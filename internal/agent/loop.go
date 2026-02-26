@@ -69,6 +69,8 @@ type Loop struct {
 	skillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	hasMemory      bool
 	contextFiles   []bootstrap.ContextFile
+	identityName   string
+	identityEmoji  string
 
 	// Per-user file seeding + dynamic context loading (managed mode)
 	ensureUserFiles    EnsureUserFilesFunc
@@ -131,6 +133,10 @@ type LoopConfig struct {
 	SkillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	HasMemory      bool
 	ContextFiles   []bootstrap.ContextFile
+
+	// Agent identity (from config identity.name / identity.emoji)
+	IdentityName  string
+	IdentityEmoji string
 
 	// Compaction config
 	CompactionCfg *config.CompactionConfig
@@ -207,6 +213,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillAllowList: cfg.SkillAllowList,
 		hasMemory:     cfg.HasMemory,
 		contextFiles:  cfg.ContextFiles,
+		identityName:  cfg.IdentityName,
+		identityEmoji: cfg.IdentityEmoji,
 		ensureUserFiles:    cfg.EnsureUserFiles,
 		contextFileLoader:  cfg.ContextFileLoader,
 		bootstrapCleanup:   cfg.BootstrapCleanup,

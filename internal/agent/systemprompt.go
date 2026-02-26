@@ -35,6 +35,10 @@ type SystemPromptConfig struct {
 
 	HasSkillSearch bool // skill_search tool registered? (for search-mode prompt)
 
+	// Agent identity from config (used in system prompt opening line)
+	IdentityName  string // e.g. "Thỏ Ngọc" — from config identity.name
+	IdentityEmoji string // e.g. "🐰" — from config identity.emoji
+
 	// Sandbox info — matching TS sandboxInfo in system-prompt.ts
 	SandboxEnabled       bool   // exec tool runs inside Docker sandbox?
 	SandboxContainerDir  string // container-side workdir (e.g. "/workspace")
@@ -72,8 +76,16 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	isMinimal := cfg.Mode == PromptMinimal
 	var lines []string
 
-	// 1. Identity
-	lines = append(lines, "You are a personal assistant running inside GoClaw.")
+	// 1. Identity — use configured name if available; never mention "GoClaw" (branding).
+	if cfg.IdentityName != "" {
+		id := cfg.IdentityName
+		if cfg.IdentityEmoji != "" {
+			id += " " + cfg.IdentityEmoji
+		}
+		lines = append(lines, fmt.Sprintf("You are %s. Your full identity, persona, and communication style are defined in IDENTITY.md and SOUL.md below. Follow them faithfully.", id))
+	} else {
+		lines = append(lines, "You are a personal assistant. Your identity, persona, and communication style are defined in your Project Context files below (IDENTITY.md and SOUL.md). Follow them faithfully.")
+	}
 	lines = append(lines, "")
 
 	// 1.5. First-run bootstrap override (must be early so model sees it first)

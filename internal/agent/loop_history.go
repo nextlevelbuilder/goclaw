@@ -58,6 +58,8 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		HasSkillSearch: hasSkillSearch,
 		ContextFiles:   contextFiles,
 		ExtraPrompt:    extraSystemPrompt,
+		IdentityName:   l.identityName,
+		IdentityEmoji:  l.identityEmoji,
 		SandboxEnabled:        l.sandboxEnabled,
 		SandboxContainerDir:   l.sandboxContainerDir,
 		SandboxWorkspaceAccess: l.sandboxWorkspaceAccess,

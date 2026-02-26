@@ -242,6 +242,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			AgentToolPolicy:   ag.ParseToolsConfig(),
 			SkillsLoader:      deps.Skills,
 			HasMemory:         hasMemory,
+			IdentityName:      ag.DisplayName, // managed mode: use display name as identity
 			ContextFiles:      contextFiles,
 			EnsureUserFiles:   deps.EnsureUserFiles,
 			ContextFileLoader: deps.ContextFileLoader,

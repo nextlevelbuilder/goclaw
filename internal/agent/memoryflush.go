@@ -124,12 +124,14 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 
 	// System prompt: combine agent's normal system prompt context with flush system prompt
 	systemPrompt := BuildSystemPrompt(SystemPromptConfig{
-		AgentID:   l.id,
-		Model:     l.model,
-		Workspace: l.workspace,
-		Mode:      PromptMinimal,
-		ToolNames: l.tools.List(),
-		HasMemory: l.hasMemory,
+		AgentID:       l.id,
+		Model:         l.model,
+		Workspace:     l.workspace,
+		Mode:          PromptMinimal,
+		ToolNames:     l.tools.List(),
+		HasMemory:     l.hasMemory,
+		IdentityName:  l.identityName,
+		IdentityEmoji: l.identityEmoji,
 	})
 	systemPrompt += "\n\n" + settings.SystemPrompt
 

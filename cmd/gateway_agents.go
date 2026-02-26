@@ -71,9 +71,14 @@ func createAgentLoop(agentID string, cfg *config.Config, router *agent.Router, p
 	// AgentSpec.Skills: nil = all skills, [] = none, ["x","y"] = only those.
 	var skillAllowList []string
 	var agentToolPolicy *config.ToolPolicySpec
+	var identityName, identityEmoji string
 	if spec, ok := cfg.Agents.List[agentID]; ok {
 		skillAllowList = spec.Skills
 		agentToolPolicy = spec.Tools
+		if spec.Identity != nil {
+			identityName = spec.Identity.Name
+			identityEmoji = spec.Identity.Emoji
+		}
 	}
 
 	// Resolve AgentUUID and AgentType from store (standalone mode with FileAgentStore)
@@ -104,6 +109,8 @@ func createAgentLoop(agentID string, cfg *config.Config, router *agent.Router, p
 		SkillsLoader:   skillsLoader,
 		SkillAllowList: skillAllowList,
 		HasMemory:      hasMemory,
+		IdentityName:   identityName,
+		IdentityEmoji:  identityEmoji,
 		ContextFiles:      contextFiles,
 		EnsureUserFiles:   ensureUserFiles,
 		ContextFileLoader: contextFileLoader,
