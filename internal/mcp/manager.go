@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -338,6 +339,15 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 			return
 		case <-ticker.C:
 			if err := ss.client.Ping(ctx); err != nil {
+				// Servers that don't implement "ping" are still alive — treat as healthy.
+				if strings.Contains(strings.ToLower(err.Error()), "method not found") {
+					ss.connected.Store(true)
+					ss.mu.Lock()
+					ss.reconnAttempts = 0
+					ss.lastErr = ""
+					ss.mu.Unlock()
+					continue
+				}
 				ss.connected.Store(false)
 				ss.mu.Lock()
 				ss.lastErr = err.Error()
