@@ -148,7 +148,13 @@ func (t *SubagentTool) executeRun(ctx context.Context, args map[string]interface
 	channel := ToolChannelFromCtx(ctx)
 	chatID := ToolChatIDFromCtx(ctx)
 
-	result, iterations, err := t.manager.RunSync(ctx, t.parentID, t.depth, task, label,
+	// Resolve parent agent from ctx (managed mode) with fallback to construction-time default
+	parentID := ToolAgentKeyFromCtx(ctx)
+	if parentID == "" {
+		parentID = t.parentID
+	}
+
+	result, iterations, err := t.manager.RunSync(ctx, parentID, t.depth, task, label,
 		channel, chatID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Subagent '%s' failed: %v", label, err))

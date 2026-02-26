@@ -61,7 +61,13 @@ func (t *SpawnTool) Execute(ctx context.Context, args map[string]interface{}) *R
 	peerKind := ToolPeerKindFromCtx(ctx)
 	callback := ToolAsyncCBFromCtx(ctx)
 
-	msg, err := t.manager.Spawn(ctx, t.parentID, t.depth, task, label, modelOverride,
+	// Resolve parent agent from ctx (managed mode) with fallback to construction-time default
+	parentID := ToolAgentKeyFromCtx(ctx)
+	if parentID == "" {
+		parentID = t.parentID
+	}
+
+	msg, err := t.manager.Spawn(ctx, parentID, t.depth, task, label, modelOverride,
 		channel, chatID, peerKind, callback)
 	if err != nil {
 		return ErrorResult(err.Error())

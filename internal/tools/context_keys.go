@@ -20,6 +20,7 @@ const (
 	ctxSandboxKey toolContextKey = "tool_sandbox_key"
 	ctxAsyncCB    toolContextKey = "tool_async_cb"
 	ctxWorkspace  toolContextKey = "tool_workspace"
+	ctxAgentKey   toolContextKey = "tool_agent_key"
 )
 
 func WithToolChannel(ctx context.Context, channel string) context.Context {
@@ -73,6 +74,18 @@ func WithToolWorkspace(ctx context.Context, ws string) context.Context {
 
 func ToolWorkspaceFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxWorkspace).(string)
+	return v
+}
+
+// WithToolAgentKey injects the calling agent's key into context.
+// In managed mode multiple agents share a single tool registry; the agent key
+// lets tools like spawn/subagent identify which agent is the parent.
+func WithToolAgentKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, ctxAgentKey, key)
+}
+
+func ToolAgentKeyFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxAgentKey).(string)
 	return v
 }
 

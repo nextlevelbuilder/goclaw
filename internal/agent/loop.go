@@ -423,6 +423,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		}
 	}
 
+	// Inject agent key into context for tool-level resolution (managed mode: multiple agents share tool registry)
+	ctx = tools.WithToolAgentKey(ctx, l.id)
+
 	// Security: truncate oversized user messages gracefully (feed truncation notice into LLM)
 	maxChars := l.maxMessageChars
 	if maxChars <= 0 {
