@@ -30,7 +30,7 @@ var imageGenProviderPriority = []string{"openrouter", "gemini", "openai"}
 var imageGenModelDefaults = map[string]string{
 	"openrouter": "google/gemini-2.5-flash-image",
 	"openai":     "dall-e-3",
-	"gemini":     "gemini-2.0-flash-exp",
+	"gemini":     "gemini-2.5-flash-image",
 }
 
 // CreateImageTool generates images using an image generation API.
@@ -92,7 +92,18 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]interface
 	slog.Info("create_image: calling image generation API",
 		"provider", providerName, "model", model, "aspect_ratio", aspectRatio)
 
-	imageBytes, usage, err := t.callImageGenAPI(ctx, cp.APIKey(), cp.APIBase(), model, prompt, aspectRatio)
+	// OpenRouter supports modalities on /chat/completions; Gemini, OpenAI and others use /images/generations
+	var imageBytes []byte
+	var usage *providers.Usage
+	if providerName == "openrouter" {
+		var genErr error
+		imageBytes, usage, genErr = t.callImageGenAPI(ctx, cp.APIKey(), cp.APIBase(), model, prompt, aspectRatio)
+		err = genErr
+	} else {
+		var genErr error
+		imageBytes, usage, genErr = t.callStandardImageGenAPI(ctx, cp.APIKey(), cp.APIBase(), model, prompt)
+		err = genErr
+	}
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("image generation failed: %v", err))
 	}
@@ -217,6 +228,66 @@ func (t *CreateImageTool) callImageGenAPI(ctx context.Context, apiKey, apiBase, 
 	}
 
 	return t.parseImageResponse(respBody)
+}
+
+// callStandardImageGenAPI uses the /images/generations endpoint (Gemini, OpenAI, and compatible providers).
+// This is the standard OpenAI-compatible image generation endpoint that returns b64_json data.
+func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, apiBase, model, prompt string) ([]byte, *providers.Usage, error) {
+	body := map[string]interface{}{
+		"model":           model,
+		"prompt":          prompt,
+		"n":               1,
+		"response_format": "b64_json",
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := strings.TrimRight(apiBase, "/") + "/images/generations"
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateBytes(respBody, 500))
+	}
+
+	// Parse OpenAI-compat images/generations response: {data: [{b64_json: "..."}]}
+	var imgResp struct {
+		Data []struct {
+			B64JSON string `json:"b64_json"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &imgResp); err != nil {
+		return nil, nil, fmt.Errorf("parse response: %w", err)
+	}
+	if len(imgResp.Data) == 0 || imgResp.Data[0].B64JSON == "" {
+		return nil, nil, fmt.Errorf("no image data in response")
+	}
+
+	imageBytes, err := base64.StdEncoding.DecodeString(imgResp.Data[0].B64JSON)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode base64: %w", err)
+	}
+
+	return imageBytes, nil, nil
 }
 
 // parseImageResponse extracts base64 image data from the OpenAI-compat chat response.
