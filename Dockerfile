@@ -36,7 +36,7 @@ ARG ENABLE_SANDBOX=false
 
 # Install ca-certificates + wget (healthcheck) + optionally docker-cli (sandbox)
 RUN set -eux; \
-    apk add --no-cache ca-certificates wget; \
+    apk add --no-cache ca-certificates wget su-exec; \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
         apk add --no-cache docker-cli; \
     fi
@@ -51,12 +51,8 @@ COPY --from=builder /src/migrations/ /usr/share/goclaw/migrations/
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create data directories (owned by goclaw user) — /app is purely persistent data
-RUN mkdir -p /app/workspace /app/data /app/sessions /app/skills /app/tsnet-state /app/.goclaw \
-    && chown -R goclaw:goclaw /app
-
-# Default environment
-ENV GOCLAW_CONFIG=/app/config.json \
+# Default environment — /app is purely persistent data (volume-mounted at runtime)
+ENV GOCLAW_CONFIG=/etc/goclaw/config.json \
     GOCLAW_WORKSPACE=/app/workspace \
     GOCLAW_DATA_DIR=/app/data \
     GOCLAW_SESSIONS_STORAGE=/app/sessions \
@@ -64,8 +60,6 @@ ENV GOCLAW_CONFIG=/app/config.json \
     GOCLAW_MIGRATIONS_DIR=/usr/share/goclaw/migrations \
     GOCLAW_HOST=0.0.0.0 \
     GOCLAW_PORT=18790
-
-USER goclaw
 
 EXPOSE 18790
 

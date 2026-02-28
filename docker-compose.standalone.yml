@@ -6,7 +6,7 @@
 services:
   goclaw:
     volumes:
-      - ./config.json:/app/config.json:ro
+      - ./config.json:/etc/goclaw/config.json:ro
       - goclaw-data:/app
 
 volumes:
