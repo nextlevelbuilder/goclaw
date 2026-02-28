@@ -17,7 +17,7 @@ flowchart TD
     subgraph PH1["Phase 1: Setup"]
         P1A[Increment activeRuns atomic counter] --> P1B[Emit run.started event]
         P1B --> P1C[Create trace record]
-        P1C --> P1D[Inject agentType / userID / agentID into context]
+        P1C --> P1D["prepareContext: inject agentType / userID / agentID"]
         P1D --> P1E0[Compute per-user workspace + WithToolWorkspace]
         P1E0 --> P1E[Ensure per-user files via sync.Map cache]
         P1E --> P1F[Persist agent + user IDs on session]
@@ -25,7 +25,7 @@ flowchart TD
 
     PH1 --> PH2
 
-    subgraph PH2["Phase 2: Input Validation"]
+    subgraph PH2["Phase 2: Input Validation (in prepareContext)"]
         P2A["InputGuard.Scan - 6 injection patterns"] --> P2B["Message truncation at max_message_chars (default 32K)"]
     end
 
@@ -51,8 +51,8 @@ flowchart TD
     subgraph PH5["Phase 5: Tool Execution"]
         P5A[Append assistant message with tool calls] --> P5B{Single or multiple tools?}
         P5B -->|Single| P5C[Execute sequentially]
-        P5B -->|Multiple| P5D["Execute in parallel via goroutines, sort results by index"]
-        P5C & P5D --> P5E["Emit tool.call / tool.result events, record tool spans, save tool messages"]
+        P5B -->|Multiple| P5D["executeToolsParallel: goroutines, sort results by index"]
+        P5C & P5D --> P5E["processToolResult: emit events, record spans, loop detection, collect media"]
     end
 
     PH5 --> PH4
@@ -61,7 +61,7 @@ flowchart TD
 
     subgraph PH6["Phase 6: Response Finalization"]
         P6A["SanitizeAssistantContent (7-step pipeline)"] --> P6B["Detect NO_REPLY - suppress delivery if silent"]
-        P6B --> P6C[Flush all buffered messages atomically to session]
+        P6B --> P6C["persistRun: flush all buffered messages atomically to session"]
         P6C --> P6D[Update metadata: model, provider, token counts]
     end
 
@@ -89,10 +89,12 @@ flowchart TD
 - Increment the `activeRuns` atomic counter (no mutex -- true concurrency, especially in group chats with `maxConcurrent = 3`).
 - Emit a `run.started` event to notify connected clients.
 - Create a trace record (managed mode) with a generated trace UUID.
-- Propagate context values: `WithAgentID()`, `WithUserID()`, `WithAgentType()`. Downstream tools and interceptors rely on these.
-- Compute per-user workspace: `base + "/" + sanitize(userID)`. Inject via `WithToolWorkspace(ctx)` so all filesystem and shell tools use the correct directory.
-- Ensure per-user files exist. A `sync.Map` cache guarantees the seeding function runs at most once per user.
-- Persist the agent ID and user ID on the session for later reference.
+- Call `prepareContext()` which:
+  - Propagates context values: `WithAgentID()`, `WithUserID()`, `WithAgentType()`. Downstream tools and interceptors rely on these.
+  - Computes per-user workspace: `base + "/" + sanitize(userID)`. Injects via `WithToolWorkspace(ctx)` so all filesystem and shell tools use the correct directory.
+  - Ensures per-user files exist. A `sync.Map` cache guarantees the seeding function runs at most once per user.
+  - Persists the agent ID and user ID on the session for later reference.
+  - Runs input validation (Phase 2).
 
 ### Phase 2: Input Validation
 
@@ -119,17 +121,19 @@ flowchart TD
 
 - Append the assistant message (with tool calls) to the message list.
 - **Single tool call**: execute sequentially (no goroutine overhead).
-- **Multiple tool calls**: launch parallel goroutines, collect all results, sort by original index, then process sequentially.
-- Emit `tool.call` before execution and `tool.result` after.
-- Record a tool span for each call. Track async tools (spawn, cron) separately.
+- **Multiple tool calls**: `executeToolsParallel()` launches parallel goroutines, collects all results, and sorts by original index.
+- **Unified result processing**: `processToolResult()` handles each result identically regardless of single/parallel path: emit `tool.call`/`tool.result` events, record tool spans, run loop detection, collect media results.
 - Save tool messages to the session.
 
 ### Phase 6: Response Finalization
 
 - Run `SanitizeAssistantContent` -- a 7-step cleanup pipeline (see Section 3).
 - Detect `NO_REPLY` in the final content. If present, suppress message delivery (silent reply).
-- Flush all buffered messages atomically to the session (user message, tool messages, assistant message). This prevents concurrent runs from interleaving partial history.
-- Update session metadata: model name, provider name, cumulative token counts.
+- Call `persistRun()` which:
+  - Flushes all buffered messages atomically to the session (user message, tool messages, assistant message). This prevents concurrent runs from interleaving partial history.
+  - Updates session metadata: model name, provider name, cumulative token counts.
+  - Calibrates token estimation with actual prompt token counts.
+  - Runs bootstrap auto-cleanup after 3 user turns.
 
 ### Phase 7: Auto-Summarization
 
@@ -489,12 +493,15 @@ Enabled via the `GOCLAW_TRACE_VERBOSE=1` environment variable.
 
 | File | Responsibility |
 |------|---------------|
-| `internal/agent/loop.go` | Core Loop struct, RunRequest/RunResult, LLM iteration loop, tool execution, event emission |
+| `internal/agent/loop.go` | Core Loop struct, RunRequest/RunResult, LLM iteration loop (`runLoop`), `prepareContext`, `processToolResult`, `executeToolsParallel`, `persistRun` |
 | `internal/agent/loop_history.go` | History pipeline: limitHistoryTurns, sanitizeHistory, summary injection |
-| `internal/agent/pruning.go` | Context pruning: 2-pass soft trim and hard clear algorithm |
-| `internal/agent/systemprompt.go` | System prompt assembly (15+ sections), PromptFull and PromptMinimal modes |
-| `internal/agent/resolver.go` | ManagedResolver: lazy Loop creation from PostgreSQL, provider resolution, bootstrap loading |
 | `internal/agent/loop_tracing.go` | Trace and span creation, verbose mode input capture, span finalization |
-| `internal/agent/input_guard.go` | Input Guard: 6 regex patterns, 4 action modes, security logging |
+| `internal/agent/media.go` | Media handling: MediaResult, loadImages, parseMediaResult, mimeFromExt |
+| `internal/agent/toolloop.go` | Tool loop detection: toolLoopState, repeated no-progress call detection |
+| `internal/agent/pruning.go` | Context pruning: 2-pass soft trim and hard clear algorithm |
 | `internal/agent/sanitize.go` | 7-step output sanitization pipeline |
+| `internal/agent/systemprompt.go` | System prompt assembly (15+ sections), PromptFull and PromptMinimal modes |
+| `internal/agent/input_guard.go` | Input Guard: 6 regex patterns, 4 action modes, security logging |
+| `internal/agent/resolver.go` | ManagedResolver: lazy Loop creation from PostgreSQL, provider resolution, bootstrap loading |
 | `internal/agent/memoryflush.go` | Pre-compaction memory flush: embedded agent turn with write_file tool |
+| `internal/agent/types.go` | Agent interface definition |

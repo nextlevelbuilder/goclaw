@@ -53,12 +53,12 @@ type Loop struct {
 	maxIterations int
 	workspace     string
 
-	eventPub   bus.EventPublisher // currently unused by Loop; kept for future use
-	sessions   store.SessionStore
+	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
+	sessions        store.SessionStore
 	tools           *tools.Registry
 	toolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
 	agentToolPolicy *config.ToolPolicySpec // per-agent tool policy from DB (nil = no restrictions)
-	activeRuns atomic.Int32 // number of currently executing runs
+	activeRuns      atomic.Int32           // number of currently executing runs
 
 	// Per-session summarization lock: prevents concurrent summarize goroutines for the same session.
 	summarizeMu sync.Map // sessionKey → *sync.Mutex
@@ -71,10 +71,10 @@ type Loop struct {
 	contextFiles   []bootstrap.ContextFile
 
 	// Per-user file seeding + dynamic context loading (managed mode)
-	ensureUserFiles    EnsureUserFilesFunc
-	contextFileLoader  ContextFileLoaderFunc
-	bootstrapCleanup   BootstrapCleanupFunc
-	seededUsers        sync.Map // userID → true, avoid re-check per request
+	ensureUserFiles   EnsureUserFilesFunc
+	contextFileLoader ContextFileLoaderFunc
+	bootstrapCleanup  BootstrapCleanupFunc
+	seededUsers       sync.Map // userID → true, avoid re-check per request
 
 	// Compaction config (memory flush settings)
 	compactionCfg *config.CompactionConfig
@@ -83,8 +83,8 @@ type Loop struct {
 	contextPruningCfg *config.ContextPruningConfig
 
 	// Sandbox info
-	sandboxEnabled        bool
-	sandboxContainerDir   string
+	sandboxEnabled         bool
+	sandboxContainerDir    string
 	sandboxWorkspaceAccess string
 
 	// Event callback for broadcasting agent events (run.started, chunk, tool.call, etc.)
@@ -107,7 +107,7 @@ type Loop struct {
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
 type AgentEvent struct {
-	Type    string      `json:"type"`    // "run.started", "run.completed", "run.failed", "chunk", "tool.call", "tool.result"
+	Type    string      `json:"type"` // "run.started", "run.completed", "run.failed", "chunk", "tool.call", "tool.result"
 	AgentID string      `json:"agentId"`
 	RunID   string      `json:"runId"`
 	Payload interface{} `json:"payload,omitempty"`
@@ -115,14 +115,14 @@ type AgentEvent struct {
 
 // LoopConfig configures a new Loop.
 type LoopConfig struct {
-	ID            string
-	Provider      providers.Provider
-	Model         string
-	ContextWindow int
-	MaxIterations int
-	Workspace     string
-	Bus           bus.EventPublisher
-	Sessions      store.SessionStore
+	ID              string
+	Provider        providers.Provider
+	Model           string
+	ContextWindow   int
+	MaxIterations   int
+	Workspace       string
+	Bus             bus.EventPublisher
+	Sessions        store.SessionStore
 	Tools           *tools.Registry
 	ToolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
 	AgentToolPolicy *config.ToolPolicySpec // per-agent tool policy from DB (nil = no restrictions)
@@ -142,8 +142,8 @@ type LoopConfig struct {
 	ContextPruningCfg *config.ContextPruningConfig
 
 	// Sandbox info (injected into system prompt)
-	SandboxEnabled        bool
-	SandboxContainerDir   string // e.g. "/workspace"
+	SandboxEnabled         bool
+	SandboxContainerDir    string // e.g. "/workspace"
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
 
 	// Managed mode: agent UUID for context propagation to tools
@@ -159,9 +159,9 @@ type LoopConfig struct {
 	TraceCollector *tracing.Collector
 
 	// Security: input guard for injection detection, max message size
-	InputGuard      *InputGuard    // nil = auto-create when InjectionAction != "off"
-	InjectionAction string         // "log", "warn" (default), "block", "off"
-	MaxMessageChars int            // 0 = use default (32000)
+	InputGuard      *InputGuard // nil = auto-create when InjectionAction != "off"
+	InjectionAction string      // "log", "warn" (default), "block", "off"
+	MaxMessageChars int         // 0 = use default (32000)
 
 	// Global builtin tool settings (from builtin_tools table, managed mode)
 	BuiltinToolSettings tools.BuiltinToolSettings
@@ -194,60 +194,60 @@ func NewLoop(cfg LoopConfig) *Loop {
 	}
 
 	return &Loop{
-		id:            cfg.ID,
-		agentUUID:     cfg.AgentUUID,
-		agentType:     cfg.AgentType,
-		provider:      cfg.Provider,
-		model:         cfg.Model,
-		contextWindow: cfg.ContextWindow,
-		maxIterations: cfg.MaxIterations,
-		workspace:     cfg.Workspace,
-		eventPub:      cfg.Bus,
-		sessions:      cfg.Sessions,
-		tools:           cfg.Tools,
-		toolPolicy:      cfg.ToolPolicy,
-		agentToolPolicy: cfg.AgentToolPolicy,
-		onEvent:         cfg.OnEvent,
-		ownerIDs:      cfg.OwnerIDs,
-		skillsLoader:   cfg.SkillsLoader,
-		skillAllowList: cfg.SkillAllowList,
-		hasMemory:     cfg.HasMemory,
-		contextFiles:  cfg.ContextFiles,
-		ensureUserFiles:    cfg.EnsureUserFiles,
-		contextFileLoader:  cfg.ContextFileLoader,
-		bootstrapCleanup:   cfg.BootstrapCleanup,
-		compactionCfg:     cfg.CompactionCfg,
-		contextPruningCfg: cfg.ContextPruningCfg,
-		sandboxEnabled:        cfg.SandboxEnabled,
-		sandboxContainerDir:   cfg.SandboxContainerDir,
+		id:                     cfg.ID,
+		agentUUID:              cfg.AgentUUID,
+		agentType:              cfg.AgentType,
+		provider:               cfg.Provider,
+		model:                  cfg.Model,
+		contextWindow:          cfg.ContextWindow,
+		maxIterations:          cfg.MaxIterations,
+		workspace:              cfg.Workspace,
+		eventPub:               cfg.Bus,
+		sessions:               cfg.Sessions,
+		tools:                  cfg.Tools,
+		toolPolicy:             cfg.ToolPolicy,
+		agentToolPolicy:        cfg.AgentToolPolicy,
+		onEvent:                cfg.OnEvent,
+		ownerIDs:               cfg.OwnerIDs,
+		skillsLoader:           cfg.SkillsLoader,
+		skillAllowList:         cfg.SkillAllowList,
+		hasMemory:              cfg.HasMemory,
+		contextFiles:           cfg.ContextFiles,
+		ensureUserFiles:        cfg.EnsureUserFiles,
+		contextFileLoader:      cfg.ContextFileLoader,
+		bootstrapCleanup:       cfg.BootstrapCleanup,
+		compactionCfg:          cfg.CompactionCfg,
+		contextPruningCfg:      cfg.ContextPruningCfg,
+		sandboxEnabled:         cfg.SandboxEnabled,
+		sandboxContainerDir:    cfg.SandboxContainerDir,
 		sandboxWorkspaceAccess: cfg.SandboxWorkspaceAccess,
-		traceCollector:        cfg.TraceCollector,
-		inputGuard:            guard,
-		injectionAction:       action,
-		maxMessageChars:       cfg.MaxMessageChars,
-		builtinToolSettings:   cfg.BuiltinToolSettings,
-		thinkingLevel:         cfg.ThinkingLevel,
+		traceCollector:         cfg.TraceCollector,
+		inputGuard:             guard,
+		injectionAction:        action,
+		maxMessageChars:        cfg.MaxMessageChars,
+		builtinToolSettings:    cfg.BuiltinToolSettings,
+		thinkingLevel:          cfg.ThinkingLevel,
 	}
 }
 
 // RunRequest is the input for processing a message through the agent.
 type RunRequest struct {
-	SessionKey       string // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
-	Message          string // user message
-	Media            []string // local file paths to images (already sanitized)
-	Channel          string // source channel
-	ChatID           string // source chat ID
-	PeerKind         string // "direct" or "group" (for session key building and tool context)
-	RunID            string // unique run identifier
-	UserID           string // external user ID (TEXT, free-form) for multi-tenant scoping
-	SenderID         string // original individual sender ID (preserved in group chats for permission checks)
-	Stream           bool   // whether to stream response chunks
-	ExtraSystemPrompt string // optional: injected into system prompt (skills, subagent context, etc.)
-	HistoryLimit     int    // max user turns to keep in context (0=unlimited, from channel config)
-	ParentTraceID    uuid.UUID // if set, reuse parent trace instead of creating new (announce runs)
-	ParentRootSpanID uuid.UUID // if set, nest announce agent span under this parent span
-	TraceName        string    // override trace name (default: "chat <agentID>")
-	TraceTags        []string  // additional tags for the trace (e.g. "cron")
+	SessionKey        string    // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
+	Message           string    // user message
+	Media             []string  // local file paths to images (already sanitized)
+	Channel           string    // source channel
+	ChatID            string    // source chat ID
+	PeerKind          string    // "direct" or "group" (for session key building and tool context)
+	RunID             string    // unique run identifier
+	UserID            string    // external user ID (TEXT, free-form) for multi-tenant scoping
+	SenderID          string    // original individual sender ID (preserved in group chats for permission checks)
+	Stream            bool      // whether to stream response chunks
+	ExtraSystemPrompt string    // optional: injected into system prompt (skills, subagent context, etc.)
+	HistoryLimit      int       // max user turns to keep in context (0=unlimited, from channel config)
+	ParentTraceID     uuid.UUID // if set, reuse parent trace instead of creating new (announce runs)
+	ParentRootSpanID  uuid.UUID // if set, nest announce agent span under this parent span
+	TraceName         string    // override trace name (default: "chat <agentID>")
+	TraceTags         []string  // additional tags for the trace (e.g. "cron")
 }
 
 // RunResult is the output of a completed agent run.
@@ -257,13 +257,6 @@ type RunResult struct {
 	Iterations int              `json:"iterations"`
 	Usage      *providers.Usage `json:"usage,omitempty"`
 	Media      []MediaResult    `json:"media,omitempty"` // media files from tool results (MEDIA: prefix)
-}
-
-// MediaResult represents a media file produced by a tool during the agent run.
-type MediaResult struct {
-	Path        string `json:"path"`                  // local file path
-	ContentType string `json:"content_type,omitempty"` // MIME type
-	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
 }
 
 // Run processes a single message through the agent loop.
@@ -365,6 +358,254 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 }
 
 func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) {
+	// 1. Prepare context: inject per-request values, setup workspace, security checks
+	var err error
+	ctx, req, err = l.prepareContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Build messages from session history
+	history := l.sessions.GetHistory(req.SessionKey)
+	summary := l.sessions.GetSummary(req.SessionKey)
+
+	// buildMessages resolves context files once and also detects BOOTSTRAP.md presence
+	// (hadBootstrap) — no extra DB roundtrip needed for bootstrap detection.
+	messages, hadBootstrap := l.buildMessages(ctx, history, summary, req.Message, req.ExtraSystemPrompt, req.SessionKey, req.Channel, req.UserID, req.HistoryLimit)
+
+	// 3. Attach vision images to the current user message (last in messages slice).
+	// Images are only attached to the live request, NOT persisted in session history.
+	if len(req.Media) > 0 {
+		if images := loadImages(req.Media); len(images) > 0 {
+			messages[len(messages)-1].Images = images
+			ctx = tools.WithMediaImages(ctx, images) // make images available to read_image tool
+			slog.Info("vision: attached images to user message", "count", len(images), "agent", l.id, "session", req.SessionKey)
+		}
+		// Clean up temp media files — they're now base64-encoded in memory.
+		for _, p := range req.Media {
+			if err := os.Remove(p); err != nil {
+				slog.Debug("vision: failed to clean temp media file", "path", p, "error", err)
+			}
+		}
+	}
+
+	// 4. Buffer new messages — write to session only AFTER the run completes.
+	// This prevents concurrent runs from seeing each other's in-progress messages.
+	// NOTE: pendingMsgs stores TEXT ONLY (no images) to avoid bloating session storage.
+	var pendingMsgs []providers.Message
+	pendingMsgs = append(pendingMsgs, providers.Message{
+		Role:    "user",
+		Content: req.Message,
+	})
+
+	// 5. Run LLM iteration loop
+	var loopDetector toolLoopState // detects repeated no-progress tool calls
+	var totalUsage providers.Usage
+	iteration := 0
+	var finalContent string
+	var asyncToolCalls []string    // track async spawn tool names for fallback
+	var mediaResults []MediaResult // media files from tool MEDIA: results
+
+	// Inject retry hook so channels can update placeholder on LLM retries.
+	ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, err error) {
+		l.emit(AgentEvent{
+			Type:    protocol.AgentEventRunRetrying,
+			AgentID: l.id,
+			RunID:   req.RunID,
+			Payload: map[string]string{
+				"attempt":     fmt.Sprintf("%d", attempt),
+				"maxAttempts": fmt.Sprintf("%d", maxAttempts),
+				"error":       err.Error(),
+			},
+		})
+	})
+
+	for iteration < l.maxIterations {
+		iteration++
+
+		slog.Debug("agent iteration", "agent", l.id, "iteration", iteration, "messages", len(messages))
+
+		// Build provider request with policy-filtered tools
+		var toolDefs []providers.ToolDefinition
+		if l.toolPolicy != nil {
+			toolDefs = l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
+		} else {
+			toolDefs = l.tools.ProviderDefs()
+		}
+
+		chatReq := providers.ChatRequest{
+			Messages: messages,
+			Tools:    toolDefs,
+			Model:    l.model,
+			Options: map[string]interface{}{
+				providers.OptMaxTokens:   8192,
+				providers.OptTemperature: 0.7,
+			},
+		}
+		if l.thinkingLevel != "" && l.thinkingLevel != "off" {
+			if tc, ok := l.provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
+				chatReq.Options[providers.OptThinkingLevel] = l.thinkingLevel
+			} else {
+				slog.Debug("thinking_level ignored: provider does not support thinking",
+					"provider", l.provider.Name(), "level", l.thinkingLevel)
+			}
+		}
+
+		// Call LLM (streaming or non-streaming)
+		var resp *providers.ChatResponse
+		var llmErr error
+
+		llmSpanStart := time.Now().UTC()
+
+		if req.Stream {
+			resp, llmErr = l.provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
+				if chunk.Thinking != "" {
+					l.emit(AgentEvent{
+						Type:    protocol.ChatEventThinking,
+						AgentID: l.id,
+						RunID:   req.RunID,
+						Payload: map[string]string{"content": chunk.Thinking},
+					})
+				}
+				if chunk.Content != "" {
+					l.emit(AgentEvent{
+						Type:    protocol.ChatEventChunk,
+						AgentID: l.id,
+						RunID:   req.RunID,
+						Payload: map[string]string{"content": chunk.Content},
+					})
+				}
+			})
+		} else {
+			resp, llmErr = l.provider.Chat(ctx, chatReq)
+		}
+
+		if llmErr != nil {
+			l.emitLLMSpan(ctx, llmSpanStart, iteration, messages, nil, llmErr)
+			return nil, fmt.Errorf("LLM call failed (iteration %d): %w", iteration, llmErr)
+		}
+
+		l.emitLLMSpan(ctx, llmSpanStart, iteration, messages, resp, nil)
+
+		if resp.Usage != nil {
+			totalUsage.PromptTokens += resp.Usage.PromptTokens
+			totalUsage.CompletionTokens += resp.Usage.CompletionTokens
+			totalUsage.TotalTokens += resp.Usage.TotalTokens
+			totalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
+		}
+
+		// No tool calls → done
+		if len(resp.ToolCalls) == 0 {
+			finalContent = resp.Content
+			break
+		}
+
+		// Build assistant message with tool calls
+		assistantMsg := providers.Message{
+			Role:                "assistant",
+			Content:             resp.Content,
+			ToolCalls:           resp.ToolCalls,
+			RawAssistantContent: resp.RawAssistantContent, // preserve thinking blocks for Anthropic passback
+		}
+		messages = append(messages, assistantMsg)
+		pendingMsgs = append(pendingMsgs, assistantMsg)
+
+		// Execute tool calls and collect results
+		var toolResults []toolExecResult
+		if len(resp.ToolCalls) == 1 {
+			// Single tool: sequential — no goroutine overhead
+			tc := resp.ToolCalls[0]
+			l.emit(AgentEvent{
+				Type:    protocol.AgentEventToolCall,
+				AgentID: l.id,
+				RunID:   req.RunID,
+				Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID},
+			})
+
+			argsJSON, _ := json.Marshal(tc.Arguments)
+			slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
+
+			spanStart := time.Now().UTC()
+			result := l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+			toolResults = []toolExecResult{{tc: tc, result: result, argsJSON: string(argsJSON), spanStart: spanStart}}
+		} else {
+			// Multiple tools: emit all tool.call events upfront, then execute in parallel
+			for _, tc := range resp.ToolCalls {
+				l.emit(AgentEvent{
+					Type:    protocol.AgentEventToolCall,
+					AgentID: l.id,
+					RunID:   req.RunID,
+					Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID},
+				})
+			}
+			toolResults = l.executeToolsParallel(ctx, resp.ToolCalls, req)
+		}
+
+		// Process all tool results (unified path for single and parallel)
+		var loopStuck bool
+		for _, r := range toolResults {
+			toolMsg, level, loopMsg := l.processToolResult(ctx, r, req.RunID, &loopDetector, &asyncToolCalls, &mediaResults)
+			messages = append(messages, toolMsg)
+			pendingMsgs = append(pendingMsgs, toolMsg)
+
+			if level == "critical" {
+				finalContent = "I was unable to complete this task \u2014 I got stuck repeatedly calling " + r.tc.Name + " without making progress. Please try rephrasing your request."
+				loopStuck = true
+				break
+			}
+			if level == "warning" {
+				messages = append(messages, providers.Message{Role: "user", Content: loopMsg})
+			}
+		}
+		if loopStuck {
+			break
+		}
+	}
+
+	// 6. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
+	finalContent = SanitizeAssistantContent(finalContent)
+
+	// 7. Handle NO_REPLY: save to session for context but mark as silent.
+	// Matching TS: NO_REPLY is saved (via resolveSilentReplyFallbackText) but
+	// filtered at the payload level before delivery.
+	isSilent := IsSilentReply(finalContent)
+
+	// 8. Fallback for empty content
+	if finalContent == "" {
+		finalContent = "..."
+	}
+
+	pendingMsgs = append(pendingMsgs, providers.Message{
+		Role:    "assistant",
+		Content: finalContent,
+	})
+
+	// 9. Persist run: flush messages, update metadata, bootstrap cleanup
+	l.persistRun(ctx, req, pendingMsgs, history, hadBootstrap, totalUsage)
+
+	// If silent, return empty content so gateway suppresses delivery.
+	if isSilent {
+		slog.Info("agent loop: NO_REPLY detected, suppressing delivery",
+			"agent", l.id, "session", req.SessionKey)
+		finalContent = ""
+	}
+
+	// 10. Maybe summarize
+	l.maybeSummarize(ctx, req.SessionKey)
+
+	return &RunResult{
+		Content:    finalContent,
+		RunID:      req.RunID,
+		Iterations: iteration,
+		Usage:      &totalUsage,
+		Media:      mediaResults,
+	}, nil
+}
+
+// prepareContext injects per-request values into the context and performs
+// pre-processing: workspace setup, user seeding, input guard, message truncation.
+// Returns the enriched context, possibly modified request, and any blocking error.
+func (l *Loop) prepareContext(ctx context.Context, req RunRequest) (context.Context, RunRequest, error) {
 	// Inject agent UUID into context for tool routing (managed mode)
 	if l.agentUUID != uuid.Nil {
 		ctx = store.WithAgentID(ctx, l.agentUUID)
@@ -433,7 +674,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					"agent", l.id, "user", req.UserID,
 					"patterns", matchStr, "message_len", len(req.Message),
 				)
-				return nil, fmt.Errorf("message blocked: potential prompt injection detected (%s)", matchStr)
+				return ctx, req, fmt.Errorf("message blocked: potential prompt injection detected (%s)", matchStr)
 			case "log":
 				slog.Info("security.injection_detected",
 					"agent", l.id, "user", req.UserID,
@@ -468,365 +709,134 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		)
 	}
 
-	// 0. Cache agent's context window on the session (first run only).
+	// Cache agent's context window on the session (first run only).
 	// Enables scheduler's adaptive throttle to use the real value instead of hardcoded 200K.
 	if l.sessions.GetContextWindow(req.SessionKey) <= 0 {
 		l.sessions.SetContextWindow(req.SessionKey, l.contextWindow)
 	}
 
-	// 1. Build messages from session history
-	history := l.sessions.GetHistory(req.SessionKey)
-	summary := l.sessions.GetSummary(req.SessionKey)
+	return ctx, req, nil
+}
 
-	// buildMessages resolves context files once and also detects BOOTSTRAP.md presence
-	// (hadBootstrap) — no extra DB roundtrip needed for bootstrap detection.
-	messages, hadBootstrap := l.buildMessages(ctx, history, summary, req.Message, req.ExtraSystemPrompt, req.SessionKey, req.Channel, req.UserID, req.HistoryLimit)
+// toolExecResult holds one tool execution outcome (used for both single and parallel paths).
+type toolExecResult struct {
+	tc        providers.ToolCall
+	result    *tools.Result
+	argsJSON  string
+	spanStart time.Time
+}
 
-	// 2. Attach vision images to the current user message (last in messages slice).
-	// Images are only attached to the live request, NOT persisted in session history.
-	if len(req.Media) > 0 {
-		if images := loadImages(req.Media); len(images) > 0 {
-			messages[len(messages)-1].Images = images
-			ctx = tools.WithMediaImages(ctx, images) // make images available to read_image tool
-			slog.Info("vision: attached images to user message", "count", len(images), "agent", l.id, "session", req.SessionKey)
-		}
-		// Clean up temp media files — they're now base64-encoded in memory.
-		for _, p := range req.Media {
-			if err := os.Remove(p); err != nil {
-				slog.Debug("vision: failed to clean temp media file", "path", p, "error", err)
-			}
-		}
+// processToolResult handles the common per-tool-result work:
+// emit tracing span + result event, record loop detection, log errors, collect media.
+// Returns the tool message and any loop detection (level, message).
+func (l *Loop) processToolResult(
+	ctx context.Context,
+	r toolExecResult,
+	runID string,
+	loopDetector *toolLoopState,
+	asyncToolCalls *[]string,
+	mediaResults *[]MediaResult,
+) (providers.Message, string, string) {
+	l.emitToolSpan(ctx, r.spanStart, r.tc.Name, r.tc.ID, r.argsJSON, r.result)
+
+	// Record for loop detection.
+	argsHash := loopDetector.record(r.tc.Name, r.tc.Arguments)
+	loopDetector.recordResult(argsHash, r.result.ForLLM)
+
+	if r.result.Async {
+		*asyncToolCalls = append(*asyncToolCalls, r.tc.Name)
 	}
 
-	// 3. Buffer new messages — write to session only AFTER the run completes.
-	// This prevents concurrent runs from seeing each other's in-progress messages.
-	// NOTE: pendingMsgs stores TEXT ONLY (no images) to avoid bloating session storage.
-	var pendingMsgs []providers.Message
-	pendingMsgs = append(pendingMsgs, providers.Message{
-		Role:    "user",
-		Content: req.Message,
+	if r.result.IsError {
+		errMsg := r.result.ForLLM
+		if len(errMsg) > 200 {
+			errMsg = errMsg[:200] + "..."
+		}
+		slog.Warn("tool error", "agent", l.id, "tool", r.tc.Name, "error", errMsg)
+	}
+
+	l.emit(AgentEvent{
+		Type:    protocol.AgentEventToolResult,
+		AgentID: l.id,
+		RunID:   runID,
+		Payload: map[string]interface{}{
+			"name":     r.tc.Name,
+			"id":       r.tc.ID,
+			"is_error": r.result.IsError,
+		},
 	})
 
-	// 4. Run LLM iteration loop
-	var loopDetector toolLoopState // detects repeated no-progress tool calls
-	var totalUsage providers.Usage
-	iteration := 0
-	var finalContent string
-	var asyncToolCalls []string  // track async spawn tool names for fallback
-	var mediaResults []MediaResult // media files from tool MEDIA: results
+	// Collect MEDIA: paths from tool results
+	if mr := parseMediaResult(r.result.ForLLM); mr != nil {
+		*mediaResults = append(*mediaResults, *mr)
+	}
 
-	// Inject retry hook so channels can update placeholder on LLM retries.
-	ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, err error) {
-		l.emit(AgentEvent{
-			Type:    protocol.AgentEventRunRetrying,
-			AgentID: l.id,
-			RunID:   req.RunID,
-			Payload: map[string]string{
-				"attempt":     fmt.Sprintf("%d", attempt),
-				"maxAttempts": fmt.Sprintf("%d", maxAttempts),
-				"error":       err.Error(),
-			},
-		})
-	})
+	toolMsg := providers.Message{
+		Role:       "tool",
+		Content:    r.result.ForLLM,
+		ToolCallID: r.tc.ID,
+	}
 
-	for iteration < l.maxIterations {
-		iteration++
+	// Check for tool call loop.
+	level, loopMsg := loopDetector.detect(r.tc.Name, argsHash)
+	if level == "critical" {
+		slog.Warn("tool loop critical", "agent", l.id, "tool", r.tc.Name, "message", loopMsg)
+	} else if level == "warning" {
+		slog.Warn("tool loop warning", "agent", l.id, "tool", r.tc.Name, "message", loopMsg)
+	}
 
-		slog.Debug("agent iteration", "agent", l.id, "iteration", iteration, "messages", len(messages))
+	return toolMsg, level, loopMsg
+}
 
-		// Build provider request with policy-filtered tools
-		var toolDefs []providers.ToolDefinition
-		if l.toolPolicy != nil {
-			toolDefs = l.toolPolicy.FilterTools(l.tools, l.id, l.provider.Name(), l.agentToolPolicy, nil, false, false)
-		} else {
-			toolDefs = l.tools.ProviderDefs()
-		}
+// executeToolsParallel runs multiple tool calls concurrently via goroutines.
+// Tool instances are immutable (context-based) so concurrent access is safe.
+// Results are collected then sorted by original index for deterministic ordering.
+func (l *Loop) executeToolsParallel(ctx context.Context, toolCalls []providers.ToolCall, req RunRequest) []toolExecResult {
+	type indexedResult struct {
+		idx int
+		toolExecResult
+	}
 
-		chatReq := providers.ChatRequest{
-			Messages: messages,
-			Tools:    toolDefs,
-			Model:    l.model,
-			Options: map[string]interface{}{
-				providers.OptMaxTokens:   8192,
-				providers.OptTemperature: 0.7,
-			},
-		}
-		if l.thinkingLevel != "" && l.thinkingLevel != "off" {
-			if tc, ok := l.provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
-				chatReq.Options[providers.OptThinkingLevel] = l.thinkingLevel
-			} else {
-				slog.Debug("thinking_level ignored: provider does not support thinking",
-					"provider", l.provider.Name(), "level", l.thinkingLevel)
-			}
-		}
+	resultCh := make(chan indexedResult, len(toolCalls))
+	var wg sync.WaitGroup
 
-		// Call LLM (streaming or non-streaming)
-		var resp *providers.ChatResponse
-		var err error
-
-		llmSpanStart := time.Now().UTC()
-
-		if req.Stream {
-			resp, err = l.provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
-				if chunk.Thinking != "" {
-					l.emit(AgentEvent{
-						Type:    protocol.ChatEventThinking,
-						AgentID: l.id,
-						RunID:   req.RunID,
-						Payload: map[string]string{"content": chunk.Thinking},
-					})
-				}
-				if chunk.Content != "" {
-					l.emit(AgentEvent{
-						Type:    protocol.ChatEventChunk,
-						AgentID: l.id,
-						RunID:   req.RunID,
-						Payload: map[string]string{"content": chunk.Content},
-					})
-				}
-			})
-		} else {
-			resp, err = l.provider.Chat(ctx, chatReq)
-		}
-
-		if err != nil {
-			l.emitLLMSpan(ctx, llmSpanStart, iteration, messages, nil, err)
-			return nil, fmt.Errorf("LLM call failed (iteration %d): %w", iteration, err)
-		}
-
-		l.emitLLMSpan(ctx, llmSpanStart, iteration, messages, resp, nil)
-
-		if resp.Usage != nil {
-			totalUsage.PromptTokens += resp.Usage.PromptTokens
-			totalUsage.CompletionTokens += resp.Usage.CompletionTokens
-			totalUsage.TotalTokens += resp.Usage.TotalTokens
-			totalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
-		}
-
-		// No tool calls → done
-		if len(resp.ToolCalls) == 0 {
-			finalContent = resp.Content
-			break
-		}
-
-		// Build assistant message with tool calls
-		assistantMsg := providers.Message{
-			Role:                "assistant",
-			Content:             resp.Content,
-			ToolCalls:           resp.ToolCalls,
-			RawAssistantContent: resp.RawAssistantContent, // preserve thinking blocks for Anthropic passback
-		}
-		messages = append(messages, assistantMsg)
-		pendingMsgs = append(pendingMsgs, assistantMsg)
-
-		// Execute tool calls (parallel when multiple, sequential when single)
-		if len(resp.ToolCalls) == 1 {
-			// Single tool: sequential — no goroutine overhead
-			tc := resp.ToolCalls[0]
-			l.emit(AgentEvent{
-				Type:    protocol.AgentEventToolCall,
-				AgentID: l.id,
-				RunID:   req.RunID,
-				Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID},
-			})
-
+	for i, tc := range toolCalls {
+		wg.Add(1)
+		go func(idx int, tc providers.ToolCall) {
+			defer wg.Done()
 			argsJSON, _ := json.Marshal(tc.Arguments)
-			slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
-
-			argsHash := loopDetector.record(tc.Name, tc.Arguments)
-
-			toolSpanStart := time.Now().UTC()
+			slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON), "parallel", true)
+			spanStart := time.Now().UTC()
 			result := l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
-
-			l.emitToolSpan(ctx, toolSpanStart, tc.Name, tc.ID, string(argsJSON), result)
-
-			// Record result for loop detection.
-			loopDetector.recordResult(argsHash, result.ForLLM)
-
-			if result.Async {
-				asyncToolCalls = append(asyncToolCalls, tc.Name)
-			}
-
-			if result.IsError {
-				errMsg := result.ForLLM
-				if len(errMsg) > 200 {
-					errMsg = errMsg[:200] + "..."
-				}
-				slog.Warn("tool error", "agent", l.id, "tool", tc.Name, "error", errMsg)
-			}
-
-			l.emit(AgentEvent{
-				Type:    protocol.AgentEventToolResult,
-				AgentID: l.id,
-				RunID:   req.RunID,
-				Payload: map[string]interface{}{
-					"name":     tc.Name,
-					"id":       tc.ID,
-					"is_error": result.IsError,
-				},
-			})
-
-			// Collect MEDIA: paths from tool results
-			if mr := parseMediaResult(result.ForLLM); mr != nil {
-				mediaResults = append(mediaResults, *mr)
-			}
-
-			toolMsg := providers.Message{
-				Role:       "tool",
-				Content:    result.ForLLM,
-				ToolCallID: tc.ID,
-			}
-			messages = append(messages, toolMsg)
-			pendingMsgs = append(pendingMsgs, toolMsg)
-
-			// Check for tool call loop after recording result.
-			if level, msg := loopDetector.detect(tc.Name, argsHash); level != "" {
-				if level == "critical" {
-					slog.Warn("tool loop critical", "agent", l.id, "tool", tc.Name, "message", msg)
-					finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + tc.Name + " without making progress. Please try rephrasing your request."
-					break
-				}
-				// Warning: inject message so model knows to change strategy.
-				slog.Warn("tool loop warning", "agent", l.id, "tool", tc.Name, "message", msg)
-				messages = append(messages, providers.Message{Role: "user", Content: msg})
-			}
-		} else {
-			// Multiple tools: parallel execution via goroutines.
-			// Tool instances are immutable (context-based) so concurrent access is safe.
-			// Results are collected then processed sequentially for deterministic ordering.
-			type indexedResult struct {
-				idx       int
-				tc        providers.ToolCall
-				result    *tools.Result
-				argsJSON  string
-				spanStart time.Time
-			}
-
-			// 1. Emit all tool.call events upfront (client sees all calls starting)
-			for _, tc := range resp.ToolCalls {
-				l.emit(AgentEvent{
-					Type:    protocol.AgentEventToolCall,
-					AgentID: l.id,
-					RunID:   req.RunID,
-					Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID},
-				})
-			}
-
-			// 2. Execute all tools in parallel
-			resultCh := make(chan indexedResult, len(resp.ToolCalls))
-			var wg sync.WaitGroup
-
-			for i, tc := range resp.ToolCalls {
-				wg.Add(1)
-				go func(idx int, tc providers.ToolCall) {
-					defer wg.Done()
-					argsJSON, _ := json.Marshal(tc.Arguments)
-					slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON), "parallel", true)
-					spanStart := time.Now().UTC()
-					result := l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
-					resultCh <- indexedResult{idx: idx, tc: tc, result: result, argsJSON: string(argsJSON), spanStart: spanStart}
-				}(i, tc)
-			}
-
-			// Close channel after all goroutines complete (run in separate goroutine to avoid deadlock)
-			go func() { wg.Wait(); close(resultCh) }()
-
-			// 3. Collect results
-			collected := make([]indexedResult, 0, len(resp.ToolCalls))
-			for r := range resultCh {
-				collected = append(collected, r)
-			}
-
-			// 4. Sort by original index → deterministic message ordering
-			sort.Slice(collected, func(i, j int) bool {
-				return collected[i].idx < collected[j].idx
-			})
-
-			// 5. Process results sequentially: emit events, append messages, save to session
-			var loopStuck bool
-			for _, r := range collected {
-				l.emitToolSpan(ctx, r.spanStart, r.tc.Name, r.tc.ID, r.argsJSON, r.result)
-
-				// Record for loop detection.
-				argsHash := loopDetector.record(r.tc.Name, r.tc.Arguments)
-				loopDetector.recordResult(argsHash, r.result.ForLLM)
-
-				if r.result.Async {
-					asyncToolCalls = append(asyncToolCalls, r.tc.Name)
-				}
-
-				if r.result.IsError {
-					errMsg := r.result.ForLLM
-					if len(errMsg) > 200 {
-						errMsg = errMsg[:200] + "..."
-					}
-					slog.Warn("tool error", "agent", l.id, "tool", r.tc.Name, "error", errMsg)
-				}
-
-				l.emit(AgentEvent{
-					Type:    protocol.AgentEventToolResult,
-					AgentID: l.id,
-					RunID:   req.RunID,
-					Payload: map[string]interface{}{
-						"name":     r.tc.Name,
-						"id":       r.tc.ID,
-						"is_error": r.result.IsError,
-					},
-				})
-
-				// Collect MEDIA: paths from tool results
-				if mr := parseMediaResult(r.result.ForLLM); mr != nil {
-					mediaResults = append(mediaResults, *mr)
-				}
-
-				toolMsg := providers.Message{
-					Role:       "tool",
-					Content:    r.result.ForLLM,
-					ToolCallID: r.tc.ID,
-				}
-				messages = append(messages, toolMsg)
-				pendingMsgs = append(pendingMsgs, toolMsg)
-
-				// Check for tool call loop.
-				if level, msg := loopDetector.detect(r.tc.Name, argsHash); level != "" {
-					if level == "critical" {
-						slog.Warn("tool loop critical", "agent", l.id, "tool", r.tc.Name, "message", msg)
-						finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + r.tc.Name + " without making progress. Please try rephrasing your request."
-						loopStuck = true
-						break
-					}
-					slog.Warn("tool loop warning", "agent", l.id, "tool", r.tc.Name, "message", msg)
-					messages = append(messages, providers.Message{Role: "user", Content: msg})
-				}
-			}
-			if loopStuck {
-				break
-			}
-		}
+			resultCh <- indexedResult{idx: idx, toolExecResult: toolExecResult{tc: tc, result: result, argsJSON: string(argsJSON), spanStart: spanStart}}
+		}(i, tc)
 	}
 
-	// 4. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
-	finalContent = SanitizeAssistantContent(finalContent)
+	// Close channel after all goroutines complete (run in separate goroutine to avoid deadlock)
+	go func() { wg.Wait(); close(resultCh) }()
 
-	// 5. Handle NO_REPLY: save to session for context but mark as silent.
-	// Matching TS: NO_REPLY is saved (via resolveSilentReplyFallbackText) but
-	// filtered at the payload level before delivery.
-	isSilent := IsSilentReply(finalContent)
-
-	// 6. Fallback for empty content
-	if finalContent == "" {
-		if len(asyncToolCalls) > 0 {
-			finalContent = "..."
-		} else {
-			finalContent = "..."
-		}
+	// Collect results
+	collected := make([]indexedResult, 0, len(toolCalls))
+	for r := range resultCh {
+		collected = append(collected, r)
 	}
 
-	pendingMsgs = append(pendingMsgs, providers.Message{
-		Role:    "assistant",
-		Content: finalContent,
+	// Sort by original index → deterministic message ordering
+	sort.Slice(collected, func(i, j int) bool {
+		return collected[i].idx < collected[j].idx
 	})
 
+	// Extract results in order
+	results := make([]toolExecResult, len(collected))
+	for i, c := range collected {
+		results[i] = c.toolExecResult
+	}
+	return results
+}
+
+// persistRun flushes buffered messages to the session store, updates metadata,
+// calibrates token estimation, and handles bootstrap auto-cleanup.
+func (l *Loop) persistRun(ctx context.Context, req RunRequest, pendingMsgs, history []providers.Message, hadBootstrap bool, totalUsage providers.Usage) {
 	// Flush all buffered messages to session atomically.
 	// This ensures concurrent runs never see each other's in-progress messages.
 	for _, msg := range pendingMsgs {
@@ -865,83 +875,6 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				slog.Info("bootstrap auto-cleanup completed", "agent", l.id, "user", req.UserID, "turns", userTurns)
 			}
 		}
-	}
-
-	// If silent, return empty content so gateway suppresses delivery.
-	if isSilent {
-		slog.Info("agent loop: NO_REPLY detected, suppressing delivery",
-			"agent", l.id, "session", req.SessionKey)
-		finalContent = ""
-	}
-
-	// 5. Maybe summarize
-	l.maybeSummarize(ctx, req.SessionKey)
-
-	return &RunResult{
-		Content:    finalContent,
-		RunID:      req.RunID,
-		Iterations: iteration,
-		Usage:      &totalUsage,
-		Media:      mediaResults,
-	}, nil
-}
-
-// parseMediaResult extracts a MediaResult from a tool result string containing "MEDIA:" prefix.
-// Handles formats: "MEDIA:/path/to/file" and "[[audio_as_voice]]\nMEDIA:/path/to/file".
-// Returns nil if no MEDIA: prefix is found.
-func parseMediaResult(toolOutput string) *MediaResult {
-	s := toolOutput
-	asVoice := false
-
-	// Check for [[audio_as_voice]] tag (TTS voice messages)
-	if strings.Contains(s, "[[audio_as_voice]]") {
-		asVoice = true
-		s = strings.ReplaceAll(s, "[[audio_as_voice]]", "")
-		s = strings.TrimSpace(s)
-	}
-
-	// Find MEDIA: prefix
-	idx := strings.Index(s, "MEDIA:")
-	if idx < 0 {
-		return nil
-	}
-	path := strings.TrimSpace(s[idx+6:])
-	if path == "" {
-		return nil
-	}
-	// Take only the first line (in case there's trailing text)
-	if nl := strings.IndexByte(path, '\n'); nl >= 0 {
-		path = strings.TrimSpace(path[:nl])
-	}
-
-	return &MediaResult{
-		Path:        path,
-		ContentType: mimeFromExt(filepath.Ext(path)),
-		AsVoice:     asVoice,
-	}
-}
-
-// mimeFromExt returns a MIME type for common media file extensions.
-func mimeFromExt(ext string) string {
-	switch strings.ToLower(ext) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".mp4":
-		return "video/mp4"
-	case ".ogg", ".opus":
-		return "audio/ogg"
-	case ".mp3":
-		return "audio/mpeg"
-	case ".wav":
-		return "audio/wav"
-	default:
-		return "application/octet-stream"
 	}
 }
 
