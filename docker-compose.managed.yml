@@ -32,10 +32,6 @@ services:
     environment:
       - GOCLAW_MODE=managed
       - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
-    volumes:
-      - goclaw-skills:/app/skills
-      - goclaw-workspace:/app/.goclaw
 
 volumes:
   postgres-data:
-  goclaw-skills:

@@ -17,8 +17,3 @@ services:
     environment:
       - GOCLAW_TSNET_HOSTNAME=${GOCLAW_TSNET_HOSTNAME:-goclaw-gateway}
       - GOCLAW_TSNET_AUTH_KEY=${GOCLAW_TSNET_AUTH_KEY}
-    volumes:
-      - tsnet-state:/app/tsnet-state
-
-volumes:
-  tsnet-state:

@@ -45,13 +45,13 @@ RUN set -eux; \
 RUN adduser -D -u 1000 -h /app goclaw
 WORKDIR /app
 
-# Copy binary and migrations
-COPY --from=builder /out/goclaw /app/goclaw
-COPY --from=builder /src/migrations/ /app/migrations/
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+# Copy binary, migrations, and entrypoint to system paths (outside /app data volume)
+COPY --from=builder /out/goclaw /usr/local/bin/goclaw
+COPY --from=builder /src/migrations/ /usr/share/goclaw/migrations/
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Create data directories (owned by goclaw user)
+# Create data directories (owned by goclaw user) — /app is purely persistent data
 RUN mkdir -p /app/workspace /app/data /app/sessions /app/skills /app/tsnet-state /app/.goclaw \
     && chown -R goclaw:goclaw /app
 
@@ -61,7 +61,7 @@ ENV GOCLAW_CONFIG=/app/config.json \
     GOCLAW_DATA_DIR=/app/data \
     GOCLAW_SESSIONS_STORAGE=/app/sessions \
     GOCLAW_SKILLS_DIR=/app/skills \
-    GOCLAW_MIGRATIONS_DIR=/app/migrations \
+    GOCLAW_MIGRATIONS_DIR=/usr/share/goclaw/migrations \
     GOCLAW_HOST=0.0.0.0 \
     GOCLAW_PORT=18790
 
@@ -72,5 +72,5 @@ EXPOSE 18790
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:18790/health || exit 1
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["serve"]

@@ -7,13 +7,7 @@ services:
   goclaw:
     volumes:
       - ./config.json:/app/config.json:ro
-      - goclaw-workspace:/app/workspace
-      - goclaw-data:/app/data
-      - goclaw-sessions:/app/sessions
-      - goclaw-skills:/app/skills
+      - goclaw-data:/app
 
 volumes:
-  goclaw-workspace:
   goclaw-data:
-  goclaw-sessions:
-  goclaw-skills:

@@ -25,14 +25,12 @@ services:
     environment:
       - GOCLAW_MODE=managed
       - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
-      - GOCLAW_CONFIG=/app/data/config.json
-      - GOCLAW_MIGRATIONS_DIR=/app/migrations
       - GOCLAW_ENCRYPTION_KEY=${GOCLAW_ENCRYPTION_KEY:-}
     volumes:
-      - goclaw-data:/app/data
+      - goclaw-data:/app
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["/app/goclaw"]
+    entrypoint: ["goclaw"]
     command: ["upgrade"]
     restart: "no"
