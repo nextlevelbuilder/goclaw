@@ -86,7 +86,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Mode:            ModeOff,
-		Image:           "openclaw-sandbox:bookworm-slim",
+		Image:           "goclaw-sandbox:bookworm-slim",
 		WorkspaceAccess: AccessRW,
 		Scope:           ScopeSession,
 		MemoryMB:        512,
@@ -97,7 +97,7 @@ func DefaultConfig() Config {
 		CapDrop:         []string{"ALL"},
 		Tmpfs:           []string{"/tmp", "/var/tmp", "/run"},
 		MaxOutputBytes:  1 << 20, // 1MB
-		ContainerPrefix:  "openclaw-sbx-",
+		ContainerPrefix:  "goclaw-sbx-",
 		Workdir:          "/workspace",
 		IdleHours:        24,
 		MaxAgeDays:       7,

@@ -1,7 +1,7 @@
 # Sandbox overlay — enables Docker-based sandbox for agent code execution.
 #
 # Prerequisites:
-#   1. Build the sandbox image:  docker build -t openclaw-sandbox:bookworm-slim -f Dockerfile.sandbox .
+#   1. Build the sandbox image:  docker build -t goclaw-sandbox:bookworm-slim -f Dockerfile.sandbox .
 #   2. Ensure Docker socket is accessible
 #
 # Usage (with managed mode):
@@ -19,7 +19,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - GOCLAW_SANDBOX_MODE=all
-      - GOCLAW_SANDBOX_IMAGE=openclaw-sandbox:bookworm-slim
+      - GOCLAW_SANDBOX_IMAGE=goclaw-sandbox:bookworm-slim
       - GOCLAW_SANDBOX_WORKSPACE_ACCESS=rw
       - GOCLAW_SANDBOX_SCOPE=session
       - GOCLAW_SANDBOX_MEMORY_MB=512

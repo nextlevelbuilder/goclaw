@@ -32,7 +32,7 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 	initReq := mcpgo.InitializeRequest{}
 	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
 	initReq.Params.ClientInfo = mcpgo.Implementation{
-		Name:    "openclaw-go",
+		Name:    "goclaw",
 		Version: "1.0.0",
 	}
 
