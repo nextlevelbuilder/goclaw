@@ -46,7 +46,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit }: MCPFormD
       setDisplayName(server?.display_name ?? "");
       setTransport(server?.transport ?? "stdio");
       setCommand(server?.command ?? "");
-      setArgs(server?.args?.join(", ") ?? "");
+      setArgs(Array.isArray(server?.args) ? server.args.join(", ") : "");
       setUrl(server?.url ?? "");
       setHeaders(server?.headers ? JSON.stringify(server.headers, null, 2) : "");
       setToolPrefix(server?.tool_prefix ?? "");

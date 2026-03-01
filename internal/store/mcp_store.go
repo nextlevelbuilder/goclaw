@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,14 +15,14 @@ type MCPServerData struct {
 	DisplayName string  `json:"display_name,omitempty"`
 	Transport   string  `json:"transport"`               // "stdio", "sse", "streamable-http"
 	Command     string  `json:"command,omitempty"`        // stdio
-	Args        []byte  `json:"args,omitempty"`           // JSONB
+	Args        json.RawMessage `json:"args,omitempty"`    // JSONB
 	URL         string  `json:"url,omitempty"`            // sse/http
-	Headers     []byte  `json:"headers,omitempty"`        // JSONB
-	Env         []byte  `json:"env,omitempty"`            // JSONB (stdio)
+	Headers     json.RawMessage `json:"headers,omitempty"`  // JSONB
+	Env         json.RawMessage `json:"env,omitempty"`     // JSONB (stdio)
 	APIKey      string  `json:"api_key,omitempty"`        // encrypted
 	ToolPrefix  string  `json:"tool_prefix,omitempty"`
 	TimeoutSec  int     `json:"timeout_sec"`
-	Settings    []byte  `json:"settings,omitempty"`       // JSONB
+	Settings    json.RawMessage `json:"settings,omitempty"` // JSONB
 	Enabled     bool    `json:"enabled"`
 	CreatedBy   string  `json:"created_by"`
 }
@@ -32,9 +33,9 @@ type MCPAgentGrant struct {
 	ServerID        uuid.UUID `json:"server_id"`
 	AgentID         uuid.UUID `json:"agent_id"`
 	Enabled         bool      `json:"enabled"`
-	ToolAllow       []byte    `json:"tool_allow,omitempty"`       // JSONB
-	ToolDeny        []byte    `json:"tool_deny,omitempty"`        // JSONB
-	ConfigOverrides []byte    `json:"config_overrides,omitempty"` // JSONB
+	ToolAllow       json.RawMessage `json:"tool_allow,omitempty"`       // JSONB
+	ToolDeny        json.RawMessage `json:"tool_deny,omitempty"`        // JSONB
+	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty"` // JSONB
 	GrantedBy       string    `json:"granted_by"`
 	CreatedAt       time.Time `json:"created_at"`
 }
@@ -45,10 +46,10 @@ type MCPUserGrant struct {
 	ServerID  uuid.UUID `json:"server_id"`
 	UserID    string    `json:"user_id"`
 	Enabled   bool      `json:"enabled"`
-	ToolAllow []byte    `json:"tool_allow,omitempty"` // JSONB
-	ToolDeny  []byte    `json:"tool_deny,omitempty"`  // JSONB
-	GrantedBy string    `json:"granted_by"`
-	CreatedAt time.Time `json:"created_at"`
+	ToolAllow json.RawMessage `json:"tool_allow,omitempty"` // JSONB
+	ToolDeny  json.RawMessage `json:"tool_deny,omitempty"`  // JSONB
+	GrantedBy string          `json:"granted_by"`
+	CreatedAt time.Time       `json:"created_at"`
 }
 
 // MCPAccessRequest represents a request for MCP server access.
@@ -60,7 +61,7 @@ type MCPAccessRequest struct {
 	Scope       string     `json:"scope"`                    // "agent" or "user"
 	Status      string     `json:"status"`                   // "pending", "approved", "rejected"
 	Reason      string     `json:"reason,omitempty"`
-	ToolAllow   []byte     `json:"tool_allow,omitempty"`     // JSONB
+	ToolAllow   json.RawMessage `json:"tool_allow,omitempty"` // JSONB
 	RequestedBy string    `json:"requested_by"`
 	ReviewedBy  string     `json:"reviewed_by,omitempty"`
 	ReviewedAt  *time.Time `json:"reviewed_at,omitempty"`

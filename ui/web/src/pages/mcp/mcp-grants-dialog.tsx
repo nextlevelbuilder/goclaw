@@ -107,10 +107,10 @@ export function MCPGrantsDialog({
                 <div key={grant.id} className="flex items-center justify-between border-b px-3 py-2 last:border-0">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="font-mono text-xs">{grant.agent_id}</Badge>
-                    {grant.tool_allow && (
+                    {Array.isArray(grant.tool_allow) && grant.tool_allow.length > 0 && (
                       <span className="text-xs text-muted-foreground">allow: {grant.tool_allow.join(", ")}</span>
                     )}
-                    {grant.tool_deny && (
+                    {Array.isArray(grant.tool_deny) && grant.tool_deny.length > 0 && (
                       <span className="text-xs text-muted-foreground">deny: {grant.tool_deny.join(", ")}</span>
                     )}
                   </div>

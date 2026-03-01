@@ -176,8 +176,8 @@ func (h *MCPHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		AgentID   string `json:"agent_id"`
-		ToolAllow []byte `json:"tool_allow,omitempty"`
-		ToolDeny  []byte `json:"tool_deny,omitempty"`
+		ToolAllow json.RawMessage `json:"tool_allow,omitempty"`
+		ToolDeny  json.RawMessage `json:"tool_deny,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -258,8 +258,8 @@ func (h *MCPHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		UserID    string `json:"user_id"`
-		ToolAllow []byte `json:"tool_allow,omitempty"`
-		ToolDeny  []byte `json:"tool_deny,omitempty"`
+		ToolAllow json.RawMessage `json:"tool_allow,omitempty"`
+		ToolDeny  json.RawMessage `json:"tool_deny,omitempty"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
