@@ -815,7 +815,7 @@ func runGateway() {
 	}
 
 	// Start heartbeat service (matching TS heartbeat-runner.ts).
-	heartbeatSvc := setupHeartbeat(cfg, agentRouter, sessStore, msgBus, workspace)
+	heartbeatSvc := setupHeartbeat(cfg, agentRouter, sessStore, msgBus, workspace, managedStores)
 	if heartbeatSvc != nil {
 		heartbeatSvc.Start()
 	}
