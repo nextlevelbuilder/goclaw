@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -59,10 +60,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}},suffix=${{ matrix.suffix }}
-            type=semver,pattern={{major}}.{{minor}},suffix=${{ matrix.suffix }}
-            type=raw,value=latest,enable=${{ matrix.suffix == '' }},suffix=
-            type=raw,value=${{ matrix.variant }},enable=${{ matrix.suffix != '' }}
+            type=semver,pattern={{version}},suffix=${{ matrix.suffix }},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{major}}.{{minor}},suffix=${{ matrix.suffix }},enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ matrix.suffix == '' && github.event_name == 'push' }},suffix=
+            type=raw,value=${{ matrix.variant }},enable=${{ matrix.suffix != '' && github.event_name == 'push' }}
+            type=raw,value=edge${{ matrix.suffix }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -105,9 +107,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'push' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
