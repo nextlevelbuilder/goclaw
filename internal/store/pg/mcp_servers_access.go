@@ -117,14 +117,14 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 	for rows.Next() {
 		var srv store.MCPServerData
 		var displayName, command, url, apiKey, toolPrefix *string
-		var args, headers, env, settings *[]byte
+		var args, headers, env *[]byte
 		var toolAllowJSON, toolDenyJSON *[]byte
 
 		if err := rows.Scan(
 			&srv.ID, &srv.Name, &displayName, &srv.Transport, &command,
 			&args, &url, &headers, &env,
 			&apiKey, &toolPrefix, &srv.TimeoutSec,
-			&settings, &srv.Enabled, &srv.CreatedBy, &srv.CreatedAt, &srv.UpdatedAt,
+			&srv.Settings, &srv.Enabled, &srv.CreatedBy, &srv.CreatedAt, &srv.UpdatedAt,
 			&toolAllowJSON, &toolDenyJSON,
 		); err != nil {
 			continue
@@ -136,7 +136,6 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 		srv.Args = derefBytes(args)
 		srv.Headers = derefBytes(headers)
 		srv.Env = derefBytes(env)
-		srv.Settings = derefBytes(settings)
 		if apiKey != nil && *apiKey != "" && s.encKey != "" {
 			if decrypted, err := crypto.Decrypt(*apiKey, s.encKey); err == nil {
 				srv.APIKey = decrypted
