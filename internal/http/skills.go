@@ -181,16 +181,27 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer zr.Close()
 
-	// Validate: must have SKILL.md at root
+	// Validate: must have SKILL.md at root or inside a single top-level directory.
+	// Many ZIP tools wrap contents in a folder (e.g. "my-skill/SKILL.md").
 	var skillMD *zip.File
+	var stripPrefix string
 	for _, f := range zr.File {
-		if f.Name == "SKILL.md" || f.Name == "./SKILL.md" {
+		name := strings.TrimPrefix(f.Name, "./")
+		if name == "SKILL.md" {
 			skillMD = f
+			stripPrefix = ""
+			break
+		}
+		// Allow one level of directory nesting: "dirname/SKILL.md"
+		parts := strings.SplitN(name, "/", 3)
+		if len(parts) == 2 && parts[1] == "SKILL.md" && !f.FileInfo().IsDir() {
+			skillMD = f
+			stripPrefix = parts[0] + "/"
 			break
 		}
 	}
 	if skillMD == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ZIP must contain SKILL.md at root"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ZIP must contain SKILL.md at root (or inside a single top-level directory)"})
 		return
 	}
 
@@ -232,8 +243,16 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if f.FileInfo().IsDir() {
 			continue
 		}
+		// Strip wrapper directory prefix if ZIP had one
+		entryName := strings.TrimPrefix(f.Name, "./")
+		if stripPrefix != "" {
+			entryName = strings.TrimPrefix(entryName, stripPrefix)
+			if entryName == "" {
+				continue
+			}
+		}
 		// Security: prevent path traversal
-		name := filepath.Clean(f.Name)
+		name := filepath.Clean(entryName)
 		if strings.Contains(name, "..") {
 			continue
 		}
