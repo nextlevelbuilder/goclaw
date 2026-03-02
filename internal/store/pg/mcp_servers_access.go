@@ -113,17 +113,18 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 	}
 	defer rows.Close()
 
-	var result []store.MCPAccessInfo
+	result := make([]store.MCPAccessInfo, 0)
 	for rows.Next() {
 		var srv store.MCPServerData
 		var displayName, command, url, apiKey, toolPrefix *string
-		var toolAllowJSON, toolDenyJSON []byte
+		var args, headers, env, settings *[]byte
+		var toolAllowJSON, toolDenyJSON *[]byte
 
 		if err := rows.Scan(
 			&srv.ID, &srv.Name, &displayName, &srv.Transport, &command,
-			&srv.Args, &url, &srv.Headers, &srv.Env,
+			&args, &url, &headers, &env,
 			&apiKey, &toolPrefix, &srv.TimeoutSec,
-			&srv.Settings, &srv.Enabled, &srv.CreatedBy, &srv.CreatedAt, &srv.UpdatedAt,
+			&settings, &srv.Enabled, &srv.CreatedBy, &srv.CreatedAt, &srv.UpdatedAt,
 			&toolAllowJSON, &toolDenyJSON,
 		); err != nil {
 			continue
@@ -132,6 +133,10 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 		srv.Command = derefStr(command)
 		srv.URL = derefStr(url)
 		srv.ToolPrefix = derefStr(toolPrefix)
+		srv.Args = derefBytes(args)
+		srv.Headers = derefBytes(headers)
+		srv.Env = derefBytes(env)
+		srv.Settings = derefBytes(settings)
 		if apiKey != nil && *apiKey != "" && s.encKey != "" {
 			if decrypted, err := crypto.Decrypt(*apiKey, s.encKey); err == nil {
 				srv.APIKey = decrypted
@@ -142,10 +147,10 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 
 		info := store.MCPAccessInfo{Server: srv}
 		if toolAllowJSON != nil {
-			json.Unmarshal(toolAllowJSON, &info.ToolAllow)
+			json.Unmarshal(*toolAllowJSON, &info.ToolAllow)
 		}
 		if toolDenyJSON != nil {
-			json.Unmarshal(toolDenyJSON, &info.ToolDeny)
+			json.Unmarshal(*toolDenyJSON, &info.ToolDeny)
 		}
 		result = append(result, info)
 	}

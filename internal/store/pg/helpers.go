@@ -55,6 +55,13 @@ func derefUUID(u *uuid.UUID) uuid.UUID {
 	return *u
 }
 
+func derefBytes(b *[]byte) []byte {
+	if b == nil {
+		return nil
+	}
+	return *b
+}
+
 // --- JSON helpers ---
 
 func jsonOrEmpty(data []byte) []byte {
