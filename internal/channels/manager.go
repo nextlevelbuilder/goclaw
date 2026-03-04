@@ -19,9 +19,13 @@ type RunContext struct {
 	ChannelName  string
 	ChatID       string
 	MessageID    string // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
+	Metadata     map[string]string // outbound routing metadata (thread_id, local_key, group_id)
+	Streaming    bool              // whether run uses streaming (to avoid double-delivery of block replies)
 	mu           sync.Mutex
 	streamBuffer string // accumulated streaming text (chunks are deltas)
 	inToolPhase  bool   // true after tool.call, reset on next chunk (new LLM iteration)
+	blockReplies int    // count of block replies sent
+	lastBlockReply string // last block reply content (for dedup)
 }
 
 // Manager manages all registered channels, handling their lifecycle
@@ -260,11 +264,13 @@ func (m *Manager) SendToChannel(ctx context.Context, channelName, chatID, conten
 
 // RegisterRun associates a run ID with a channel context so agent events
 // (chunks, tool calls, completion) can be forwarded to the originating channel.
-func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string) {
+func (m *Manager) RegisterRun(runID, channelName, chatID, messageID string, metadata map[string]string, streaming bool) {
 	m.runs.Store(runID, &RunContext{
 		ChannelName: channelName,
 		ChatID:      chatID,
 		MessageID:   messageID,
+		Metadata:    metadata,
+		Streaming:   streaming,
 	})
 }
 
@@ -363,6 +369,47 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload interface{})
 			// Clean up streaming state
 			_ = sc.OnStreamEnd(ctx, rc.ChatID, "")
 		}
+	}
+
+	// Handle block.reply: deliver intermediate assistant text to non-streaming channels.
+	// Streaming channels already deliver via chunks, so skip to avoid double-delivery.
+	if eventType == protocol.AgentEventBlockReply {
+		content := extractPayloadString(payload, "content")
+		if content == "" {
+			return
+		}
+		rc.mu.Lock()
+		rc.blockReplies++
+		rc.lastBlockReply = content
+		streaming := rc.Streaming
+		rc.mu.Unlock()
+
+		if streaming {
+			return // streaming already delivered via chunks
+		}
+
+		// Build outbound metadata: copy routing fields but strip reply_to_message_id
+		// (block replies are standalone) and placeholder_key (reserve for final message).
+		var outMeta map[string]string
+		if rc.Metadata != nil {
+			outMeta = make(map[string]string)
+			for _, k := range []string{"message_thread_id", "local_key", "group_id"} {
+				if v := rc.Metadata[k]; v != "" {
+					outMeta[k] = v
+				}
+			}
+			if len(outMeta) == 0 {
+				outMeta = nil
+			}
+		}
+
+		m.bus.PublishOutbound(bus.OutboundMessage{
+			Channel:  rc.ChannelName,
+			ChatID:   rc.ChatID,
+			Content:  content,
+			Metadata: outMeta,
+		})
+		return
 	}
 
 	// Handle LLM retry: update placeholder to notify user

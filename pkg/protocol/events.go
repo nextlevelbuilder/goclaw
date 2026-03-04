@@ -49,6 +49,7 @@ const (
 	AgentEventRunRetrying  = "run.retrying"
 	AgentEventToolCall     = "tool.call"
 	AgentEventToolResult   = "tool.result"
+	AgentEventBlockReply   = "block.reply"
 )
 
 // Chat event subtypes (in payload.type)
