@@ -2,8 +2,12 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -14,13 +18,14 @@ import (
 
 // Manager handles the Chrome browser lifecycle and page management.
 type Manager struct {
-	mu       sync.Mutex
-	browser  *rod.Browser
-	refs     *RefStore
-	pages    map[string]*rod.Page        // targetID → page
-	console  map[string][]ConsoleMessage // targetID → console messages
-	headless bool
-	logger   *slog.Logger
+	mu        sync.Mutex
+	browser   *rod.Browser
+	refs      *RefStore
+	pages     map[string]*rod.Page        // targetID → page
+	console   map[string][]ConsoleMessage // targetID → console messages
+	headless  bool
+	remoteURL string // CDP endpoint for remote Chrome (sidecar); skips local launcher
+	logger    *slog.Logger
 }
 
 // Option configures a Manager.
@@ -29,6 +34,12 @@ type Option func(*Manager)
 // WithHeadless sets headless mode (default false).
 func WithHeadless(h bool) Option {
 	return func(m *Manager) { m.headless = h }
+}
+
+// WithRemoteURL sets a remote CDP endpoint (e.g. "ws://chrome:9222").
+// When set, Start() connects to the remote Chrome instead of launching locally.
+func WithRemoteURL(url string) Option {
+	return func(m *Manager) { m.remoteURL = url }
 }
 
 // WithLogger sets a custom logger.
@@ -50,27 +61,49 @@ func New(opts ...Option) *Manager {
 	return m
 }
 
-// Start launches a Chrome browser.
+// Start launches a local Chrome browser or connects to a remote one.
+// If already connected but the connection is dead, it reconnects automatically.
 func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// If browser exists, check if connection is still alive
 	if m.browser != nil {
-		return fmt.Errorf("browser already running")
+		if _, err := m.browser.Pages(); err == nil {
+			return nil // already connected and healthy
+		}
+		// Connection dead — clean up and reconnect
+		m.logger.Info("browser connection lost, reconnecting")
+		m.browser = nil
+		m.pages = make(map[string]*rod.Page)
+		m.console = make(map[string][]ConsoleMessage)
 	}
 
-	l := launcher.New().
-		Headless(m.headless).
-		Set("disable-gpu").
-		Set("no-first-run").
-		Set("no-default-browser-check")
+	var controlURL string
 
-	controlURL, err := l.Launch()
-	if err != nil {
-		return fmt.Errorf("launch Chrome: %w", err)
+	if m.remoteURL != "" {
+		// Remote Chrome sidecar — query /json/version and fix host for Docker networking
+		u, err := resolveRemoteCDP(m.remoteURL)
+		if err != nil {
+			return fmt.Errorf("resolve remote Chrome at %s: %w", m.remoteURL, err)
+		}
+		controlURL = u
+		m.logger.Info("connecting to remote Chrome", "cdp", controlURL, "remote", m.remoteURL)
+	} else {
+		// Local Chrome — launch via rod launcher
+		l := launcher.New().
+			Headless(m.headless).
+			Set("disable-gpu").
+			Set("no-first-run").
+			Set("no-default-browser-check")
+
+		u, err := l.Launch()
+		if err != nil {
+			return fmt.Errorf("launch Chrome: %w", err)
+		}
+		controlURL = u
+		m.logger.Info("Chrome launched", "cdp", controlURL, "headless", m.headless)
 	}
-
-	m.logger.Info("Chrome launched", "cdp", controlURL, "headless", m.headless)
 
 	b := rod.New().ControlURL(controlURL)
 	if err := b.Connect(); err != nil {
@@ -81,7 +114,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop closes the Chrome browser.
+// Stop closes the Chrome browser (local) or disconnects (remote sidecar).
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -90,7 +123,13 @@ func (m *Manager) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	err := m.browser.Close()
+	var err error
+	if m.remoteURL == "" {
+		// Local Chrome — close the browser process
+		err = m.browser.Close()
+	}
+	// Remote Chrome — just drop the connection; sidecar stays alive
+
 	m.browser = nil
 	m.pages = make(map[string]*rod.Page)
 	m.console = make(map[string][]ConsoleMessage)
@@ -304,8 +343,29 @@ func (m *Manager) Refs() *RefStore {
 	return m.refs
 }
 
+// reconnectLocked re-establishes the CDP connection to a remote Chrome.
+// Must be called with m.mu held. Only works when remoteURL is set.
+func (m *Manager) reconnectLocked() error {
+	m.browser = nil
+	m.pages = make(map[string]*rod.Page)
+	m.console = make(map[string][]ConsoleMessage)
+
+	controlURL, err := resolveRemoteCDP(m.remoteURL)
+	if err != nil {
+		return err
+	}
+
+	b := rod.New().ControlURL(controlURL)
+	if err := b.Connect(); err != nil {
+		return err
+	}
+	m.browser = b
+	return nil
+}
+
 // getPage looks up a page by targetID. If targetID is empty, returns the first available page.
-// Must be called with m.mu held.
+// Must be called with m.mu held. If the connection is dead and remoteURL is set,
+// it attempts one automatic reconnect.
 func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 	if m.browser == nil {
 		return nil, fmt.Errorf("browser not running")
@@ -321,7 +381,19 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 	// Refresh page list from browser
 	pages, err := m.browser.Pages()
 	if err != nil {
-		return nil, fmt.Errorf("list pages: %w", err)
+		// Connection dead — try auto-reconnect for remote Chrome
+		if m.remoteURL != "" {
+			if reconnErr := m.reconnectLocked(); reconnErr != nil {
+				return nil, fmt.Errorf("list pages: %w (reconnect also failed: %v)", err, reconnErr)
+			}
+			m.logger.Info("auto-reconnected to remote Chrome")
+			pages, err = m.browser.Pages()
+			if err != nil {
+				return nil, fmt.Errorf("list pages after reconnect: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("list pages: %w", err)
+		}
 	}
 
 	// Update cache
@@ -426,4 +498,95 @@ func (m *Manager) getPageAndResolve(targetID, ref string) (*rod.Page, *rod.Eleme
 // waitStable waits for page to become stable (no network/DOM activity).
 func waitStable(page *rod.Page) {
 	_ = page.WaitStable(300 * time.Millisecond)
+}
+
+// resolveRemoteCDP queries a Chrome endpoint's /json/version to get the CDP
+// WebSocket URL, resolving the hostname to an IP address.
+//
+// Chrome (M113+) rejects HTTP/WebSocket requests where the Host header is a
+// hostname (not an IP or "localhost") to prevent DNS rebinding attacks.
+// In Docker, the service name "chrome" is a hostname, so we resolve it to an
+// IP address and use that for all connections.
+
+// cdpHTTPClient is used for /json/version queries with a reasonable timeout.
+var cdpHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+func resolveRemoteCDP(remoteURL string) (string, error) {
+	parsed, err := url.Parse(remoteURL)
+	if err != nil {
+		return "", fmt.Errorf("parse remote URL: %w", err)
+	}
+
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if port == "" {
+		port = "9222"
+	}
+
+	// Resolve hostname to IP — Chrome M113+ requires IP or "localhost" in
+	// the Host header to prevent DNS rebinding attacks.
+	ip, err := resolveToIPv4(host)
+	if err != nil {
+		return "", err
+	}
+
+	// Query /json/version using the IP (so Host header is an IP).
+	versionURL := fmt.Sprintf("http://%s:%s/json/version", ip, port)
+	resp, err := cdpHTTPClient.Get(versionURL) //nolint:gosec // resolved from user-configured URL
+	if err != nil {
+		return "", fmt.Errorf("query /json/version at %s: %w", versionURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("/json/version returned HTTP %d", resp.StatusCode)
+	}
+
+	var ver struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ver); err != nil {
+		return "", fmt.Errorf("parse /json/version: %w", err)
+	}
+	if ver.WebSocketDebuggerURL == "" {
+		return "", fmt.Errorf("empty webSocketDebuggerUrl in /json/version response")
+	}
+
+	// Replace host in returned URL with the resolved IP.
+	// Chrome returns ws://127.0.0.1/... but we need ws://<container-IP>:<port>/...
+	wsURL, err := url.Parse(ver.WebSocketDebuggerURL)
+	if err != nil {
+		return "", fmt.Errorf("parse webSocketDebuggerUrl: %w", err)
+	}
+	wsURL.Host = net.JoinHostPort(ip, port)
+	return wsURL.String(), nil
+}
+
+// resolveToIPv4 resolves a hostname to an IPv4 address.
+// Chrome typically binds on 0.0.0.0 (IPv4), so we prefer IPv4 to avoid
+// connection failures when DNS returns IPv6 addresses first.
+// If the host is already an IP, it is returned as-is.
+func resolveToIPv4(host string) (string, error) {
+	// Already an IP literal — return as-is.
+	if net.ParseIP(host) != nil {
+		return host, nil
+	}
+
+	ips, err := net.LookupHost(host)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", host, err)
+	}
+
+	// Prefer IPv4.
+	for _, ip := range ips {
+		if parsed := net.ParseIP(ip); parsed != nil && parsed.To4() != nil {
+			return ip, nil
+		}
+	}
+
+	// Fallback: return first address (could be IPv6).
+	if len(ips) > 0 {
+		return ips[0], nil
+	}
+	return "", fmt.Errorf("no addresses found for %s", host)
 }

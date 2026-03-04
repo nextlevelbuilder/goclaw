@@ -166,12 +166,17 @@ func runGateway() {
 	// Browser automation tool
 	var browserMgr *browser.Manager
 	if cfg.Tools.Browser.Enabled {
-		browserMgr = browser.New(
-			browser.WithHeadless(cfg.Tools.Browser.Headless),
-		)
+		var opts []browser.Option
+		if cfg.Tools.Browser.RemoteURL != "" {
+			opts = append(opts, browser.WithRemoteURL(cfg.Tools.Browser.RemoteURL))
+			slog.Info("browser tool enabled", "remote", cfg.Tools.Browser.RemoteURL)
+		} else {
+			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
+			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+		}
+		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
 		defer browserMgr.Close()
-		slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
 	}
 
 	// Web tools (web_search + web_fetch)

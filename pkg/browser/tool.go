@@ -137,6 +137,14 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]interface{}) 
 		return tools.ErrorResult("action is required")
 	}
 
+	// Auto-start browser for actions that need it
+	switch action {
+	case "open", "snapshot", "screenshot", "navigate", "act", "tabs", "console":
+		if err := t.manager.Start(ctx); err != nil {
+			return tools.ErrorResult(fmt.Sprintf("failed to start browser: %v", err))
+		}
+	}
+
 	switch action {
 	case "status":
 		return t.handleStatus()
