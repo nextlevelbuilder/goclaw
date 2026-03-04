@@ -478,6 +478,16 @@ func runGateway() {
 	toolsReg.Register(skillSearchTool)
 	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills()))
 
+	// Managed mode: wire skills-store directory into filesystem loader so agents
+	// can discover uploaded skills in their system prompt and BM25 search index.
+	if managedStores != nil && managedStores.Skills != nil {
+		storeDirs := managedStores.Skills.Dirs()
+		if len(storeDirs) > 0 {
+			skillsLoader.SetManagedDir(storeDirs[0])
+			slog.Info("managed mode: skills-store directory wired into loader", "dir", storeDirs[0])
+		}
+	}
+
 	// Managed mode: wire embedding-based skill search + per-agent access filtering
 	if managedStores != nil && managedStores.Skills != nil {
 		if sas, ok := managedStores.Skills.(store.SkillAccessStore); ok {

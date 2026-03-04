@@ -2,10 +2,10 @@ package config
 
 // ChannelsConfig contains per-channel configuration.
 type ChannelsConfig struct {
-	Telegram TelegramConfig `json:"telegram"`
-	Discord  DiscordConfig  `json:"discord"`
-	Slack    SlackConfig    `json:"slack"`
-	WhatsApp WhatsAppConfig `json:"whatsapp"`
+	Telegram     TelegramConfig     `json:"telegram"`
+	Discord      DiscordConfig      `json:"discord"`
+	Slack        SlackConfig        `json:"slack"`
+	WhatsApp     WhatsAppConfig     `json:"whatsapp"`
 	Zalo         ZaloConfig         `json:"zalo"`
 	ZaloPersonal ZaloPersonalConfig `json:"zalo_personal"`
 	Feishu       FeishuConfig       `json:"feishu"`
@@ -16,15 +16,15 @@ type TelegramConfig struct {
 	Token          string              `json:"token"`
 	Proxy          string              `json:"proxy,omitempty"`
 	AllowFrom      FlexibleStringSlice `json:"allow_from"`
-	DMPolicy       string              `json:"dm_policy,omitempty"`        // "pairing" (default), "allowlist", "open", "disabled"
-	GroupPolicy    string              `json:"group_policy,omitempty"`     // "open" (default), "allowlist", "disabled"
-	RequireMention *bool               `json:"require_mention,omitempty"`  // require @bot mention in groups (default true)
-	HistoryLimit   int                 `json:"history_limit,omitempty"`    // max pending group messages for context (default 50, 0=disabled)
-	DMStream       *bool               `json:"dm_stream,omitempty"`        // enable streaming for DMs (default false) — edits placeholder progressively; disabled pending Telegram draft API fixes (tdesktop#10315)
-	GroupStream    *bool               `json:"group_stream,omitempty"`     // enable streaming for groups (default false) — sends new message, edits progressively
-	ReactionLevel  string              `json:"reaction_level,omitempty"`   // "off" (default), "minimal", "full" — status emoji reactions
-	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"`  // max media download size in bytes (default 20MB)
-	LinkPreview    *bool               `json:"link_preview,omitempty"`     // enable URL previews in messages (default true)
+	DMPolicy       string              `json:"dm_policy,omitempty"`       // "pairing" (default), "allowlist", "open", "disabled"
+	GroupPolicy    string              `json:"group_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
+	RequireMention *bool               `json:"require_mention,omitempty"` // require @bot mention in groups (default true)
+	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
+	DMStream       *bool               `json:"dm_stream,omitempty"`       // enable streaming for DMs (default false) — edits placeholder progressively; disabled pending Telegram draft API fixes (tdesktop#10315)
+	GroupStream    *bool               `json:"group_stream,omitempty"`    // enable streaming for groups (default false) — sends new message, edits progressively
+	ReactionLevel  string              `json:"reaction_level,omitempty"`  // "off" (default), "minimal", "full" — status emoji reactions
+	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max media download size in bytes (default 20MB)
+	LinkPreview    *bool               `json:"link_preview,omitempty"`    // enable URL previews in messages (default true)
 
 	// Optional STT (Speech-to-Text) pipeline for voice/audio inbound messages.
 	// When stt_proxy_url is set, audio/voice messages are transcribed before being forwarded to the agent.
@@ -45,15 +45,15 @@ type TelegramConfig struct {
 // TelegramGroupConfig defines per-group overrides for a Telegram channel.
 // Matching TS TelegramGroupConfig in src/config/types.telegram.ts.
 type TelegramGroupConfig struct {
-	GroupPolicy    string                          `json:"group_policy,omitempty"`     // override group policy for this group
-	RequireMention *bool                           `json:"require_mention,omitempty"`  // override require_mention for this group
-	AllowFrom      FlexibleStringSlice             `json:"allow_from,omitempty"`       // override allow_from for this group
-	Enabled        *bool                           `json:"enabled,omitempty"`          // disable bot for this group (default: true)
-	Skills         []string                        `json:"skills,omitempty"`           // skill whitelist (nil = all, [] = none)
-	Tools          []string                        `json:"tools,omitempty"`            // tool allow list (nil = all, supports "group:xxx")
-	SystemPrompt   string                          `json:"system_prompt,omitempty"`    // extra system prompt for this group
-	Topics         map[string]*TelegramTopicConfig `json:"topics,omitempty"`           // per-topic overrides (key: thread ID string)
-	Quota          *QuotaWindow                    `json:"quota,omitempty"`            // per-group quota override
+	GroupPolicy    string                          `json:"group_policy,omitempty"`    // override group policy for this group
+	RequireMention *bool                           `json:"require_mention,omitempty"` // override require_mention for this group
+	AllowFrom      FlexibleStringSlice             `json:"allow_from,omitempty"`      // override allow_from for this group
+	Enabled        *bool                           `json:"enabled,omitempty"`         // disable bot for this group (default: true)
+	Skills         []string                        `json:"skills,omitempty"`          // skill whitelist (nil = all, [] = none)
+	Tools          []string                        `json:"tools,omitempty"`           // tool allow list (nil = all, supports "group:xxx")
+	SystemPrompt   string                          `json:"system_prompt,omitempty"`   // extra system prompt for this group
+	Topics         map[string]*TelegramTopicConfig `json:"topics,omitempty"`          // per-topic overrides (key: thread ID string)
+	Quota          *QuotaWindow                    `json:"quota,omitempty"`           // per-group quota override
 }
 
 // TelegramTopicConfig defines per-topic overrides within a Telegram group.
@@ -85,7 +85,7 @@ type SlackConfig struct {
 	AllowFrom      FlexibleStringSlice `json:"allow_from"`
 	DMPolicy       string              `json:"dm_policy,omitempty"`       // "open" (default), "allowlist", "disabled"
 	GroupPolicy    string              `json:"group_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
-	RequireMention bool               `json:"require_mention,omitempty"` // only respond to @bot in channels (default true)
+	RequireMention bool                `json:"require_mention,omitempty"` // only respond to @bot in channels (default true)
 }
 
 type WhatsAppConfig struct {
@@ -100,7 +100,7 @@ type ZaloConfig struct {
 	Enabled       bool                `json:"enabled"`
 	Token         string              `json:"token"`
 	AllowFrom     FlexibleStringSlice `json:"allow_from"`
-	DMPolicy      string              `json:"dm_policy,omitempty"`       // "pairing" (default), "allowlist", "open", "disabled"
+	DMPolicy      string              `json:"dm_policy,omitempty"` // "pairing" (default), "allowlist", "open", "disabled"
 	WebhookURL    string              `json:"webhook_url,omitempty"`
 	WebhookSecret string              `json:"webhook_secret,omitempty"`
 	MediaMaxMB    int                 `json:"media_max_mb,omitempty"` // default 5
@@ -121,13 +121,13 @@ type FeishuConfig struct {
 	AppSecret         string              `json:"app_secret"`
 	EncryptKey        string              `json:"encrypt_key,omitempty"`
 	VerificationToken string              `json:"verification_token,omitempty"`
-	Domain            string              `json:"domain,omitempty"`             // "lark" (default/global), "feishu" (China), or custom URL
-	ConnectionMode    string              `json:"connection_mode,omitempty"`    // "websocket" (default), "webhook"
-	WebhookPort       int                 `json:"webhook_port,omitempty"`       // default 3000
-	WebhookPath       string              `json:"webhook_path,omitempty"`       // default "/feishu/events"
+	Domain            string              `json:"domain,omitempty"`          // "lark" (default/global), "feishu" (China), or custom URL
+	ConnectionMode    string              `json:"connection_mode,omitempty"` // "websocket" (default), "webhook"
+	WebhookPort       int                 `json:"webhook_port,omitempty"`    // default 3000
+	WebhookPath       string              `json:"webhook_path,omitempty"`    // default "/feishu/events"
 	AllowFrom         FlexibleStringSlice `json:"allow_from"`
-	DMPolicy          string              `json:"dm_policy,omitempty"`          // "pairing" (default)
-	GroupPolicy       string              `json:"group_policy,omitempty"`       // "open" (default)
+	DMPolicy          string              `json:"dm_policy,omitempty"`    // "pairing" (default)
+	GroupPolicy       string              `json:"group_policy,omitempty"` // "open" (default)
 	GroupAllowFrom    FlexibleStringSlice `json:"group_allow_from,omitempty"`
 	RequireMention    *bool               `json:"require_mention,omitempty"`    // default true (groups)
 	TopicSessionMode  string              `json:"topic_session_mode,omitempty"` // "disabled" (default)
@@ -201,45 +201,45 @@ type QuotaConfig struct {
 
 // GatewayConfig controls the gateway server.
 type GatewayConfig struct {
-	Host            string   `json:"host"`
-	Port            int      `json:"port"`
-	Token           string   `json:"token,omitempty"`              // bearer token for WS/HTTP auth
-	OwnerIDs        []string `json:"owner_ids,omitempty"`          // sender IDs considered "owner"
-	AllowedOrigins  []string `json:"allowed_origins,omitempty"`    // WebSocket CORS whitelist (empty = allow all)
-	MaxMessageChars int      `json:"max_message_chars,omitempty"`  // max user message characters (default 32000)
-	RateLimitRPM      int      `json:"rate_limit_rpm,omitempty"`       // rate limit: requests per minute per user (default 20, 0 = disabled)
-	InjectionAction   string   `json:"injection_action,omitempty"`     // prompt injection action: "log", "warn" (default), "block", "off"
-	InboundDebounceMs int      `json:"inbound_debounce_ms,omitempty"` // merge rapid messages from same sender (default 1000ms, -1 = disabled)
+	Host              string       `json:"host"`
+	Port              int          `json:"port"`
+	Token             string       `json:"token,omitempty"`               // bearer token for WS/HTTP auth
+	OwnerIDs          []string     `json:"owner_ids,omitempty"`           // sender IDs considered "owner"
+	AllowedOrigins    []string     `json:"allowed_origins,omitempty"`     // WebSocket CORS whitelist (empty = allow all)
+	MaxMessageChars   int          `json:"max_message_chars,omitempty"`   // max user message characters (default 32000)
+	RateLimitRPM      int          `json:"rate_limit_rpm,omitempty"`      // rate limit: requests per minute per user (default 20, 0 = disabled)
+	InjectionAction   string       `json:"injection_action,omitempty"`    // prompt injection action: "log", "warn" (default), "block", "off"
+	InboundDebounceMs int          `json:"inbound_debounce_ms,omitempty"` // merge rapid messages from same sender (default 1000ms, -1 = disabled)
 	Quota             *QuotaConfig `json:"quota,omitempty"`               // per-user/group request quotas (managed mode only)
 }
 
 // ToolsConfig controls tool availability, policy, and web search.
 type ToolsConfig struct {
-	Profile          string                        `json:"profile,omitempty"`            // global profile: "minimal", "coding", "messaging", "full"
-	Allow            []string                      `json:"allow,omitempty"`              // global allow list (tool names or "group:xxx")
-	Deny             []string                      `json:"deny,omitempty"`               // global deny list
-	AlsoAllow        []string                      `json:"alsoAllow,omitempty"`          // additive: adds without removing existing
-	ByProvider       map[string]*ToolPolicySpec    `json:"byProvider,omitempty"`         // per-provider overrides
-	ExecApproval     ExecApprovalCfg               `json:"execApproval,omitempty"`       // exec command approval settings
-	WebFetch         WebFetchPolicyConfig          `json:"web_fetch"`                     // domain policy for URL fetching
-	Web              WebToolsConfig                `json:"web"`
-	Browser          BrowserToolConfig             `json:"browser"`
-	RateLimitPerHour int                           `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
-	ScrubCredentials *bool                         `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
-	McpServers       map[string]*MCPServerConfig   `json:"mcp_servers,omitempty"`         // external MCP server connections
+	Profile          string                      `json:"profile,omitempty"`      // global profile: "minimal", "coding", "messaging", "full"
+	Allow            []string                    `json:"allow,omitempty"`        // global allow list (tool names or "group:xxx")
+	Deny             []string                    `json:"deny,omitempty"`         // global deny list
+	AlsoAllow        []string                    `json:"alsoAllow,omitempty"`    // additive: adds without removing existing
+	ByProvider       map[string]*ToolPolicySpec  `json:"byProvider,omitempty"`   // per-provider overrides
+	ExecApproval     ExecApprovalCfg             `json:"execApproval,omitempty"` // exec command approval settings
+	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`              // domain policy for URL fetching
+	Web              WebToolsConfig              `json:"web"`
+	Browser          BrowserToolConfig           `json:"browser"`
+	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
+	ScrubCredentials *bool                       `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
+	McpServers       map[string]*MCPServerConfig `json:"mcp_servers,omitempty"`         // external MCP server connections
 }
 
 // MCPServerConfig configures a single external MCP server connection.
 type MCPServerConfig struct {
-	Transport  string            `json:"transport"`               // "stdio", "sse", "streamable-http"
-	Command    string            `json:"command,omitempty"`       // stdio: command to spawn
-	Args       []string          `json:"args,omitempty"`          // stdio: command arguments
-	Env        map[string]string `json:"env,omitempty"`           // stdio: extra environment variables
-	URL        string            `json:"url,omitempty"`           // sse/http: server URL
-	Headers    map[string]string `json:"headers,omitempty"`       // sse/http: extra HTTP headers
-	Enabled    *bool             `json:"enabled,omitempty"`       // default true
-	ToolPrefix string            `json:"tool_prefix,omitempty"`   // prefix for tool names (avoids collisions)
-	TimeoutSec int               `json:"timeout_sec,omitempty"`   // per-tool-call timeout in seconds (default 60)
+	Transport  string            `json:"transport"`             // "stdio", "sse", "streamable-http"
+	Command    string            `json:"command,omitempty"`     // stdio: command to spawn
+	Args       []string          `json:"args,omitempty"`        // stdio: command arguments
+	Env        map[string]string `json:"env,omitempty"`         // stdio: extra environment variables
+	URL        string            `json:"url,omitempty"`         // sse/http: server URL
+	Headers    map[string]string `json:"headers,omitempty"`     // sse/http: extra HTTP headers
+	Enabled    *bool             `json:"enabled,omitempty"`     // default true
+	ToolPrefix string            `json:"tool_prefix,omitempty"` // prefix for tool names (avoids collisions)
+	TimeoutSec int               `json:"timeout_sec,omitempty"` // per-tool-call timeout in seconds (default 60)
 }
 
 // IsEnabled returns whether this MCP server is enabled (default true).
@@ -256,9 +256,9 @@ type ExecApprovalCfg struct {
 
 // WebFetchPolicyConfig controls domain filtering for the web_fetch tool.
 type WebFetchPolicyConfig struct {
-	Policy         string   `json:"policy,omitempty"`           // "allow_all" (default), "allowlist"
-	AllowedDomains []string `json:"allowed_domains,omitempty"`  // e.g. ["github.com", "*.example.com"]
-	BlockedDomains []string `json:"blocked_domains,omitempty"`  // always checked regardless of policy
+	Policy         string   `json:"policy,omitempty"`          // "allow_all" (default), "allowlist"
+	AllowedDomains []string `json:"allowed_domains,omitempty"` // e.g. ["github.com", "*.example.com"]
+	BlockedDomains []string `json:"blocked_domains,omitempty"` // always checked regardless of policy
 }
 
 // BrowserToolConfig controls the browser automation tool.
@@ -311,20 +311,20 @@ type DuckDuckGoConfig struct {
 // SessionsConfig controls session behavior.
 // Matching TS src/config/sessions/types.ts + src/config/types.base.ts.
 type SessionsConfig struct {
-	Storage string `json:"storage"`              // directory for session files
-	Scope   string `json:"scope,omitempty"`      // "per-sender" (default), "global"
-	DmScope string `json:"dm_scope,omitempty"`   // "main", "per-peer", "per-channel-peer" (default), "per-account-channel-peer"
-	MainKey string `json:"main_key,omitempty"`   // main session key suffix (default "main", used when dm_scope="main")
+	Storage string `json:"storage"`            // directory for session files
+	Scope   string `json:"scope,omitempty"`    // "per-sender" (default), "global"
+	DmScope string `json:"dm_scope,omitempty"` // "main", "per-peer", "per-channel-peer" (default), "per-account-channel-peer"
+	MainKey string `json:"main_key,omitempty"` // main session key suffix (default "main", used when dm_scope="main")
 }
 
 // TtsConfig configures text-to-speech.
 // Matching TS src/config/types.tts.ts.
 type TtsConfig struct {
-	Provider   string              `json:"provider,omitempty"`    // "openai", "elevenlabs", "edge", "minimax"
-	Auto       string              `json:"auto,omitempty"`        // "off" (default), "always", "inbound", "tagged"
-	Mode       string              `json:"mode,omitempty"`        // "final" (default), "all"
-	MaxLength  int                 `json:"max_length,omitempty"`  // max text length before truncation (default 1500)
-	TimeoutMs  int                 `json:"timeout_ms,omitempty"`  // API timeout in ms (default 30000)
+	Provider   string              `json:"provider,omitempty"`   // "openai", "elevenlabs", "edge", "minimax"
+	Auto       string              `json:"auto,omitempty"`       // "off" (default), "always", "inbound", "tagged"
+	Mode       string              `json:"mode,omitempty"`       // "final" (default), "all"
+	MaxLength  int                 `json:"max_length,omitempty"` // max text length before truncation (default 1500)
+	TimeoutMs  int                 `json:"timeout_ms,omitempty"` // API timeout in ms (default 30000)
 	OpenAI     TtsOpenAIConfig     `json:"openai,omitempty"`
 	ElevenLabs TtsElevenLabsConfig `json:"elevenlabs,omitempty"`
 	Edge       TtsEdgeConfig       `json:"edge,omitempty"`

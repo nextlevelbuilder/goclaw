@@ -10,10 +10,11 @@ import (
 // SkillSearchResult is a single result from a skill search.
 type SkillSearchResult struct {
 	Name        string  `json:"name"`
+	Slug        string  `json:"slug"` // directory name (unique identifier, used for access filtering)
 	Description string  `json:"description"`
 	Location    string  `json:"location"` // absolute path to SKILL.md
 	BaseDir     string  `json:"baseDir"`  // skill directory (for {baseDir} references)
-	Source      string  `json:"source"`   // "workspace", "global", "builtin"
+	Source      string  `json:"source"`   // "workspace", "global", "builtin", "managed"
 	Score       float64 `json:"score"`
 }
 
@@ -151,6 +152,7 @@ func (idx *Index) Search(query string, maxResults int) []SkillSearchResult {
 	for i, r := range results {
 		out[i] = SkillSearchResult{
 			Name:        r.doc.info.Name,
+			Slug:        r.doc.info.Slug,
 			Description: r.doc.info.Description,
 			Location:    r.doc.info.Path,
 			BaseDir:     r.doc.info.BaseDir,

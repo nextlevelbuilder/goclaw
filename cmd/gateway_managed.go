@@ -82,20 +82,26 @@ func wireManagedExtras(
 	}
 
 	// 5. Set up agent resolver: lazy-creates Loops from DB
+	var skillAccessStore store.SkillAccessStore
+	if sas, ok := stores.Skills.(store.SkillAccessStore); ok {
+		skillAccessStore = sas
+	}
+
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
-		AgentStore:        stores.Agents,
-		ProviderReg:       providerReg,
-		Bus:               msgBus,
-		Sessions:          sessStore,
-		Tools:             toolsReg,
-		ToolPolicy:        toolPE,
-		Skills:            skillsLoader,
-		HasMemory:         hasMemory,
-		TraceCollector:    traceCollector,
-		EnsureUserFiles:   ensureUserFiles,
-		ContextFileLoader: contextFileLoader,
-		BootstrapCleanup:  buildBootstrapCleanup(stores.Agents),
-		InjectionAction:   injectionAction,
+		AgentStore:             stores.Agents,
+		ProviderReg:            providerReg,
+		Bus:                    msgBus,
+		Sessions:               sessStore,
+		Tools:                  toolsReg,
+		ToolPolicy:             toolPE,
+		Skills:                 skillsLoader,
+		SkillAccessStore:       skillAccessStore,
+		HasMemory:              hasMemory,
+		TraceCollector:         traceCollector,
+		EnsureUserFiles:        ensureUserFiles,
+		ContextFileLoader:      contextFileLoader,
+		BootstrapCleanup:       buildBootstrapCleanup(stores.Agents),
+		InjectionAction:        injectionAction,
 		MaxMessageChars:        appCfg.Gateway.MaxMessageChars,
 		CompactionCfg:          appCfg.Agents.Defaults.Compaction,
 		ContextPruningCfg:      appCfg.Agents.Defaults.ContextPruning,
@@ -106,6 +112,7 @@ func wireManagedExtras(
 		AgentLinkStore:         stores.AgentLinks,
 		TeamStore:              stores.Teams,
 		BuiltinToolStore:       stores.BuiltinTools,
+		MCPStore:               stores.MCP,
 		GroupWriterCache:       groupWriterCache,
 		OnEvent: func(event agent.AgentEvent) {
 			msgBus.Broadcast(bus.Event{
@@ -239,6 +246,18 @@ func wireManagedExtras(
 		}
 		payload, ok := event.Payload.(bus.CacheInvalidatePayload)
 		if !ok || payload.Kind != bus.CacheKindSkillGrants {
+			return
+		}
+		agentRouter.InvalidateAll()
+	})
+
+	// MCP cache: invalidate all agent caches when MCP servers/grants change
+	msgBus.Subscribe(bus.TopicCacheMCP, func(event bus.Event) {
+		if event.Name != protocol.EventCacheInvalidate {
+			return
+		}
+		payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+		if !ok || payload.Kind != bus.CacheKindMCP {
 			return
 		}
 		agentRouter.InvalidateAll()
@@ -472,7 +491,7 @@ func wireManagedHTTP(stores *store.Stores, token string, msgBus *bus.MessageBus,
 	}
 
 	if stores != nil && stores.MCP != nil {
-		mcpH = httpapi.NewMCPHandler(stores.MCP, token)
+		mcpH = httpapi.NewMCPHandler(stores.MCP, token, msgBus)
 	}
 
 	if stores != nil && stores.CustomTools != nil {

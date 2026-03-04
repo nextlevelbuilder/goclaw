@@ -11,41 +11,41 @@ import (
 // MCPServerData represents an MCP server in the database.
 type MCPServerData struct {
 	BaseModel
-	Name        string  `json:"name"`
-	DisplayName string  `json:"display_name,omitempty"`
-	Transport   string  `json:"transport"`               // "stdio", "sse", "streamable-http"
-	Command     string  `json:"command,omitempty"`        // stdio
+	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name,omitempty"`
+	Transport   string          `json:"transport"`         // "stdio", "sse", "streamable-http"
+	Command     string          `json:"command,omitempty"` // stdio
 	Args        json.RawMessage `json:"args,omitempty"`    // JSONB
-	URL         string  `json:"url,omitempty"`            // sse/http
-	Headers     json.RawMessage `json:"headers,omitempty"`  // JSONB
+	URL         string          `json:"url,omitempty"`     // sse/http
+	Headers     json.RawMessage `json:"headers,omitempty"` // JSONB
 	Env         json.RawMessage `json:"env,omitempty"`     // JSONB (stdio)
-	APIKey      string  `json:"api_key,omitempty"`        // encrypted
-	ToolPrefix  string  `json:"tool_prefix,omitempty"`
-	TimeoutSec  int     `json:"timeout_sec"`
+	APIKey      string          `json:"api_key,omitempty"` // encrypted
+	ToolPrefix  string          `json:"tool_prefix,omitempty"`
+	TimeoutSec  int             `json:"timeout_sec"`
 	Settings    json.RawMessage `json:"settings,omitempty"` // JSONB
-	Enabled     bool    `json:"enabled"`
-	CreatedBy   string  `json:"created_by"`
+	Enabled     bool            `json:"enabled"`
+	CreatedBy   string          `json:"created_by"`
 }
 
 // MCPAgentGrant represents an MCP server grant to an agent.
 type MCPAgentGrant struct {
-	ID              uuid.UUID `json:"id"`
-	ServerID        uuid.UUID `json:"server_id"`
-	AgentID         uuid.UUID `json:"agent_id"`
-	Enabled         bool      `json:"enabled"`
+	ID              uuid.UUID       `json:"id"`
+	ServerID        uuid.UUID       `json:"server_id"`
+	AgentID         uuid.UUID       `json:"agent_id"`
+	Enabled         bool            `json:"enabled"`
 	ToolAllow       json.RawMessage `json:"tool_allow,omitempty"`       // JSONB
 	ToolDeny        json.RawMessage `json:"tool_deny,omitempty"`        // JSONB
 	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty"` // JSONB
-	GrantedBy       string    `json:"granted_by"`
-	CreatedAt       time.Time `json:"created_at"`
+	GrantedBy       string          `json:"granted_by"`
+	CreatedAt       time.Time       `json:"created_at"`
 }
 
 // MCPUserGrant represents an MCP server grant to a user.
 type MCPUserGrant struct {
-	ID        uuid.UUID `json:"id"`
-	ServerID  uuid.UUID `json:"server_id"`
-	UserID    string    `json:"user_id"`
-	Enabled   bool      `json:"enabled"`
+	ID        uuid.UUID       `json:"id"`
+	ServerID  uuid.UUID       `json:"server_id"`
+	UserID    string          `json:"user_id"`
+	Enabled   bool            `json:"enabled"`
 	ToolAllow json.RawMessage `json:"tool_allow,omitempty"` // JSONB
 	ToolDeny  json.RawMessage `json:"tool_deny,omitempty"`  // JSONB
 	GrantedBy string          `json:"granted_by"`
@@ -54,19 +54,19 @@ type MCPUserGrant struct {
 
 // MCPAccessRequest represents a request for MCP server access.
 type MCPAccessRequest struct {
-	ID          uuid.UUID  `json:"id"`
-	ServerID    uuid.UUID  `json:"server_id"`
-	AgentID     *uuid.UUID `json:"agent_id,omitempty"`
-	UserID      string     `json:"user_id,omitempty"`
-	Scope       string     `json:"scope"`                    // "agent" or "user"
-	Status      string     `json:"status"`                   // "pending", "approved", "rejected"
-	Reason      string     `json:"reason,omitempty"`
+	ID          uuid.UUID       `json:"id"`
+	ServerID    uuid.UUID       `json:"server_id"`
+	AgentID     *uuid.UUID      `json:"agent_id,omitempty"`
+	UserID      string          `json:"user_id,omitempty"`
+	Scope       string          `json:"scope"`  // "agent" or "user"
+	Status      string          `json:"status"` // "pending", "approved", "rejected"
+	Reason      string          `json:"reason,omitempty"`
 	ToolAllow   json.RawMessage `json:"tool_allow,omitempty"` // JSONB
-	RequestedBy string    `json:"requested_by"`
-	ReviewedBy  string     `json:"reviewed_by,omitempty"`
-	ReviewedAt  *time.Time `json:"reviewed_at,omitempty"`
-	ReviewNote  string     `json:"review_note,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
+	RequestedBy string          `json:"requested_by"`
+	ReviewedBy  string          `json:"reviewed_by,omitempty"`
+	ReviewedAt  *time.Time      `json:"reviewed_at,omitempty"`
+	ReviewNote  string          `json:"review_note,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 
 // MCPAccessInfo combines server data with grant-level tool filters for runtime resolution.
@@ -90,6 +90,7 @@ type MCPServerStore interface {
 	GrantToAgent(ctx context.Context, g *MCPAgentGrant) error
 	RevokeFromAgent(ctx context.Context, serverID, agentID uuid.UUID) error
 	ListAgentGrants(ctx context.Context, agentID uuid.UUID) ([]MCPAgentGrant, error)
+	ListServerGrants(ctx context.Context, serverID uuid.UUID) ([]MCPAgentGrant, error)
 
 	// User grants
 	GrantToUser(ctx context.Context, g *MCPUserGrant) error

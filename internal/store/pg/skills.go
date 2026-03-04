@@ -309,6 +309,7 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 				1 - (embedding <=> $1::vector) AS score
 			FROM skills
 			WHERE status = 'active' AND embedding IS NOT NULL
+			  AND visibility != 'private'
 			ORDER BY embedding <=> $2::vector
 			LIMIT $3`,
 		vecStr, vecStr, limit,

@@ -18,7 +18,7 @@ interface MCPGrantsDialogProps {
   server: MCPServerData;
   onGrant: (agentId: string, toolAllow?: string[], toolDeny?: string[]) => Promise<void>;
   onRevoke: (agentId: string) => Promise<void>;
-  onLoadGrants: (agentId: string) => Promise<MCPAgentGrant[]>;
+  onLoadGrants: (serverId: string) => Promise<MCPAgentGrant[]>;
 }
 
 export function MCPGrantsDialog({
@@ -27,6 +27,7 @@ export function MCPGrantsDialog({
   server,
   onGrant,
   onRevoke,
+  onLoadGrants,
 }: MCPGrantsDialogProps) {
   const [agentId, setAgentId] = useState("");
   const [toolAllow, setToolAllow] = useState("");
@@ -40,35 +41,56 @@ export function MCPGrantsDialog({
       setAgentId("");
       setToolAllow("");
       setToolDeny("");
-      setGrants([]);
       setError("");
+      // Load existing grants from API
+      setLoading(true);
+      onLoadGrants(server.id)
+        .then((existing) => setGrants(existing))
+        .catch(() => setGrants([]))
+        .finally(() => setLoading(false));
     }
-  }, [open]);
+  }, [open, server.id, onLoadGrants]);
 
   const handleGrant = async () => {
     if (!agentId.trim()) {
       setError("Agent ID is required");
       return;
     }
+
+    const trimmedId = agentId.trim();
+    const existing = grants.find((g) => g.agent_id === trimmedId);
+
     setLoading(true);
     setError("");
     try {
       const allow = toolAllow.trim() ? toolAllow.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
       const deny = toolDeny.trim() ? toolDeny.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
-      await onGrant(agentId.trim(), allow, deny);
-      setGrants((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          server_id: server.id,
-          agent_id: agentId.trim(),
-          enabled: true,
-          tool_allow: allow ?? null,
-          tool_deny: deny ?? null,
-          granted_by: "",
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      await onGrant(trimmedId, allow, deny);
+
+      if (existing) {
+        // Upsert: update existing grant in list
+        setGrants((prev) =>
+          prev.map((g) =>
+            g.agent_id === trimmedId
+              ? { ...g, tool_allow: allow ?? null, tool_deny: deny ?? null }
+              : g
+          )
+        );
+      } else {
+        setGrants((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            server_id: server.id,
+            agent_id: trimmedId,
+            enabled: true,
+            tool_allow: allow ?? null,
+            tool_deny: deny ?? null,
+            granted_by: "",
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      }
       setAgentId("");
       setToolAllow("");
       setToolDeny("");

@@ -4,7 +4,7 @@ import "testing"
 
 func TestRegisterToolGroup(t *testing.T) {
 	// Register a new MCP group
-	RegisterToolGroup("mcp:postgres", []string{"pg__query", "pg__list_tables"})
+	RegisterToolGroup("mcp:postgres", []string{"mcp_pg__query", "mcp_pg__list_tables"})
 
 	members, ok := toolGroups["mcp:postgres"]
 	if !ok {
@@ -22,10 +22,10 @@ func TestRegisterToolGroup(t *testing.T) {
 }
 
 func TestRegisterToolGroup_UsedInExpand(t *testing.T) {
-	RegisterToolGroup("mcp:test", []string{"test__tool_a", "test__tool_b"})
+	RegisterToolGroup("mcp:test", []string{"mcp_test__tool_a", "mcp_test__tool_b"})
 	defer UnregisterToolGroup("mcp:test")
 
-	available := []string{"test__tool_a", "test__tool_b", "read_file", "exec"}
+	available := []string{"mcp_test__tool_a", "mcp_test__tool_b", "read_file", "exec"}
 	expanded := expandSpec(available, []string{"group:mcp:test"})
 
 	if len(expanded) != 2 {

@@ -49,7 +49,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit }: MCPFormD
       setArgs(Array.isArray(server?.args) ? server.args.join(", ") : "");
       setUrl(server?.url ?? "");
       setHeaders(server?.headers ? JSON.stringify(server.headers, null, 2) : "");
-      setToolPrefix(server?.tool_prefix ?? "");
+      setToolPrefix((server?.tool_prefix ?? "").replace(/^mcp_/, ""));
       setTimeout(server?.timeout_sec ?? 60);
       setEnabled(server?.enabled ?? true);
       setError("");
@@ -173,15 +173,18 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit }: MCPFormD
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="mcp-prefix">Tool Prefix</Label>
-              <Input id="mcp-prefix" value={toolPrefix} onChange={(e) => setToolPrefix(e.target.value)} placeholder="mcp_" />
+          <div className="grid gap-1.5">
+            <Label htmlFor="mcp-prefix">Tool Prefix</Label>
+            <div className="flex">
+              <span className="inline-flex items-center px-2.5 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-mono">mcp_</span>
+              <Input id="mcp-prefix" value={toolPrefix} onChange={(e) => setToolPrefix(e.target.value.replace(/[^a-z0-9_]/g, ""))} placeholder={name.replace(/-/g, "_") || "auto"} className="rounded-l-none font-mono text-sm" />
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="mcp-timeout">Timeout (seconds)</Label>
-              <Input id="mcp-timeout" type="number" value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={1} />
-            </div>
+            <p className="text-xs text-muted-foreground">Auto-derived from name if empty. Tools: <code className="text-[10px]">mcp_&#123;prefix&#125;__&#123;tool&#125;</code></p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="mcp-timeout">Timeout (seconds)</Label>
+            <Input id="mcp-timeout" type="number" value={timeout} onChange={(e) => setTimeout(Number(e.target.value))} min={1} />
           </div>
 
           <div className="flex items-center gap-2">

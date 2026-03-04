@@ -49,11 +49,11 @@ export function useMCP() {
   );
 
   const listAgentGrants = useCallback(
-    async (_serverId: string) => {
-      // Backend provides per-agent listing, not per-server.
-      return [] as MCPAgentGrant[];
+    async (serverId: string) => {
+      const res = await http.get<{ grants: MCPAgentGrant[] }>(`/v1/mcp/servers/${serverId}/grants`);
+      return res.grants ?? [];
     },
-    [],
+    [http],
   );
 
   const grantAgent = useCallback(

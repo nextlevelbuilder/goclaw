@@ -22,7 +22,7 @@ const transportBadge: Record<string, string> = {
 };
 
 export function MCPPage() {
-  const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listGrantsByAgent } = useMCP();
+  const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants } = useMCP();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
   const [search, setSearch] = useState("");
@@ -197,7 +197,7 @@ export function MCPPage() {
           server={grantsServer}
           onGrant={(agentId, allow, deny) => grantAgent(grantsServer.id, agentId, allow, deny)}
           onRevoke={(agentId) => revokeAgent(grantsServer.id, agentId)}
-          onLoadGrants={listGrantsByAgent}
+          onLoadGrants={listAgentGrants}
         />
       )}
 

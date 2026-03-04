@@ -9,10 +9,10 @@ type InboundMessage struct {
 	ChatID       string            `json:"chat_id"`
 	Content      string            `json:"content"`
 	Media        []string          `json:"media,omitempty"`
-	SessionKey   string            `json:"session_key"`           // deprecated: gateway builds canonical key
-	PeerKind     string            `json:"peer_kind,omitempty"`   // "direct" or "group" (used for session key)
-	AgentID      string            `json:"agent_id,omitempty"`    // target agent (for multi-agent routing)
-	UserID       string            `json:"user_id,omitempty"`     // external user ID for per-user scoping (memory, bootstrap)
+	SessionKey   string            `json:"session_key"`             // deprecated: gateway builds canonical key
+	PeerKind     string            `json:"peer_kind,omitempty"`     // "direct" or "group" (used for session key)
+	AgentID      string            `json:"agent_id,omitempty"`      // target agent (for multi-agent routing)
+	UserID       string            `json:"user_id,omitempty"`       // external user ID for per-user scoping (memory, bootstrap)
 	HistoryLimit int               `json:"history_limit,omitempty"` // max turns to keep in context (0=unlimited, from channel config)
 	ToolAllow    []string          `json:"tool_allow,omitempty"`    // per-group tool allow list (nil = no restriction)
 	Metadata     map[string]string `json:"metadata,omitempty"`
@@ -31,12 +31,12 @@ type OutboundMessage struct {
 type MediaAttachment struct {
 	URL         string `json:"url"`                    // file path or URL
 	ContentType string `json:"content_type,omitempty"` // MIME type (e.g. "image/jpeg", "video/mp4")
-	Caption     string `json:"caption,omitempty"`       // optional caption for media
+	Caption     string `json:"caption,omitempty"`      // optional caption for media
 }
 
 // Event represents a server-side event to broadcast to WebSocket clients.
 type Event struct {
-	Name    string      `json:"name"`              // event name (e.g. "agent", "chat", "health")
+	Name    string      `json:"name"` // event name (e.g. "agent", "chat", "health")
 	Payload interface{} `json:"payload,omitempty"`
 }
 
@@ -50,9 +50,10 @@ const (
 	CacheKindChannelInstances = "channel_instances"
 	CacheKindBuiltinTools     = "builtin_tools"
 	CacheKindTeam             = "team"
-	CacheKindUserWorkspace       = "user_workspace"
-	CacheKindGroupFileWriters    = "group_file_writers"
-	CacheKindSkillGrants         = "skill_grants"
+	CacheKindUserWorkspace    = "user_workspace"
+	CacheKindGroupFileWriters = "group_file_writers"
+	CacheKindSkillGrants      = "skill_grants"
+	CacheKindMCP              = "mcp"
 )
 
 // Topic constants for msgBus.Subscribe() / Broadcast().
@@ -65,11 +66,12 @@ const (
 	TopicCacheBuiltinTools     = "cache:builtin_tools"
 	TopicCacheTeam             = "cache:team"
 	TopicCacheUserWorkspace    = "cache:user_workspace"
-	TopicCacheChannelInstances    = "cache:channel_instances"
-	TopicCacheGroupFileWriters    = "cache:group_file_writers"
-	TopicCacheSkillGrants         = "cache:skill_grants"
-	TopicChannelStreaming          = "channel-streaming"
-	TopicConfigChanged             = "config:changed"
+	TopicCacheChannelInstances = "cache:channel_instances"
+	TopicCacheGroupFileWriters = "cache:group_file_writers"
+	TopicCacheSkillGrants      = "cache:skill_grants"
+	TopicCacheMCP              = "cache:mcp"
+	TopicChannelStreaming      = "channel-streaming"
+	TopicConfigChanged         = "config:changed"
 )
 
 // CacheInvalidatePayload signals cache layers to evict stale entries.
