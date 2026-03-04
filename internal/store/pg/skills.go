@@ -210,21 +210,28 @@ func (s *PGSkillStore) UpdateSkill(id uuid.UUID, updates map[string]interface{})
 }
 
 func (s *PGSkillStore) DeleteSkill(id uuid.UUID) error {
-	// Cascade: remove all agent grants for this skill
-	_, err := s.db.Exec("DELETE FROM skill_agent_grants WHERE skill_id = $1", id)
+	tx, err := s.db.Begin()
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Cascade: remove all agent grants for this skill
+	if _, err := tx.Exec("DELETE FROM skill_agent_grants WHERE skill_id = $1", id); err != nil {
 		return fmt.Errorf("delete skill grants: %w", err)
 	}
 
 	// Cascade: remove all user grants for this skill
-	_, err = s.db.Exec("DELETE FROM skill_user_grants WHERE skill_id = $1", id)
-	if err != nil {
+	if _, err := tx.Exec("DELETE FROM skill_user_grants WHERE skill_id = $1", id); err != nil {
 		return fmt.Errorf("delete skill user grants: %w", err)
 	}
 
 	// Soft-delete the skill itself
-	_, err = s.db.Exec("UPDATE skills SET status = 'archived' WHERE id = $1", id)
-	if err != nil {
+	if _, err := tx.Exec("UPDATE skills SET status = 'archived' WHERE id = $1", id); err != nil {
+		return fmt.Errorf("archive skill: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.BumpVersion()

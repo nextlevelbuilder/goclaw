@@ -49,23 +49,16 @@ func (s *PGSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uui
 		return err
 	}
 
-	// Auto-demote: if no more agent grants remain, set internal → private
-	var remainingGrants int
-	err = s.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM skill_agent_grants WHERE skill_id = $1", skillID,
-	).Scan(&remainingGrants)
+	// Atomic auto-demote: set internal → private only if zero remaining grants.
+	// Uses NOT EXISTS subquery so the check + update is a single atomic SQL statement,
+	// avoiding a race window between COUNT and UPDATE.
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills SET visibility = 'private', updated_at = NOW()
+		 WHERE id = $1 AND visibility = 'internal'
+		   AND NOT EXISTS (SELECT 1 FROM skill_agent_grants WHERE skill_id = $1)`,
+		skillID)
 	if err != nil {
-		slog.Warn("skill_grants: failed to count remaining grants", "skill_id", skillID, "error", err)
-		return nil // grant was already revoked
-	}
-
-	if remainingGrants == 0 {
-		_, err = s.db.ExecContext(ctx,
-			`UPDATE skills SET visibility = 'private', updated_at = NOW() WHERE id = $1 AND visibility = 'internal'`,
-			skillID)
-		if err != nil {
-			slog.Warn("skill_grants: failed to auto-demote visibility", "skill_id", skillID, "error", err)
-		}
+		slog.Warn("skill_grants: failed to auto-demote visibility", "skill_id", skillID, "error", err)
 	}
 
 	s.BumpVersion()
