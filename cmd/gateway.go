@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
@@ -606,6 +607,10 @@ func runGateway() {
 
 	// Create gateway server and wire enforcement
 	server := gateway.NewServer(cfg, msgBus, agentRouter, sessStore, toolsReg)
+	server.SetVersion(Version)
+	if managedStores != nil {
+		server.SetDB(managedStores.DB)
+	}
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pairingStore)
 
@@ -928,7 +933,12 @@ func runGateway() {
 	}
 
 	// Register quota usage RPC (nil-safe — returns {enabled: false} in standalone mode).
-	methods.NewQuotaMethods(quotaChecker).Register(server.Router())
+	// Pass DB so summary cards still work when quota is disabled (queries traces directly).
+	var quotaDB *sql.DB
+	if managedStores != nil {
+		quotaDB = managedStores.DB
+	}
+	methods.NewQuotaMethods(quotaChecker, quotaDB).Register(server.Router())
 
 	// Reload quota config on config changes via pub/sub.
 	if quotaChecker != nil {

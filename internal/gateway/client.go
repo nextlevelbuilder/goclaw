@@ -25,17 +25,22 @@ type Client struct {
 	send          chan []byte
 	mu            sync.Mutex
 
+	connectedAt time.Time // when the client connected
+	remoteAddr  string    // peer IP:port from websocket
+
 	// Browser pairing state
 	pairingCode    string // 8-char code if pending approval
 	pairingPending bool   // true while waiting for admin approval
 }
 
-func NewClient(conn *websocket.Conn, server *Server) *Client {
+func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
 	return &Client{
-		id:     uuid.NewString(),
-		conn:   conn,
-		server: server,
-		send:   make(chan []byte, 256),
+		id:          uuid.NewString(),
+		conn:        conn,
+		server:      server,
+		send:        make(chan []byte, 256),
+		connectedAt: time.Now(),
+		remoteAddr:  remoteIP,
 	}
 }
 
@@ -177,6 +182,12 @@ func (c *Client) Role() permissions.Role { return c.role }
 
 // UserID returns the external user ID set during connect.
 func (c *Client) UserID() string { return c.userID }
+
+// ConnectedAt returns when the client connected.
+func (c *Client) ConnectedAt() time.Time { return c.connectedAt }
+
+// RemoteAddr returns the peer IP:port.
+func (c *Client) RemoteAddr() string { return c.remoteAddr }
 
 // Close shuts down the client connection.
 func (c *Client) Close() {

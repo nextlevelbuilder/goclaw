@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -162,16 +163,86 @@ func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
 }
 
 func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *protocol.RequestFrame) {
+	s := r.server
+	uptimeMs := time.Since(s.startedAt).Milliseconds()
+
+	mode := "standalone"
+	if s.cfg.Database.Mode == "managed" {
+		mode = "managed"
+	}
+
+	// Database status (real ping)
+	dbStatus := "n/a"
+	if s.db != nil {
+		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		if err := s.db.PingContext(pingCtx); err != nil {
+			dbStatus = "error"
+		} else {
+			dbStatus = "ok"
+		}
+	}
+
+	// Connected clients list
+	type clientInfo struct {
+		ID          string `json:"id"`
+		RemoteAddr  string `json:"remoteAddr"`
+		UserID      string `json:"userId"`
+		Role        string `json:"role"`
+		ConnectedAt string `json:"connectedAt"`
+	}
+	clients := s.ClientList()
+	clientList := make([]clientInfo, 0, len(clients))
+	for _, c := range clients {
+		clientList = append(clientList, clientInfo{
+			ID:          c.ID(),
+			RemoteAddr:  c.RemoteAddr(),
+			UserID:      c.UserID(),
+			Role:        string(c.Role()),
+			ConnectedAt: c.ConnectedAt().UTC().Format(time.RFC3339),
+		})
+	}
+
+	// Tool count
+	toolCount := 0
+	if s.tools != nil {
+		toolCount = s.tools.Count()
+	}
+
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]interface{}{
-		"status": "ok",
+		"status":   "ok",
+		"version":  s.version,
+		"uptime":   uptimeMs,
+		"mode":     mode,
+		"database": dbStatus,
+		"tools":    toolCount,
+		"clients":  clientList,
+		"currentId": client.ID(),
 	}))
 }
 
 func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *protocol.RequestFrame) {
 	agents := r.server.agents.ListInfo()
+
+	sessionCount := 0
+	if r.server.sessions != nil {
+		sessionCount = len(r.server.sessions.List(""))
+	}
+
+	// In managed mode, agents are lazily resolved — router only has loaded agents.
+	// Query the DB store for the real total count.
+	agentTotal := len(agents)
+	if r.server.agentStore != nil {
+		if dbAgents, err := r.server.agentStore.List(ctx, ""); err == nil && len(dbAgents) > agentTotal {
+			agentTotal = len(dbAgents)
+		}
+	}
+
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]interface{}{
-		"agents":  agents,
-		"clients": len(r.server.clients),
+		"agents":     agents,
+		"agentTotal": agentTotal,
+		"clients":    len(r.server.clients),
+		"sessions":   sessionCount,
 	}))
 }
 

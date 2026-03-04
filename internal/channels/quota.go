@@ -212,7 +212,7 @@ func (qc *QuotaChecker) Usage(ctx context.Context) QuotaUsageResult {
 	}
 	if !cfg.Enabled {
 		// Still return today's summary even when quota is disabled
-		qc.queryTodaySummary(ctx, &result)
+		QueryTodaySummary(ctx, qc.db, &result)
 		return result
 	}
 
@@ -237,7 +237,7 @@ func (qc *QuotaChecker) Usage(ctx context.Context) QuotaUsageResult {
 	)
 	if err != nil {
 		slog.Warn("quota.usage: failed to query user counts", "error", err)
-		qc.queryTodaySummary(ctx, &result)
+		QueryTodaySummary(ctx, qc.db, &result)
 		return result
 	}
 	defer rows.Close()
@@ -258,16 +258,17 @@ func (qc *QuotaChecker) Usage(ctx context.Context) QuotaUsageResult {
 		})
 	}
 
-	qc.queryTodaySummary(ctx, &result)
+	QueryTodaySummary(ctx, qc.db, &result)
 	return result
 }
 
-// queryTodaySummary fills today's aggregate stats into the result.
-func (qc *QuotaChecker) queryTodaySummary(ctx context.Context, result *QuotaUsageResult) {
+// QueryTodaySummary fills today's aggregate stats into the result.
+// Exported so QuotaMethods can call it directly when QuotaChecker is nil.
+func QueryTodaySummary(ctx context.Context, db *sql.DB, result *QuotaUsageResult) {
 	now := time.Now().UTC()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	err := qc.db.QueryRowContext(ctx, `
+	err := db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(total_input_tokens), 0),

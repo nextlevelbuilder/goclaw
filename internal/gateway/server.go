@@ -49,6 +49,10 @@ type Server struct {
 	clients     map[string]*Client
 	mu          sync.RWMutex
 
+	startedAt time.Time
+	version   string
+	db        interface{ PingContext(context.Context) error } // for health check DB ping
+
 	httpServer *http.Server
 	mux        *http.ServeMux
 }
@@ -56,11 +60,12 @@ type Server struct {
 // NewServer creates a new gateway server.
 func NewServer(cfg *config.Config, eventPub bus.EventPublisher, agents *agent.Router, sess store.SessionStore, toolsReg ...*tools.Registry) *Server {
 	s := &Server{
-		cfg:      cfg,
-		eventPub: eventPub,
-		agents:   agents,
-		sessions: sess,
-		clients:  make(map[string]*Client),
+		cfg:       cfg,
+		eventPub:  eventPub,
+		agents:    agents,
+		sessions:  sess,
+		clients:   make(map[string]*Client),
+		startedAt: time.Now(),
 	}
 
 	s.upgrader = websocket.Upgrader{
@@ -222,7 +227,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := NewClient(conn, s)
+	client := NewClient(conn, s, clientIP(r))
 	s.registerClient(client)
 
 	defer func() {
@@ -238,6 +243,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"status":"ok","protocol":%d}`, protocol.ProtocolVersion)
+}
+
+// clientIP extracts the real client IP from the request, checking proxy headers first.
+func clientIP(r *http.Request) string {
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		if i := strings.IndexByte(fwd, ','); i > 0 {
+			return strings.TrimSpace(fwd[:i])
+		}
+		return strings.TrimSpace(fwd)
+	}
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return host
 }
 
 // Router returns the method router for registering additional handlers.
@@ -282,6 +302,29 @@ func (s *Server) SetBuiltinToolsHandler(h *httpapi.BuiltinToolsHandler) {
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }
+
+// SetVersion sets the server version for health responses.
+func (s *Server) SetVersion(v string) { s.version = v }
+
+// SetDB sets the database connection for health check pings.
+func (s *Server) SetDB(db interface{ PingContext(context.Context) error }) { s.db = db }
+
+// StartedAt returns the server start time.
+func (s *Server) StartedAt() time.Time { return s.startedAt }
+
+// Version returns the server version string.
+func (s *Server) Version() string { return s.version }
+
+// ClientList returns a snapshot of all connected clients.
+func (s *Server) ClientList() []*Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	list := make([]*Client, 0, len(s.clients))
+	for _, c := range s.clients {
+		list = append(list, c)
+	}
+	return list
+}
 
 // BroadcastEvent sends an event to all connected clients.
 func (s *Server) BroadcastEvent(event protocol.EventFrame) {
