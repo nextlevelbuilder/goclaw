@@ -261,8 +261,9 @@ func saveCleanConfig(cfgPath string, cfg *config.Config) error {
 			},
 		},
 		"browser": map[string]interface{}{
-			"enabled":  cfg.Tools.Browser.Enabled,
-			"headless": cfg.Tools.Browser.Headless,
+			"enabled":    cfg.Tools.Browser.Enabled,
+			"headless":   cfg.Tools.Browser.Headless,
+			"remote_url": cfg.Tools.Browser.RemoteURL,
 		},
 		"execApproval": map[string]interface{}{
 			"security": nonEmpty(cfg.Tools.ExecApproval.Security, "full"),

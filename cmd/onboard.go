@@ -661,7 +661,9 @@ func runOnboard() {
 	} else {
 		fmt.Println("  Memory:    disabled")
 	}
-	if cfg.Tools.Browser.Enabled {
+	if cfg.Tools.Browser.RemoteURL != "" {
+		fmt.Printf("  Browser:   enabled (remote: %s)\n", cfg.Tools.Browser.RemoteURL)
+	} else if cfg.Tools.Browser.Enabled {
 		fmt.Println("  Browser:   enabled (headless)")
 	} else {
 		fmt.Println("  Browser:   disabled")
