@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -117,6 +118,12 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check for duplicate agent_key before creating
+	if existing, _ := h.agents.GetByKey(r.Context(), req.AgentKey); existing != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "An agent with key \"" + req.AgentKey + "\" already exists"})
+		return
+	}
+
 	req.OwnerID = userID
 	if req.AgentType == "" {
 		req.AgentType = store.AgentTypeOpen
@@ -153,7 +160,11 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.agents.Create(r.Context(), &req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "An agent with this key already exists"})
+		} else {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
 		return
 	}
 

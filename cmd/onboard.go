@@ -1,14 +1,17 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 func onboardCmd() *cobra.Command {
@@ -39,6 +42,7 @@ var providerMap = map[string]providerInfo{
 	"minimax":    {"minimax", "GOCLAW_MINIMAX_API_KEY", "MiniMax-M2.5"},
 	"cohere":     {"cohere", "GOCLAW_COHERE_API_KEY", "command-a"},
 	"perplexity": {"perplexity", "GOCLAW_PERPLEXITY_API_KEY", "sonar-pro"},
+	"claude_cli": {"claude-cli", "", "sonnet"},
 	"custom":     {"custom", "", ""},
 }
 
@@ -189,6 +193,7 @@ func runOnboard() {
 		{"MiniMax     (MiniMax models)", "minimax"},
 		{"Cohere      (Command models)", "cohere"},
 		{"Perplexity  (Sonar search models)", "perplexity"},
+		{"Claude CLI  (use local claude CLI — no API key needed)", "claude_cli"},
 		{"Custom      (any OpenAI-compatible endpoint)", "custom"},
 	}
 
@@ -199,8 +204,76 @@ func runOnboard() {
 		return
 	}
 
+	// Claude CLI variables
+	var cliPath, cliModel string
+	if cfg.Providers.ClaudeCLI.CLIPath != "" {
+		cliPath = cfg.Providers.ClaudeCLI.CLIPath
+		cliModel = cfg.Providers.ClaudeCLI.Model
+	}
+
 	// Provider-specific prompts
 	switch providerChoice {
+	case "claude_cli":
+		if cliPath == "" {
+			cliPath = "claude"
+		}
+		cliPath, err = promptString("Claude CLI Path", "Path to the claude binary", cliPath)
+		if err != nil {
+			fmt.Println("Cancelled.")
+			return
+		}
+
+		// Verify CLI binary exists
+		if _, lookErr := exec.LookPath(cliPath); lookErr != nil {
+			fmt.Printf("  ✗ Claude CLI binary not found at %q\n", cliPath)
+			fmt.Println("  Install Claude CLI first: https://docs.anthropic.com/en/docs/claude-cli")
+			return
+		}
+
+		// Check authentication status
+		fmt.Print("  Checking Claude CLI authentication... ")
+		authStatus, authErr := providers.CheckClaudeAuthStatus(context.Background(), cliPath)
+		if authErr != nil || !authStatus.LoggedIn {
+			if authErr != nil {
+				fmt.Println("FAILED")
+				fmt.Printf("  %v\n", authErr)
+			} else {
+				fmt.Println("NOT LOGGED IN")
+			}
+			fmt.Println()
+			runLogin, confirmErr := promptConfirm("Claude CLI requires authentication. Run login now?", true)
+			if confirmErr != nil {
+				fmt.Println("Cancelled.")
+				return
+			}
+			if runLogin {
+				if loginErr := runClaudeAuthLogin(cliPath); loginErr != nil {
+					fmt.Printf("  Login failed: %v\n", loginErr)
+					fmt.Println("  You can try manually: claude auth login")
+					return
+				}
+			} else {
+				fmt.Println("  Skipping login. Run 'claude auth login' before starting the gateway.")
+			}
+		} else {
+			sub := authStatus.SubscriptionType
+			if sub == "" {
+				sub = "unknown"
+			}
+			fmt.Printf("OK\n")
+			fmt.Printf("  ✓ Authenticated as %s (subscription: %s)\n", authStatus.Email, sub)
+		}
+		fmt.Println()
+
+		if cliModel == "" {
+			cliModel = "sonnet"
+		}
+		cliModel, err = promptString("Default Model", "Model alias: sonnet, opus, haiku", cliModel)
+		if err != nil {
+			fmt.Println("Cancelled.")
+			return
+		}
+
 	case "custom":
 		customAPIBase, err = promptString("API Base URL", "OpenAI-compatible endpoint (e.g. Ollama, vLLM, LiteLLM)", customAPIBase)
 		if err != nil {
@@ -375,6 +448,10 @@ func runOnboard() {
 		if customModel == "" {
 			errors = append(errors, "Model ID is required for custom provider")
 		}
+	} else if providerChoice == "claude_cli" {
+		if cliPath == "" {
+			errors = append(errors, "Claude CLI path is required")
+		}
 	} else if apiKey == "" {
 		errors = append(errors, fmt.Sprintf("API key is required for %s", providerChoice))
 	}
@@ -415,7 +492,12 @@ func runOnboard() {
 	// --- Apply collected values to config ---
 
 	// Provider & model
-	if providerChoice == "custom" {
+	if providerChoice == "claude_cli" {
+		cfg.Agents.Defaults.Provider = "claude-cli"
+		cfg.Agents.Defaults.Model = cliModel
+		cfg.Providers.ClaudeCLI.CLIPath = cliPath
+		cfg.Providers.ClaudeCLI.Model = cliModel
+	} else if providerChoice == "custom" {
 		cfg.Agents.Defaults.Provider = "openai"
 		cfg.Providers.OpenAI.APIBase = customAPIBase
 		cfg.Providers.OpenAI.APIKey = apiKey
@@ -596,7 +678,10 @@ func runOnboard() {
 	savedTtsElevenLabsKey := cfg.Tts.ElevenLabs.APIKey
 	savedTtsMiniMaxKey := cfg.Tts.MiniMax.APIKey
 
-	cfg.Providers = config.ProvidersConfig{}
+	// Clear secrets from providers but keep non-secret configs (like ClaudeCLI)
+	cfg.Providers = config.ProvidersConfig{
+		ClaudeCLI: savedProviders.ClaudeCLI, // no secrets, safe to save in config
+	}
 	cfg.Gateway.Token = ""
 	cfg.Channels.Telegram.Token = ""
 	cfg.Channels.Zalo.Token = ""

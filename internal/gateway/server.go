@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -183,6 +184,12 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// Managed mode: builtin tool management API
 	if s.builtinToolsHandler != nil {
 		s.builtinToolsHandler.RegisterRoutes(mux)
+	}
+
+	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http
+	if s.tools != nil {
+		bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0")
+		mux.Handle("/mcp/bridge", bridgeHandler)
 	}
 
 	s.mux = mux

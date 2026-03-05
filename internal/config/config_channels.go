@@ -141,19 +141,28 @@ type FeishuConfig struct {
 
 // ProvidersConfig maps provider name to its config.
 type ProvidersConfig struct {
-	Anthropic  ProviderConfig `json:"anthropic"`
-	OpenAI     ProviderConfig `json:"openai"`
-	OpenRouter ProviderConfig `json:"openrouter"`
-	Groq       ProviderConfig `json:"groq"`
-	Gemini     ProviderConfig `json:"gemini"`
-	DeepSeek   ProviderConfig `json:"deepseek"`
-	Mistral    ProviderConfig `json:"mistral"`
-	XAI        ProviderConfig `json:"xai"`
-	MiniMax    ProviderConfig `json:"minimax"`
-	Cohere     ProviderConfig `json:"cohere"`
-	Perplexity ProviderConfig `json:"perplexity"`
-	DashScope  ProviderConfig `json:"dashscope"`
-	Bailian    ProviderConfig `json:"bailian"`
+	Anthropic  ProviderConfig   `json:"anthropic"`
+	OpenAI     ProviderConfig   `json:"openai"`
+	OpenRouter ProviderConfig   `json:"openrouter"`
+	Groq       ProviderConfig   `json:"groq"`
+	Gemini     ProviderConfig   `json:"gemini"`
+	DeepSeek   ProviderConfig   `json:"deepseek"`
+	Mistral    ProviderConfig   `json:"mistral"`
+	XAI        ProviderConfig   `json:"xai"`
+	MiniMax    ProviderConfig   `json:"minimax"`
+	Cohere     ProviderConfig   `json:"cohere"`
+	Perplexity ProviderConfig   `json:"perplexity"`
+	DashScope  ProviderConfig   `json:"dashscope"`
+	Bailian    ProviderConfig   `json:"bailian"`
+	ClaudeCLI  ClaudeCLIConfig  `json:"claude_cli"`
+}
+
+// ClaudeCLIConfig configures the Claude CLI provider (uses subscription, not API key).
+type ClaudeCLIConfig struct {
+	CLIPath     string `json:"cli_path" yaml:"cli_path"`           // path to claude binary (default: "claude")
+	Model       string `json:"model" yaml:"model"`                 // default model alias (default: "sonnet")
+	BaseWorkDir string `json:"base_work_dir" yaml:"base_work_dir"` // base dir for agent workspaces
+	PermMode    string `json:"perm_mode" yaml:"perm_mode"`         // permission mode (default: "bypassPermissions")
 }
 
 type ProviderConfig struct {
@@ -161,7 +170,7 @@ type ProviderConfig struct {
 	APIBase string `json:"api_base,omitempty"`
 }
 
-// HasAnyProvider returns true if at least one provider has an API key configured.
+// HasAnyProvider returns true if at least one provider has an API key or CLI configured.
 func (c *Config) HasAnyProvider() bool {
 	p := c.Providers
 	return p.Anthropic.APIKey != "" ||
@@ -176,7 +185,8 @@ func (c *Config) HasAnyProvider() bool {
 		p.Cohere.APIKey != "" ||
 		p.Perplexity.APIKey != "" ||
 		p.DashScope.APIKey != "" ||
-		p.Bailian.APIKey != ""
+		p.Bailian.APIKey != "" ||
+		p.ClaudeCLI.CLIPath != ""
 }
 
 // QuotaWindow defines request limits per time window. Zero means unlimited.

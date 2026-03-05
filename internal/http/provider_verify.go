@@ -42,6 +42,17 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Claude CLI: validate model alias locally (no LLM call needed)
+	if p.ProviderType == "claude_cli" {
+		validModels := map[string]bool{"sonnet": true, "opus": true, "haiku": true}
+		if validModels[req.Model] {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "error": "Invalid model. Use: sonnet, opus, or haiku"})
+		}
+		return
+	}
+
 	if h.providerReg == nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "error": "no provider registry available"})
 		return
@@ -71,6 +82,31 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true})
+}
+
+// handleClaudeCLIAuthStatus checks whether the Claude CLI is authenticated on the server.
+//
+//	GET /v1/providers/claude-cli/auth-status
+//	Response: {"logged_in": true, "email": "...", "subscription_type": "max"}
+//	     or: {"logged_in": false, "error": "..."}
+func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	status, err := providers.CheckClaudeAuthStatus(ctx, "claude")
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"logged_in": false,
+			"error":     err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"logged_in":         status.LoggedIn,
+		"email":             status.Email,
+		"subscription_type": status.SubscriptionType,
+	})
 }
 
 // friendlyVerifyError extracts a human-readable message from provider errors.

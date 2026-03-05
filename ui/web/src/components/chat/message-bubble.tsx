@@ -28,7 +28,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         className={`max-w-[80%] rounded-lg px-4 py-2 ${
           isUser
             ? "bg-primary text-primary-foreground"
-            : "bg-muted"
+            : "bg-card text-card-foreground border border-border shadow-sm"
         }`}
       >
         <MessageContent content={message.content} role={message.role} />

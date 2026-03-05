@@ -385,7 +385,8 @@ func runGateway() {
 
 	// Managed mode: register providers from DB (overrides config providers).
 	if managedStores != nil && managedStores.Providers != nil {
-		registerProvidersFromDB(providerRegistry, managedStores.Providers)
+		dbGatewayAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
+		registerProvidersFromDB(providerRegistry, managedStores.Providers, dbGatewayAddr)
 	}
 
 	// Managed mode: wire embedding provider to PGMemoryStore so IndexDocument generates vectors.
@@ -629,7 +630,8 @@ func runGateway() {
 		}
 
 		contextFileInterceptor = wireManagedExtras(managedStores, agentRouter, providerRegistry, msgBus, sessStore, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, dynamicLoader)
-		agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH := wireManagedHTTP(managedStores, cfg.Gateway.Token, msgBus, toolsReg, providerRegistry, permPE.IsOwner)
+		managedGatewayAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
+		agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH := wireManagedHTTP(managedStores, cfg.Gateway.Token, msgBus, toolsReg, providerRegistry, permPE.IsOwner, managedGatewayAddr)
 		if agentsH != nil {
 			server.SetAgentsHandler(agentsH)
 		}

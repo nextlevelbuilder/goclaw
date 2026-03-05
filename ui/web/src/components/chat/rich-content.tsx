@@ -228,7 +228,7 @@ export function RichContent({ content, role }: RichContentProps) {
   // If no special blocks found, render as plain markdown (fast path)
   const first = blocks[0];
   if (blocks.length === 1 && first?.type === "markdown") {
-    return <MarkdownRenderer content={content} className={role === "user" ? "text-sm" : ""} />;
+    return <MarkdownRenderer content={content} className={role === "user" ? "text-sm prose-invert" : ""} />;
   }
 
   return (
@@ -242,7 +242,7 @@ export function RichContent({ content, role }: RichContentProps) {
           case "video-notice":
             return <VideoNoticeBadge key={i} content={block.content} />;
           case "markdown":
-            return <MarkdownRenderer key={i} content={block.content} className={role === "user" ? "text-sm" : ""} />;
+            return <MarkdownRenderer key={i} content={block.content} className={role === "user" ? "text-sm prose-invert" : ""} />;
           case "file":
             return <FileBlock key={i} name={block.name} mime={block.mime} content={block.content} />;
           case "reply":

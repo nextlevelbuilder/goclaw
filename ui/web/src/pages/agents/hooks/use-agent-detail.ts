@@ -114,5 +114,11 @@ export function useAgentDetail(agentId: string | undefined) {
     await http.post(`/v1/agents/${agentId}/resummon`);
   }, [agentId, http]);
 
-  return { agent, files, loading, updateAgent, getFile, setFile, regenerateAgent, resummonAgent, refresh: invalidate };
+  const deleteAgent = useCallback(async () => {
+    if (!agentId) return;
+    await http.delete(`/v1/agents/${agentId}`);
+    queryClient.invalidateQueries({ queryKey: queryKeys.agents.all });
+  }, [agentId, http, queryClient]);
+
+  return { agent, files, loading, updateAgent, getFile, setFile, regenerateAgent, resummonAgent, deleteAgent, refresh: invalidate };
 }

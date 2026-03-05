@@ -166,19 +166,30 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 		return nil, fmt.Errorf("resolve provider: %w", err)
 	}
 
+	// Use a unique session key so CLI-based providers get an isolated workdir
+	// (prevents polluting/reading CLAUDE.md from active chat sessions).
+	summonSessionKey := "summon-" + uuid.New().String()
+
 	resp, err := provider.Chat(ctx, providers.ChatRequest{
 		Messages: []providers.Message{
+			{Role: "system", Content: "You are a file generator. Output ONLY the requested XML-tagged files. No extra commentary."},
 			{Role: "user", Content: prompt},
 		},
 		Model: model,
 		Options: map[string]interface{}{
-			"max_tokens":  8192,
-			"temperature": 0.7,
+			"max_tokens":              8192,
+			"temperature":             0.7,
+			providers.OptSessionKey:    summonSessionKey,
+			providers.OptDisableTools:  true,
 		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("LLM call: %w", err)
 	}
+
+	slog.Info("summoning: raw LLM response", "provider", providerName, "length", len(resp.Content),
+		"preview_start", truncateUTF8(resp.Content, 500),
+		"preview_end", truncateUTF8(suffixString(resp.Content, 500), 500))
 
 	files := parseFileResponse(resp.Content)
 	if len(files) == 0 {
@@ -377,6 +388,15 @@ func extractIdentityName(content string) string {
 		return ""
 	}
 	return strings.TrimSpace(m[1])
+}
+
+// suffixString returns the last n runes of s.
+func suffixString(s string, n int) string {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s
+	}
+	return string(runes[len(runes)-n:])
 }
 
 // truncateUTF8 truncates s to at most maxLen runes, appending "…" if truncated.

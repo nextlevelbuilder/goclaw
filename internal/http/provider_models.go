@@ -36,6 +36,12 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Claude CLI doesn't need an API key — return hardcoded models
+	if p.ProviderType == "claude_cli" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"models": claudeCLIModels()})
+		return
+	}
+
 	if p.APIKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "provider has no API key configured"})
 		return
@@ -160,6 +166,15 @@ func bailianModels() []ModelInfo {
 		{ID: "qwen3-coder-next", Name: "Qwen 3 Coder Next"},
 		{ID: "qwen3-coder-plus", Name: "Qwen 3 Coder Plus"},
 		{ID: "glm-4.7", Name: "GLM 4.7"},
+	}
+}
+
+// claudeCLIModels returns the model aliases accepted by the Claude CLI.
+func claudeCLIModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "sonnet", Name: "Sonnet"},
+		{ID: "opus", Name: "Opus"},
+		{ID: "haiku", Name: "Haiku"},
 	}
 }
 

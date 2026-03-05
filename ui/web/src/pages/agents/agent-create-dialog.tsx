@@ -41,6 +41,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const [agentType, setAgentType] = useState<"open" | "predefined">("open");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const enabledProviders = providers.filter((p) => p.enabled);
 
@@ -71,6 +72,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const handleCreate = async () => {
     if (!agentKey.trim()) return;
     setLoading(true);
+    setError("");
     try {
       await onCreate({
         agent_key: agentKey.trim(),
@@ -88,8 +90,9 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
       setModel("");
       setAgentType("open");
       setDescription("");
-    } catch {
-      // error handled upstream
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create agent");
     } finally {
       setLoading(false);
     }
@@ -249,6 +252,9 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
                 Leave empty to start with templates.
               </p>
             </div>
+          )}
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
           )}
         </div>
         <DialogFooter>

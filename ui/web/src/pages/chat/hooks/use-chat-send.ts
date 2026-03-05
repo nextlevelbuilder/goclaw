@@ -41,8 +41,6 @@ export function useChatSend({
       onExpectRun();
 
       try {
-        // The RPC response arrives after the run completes.
-        // Streaming events are captured by the event handler during the run.
         await ws.call<{ runId: string; content: string }>(
           Methods.CHAT_SEND,
           {
@@ -51,7 +49,7 @@ export function useChatSend({
             message: trimmed,
             stream: true,
           },
-          120_000, // 2 min timeout for long runs
+          600_000, // 10 min hard cap — actual timeout is managed by inactivity via resetTimeout
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to send message");

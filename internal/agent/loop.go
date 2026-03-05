@@ -656,6 +656,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			Options: map[string]interface{}{
 				providers.OptMaxTokens:   8192,
 				providers.OptTemperature: 0.7,
+				providers.OptSessionKey:  req.SessionKey,
 			},
 		}
 		if l.thinkingLevel != "" && l.thinkingLevel != "off" {

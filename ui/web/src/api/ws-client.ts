@@ -99,13 +99,27 @@ export class WsClient {
   }
 
   /**
-   * Send an RPC call and wait for the response.
+   * Reset the timeout for a pending RPC call (e.g. when stream events arrive).
    */
-  async call<T = unknown>(
+  resetTimeout(requestId: string, timeoutMs: number): void {
+    const pending = this.pending.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timeout);
+    pending.timeout = setTimeout(() => {
+      this.pending.delete(requestId);
+      pending.reject(new ApiError("AGENT_TIMEOUT", `timed out after ${timeoutMs}ms of inactivity`));
+    }, timeoutMs);
+  }
+
+  /**
+   * Send an RPC call and wait for the response.
+   * Returns { promise, requestId } so callers can reset the timeout on activity.
+   */
+  callWithId<T = unknown>(
     method: string,
     params?: Record<string, unknown>,
     timeoutMs?: number,
-  ): Promise<T> {
+  ): { promise: Promise<T>; requestId: string } {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new ApiError("UNAVAILABLE", "WebSocket not connected");
     }
@@ -113,7 +127,7 @@ export class WsClient {
     const id = generateId();
     const timeout = timeoutMs ?? this.defaultTimeout;
 
-    return new Promise<T>((resolve, reject) => {
+    const promise = new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new ApiError("AGENT_TIMEOUT", `${method} timed out after ${timeout}ms`));
@@ -129,6 +143,19 @@ export class WsClient {
         JSON.stringify({ type: "req", id, method, params }),
       );
     });
+
+    return { promise, requestId: id };
+  }
+
+  /**
+   * Send an RPC call and wait for the response.
+   */
+  async call<T = unknown>(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number,
+  ): Promise<T> {
+    return this.callWithId<T>(method, params, timeoutMs).promise;
   }
 
   /**

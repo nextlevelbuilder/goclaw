@@ -26,6 +26,14 @@ func onboardWriteEnvFile(path string, cfg *config.Config, primaryKey, primaryEnv
 		lines = append(lines, fmt.Sprintf("export %s=%s", primaryEnvKey, primaryKey))
 	}
 
+	// Claude CLI config (no API key, just path/model)
+	if cfg.Providers.ClaudeCLI.CLIPath != "" {
+		lines = append(lines, fmt.Sprintf("export GOCLAW_CLAUDE_CLI_PATH=%s", cfg.Providers.ClaudeCLI.CLIPath))
+		if cfg.Providers.ClaudeCLI.Model != "" {
+			lines = append(lines, fmt.Sprintf("export GOCLAW_CLAUDE_CLI_MODEL=%s", cfg.Providers.ClaudeCLI.Model))
+		}
+	}
+
 	// Add other configured provider keys (skip if same as primary)
 	addIfSet := func(envKey, value string) {
 		if value != "" && (primaryEnvKey == "" || envKey != primaryEnvKey) {
