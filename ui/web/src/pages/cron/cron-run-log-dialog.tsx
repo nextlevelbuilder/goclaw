@@ -25,7 +25,7 @@ export function CronRunLogDialog({
 }: CronRunLogDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[70vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[70vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Run Log: {jobName}</DialogTitle>
         </DialogHeader>

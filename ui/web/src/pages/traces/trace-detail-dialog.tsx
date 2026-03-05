@@ -189,7 +189,7 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
     <div>
       <div
         className="mt-1.5 min-w-0 rounded-md border text-sm"
-        style={{ marginLeft: depth * 24 }}
+        style={{ marginLeft: depth * 16 }}
       >
         <div className="flex w-full items-center gap-1 px-2 py-2">
           {/* Tree toggle */}
@@ -222,7 +222,7 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
               {span.name || span.tool_name || "span"}
             </span>
             {(span.input_tokens > 0 || span.output_tokens > 0) && (
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
                 {formatTokens(span.input_tokens)}/{formatTokens(span.output_tokens)}
                 {(span.metadata?.cache_read_tokens ?? 0) > 0 && (
                   <span className="ml-1 text-green-400" title="Cached tokens read">

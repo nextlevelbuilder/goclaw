@@ -27,7 +27,7 @@ var slugRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$`)
 
 // SkillsHandler handles skill management HTTP endpoints (managed mode).
 type SkillsHandler struct {
-	skills *pg.PGSkillStore
+	skills  *pg.PGSkillStore
 	baseDir string // filesystem base for skill content
 	token   string
 	msgBus  *bus.MessageBus
@@ -181,16 +181,27 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer zr.Close()
 
-	// Validate: must have SKILL.md at root
+	// Validate: must have SKILL.md at root or inside a single top-level directory.
+	// Many ZIP tools wrap contents in a folder (e.g. "my-skill/SKILL.md").
 	var skillMD *zip.File
+	var stripPrefix string
 	for _, f := range zr.File {
-		if f.Name == "SKILL.md" || f.Name == "./SKILL.md" {
+		name := strings.TrimPrefix(f.Name, "./")
+		if name == "SKILL.md" {
 			skillMD = f
+			stripPrefix = ""
+			break
+		}
+		// Allow one level of directory nesting: "dirname/SKILL.md"
+		parts := strings.SplitN(name, "/", 3)
+		if len(parts) == 2 && parts[1] == "SKILL.md" && !f.FileInfo().IsDir() {
+			skillMD = f
+			stripPrefix = parts[0] + "/"
 			break
 		}
 	}
 	if skillMD == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ZIP must contain SKILL.md at root"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "ZIP must contain SKILL.md at root (or inside a single top-level directory)"})
 		return
 	}
 
@@ -201,7 +212,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, description, slug := parseSkillFrontmatter(skillContent)
+	name, description, slug, frontmatter := parseSkillFrontmatter(skillContent)
 	if name == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "SKILL.md must have a name in frontmatter"})
 		return
@@ -214,12 +225,8 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine version (increment if slug already exists)
-	version := 1
-	if existing, ok := h.skills.GetSkill(slug); ok {
-		_ = existing
-		version = h.skills.GetNextVersion(slug)
-	}
+	// Determine version (always increment — includes archived skills so re-upload gets v2+)
+	version := h.skills.GetNextVersion(slug)
 
 	// Extract to filesystem: baseDir/slug/version/
 	destDir := filepath.Join(h.baseDir, slug, fmt.Sprintf("%d", version))
@@ -232,8 +239,16 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		if f.FileInfo().IsDir() {
 			continue
 		}
+		// Strip wrapper directory prefix if ZIP had one
+		entryName := strings.TrimPrefix(f.Name, "./")
+		if stripPrefix != "" {
+			entryName = strings.TrimPrefix(entryName, stripPrefix)
+			if entryName == "" {
+				continue
+			}
+		}
 		// Security: prevent path traversal
-		name := filepath.Clean(f.Name)
+		name := filepath.Clean(entryName)
 		if strings.Contains(name, "..") {
 			continue
 		}
@@ -260,6 +275,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		FilePath:    destDir,
 		FileSize:    size,
 		FileHash:    &fileHash,
+		Frontmatter: frontmatter,
 	}
 
 	id, err := h.skills.CreateSkillManaged(r.Context(), skill)
@@ -296,4 +312,3 @@ func (h *SkillsHandler) handleListAgentSkills(w http.ResponseWriter, r *http.Req
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"skills": skills})
 }
-

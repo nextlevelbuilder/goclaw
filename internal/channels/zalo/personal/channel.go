@@ -35,6 +35,7 @@ type Channel struct {
 	config          config.ZaloPersonalConfig
 	pairingService  store.PairingStore
 	pairingDebounce sync.Map // senderID -> time.Time
+	approvedGroups  sync.Map // groupID → true (in-memory cache for paired groups)
 	typingCtrls     sync.Map // threadID → *typing.Controller
 
 	mu       sync.RWMutex // protects sess and listener

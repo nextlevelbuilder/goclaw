@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
 import type { MCPServerData, MCPServerInput, MCPAgentGrant } from "@/types/mcp";
 
 export type { MCPServerData, MCPServerInput, MCPAgentGrant };
@@ -25,35 +26,53 @@ export function useMCP() {
 
   const createServer = useCallback(
     async (data: MCPServerInput) => {
-      const res = await http.post<MCPServerData>("/v1/mcp/servers", data);
-      await invalidate();
-      return res;
+      try {
+        const res = await http.post<MCPServerData>("/v1/mcp/servers", data);
+        await invalidate();
+        toast.success("MCP server created", `${data.name} has been added`);
+        return res;
+      } catch (err) {
+        toast.error("Failed to create MCP server", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const updateServer = useCallback(
     async (id: string, data: Partial<MCPServerInput>) => {
-      await http.put(`/v1/mcp/servers/${id}`, data);
-      await invalidate();
+      try {
+        await http.put(`/v1/mcp/servers/${id}`, data);
+        await invalidate();
+        toast.success("MCP server updated");
+      } catch (err) {
+        toast.error("Failed to update MCP server", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const deleteServer = useCallback(
     async (id: string) => {
-      await http.delete(`/v1/mcp/servers/${id}`);
-      await invalidate();
+      try {
+        await http.delete(`/v1/mcp/servers/${id}`);
+        await invalidate();
+        toast.success("MCP server deleted");
+      } catch (err) {
+        toast.error("Failed to delete MCP server", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const listAgentGrants = useCallback(
-    async (_serverId: string) => {
-      // Backend provides per-agent listing, not per-server.
-      return [] as MCPAgentGrant[];
+    async (serverId: string) => {
+      const res = await http.get<{ grants: MCPAgentGrant[] }>(`/v1/mcp/servers/${serverId}/grants`);
+      return res.grants ?? [];
     },
-    [],
+    [http],
   );
 
   const grantAgent = useCallback(

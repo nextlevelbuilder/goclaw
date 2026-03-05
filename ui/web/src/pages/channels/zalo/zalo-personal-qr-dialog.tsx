@@ -45,7 +45,7 @@ export function ZaloPersonalQRDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!loading) onOpenChange(v); }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Login with QR — {instanceName}</DialogTitle>
         </DialogHeader>

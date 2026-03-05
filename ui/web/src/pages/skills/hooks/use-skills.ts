@@ -19,6 +19,7 @@ export function useSkills() {
       const res = await ws.call<{ skills: SkillInfo[] }>(Methods.SKILLS_LIST);
       return res.skills ?? [];
     },
+    staleTime: 60_000,
   });
 
   const invalidate = useCallback(

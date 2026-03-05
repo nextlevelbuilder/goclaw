@@ -150,29 +150,39 @@ func readZipFile(f *zip.File) (string, error) {
 }
 
 // parseSkillFrontmatter extracts name, description, and slug from SKILL.md YAML frontmatter.
-func parseSkillFrontmatter(content string) (name, description, slug string) {
+// Also returns the full parsed frontmatter as a map for DB storage.
+func parseSkillFrontmatter(content string) (name, description, slug string, allFields map[string]string) {
+	allFields = make(map[string]string)
 	if !strings.HasPrefix(content, "---") {
-		return "", "", ""
+		return "", "", "", allFields
 	}
 	end := strings.Index(content[3:], "---")
 	if end < 0 {
-		return "", "", ""
+		return "", "", "", allFields
 	}
 	fm := content[3 : 3+end]
 
 	for _, line := range strings.Split(fm, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "name:") {
-			name = strings.TrimSpace(strings.TrimPrefix(line, "name:"))
-			name = strings.Trim(name, `"'`)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
 		}
-		if strings.HasPrefix(line, "description:") {
-			description = strings.TrimSpace(strings.TrimPrefix(line, "description:"))
-			description = strings.Trim(description, `"'`)
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
 		}
-		if strings.HasPrefix(line, "slug:") {
-			slug = strings.TrimSpace(strings.TrimPrefix(line, "slug:"))
-			slug = strings.Trim(slug, `"'`)
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		val = strings.Trim(val, `"'`)
+		allFields[key] = val
+
+		switch key {
+		case "name":
+			name = val
+		case "description":
+			description = val
+		case "slug":
+			slug = val
 		}
 	}
 	return

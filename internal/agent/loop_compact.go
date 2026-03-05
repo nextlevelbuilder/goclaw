@@ -1,0 +1,91 @@
+package agent
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
+)
+
+// compactMessagesInPlace summarizes the first ~70% of messages into a condensed
+// summary, keeping the last ~30% intact. Operates purely on the local messages
+// slice — no session state touched, no locks needed.
+// Returns nil on failure (caller keeps original messages).
+func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.Message) []providers.Message {
+	if len(messages) < 6 {
+		return nil
+	}
+
+	// Resolve keepCount from compaction config (same defaults as maybeSummarize).
+	keepCount := 4
+	if l.compactionCfg != nil && l.compactionCfg.KeepLastMessages > 0 {
+		keepCount = l.compactionCfg.KeepLastMessages
+	}
+	// Ensure we keep at least 30% of messages.
+	if minKeep := len(messages) * 3 / 10; minKeep > keepCount {
+		keepCount = minKeep
+	}
+
+	splitIdx := len(messages) - keepCount
+
+	// Walk backward from splitIdx to find a clean boundary —
+	// avoid splitting tool_use → tool_result pairs.
+	for splitIdx > 0 {
+		m := messages[splitIdx]
+		if m.Role == "tool" || (m.Role == "assistant" && len(m.ToolCalls) > 0) {
+			splitIdx--
+			continue
+		}
+		break
+	}
+	if splitIdx <= 1 {
+		return nil
+	}
+
+	// Build summary input (same pattern as maybeSummarize in loop_history.go).
+	toSummarize := messages[:splitIdx]
+	var sb strings.Builder
+	for _, m := range toSummarize {
+		switch m.Role {
+		case "user":
+			fmt.Fprintf(&sb, "user: %s\n", m.Content)
+		case "assistant":
+			fmt.Fprintf(&sb, "assistant: %s\n", SanitizeAssistantContent(m.Content))
+		}
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	resp, err := l.provider.Chat(sctx, providers.ChatRequest{
+		Messages: []providers.Message{{
+			Role:    "user",
+			Content: "Provide a concise summary of this conversation, preserving key findings, data, and context:\n\n" + sb.String(),
+		}},
+		Model:   l.model,
+		Options: map[string]interface{}{"max_tokens": 1024, "temperature": 0.3},
+	})
+	if err != nil {
+		slog.Warn("mid_loop_compaction_failed", "agent", l.id, "error", err)
+		return nil
+	}
+
+	summary := providers.Message{
+		Role:    "user",
+		Content: "[Summary of earlier conversation]\n" + SanitizeAssistantContent(resp.Content),
+	}
+	result := make([]providers.Message, 0, 1+keepCount)
+	result = append(result, summary)
+	result = append(result, messages[splitIdx:]...)
+
+	slog.Info("mid_loop_compacted",
+		"agent", l.id,
+		"original_msgs", len(messages),
+		"summarized", splitIdx,
+		"kept", len(result))
+
+	return result
+}

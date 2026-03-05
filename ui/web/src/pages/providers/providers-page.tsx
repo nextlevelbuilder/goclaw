@@ -72,7 +72,7 @@ export function ProvidersPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Providers"
         description="Manage LLM providers"
@@ -107,8 +107,8 @@ export function ProvidersPage() {
             description={search ? "Try a different search term." : "Add your first LLM provider to get started."}
           />
         ) : (
-          <div className="rounded-md border">
-            <table className="w-full text-sm">
+          <div className="rounded-md border overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">Name</th>

@@ -134,99 +134,101 @@ function OverridesTable({
     <div className="space-y-2">
       <InfoLabel tip={tip}>{label}</InfoLabel>
       {keys.map((key, i) => (
-        <div key={i} className="flex items-end gap-2">
-          <div className="grid gap-1.5 min-w-[180px]">
-            {i === 0 && (
-              <span className="text-xs text-muted-foreground">Key</span>
-            )}
-            {options ? (
-              <Select
-                value={key}
-                onValueChange={(v) => updateKey(key, v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={keyPlaceholder} />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Current value always shown */}
-                  {key && (
-                    <SelectItem value={key}>
-                      {options.find((o) => o.value === key)?.label ?? key}
-                    </SelectItem>
-                  )}
-                  {availableOptions
-                    ?.filter((o) => o.value !== key)
-                    .map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
+        <div key={i} className="overflow-x-auto">
+          <div className="flex items-end gap-2 min-w-[420px]">
+            <div className="grid gap-1.5 min-w-[180px]">
+              {i === 0 && (
+                <span className="text-xs text-muted-foreground">Key</span>
+              )}
+              {options ? (
+                <Select
+                  value={key}
+                  onValueChange={(v) => updateKey(key, v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={keyPlaceholder} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Current value always shown */}
+                    {key && (
+                      <SelectItem value={key}>
+                        {options.find((o) => o.value === key)?.label ?? key}
                       </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            ) : (
+                    )}
+                    {availableOptions
+                      ?.filter((o) => o.value !== key)
+                      .map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  placeholder={keyPlaceholder}
+                  value={key}
+                  onChange={(e) => updateKey(key, e.target.value)}
+                />
+              )}
+            </div>
+            <div className="grid gap-1.5 w-20">
+              {i === 0 && (
+                <span className="text-xs text-muted-foreground">Hour</span>
+              )}
               <Input
-                placeholder={keyPlaceholder}
-                value={key}
-                onChange={(e) => updateKey(key, e.target.value)}
+                type="number"
+                min={0}
+                value={entries[key]?.hour ?? 0}
+                onChange={(e) =>
+                  updateWindow(key, {
+                    ...entries[key],
+                    hour: Number(e.target.value),
+                  })
+                }
               />
-            )}
+            </div>
+            <div className="grid gap-1.5 w-20">
+              {i === 0 && (
+                <span className="text-xs text-muted-foreground">Day</span>
+              )}
+              <Input
+                type="number"
+                min={0}
+                value={entries[key]?.day ?? 0}
+                onChange={(e) =>
+                  updateWindow(key, {
+                    ...entries[key],
+                    day: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <div className="grid gap-1.5 w-20">
+              {i === 0 && (
+                <span className="text-xs text-muted-foreground">Week</span>
+              )}
+              <Input
+                type="number"
+                min={0}
+                value={entries[key]?.week ?? 0}
+                onChange={(e) =>
+                  updateWindow(key, {
+                    ...entries[key],
+                    week: Number(e.target.value),
+                  })
+                }
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => removeRow(key)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
-          <div className="grid gap-1.5 w-20">
-            {i === 0 && (
-              <span className="text-xs text-muted-foreground">Hour</span>
-            )}
-            <Input
-              type="number"
-              min={0}
-              value={entries[key]?.hour ?? 0}
-              onChange={(e) =>
-                updateWindow(key, {
-                  ...entries[key],
-                  hour: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-          <div className="grid gap-1.5 w-20">
-            {i === 0 && (
-              <span className="text-xs text-muted-foreground">Day</span>
-            )}
-            <Input
-              type="number"
-              min={0}
-              value={entries[key]?.day ?? 0}
-              onChange={(e) =>
-                updateWindow(key, {
-                  ...entries[key],
-                  day: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-          <div className="grid gap-1.5 w-20">
-            {i === 0 && (
-              <span className="text-xs text-muted-foreground">Week</span>
-            )}
-            <Input
-              type="number"
-              min={0}
-              value={entries[key]?.week ?? 0}
-              onChange={(e) =>
-                updateWindow(key, {
-                  ...entries[key],
-                  week: Number(e.target.value),
-                })
-              }
-            />
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            onClick={() => removeRow(key)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
         </div>
       ))}
       {options ? (

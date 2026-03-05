@@ -4,30 +4,70 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-func (dm *DelegateManager) emitEvent(name string, task *DelegationTask) {
+// emitDelegationEvent broadcasts a delegation lifecycle event with a typed payload.
+func (dm *DelegateManager) emitDelegationEvent(name string, task *DelegationTask) {
 	if dm.msgBus == nil {
 		return
 	}
-	payload := map[string]string{
-		"delegation_id": task.ID,
-		"source_agent":  task.SourceAgentID.String(),
-		"target_agent":  task.TargetAgentKey,
-		"user_id":       task.UserID,
-		"mode":          task.Mode,
-	}
-	if task.TeamID.String() != "00000000-0000-0000-0000-000000000000" {
-		payload["team_id"] = task.TeamID.String()
-	}
-	if task.TeamTaskID.String() != "00000000-0000-0000-0000-000000000000" {
-		payload["team_task_id"] = task.TeamTaskID.String()
-	}
 	dm.msgBus.Broadcast(bus.Event{
 		Name:    name,
+		Payload: buildDelegationPayload(task),
+	})
+}
+
+// emitDelegationEventWithError broadcasts a delegation failed event including the error.
+func (dm *DelegateManager) emitDelegationEventWithError(task *DelegationTask, err error) {
+	if dm.msgBus == nil {
+		return
+	}
+	payload := buildDelegationPayload(task)
+	payload.Status = "failed"
+	payload.Error = err.Error()
+	if task.CompletedAt != nil {
+		payload.ElapsedMS = int(task.CompletedAt.Sub(task.CreatedAt).Milliseconds())
+	} else {
+		payload.ElapsedMS = int(time.Since(task.CreatedAt).Milliseconds())
+	}
+	dm.msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventDelegationFailed,
 		Payload: payload,
 	})
+}
+
+// buildDelegationPayload creates a DelegationEventPayload from a DelegationTask.
+func buildDelegationPayload(task *DelegationTask) protocol.DelegationEventPayload {
+	payload := protocol.DelegationEventPayload{
+		DelegationID:      task.ID,
+		SourceAgentID:     task.SourceAgentID.String(),
+		SourceAgentKey:    task.SourceAgentKey,
+		SourceDisplayName: task.SourceDisplayName,
+		TargetAgentID:     task.TargetAgentID.String(),
+		TargetAgentKey:    task.TargetAgentKey,
+		TargetDisplayName: task.TargetDisplayName,
+		UserID:            task.UserID,
+		Channel:           task.OriginChannel,
+		ChatID:            task.OriginChatID,
+		Mode:              task.Mode,
+		Task:              task.Task,
+		Status:            task.Status,
+		CreatedAt:         task.CreatedAt.UTC().Format(time.RFC3339),
+	}
+	if task.TeamID != uuid.Nil {
+		payload.TeamID = task.TeamID.String()
+	}
+	if task.TeamTaskID != uuid.Nil {
+		payload.TeamTaskID = task.TeamTaskID.String()
+	}
+	if task.CompletedAt != nil {
+		payload.ElapsedMS = int(task.CompletedAt.Sub(task.CreatedAt).Milliseconds())
+	}
+	return payload
 }
 
 func formatDelegateAnnounce(task *DelegationTask, artifacts *DelegateArtifacts, err error, elapsed time.Duration) string {

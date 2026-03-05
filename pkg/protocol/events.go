@@ -33,6 +33,30 @@ const (
 	EventDelegationStarted   = "delegation.started"
 	EventDelegationCompleted = "delegation.completed"
 
+	// Delegation lifecycle events.
+	EventDelegationFailed      = "delegation.failed"
+	EventDelegationCancelled   = "delegation.cancelled"
+	EventDelegationProgress    = "delegation.progress"
+	EventDelegationAccumulated = "delegation.accumulated"
+	EventDelegationAnnounce    = "delegation.announce"
+	EventQualityGateRetry      = "delegation.quality_gate.retry"
+
+	// Team task lifecycle events.
+	EventTeamTaskClaimed   = "team.task.claimed"
+	EventTeamTaskCancelled = "team.task.cancelled"
+
+	// Team CRUD events (admin operations).
+	EventTeamCreated       = "team.created"
+	EventTeamUpdated       = "team.updated"
+	EventTeamDeleted       = "team.deleted"
+	EventTeamMemberAdded   = "team.member.added"
+	EventTeamMemberRemoved = "team.member.removed"
+
+	// Agent link events (admin operations).
+	EventAgentLinkCreated = "agent_link.created"
+	EventAgentLinkUpdated = "agent_link.updated"
+	EventAgentLinkDeleted = "agent_link.deleted"
+
 	// Cache invalidation events (internal, not forwarded to WS clients).
 	EventCacheInvalidate = "cache.invalidate"
 

@@ -22,7 +22,7 @@ const transportBadge: Record<string, string> = {
 };
 
 export function MCPPage() {
-  const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listGrantsByAgent } = useMCP();
+  const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants } = useMCP();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
   const [search, setSearch] = useState("");
@@ -63,7 +63,7 @@ export function MCPPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="MCP Servers"
         description="Manage Model Context Protocol server connections"
@@ -197,7 +197,7 @@ export function MCPPage() {
           server={grantsServer}
           onGrant={(agentId, allow, deny) => grantAgent(grantsServer.id, agentId, allow, deny)}
           onRevoke={(agentId) => revokeAgent(grantsServer.id, agentId)}
-          onLoadGrants={listGrantsByAgent}
+          onLoadGrants={listAgentGrants}
         />
       )}
 

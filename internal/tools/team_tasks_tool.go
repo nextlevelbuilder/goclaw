@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -272,11 +273,15 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]inter
 		return ErrorResult("failed to create task: " + err.Error())
 	}
 
-	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCreated, map[string]string{
-		"team_id": team.ID.String(),
-		"task_id": task.ID.String(),
-		"subject": subject,
-		"status":  status,
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCreated, protocol.TeamTaskEventPayload{
+		TeamID:    team.ID.String(),
+		TaskID:    task.ID.String(),
+		Subject:   subject,
+		Status:    status,
+		UserID:    store.UserIDFromContext(ctx),
+		Channel:   ToolChannelFromCtx(ctx),
+		ChatID:    ToolChatIDFromCtx(ctx),
+		Timestamp: task.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	})
 
 	return NewResult(fmt.Sprintf("Task created: %s (id=%s, status=%s)", subject, task.ID, status))
@@ -301,10 +306,28 @@ func (t *TeamTasksTool) executeClaim(ctx context.Context, args map[string]interf
 		return ErrorResult("failed to claim task: " + err.Error())
 	}
 
+	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskClaimed, protocol.TeamTaskEventPayload{
+		TeamID:           team.ID.String(),
+		TaskID:           taskIDStr,
+		Status:           store.TeamTaskStatusInProgress,
+		OwnerAgentKey:    ownerKey,
+		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),
+		UserID:           store.UserIDFromContext(ctx),
+		Channel:          ToolChannelFromCtx(ctx),
+		ChatID:           ToolChatIDFromCtx(ctx),
+		Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+	})
+
 	return NewResult(fmt.Sprintf("Task %s claimed successfully. It is now in progress.", taskIDStr))
 }
 
 func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]interface{}) *Result {
+	// Delegate agents cannot complete tasks — autoCompleteTeamTask handles it.
+	if ToolChannelFromCtx(ctx) == "delegate" {
+		return ErrorResult("delegate agents cannot complete team tasks directly — results are auto-completed when delegation finishes")
+	}
+
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {
 		return ErrorResult(err.Error())
@@ -333,15 +356,28 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]int
 		return ErrorResult("failed to complete task: " + err.Error())
 	}
 
-	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCompleted, map[string]string{
-		"team_id": team.ID.String(),
-		"task_id": taskIDStr,
+	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCompleted, protocol.TeamTaskEventPayload{
+		TeamID:           team.ID.String(),
+		TaskID:           taskIDStr,
+		Status:           store.TeamTaskStatusCompleted,
+		OwnerAgentKey:    ownerKey,
+		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),
+		UserID:           store.UserIDFromContext(ctx),
+		Channel:          ToolChannelFromCtx(ctx),
+		ChatID:           ToolChatIDFromCtx(ctx),
+		Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	})
 
 	return NewResult(fmt.Sprintf("Task %s completed. Dependent tasks have been unblocked.", taskIDStr))
 }
 
 func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]interface{}) *Result {
+	// Delegate agents cannot cancel tasks — only lead/user-facing agents can.
+	if ToolChannelFromCtx(ctx) == "delegate" {
+		return ErrorResult("delegate agents cannot cancel team tasks directly")
+	}
+
 	team, _, err := t.manager.resolveTeam(ctx)
 	if err != nil {
 		return ErrorResult(err.Error())
@@ -358,20 +394,29 @@ func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]inter
 
 	reason, _ := args["reason"].(string)
 	if reason == "" {
-		reason = "Cancelled: task was not executed"
+		reason = "Cancelled by agent"
 	}
 
-	if err := t.manager.teamStore.UpdateTask(ctx, taskID, map[string]any{
-		"status": store.TeamTaskStatusCompleted,
-		"result": "CANCELLED: " + reason,
-	}); err != nil {
+	// CancelTask: guards against completed tasks, unblocks dependents, transitions blocked→pending.
+	if err := t.manager.teamStore.CancelTask(ctx, taskID, team.ID, reason); err != nil {
 		return ErrorResult("failed to cancel task: " + err.Error())
 	}
 
-	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCompleted, map[string]string{
-		"team_id": team.ID.String(),
-		"task_id": taskIDStr,
+	// Cancel any running delegation for this task.
+	if t.manager.delegateMgr != nil {
+		t.manager.delegateMgr.CancelByTeamTaskID(taskID)
+	}
+
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCancelled, protocol.TeamTaskEventPayload{
+		TeamID:    team.ID.String(),
+		TaskID:    taskIDStr,
+		Status:    "cancelled",
+		Reason:    reason,
+		UserID:    store.UserIDFromContext(ctx),
+		Channel:   ToolChannelFromCtx(ctx),
+		ChatID:    ToolChatIDFromCtx(ctx),
+		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	})
 
-	return NewResult(fmt.Sprintf("Task %s cancelled.", taskIDStr))
+	return NewResult(fmt.Sprintf("Task %s cancelled. Any running delegation has been stopped and dependent tasks unblocked.", taskIDStr))
 }

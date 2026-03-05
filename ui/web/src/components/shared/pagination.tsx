@@ -32,11 +32,11 @@ export function Pagination({
   if (total === 0) return null;
 
   return (
-    <div className="flex items-center justify-between border-t px-4 py-3">
+    <div className="flex flex-col items-center gap-2 border-t px-4 py-3 sm:flex-row sm:justify-between">
       <div className="text-sm text-muted-foreground">
         {total} {total === 1 ? "item" : "items"}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Rows</span>
           <Select

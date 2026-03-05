@@ -52,7 +52,7 @@ export function TeamsPage() {
   useEffect(() => { resetPage(); }, [search, resetPage]);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Teams"
         description="Manage your agent teams"

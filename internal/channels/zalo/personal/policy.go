@@ -100,6 +100,21 @@ func (c *Channel) checkGroupPolicy(senderID, groupID string, mentions []*protoco
 			slog.Debug("zalo_personal group message rejected by allowlist", "group_id", groupID)
 			return false
 		}
+
+	case "pairing":
+		if c.IsAllowed(groupID) {
+			// pass — allowlist bypass
+		} else if _, cached := c.approvedGroups.Load(groupID); cached {
+			// pass — already approved
+		} else {
+			groupSenderID := fmt.Sprintf("group:%s", groupID)
+			if c.pairingService != nil && c.pairingService.IsPaired(groupSenderID, c.Name()) {
+				c.approvedGroups.Store(groupID, true)
+			} else {
+				c.sendPairingReply(groupSenderID, groupID)
+				return false
+			}
+		}
 	}
 
 	// @mention gating: only process group messages that @mention the bot.

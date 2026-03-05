@@ -43,9 +43,10 @@ func wireManagedExtras(
 	appCfg *config.Config,
 	sandboxMgr sandbox.Manager,
 	dynamicLoader *tools.DynamicToolLoader,
-) *tools.ContextFileInterceptor {
+) (*tools.ContextFileInterceptor, *tools.DelegateManager) {
 	// 1. Context file interceptor (created before resolver so callbacks can reference it)
 	var contextFileInterceptor *tools.ContextFileInterceptor
+	var delegateMgr *tools.DelegateManager
 	if stores.Agents != nil {
 		contextFileInterceptor = tools.NewContextFileInterceptor(stores.Agents, workspace)
 	}
@@ -82,20 +83,26 @@ func wireManagedExtras(
 	}
 
 	// 5. Set up agent resolver: lazy-creates Loops from DB
+	var skillAccessStore store.SkillAccessStore
+	if sas, ok := stores.Skills.(store.SkillAccessStore); ok {
+		skillAccessStore = sas
+	}
+
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
-		AgentStore:        stores.Agents,
-		ProviderReg:       providerReg,
-		Bus:               msgBus,
-		Sessions:          sessStore,
-		Tools:             toolsReg,
-		ToolPolicy:        toolPE,
-		Skills:            skillsLoader,
-		HasMemory:         hasMemory,
-		TraceCollector:    traceCollector,
-		EnsureUserFiles:   ensureUserFiles,
-		ContextFileLoader: contextFileLoader,
-		BootstrapCleanup:  buildBootstrapCleanup(stores.Agents),
-		InjectionAction:   injectionAction,
+		AgentStore:             stores.Agents,
+		ProviderReg:            providerReg,
+		Bus:                    msgBus,
+		Sessions:               sessStore,
+		Tools:                  toolsReg,
+		ToolPolicy:             toolPE,
+		Skills:                 skillsLoader,
+		SkillAccessStore:       skillAccessStore,
+		HasMemory:              hasMemory,
+		TraceCollector:         traceCollector,
+		EnsureUserFiles:        ensureUserFiles,
+		ContextFileLoader:      contextFileLoader,
+		BootstrapCleanup:       buildBootstrapCleanup(stores.Agents),
+		InjectionAction:        injectionAction,
 		MaxMessageChars:        appCfg.Gateway.MaxMessageChars,
 		CompactionCfg:          appCfg.Agents.Defaults.Compaction,
 		ContextPruningCfg:      appCfg.Agents.Defaults.ContextPruning,
@@ -106,6 +113,7 @@ func wireManagedExtras(
 		AgentLinkStore:         stores.AgentLinks,
 		TeamStore:              stores.Teams,
 		BuiltinToolStore:       stores.BuiltinTools,
+		MCPStore:               stores.MCP,
 		GroupWriterCache:       groupWriterCache,
 		OnEvent: func(event agent.AgentEvent) {
 			msgBus.Broadcast(bus.Event{
@@ -144,6 +152,13 @@ func wireManagedExtras(
 			if contextFileInterceptor != nil {
 				ia.SetContextFileInterceptor(contextFileInterceptor)
 			}
+			if stores.Memory != nil {
+				ia.SetMemoryInterceptor(tools.NewMemoryInterceptor(stores.Memory, workspace))
+			}
+		}
+	}
+	if listTool, ok := toolsReg.Get("list_files"); ok {
+		if ia, ok := listTool.(tools.InterceptorAware); ok {
 			if stores.Memory != nil {
 				ia.SetMemoryInterceptor(tools.NewMemoryInterceptor(stores.Memory, workspace))
 			}
@@ -244,6 +259,18 @@ func wireManagedExtras(
 		agentRouter.InvalidateAll()
 	})
 
+	// MCP cache: invalidate all agent caches when MCP servers/grants change
+	msgBus.Subscribe(bus.TopicCacheMCP, func(event bus.Event) {
+		if event.Name != protocol.EventCacheInvalidate {
+			return
+		}
+		payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+		if !ok || payload.Kind != bus.CacheKindMCP {
+			return
+		}
+		agentRouter.InvalidateAll()
+	})
+
 	// Cron cache: invalidate job cache on cron changes
 	if ci, ok := stores.Cron.(store.CacheInvalidatable); ok {
 		msgBus.Subscribe(bus.TopicCacheCron, func(event bus.Event) {
@@ -309,6 +336,10 @@ func wireManagedExtras(
 				Stream:            req.Stream,
 				ExtraSystemPrompt: req.ExtraSystemPrompt,
 				MaxIterations:     req.MaxIterations,
+				DelegationID:      req.DelegationID,
+				TeamID:            req.TeamID,
+				TeamTaskID:        req.TeamTaskID,
+				ParentAgentID:     req.ParentAgentID,
 			})
 			if err != nil {
 				return nil, err
@@ -323,7 +354,7 @@ func wireManagedExtras(
 			}
 			return dr, nil
 		}
-		delegateMgr := tools.NewDelegateManager(runAgentFn, stores.AgentLinks, stores.Agents, msgBus)
+		delegateMgr = tools.NewDelegateManager(runAgentFn, stores.AgentLinks, stores.Agents, msgBus)
 		if stores.Teams != nil {
 			delegateMgr.SetTeamStore(stores.Teams)
 		}
@@ -385,6 +416,9 @@ func wireManagedExtras(
 	// Register team tools (team_tasks + team_message) if team store is available.
 	if stores.Teams != nil && stores.Agents != nil {
 		teamMgr := tools.NewTeamToolManager(stores.Teams, stores.Agents, msgBus)
+		if delegateMgr != nil {
+			teamMgr.SetDelegateManager(delegateMgr)
+		}
 		toolsReg.Register(tools.NewTeamTasksTool(teamMgr))
 		toolsReg.Register(tools.NewTeamMessageTool(teamMgr))
 
@@ -435,7 +469,7 @@ func wireManagedExtras(
 	}
 
 	slog.Info("managed mode: resolver + interceptors + cache subscribers wired")
-	return contextFileInterceptor
+	return contextFileInterceptor, delegateMgr
 }
 
 // wireManagedHTTP creates managed-mode HTTP handlers (agents + skills + traces + MCP + custom tools + channel instances + providers + delegations + builtin tools).
@@ -472,7 +506,7 @@ func wireManagedHTTP(stores *store.Stores, token string, msgBus *bus.MessageBus,
 	}
 
 	if stores != nil && stores.MCP != nil {
-		mcpH = httpapi.NewMCPHandler(stores.MCP, token)
+		mcpH = httpapi.NewMCPHandler(stores.MCP, token, msgBus)
 	}
 
 	if stores != nil && stores.CustomTools != nil {

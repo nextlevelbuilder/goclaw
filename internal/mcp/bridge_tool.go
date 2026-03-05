@@ -16,8 +16,8 @@ import (
 // It delegates Execute calls to the MCP server via the client.
 type BridgeTool struct {
 	serverName     string
-	toolName       string                 // original MCP tool name
-	registeredName string                 // may include prefix: "{prefix}__{toolName}"
+	toolName       string // original MCP tool name
+	registeredName string // may include prefix: "{prefix}__{toolName}"
 	description    string
 	inputSchema    map[string]interface{} // JSON Schema for parameters
 	client         *mcpclient.Client
@@ -26,12 +26,12 @@ type BridgeTool struct {
 }
 
 // NewBridgeTool creates a BridgeTool from an MCP Tool definition.
+// The tool name is always prefixed with "mcp_" to distinguish MCP tools from native tools.
+// If prefix is empty, it is auto-derived from the server name.
 func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, client *mcpclient.Client, prefix string, timeoutSec int, connected *atomic.Bool) *BridgeTool {
 	name := mcpTool.Name
-	registered := name
-	if prefix != "" {
-		registered = prefix + "__" + name
-	}
+	effectivePrefix := ensureMCPPrefix(prefix, serverName)
+	registered := effectivePrefix + "__" + name
 
 	if timeoutSec <= 0 {
 		timeoutSec = 60
@@ -51,9 +51,31 @@ func NewBridgeTool(serverName string, mcpTool mcpgo.Tool, client *mcpclient.Clie
 	}
 }
 
-func (t *BridgeTool) Name() string                        { return t.registeredName }
-func (t *BridgeTool) Description() string                 { return t.description }
-func (t *BridgeTool) Parameters() map[string]interface{}  { return t.inputSchema }
+// ensureMCPPrefix guarantees the tool prefix starts with "mcp_".
+//   - Empty prefix → "mcp_{sanitizedServerName}"
+//   - Prefix without "mcp_" → "mcp_{prefix}"
+//   - Prefix already starting with "mcp_" → unchanged
+//
+// Server name hyphens are converted to underscores for tool name compatibility.
+func ensureMCPPrefix(prefix, serverName string) string {
+	const mcpPfx = "mcp_"
+
+	if prefix == "" {
+		// Auto-derive from server name: "my-server" → "mcp_my_server"
+		sanitized := strings.ReplaceAll(serverName, "-", "_")
+		return mcpPfx + sanitized
+	}
+
+	if !strings.HasPrefix(prefix, mcpPfx) {
+		return mcpPfx + prefix
+	}
+
+	return prefix
+}
+
+func (t *BridgeTool) Name() string                       { return t.registeredName }
+func (t *BridgeTool) Description() string                { return t.description }
+func (t *BridgeTool) Parameters() map[string]interface{} { return t.inputSchema }
 
 // ServerName returns the name of the MCP server this tool belongs to.
 func (t *BridgeTool) ServerName() string { return t.serverName }

@@ -219,7 +219,7 @@ export function ChannelInstanceFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!loading && canClose) onOpenChange(v); }}>
-      <DialogContent className="max-h-[85vh] max-w-lg flex flex-col">
+      <DialogContent className="max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{dialogTitle}</DialogTitle>
           {hasWizard && (

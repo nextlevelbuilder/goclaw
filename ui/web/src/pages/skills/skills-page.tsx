@@ -64,7 +64,7 @@ export function SkillsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Skills"
         description="Manage agent skills and capabilities"

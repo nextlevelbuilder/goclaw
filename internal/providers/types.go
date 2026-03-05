@@ -76,6 +76,7 @@ type ImageContent struct {
 type Message struct {
 	Role       string         `json:"role"`                  // "system", "user", "assistant", "tool"
 	Content    string         `json:"content"`
+	Thinking   string         `json:"thinking,omitempty"`    // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
 	Images     []ImageContent `json:"images,omitempty"`      // vision: base64 images
 	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"` // for role="tool" responses

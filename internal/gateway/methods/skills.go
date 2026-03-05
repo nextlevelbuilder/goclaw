@@ -32,11 +32,16 @@ func (m *SkillsMethods) handleList(_ context.Context, client *gateway.Client, re
 
 	result := make([]map[string]interface{}, 0, len(allSkills))
 	for _, s := range allSkills {
-		result = append(result, map[string]interface{}{
+		entry := map[string]interface{}{
 			"name":        s.Name,
+			"slug":        s.Slug,
 			"description": s.Description,
 			"source":      s.Source,
-		})
+		}
+		if s.ID != "" {
+			entry["id"] = s.ID
+		}
+		result = append(result, entry)
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]interface{}{

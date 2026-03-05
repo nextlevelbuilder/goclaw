@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
 import type { ChannelInstanceData, ChannelInstanceInput } from "@/types/channel";
 
 export type { ChannelInstanceData, ChannelInstanceInput };
@@ -52,25 +53,43 @@ export function useChannelInstances(filters: ChannelInstanceFilters = {}) {
 
   const createInstance = useCallback(
     async (data: ChannelInstanceInput) => {
-      const res = await http.post<{ id: string }>("/v1/channels/instances", data);
-      await invalidate();
-      return res;
+      try {
+        const res = await http.post<{ id: string }>("/v1/channels/instances", data);
+        await invalidate();
+        toast.success("Channel created", `${data.name} has been added`);
+        return res;
+      } catch (err) {
+        toast.error("Failed to create channel", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const updateInstance = useCallback(
     async (id: string, data: Partial<ChannelInstanceInput>) => {
-      await http.put(`/v1/channels/instances/${id}`, data);
-      await invalidate();
+      try {
+        await http.put(`/v1/channels/instances/${id}`, data);
+        await invalidate();
+        toast.success("Channel updated");
+      } catch (err) {
+        toast.error("Failed to update channel", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const deleteInstance = useCallback(
     async (id: string) => {
-      await http.delete(`/v1/channels/instances/${id}`);
-      await invalidate();
+      try {
+        await http.delete(`/v1/channels/instances/${id}`);
+        await invalidate();
+        toast.success("Channel deleted");
+      } catch (err) {
+        toast.error("Failed to delete channel", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );

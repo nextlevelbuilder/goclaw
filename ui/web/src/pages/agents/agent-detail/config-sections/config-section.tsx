@@ -27,7 +27,7 @@ export function ConfigSection({
         <Switch checked={enabled} onCheckedChange={onToggle} />
       </div>
       {enabled ? (
-        <div className="rounded-lg border p-4 space-y-4">{children}</div>
+        <div className="rounded-lg border p-3 space-y-4 sm:p-4">{children}</div>
       ) : (
         <p className="text-xs text-muted-foreground italic">
           Using global defaults from config.json

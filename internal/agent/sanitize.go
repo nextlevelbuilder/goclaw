@@ -107,11 +107,11 @@ func stripGarbledToolXML(content string) string {
 	cleaned = strings.TrimSpace(cleaned)
 
 	if cleaned != "" && hasIndicator {
-		slog.Warn("stripped garbled tool call response",
+		slog.Warn("stripped garbled tool call XML, preserving remaining content",
 			"original_len", len(content),
 			"remaining_len", len(cleaned),
 		)
-		return ""
+		return cleaned
 	}
 
 	if cleaned == "" {

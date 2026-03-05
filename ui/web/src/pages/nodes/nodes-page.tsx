@@ -25,7 +25,7 @@ export function NodesPage() {
   const [denyTarget, setDenyTarget] = useState<PendingPairing | null>(null);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Nodes"
         description="Manage paired devices and pending pairing requests"
@@ -97,8 +97,8 @@ export function NodesPage() {
                 <h3 className="mb-3 text-sm font-medium">
                   Paired Devices ({pairedDevices.length})
                 </h3>
-                <div className="rounded-md border">
-                  <table className="w-full text-sm">
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full min-w-[600px] text-sm">
                     <thead>
                       <tr className="border-b bg-muted/50">
                         <th className="px-4 py-3 text-left font-medium">Channel</th>

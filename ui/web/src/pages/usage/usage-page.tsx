@@ -36,7 +36,7 @@ export function UsagePage() {
     : [];
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Usage"
         description="Token usage and costs by agent"

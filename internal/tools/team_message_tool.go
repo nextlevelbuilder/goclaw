@@ -118,11 +118,17 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]inter
 	if len(preview) > 100 {
 		preview = preview[:100] + "..."
 	}
-	t.manager.broadcastTeamEvent(protocol.EventTeamMessageSent, map[string]string{
-		"team_id": team.ID.String(),
-		"from":    fromKey,
-		"to":      toKey,
-		"preview": preview,
+	t.manager.broadcastTeamEvent(protocol.EventTeamMessageSent, protocol.TeamMessageEventPayload{
+		TeamID:          team.ID.String(),
+		FromAgentKey:    fromKey,
+		FromDisplayName: t.manager.agentDisplayName(ctx, fromKey),
+		ToAgentKey:      toKey,
+		ToDisplayName:   t.manager.agentDisplayName(ctx, toKey),
+		MessageType:     string(store.TeamMessageTypeChat),
+		Preview:         preview,
+		UserID:          store.UserIDFromContext(ctx),
+		Channel:         ToolChannelFromCtx(ctx),
+		ChatID:          ToolChatIDFromCtx(ctx),
 	})
 
 	return NewResult(fmt.Sprintf("Message sent to %s.", toKey))
@@ -167,11 +173,16 @@ func (t *TeamMessageTool) executeBroadcast(ctx context.Context, args map[string]
 	if len(preview) > 100 {
 		preview = preview[:100] + "..."
 	}
-	t.manager.broadcastTeamEvent(protocol.EventTeamMessageSent, map[string]string{
-		"team_id": team.ID.String(),
-		"from":    fromKey,
-		"to":      "broadcast",
-		"preview": preview,
+	t.manager.broadcastTeamEvent(protocol.EventTeamMessageSent, protocol.TeamMessageEventPayload{
+		TeamID:          team.ID.String(),
+		FromAgentKey:    fromKey,
+		FromDisplayName: t.manager.agentDisplayName(ctx, fromKey),
+		ToAgentKey:      "broadcast",
+		MessageType:     string(store.TeamMessageTypeBroadcast),
+		Preview:         preview,
+		UserID:          store.UserIDFromContext(ctx),
+		Channel:         ToolChannelFromCtx(ctx),
+		ChatID:          ToolChatIDFromCtx(ctx),
 	})
 
 	return NewResult(fmt.Sprintf("Broadcast sent to all teammates."))

@@ -66,7 +66,7 @@ export function LinkCreateForm({ agentOptions, onSubmit }: LinkCreateFormProps) 
     <div className="rounded-lg border p-4">
       <h3 className="mb-3 text-sm font-medium">Create Link</h3>
       <div className="space-y-3">
-        <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-1.5">
             <Label>Target Agent</Label>
             <Combobox
@@ -76,7 +76,7 @@ export function LinkCreateForm({ agentOptions, onSubmit }: LinkCreateFormProps) 
               placeholder="Select or search agent..."
             />
           </div>
-          <div className="w-44 space-y-1.5">
+          <div className="w-full space-y-1.5 sm:w-44">
             <Label>Direction</Label>
             <Select value={direction} onValueChange={setDirection}>
               <SelectTrigger>
@@ -97,7 +97,7 @@ export function LinkCreateForm({ agentOptions, onSubmit }: LinkCreateFormProps) 
         <p className="text-xs text-muted-foreground">
           {DIRECTION_OPTIONS.find((o) => o.value === direction)?.desc}
         </p>
-        <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-1.5">
             <Label>Description</Label>
             <Input
@@ -106,7 +106,7 @@ export function LinkCreateForm({ agentOptions, onSubmit }: LinkCreateFormProps) 
               placeholder="Optional description of the link..."
             />
           </div>
-          <div className="w-32 space-y-1.5">
+          <div className="w-full space-y-1.5 sm:w-32">
             <Label>Max Concurrent</Label>
             <Input
               type="number"

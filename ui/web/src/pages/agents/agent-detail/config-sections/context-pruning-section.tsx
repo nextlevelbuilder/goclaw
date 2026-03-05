@@ -25,7 +25,7 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Pruning strategy. 'cache-ttl' trims old tool results based on their position in the conversation.">Mode</InfoLabel>
           <Select
@@ -53,7 +53,7 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Context usage ratio (0-1) at which soft trimming begins. E.g. 0.3 means trimming starts when context is 30% full.">Soft Trim Ratio (0-1)</InfoLabel>
           <Input
@@ -90,7 +90,7 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
       {/* Soft Trim */}
       <div className="space-y-3 rounded-md border border-dashed p-3">
         <h4 className="text-xs font-medium text-muted-foreground">Soft Trim</h4>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-2">
             <InfoLabel tip="Tool results longer than this will be soft-trimmed, keeping only head and tail portions.">Max Chars</InfoLabel>
             <Input

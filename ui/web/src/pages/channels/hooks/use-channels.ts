@@ -11,17 +11,19 @@ export function useChannels() {
   const ws = useWs();
   const [channels, setChannels] = useState<Record<string, ChannelStatus>>({});
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!ws.isConnected) return;
     setLoading(true);
+    setError(null);
     try {
       const res = await ws.call<{ channels: Record<string, ChannelStatus> }>(
         Methods.CHANNELS_STATUS,
       );
       setChannels(res.channels ?? {});
-    } catch {
-      // ignore
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load channels");
     } finally {
       setLoading(false);
     }
@@ -31,5 +33,5 @@ export function useChannels() {
     load();
   }, [load]);
 
-  return { channels, loading, refresh: load };
+  return { channels, loading, error, refresh: load };
 }

@@ -110,7 +110,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
           <DialogTitle>Create Agent</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4 overflow-y-auto min-h-0">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="displayName">Display Name *</Label>
               <Input
@@ -140,7 +140,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
               <p className="text-xs text-muted-foreground">Lowercase, numbers, hyphens</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Provider *</Label>
               {enabledProviders.length > 0 ? (

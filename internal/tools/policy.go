@@ -60,10 +60,10 @@ var toolProfiles = map[string][]string{
 
 // Tool aliases map alternative names to canonical names.
 var toolAliases = map[string]string{
-	"bash":             "exec",
-	"apply-patch":      "apply_patch",
-	"edit_file":        "edit",
-	"sessions_spawn":   "spawn",
+	"bash":           "exec",
+	"apply-patch":    "apply_patch",
+	"edit_file":      "edit",
+	"sessions_spawn": "spawn",
 }
 
 // Subagent deny lists — tools subagents cannot use.

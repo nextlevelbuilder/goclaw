@@ -25,7 +25,7 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="'off' disables sandboxing, 'non-main' sandboxes only sub-agents, 'all' sandboxes every execution including the main agent.">Mode</InfoLabel>
           <Select
@@ -65,7 +65,7 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
           onChange={(e) => onChange({ ...value, image: e.target.value || undefined })}
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Container lifecycle scope. 'session' = one container per chat session, 'agent' = shared across sessions, 'shared' = shared across all agents.">Scope</InfoLabel>
           <Select
@@ -90,7 +90,7 @@ export function SandboxSection({ enabled, value, onToggle, onChange }: SandboxSe
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Maximum memory allocation for the sandbox container in megabytes.">Memory (MB)</InfoLabel>
           <Input

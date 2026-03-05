@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
 
 export interface CronSchedule {
   kind: "at" | "every" | "cron";
@@ -76,31 +77,55 @@ export function useCron() {
       channel?: string;
       to?: string;
     }) => {
-      await ws.call(Methods.CRON_CREATE, params);
-      await invalidate();
+      try {
+        await ws.call(Methods.CRON_CREATE, params);
+        await invalidate();
+        toast.success("Cron job created", `${params.name} has been added`);
+      } catch (err) {
+        toast.error("Failed to create cron job", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [ws, invalidate],
   );
 
   const toggleJob = useCallback(
     async (jobId: string, enabled: boolean) => {
-      await ws.call(Methods.CRON_TOGGLE, { jobId, enabled });
-      await invalidate();
+      try {
+        await ws.call(Methods.CRON_TOGGLE, { jobId, enabled });
+        await invalidate();
+        toast.success(enabled ? "Cron job enabled" : "Cron job disabled");
+      } catch (err) {
+        toast.error("Failed to toggle cron job", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [ws, invalidate],
   );
 
   const deleteJob = useCallback(
     async (jobId: string) => {
-      await ws.call(Methods.CRON_DELETE, { jobId });
-      await invalidate();
+      try {
+        await ws.call(Methods.CRON_DELETE, { jobId });
+        await invalidate();
+        toast.success("Cron job deleted");
+      } catch (err) {
+        toast.error("Failed to delete cron job", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [ws, invalidate],
   );
 
   const runJob = useCallback(
     async (jobId: string) => {
-      await ws.call(Methods.CRON_RUN, { jobId, mode: "force" });
+      try {
+        await ws.call(Methods.CRON_RUN, { jobId, mode: "force" });
+        toast.success("Cron job triggered");
+      } catch (err) {
+        toast.error("Failed to run cron job", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [ws],
   );

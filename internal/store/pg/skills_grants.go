@@ -11,6 +11,8 @@ import (
 )
 
 // GrantToAgent grants a skill to an agent with version pinning.
+// Auto-promotes visibility from 'private' to 'internal' so the skill
+// becomes accessible via ListAccessible for granted agents.
 func (s *PGSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uuid.UUID, version int, grantedBy string) error {
 	if err := store.ValidateUserID(grantedBy); err != nil {
 		return err
@@ -21,14 +23,46 @@ func (s *PGSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uuid.U
 		 ON CONFLICT (skill_id, agent_id) DO UPDATE SET pinned_version = EXCLUDED.pinned_version`,
 		store.GenNewID(), skillID, agentID, version, grantedBy, time.Now(),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Auto-promote: private → internal (so ListAccessible query includes it for granted agents)
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills SET visibility = 'internal', updated_at = NOW() WHERE id = $1 AND visibility = 'private'`,
+		skillID)
+	if err != nil {
+		slog.Warn("skill_grants: failed to auto-promote visibility", "skill_id", skillID, "error", err)
+		// Non-fatal: grant was already created successfully
+	}
+
+	s.BumpVersion()
+	return nil
 }
 
 // RevokeFromAgent revokes a skill grant from an agent.
+// Auto-demotes visibility from 'internal' back to 'private' when no agent grants remain.
 func (s *PGSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uuid.UUID) error {
 	_, err := s.db.ExecContext(ctx,
 		"DELETE FROM skill_agent_grants WHERE skill_id = $1 AND agent_id = $2", skillID, agentID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Atomic auto-demote: set internal → private only if zero remaining grants.
+	// Uses NOT EXISTS subquery so the check + update is a single atomic SQL statement,
+	// avoiding a race window between COUNT and UPDATE.
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills SET visibility = 'private', updated_at = NOW()
+		 WHERE id = $1 AND visibility = 'internal'
+		   AND NOT EXISTS (SELECT 1 FROM skill_agent_grants WHERE skill_id = $1)`,
+		skillID)
+	if err != nil {
+		slog.Warn("skill_grants: failed to auto-demote visibility", "skill_id", skillID, "error", err)
+	}
+
+	s.BumpVersion()
+	return nil
 }
 
 // ListAgentGrants returns all skill grants for an agent.
@@ -103,7 +137,7 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 			slog.Warn("skill_grants: scan error in ListAccessible", "error", err)
 			continue
 		}
-		result = append(result, buildSkillInfo(name, slug, desc, version, s.baseDir))
+		result = append(result, buildSkillInfo("", name, slug, desc, version, s.baseDir))
 	}
 	return result, rows.Err()
 }

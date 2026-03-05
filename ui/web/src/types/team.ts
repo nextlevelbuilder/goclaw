@@ -5,6 +5,7 @@ export interface TeamAccessSettings {
   deny_user_ids?: string[];
   allow_channels?: string[];
   deny_channels?: string[];
+  progress_notifications?: boolean;
 }
 
 export interface TeamData {

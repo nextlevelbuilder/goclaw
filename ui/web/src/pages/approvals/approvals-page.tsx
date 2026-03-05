@@ -19,7 +19,7 @@ export function ApprovalsPage() {
   const [approveTarget, setApproveTarget] = useState<{ approval: PendingApproval; always: boolean } | null>(null);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Approvals"
         description="Pending execution approvals"

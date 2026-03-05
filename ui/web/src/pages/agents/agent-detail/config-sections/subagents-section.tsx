@@ -37,7 +37,7 @@ export function SubagentsSection({ enabled, value, onToggle, onChange }: Subagen
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Maximum number of sub-agents that can run simultaneously for this agent.">Max Concurrent</InfoLabel>
           <Input
@@ -62,7 +62,7 @@ export function SubagentsSection({ enabled, value, onToggle, onChange }: Subagen
           </Select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Maximum number of sub-agents a single parent agent can spawn in one session.">Max Children Per Agent</InfoLabel>
           <Input

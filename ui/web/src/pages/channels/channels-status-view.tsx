@@ -30,7 +30,7 @@ export function ChannelsStatusView({ channels, loading, spinning, refresh }: Cha
   const showSkeleton = useDeferredLoading(loading && entries.length === 0);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Channels"
         description="Communication channel status"

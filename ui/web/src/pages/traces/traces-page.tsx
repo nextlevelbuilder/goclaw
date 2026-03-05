@@ -37,7 +37,7 @@ export function TracesPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Traces"
         description="LLM call traces and performance data"
@@ -73,8 +73,8 @@ export function TracesPage() {
             description="No traces found. Traces are recorded when agents process requests."
           />
         ) : (
-          <div className="rounded-md border">
-            <table className="w-full text-sm">
+          <div className="rounded-md border overflow-x-auto">
+            <table className="w-full min-w-[700px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">Name</th>

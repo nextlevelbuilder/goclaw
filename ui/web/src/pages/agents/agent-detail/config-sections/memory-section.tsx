@@ -38,7 +38,7 @@ export function MemorySection({ enabled, value, onToggle, onChange }: MemorySect
         providerPlaceholder="(auto)"
         modelPlaceholder="text-embedding-3-small"
       />
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Maximum number of memory entries returned per search query.">Max Results</InfoLabel>
           <Input
@@ -58,7 +58,7 @@ export function MemorySection({ enabled, value, onToggle, onChange }: MemorySect
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Weight for vector (semantic) similarity in hybrid search scoring. Higher values prioritize meaning over keywords.">Vector Weight</InfoLabel>
           <Input

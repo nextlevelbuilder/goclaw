@@ -152,7 +152,6 @@ func (c *Controller) forceStop() {
 	// Stop keepalive loop
 	if c.keepaliveDone != nil {
 		close(c.keepaliveDone)
-		c.keepaliveDone = nil
 	}
 
 	// Send stop signal

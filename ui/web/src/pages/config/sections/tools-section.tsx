@@ -259,6 +259,20 @@ export function ToolsSection({ data, onSave, saving }: Props) {
                 />
               </div>
             )}
+            <div className="grid gap-1.5">
+              <InfoLabel tip="Domains that are always blocked regardless of policy mode. Useful for preventing info-leak sites (IP lookup, etc.).">Blocked Domains (one per line, supports *.example.com)</InfoLabel>
+              <Textarea
+                value={(webFetch.blocked_domains ?? []).join("\n")}
+                onChange={(e) =>
+                  updateNested("web_fetch", {
+                    ...webFetch,
+                    blocked_domains: e.target.value.split("\n").filter(Boolean),
+                  })
+                }
+                className="min-h-[80px] font-mono text-xs"
+                placeholder={"ifconfig.co\nipinfo.io\n*.whatismyip.com"}
+              />
+            </div>
           </div>
         </div>
 

@@ -32,6 +32,7 @@ type Channel struct {
 	cancel          context.CancelFunc
 	pairingService  store.PairingStore
 	pairingDebounce sync.Map // senderID → time.Time
+	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
 }
 
 // New creates a new WhatsApp channel from config.
@@ -222,7 +223,7 @@ func (c *Channel) handleIncomingMessage(msg map[string]interface{}) {
 			return
 		}
 	} else {
-		if !c.CheckPolicy("group", "", c.config.GroupPolicy, senderID) {
+		if !c.checkGroupPolicy(senderID, chatID) {
 			slog.Debug("whatsapp group message rejected by policy", "sender_id", senderID)
 			return
 		}
@@ -264,6 +265,37 @@ func (c *Channel) handleIncomingMessage(msg map[string]interface{}) {
 	)
 
 	c.HandleMessage(senderID, chatID, content, media, metadata, peerKind)
+}
+
+// checkGroupPolicy evaluates the group policy for a sender, with pairing support.
+func (c *Channel) checkGroupPolicy(senderID, chatID string) bool {
+	groupPolicy := c.config.GroupPolicy
+	if groupPolicy == "" {
+		groupPolicy = "open"
+	}
+
+	switch groupPolicy {
+	case "disabled":
+		return false
+	case "allowlist":
+		return c.IsAllowed(senderID)
+	case "pairing":
+		if c.IsAllowed(senderID) {
+			return true
+		}
+		if _, cached := c.approvedGroups.Load(chatID); cached {
+			return true
+		}
+		groupSenderID := fmt.Sprintf("group:%s", chatID)
+		if c.pairingService != nil && c.pairingService.IsPaired(groupSenderID, c.Name()) {
+			c.approvedGroups.Store(chatID, true)
+			return true
+		}
+		c.sendPairingReply(groupSenderID, chatID)
+		return false
+	default: // "open"
+		return true
+	}
 }
 
 // checkDMPolicy evaluates the DM policy for a sender, handling pairing flow.

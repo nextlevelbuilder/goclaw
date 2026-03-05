@@ -1,0 +1,39 @@
+# Browser sidecar overlay — adds headless Chrome for the browser automation tool.
+#
+# Usage (with managed mode):
+#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.browser.yml up -d --build
+#
+# The Chrome sidecar exposes CDP (Chrome DevTools Protocol) on port 9222.
+# GoClaw connects to it automatically via GOCLAW_BROWSER_REMOTE_URL.
+
+services:
+  chrome:
+    image: zenika/alpine-chrome:124
+    command:
+      - --no-sandbox
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --remote-allow-origins=*
+      - --disable-gpu
+      - --disable-dev-shm-usage
+    ports:
+      - "${CHROME_CDP_PORT:-9222}:9222"
+    shm_size: 2gb
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9222/json/version >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+    restart: unless-stopped
+
+  goclaw:
+    environment:
+      - GOCLAW_BROWSER_REMOTE_URL=ws://chrome:9222
+    depends_on:
+      chrome:
+        condition: service_healthy

@@ -166,8 +166,10 @@ func (t *SkillSearchTool) filterByAccess(ctx context.Context, results []skills.S
 	for _, r := range results {
 		if r.Source != "managed" {
 			filtered = append(filtered, r)
-		} else if _, ok := allowed[r.Name]; ok {
+		} else if _, ok := allowed[r.Slug]; ok {
 			filtered = append(filtered, r)
+		} else {
+			slog.Debug("skill_search: filtered out inaccessible managed skill", "slug", r.Slug, "name", r.Name)
 		}
 	}
 	return filtered
@@ -238,6 +240,7 @@ func (t *SkillSearchTool) hybridSearch(ctx context.Context, query string, bm25Re
 			seen[r.Name] = &merged{
 				result: skills.SkillSearchResult{
 					Name:        r.Name,
+					Slug:        r.Slug,
 					Description: r.Description,
 					Location:    r.Path,
 					Source:      "managed",

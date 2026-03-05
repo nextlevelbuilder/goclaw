@@ -167,7 +167,54 @@ export const Events = {
   HEARTBEAT: "heartbeat",
   TALK_MODE: "talk.mode",
   HANDOFF: "handoff",
+
+  // Delegation lifecycle
+  DELEGATION_STARTED: "delegation.started",
+  DELEGATION_COMPLETED: "delegation.completed",
+  DELEGATION_FAILED: "delegation.failed",
+  DELEGATION_CANCELLED: "delegation.cancelled",
+  DELEGATION_PROGRESS: "delegation.progress",
+  DELEGATION_ACCUMULATED: "delegation.accumulated",
+  DELEGATION_ANNOUNCE: "delegation.announce",
+  DELEGATION_QUALITY_GATE_RETRY: "delegation.quality_gate.retry",
+
+  // Team tasks
+  TEAM_TASK_CREATED: "team.task.created",
+  TEAM_TASK_CLAIMED: "team.task.claimed",
+  TEAM_TASK_COMPLETED: "team.task.completed",
+  TEAM_TASK_CANCELLED: "team.task.cancelled",
+
+  // Team messages
+  TEAM_MESSAGE_SENT: "team.message.sent",
+
+  // Team CRUD
+  TEAM_CREATED: "team.created",
+  TEAM_UPDATED: "team.updated",
+  TEAM_DELETED: "team.deleted",
+  TEAM_MEMBER_ADDED: "team.member.added",
+  TEAM_MEMBER_REMOVED: "team.member.removed",
+
+  // Agent links
+  AGENT_LINK_CREATED: "agent_link.created",
+  AGENT_LINK_UPDATED: "agent_link.updated",
+  AGENT_LINK_DELETED: "agent_link.deleted",
 } as const;
+
+/** All event names relevant to team debug view */
+export const TEAM_RELATED_EVENTS: Set<string> = new Set([
+  Events.DELEGATION_STARTED, Events.DELEGATION_COMPLETED,
+  Events.DELEGATION_FAILED, Events.DELEGATION_CANCELLED,
+  Events.DELEGATION_PROGRESS, Events.DELEGATION_ACCUMULATED,
+  Events.DELEGATION_ANNOUNCE, Events.DELEGATION_QUALITY_GATE_RETRY,
+  Events.TEAM_TASK_CREATED, Events.TEAM_TASK_CLAIMED,
+  Events.TEAM_TASK_COMPLETED, Events.TEAM_TASK_CANCELLED,
+  Events.TEAM_MESSAGE_SENT,
+  Events.TEAM_CREATED, Events.TEAM_UPDATED, Events.TEAM_DELETED,
+  Events.TEAM_MEMBER_ADDED, Events.TEAM_MEMBER_REMOVED,
+  Events.AGENT_LINK_CREATED, Events.AGENT_LINK_UPDATED,
+  Events.AGENT_LINK_DELETED,
+  Events.AGENT,
+]);
 
 // Agent event subtypes (in payload.type)
 export const AgentEventTypes = {

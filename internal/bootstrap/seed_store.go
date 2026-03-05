@@ -81,10 +81,10 @@ var userSeedFilesOpen = []string{
 }
 
 // userSeedFilesPredefined is the set of files seeded per-user for predefined agents.
-// Includes BOOTSTRAP.md for user onboarding (uses BOOTSTRAP_PREDEFINED.md template).
+// Only USER.md — predefined agents already have full context (SOUL.md, IDENTITY.md, AGENTS.md)
+// and don't need a bootstrap onboarding ritual. They just need to learn the user's profile.
 var userSeedFilesPredefined = []string{
 	UserFile,
-	BootstrapFile,
 }
 
 // SeedUserFiles seeds embedded templates into user_context_files for a new user.

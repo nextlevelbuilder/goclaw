@@ -24,7 +24,7 @@ export function ChatSidebar({
   onNewChat,
 }: ChatSidebarProps) {
   return (
-    <div className="flex h-full w-72 flex-col border-r">
+    <div className="flex h-full w-72 max-w-[85vw] flex-col border-r bg-background">
       {/* Agent selector */}
       <div className="border-b p-3">
         <AgentSelector value={agentId} onChange={onAgentChange} />

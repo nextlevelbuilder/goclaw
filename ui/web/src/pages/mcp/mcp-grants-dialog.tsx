@@ -18,7 +18,7 @@ interface MCPGrantsDialogProps {
   server: MCPServerData;
   onGrant: (agentId: string, toolAllow?: string[], toolDeny?: string[]) => Promise<void>;
   onRevoke: (agentId: string) => Promise<void>;
-  onLoadGrants: (agentId: string) => Promise<MCPAgentGrant[]>;
+  onLoadGrants: (serverId: string) => Promise<MCPAgentGrant[]>;
 }
 
 export function MCPGrantsDialog({
@@ -27,6 +27,7 @@ export function MCPGrantsDialog({
   server,
   onGrant,
   onRevoke,
+  onLoadGrants,
 }: MCPGrantsDialogProps) {
   const [agentId, setAgentId] = useState("");
   const [toolAllow, setToolAllow] = useState("");
@@ -40,35 +41,56 @@ export function MCPGrantsDialog({
       setAgentId("");
       setToolAllow("");
       setToolDeny("");
-      setGrants([]);
       setError("");
+      // Load existing grants from API
+      setLoading(true);
+      onLoadGrants(server.id)
+        .then((existing) => setGrants(existing))
+        .catch(() => setGrants([]))
+        .finally(() => setLoading(false));
     }
-  }, [open]);
+  }, [open, server.id, onLoadGrants]);
 
   const handleGrant = async () => {
     if (!agentId.trim()) {
       setError("Agent ID is required");
       return;
     }
+
+    const trimmedId = agentId.trim();
+    const existing = grants.find((g) => g.agent_id === trimmedId);
+
     setLoading(true);
     setError("");
     try {
       const allow = toolAllow.trim() ? toolAllow.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
       const deny = toolDeny.trim() ? toolDeny.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
-      await onGrant(agentId.trim(), allow, deny);
-      setGrants((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          server_id: server.id,
-          agent_id: agentId.trim(),
-          enabled: true,
-          tool_allow: allow ?? null,
-          tool_deny: deny ?? null,
-          granted_by: "",
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      await onGrant(trimmedId, allow, deny);
+
+      if (existing) {
+        // Upsert: update existing grant in list
+        setGrants((prev) =>
+          prev.map((g) =>
+            g.agent_id === trimmedId
+              ? { ...g, tool_allow: allow ?? null, tool_deny: deny ?? null }
+              : g
+          )
+        );
+      } else {
+        setGrants((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            server_id: server.id,
+            agent_id: trimmedId,
+            enabled: true,
+            tool_allow: allow ?? null,
+            tool_deny: deny ?? null,
+            granted_by: "",
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      }
       setAgentId("");
       setToolAllow("");
       setToolDeny("");
@@ -93,7 +115,7 @@ export function MCPGrantsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Agent Grants - {server.display_name || server.name}</DialogTitle>
         </DialogHeader>
@@ -104,9 +126,9 @@ export function MCPGrantsDialog({
             <Label>Current Grants</Label>
             <div className="rounded-md border">
               {grants.map((grant) => (
-                <div key={grant.id} className="flex items-center justify-between border-b px-3 py-2 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="font-mono text-xs">{grant.agent_id}</Badge>
+                <div key={grant.id} className="flex flex-wrap items-center gap-1 border-b px-3 py-2 last:border-0 sm:justify-between">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                    <Badge variant="outline" className="truncate font-mono text-xs">{grant.agent_id}</Badge>
                     {Array.isArray(grant.tool_allow) && grant.tool_allow.length > 0 && (
                       <span className="text-xs text-muted-foreground">allow: {grant.tool_allow.join(", ")}</span>
                     )}

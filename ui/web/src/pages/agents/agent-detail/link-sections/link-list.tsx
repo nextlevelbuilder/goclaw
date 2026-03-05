@@ -44,8 +44,8 @@ export function LinkList({
   }
 
   return (
-    <div className="rounded-lg border">
-      <div className="grid grid-cols-[1fr_100px_60px_60px_80px] items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-xs font-medium text-muted-foreground">
+    <div className="overflow-x-auto rounded-lg border">
+      <div className="grid min-w-[500px] grid-cols-[1fr_100px_60px_60px_80px] items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-xs font-medium text-muted-foreground">
         <span>Target</span>
         <span>Direction</span>
         <span>Status</span>
@@ -55,7 +55,7 @@ export function LinkList({
       {links.map((link) => (
         <div
           key={link.id}
-          className="grid grid-cols-[1fr_100px_60px_60px_80px] items-center gap-2 border-b px-4 py-3 last:border-0"
+          className="grid min-w-[500px] grid-cols-[1fr_100px_60px_60px_80px] items-center gap-2 border-b px-4 py-3 last:border-0"
         >
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">

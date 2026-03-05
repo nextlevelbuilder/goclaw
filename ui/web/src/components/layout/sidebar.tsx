@@ -28,15 +28,22 @@ import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   collapsed: boolean;
+  onNavItemClick?: () => void;
 }
 
-export function Sidebar({ collapsed }: SidebarProps) {
+export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
   return (
     <aside
       className={cn(
         "flex h-full flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-200",
         collapsed ? "w-16" : "w-64",
       )}
+      onClick={(e) => {
+        // Close mobile drawer when clicking a nav link
+        if (onNavItemClick && (e.target as HTMLElement).closest("a")) {
+          onNavItemClick();
+        }
+      }}
     >
       {/* Logo / title */}
       <div className="flex h-14 items-center border-b px-4">

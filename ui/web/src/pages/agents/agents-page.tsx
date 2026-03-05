@@ -9,7 +9,6 @@ import { CardSkeleton } from "@/components/shared/loading-skeleton";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { useHttp } from "@/hooks/use-ws";
 import { useAgents } from "./hooks/use-agents";
 import { AgentCard } from "./agent-card";
 import { AgentCreateDialog } from "./agent-create-dialog";
@@ -20,8 +19,7 @@ import { usePagination } from "@/hooks/use-pagination";
 export function AgentsPage() {
   const { id: detailId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const http = useHttp();
-  const { agents, loading, createAgent, deleteAgent, refresh } = useAgents();
+  const { agents, loading, createAgent, deleteAgent, refresh, resummonAgent } = useAgents();
   const showSkeleton = useDeferredLoading(loading && agents.length === 0);
 
   const [search, setSearch] = useState("");
@@ -31,10 +29,10 @@ export function AgentsPage() {
 
   const handleResummon = async (agent: { id: string; display_name?: string; agent_key: string }) => {
     try {
-      await http.post(`/v1/agents/${agent.id}/resummon`);
+      await resummonAgent(agent.id);
       setSummoningAgent({ id: agent.id, name: agent.display_name || agent.agent_key });
     } catch {
-      // error handled by http hook
+      // error handled by hook
     }
   };
 
@@ -61,7 +59,7 @@ export function AgentsPage() {
   useEffect(() => { resetPage(); }, [search, resetPage]);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Agents"
         description="Manage your AI agents"
@@ -169,6 +167,7 @@ export function AgentsPage() {
           agentId={summoningAgent.id}
           agentName={summoningAgent.name}
           onCompleted={refresh}
+          onResummon={resummonAgent}
         />
       )}
     </div>

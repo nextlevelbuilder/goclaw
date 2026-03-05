@@ -12,6 +12,7 @@ import { DetailSkeleton } from "@/components/shared/loading-skeleton";
 import { useConfig } from "./hooks/use-config";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
+import { useIsMobile } from "@/hooks/use-media-query";
 import { ROUTES } from "@/lib/constants";
 import { GatewaySection } from "./sections/gateway-section";
 import { ProvidersSection } from "./sections/providers-section";
@@ -27,6 +28,7 @@ import { QuotaSection } from "./sections/quota-section";
 
 export function ConfigPage() {
   const { config, hash, configPath, loading, saving, error, refresh, applyRaw, patch } = useConfig();
+  const isMobile = useIsMobile();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && !config);
   const [rawText, setRawText] = useState("");
@@ -54,7 +56,7 @@ export function ConfigPage() {
 
   if (showSkeleton) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <PageHeader title="Config" description="Gateway configuration" />
         <div className="mt-6">
           <DetailSkeleton />
@@ -65,7 +67,7 @@ export function ConfigPage() {
 
   if (!config) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <PageHeader title="Config" description="Gateway configuration" />
         <div className="mt-6">
           <EmptyState
@@ -86,7 +88,7 @@ export function ConfigPage() {
   const isManaged = (config.database as any)?.mode === "managed";
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Config"
         description="Gateway configuration"
@@ -117,16 +119,22 @@ export function ConfigPage() {
         </span>
       </div>
 
-      <Tabs orientation="vertical" defaultValue="general" className="mt-4 items-start">
-        <TabsList variant="line" className="w-44 shrink-0 sticky top-6 rounded-lg border bg-card p-3 shadow-sm">
+      <Tabs orientation={isMobile ? "horizontal" : "vertical"} defaultValue="general" className="mt-4 items-start">
+        <TabsList
+          variant={isMobile ? "default" : "line"}
+          className={isMobile
+            ? "w-full overflow-x-auto overflow-y-hidden"
+            : "w-44 shrink-0 sticky top-6 rounded-lg border bg-card p-3 shadow-sm"
+          }
+        >
           <TabsTrigger value="general">General</TabsTrigger>
           {isManaged && <TabsTrigger value="quota">Quota</TabsTrigger>}
           <TabsTrigger value="agents">Agents</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
           <TabsTrigger value="connections">Connections</TabsTrigger>
           <TabsTrigger value="advanced">Advanced</TabsTrigger>
-          <div className="my-2 h-px w-full bg-border" />
-          <TabsTrigger value="raw">Raw Editor</TabsTrigger>
+          {!isMobile && <div className="my-2 h-px w-full bg-border" />}
+          <TabsTrigger value="raw">Raw</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-4">

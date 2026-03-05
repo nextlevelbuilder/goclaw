@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Plus, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { useHttp } from "@/hooks/use-ws";
-import type { AgentShareData } from "@/types/agent";
+import { useAgentShares } from "../hooks/use-agent-shares";
 
 interface AgentSharesTabProps {
   agentId: string;
@@ -33,41 +32,17 @@ function roleBadgeVariant(role: string) {
 }
 
 export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
-  const http = useHttp();
-  const [shares, setShares] = useState<AgentShareData[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { shares, loading, addShare, revokeShare } = useAgentShares(agentId);
   const [newUserId, setNewUserId] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
 
-  const loadShares = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await http.get<{ shares: AgentShareData[] }>(
-        `/v1/agents/${agentId}/shares`,
-      );
-      setShares(res.shares ?? []);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, [http, agentId]);
-
-  useEffect(() => {
-    loadShares();
-  }, [loadShares]);
-
-  const addShare = async () => {
+  const handleAddShare = async () => {
     if (!newUserId.trim()) return;
     try {
-      await http.post(`/v1/agents/${agentId}/shares`, {
-        user_id: newUserId.trim(),
-        role: newRole,
-      });
+      await addShare(newUserId.trim(), newRole);
       setNewUserId("");
       setNewRole("user");
-      loadShares();
     } catch {
       // ignore
     }
@@ -78,7 +53,7 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
       {/* Add share form */}
       <div className="rounded-lg border p-4">
         <h3 className="mb-3 text-sm font-medium">Grant Access</h3>
-        <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1 space-y-1.5">
             <Label htmlFor="shareUserId">User ID</Label>
             <Input
@@ -87,11 +62,11 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
               onChange={(e) => setNewUserId(e.target.value)}
               placeholder="Enter user ID..."
               onKeyDown={(e) => {
-                if (e.key === "Enter" && newUserId.trim()) addShare();
+                if (e.key === "Enter" && newUserId.trim()) handleAddShare();
               }}
             />
           </div>
-          <div className="w-36 space-y-1.5">
+          <div className="w-full space-y-1.5 sm:w-36">
             <Label>Role</Label>
             <Select value={newRole} onValueChange={setNewRole}>
               <SelectTrigger>
@@ -106,7 +81,7 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={addShare} disabled={!newUserId.trim()} className="gap-1.5">
+          <Button onClick={handleAddShare} disabled={!newUserId.trim()} className="gap-1.5">
             <Plus className="h-4 w-4" />
             Share
           </Button>
@@ -125,8 +100,8 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border">
-          <div className="grid grid-cols-[1fr_100px_48px] items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-xs font-medium text-muted-foreground">
+        <div className="overflow-x-auto rounded-lg border">
+          <div className="grid min-w-[300px] grid-cols-[1fr_100px_48px] items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-xs font-medium text-muted-foreground">
             <span>User</span>
             <span>Role</span>
             <span />
@@ -134,7 +109,7 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
           {shares.map((share) => (
             <div
               key={share.user_id}
-              className="grid grid-cols-[1fr_100px_48px] items-center gap-2 border-b px-4 py-3 last:border-0"
+              className="grid min-w-[300px] grid-cols-[1fr_100px_48px] items-center gap-2 border-b px-4 py-3 last:border-0"
             >
               <div>
                 <span className="text-sm font-medium">{share.user_id}</span>
@@ -168,8 +143,7 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
         onConfirm={async () => {
           if (revokeTarget) {
             try {
-              await http.delete(`/v1/agents/${agentId}/shares/${revokeTarget}`);
-              loadShares();
+              await revokeShare(revokeTarget);
             } catch {
               // ignore
             }

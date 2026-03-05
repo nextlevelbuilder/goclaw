@@ -97,6 +97,7 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_ANTHROPIC_API_KEY", &c.Providers.Anthropic.APIKey)
 	envStr("GOCLAW_ANTHROPIC_BASE_URL", &c.Providers.Anthropic.APIBase)
 	envStr("GOCLAW_OPENAI_API_KEY", &c.Providers.OpenAI.APIKey)
+	envStr("GOCLAW_OPENAI_BASE_URL", &c.Providers.OpenAI.APIBase)
 	envStr("GOCLAW_OPENROUTER_API_KEY", &c.Providers.OpenRouter.APIKey)
 	envStr("GOCLAW_GROQ_API_KEY", &c.Providers.Groq.APIKey)
 	envStr("GOCLAW_DEEPSEEK_API_KEY", &c.Providers.DeepSeek.APIKey)
@@ -230,6 +231,12 @@ func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("GOCLAW_SANDBOX_NETWORK"); v != "" {
 		ensureSandbox()
 		c.Agents.Defaults.Sandbox.NetworkEnabled = v == "true" || v == "1"
+	}
+
+	// Browser (for Docker-compose browser sidecar overlay)
+	envStr("GOCLAW_BROWSER_REMOTE_URL", &c.Tools.Browser.RemoteURL)
+	if c.Tools.Browser.RemoteURL != "" {
+		c.Tools.Browser.Enabled = true
 	}
 }
 

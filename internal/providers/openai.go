@@ -105,10 +105,13 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	scanner := bufio.NewScanner(respBody)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
+		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
-		data := strings.TrimPrefix(line, "data: ")
+		// SSE spec allows both "data: value" and "data:value" (space is optional).
+		// Some providers (e.g. Kimi) omit the space after the colon.
+		data := strings.TrimPrefix(line, "data:")
+		data = strings.TrimPrefix(data, " ")
 		if data == "[DONE]" {
 			break
 		}
@@ -116,6 +119,23 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		var chunk openAIStreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			continue
+		}
+
+		// Usage chunk often has empty choices — extract usage before skipping.
+		// When stream_options.include_usage is true, the final chunk contains
+		// usage data but choices is typically an empty array.
+		if chunk.Usage != nil {
+			result.Usage = &Usage{
+				PromptTokens:     chunk.Usage.PromptTokens,
+				CompletionTokens: chunk.Usage.CompletionTokens,
+				TotalTokens:      chunk.Usage.TotalTokens,
+			}
+			if chunk.Usage.PromptTokensDetails != nil {
+				result.Usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+			}
+			if chunk.Usage.CompletionTokensDetails != nil && chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
+				result.Usage.ThinkingTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
+			}
 		}
 
 		if len(chunk.Choices) == 0 {
@@ -158,20 +178,16 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			result.FinishReason = chunk.Choices[0].FinishReason
 		}
 
-		if chunk.Usage != nil {
-			result.Usage = &Usage{
-				PromptTokens:     chunk.Usage.PromptTokens,
-				CompletionTokens: chunk.Usage.CompletionTokens,
-				TotalTokens:      chunk.Usage.TotalTokens,
-			}
-			if chunk.Usage.PromptTokensDetails != nil {
-				result.Usage.CacheReadTokens = chunk.Usage.PromptTokensDetails.CachedTokens
-			}
-			if chunk.Usage.CompletionTokensDetails != nil && chunk.Usage.CompletionTokensDetails.ReasoningTokens > 0 {
-				result.Usage.ThinkingTokens = chunk.Usage.CompletionTokensDetails.ReasoningTokens
-			}
-		}
+	}
 
+	// Check for scanner errors (timeout, connection reset, etc.)
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
+	}
+
+	// Check for scanner errors (timeout, connection reset, etc.)
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
 	// Parse accumulated tool call arguments
@@ -215,6 +231,11 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	for _, m := range inputMessages {
 		msg := map[string]interface{}{
 			"role": m.Role,
+		}
+
+		// Echo reasoning_content for assistant messages (required by Kimi, DeepSeek when thinking is enabled)
+		if m.Thinking != "" && m.Role == "assistant" {
+			msg["reasoning_content"] = m.Thinking
 		}
 
 		// Include content; omit empty content for assistant messages with tool_calls

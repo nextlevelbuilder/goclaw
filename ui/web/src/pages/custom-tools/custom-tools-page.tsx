@@ -67,7 +67,7 @@ export function CustomToolsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Custom Tools"
         description="Manage custom shell-based tools for agents"

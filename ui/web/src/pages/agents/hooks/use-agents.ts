@@ -4,6 +4,7 @@ import { useWs, useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
 import type { AgentData } from "@/types/agent";
 
 interface AgentInfoWs {
@@ -61,20 +62,39 @@ export function useAgents() {
 
   const createAgent = useCallback(
     async (data: Partial<AgentData>) => {
-      const res = await http.post<AgentData>("/v1/agents", data);
-      await invalidate();
-      return res;
+      try {
+        const res = await http.post<AgentData>("/v1/agents", data);
+        await invalidate();
+        toast.success("Agent created", `${data.display_name || data.agent_key || "Agent"} has been added`);
+        return res;
+      } catch (err) {
+        toast.error("Failed to create agent", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const deleteAgent = useCallback(
     async (id: string) => {
-      await http.delete(`/v1/agents/${id}`);
-      await invalidate();
+      try {
+        await http.delete(`/v1/agents/${id}`);
+        await invalidate();
+        toast.success("Agent deleted");
+      } catch (err) {
+        toast.error("Failed to delete agent", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
-  return { agents, loading, error, refresh: invalidate, createAgent, deleteAgent };
+  const resummonAgent = useCallback(
+    async (id: string) => {
+      await http.post(`/v1/agents/${id}/resummon`);
+    },
+    [http],
+  );
+
+  return { agents, loading, error, refresh: invalidate, createAgent, deleteAgent, resummonAgent };
 }

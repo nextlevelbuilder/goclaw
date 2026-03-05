@@ -26,6 +26,7 @@ export function useBuiltinTools() {
       const res = await http.get<{ tools: BuiltinToolData[] }>("/v1/tools/builtin");
       return res.tools ?? [];
     },
+    staleTime: 5 * 60_000,
   });
 
   const invalidate = useCallback(

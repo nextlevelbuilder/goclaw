@@ -54,7 +54,7 @@ export function SessionsPage() {
   });
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader title="Sessions" description="Browse conversation sessions" />
 
       <div className="mt-4">
@@ -80,8 +80,8 @@ export function SessionsPage() {
             }
           />
         ) : (
-          <div className="rounded-md border">
-            <table className="w-full">
+          <div className="rounded-md border overflow-x-auto">
+            <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left text-sm font-medium">Session</th>

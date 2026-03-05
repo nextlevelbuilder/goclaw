@@ -30,6 +30,7 @@ type Channel struct {
 	typingCtrls     sync.Map // channelID string → *typing.Controller
 	pairingService  store.PairingStore
 	pairingDebounce sync.Map // senderID → time.Time
+	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
 	groupHistory    *channels.PendingHistory
 	historyLimit    int
 }
@@ -240,7 +241,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			return
 		}
 	} else {
-		if !c.CheckPolicy("group", "", c.config.GroupPolicy, senderID) {
+		if !c.checkGroupPolicy(senderID, channelID) {
 			slog.Debug("discord group message rejected by policy",
 				"user_id", senderID,
 				"username", senderName,
@@ -363,6 +364,37 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// Clear pending history after sending to agent.
 	if peerKind == "group" {
 		c.groupHistory.Clear(channelID)
+	}
+}
+
+// checkGroupPolicy evaluates the group policy for a sender, with pairing support.
+func (c *Channel) checkGroupPolicy(senderID, channelID string) bool {
+	groupPolicy := c.config.GroupPolicy
+	if groupPolicy == "" {
+		groupPolicy = "open"
+	}
+
+	switch groupPolicy {
+	case "disabled":
+		return false
+	case "allowlist":
+		return c.IsAllowed(senderID)
+	case "pairing":
+		if c.IsAllowed(senderID) {
+			return true
+		}
+		if _, cached := c.approvedGroups.Load(channelID); cached {
+			return true
+		}
+		groupSenderID := fmt.Sprintf("group:%s", channelID)
+		if c.pairingService != nil && c.pairingService.IsPaired(groupSenderID, c.Name()) {
+			c.approvedGroups.Store(channelID, true)
+			return true
+		}
+		c.sendPairingReply(groupSenderID, channelID)
+		return false
+	default: // "open"
+		return true
 	}
 }
 

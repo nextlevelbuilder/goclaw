@@ -19,6 +19,7 @@ import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { Events } from "@/api/protocol";
 import { formatDate, formatDuration } from "@/lib/format";
 import { useDelegations } from "./hooks/use-delegations";
+import { useTraces } from "@/pages/traces/hooks/use-traces";
 import { DelegationDetailDialog } from "./delegation-detail-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
@@ -27,6 +28,7 @@ import type { DelegationHistoryRecord } from "@/types/delegation";
 
 export function DelegationsPage() {
   const { delegations, total, loading, load, getDelegation } = useDelegations();
+  const { getTrace } = useTraces();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && delegations.length === 0);
   const [sourceFilter, setSourceFilter] = useState("");
@@ -85,7 +87,7 @@ export function DelegationsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Delegations"
         description="Agent delegation history and results"
@@ -203,6 +205,7 @@ export function DelegationsPage() {
           delegationId={selectedId}
           onClose={() => setSelectedId(null)}
           getDelegation={getDelegation}
+          getTrace={getTrace}
         />
       )}
     </div>

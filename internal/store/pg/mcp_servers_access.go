@@ -63,6 +63,29 @@ func (s *PGMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid.UUI
 	return result, nil
 }
 
+func (s *PGMCPServerStore) ListServerGrants(ctx context.Context, serverID uuid.UUID) ([]store.MCPAgentGrant, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, server_id, agent_id, enabled,
+		 COALESCE(tool_allow, '[]'::jsonb), COALESCE(tool_deny, '[]'::jsonb),
+		 COALESCE(config_overrides, '{}'::jsonb), granted_by, created_at
+		 FROM mcp_agent_grants WHERE server_id = $1 ORDER BY created_at`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]store.MCPAgentGrant, 0)
+	for rows.Next() {
+		var g store.MCPAgentGrant
+		if err := rows.Scan(&g.ID, &g.ServerID, &g.AgentID, &g.Enabled,
+			&g.ToolAllow, &g.ToolDeny, &g.ConfigOverrides, &g.GrantedBy, &g.CreatedAt); err != nil {
+			continue
+		}
+		result = append(result, g)
+	}
+	return result, nil
+}
+
 // --- User Grants ---
 
 func (s *PGMCPServerStore) GrantToUser(ctx context.Context, g *store.MCPUserGrant) error {

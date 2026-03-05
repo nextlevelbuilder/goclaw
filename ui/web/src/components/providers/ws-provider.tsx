@@ -1,9 +1,12 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { WsClient, type ConnectionState } from "@/api/ws-client";
 import { HttpClient } from "@/api/http-client";
 import { WsContext } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useWsQueryInvalidation } from "@/hooks/use-query-invalidation";
+import { useWsEvent } from "@/hooks/use-ws-event";
+import { TEAM_RELATED_EVENTS } from "@/api/protocol";
+import { useTeamEventStore } from "@/stores/use-team-event-store";
 
 // In dev mode, connect directly to backend WS (bypass Vite proxy).
 // In production, use relative "/ws" path.
@@ -59,6 +62,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   return (
     <WsContext.Provider value={value}>
       <WsQueryInvalidation />
+      <WsTeamEventCapture />
       {children}
     </WsContext.Provider>
   );
@@ -66,5 +70,27 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
 
 function WsQueryInvalidation() {
   useWsQueryInvalidation();
+  return null;
+}
+
+/** Captures all team-related WS events into the Zustand store. */
+function WsTeamEventCapture() {
+  const addEvent = useTeamEventStore((s) => s.addEvent);
+
+  const handler = useCallback(
+    (raw: unknown) => {
+      const { event, payload } = raw as { event: string; payload: unknown };
+      if (!TEAM_RELATED_EVENTS.has(event)) return;
+      // Skip noisy chunk/thinking subtypes for agent events
+      if (event === "agent") {
+        const p = payload as { type?: string };
+        if (p.type === "chunk" || p.type === "thinking") return;
+      }
+      addEvent(event, payload);
+    },
+    [addEvent],
+  );
+
+  useWsEvent("*", handler);
   return null;
 }

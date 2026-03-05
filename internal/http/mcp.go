@@ -7,18 +7,31 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // MCPHandler handles MCP server management HTTP endpoints (managed mode).
 type MCPHandler struct {
-	store store.MCPServerStore
-	token string
+	store  store.MCPServerStore
+	token  string
+	msgBus *bus.MessageBus
 }
 
 // NewMCPHandler creates a handler for MCP server management endpoints.
-func NewMCPHandler(s store.MCPServerStore, token string) *MCPHandler {
-	return &MCPHandler{store: s, token: token}
+func NewMCPHandler(s store.MCPServerStore, token string, msgBus *bus.MessageBus) *MCPHandler {
+	return &MCPHandler{store: s, token: token, msgBus: msgBus}
+}
+
+func (h *MCPHandler) emitCacheInvalidate() {
+	if h.msgBus == nil {
+		return
+	}
+	h.msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventCacheInvalidate,
+		Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindMCP},
+	})
 }
 
 // RegisterRoutes registers all MCP management routes on the given mux.
@@ -31,6 +44,7 @@ func (h *MCPHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/mcp/servers/{id}", h.auth(h.handleDeleteServer))
 
 	// Agent grants
+	mux.HandleFunc("GET /v1/mcp/servers/{id}/grants", h.auth(h.handleListServerGrants))
 	mux.HandleFunc("POST /v1/mcp/servers/{id}/grants/agent", h.auth(h.handleGrantAgent))
 	mux.HandleFunc("DELETE /v1/mcp/servers/{id}/grants/agent/{agentID}", h.auth(h.handleRevokeAgent))
 	mux.HandleFunc("GET /v1/mcp/grants/agent/{agentID}", h.auth(h.handleListAgentGrants))
@@ -101,6 +115,7 @@ func (h *MCPHandler) handleCreateServer(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusCreated, srv)
 }
 
@@ -146,6 +161,7 @@ func (h *MCPHandler) handleUpdateServer(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -162,6 +178,7 @@ func (h *MCPHandler) handleDeleteServer(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
@@ -175,7 +192,7 @@ func (h *MCPHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		AgentID   string `json:"agent_id"`
+		AgentID   string          `json:"agent_id"`
 		ToolAllow json.RawMessage `json:"tool_allow,omitempty"`
 		ToolDeny  json.RawMessage `json:"tool_deny,omitempty"`
 	}
@@ -205,6 +222,7 @@ func (h *MCPHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "granted"})
 }
 
@@ -227,6 +245,7 @@ func (h *MCPHandler) handleRevokeAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
@@ -247,6 +266,23 @@ func (h *MCPHandler) handleListAgentGrants(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, map[string]interface{}{"grants": grants})
 }
 
+func (h *MCPHandler) handleListServerGrants(w http.ResponseWriter, r *http.Request) {
+	serverID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid server ID"})
+		return
+	}
+
+	grants, err := h.store.ListServerGrants(r.Context(), serverID)
+	if err != nil {
+		slog.Error("mcp.list_server_grants", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list grants"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"grants": grants})
+}
+
 // --- User grants ---
 
 func (h *MCPHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) {
@@ -257,7 +293,7 @@ func (h *MCPHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		UserID    string `json:"user_id"`
+		UserID    string          `json:"user_id"`
 		ToolAllow json.RawMessage `json:"tool_allow,omitempty"`
 		ToolDeny  json.RawMessage `json:"tool_deny,omitempty"`
 	}
@@ -290,6 +326,7 @@ func (h *MCPHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "granted"})
 }
 
@@ -312,6 +349,7 @@ func (h *MCPHandler) handleRevokeUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.emitCacheInvalidate()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
@@ -378,6 +416,10 @@ func (h *MCPHandler) handleReviewRequest(w http.ResponseWriter, r *http.Request)
 		slog.Error("mcp.review_request", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+
+	if req.Approved {
+		h.emitCacheInvalidate()
 	}
 
 	status := "rejected"

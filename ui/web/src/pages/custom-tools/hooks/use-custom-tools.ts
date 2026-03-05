@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
 import type { CustomToolData, CustomToolInput } from "@/types/custom-tool";
 
 export type { CustomToolData, CustomToolInput };
@@ -42,25 +43,43 @@ export function useCustomTools(filters: CustomToolFilters = {}) {
 
   const createTool = useCallback(
     async (data: CustomToolInput) => {
-      const res = await http.post<{ id: string }>("/v1/tools/custom", data);
-      await invalidate();
-      return res;
+      try {
+        const res = await http.post<{ id: string }>("/v1/tools/custom", data);
+        await invalidate();
+        toast.success("Custom tool created", `${data.name} has been added`);
+        return res;
+      } catch (err) {
+        toast.error("Failed to create custom tool", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const updateTool = useCallback(
     async (id: string, data: Partial<CustomToolInput>) => {
-      await http.put(`/v1/tools/custom/${id}`, data);
-      await invalidate();
+      try {
+        await http.put(`/v1/tools/custom/${id}`, data);
+        await invalidate();
+        toast.success("Custom tool updated");
+      } catch (err) {
+        toast.error("Failed to update custom tool", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const deleteTool = useCallback(
     async (id: string) => {
-      await http.delete(`/v1/tools/custom/${id}`);
-      await invalidate();
+      try {
+        await http.delete(`/v1/tools/custom/${id}`);
+        await invalidate();
+        toast.success("Custom tool deleted");
+      } catch (err) {
+        toast.error("Failed to delete custom tool", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
     },
     [http, invalidate],
   );

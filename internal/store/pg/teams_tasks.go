@@ -159,11 +159,56 @@ func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID
 	}
 
 	// Unblock dependent tasks: remove this taskID from their blocked_by arrays.
-	// Tasks with empty blocked_by after removal become claimable.
+	// Tasks whose blocked_by becomes empty transition from blocked→pending so they can be claimed.
 	_, err = tx.ExecContext(ctx,
-		`UPDATE team_tasks SET blocked_by = array_remove(blocked_by, $1), updated_at = $2
+		`UPDATE team_tasks SET
+		   blocked_by = array_remove(blocked_by, $1),
+		   status = CASE WHEN status = 'blocked' AND blocked_by = ARRAY[$1]::uuid[] THEN 'pending' ELSE status END,
+		   updated_at = $2
 		 WHERE $1 = ANY(blocked_by)`,
 		taskID, time.Now(),
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s *PGTeamStore) CancelTask(ctx context.Context, taskID, teamID uuid.UUID, reason string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Cancel the task (guard: only non-completed tasks)
+	now := time.Now()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE team_tasks SET status = $1, result = $2, updated_at = $3
+		 WHERE id = $4 AND status != $5 AND team_id = $6`,
+		store.TeamTaskStatusCompleted, "CANCELLED: "+reason, now,
+		taskID, store.TeamTaskStatusCompleted, teamID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("task not found, already completed, or wrong team")
+	}
+
+	// Unblock dependent tasks (same logic as CompleteTask)
+	_, err = tx.ExecContext(ctx,
+		`UPDATE team_tasks SET
+		   blocked_by = array_remove(blocked_by, $1),
+		   status = CASE WHEN status = 'blocked' AND blocked_by = ARRAY[$1]::uuid[] THEN 'pending' ELSE status END,
+		   updated_at = $2
+		 WHERE $1 = ANY(blocked_by)`,
+		taskID, now,
 	)
 	if err != nil {
 		return err

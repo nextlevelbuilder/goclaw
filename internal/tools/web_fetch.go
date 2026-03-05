@@ -27,6 +27,7 @@ type WebFetchTool struct {
 	cache          *webCache
 	policy         string   // "allow_all" (default), "allowlist"
 	allowedDomains []string // domains when policy="allowlist" (supports "*.example.com")
+	blockedDomains []string // always checked regardless of policy (supports "*.example.com")
 	mu             sync.RWMutex
 }
 
@@ -36,6 +37,7 @@ type WebFetchConfig struct {
 	CacheTTL       time.Duration
 	Policy         string   // "allow_all" (default), "allowlist"
 	AllowedDomains []string // domains when policy="allowlist"
+	BlockedDomains []string // always blocked regardless of policy
 }
 
 func NewWebFetchTool(cfg WebFetchConfig) *WebFetchTool {
@@ -56,30 +58,28 @@ func NewWebFetchTool(cfg WebFetchConfig) *WebFetchTool {
 		cache:          newWebCache(defaultCacheMaxEntries, ttl),
 		policy:         policy,
 		allowedDomains: cfg.AllowedDomains,
+		blockedDomains: cfg.BlockedDomains,
 	}
 }
 
 // UpdatePolicy replaces the domain policy at runtime (called via pub/sub on config change).
-func (t *WebFetchTool) UpdatePolicy(policy string, domains []string) {
+func (t *WebFetchTool) UpdatePolicy(policy string, allowed, blocked []string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if policy == "" {
 		policy = "allow_all"
 	}
 	t.policy = policy
-	t.allowedDomains = domains
-	slog.Info("web_fetch policy updated", "policy", policy, "domains", len(domains))
+	t.allowedDomains = allowed
+	t.blockedDomains = blocked
+	slog.Info("web_fetch policy updated", "policy", policy, "allowed", len(allowed), "blocked", len(blocked))
 }
 
-// isDomainAllowed checks if a hostname matches the allowlist.
+// matchDomainList checks if a hostname matches any pattern in the list.
 // Supports exact match ("github.com") and wildcard prefix ("*.example.com").
-func (t *WebFetchTool) isDomainAllowed(hostname string) bool {
-	t.mu.RLock()
-	domains := t.allowedDomains
-	t.mu.RUnlock()
-
+func matchDomainList(hostname string, patterns []string) bool {
 	hostname = strings.ToLower(hostname)
-	for _, pattern := range domains {
+	for _, pattern := range patterns {
 		pattern = strings.ToLower(strings.TrimSpace(pattern))
 		if pattern == hostname {
 			return true
@@ -93,6 +93,22 @@ func (t *WebFetchTool) isDomainAllowed(hostname string) bool {
 		}
 	}
 	return false
+}
+
+// isDomainAllowed checks if a hostname matches the allowlist.
+func (t *WebFetchTool) isDomainAllowed(hostname string) bool {
+	t.mu.RLock()
+	domains := t.allowedDomains
+	t.mu.RUnlock()
+	return matchDomainList(hostname, domains)
+}
+
+// isDomainBlocked checks if a hostname matches the blocklist.
+func (t *WebFetchTool) isDomainBlocked(hostname string) bool {
+	t.mu.RLock()
+	domains := t.blockedDomains
+	t.mu.RUnlock()
+	return matchDomainList(hostname, domains)
 }
 
 func (t *WebFetchTool) Name() string { return "web_fetch" }
@@ -147,12 +163,19 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult(fmt.Sprintf("SSRF protection: %v", err))
 	}
 
+	hostname := parsed.Hostname()
+
+	// Domain blocklist check (always enforced regardless of policy)
+	if t.isDomainBlocked(hostname) {
+		return ErrorResult(fmt.Sprintf("domain %q is blocked by policy", hostname))
+	}
+
 	// Domain allowlist check
 	t.mu.RLock()
 	policy := t.policy
 	t.mu.RUnlock()
-	if policy == "allowlist" && !t.isDomainAllowed(parsed.Hostname()) {
-		return ErrorResult(fmt.Sprintf("domain %q is not in the allowed domains list", parsed.Hostname()))
+	if policy == "allowlist" && !t.isDomainAllowed(hostname) {
+		return ErrorResult(fmt.Sprintf("domain %q is not in the allowed domains list", hostname))
 	}
 
 	extractMode := "markdown"

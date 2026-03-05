@@ -66,6 +66,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [denyUserIds, setDenyUserIds] = useState<string[]>(initial.deny_user_ids ?? []);
   const [allowChannels, setAllowChannels] = useState<string[]>(initial.allow_channels ?? []);
   const [denyChannels, setDenyChannels] = useState<string[]>(initial.deny_channels ?? []);
+  const [progressNotifications, setProgressNotifications] = useState(initial.progress_notifications ?? false);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -83,6 +84,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setDenyUserIds(s.deny_user_ids ?? []);
     setAllowChannels(s.allow_channels ?? []);
     setDenyChannels(s.deny_channels ?? []);
+    setProgressNotifications(s.progress_notifications ?? false);
     setSaved(false);
     setError(null);
   }, [team]);
@@ -97,6 +99,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       if (denyUserIds.length > 0) settings.deny_user_ids = denyUserIds;
       if (allowChannels.length > 0) settings.allow_channels = allowChannels;
       if (denyChannels.length > 0) settings.deny_channels = denyChannels;
+      if (progressNotifications) settings.progress_notifications = true;
       await updateTeamSettings(teamId, settings);
       setSaved(true);
       onSaved();
@@ -106,7 +109,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     } finally {
       setSaving(false);
     }
-  }, [teamId, allowUserIds, denyUserIds, allowChannels, denyChannels, updateTeamSettings, onSaved]);
+  }, [teamId, allowUserIds, denyUserIds, allowChannels, denyChannels, progressNotifications, updateTeamSettings, onSaved]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
@@ -172,6 +175,27 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
               placeholder="Select channel..."
             />
           </div>
+        </div>
+      </div>
+
+      {/* Notifications */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">Notifications</h3>
+        <div className="rounded-lg border p-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={progressNotifications}
+              onChange={(e) => setProgressNotifications(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            <div>
+              <span className="text-sm font-medium">Progress notifications</span>
+              <p className="text-xs text-muted-foreground">
+                Send periodic "Your team is working on it..." messages to chat during async delegations.
+              </p>
+            </div>
+          </label>
         </div>
       </div>
 

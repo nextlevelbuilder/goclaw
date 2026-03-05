@@ -7,7 +7,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useHttp } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
 
 interface SummoningModalProps {
@@ -16,6 +15,7 @@ interface SummoningModalProps {
   agentId: string;
   agentName: string;
   onCompleted: () => void;
+  onResummon: (agentId: string) => Promise<void>;
 }
 
 const SUMMONING_FILES = [
@@ -29,8 +29,8 @@ export function SummoningModal({
   agentId,
   agentName,
   onCompleted,
+  onResummon,
 }: SummoningModalProps) {
-  const http = useHttp();
   const [generatedFiles, setGeneratedFiles] = useState<string[]>([]);
   const [status, setStatus] = useState<"summoning" | "completed" | "failed">("summoning");
   const [errorMsg, setErrorMsg] = useState("");
@@ -76,7 +76,7 @@ export function SummoningModal({
   const handleRetry = async () => {
     setRetrying(true);
     try {
-      await http.post(`/v1/agents/${agentId}/resummon`);
+      await onResummon(agentId);
       setGeneratedFiles([]);
       setStatus("summoning");
       setErrorMsg("");

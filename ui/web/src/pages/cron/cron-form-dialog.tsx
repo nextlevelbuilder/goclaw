@@ -66,7 +66,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg flex flex-col">
+      <DialogContent className="max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Create Cron Job</DialogTitle>
         </DialogHeader>

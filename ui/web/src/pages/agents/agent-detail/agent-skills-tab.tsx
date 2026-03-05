@@ -69,7 +69,7 @@ export function AgentSkillsTab({ agentId }: AgentSkillsTabProps) {
         <p className="text-sm text-muted-foreground">
           {skills.filter((s) => s.granted).length} of {skills.length} skills granted
         </p>
-        <SearchInput value={search} onChange={setSearch} placeholder="Filter skills..." className="w-64" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Filter skills..." className="w-full sm:w-64" />
       </div>
 
       <div className="divide-y rounded-lg border">

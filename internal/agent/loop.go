@@ -10,285 +10,17 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
-	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
-	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
-
-// bootstrapAutoCleanupTurns is the number of user messages after which
-// BOOTSTRAP.md is auto-removed if the LLM hasn't cleared it.
-// Bootstrap typically completes in 2-3 conversation turns.
-const bootstrapAutoCleanupTurns = 3
-
-// EnsureUserFilesFunc seeds per-user context files on first chat (managed mode).
-// Returns the effective workspace path (from user_agent_profiles) for caching.
-type EnsureUserFilesFunc func(ctx context.Context, agentID uuid.UUID, userID, agentType, workspace, channel string) (effectiveWorkspace string, err error)
-
-// ContextFileLoaderFunc loads context files dynamically per-request (managed mode).
-type ContextFileLoaderFunc func(ctx context.Context, agentID uuid.UUID, userID, agentType string) []bootstrap.ContextFile
-
-// BootstrapCleanupFunc removes BOOTSTRAP.md after a successful first run.
-// Called automatically so the system doesn't rely on the LLM to delete it.
-type BootstrapCleanupFunc func(ctx context.Context, agentID uuid.UUID, userID string) error
-
-// Loop is the agent execution loop for one agent instance.
-// Think → Act → Observe cycle with tool execution.
-type Loop struct {
-	id            string
-	agentUUID     uuid.UUID // set in managed mode for context propagation
-	agentType     string    // "open" or "predefined" (managed mode)
-	provider      providers.Provider
-	model         string
-	contextWindow int
-	maxIterations int
-	maxToolCalls  int
-	workspace     string
-
-	eventPub   bus.EventPublisher // currently unused by Loop; kept for future use
-	sessions   store.SessionStore
-	tools           *tools.Registry
-	toolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
-	agentToolPolicy *config.ToolPolicySpec // per-agent tool policy from DB (nil = no restrictions)
-	activeRuns atomic.Int32 // number of currently executing runs
-
-	// Per-session summarization lock: prevents concurrent summarize goroutines for the same session.
-	summarizeMu sync.Map // sessionKey → *sync.Mutex
-
-	// Bootstrap/persona context (loaded at startup, injected into system prompt)
-	ownerIDs       []string
-	skillsLoader   *skills.Loader
-	skillAllowList []string // nil = all, [] = none, ["x","y"] = filter
-	hasMemory      bool
-	contextFiles   []bootstrap.ContextFile
-
-	// Per-user file seeding + dynamic context loading (managed mode)
-	ensureUserFiles    EnsureUserFilesFunc
-	contextFileLoader  ContextFileLoaderFunc
-	bootstrapCleanup   BootstrapCleanupFunc
-	userWorkspaces     sync.Map // userID → string (expanded workspace path from user_agent_profiles)
-
-	// Compaction config (memory flush settings)
-	compactionCfg *config.CompactionConfig
-
-	// Context pruning config (trim old tool results in-memory)
-	contextPruningCfg *config.ContextPruningConfig
-
-	// Sandbox info
-	sandboxEnabled        bool
-	sandboxContainerDir   string
-	sandboxWorkspaceAccess string
-
-	// Event callback for broadcasting agent events (run.started, chunk, tool.call, etc.)
-	onEvent func(event AgentEvent)
-
-	// Tracing collector (nil in standalone mode)
-	traceCollector *tracing.Collector
-
-	// Security: input scanning and message size limit
-	inputGuard      *InputGuard
-	injectionAction string // "log", "warn" (default), "block", "off"
-	maxMessageChars int    // 0 = use default (32000)
-
-	// Global builtin tool settings (from builtin_tools table, managed mode)
-	builtinToolSettings tools.BuiltinToolSettings
-
-	// Thinking level for extended thinking support
-	thinkingLevel string
-
-	// Group writer cache for system prompt injection (managed mode)
-	groupWriterCache *store.GroupWriterCache
-
-	// Team store for cross-session pending task detection (managed mode)
-	teamStore store.TeamStore
-}
-
-// AgentEvent is emitted during agent execution for WS broadcasting.
-type AgentEvent struct {
-	Type    string      `json:"type"`    // "run.started", "run.completed", "run.failed", "chunk", "tool.call", "tool.result"
-	AgentID string      `json:"agentId"`
-	RunID   string      `json:"runId"`
-	Payload interface{} `json:"payload,omitempty"`
-}
-
-// LoopConfig configures a new Loop.
-type LoopConfig struct {
-	ID            string
-	Provider      providers.Provider
-	Model         string
-	ContextWindow int
-	MaxIterations int
-	MaxToolCalls  int
-	Workspace     string
-	Bus           bus.EventPublisher
-	Sessions      store.SessionStore
-	Tools           *tools.Registry
-	ToolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
-	AgentToolPolicy *config.ToolPolicySpec // per-agent tool policy from DB (nil = no restrictions)
-	OnEvent         func(AgentEvent)
-
-	// Bootstrap/persona context
-	OwnerIDs       []string
-	SkillsLoader   *skills.Loader
-	SkillAllowList []string // nil = all, [] = none, ["x","y"] = filter
-	HasMemory      bool
-	ContextFiles   []bootstrap.ContextFile
-
-	// Compaction config
-	CompactionCfg *config.CompactionConfig
-
-	// Context pruning (trim old tool results to save context window)
-	ContextPruningCfg *config.ContextPruningConfig
-
-	// Sandbox info (injected into system prompt)
-	SandboxEnabled        bool
-	SandboxContainerDir   string // e.g. "/workspace"
-	SandboxWorkspaceAccess string // "none", "ro", "rw"
-
-	// Managed mode: agent UUID for context propagation to tools
-	AgentUUID uuid.UUID
-	AgentType string // "open" or "predefined" (managed mode)
-
-	// Per-user file seeding + dynamic context loading (managed mode)
-	EnsureUserFiles   EnsureUserFilesFunc
-	ContextFileLoader ContextFileLoaderFunc
-	BootstrapCleanup  BootstrapCleanupFunc
-
-	// Tracing collector (nil = no tracing)
-	TraceCollector *tracing.Collector
-
-	// Security: input guard for injection detection, max message size
-	InputGuard      *InputGuard    // nil = auto-create when InjectionAction != "off"
-	InjectionAction string         // "log", "warn" (default), "block", "off"
-	MaxMessageChars int            // 0 = use default (32000)
-
-	// Global builtin tool settings (from builtin_tools table, managed mode)
-	BuiltinToolSettings tools.BuiltinToolSettings
-
-	// Thinking level: "off", "low", "medium", "high" (from agent other_config)
-	ThinkingLevel string
-
-	// Group writer cache for system prompt injection (managed mode)
-	GroupWriterCache *store.GroupWriterCache
-
-	// Team store for cross-session pending task detection (managed mode)
-	TeamStore store.TeamStore
-}
-
-func NewLoop(cfg LoopConfig) *Loop {
-	if cfg.MaxIterations <= 0 {
-		cfg.MaxIterations = 20
-	}
-	if cfg.ContextWindow <= 0 {
-		cfg.ContextWindow = 200000
-	}
-
-	// Normalize injection action (default: "warn")
-	action := cfg.InjectionAction
-	switch action {
-	case "log", "warn", "block", "off":
-		// valid
-	default:
-		action = "warn"
-	}
-
-	// Auto-create InputGuard unless explicitly disabled
-	guard := cfg.InputGuard
-	if guard == nil && action != "off" {
-		guard = NewInputGuard()
-	}
-
-	return &Loop{
-		id:            cfg.ID,
-		agentUUID:     cfg.AgentUUID,
-		agentType:     cfg.AgentType,
-		provider:      cfg.Provider,
-		model:         cfg.Model,
-		contextWindow: cfg.ContextWindow,
-		maxIterations: cfg.MaxIterations,
-		maxToolCalls:  cfg.MaxToolCalls,
-		workspace:     cfg.Workspace,
-		eventPub:      cfg.Bus,
-		sessions:      cfg.Sessions,
-		tools:           cfg.Tools,
-		toolPolicy:      cfg.ToolPolicy,
-		agentToolPolicy: cfg.AgentToolPolicy,
-		onEvent:         cfg.OnEvent,
-		ownerIDs:      cfg.OwnerIDs,
-		skillsLoader:   cfg.SkillsLoader,
-		skillAllowList: cfg.SkillAllowList,
-		hasMemory:     cfg.HasMemory,
-		contextFiles:  cfg.ContextFiles,
-		ensureUserFiles:    cfg.EnsureUserFiles,
-		contextFileLoader:  cfg.ContextFileLoader,
-		bootstrapCleanup:   cfg.BootstrapCleanup,
-		compactionCfg:     cfg.CompactionCfg,
-		contextPruningCfg: cfg.ContextPruningCfg,
-		sandboxEnabled:        cfg.SandboxEnabled,
-		sandboxContainerDir:   cfg.SandboxContainerDir,
-		sandboxWorkspaceAccess: cfg.SandboxWorkspaceAccess,
-		traceCollector:        cfg.TraceCollector,
-		inputGuard:            guard,
-		injectionAction:       action,
-		maxMessageChars:       cfg.MaxMessageChars,
-		builtinToolSettings:   cfg.BuiltinToolSettings,
-		thinkingLevel:         cfg.ThinkingLevel,
-		groupWriterCache:      cfg.GroupWriterCache,
-		teamStore:             cfg.TeamStore,
-	}
-}
-
-// RunRequest is the input for processing a message through the agent.
-type RunRequest struct {
-	SessionKey       string // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
-	Message          string // user message
-	Media            []string // local file paths to images (already sanitized)
-	ForwardMedia     []string // media paths to forward to output (not deleted, from delegation results)
-	Channel          string // source channel
-	ChatID           string // source chat ID
-	PeerKind         string // "direct" or "group" (for session key building and tool context)
-	RunID            string // unique run identifier
-	UserID           string // external user ID (TEXT, free-form) for multi-tenant scoping
-	SenderID         string // original individual sender ID (preserved in group chats for permission checks)
-	Stream           bool   // whether to stream response chunks
-	ExtraSystemPrompt string   // optional: injected into system prompt (skills, subagent context, etc.)
-	SkillFilter       []string // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
-	HistoryLimit      int      // max user turns to keep in context (0=unlimited, from channel config)
-	ToolAllow         []string // per-group tool allow list (nil = no restriction, supports "group:xxx")
-	LocalKey         string    // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
-	ParentTraceID    uuid.UUID // if set, reuse parent trace instead of creating new (announce runs)
-	ParentRootSpanID uuid.UUID // if set, nest announce agent span under this parent span
-	TraceName        string    // override trace name (default: "chat <agentID>")
-	TraceTags        []string  // additional tags for the trace (e.g. "cron")
-	MaxIterations    int       // per-request override (0 = use agent default, must be lower)
-}
-
-// RunResult is the output of a completed agent run.
-type RunResult struct {
-	Content      string           `json:"content"`
-	RunID        string           `json:"runId"`
-	Iterations   int              `json:"iterations"`
-	Usage        *providers.Usage `json:"usage,omitempty"`
-	Media        []MediaResult    `json:"media,omitempty"`         // media files from tool results (MEDIA: prefix)
-	Deliverables []string         `json:"deliverables,omitempty"`  // actual content from tool outputs (for team task results)
-}
-
-// MediaResult represents a media file produced by a tool during the agent run.
-type MediaResult struct {
-	Path        string `json:"path"`                  // local file path
-	ContentType string `json:"content_type,omitempty"` // MIME type
-	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
-}
 
 // Run processes a single message through the agent loop.
 // It blocks until completion and returns the final response.
@@ -296,7 +28,19 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	l.activeRuns.Add(1)
 	defer l.activeRuns.Add(-1)
 
-	l.emit(AgentEvent{Type: protocol.AgentEventRunStarted, AgentID: l.id, RunID: req.RunID})
+	// Per-run emit wrapper: enriches every AgentEvent with delegation + routing context.
+	emitRun := func(event AgentEvent) {
+		event.DelegationID = req.DelegationID
+		event.TeamID = req.TeamID
+		event.TeamTaskID = req.TeamTaskID
+		event.ParentAgentID = req.ParentAgentID
+		event.UserID = req.UserID
+		event.Channel = req.Channel
+		event.ChatID = req.ChatID
+		l.emit(event)
+	}
+
+	emitRun(AgentEvent{Type: protocol.AgentEventRunStarted, AgentID: l.id, RunID: req.RunID})
 
 	// Create trace (managed mode only)
 	var traceID uuid.UUID
@@ -366,7 +110,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	}
 
 	if err != nil {
-		l.emit(AgentEvent{
+		emitRun(AgentEvent{
 			Type:    protocol.AgentEventRunFailed,
 			AgentID: l.id,
 			RunID:   req.RunID,
@@ -387,7 +131,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		return nil, err
 	}
 
-	l.emit(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID})
+	emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID})
 	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 		l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, 500))
 	}
@@ -395,6 +139,18 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 }
 
 func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) {
+	// Per-run emit wrapper: enriches every AgentEvent with delegation + routing context.
+	emitRun := func(event AgentEvent) {
+		event.DelegationID = req.DelegationID
+		event.TeamID = req.TeamID
+		event.TeamTaskID = req.TeamTaskID
+		event.ParentAgentID = req.ParentAgentID
+		event.UserID = req.UserID
+		event.Channel = req.Channel
+		event.ChatID = req.ChatID
+		l.emit(event)
+	}
+
 	// Inject agent UUID into context for tool routing (managed mode)
 	if l.agentUUID != uuid.Nil {
 		ctx = store.WithAgentID(ctx, l.agentUUID)
@@ -614,7 +370,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	// Inject retry hook so channels can update placeholder on LLM retries.
 	ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, err error) {
-		l.emit(AgentEvent{
+		emitRun(AgentEvent{
 			Type:    protocol.AgentEventRunRetrying,
 			AgentID: l.id,
 			RunID:   req.RunID,
@@ -677,7 +433,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		if req.Stream {
 			resp, err = l.provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
 				if chunk.Thinking != "" {
-					l.emit(AgentEvent{
+					emitRun(AgentEvent{
 						Type:    protocol.ChatEventThinking,
 						AgentID: l.id,
 						RunID:   req.RunID,
@@ -685,7 +441,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					})
 				}
 				if chunk.Content != "" {
-					l.emit(AgentEvent{
+					emitRun(AgentEvent{
 						Type:    protocol.ChatEventChunk,
 						AgentID: l.id,
 						RunID:   req.RunID,
@@ -703,6 +459,26 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		}
 
 		l.emitLLMSpan(ctx, llmSpanStart, iteration, messages, resp, nil)
+
+		// For non-streaming responses, emit thinking and content as single events
+		if !req.Stream {
+			if resp.Thinking != "" {
+				emitRun(AgentEvent{
+					Type:    protocol.ChatEventThinking,
+					AgentID: l.id,
+					RunID:   req.RunID,
+					Payload: map[string]string{"content": resp.Thinking},
+				})
+			}
+			if resp.Content != "" {
+				emitRun(AgentEvent{
+					Type:    protocol.ChatEventChunk,
+					AgentID: l.id,
+					RunID:   req.RunID,
+					Payload: map[string]string{"content": resp.Content},
+				})
+			}
+		}
 
 		if resp.Usage != nil {
 			totalUsage.PromptTokens += resp.Usage.PromptTokens
@@ -782,6 +558,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		assistantMsg := providers.Message{
 			Role:                "assistant",
 			Content:             resp.Content,
+			Thinking:            resp.Thinking, // reasoning_content passback for thinking models (Kimi, DeepSeek)
 			ToolCalls:           resp.ToolCalls,
 			RawAssistantContent: resp.RawAssistantContent, // preserve thinking blocks for Anthropic passback
 		}
@@ -815,7 +592,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		if len(resp.ToolCalls) == 1 {
 			// Single tool: sequential — no goroutine overhead
 			tc := resp.ToolCalls[0]
-			l.emit(AgentEvent{
+			emitRun(AgentEvent{
 				Type:    protocol.AgentEventToolCall,
 				AgentID: l.id,
 				RunID:   req.RunID,
@@ -860,7 +637,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			}
 
-			l.emit(AgentEvent{
+			emitRun(AgentEvent{
 				Type:    protocol.AgentEventToolResult,
 				AgentID: l.id,
 				RunID:   req.RunID,
@@ -915,7 +692,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 			// 1. Emit all tool.call events upfront (client sees all calls starting)
 			for _, tc := range resp.ToolCalls {
-				l.emit(AgentEvent{
+				emitRun(AgentEvent{
 					Type:    protocol.AgentEventToolCall,
 					AgentID: l.id,
 					RunID:   req.RunID,
@@ -987,7 +764,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					}
 				}
 
-				l.emit(AgentEvent{
+				emitRun(AgentEvent{
 					Type:    protocol.AgentEventToolResult,
 					AgentID: l.id,
 					RunID:   req.RunID,
@@ -1122,191 +899,3 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}, nil
 }
 
-// compactMessagesInPlace summarizes the first ~70% of messages into a condensed
-// summary, keeping the last ~30% intact. Operates purely on the local messages
-// slice — no session state touched, no locks needed.
-// Returns nil on failure (caller keeps original messages).
-func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.Message) []providers.Message {
-	if len(messages) < 6 {
-		return nil
-	}
-
-	// Resolve keepCount from compaction config (same defaults as maybeSummarize).
-	keepCount := 4
-	if l.compactionCfg != nil && l.compactionCfg.KeepLastMessages > 0 {
-		keepCount = l.compactionCfg.KeepLastMessages
-	}
-	// Ensure we keep at least 30% of messages.
-	if minKeep := len(messages) * 3 / 10; minKeep > keepCount {
-		keepCount = minKeep
-	}
-
-	splitIdx := len(messages) - keepCount
-
-	// Walk backward from splitIdx to find a clean boundary —
-	// avoid splitting tool_use → tool_result pairs.
-	for splitIdx > 0 {
-		m := messages[splitIdx]
-		if m.Role == "tool" || (m.Role == "assistant" && len(m.ToolCalls) > 0) {
-			splitIdx--
-			continue
-		}
-		break
-	}
-	if splitIdx <= 1 {
-		return nil
-	}
-
-	// Build summary input (same pattern as maybeSummarize in loop_history.go).
-	toSummarize := messages[:splitIdx]
-	var sb strings.Builder
-	for _, m := range toSummarize {
-		switch m.Role {
-		case "user":
-			fmt.Fprintf(&sb, "user: %s\n", m.Content)
-		case "assistant":
-			fmt.Fprintf(&sb, "assistant: %s\n", SanitizeAssistantContent(m.Content))
-		}
-	}
-
-	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	resp, err := l.provider.Chat(sctx, providers.ChatRequest{
-		Messages: []providers.Message{{
-			Role:    "user",
-			Content: "Provide a concise summary of this conversation, preserving key findings, data, and context:\n\n" + sb.String(),
-		}},
-		Model:   l.model,
-		Options: map[string]interface{}{"max_tokens": 1024, "temperature": 0.3},
-	})
-	if err != nil {
-		slog.Warn("mid_loop_compaction_failed", "agent", l.id, "error", err)
-		return nil
-	}
-
-	summary := providers.Message{
-		Role:    "user",
-		Content: "[Summary of earlier conversation]\n" + SanitizeAssistantContent(resp.Content),
-	}
-	result := make([]providers.Message, 0, 1+keepCount)
-	result = append(result, summary)
-	result = append(result, messages[splitIdx:]...)
-
-	slog.Info("mid_loop_compacted",
-		"agent", l.id,
-		"original_msgs", len(messages),
-		"summarized", splitIdx,
-		"kept", len(result))
-
-	return result
-}
-
-// parseMediaResult extracts a MediaResult from a tool result string containing "MEDIA:" prefix.
-// Handles formats: "MEDIA:/path/to/file" and "[[audio_as_voice]]\nMEDIA:/path/to/file".
-// Returns nil if no MEDIA: prefix is found.
-//
-// IMPORTANT: Only matches "MEDIA:" at the start of the (trimmed) string to avoid false
-// positives when tool output contains "MEDIA:" in arbitrary text (e.g. a web page
-// mentioning a commit message like "return MEDIA: path from screenshot").
-func parseMediaResult(toolOutput string) *MediaResult {
-	s := toolOutput
-	asVoice := false
-
-	// Check for [[audio_as_voice]] tag (TTS voice messages)
-	if strings.Contains(s, "[[audio_as_voice]]") {
-		asVoice = true
-		s = strings.ReplaceAll(s, "[[audio_as_voice]]", "")
-	}
-
-	s = strings.TrimSpace(s)
-
-	// Only match MEDIA: at the beginning of the string.
-	if !strings.HasPrefix(s, "MEDIA:") {
-		return nil
-	}
-	path := strings.TrimSpace(s[6:])
-	if path == "" {
-		return nil
-	}
-	// Take only the first line (in case there's trailing text)
-	if nl := strings.IndexByte(path, '\n'); nl >= 0 {
-		path = strings.TrimSpace(path[:nl])
-	}
-
-	return &MediaResult{
-		Path:        path,
-		ContentType: mimeFromExt(filepath.Ext(path)),
-		AsVoice:     asVoice,
-	}
-}
-
-// mimeFromExt returns a MIME type for common media file extensions.
-func mimeFromExt(ext string) string {
-	switch strings.ToLower(ext) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".webp":
-		return "image/webp"
-	case ".mp4":
-		return "video/mp4"
-	case ".ogg", ".opus":
-		return "audio/ogg"
-	case ".mp3":
-		return "audio/mpeg"
-	case ".wav":
-		return "audio/wav"
-	case ".txt":
-		return "text/plain"
-	case ".pdf":
-		return "application/pdf"
-	case ".csv":
-		return "text/csv"
-	case ".json":
-		return "application/json"
-	case ".html", ".htm":
-		return "text/html"
-	case ".xml":
-		return "application/xml"
-	case ".zip":
-		return "application/zip"
-	case ".doc", ".docx":
-		return "application/msword"
-	case ".xls", ".xlsx":
-		return "application/vnd.ms-excel"
-	default:
-		return "application/octet-stream"
-	}
-}
-
-// sanitizePathSegment makes a userID safe for use as a directory name.
-// Replaces colons, spaces, and other unsafe chars with underscores.
-func sanitizePathSegment(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
-}
-
-// InvalidateUserWorkspace clears the cached workspace for a user,
-// forcing the next request to re-read from user_agent_profiles.
-func (l *Loop) InvalidateUserWorkspace(userID string) {
-	l.userWorkspaces.Delete(userID)
-}
-
-// ProviderName returns the name of this agent's LLM provider (e.g. "anthropic", "openai").
-func (l *Loop) ProviderName() string {
-	if l.provider == nil {
-		return ""
-	}
-	return l.provider.Name()
-}

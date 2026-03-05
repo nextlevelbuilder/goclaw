@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -16,11 +17,12 @@ type PairingApproveCallback func(ctx context.Context, channel, chatID string)
 // PairingMethods handles device.pair.request, device.pair.approve, device.pair.list, device.pair.revoke.
 type PairingMethods struct {
 	service   store.PairingStore
+	msgBus    *bus.MessageBus
 	onApprove PairingApproveCallback
 }
 
-func NewPairingMethods(service store.PairingStore) *PairingMethods {
-	return &PairingMethods{service: service}
+func NewPairingMethods(service store.PairingStore, msgBus *bus.MessageBus) *PairingMethods {
+	return &PairingMethods{service: service, msgBus: msgBus}
 }
 
 // SetOnApprove sets a callback that fires after a pairing is approved.
@@ -152,6 +154,17 @@ func (m *PairingMethods) handleRevoke(_ context.Context, client *gateway.Client,
 	if err := m.service.RevokePairing(params.SenderID, params.Channel); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
+	}
+
+	// Broadcast revocation so the server can force-disconnect the active session.
+	if m.msgBus != nil {
+		m.msgBus.Broadcast(bus.Event{
+			Name: bus.EventPairingRevoked,
+			Payload: bus.PairingRevokedPayload{
+				SenderID: params.SenderID,
+				Channel:  params.Channel,
+			},
+		})
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]interface{}{

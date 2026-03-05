@@ -59,7 +59,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
 
   if (loading || !agent) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <Button variant="ghost" onClick={onBack} className="mb-4 gap-1">
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
@@ -72,7 +72,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const subtitle = agentSubtitle(agent);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* Header */}
       <div className="mb-6 flex items-start gap-4">
         <Button variant="ghost" size="icon" onClick={onBack} className="mt-0.5 shrink-0">
@@ -110,9 +110,9 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
       </div>
 
       {/* Tabs */}
-      <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="max-w-4xl rounded-xl border bg-card p-3 shadow-sm sm:p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="config">Config</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
@@ -165,6 +165,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
         agentId={agentId}
         agentName={title}
         onCompleted={() => {}}
+        onResummon={async () => { await resummonAgent(); }}
       />
     </div>
   );

@@ -25,6 +25,7 @@ export function useConfig() {
       hashRef.current = res.hash;
       return res;
     },
+    staleTime: 5 * 60_000,
   });
 
   const config = data?.config ?? null;

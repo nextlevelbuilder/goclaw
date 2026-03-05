@@ -16,7 +16,7 @@ interface SkillDetailDialogProps {
 export function SkillDetailDialog({ skill, onClose }: SkillDetailDialogProps) {
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {skill.name}

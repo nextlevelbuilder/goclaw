@@ -67,7 +67,7 @@ export function QualityGatesSection({ enabled, value, onToggle, onChange }: Qual
                 <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
               </Button>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <InfoLabel tip="Validation method. 'Agent' delegates to a reviewer agent, 'Command' runs a shell command and checks exit code.">Type</InfoLabel>
                 <Select
@@ -107,7 +107,7 @@ export function QualityGatesSection({ enabled, value, onToggle, onChange }: Qual
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex items-center gap-2">
                 <Switch
                   checked={gate.block_on_failure}
@@ -127,7 +127,7 @@ export function QualityGatesSection({ enabled, value, onToggle, onChange }: Qual
                 </div>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <InfoLabel tip="Maximum time in seconds to wait for the quality gate check to complete before timing out.">Timeout (seconds)</InfoLabel>
                 <Input

@@ -62,7 +62,7 @@ export function TtsPage() {
 
   if (showSkeleton) {
     return (
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <PageHeader title="Text-to-Speech" description="Configure TTS providers and auto-apply settings" />
         <div className="mt-4">
           <TableSkeleton rows={3} />
@@ -72,7 +72,7 @@ export function TtsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Text-to-Speech"
         description="Configure TTS providers and auto-apply settings"

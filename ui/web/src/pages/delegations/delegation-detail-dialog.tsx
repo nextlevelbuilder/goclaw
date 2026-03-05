@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDuration } from "@/lib/format";
-import { useHttp } from "@/hooks/use-ws";
 import { TraceDetailDialog } from "@/pages/traces/trace-detail-dialog";
 import type { DelegationHistoryRecord } from "@/types/delegation";
 import type { TraceData, SpanData } from "@/types/trace";
@@ -16,24 +15,13 @@ interface DelegationDetailDialogProps {
   delegationId: string;
   onClose: () => void;
   getDelegation: (id: string) => Promise<DelegationHistoryRecord | null>;
+  getTrace: (traceId: string) => Promise<{ trace: TraceData; spans: SpanData[] } | null>;
 }
 
-export function DelegationDetailDialog({ delegationId, onClose, getDelegation }: DelegationDetailDialogProps) {
+export function DelegationDetailDialog({ delegationId, onClose, getDelegation, getTrace }: DelegationDetailDialogProps) {
   const [record, setRecord] = useState<DelegationHistoryRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewingTraceId, setViewingTraceId] = useState<string | null>(null);
-  const http = useHttp();
-
-  const getTrace = useCallback(
-    async (traceId: string): Promise<{ trace: TraceData; spans: SpanData[] } | null> => {
-      try {
-        return await http.get<{ trace: TraceData; spans: SpanData[] }>(`/v1/traces/${traceId}`);
-      } catch {
-        return null;
-      }
-    },
-    [http],
-  );
 
   useEffect(() => {
     setLoading(true);
@@ -118,14 +106,14 @@ export function DelegationDetailDialog({ delegationId, onClose, getDelegation }:
             {/* Task */}
             <div className="rounded-md border p-3">
               <p className="mb-1 text-xs font-medium text-muted-foreground">Task</p>
-              <pre className="whitespace-pre-wrap text-sm">{record.task}</pre>
+              <pre className="whitespace-pre-wrap break-words text-sm">{record.task}</pre>
             </div>
 
             {/* Result */}
             {record.result && (
               <div className="rounded-md border p-3">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">Result</p>
-                <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap text-sm">
+                <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words text-sm">
                   {record.result}
                 </pre>
               </div>

@@ -197,6 +197,11 @@ type TeamStore interface {
 	// teamID is validated in the WHERE clause to prevent cross-team task completion.
 	CompleteTask(ctx context.Context, taskID, teamID uuid.UUID, result string) error
 
+	// CancelTask marks a non-completed task as cancelled (status=completed, result="CANCELLED: ..."),
+	// unblocks dependent tasks, and transitions blocked→pending when all blockers are resolved.
+	// Returns error if the task is already completed or not found.
+	CancelTask(ctx context.Context, taskID, teamID uuid.UUID, reason string) error
+
 	// Delegation history
 	SaveDelegationHistory(ctx context.Context, record *DelegationHistoryData) error
 	ListDelegationHistory(ctx context.Context, opts DelegationHistoryListOpts) ([]DelegationHistoryData, int, error)

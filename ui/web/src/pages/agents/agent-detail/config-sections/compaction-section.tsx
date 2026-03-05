@@ -18,7 +18,7 @@ export function CompactionSection({ enabled, value, onToggle, onChange }: Compac
       enabled={enabled}
       onToggle={onToggle}
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Minimum tokens reserved for the LLM response. Higher values give more room for output but reduce available context for history.">Reserve Tokens Floor</InfoLabel>
           <Input
@@ -39,7 +39,7 @@ export function CompactionSection({ enabled, value, onToggle, onChange }: Compac
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <InfoLabel tip="Minimum number of messages in history before compaction can trigger, regardless of token usage.">Min Messages</InfoLabel>
           <Input

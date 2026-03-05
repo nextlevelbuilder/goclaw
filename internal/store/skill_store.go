@@ -8,6 +8,7 @@ import (
 
 // SkillInfo describes a discovered skill.
 type SkillInfo struct {
+	ID          string `json:"id,omitempty"` // DB UUID (managed mode only)
 	Name        string `json:"name"`
 	Slug        string `json:"slug"`
 	Path        string `json:"path"`

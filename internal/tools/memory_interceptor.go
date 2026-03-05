@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,20 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// isMemoryDir checks if a path refers to the memory directory itself.
+// Handles "memory", "./memory", "/workspace/memory" etc.
+func isMemoryDir(path, workspace string) bool {
+	clean := filepath.Clean(path)
+	if clean == "memory" {
+		return true
+	}
+	if workspace != "" && filepath.IsAbs(clean) {
+		expected := filepath.Join(filepath.Clean(workspace), "memory")
+		return clean == expected
+	}
+	return false
+}
 
 // isMemoryPath checks if a path refers to a memory file (MEMORY.md, memory.md, memory/*).
 // Handles both relative and absolute paths (when workspace is provided).
@@ -123,4 +138,33 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 	}
 
 	return true, nil
+}
+
+// ListFiles lists memory documents from the DB when path is the memory directory.
+// Returns (listing, true, nil) if handled, or ("", false, nil) if not a memory path.
+func (m *MemoryInterceptor) ListFiles(ctx context.Context, path string) (string, bool, error) {
+	if !isMemoryDir(path, m.workspace) {
+		return "", false, nil
+	}
+
+	agentID := store.AgentIDFromContext(ctx)
+	if agentID == uuid.Nil {
+		return "", false, nil
+	}
+
+	userID := store.UserIDFromContext(ctx)
+	docs, err := m.memStore.ListDocuments(ctx, agentID.String(), userID)
+	if err != nil {
+		return "", true, err
+	}
+
+	if len(docs) == 0 {
+		return "", true, nil
+	}
+
+	var sb strings.Builder
+	for _, doc := range docs {
+		fmt.Fprintf(&sb, "[FILE] %s\n", doc.Path)
+	}
+	return sb.String(), true, nil
 }

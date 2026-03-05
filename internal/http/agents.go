@@ -258,6 +258,20 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	h.emitCacheInvalidate(bus.CacheKindAgent, ag.AgentKey)
 	h.emitCacheInvalidate(bus.CacheKindBootstrap, id.String())
 
+	// Cascade: if status changed, broadcast so channel instances and cron jobs react.
+	if newStatus, ok := updates["status"].(string); ok && newStatus != ag.Status {
+		if h.msgBus != nil {
+			h.msgBus.Broadcast(bus.Event{
+				Name: bus.EventAgentStatusChanged,
+				Payload: bus.AgentStatusChangedPayload{
+					AgentID:   id.String(),
+					OldStatus: ag.Status,
+					NewStatus: newStatus,
+				},
+			})
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 

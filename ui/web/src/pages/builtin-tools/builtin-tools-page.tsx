@@ -79,7 +79,7 @@ export function BuiltinToolsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <PageHeader
         title="Built-in Tools"
         description="Manage system built-in tools. Enable/disable or configure settings globally."

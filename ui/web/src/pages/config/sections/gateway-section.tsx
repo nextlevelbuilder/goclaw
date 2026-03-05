@@ -63,7 +63,7 @@ export function GatewaySection({ data, onSave, saving }: Props) {
         <CardDescription>WebSocket & HTTP server settings, security</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="grid gap-1.5">
             <InfoLabel tip="IP address to bind the server. Use 0.0.0.0 to accept connections from any interface.">Host</InfoLabel>
             <Input
@@ -96,7 +96,7 @@ export function GatewaySection({ data, onSave, saving }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <InfoLabel tip="Sender IDs with admin privileges. These users bypass rate limits and can manage configuration.">Owner IDs</InfoLabel>
             <TagInput
@@ -115,7 +115,7 @@ export function GatewaySection({ data, onSave, saving }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="grid gap-1.5">
             <InfoLabel tip="Maximum characters per inbound message. Messages exceeding this are rejected.">Max Message Chars</InfoLabel>
             <Input

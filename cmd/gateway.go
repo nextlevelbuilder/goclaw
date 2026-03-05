@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -165,12 +168,17 @@ func runGateway() {
 	// Browser automation tool
 	var browserMgr *browser.Manager
 	if cfg.Tools.Browser.Enabled {
-		browserMgr = browser.New(
-			browser.WithHeadless(cfg.Tools.Browser.Headless),
-		)
+		var opts []browser.Option
+		if cfg.Tools.Browser.RemoteURL != "" {
+			opts = append(opts, browser.WithRemoteURL(cfg.Tools.Browser.RemoteURL))
+			slog.Info("browser tool enabled", "remote", cfg.Tools.Browser.RemoteURL)
+		} else {
+			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
+			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+		}
+		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
 		defer browserMgr.Close()
-		slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
 	}
 
 	// Web tools (web_search + web_fetch)
@@ -186,9 +194,10 @@ func runGateway() {
 	webFetchTool := tools.NewWebFetchTool(tools.WebFetchConfig{
 		Policy:         cfg.Tools.WebFetch.Policy,
 		AllowedDomains: cfg.Tools.WebFetch.AllowedDomains,
+		BlockedDomains: cfg.Tools.WebFetch.BlockedDomains,
 	})
 	toolsReg.Register(webFetchTool)
-	slog.Info("web_fetch tool enabled", "policy", cfg.Tools.WebFetch.Policy)
+	slog.Info("web_fetch tool enabled", "policy", cfg.Tools.WebFetch.Policy, "blocked", len(cfg.Tools.WebFetch.BlockedDomains))
 
 	// Vision fallback tool (for non-vision providers like MiniMax)
 	toolsReg.Register(tools.NewReadImageTool(providerRegistry))
@@ -478,6 +487,16 @@ func runGateway() {
 	toolsReg.Register(skillSearchTool)
 	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills()))
 
+	// Managed mode: wire skills-store directory into filesystem loader so agents
+	// can discover uploaded skills in their system prompt and BM25 search index.
+	if managedStores != nil && managedStores.Skills != nil {
+		storeDirs := managedStores.Skills.Dirs()
+		if len(storeDirs) > 0 {
+			skillsLoader.SetManagedDir(storeDirs[0])
+			slog.Info("managed mode: skills-store directory wired into loader", "dir", storeDirs[0])
+		}
+	}
+
 	// Managed mode: wire embedding-based skill search + per-agent access filtering
 	if managedStores != nil && managedStores.Skills != nil {
 		if sas, ok := managedStores.Skills.(store.SkillAccessStore); ok {
@@ -607,6 +626,10 @@ func runGateway() {
 
 	// Create gateway server and wire enforcement
 	server := gateway.NewServer(cfg, msgBus, agentRouter, sessStore, toolsReg)
+	server.SetVersion(Version)
+	if managedStores != nil {
+		server.SetDB(managedStores.DB)
+	}
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pairingStore)
 
@@ -614,6 +637,7 @@ func runGateway() {
 	// Declared here so it can be passed to registerAllMethods → AgentsMethods
 	// for immediate cache invalidation on agents.files.set.
 	var contextFileInterceptor *tools.ContextFileInterceptor
+	var delegateMgr *tools.DelegateManager
 
 	// Managed mode: set agent store for tools_invoke context injection + wire extras
 	if managedStores != nil && managedStores.Agents != nil {
@@ -629,7 +653,7 @@ func runGateway() {
 			}
 		}
 
-		contextFileInterceptor = wireManagedExtras(managedStores, agentRouter, providerRegistry, msgBus, sessStore, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, dynamicLoader)
+		contextFileInterceptor, delegateMgr = wireManagedExtras(managedStores, agentRouter, providerRegistry, msgBus, sessStore, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, dynamicLoader)
 		managedGatewayAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
 		agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH := wireManagedHTTP(managedStores, cfg.Gateway.Token, msgBus, toolsReg, providerRegistry, permPE.IsOwner, managedGatewayAddr)
 		if agentsH != nil {
@@ -835,6 +859,61 @@ func runGateway() {
 		}
 	})
 
+	// Wire pairing revocation → force disconnect active WebSocket sessions.
+	msgBus.Subscribe(bus.TopicPairingRevoked, func(event bus.Event) {
+		if event.Name != bus.EventPairingRevoked {
+			return
+		}
+		payload, ok := event.Payload.(bus.PairingRevokedPayload)
+		if !ok {
+			return
+		}
+		go server.DisconnectByPairing(payload.SenderID, payload.Channel)
+	})
+
+	// Cascade: when an agent becomes inactive, disable its linked channel instances.
+	if managedStores != nil && managedStores.ChannelInstances != nil {
+		ciStore := managedStores.ChannelInstances
+		msgBus.Subscribe(bus.TopicAgentStatusChanged, func(event bus.Event) {
+			if event.Name != bus.EventAgentStatusChanged {
+				return
+			}
+			payload, ok := event.Payload.(bus.AgentStatusChangedPayload)
+			if !ok || payload.NewStatus != store.AgentStatusInactive {
+				return
+			}
+			go func() {
+				agentID, err := uuid.Parse(payload.AgentID)
+				if err != nil {
+					return
+				}
+				all, err := ciStore.ListAll(context.Background())
+				if err != nil {
+					slog.Warn("cascade disable: failed to list channel instances", "error", err)
+					return
+				}
+				disabled := 0
+				for _, inst := range all {
+					if inst.AgentID == agentID && inst.Enabled {
+						if err := ciStore.Update(context.Background(), inst.ID, map[string]any{"enabled": false}); err != nil {
+							slog.Warn("cascade disable: failed to disable channel instance", "name", inst.Name, "error", err)
+						} else {
+							disabled++
+						}
+					}
+				}
+				if disabled > 0 {
+					slog.Info("cascade disabled channel instances for inactive agent", "agent_id", payload.AgentID, "count", disabled)
+					// Trigger channel reload so disabled instances are stopped.
+					msgBus.Broadcast(bus.Event{
+						Name:    protocol.EventCacheInvalidate,
+						Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindChannelInstances},
+					})
+				}
+			}()
+		})
+	}
+
 	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -930,7 +1009,12 @@ func runGateway() {
 	}
 
 	// Register quota usage RPC (nil-safe — returns {enabled: false} in standalone mode).
-	methods.NewQuotaMethods(quotaChecker).Register(server.Router())
+	// Pass DB so summary cards still work when quota is disabled (queries traces directly).
+	var quotaDB *sql.DB
+	if managedStores != nil {
+		quotaDB = managedStores.DB
+	}
+	methods.NewQuotaMethods(quotaChecker, quotaDB).Register(server.Router())
 
 	// Reload quota config on config changes via pub/sub.
 	if quotaChecker != nil {
@@ -957,10 +1041,10 @@ func runGateway() {
 		if !ok {
 			return
 		}
-		webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains)
+		webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
 	})
 
-	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker)
+	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker, delegateMgr)
 
 	go func() {
 		sig := <-sigCh

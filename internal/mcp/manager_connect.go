@@ -80,20 +80,26 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 	}
 	ss.toolNames = registeredNames
 
+	// Create health monitoring context BEFORE storing server in map,
+	// so DisconnectServer() can safely call ss.cancel even if called immediately.
+	hctx, hcancel := context.WithCancel(context.Background())
+	ss.cancel = hcancel
+
+	// Store server state BEFORE updating MCP group, because updateMCPGroup()
+	// calls ToolNames() which iterates m.servers. If we store after, the current
+	// server's tools are invisible to ToolNames() and toolGroups["mcp"] ends up
+	// incomplete — causing the policy engine to block MCP tools.
+	m.mu.Lock()
+	m.servers[name] = ss
+	m.mu.Unlock()
+
 	// Register dynamic tool groups for policy filtering
 	if len(registeredNames) > 0 {
 		tools.RegisterToolGroup("mcp:"+name, registeredNames)
 		m.updateMCPGroup()
 	}
 
-	// Start health monitoring
-	hctx, hcancel := context.WithCancel(context.Background())
-	ss.cancel = hcancel
 	go m.healthLoop(hctx, ss)
-
-	m.mu.Lock()
-	m.servers[name] = ss
-	m.mu.Unlock()
 
 	slog.Info("mcp.server.connected",
 		"server", name,
