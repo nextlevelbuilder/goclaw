@@ -191,14 +191,32 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.builtinToolsHandler.RegisterRoutes(mux)
 	}
 
-	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http
+	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http.
+	// Only listens on localhost (CLI runs on the same machine).
+	// Protected by gateway token when configured.
 	if s.tools != nil {
 		bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0")
-		mux.Handle("/mcp/bridge", bridgeHandler)
+		if s.cfg.Gateway.Token != "" {
+			mux.Handle("/mcp/bridge", tokenAuthMiddleware(s.cfg.Gateway.Token, bridgeHandler))
+		} else {
+			mux.Handle("/mcp/bridge", bridgeHandler)
+		}
 	}
 
 	s.mux = mux
 	return mux
+}
+
+// tokenAuthMiddleware wraps an http.Handler with Bearer token authentication.
+func tokenAuthMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != token {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Start begins listening for WebSocket and HTTP connections.

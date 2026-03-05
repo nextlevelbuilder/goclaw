@@ -10,6 +10,15 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// loopbackAddr normalizes a gateway address for local connections.
+// CLI processes on the same machine can't connect to 0.0.0.0 on some OSes.
+func loopbackAddr(host string, port int) string {
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return fmt.Sprintf("%s:%d", host, port)
+}
+
 func registerProviders(registry *providers.Registry, cfg *config.Config) {
 	if cfg.Providers.Anthropic.APIKey != "" {
 		registry.Register(providers.NewAnthropicProvider(cfg.Providers.Anthropic.APIKey,
@@ -96,12 +105,12 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 			opts = append(opts, providers.WithClaudeCLIPermMode(cfg.Providers.ClaudeCLI.PermMode))
 		}
 		// Build MCP config: external MCP servers + GoClaw bridge (built-in tools via streamable-http)
-		gatewayAddr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
-		mcpPath, _, err := providers.BuildCLIMCPConfig(cfg.Tools.McpServers, gatewayAddr)
+		gatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
+		mcpPath, mcpCleanup, err := providers.BuildCLIMCPConfig(cfg.Tools.McpServers, gatewayAddr, cfg.Gateway.Token)
 		if err != nil {
 			slog.Warn("failed to build MCP config for claude-cli", "error", err)
 		} else if mcpPath != "" {
-			opts = append(opts, providers.WithClaudeCLIMCPConfig(mcpPath))
+			opts = append(opts, providers.WithClaudeCLIMCPConfig(mcpPath, mcpCleanup))
 		}
 		// Enable GoClaw security hooks (shell deny patterns, path restrictions)
 		opts = append(opts, providers.WithClaudeCLISecurityHooks(
@@ -114,7 +123,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 // registerProvidersFromDB loads providers from Postgres and registers them.
 // DB providers are registered after config providers, so they take precedence (overwrite).
 // gatewayAddr is used to inject GoClaw MCP bridge for Claude CLI providers.
-func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, gatewayAddr string) {
+func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, gatewayAddr, gatewayToken string) {
 	ctx := context.Background()
 	dbProviders, err := provStore.ListProviders(ctx)
 	if err != nil {
@@ -134,11 +143,11 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			var cliOpts []providers.ClaudeCLIOption
 			cliOpts = append(cliOpts, providers.WithClaudeCLISecurityHooks("", true))
 			if gatewayAddr != "" {
-				mcpPath, _, mcpErr := providers.BuildCLIMCPConfig(nil, gatewayAddr)
+				mcpPath, mcpCleanup, mcpErr := providers.BuildCLIMCPConfig(nil, gatewayAddr, gatewayToken)
 				if mcpErr != nil {
 					slog.Warn("failed to build MCP config for db claude-cli", "error", mcpErr)
 				} else if mcpPath != "" {
-					cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfig(mcpPath))
+					cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfig(mcpPath, mcpCleanup))
 				}
 			}
 			registry.Register(providers.NewClaudeCLIProvider(cliPath, cliOpts...))

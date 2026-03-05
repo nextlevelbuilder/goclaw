@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
@@ -37,7 +38,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	}
 
 	// Claude CLI doesn't need an API key — return hardcoded models
-	if p.ProviderType == "claude_cli" {
+	if p.ProviderType == store.ProviderClaudeCLI {
 		writeJSON(w, http.StatusOK, map[string]interface{}{"models": claudeCLIModels()})
 		return
 	}

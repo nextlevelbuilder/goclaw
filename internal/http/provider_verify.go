@@ -93,7 +93,18 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	status, err := providers.CheckClaudeAuthStatus(ctx, "claude")
+	// Try to find CLI path from existing Claude CLI provider in DB
+	cliPath := "claude"
+	if existing, err := h.store.ListProviders(r.Context()); err == nil {
+		for _, p := range existing {
+			if p.ProviderType == "claude_cli" && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+		}
+	}
+
+	status, err := providers.CheckClaudeAuthStatus(ctx, cliPath)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"logged_in": false,

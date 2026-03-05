@@ -35,6 +35,7 @@ type ClaudeCLIProvider struct {
 	permMode           string // permission mode (default: "bypassPermissions")
 	hooksSettingsPath  string // generated settings.json with security hooks (empty = no hooks)
 	hooksCleanup       func() // cleanup function for hooks temp files
+	mcpCleanup         func() // cleanup function for MCP config temp file
 	mu                 sync.Mutex                // protects sessionMu map + workdir creation
 	sessionMu          map[string]*sync.Mutex    // per-session mutex to prevent concurrent CLI calls
 }
@@ -61,9 +62,12 @@ func WithClaudeCLIWorkDir(dir string) ClaudeCLIOption {
 }
 
 // WithClaudeCLIMCPConfig sets the MCP config file path.
-func WithClaudeCLIMCPConfig(path string) ClaudeCLIOption {
+func WithClaudeCLIMCPConfig(path string, cleanup ...func()) ClaudeCLIOption {
 	return func(p *ClaudeCLIProvider) {
 		p.mcpConfigPath = path
+		if len(cleanup) > 0 && cleanup[0] != nil {
+			p.mcpCleanup = cleanup[0]
+		}
 	}
 }
 
@@ -111,6 +115,16 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 
 func (p *ClaudeCLIProvider) Name() string         { return "claude-cli" }
 func (p *ClaudeCLIProvider) DefaultModel() string  { return p.defaultModel }
+
+// Close cleans up temp files (MCP config, hooks settings).
+func (p *ClaudeCLIProvider) Close() {
+	if p.mcpCleanup != nil {
+		p.mcpCleanup()
+	}
+	if p.hooksCleanup != nil {
+		p.hooksCleanup()
+	}
+}
 
 // lockSession acquires a per-session mutex to prevent concurrent CLI calls on the same session.
 func (p *ClaudeCLIProvider) lockSession(sessionKey string) func() {
@@ -163,7 +177,7 @@ func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
-	slog.Info("claude-cli exec", "cmd", fmt.Sprintf("%s %s", p.cliPath, strings.Join(args, " ")), "workdir", workDir)
+	slog.Debug("claude-cli exec", "cmd", fmt.Sprintf("%s %s", p.cliPath, strings.Join(args, " ")), "workdir", workDir)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("claude-cli: %w (stderr: %s)", err, stderr.String())
@@ -181,12 +195,12 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		model = p.defaultModel
 	}
 
-	slog.Info("claude-cli: acquiring session lock", "session_key", sessionKey)
+	slog.Debug("claude-cli: acquiring session lock", "session_key", sessionKey)
 	unlock := p.lockSession(sessionKey)
-	slog.Info("claude-cli: session lock acquired", "session_key", sessionKey)
+	slog.Debug("claude-cli: session lock acquired", "session_key", sessionKey)
 	defer func() {
 		unlock()
-		slog.Info("claude-cli: session lock released", "session_key", sessionKey)
+		slog.Debug("claude-cli: session lock released", "session_key", sessionKey)
 	}()
 
 	workDir := p.ensureWorkDir(sessionKey)
@@ -221,17 +235,20 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	}
 
 	fullCmd := fmt.Sprintf("%s %s", p.cliPath, strings.Join(args, " "))
-	slog.Info("claude-cli stream exec", "cmd", fullCmd, "workdir", workDir)
+	slog.Debug("claude-cli stream exec", "cmd", fullCmd, "workdir", workDir)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("claude-cli start: %w", err)
 	}
 
-	// Debug log file: write raw CLI output for inspection
-	debugLogPath := filepath.Join(workDir, "cli-debug.log")
-	debugFile, _ := os.OpenFile(debugLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if debugFile != nil {
-		fmt.Fprintf(debugFile, "=== CMD: %s\n=== WORKDIR: %s\n=== TIME: %s\n\n", fullCmd, workDir, time.Now().Format(time.RFC3339))
-		defer debugFile.Close()
+	// Debug log file: only enabled when GOCLAW_DEBUG=1
+	var debugFile *os.File
+	if os.Getenv("GOCLAW_DEBUG") == "1" {
+		debugLogPath := filepath.Join(workDir, "cli-debug.log")
+		debugFile, _ = os.OpenFile(debugLogPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		if debugFile != nil {
+			fmt.Fprintf(debugFile, "=== CMD: %s\n=== WORKDIR: %s\n=== TIME: %s\n\n", fullCmd, workDir, time.Now().Format(time.RFC3339))
+			defer debugFile.Close()
+		}
 	}
 
 	// Parse stream-json line-by-line
@@ -254,7 +271,8 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 		var ev cliStreamEvent
 		if err := json.Unmarshal(line, &ev); err != nil {
-			continue // skip malformed lines
+			slog.Debug("claude-cli: skip malformed stream line", "error", err)
+			continue
 		}
 
 		switch ev.Type {
@@ -346,7 +364,12 @@ func (p *ClaudeCLIProvider) buildArgs(model, workDir string, cliSessionID uuid.U
 	}
 
 	if disableTools {
+		// Summoner: disable all tools entirely
 		args = append(args, "--tools", "")
+	} else if p.mcpConfigPath != "" {
+		// Chat with MCP bridge: disable CLI built-in tools, only allow MCP bridge tools.
+		// This ensures all tool execution goes through GoClaw's controlled MCP bridge.
+		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoRead,TodoWrite,NotebookRead,NotebookEdit")
 	}
 
 	if p.hooksSettingsPath != "" {
@@ -379,7 +402,7 @@ func (p *ClaudeCLIProvider) ensureWorkDir(sessionKey string) string {
 // CLI reads this file automatically on every run (including --resume).
 func (p *ClaudeCLIProvider) writeClaudeMD(workDir, systemPrompt string) {
 	path := filepath.Join(workDir, "CLAUDE.md")
-	if err := os.WriteFile(path, []byte(systemPrompt), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(systemPrompt), 0600); err != nil {
 		slog.Warn("claude-cli: failed to write CLAUDE.md", "path", path, "error", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -16,7 +17,8 @@ type ProvidersHandler struct {
 	store       store.ProviderStore
 	token       string
 	providerReg *providers.Registry
-	gatewayAddr string // for injecting MCP bridge into Claude CLI providers
+	gatewayAddr string     // for injecting MCP bridge into Claude CLI providers
+	cliMu       sync.Mutex // serializes Claude CLI provider create to prevent duplicates
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -81,11 +83,11 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		var cliOpts []providers.ClaudeCLIOption
 		cliOpts = append(cliOpts, providers.WithClaudeCLISecurityHooks("", true))
 		if h.gatewayAddr != "" {
-			mcpPath, _, mcpErr := providers.BuildCLIMCPConfig(nil, h.gatewayAddr)
+			mcpPath, mcpCleanup, mcpErr := providers.BuildCLIMCPConfig(nil, h.gatewayAddr, h.token)
 			if mcpErr != nil {
 				slog.Warn("failed to build MCP config for in-memory claude-cli", "error", mcpErr)
 			} else if mcpPath != "" {
-				cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfig(mcpPath))
+				cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfig(mcpPath, mcpCleanup))
 			}
 		}
 		h.providerReg.Register(providers.NewClaudeCLIProvider(cliPath, cliOpts...))
@@ -151,7 +153,8 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Only one Claude CLI provider is allowed per instance (1 machine = 1 auth session)
+	// Only one Claude CLI provider is allowed per instance (1 machine = 1 auth session).
+	// Mutex serializes check+create to prevent TOCTOU race.
 	if p.ProviderType == store.ProviderClaudeCLI {
 		existing, _ := h.store.ListProviders(r.Context())
 		for _, ep := range existing {

@@ -15,7 +15,7 @@ import (
 // When gatewayAddr is non-empty, a "goclaw-bridge" entry is injected so CLI
 // can call GoClaw's built-in tools via streamable-http MCP transport.
 // Returns the file path and a cleanup function. Caller must call cleanup when done.
-func BuildCLIMCPConfig(servers map[string]*config.MCPServerConfig, gatewayAddr string) (string, func(), error) {
+func BuildCLIMCPConfig(servers map[string]*config.MCPServerConfig, gatewayAddr string, gatewayToken ...string) (string, func(), error) {
 	mcpServers := make(map[string]interface{}, len(servers)+1)
 
 	for name, srv := range servers {
@@ -66,10 +66,16 @@ func BuildCLIMCPConfig(servers map[string]*config.MCPServerConfig, gatewayAddr s
 
 	// Inject GoClaw bridge entry so CLI can access built-in tools via MCP
 	if gatewayAddr != "" {
-		mcpServers["goclaw-bridge"] = map[string]interface{}{
+		bridgeEntry := map[string]interface{}{
 			"url":  fmt.Sprintf("http://%s/mcp/bridge", gatewayAddr),
 			"type": "http",
 		}
+		if len(gatewayToken) > 0 && gatewayToken[0] != "" {
+			bridgeEntry["headers"] = map[string]string{
+				"Authorization": "Bearer " + gatewayToken[0],
+			}
+		}
+		mcpServers["goclaw-bridge"] = bridgeEntry
 	}
 
 	if len(mcpServers) == 0 {
