@@ -459,8 +459,10 @@ func sessionFileExists(workDir string, sessionID uuid.UUID) bool {
 		resolved = workDir
 	}
 	// Claude CLI stores sessions at: ~/.claude/projects/<encoded-path>/<session-id>.jsonl
-	// CLI replaces "/", "_", and "." with "-" in the path encoding
-	encoded := strings.NewReplacer(string(filepath.Separator), "-", "_", "-", ".", "-").Replace(resolved)
+	// CLI replaces path separators, "_", ".", and ":" with "-" in the path encoding.
+	// On Windows: C:\Users\foo → C--Users-foo (backslash + colon both become "-")
+	// On macOS/Linux: /home/foo → -home-foo (forward slash becomes "-")
+	encoded := strings.NewReplacer(string(filepath.Separator), "-", "_", "-", ".", "-", ":", "-").Replace(resolved)
 	sessionFile := filepath.Join(home, ".claude", "projects", encoded, sessionID.String()+".jsonl")
 	_, err = os.Stat(sessionFile)
 	return err == nil
