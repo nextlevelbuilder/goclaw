@@ -228,7 +228,7 @@ func runOnboard() {
 		// Fetch and select model
 		fmt.Println("  Fetching OpenRouter models...")
 		orModelOptions := buildOpenRouterModelOptions()
-		orModelChoice, err = promptSelect("OpenRouter Model", orModelOptions, 0)
+		orModelChoice, err = promptSelect("Choose OpenRouter Model", orModelOptions, 0)
 		if err != nil {
 			fmt.Println("Cancelled.")
 			return

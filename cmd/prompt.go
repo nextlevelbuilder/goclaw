@@ -54,6 +54,8 @@ func promptPassword(title, description string) (string, error) {
 // filterThreshold: enable type-to-filter only when there are more than this many options.
 const filterThreshold = 5
 
+const scrollableThreshold = 15 // enable scrollbars when there are more than this many options
+
 // promptSelect shows a single-select list using huh TUI.
 // Returns the value of the selected option.
 func promptSelect[T comparable](title string, options []SelectOption[T], defaultIdx int) (T, error) {
@@ -68,13 +70,14 @@ func promptSelect[T comparable](title string, options []SelectOption[T], default
 	}
 
 	sel := huh.NewSelect[T]().
-		Title(title).
 		Options(huhOpts...).
 		Value(&value)
 
-	if len(options) > filterThreshold {
-		sel = sel.Filtering(true)
+	if len(options) > scrollableThreshold {
+		sel.Height(scrollableThreshold) // show scrollbar if too many options
+		title += " (scroll for more)"
 	}
+	sel.Title(title)
 
 	if err := runWithHelp(sel); err != nil {
 		var zero T
