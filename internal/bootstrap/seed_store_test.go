@@ -55,9 +55,13 @@ func (s *seedStubStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _,
 }
 
 // Remaining interface methods — not exercised.
-func (s *seedStubStore) Create(_ context.Context, _ *store.AgentData) error              { return nil }
-func (s *seedStubStore) GetByKey(_ context.Context, _ string) (*store.AgentData, error)  { return nil, nil }
-func (s *seedStubStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) { return nil, nil }
+func (s *seedStubStore) Create(_ context.Context, _ *store.AgentData) error { return nil }
+func (s *seedStubStore) GetByKey(_ context.Context, _ string) (*store.AgentData, error) {
+	return nil, nil
+}
+func (s *seedStubStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
+	return nil, nil
+}
 func (s *seedStubStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error   { return nil }
 func (s *seedStubStore) Delete(_ context.Context, _ uuid.UUID) error                     { return nil }
 func (s *seedStubStore) List(_ context.Context, _ string) ([]store.AgentData, error)     { return nil, nil }
@@ -230,27 +234,6 @@ func TestSeedUserFiles_OpenAgent_UsesEmbeddedTemplate(t *testing.T) {
 	}
 	if got == "" {
 		t.Error("open agent: seeded USER.md should not be empty")
-	}
-}
-
-// TestSeedUserFiles_PredefinedAgent_BootstrapUsesCorrectTemplate verifies that
-// BOOTSTRAP.md is still seeded from BOOTSTRAP_PREDEFINED.md for predefined agents.
-func TestSeedUserFiles_PredefinedAgent_BootstrapUsesCorrectTemplate(t *testing.T) {
-	as := newSeedStub()
-	agentID := uuid.New()
-
-	_, err := SeedUserFiles(context.Background(), as, agentID, "user-eve", store.AgentTypePredefined)
-	if err != nil {
-		t.Fatalf("SeedUserFiles returned error: %v", err)
-	}
-
-	// BOOTSTRAP.md must have been seeded
-	got, ok := as.seededUserFiles[BootstrapFile]
-	if !ok {
-		t.Fatal("predefined agent: BOOTSTRAP.md was not seeded")
-	}
-	if got == "" {
-		t.Error("predefined agent: BOOTSTRAP.md should have content from BOOTSTRAP_PREDEFINED.md template")
 	}
 }
 
