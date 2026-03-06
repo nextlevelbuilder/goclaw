@@ -103,6 +103,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	accumulators := make(map[int]*toolCallAccumulator)
 
 	scanner := bufio.NewScanner(respBody)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line for large tool call / thinking chunks
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {
@@ -178,11 +179,6 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			result.FinishReason = chunk.Choices[0].FinishReason
 		}
 
-	}
-
-	// Check for scanner errors (timeout, connection reset, etc.)
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
 	// Check for scanner errors (timeout, connection reset, etc.)
