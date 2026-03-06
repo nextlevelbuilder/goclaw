@@ -399,7 +399,7 @@ func resolveProviderAPIBase(providerName string) string {
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
 	case "anthropic":
-		return "https://api.anthropic.com"
+		return "https://api.anthropic.com/v1"
 	case "openai":
 		return "https://api.openai.com/v1"
 	case "groq":
