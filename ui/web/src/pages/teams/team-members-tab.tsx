@@ -2,7 +2,13 @@ import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
-import { UserPlus } from "lucide-react";
+import { UserPlus, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import type { TeamMemberData } from "@/types/team";
 import { MemberList } from "./member-sections";
@@ -50,7 +56,21 @@ export function TeamMembersTab({ members, onAddMember, onRemoveMember }: TeamMem
     <div className="max-w-2xl space-y-6">
       {onAddMember && (
         <div className="space-y-2">
-          <Label>Add Member</Label>
+          <Label className="inline-flex items-center gap-1">
+            Add Member
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  Only predefined agents can be added as team members.
+                  <br />
+                  Open agents are per-user and lack shared context needed for team collaboration.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </Label>
           <div className="flex gap-2">
             <div className="flex-1">
               <Combobox

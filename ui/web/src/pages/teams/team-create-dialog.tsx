@@ -11,7 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
-import { X } from "lucide-react";
+import { X, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 interface TeamCreateDialogProps {
@@ -143,7 +149,21 @@ export function TeamCreateDialog({ open, onOpenChange, onCreate }: TeamCreateDia
           </div>
 
           <div className="space-y-2">
-            <Label>Members</Label>
+            <Label className="inline-flex items-center gap-1">
+              Members
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    Only predefined agents can be added as team members.
+                    <br />
+                    Open agents are per-user and lack shared context needed for team collaboration.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </Label>
             <Combobox
               value={memberSearch}
               onChange={(val) => {
