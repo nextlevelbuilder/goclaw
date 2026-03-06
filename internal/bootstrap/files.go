@@ -8,7 +8,6 @@
 //	USER.md    — user profile
 //	IDENTITY.md— agent name, emoji, creature, vibe
 //	TOOLS.md   — local tool notes
-//	HEARTBEAT.md— periodic check tasks
 //	BOOTSTRAP.md— first-run ritual (deleted after completion)
 //	MEMORY.md  — long-term curated memory
 package bootstrap
@@ -27,7 +26,6 @@ const (
 	IdentityFile       = "IDENTITY.md"
 	UserFile           = "USER.md"
 	UserPredefinedFile = "USER_PREDEFINED.md"
-	HeartbeatFile      = "HEARTBEAT.md"
 	BootstrapFile      = "BOOTSTRAP.md"
 	DelegationFile   = "DELEGATION.md"
 	TeamFile         = "TEAM.md"
@@ -44,7 +42,6 @@ var standardFiles = []string{
 	ToolsFile,
 	IdentityFile,
 	UserFile,
-	HeartbeatFile,
 	BootstrapFile,
 }
 

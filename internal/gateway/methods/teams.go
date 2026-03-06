@@ -52,7 +52,7 @@ func (m *TeamsMethods) Register(router *gateway.MethodRouter) {
 
 func (m *TeamsMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 
@@ -81,7 +81,7 @@ type teamsCreateParams struct {
 
 func (m *TeamsMethods) handleCreate(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 

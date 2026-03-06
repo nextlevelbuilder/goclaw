@@ -40,7 +40,7 @@ func (m *AgentsMethods) handleIdentityGet(_ context.Context, client *gateway.Cli
 		"agentId": params.AgentID,
 	}
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: read identity from DB ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -70,7 +70,7 @@ func (m *AgentsMethods) handleIdentityGet(_ context.Context, client *gateway.Cli
 			}
 		}
 	} else {
-		// --- Standalone mode: config + filesystem ---
+		// --- Fallback: config + filesystem ---
 		result["name"] = m.cfg.ResolveDisplayName(params.AgentID)
 
 		if spec, ok := m.cfg.Agents.List[params.AgentID]; ok && spec.Identity != nil {

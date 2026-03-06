@@ -20,7 +20,7 @@ type teamsGetParams struct {
 
 func (m *TeamsMethods) handleGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 
@@ -68,7 +68,7 @@ type teamsDeleteParams struct {
 
 func (m *TeamsMethods) handleDelete(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 
@@ -129,7 +129,7 @@ type teamsTaskListParams struct {
 
 func (m *TeamsMethods) handleTaskList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 
@@ -172,7 +172,7 @@ type teamsUpdateParams struct {
 
 func (m *TeamsMethods) handleUpdate(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 
@@ -253,7 +253,7 @@ type teamsKnownUsersParams struct {
 
 func (m *TeamsMethods) handleKnownUsers(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 

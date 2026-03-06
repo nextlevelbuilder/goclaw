@@ -435,5 +435,5 @@ Teams emit events for real-time UI updates and observability.
 |----------|-----------------|
 | [03-tools-system.md](./03-tools-system.md) | Delegation system, agent links, quality gates, evaluate loop |
 | [06-store-data-model.md](./06-store-data-model.md) | Team tables schema, delegation_history, handoff_routes |
-| [08-scheduling-cron-heartbeat.md](./08-scheduling-cron-heartbeat.md) | Delegate scheduler lane (concurrency 100) |
+| [08-scheduling-cron.md](./08-scheduling-cron.md) | Delegate scheduler lane (concurrency 100), cron |
 | [09-security.md](./09-security.md) | Delegation security, hook recursion prevention |

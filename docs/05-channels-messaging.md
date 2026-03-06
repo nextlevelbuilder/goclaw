@@ -182,7 +182,7 @@ The Telegram channel uses long polling via the `telego` library (Telegram Bot AP
 - **Group mention gating**: By default, bot must be @mentioned in groups (`requireMention: true`). Pending messages without a mention are stored in a history buffer (default 50 messages) and included as context when the bot is eventually mentioned.
 - **Typing indicator**: A "typing" action is sent while the agent is processing.
 - **Proxy support**: Optional HTTP proxy configured via channel config.
-- **Cancel commands**: `/stop` and `/stopall` intercepted before the 800ms debouncer. See [08-scheduling-cron-heartbeat.md](./08-scheduling-cron-heartbeat.md).
+- **Cancel commands**: `/stop` and `/stopall` intercepted before the 800ms debouncer. See [08-scheduling-cron.md](./08-scheduling-cron.md) for details.
 - **Concurrent group support**: Group sessions support up to 3 concurrent agent runs.
 - **Bot reply as implicit mention**: Replying to a bot message in a group counts as mentioning the bot.
 
@@ -478,13 +478,13 @@ All channel state — placeholders, streams, reactions, typing controllers, thre
 
 ---
 
-## 13. Managed Mode Behavior
+## 13. Per-User Isolation
 
-In managed mode, channels provide per-user isolation through compound sender IDs and context propagation:
+Channels provide per-user isolation through compound sender IDs and context propagation:
 
 - **User scoping**: Each channel constructs a compound sender ID (e.g., `telegram:123456`) which maps to a `user_id`. The session key format `agent:{agentId}:{channel}:direct:{peerId}` ensures each user has isolated conversation history per agent.
 - **Context propagation**: `HandleMessage()` injects `AgentID`, `UserID`, and `AgentType` into the context. These flow to the ContextFileInterceptor, MemoryInterceptor, and per-user file seeding.
-- **Pairing storage**: PostgreSQL (`pairing_requests` and `paired_devices` tables) in managed mode; JSON files in standalone mode.
+- **Pairing storage**: PostgreSQL (`pairing_requests` and `paired_devices` tables).
 - **Session persistence**: PostgreSQL `sessions` table with write-behind caching.
 
 ---
@@ -554,6 +554,6 @@ flowchart TD
 |----------|-----------------|
 | [00-architecture-overview.md](./00-architecture-overview.md) | Channel startup in gateway sequence |
 | [03-tools-system.md](./03-tools-system.md) | Tool policy engine, per-request tool allow list |
-| [08-scheduling-cron-heartbeat.md](./08-scheduling-cron-heartbeat.md) | /stop and /stopall commands, scheduler lanes |
+| [08-scheduling-cron.md](./08-scheduling-cron.md) | /stop and /stopall commands, scheduler lanes, cron |
 | [09-security.md](./09-security.md) | Group file writer restrictions, security logging |
 | [11-agent-teams.md](./11-agent-teams.md) | Team message routing, delegation result delivery |

@@ -110,8 +110,8 @@ func (c *Config) StripSecrets() {
 }
 
 // StripMaskedSecrets strips only fields that still contain the mask value "***".
-// Real values (user-entered via UI) are preserved. Used in standalone mode
-// so that secrets entered via the config UI persist in config.json.
+// Real values (user-entered via UI) are preserved, so that secrets entered
+// via the config UI persist in config.json.
 func (c *Config) StripMaskedSecrets() {
 	stripIfMasked := func(s *string) {
 		if *s == secretMask {
@@ -181,7 +181,7 @@ func (c *Config) ApplyDBSecrets(secrets map[string]string) {
 }
 
 // ExtractDBSecrets returns the config_secrets key-value pairs from the config.
-// Used by managed mode to save secrets to the config_secrets table.
+// Saves secrets to the config_secrets table.
 func (c *Config) ExtractDBSecrets() map[string]string {
 	secrets := make(map[string]string)
 

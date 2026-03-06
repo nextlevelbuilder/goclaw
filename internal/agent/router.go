@@ -8,7 +8,7 @@ import (
 )
 
 // ResolverFunc is called when an agent isn't found in the cache.
-// Used in managed mode to lazy-create agents from DB.
+// Used to lazy-create agents from DB.
 type ResolverFunc func(agentKey string) (Agent, error)
 
 const defaultRouterTTL = 10 * time.Minute
@@ -21,12 +21,12 @@ type agentEntry struct {
 
 // Router manages multiple agent Loop instances.
 // Each agent has a unique ID and its own provider/model/tools config.
-// In managed mode, cached Loops expire after TTL (safety net for multi-instance).
+// Cached Loops expire after TTL (safety net for multi-instance).
 type Router struct {
 	agents     map[string]*agentEntry
 	mu         sync.RWMutex
 	activeRuns sync.Map // runID → *ActiveRun
-	resolver   ResolverFunc // optional: lazy creation from DB (managed mode)
+	resolver   ResolverFunc // optional: lazy creation from DB
 	ttl        time.Duration
 }
 
@@ -37,7 +37,7 @@ func NewRouter() *Router {
 	}
 }
 
-// SetResolver sets a resolver function for lazy agent creation (managed mode).
+// SetResolver sets a resolver function for lazy agent creation.
 func (r *Router) SetResolver(fn ResolverFunc) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -51,7 +51,7 @@ func (r *Router) Register(ag Agent) {
 	r.agents[ag.ID()] = &agentEntry{agent: ag, cachedAt: time.Now()}
 }
 
-// Get returns an agent by ID. In managed mode, lazy-creates from DB via resolver.
+// Get returns an agent by ID. Lazy-creates from DB via resolver if needed.
 // Cached entries expire after TTL as a safety net for multi-instance deployments.
 func (r *Router) Get(agentID string) (Agent, error) {
 	r.mu.RLock()
@@ -70,7 +70,7 @@ func (r *Router) Get(agentID string) (Agent, error) {
 		r.mu.Unlock()
 	}
 
-	// Try resolver (managed mode: create from DB)
+	// Try resolver (create from DB)
 	if resolver != nil {
 		ag, err := resolver(agentID)
 		if err != nil {

@@ -1,7 +1,7 @@
 # Tailscale overlay — rebuilds with tsnet support for secure remote access.
 #
-# Usage (with managed mode):
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.tailscale.yml up
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.tailscale.yml up
 #
 # Required:
 #   GOCLAW_TSNET_AUTH_KEY — Tailscale auth key (from https://login.tailscale.com/admin/settings/keys)

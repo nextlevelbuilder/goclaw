@@ -368,5 +368,5 @@ When concurrency limits are hit, the error message is written for LLM reasoning:
 | [04-gateway-protocol.md](./04-gateway-protocol.md) | WebSocket auth, RBAC, rate limiting |
 | [06-store-data-model.md](./06-store-data-model.md) | API key encryption, agent access control pipeline, agent_links table |
 | [07-bootstrap-skills-memory.md](./07-bootstrap-skills-memory.md) | Context file merging, virtual files |
-| [08-scheduling-cron-heartbeat.md](./08-scheduling-cron-heartbeat.md) | Scheduler lanes, cron lifecycle |
+| [08-scheduling-cron.md](./08-scheduling-cron.md) | Scheduler lanes, cron lifecycle, /stop and /stopall |
 | [10-tracing-observability.md](./10-tracing-observability.md) | Tracing and OTel export |

@@ -27,7 +27,7 @@ type zaloInstanceConfig struct {
 	AllowFrom      []string `json:"allow_from,omitempty"`
 }
 
-// Factory creates a Zalo Personal channel from DB instance data (managed mode).
+// Factory creates a Zalo Personal channel from DB instance data.
 // Does NOT trigger QR login — credentials must be provided.
 func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 	msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {

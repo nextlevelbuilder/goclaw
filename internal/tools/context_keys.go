@@ -90,7 +90,7 @@ func ToolWorkspaceFromCtx(ctx context.Context) string {
 }
 
 // WithToolAgentKey injects the calling agent's key into context.
-// In managed mode multiple agents share a single tool registry; the agent key
+// Multiple agents share a single tool registry; the agent key
 // lets tools like spawn/subagent identify which agent is the parent.
 func WithToolAgentKey(ctx context.Context, key string) context.Context {
 	return context.WithValue(ctx, ctxAgentKey, key)

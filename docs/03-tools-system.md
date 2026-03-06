@@ -162,7 +162,6 @@ flowchart TD
 | `IDENTITY.md` | Agent identity information |
 | `AGENTS.md` | Sub-agent definitions |
 | `TOOLS.md` | Tool usage guidance |
-| `HEARTBEAT.md` | Periodic wake-up instructions |
 | `USER.md` | Per-user preferences and context |
 | `BOOTSTRAP.md` | First-run instructions (write empty = delete row) |
 

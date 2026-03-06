@@ -18,12 +18,11 @@ import (
 type ChatMethods struct {
 	agents      *agent.Router
 	sessions    store.SessionStore
-	isManaged   bool
 	rateLimiter *gateway.RateLimiter
 }
 
-func NewChatMethods(agents *agent.Router, sess store.SessionStore, isManaged bool, rl *gateway.RateLimiter) *ChatMethods {
-	return &ChatMethods{agents: agents, sessions: sess, isManaged: isManaged, rateLimiter: rl}
+func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter) *ChatMethods {
+	return &ChatMethods{agents: agents, sessions: sess, rateLimiter: rl}
 }
 
 // Register adds chat methods to the router.
@@ -71,7 +70,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	}
 
 	userID := client.UserID()
-	if m.isManaged && userID == "" {
+	if userID == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "user_id is required in managed mode — provide it in the connect handshake"))
 		return
 	}

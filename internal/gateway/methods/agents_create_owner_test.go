@@ -126,7 +126,7 @@ func nullClient() *gateway.Client {
 	return &gateway.Client{}
 }
 
-// newManagedMethods returns AgentsMethods wired for managed mode with the given stub store.
+// newManagedMethods returns AgentsMethods wired with the given stub store.
 func newManagedMethods(t *testing.T, stub store.AgentStore) *AgentsMethods {
 	t.Helper()
 	return &AgentsMethods{
@@ -134,7 +134,6 @@ func newManagedMethods(t *testing.T, stub store.AgentStore) *AgentsMethods {
 		cfg:        minimalConfig(),
 		workspace:  t.TempDir(),
 		agentStore: stub,
-		isManaged:  true,
 	}
 }
 

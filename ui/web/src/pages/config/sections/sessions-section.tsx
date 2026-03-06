@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InfoLabel } from "@/components/shared/info-label";
@@ -41,29 +40,10 @@ export function SessionsSection({ data, onSave, saving }: Props) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Sessions</CardTitle>
-        <CardDescription>Session storage and scoping settings</CardDescription>
+        <CardDescription>Session scoping settings. Sessions are stored in PostgreSQL.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="grid gap-1.5">
-            <InfoLabel tip="Directory path where session data is persisted on disk (standalone mode).">Storage Directory</InfoLabel>
-            <Input
-              value={draft.storage ?? ""}
-              onChange={(e) => update({ storage: e.target.value })}
-              placeholder="~/.goclaw/sessions"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <InfoLabel tip="Default session key name. Used as the main conversation thread identifier.">Main Key</InfoLabel>
-            <Input
-              value={draft.main_key ?? ""}
-              onChange={(e) => update({ main_key: e.target.value })}
-              placeholder="main"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="grid gap-1.5">
             <InfoLabel tip="Session isolation level. Per Sender = each user gets their own session. Global = all users share one session.">Scope</InfoLabel>
             <Select value={draft.scope ?? "per-sender"} onValueChange={(v) => update({ scope: v })}>

@@ -10,7 +10,7 @@ import (
 )
 
 // QuotaMethods handles quota.usage — returns per-user quota consumption for the dashboard.
-// Nil-safe: returns {enabled: false} when quotaChecker is nil (standalone mode).
+// Nil-safe: returns {enabled: false} when quotaChecker is nil (quota not configured).
 // When checker is nil but db is available, still queries today's summary from traces.
 type QuotaMethods struct {
 	checker *channels.QuotaChecker

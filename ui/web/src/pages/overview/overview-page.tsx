@@ -3,7 +3,6 @@ import { Activity, Bot, Hash, Radio, AlertTriangle } from "lucide-react";
 import { Link } from "react-router";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useWsCall } from "@/hooks/use-ws-call";
@@ -94,11 +93,6 @@ export function OverviewPage() {
         description="Gateway overview and quota usage"
         actions={
           <div className="flex items-center gap-2">
-            {health?.mode && (
-              <Badge variant={health.mode === "managed" ? "info" : "secondary"}>
-                {health.mode}
-              </Badge>
-            )}
             {health?.version && (
               <span className="text-xs text-muted-foreground">
                 v{health.version}

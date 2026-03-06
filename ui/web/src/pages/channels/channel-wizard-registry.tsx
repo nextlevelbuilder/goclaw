@@ -35,8 +35,8 @@ export interface WizardEditConfigProps {
   onConfigChange: (key: string, value: unknown) => void;
 }
 
-/** Standalone re-auth dialog rendered from the channels table */
-export interface StandaloneAuthDialogProps {
+/** Re-auth dialog rendered from the channels table */
+export interface ReauthDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   instanceId: string;
@@ -63,10 +63,10 @@ export const wizardEditConfigs: Record<string, ComponentType<WizardEditConfigPro
   zalo_personal: ZaloEditConfig,
 };
 
-/** Standalone auth dialogs for re-authentication from the channels table */
-export const standaloneAuthDialogs: Record<string, ComponentType<StandaloneAuthDialogProps>> = {
+/** Re-auth dialogs for re-authentication from the channels table */
+export const reauthDialogs: Record<string, ComponentType<ReauthDialogProps>> = {
   zalo_personal: ZaloPersonalQRDialog,
 };
 
 /** Set of channel types that support re-authentication from the table */
-export const channelsWithAuth = new Set(Object.keys(standaloneAuthDialogs));
+export const channelsWithAuth = new Set(Object.keys(reauthDialogs));

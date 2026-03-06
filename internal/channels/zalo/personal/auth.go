@@ -17,7 +17,7 @@ import (
 func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 	sess := protocol.NewSession()
 
-	// 1. Preloaded credentials (managed mode: from factory).
+	// 1. Preloaded credentials (from DB via factory).
 	if c.preloadedCreds != nil {
 		slog.Info("zalo_personal: attempting login with preloaded credentials")
 		if err := protocol.LoginWithCredentials(ctx, sess, *c.preloadedCreds); err != nil {
@@ -26,7 +26,7 @@ func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 		return sess, nil
 	}
 
-	// 2. Saved file credentials (standalone).
+	// 2. Saved file credentials (config-based).
 	credPath := c.resolveCredentialsPath()
 	if cred := loadCredentials(credPath); cred != nil {
 		slog.Info("zalo_personal: attempting login with saved credentials", "path", credPath)
@@ -56,7 +56,7 @@ func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 	return sess, nil
 }
 
-// SetPreloadedCredentials sets credentials from DB (managed mode factory).
+// SetPreloadedCredentials sets credentials from DB factory.
 func (c *Channel) SetPreloadedCredentials(cred *protocol.Credentials) {
 	c.preloadedCreds = cred
 }

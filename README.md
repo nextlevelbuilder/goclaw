@@ -53,7 +53,7 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Companion apps             | macOS, iOS, Android                  | Python SDK                                   | —                                     | Web dashboard                  |
 | Live Canvas / Voice        | ✅ (A2UI + TTS/STT)                  | —                                            | Voice transcription                   | TTS (4 providers)              |
 | LLM providers              | 10+                                  | 8 native + 29 compat                         | 13+                                   | **13+**                        |
-| Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (managed mode only)         |
+| Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (PostgreSQL)                |
 | Encrypted secrets          | — (env vars only)                    | ✅ ChaCha20-Poly1305                         | — (plaintext JSON)                    | ✅ AES-256-GCM in DB           |
 
 > **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, conversation handoff, evaluate-loop quality gates, runtime custom tools via API, and MCP protocol support.
@@ -84,14 +84,13 @@ graph TB
     end
 
     subgraph Storage
-        FILE["File-based<br/>(standalone)"]
-        PG["PostgreSQL 18 + pgvector<br/>(managed · multi-tenant)"]
+        PG["PostgreSQL 18 + pgvector<br/>(multi-tenant)"]
     end
 
     WEB --> WS
     TG & DC & FS & ZL & ZLP --> CM
     API --> REST
-    LOOP --> FILE & PG
+    LOOP --> PG
 ```
 
 ## Multi-Agent Orchestration
@@ -325,8 +324,8 @@ Quality gates validate agent output before it reaches users. Configured in agent
 - **Discord, WhatsApp** — Channel adapters with `/stop` and `/stopall` commands
 
 ### Knowledge & Memory
-- **Skills** — SKILL.md-based knowledge base with BM25 search + embedding hybrid search (managed mode)
-- **Long-term memory** — SQLite FTS5 + vector embeddings (standalone) or pgvector hybrid search (managed)
+- **Skills** — SKILL.md-based knowledge base with BM25 + embedding hybrid search (pgvector)
+- **Long-term memory** — pgvector hybrid search (full-text + vector similarity)
 
 ### Infrastructure
 - **Cron scheduling** — `at`, `every`, and cron expression syntax for scheduled agent tasks
@@ -342,7 +341,7 @@ Quality gates validate agent output before it reaches users. Configured in agent
 - **Credential scrubbing** — Auto-redact API keys, tokens, passwords from tool outputs
 - **Shell deny patterns** — Blocks `curl|sh`, reverse shells, `eval $()`, `base64|sh`
 - **SSRF protection** — DNS pinning, blocked private IPs, blocked hosts
-- **AES-256-GCM** — Encrypted API keys in database (managed mode)
+- **AES-256-GCM** — Encrypted API keys in database
 - **Browser pairing** — Token-free browser auth with admin-approved pairing codes
 
 ### Web Dashboard
@@ -383,27 +382,24 @@ The script creates `.env` from `.env.example`, auto-generates `GOCLAW_ENCRYPTION
 **2. Start services:**
 
 ```bash
-# Recommended: Managed mode + Web Dashboard (http://localhost:3000)
-docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.selfservice.yml up -d --build
+# Recommended: Gateway + Web Dashboard (http://localhost:3000)
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
 
-# Standalone mode (file-based, no database)
-docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --build
-
-# Managed mode without dashboard
-docker compose -f docker-compose.yml -f docker-compose.managed.yml up -d --build
+# Without dashboard
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
 
 # + OpenTelemetry tracing (Jaeger at http://localhost:16686)
-docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.otel.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.otel.yml up -d --build
 
 # + Tailscale (secure remote access)
-docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.tailscale.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.tailscale.yml up -d --build
 ```
 
-When `GOCLAW_*_API_KEY` environment variables are set, the gateway **auto-onboards** without interactive prompts — it detects the provider, generates a gateway token, and (in managed mode) connects to Postgres, runs migrations, and seeds default data.
+When `GOCLAW_*_API_KEY` environment variables are set, the gateway **auto-onboards** without interactive prompts — it detects the provider, generates a gateway token, connects to Postgres, runs migrations, and seeds default data.
 
 **Auto-onboard detects** the first available API key in priority order: OpenRouter → Anthropic → OpenAI → Groq → DeepSeek → Gemini → Mistral → xAI → MiniMax → Cohere → Perplexity. Override with `GOCLAW_PROVIDER` and `GOCLAW_MODEL`. Memory is auto-enabled with embedding support if an OpenAI, OpenRouter, or Gemini key is detected.
 
-**Minimum `.env` for managed mode:**
+**Minimum `.env`:**
 
 ```bash
 GOCLAW_OPENROUTER_API_KEY=sk-or-your-key    # Required: at least one provider key
@@ -414,47 +410,12 @@ GOCLAW_ENCRYPTION_KEY=...                    # Auto-generated by prepare-env.sh
 # POSTGRES_PASSWORD=your-secure-password     # Optional: defaults to "goclaw"
 ```
 
-## Deployment Modes
+## Deployment
 
-> **Recommendation:** Use **managed mode** for the best experience. Most of GoClaw's advanced features — agent teams, delegation, handoff, evaluate loops, quality gates, tracing, skills with embedding search, MCP integration, and the web dashboard — require managed mode. Standalone mode is suitable for quick evaluation or single-user setups only.
-
-| Capability | Standalone | Managed |
-|-----------|:----------:|:-------:|
-| Basic agent loop + tools | ✅ | ✅ |
-| Messaging channels | ✅ | ✅ |
-| Memory (FTS) | ✅ | ✅ |
-| Per-user isolation | — | ✅ |
-| Agent teams & delegation | — | ✅ |
-| Handoff & evaluate loops | — | ✅ |
-| Quality gates | — | ✅ |
-| Tracing with cache metrics | — | ✅ |
-| Skills (BM25 + pgvector) | Basic | ✅ Hybrid search |
-| MCP server integration | — | ✅ |
-| Custom tools (runtime API) | — | ✅ |
-| Web dashboard | — | ✅ |
-| API key encryption | — | ✅ AES-256-GCM |
-
-### Standalone
-
-File-based storage, no external database required. All users share the same workspace, sessions, and context files — no per-user isolation. Best suited for quick evaluation or single-user setups.
-
-```
-config.json          -> Non-secret settings
-.env.local           -> Secrets (API keys, tokens)
-~/.goclaw/
-  |-- workspace/     -> Shared agent workspace (SOUL.md, AGENTS.md, etc.)
-  |-- data/          -> Cron jobs, pairing data
-  |-- sessions/      -> Chat session history (shared across users)
-  +-- skills/        -> User-managed skills
-```
-
-### Managed (PostgreSQL) — Recommended
-
-All data in PostgreSQL with pgvector support. Designed for multi-user and multi-tenant deployments with **per-user isolation** — each user gets their own context files, session history, and workspace. Unlocks all advanced features.
+GoClaw requires PostgreSQL with pgvector. Designed for multi-user and multi-tenant deployments with **per-user isolation** — each user gets their own context files, session history, and workspace.
 
 ```bash
 # Set up database
-export GOCLAW_MODE=managed
 export GOCLAW_POSTGRES_DSN="postgres://user:pass@localhost:5432/goclaw?sslmode=disable"
 export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
@@ -465,7 +426,7 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ./goclaw
 ```
 
-**Managed mode adds:**
+**Features:**
 
 - Per-user context files and workspaces (`user_context_files` table)
 - Agent types: `open` (per-user workspace) vs `predefined` (shared context)
@@ -482,7 +443,7 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 ### Prerequisites
 
 - Go 1.25+
-- PostgreSQL 18 with pgvector (managed mode only)
+- PostgreSQL 18 with pgvector
 - Docker (optional, for sandbox and containerized deployment)
 
 ### Build
@@ -539,11 +500,11 @@ docker build --build-arg ENABLE_OTEL=true --build-arg ENABLE_TSNET=true -t gocla
 ./goclaw onboard
 ```
 
-The wizard configures: provider, model, gateway port, channels, memory, browser, TTS, tracing, and database mode. It generates `config.json` (no secrets) and `.env.local` (secrets only).
+The wizard configures: provider, model, gateway port, channels, memory, browser, TTS, and tracing. It generates `config.json` (no secrets) and `.env.local` (secrets only).
 
 ### Auto-Onboard (Docker / CI)
 
-When `GOCLAW_*_API_KEY` environment variables are set, the gateway automatically configures itself without interactive prompts. In managed mode, it retries Postgres connection (up to 5 attempts), runs migrations, and seeds default data.
+When `GOCLAW_*_API_KEY` environment variables are set, the gateway automatically configures itself without interactive prompts. It retries Postgres connection (up to 5 attempts), runs migrations, and seeds default data.
 
 ### Environment Variables
 
@@ -588,11 +549,10 @@ When `GOCLAW_*_API_KEY` environment variables are set, the gateway automatically
 </details>
 
 <details>
-<summary><strong>Database (Managed Mode)</strong></summary>
+<summary><strong>Database</strong></summary>
 
 | Variable                | Description                            |
 | ----------------------- | -------------------------------------- |
-| `GOCLAW_MODE`           | `standalone` or `managed`              |
 | `GOCLAW_POSTGRES_DSN`   | PostgreSQL connection string           |
 | `GOCLAW_ENCRYPTION_KEY` | AES-256-GCM key for API key encryption |
 | `GOCLAW_MIGRATIONS_DIR` | Path to migration files                |
@@ -669,8 +629,6 @@ goclaw                    Start gateway (default command)
 goclaw onboard            Interactive setup wizard
 goclaw version            Print version and protocol info
 goclaw doctor             System health check (includes schema status)
-                          In managed mode: reads providers and channels from DB
-                          In standalone mode: reads from config.json + env vars
 
 goclaw upgrade            Upgrade database schema and run data hooks
 goclaw upgrade --status   Show current vs required schema version
@@ -726,13 +684,12 @@ See [WebSocket Protocol](websocket-protocol.md) for the real-time RPC protocol (
 
 ## Docker Compose
 
-Eight composable files for different deployment scenarios:
+Composable files for different deployment scenarios:
 
 | File                             | Purpose                                            |
 | -------------------------------- | -------------------------------------------------- |
 | `docker-compose.yml`             | Base service definition                            |
-| `docker-compose.standalone.yml`  | File-based storage with persistent volumes         |
-| `docker-compose.managed.yml`     | PostgreSQL (pgvector/pgvector:pg18) + managed mode |
+| `docker-compose.postgres.yml`     | PostgreSQL (pgvector/pgvector:pg18)                |
 | `docker-compose.upgrade.yml`     | One-shot database upgrade service                  |
 | `docker-compose.selfservice.yml` | Web dashboard UI (nginx + React SPA)               |
 | `docker-compose.sandbox.yml`     | Docker-based code execution sandbox                |
@@ -745,26 +702,23 @@ Eight composable files for different deployment scenarios:
 # Prepare .env (auto-generates secrets, prompts for API key)
 chmod +x prepare-env.sh && ./prepare-env.sh
 
-# Standalone
-docker compose -f docker-compose.yml -f docker-compose.standalone.yml up -d --build
-
 # Managed (PostgreSQL)
-docker compose -f docker-compose.yml -f docker-compose.managed.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
 
 # Managed + Web Dashboard (http://localhost:3000)
 docker compose -f docker-compose.yml \
-  -f docker-compose.managed.yml \
+  -f docker-compose.postgres.yml \
   -f docker-compose.selfservice.yml up -d --build
 
 # Managed + Web Dashboard + OpenTelemetry (Jaeger UI at http://localhost:16686)
 docker compose -f docker-compose.yml \
-  -f docker-compose.managed.yml \
+  -f docker-compose.postgres.yml \
   -f docker-compose.selfservice.yml \
   -f docker-compose.otel.yml up -d --build
 
 # Managed + Tailscale (secure remote access via VPN mesh)
 docker compose -f docker-compose.yml \
-  -f docker-compose.managed.yml \
+  -f docker-compose.postgres.yml \
   -f docker-compose.tailscale.yml up -d --build
 
 # Check health
@@ -780,7 +734,7 @@ curl http://localhost:18790/health
 git pull
 
 # Rebuild and restart (auto-upgrades database on start)
-docker compose -f docker-compose.yml -f docker-compose.managed.yml \
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
   -f docker-compose.selfservice.yml up -d --build
 ```
 
@@ -790,19 +744,19 @@ Replace the compose files with whichever overlays you use (e.g. add `-f docker-c
 
 ```bash
 # Check current schema status
-docker compose -f docker-compose.yml -f docker-compose.managed.yml \
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
   -f docker-compose.upgrade.yml run --rm upgrade --status
 
 # Preview pending changes (dry-run)
-docker compose -f docker-compose.yml -f docker-compose.managed.yml \
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
   -f docker-compose.upgrade.yml run --rm upgrade --dry-run
 
 # Apply upgrade (schema migrations + data hooks), then remove container
-docker compose -f docker-compose.yml -f docker-compose.managed.yml \
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
   -f docker-compose.upgrade.yml run --rm upgrade
 
 # Then rebuild and restart the gateway with the new image
-docker compose -f docker-compose.yml -f docker-compose.managed.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
 ```
 
 ### Environment File (.env)
@@ -819,7 +773,7 @@ This creates `.env` with `GOCLAW_ENCRYPTION_KEY` and `GOCLAW_GATEWAY_TOKEN` pre-
 
 | Tool               | Group         | Description                                                  |
 | ------------------ | ------------- | ------------------------------------------------------------ |
-| `read_file`        | fs            | Read file contents (with virtual FS routing in managed mode) |
+| `read_file`        | fs            | Read file contents (with virtual FS routing)                 |
 | `write_file`       | fs            | Write/create files                                           |
 | `edit_file`        | fs            | Apply targeted edits to existing files                       |
 | `list_files`       | fs            | List directory contents                                      |
@@ -831,7 +785,7 @@ This creates `.env` with `GOCLAW_ENCRYPTION_KEY` and `GOCLAW_GATEWAY_TOKEN` pre-
 | `web_fetch`        | web           | Fetch and parse web content                                  |
 | `memory_search`    | memory        | Search long-term memory (FTS + vector)                       |
 | `memory_get`       | memory        | Retrieve memory entries                                      |
-| `skill_search`     | —             | Search skills (BM25 + embedding hybrid in managed mode)      |
+| `skill_search`     | —             | Search skills (BM25 + embedding hybrid)                      |
 | `image`            | —             | Image generation/manipulation                                |
 | `message`          | messaging     | Send messages to channels                                    |
 | `tts`              | —             | Text-to-Speech synthesis                                     |
@@ -906,7 +860,7 @@ This keeps the gateway inaccessible from the LAN while remaining reachable via T
 
 ```bash
 docker compose -f docker-compose.yml \
-  -f docker-compose.managed.yml \
+  -f docker-compose.postgres.yml \
   -f docker-compose.tailscale.yml up -d
 ```
 
@@ -920,7 +874,7 @@ Requires `GOCLAW_TSNET_AUTH_KEY` in your `.env` file. Tailscale state is persist
 - **Shell security**: Deny patterns for `curl|sh`, `wget|sh`, reverse shells, `eval`, `base64|sh`
 - **Network**: SSRF protection with blocked hosts + private IP + DNS pinning
 - **File system**: Path traversal prevention, workspace restriction
-- **Encryption**: AES-256-GCM for API keys in database (managed mode)
+- **Encryption**: AES-256-GCM for API keys in database
 - **Browser pairing**: Token-free browser auth with admin approval (pairing codes, auto-reconnect)
 - **Tailscale**: Optional VPN mesh listener for secure remote access (build-tag gated)
 
@@ -943,13 +897,13 @@ GOCLAW_OPENROUTER_API_KEY=sk-or-xxx go test -v ./tests/integration/ -timeout 120
 
 - **Agent management & configuration** — Create, update, delete agents via API and web dashboard. Agent types (`open` / `predefined`), agent routing, and lazy resolution all tested.
 - **Telegram channel** — Full integration tested: message handling, streaming responses, rich formatting (HTML, tables, code blocks), reactions, media, chunked long messages.
-- **Seed data & bootstrapping** — Auto-onboard, DB seeding, migration pipeline tested end-to-end in managed mode.
+- **Seed data & bootstrapping** — Auto-onboard, DB seeding, migration pipeline tested end-to-end.
 - **User-scope & content files** — Per-user context files (`user_context_files`), agent-level context files (`agent_context_files`), virtual FS interceptors, per-user seeding (`SeedUserFiles`), and user-agent profile tracking all implemented and tested.
 - **Core built-in tools** — File system tools (`read_file`, `write_file`, `edit_file`, `list_files`, `search`, `glob`), shell execution (`exec`), web tools (`web_search`, `web_fetch`), and session management tools tested in real agent loops.
-- **Memory system** — Long-term memory with search (FTS5 in standalone, pgvector hybrid in managed mode) implemented and tested with real conversations.
+- **Memory system** — Long-term memory with pgvector hybrid search (FTS + vector) implemented and tested with real conversations.
 - **Agent loop** — Think-act-observe cycle, tool use, session history, auto-summarization, and subagent spawning tested in production.
 - **WebSocket RPC protocol (v3)** — Connect handshake, chat streaming, event push all tested with web dashboard and integration tests.
-- **Store layer (PostgreSQL)** — All PG stores (sessions, agents, providers, skills, cron, pairing, tracing, memory, teams) implemented and running in managed mode.
+- **Store layer (PostgreSQL)** — All PG stores (sessions, agents, providers, skills, cron, pairing, tracing, memory, teams) implemented and running.
 - **Browser automation** — Rod/CDP integration for headless Chrome, tested in production agent workflows.
 - **Lane-based scheduler** — Main/subagent/delegate/cron lane isolation with concurrent execution tested. Group chats support up to 3 concurrent agent runs per session with adaptive throttle and deferred session writes for history isolation.
 - **Security hardening** — Rate limiting, prompt injection detection, CORS, shell deny patterns, SSRF protection, credential scrubbing all implemented and verified.

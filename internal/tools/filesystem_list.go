@@ -17,7 +17,7 @@ type ListFilesTool struct {
 	deniedPrefixes  []string // path prefixes to deny access to (e.g. .goclaw)
 	sandboxMgr      sandbox.Manager
 	contextFileIntc *ContextFileInterceptor // unused, satisfies InterceptorAware
-	memIntc         *MemoryInterceptor      // nil = no memory routing (standalone mode)
+	memIntc         *MemoryInterceptor      // nil = no memory routing
 }
 
 func (t *ListFilesTool) SetContextFileInterceptor(intc *ContextFileInterceptor) {
@@ -64,7 +64,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]interface{}
 		path = "."
 	}
 
-	// Virtual FS: route memory directory listing to DB (managed mode)
+	// Virtual FS: route memory directory listing to DB
 	if t.memIntc != nil {
 		if listing, handled, err := t.memIntc.ListFiles(ctx, path); handled {
 			if err != nil {
@@ -83,7 +83,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]interface{}
 		return t.executeInSandbox(ctx, path, sandboxKey)
 	}
 
-	// Host execution — use per-user workspace from context if available (managed mode)
+	// Host execution — use per-user workspace from context if available
 	workspace := ToolWorkspaceFromCtx(ctx)
 	if workspace == "" {
 		workspace = t.workspace

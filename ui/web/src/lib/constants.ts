@@ -28,6 +28,7 @@ export const ROUTES = {
   BUILTIN_TOOLS: "/builtin-tools",
   MCP: "/mcp",
   TTS: "/tts",
+  SETUP: "/setup",
 } as const;
 
 export const LOCAL_STORAGE_KEYS = {

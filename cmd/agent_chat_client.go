@@ -21,9 +21,7 @@ func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey stri
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "WebSocket connect failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Falling back to standalone mode\n")
-		runStandaloneMode(cfg, agentName, message, sessionKey)
-		return
+		os.Exit(1)
 	}
 	defer conn.Close()
 

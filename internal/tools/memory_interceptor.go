@@ -60,7 +60,7 @@ func isMemoryPath(path, workspace string) bool {
 }
 
 // MemoryInterceptor routes memory file reads/writes to the MemoryStore.
-// Used in managed mode to keep MEMORY.md and memory/* in Postgres.
+// Keeps MEMORY.md and memory/* in Postgres.
 type MemoryInterceptor struct {
 	memStore  store.MemoryStore
 	workspace string
@@ -80,7 +80,7 @@ func (m *MemoryInterceptor) ReadFile(ctx context.Context, path string) (string, 
 
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID == uuid.Nil {
-		return "", false, nil // not in managed mode context
+		return "", false, nil // no agent context
 	}
 
 	// Normalize absolute path to workspace-relative for DB storage
@@ -104,7 +104,7 @@ func (m *MemoryInterceptor) ReadFile(ctx context.Context, path string) (string, 
 }
 
 // WriteFile attempts to write a memory file to the DB (+ re-index chunks for .md files).
-// Non-.md files (e.g. heartbeat-state.json) are stored but NOT indexed/chunked/embedded,
+// Non-.md files are stored but NOT indexed/chunked/embedded,
 // matching TS behavior where only .md files are indexed.
 // Returns (true, nil) if handled, or (false, nil) if not a memory path.
 func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string) (bool, error) {
@@ -114,7 +114,7 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID == uuid.Nil {
-		return false, nil // not in managed mode context
+		return false, nil // no agent context
 	}
 
 	// Normalize absolute path to workspace-relative for DB storage

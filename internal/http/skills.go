@@ -25,7 +25,7 @@ const maxSkillUploadSize = 20 << 20 // 20 MB
 
 var slugRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$`)
 
-// SkillsHandler handles skill management HTTP endpoints (managed mode).
+// SkillsHandler handles skill management HTTP endpoints.
 type SkillsHandler struct {
 	skills  *pg.PGSkillStore
 	baseDir string // filesystem base for skill content

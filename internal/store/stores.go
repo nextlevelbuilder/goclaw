@@ -3,22 +3,21 @@ package store
 import "database/sql"
 
 // Stores is the top-level container for all storage backends.
-// In standalone mode, managed-only stores (Agents, Providers, Tracing, MCP) are nil.
 type Stores struct {
-	DB        *sql.DB          // underlying connection (nil in standalone mode)
+	DB        *sql.DB // underlying connection
 	Sessions  SessionStore
 	Memory    MemoryStore
 	Cron      CronStore
 	Pairing   PairingStore
 	Skills    SkillStore
-	Agents    AgentStore      // nil in standalone mode
-	Providers ProviderStore   // nil in standalone mode
-	Tracing   TracingStore    // nil in standalone mode
-	MCP              MCPServerStore       // nil in standalone mode
-	CustomTools      CustomToolStore      // nil in standalone mode
-	ChannelInstances ChannelInstanceStore // nil in standalone mode
-	ConfigSecrets    ConfigSecretsStore   // nil in standalone mode
-	AgentLinks       AgentLinkStore       // nil in standalone mode
-	Teams            TeamStore            // nil in standalone mode
-	BuiltinTools     BuiltinToolStore     // nil in standalone mode
+	Agents    AgentStore
+	Providers ProviderStore
+	Tracing   TracingStore
+	MCP              MCPServerStore
+	CustomTools      CustomToolStore
+	ChannelInstances ChannelInstanceStore
+	ConfigSecrets    ConfigSecretsStore
+	AgentLinks       AgentLinkStore
+	Teams            TeamStore
+	BuiltinTools     BuiltinToolStore
 }

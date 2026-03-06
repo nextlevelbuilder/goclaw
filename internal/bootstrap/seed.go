@@ -18,7 +18,6 @@ var templateFiles = []string{
 	ToolsFile,
 	IdentityFile,
 	UserFile,
-	HeartbeatFile,
 }
 
 // ReadTemplate returns the content of an embedded template file.

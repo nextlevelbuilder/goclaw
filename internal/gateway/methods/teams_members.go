@@ -22,7 +22,7 @@ type teamsAddMemberParams struct {
 
 func (m *TeamsMethods) handleAddMember(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 
@@ -108,7 +108,7 @@ type teamsRemoveMemberParams struct {
 
 func (m *TeamsMethods) handleRemoveMember(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.teamStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "teams not configured"))
 		return
 	}
 

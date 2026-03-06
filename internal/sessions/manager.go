@@ -335,7 +335,6 @@ func (m *Manager) List(agentID string) []SessionInfo {
 
 // LastUsedChannel finds the most recently updated channel session for an agent
 // and extracts channel + chatID from the key. Returns ("", "") if none found.
-// Used for heartbeat delivery target resolution (target="last").
 func (m *Manager) LastUsedChannel(agentID string) (channel, chatID string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -348,9 +347,9 @@ func (m *Manager) LastUsedChannel(agentID string) (channel, chatID string) {
 		if !strings.HasPrefix(key, prefix) {
 			continue
 		}
-		// Skip non-channel sessions (cron, subagent, heartbeat)
+		// Skip non-channel sessions (cron, subagent)
 		rest := key[len(prefix):]
-		if strings.HasPrefix(rest, "cron:") || strings.HasPrefix(rest, "subagent:") || strings.HasPrefix(rest, "heartbeat:") {
+		if strings.HasPrefix(rest, "cron:") || strings.HasPrefix(rest, "subagent:") {
 			continue
 		}
 		if s.Updated.After(bestUpdated) {

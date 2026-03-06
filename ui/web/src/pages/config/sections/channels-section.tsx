@@ -85,8 +85,8 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Channels</CardTitle>
-        <CardDescription>Messaging channel integrations</CardDescription>
+        <CardTitle className="text-base">Channel Defaults</CardTitle>
+        <CardDescription>Config-level channel defaults. Manage channel instances on the Channels page.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {activeChannels.length === 0 ? (

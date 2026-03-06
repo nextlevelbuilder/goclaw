@@ -29,22 +29,22 @@ type ReadFileTool struct {
 	allowedPrefixes  []string              // extra allowed path prefixes (e.g. skills dirs)
 	deniedPrefixes   []string              // path prefixes to deny access to (e.g. .goclaw)
 	sandboxMgr       sandbox.Manager       // nil = direct host access
-	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing (standalone mode)
-	memIntc          *MemoryInterceptor      // nil = no memory routing (standalone mode)
-	groupWriterCache *store.GroupWriterCache  // nil = no group read restriction (standalone mode)
+	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
+	memIntc          *MemoryInterceptor      // nil = no memory routing
+	groupWriterCache *store.GroupWriterCache  // nil = no group read restriction
 }
 
-// SetContextFileInterceptor enables virtual FS routing for context files (managed mode).
+// SetContextFileInterceptor enables virtual FS routing for context files.
 func (t *ReadFileTool) SetContextFileInterceptor(intc *ContextFileInterceptor) {
 	t.contextFileIntc = intc
 }
 
-// SetMemoryInterceptor enables virtual FS routing for memory files (managed mode).
+// SetMemoryInterceptor enables virtual FS routing for memory files.
 func (t *ReadFileTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 	t.memIntc = intc
 }
 
-// SetGroupWriterCache enables group read restriction for SOUL.md/AGENTS.md (managed mode).
+// SetGroupWriterCache enables group read restriction for SOUL.md/AGENTS.md.
 func (t *ReadFileTool) SetGroupWriterCache(c *store.GroupWriterCache) {
 	t.groupWriterCache = c
 }
@@ -92,7 +92,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return ErrorResult("path is required")
 	}
 
-	// Group read restriction: block non-writers from reading SOUL.md/AGENTS.md (managed mode)
+	// Group read restriction: block non-writers from reading SOUL.md/AGENTS.md
 	if t.groupWriterCache != nil {
 		base := filepath.Base(path)
 		if base == bootstrap.SoulFile || base == bootstrap.AgentsFile {
@@ -102,7 +102,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 		}
 	}
 
-	// Virtual FS: route context files to DB (managed mode)
+	// Virtual FS: route context files to DB
 	if t.contextFileIntc != nil {
 		if content, handled, err := t.contextFileIntc.ReadFile(ctx, path); handled {
 			if err != nil {
@@ -122,7 +122,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return SilentResult(hint)
 	}
 
-	// Virtual FS: route memory files to DB (managed mode)
+	// Virtual FS: route memory files to DB
 	if t.memIntc != nil {
 		if content, handled, err := t.memIntc.ReadFile(ctx, path); handled {
 			if err != nil {
@@ -141,7 +141,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]interface{})
 		return t.executeInSandbox(ctx, path, sandboxKey)
 	}
 
-	// Host execution — use per-user workspace from context if available (managed mode)
+	// Host execution — use per-user workspace from context if available
 	workspace := ToolWorkspaceFromCtx(ctx)
 	if workspace == "" {
 		workspace = t.workspace

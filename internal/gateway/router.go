@@ -168,10 +168,7 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 	s := r.server
 	uptimeMs := time.Since(s.startedAt).Milliseconds()
 
-	mode := "standalone"
-	if s.cfg.Database.Mode == "managed" {
-		mode = "managed"
-	}
+	mode := "managed"
 
 	// Database status (real ping)
 	dbStatus := "n/a"
@@ -231,7 +228,7 @@ func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *pr
 		sessionCount = len(r.server.sessions.List(""))
 	}
 
-	// In managed mode, agents are lazily resolved — router only has loaded agents.
+	// Agents are lazily resolved — router only has loaded agents.
 	// Query the DB store for the real total count.
 	agentTotal := len(agents)
 	if r.server.agentStore != nil {

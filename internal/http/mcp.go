@@ -12,7 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// MCPHandler handles MCP server management HTTP endpoints (managed mode).
+// MCPHandler handles MCP server management HTTP endpoints.
 type MCPHandler struct {
 	store  store.MCPServerStore
 	token  string

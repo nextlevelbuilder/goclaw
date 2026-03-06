@@ -54,6 +54,13 @@ export function ProviderModelSelect({
   const { providers } = useProviders();
   const enabledProviders = providers.filter((p) => p.enabled);
 
+  // Auto-select first enabled provider when none is set
+  useEffect(() => {
+    if (!provider && enabledProviders.length > 0) {
+      onProviderChange(enabledProviders[0]!.name);
+    }
+  }, [provider, enabledProviders, onProviderChange]);
+
   const selectedProviderId = useMemo(
     () => enabledProviders.find((p) => p.name === provider)?.id,
     [enabledProviders, provider],

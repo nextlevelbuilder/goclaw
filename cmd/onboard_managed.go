@@ -36,7 +36,6 @@ func testPostgresConnection(dsn string) error {
 func seedManagedData(dsn string, cfg *config.Config) error {
 	storeCfg := store.StoreConfig{
 		PostgresDSN:   dsn,
-		Mode:          "managed",
 		EncryptionKey: os.Getenv("GOCLAW_ENCRYPTION_KEY"),
 	}
 	stores, err := pg.NewPGStores(storeCfg)

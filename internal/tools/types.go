@@ -44,18 +44,18 @@ type AsyncTool interface {
 
 // --- Configuration interfaces for reducing type assertions in cmd/ wiring ---
 
-// InterceptorAware tools can receive ContextFile and Memory interceptors (managed mode).
+// InterceptorAware tools can receive ContextFile and Memory interceptors.
 type InterceptorAware interface {
 	SetContextFileInterceptor(*ContextFileInterceptor)
 	SetMemoryInterceptor(*MemoryInterceptor)
 }
 
-// GroupWriterAware tools receive a GroupWriterCache for group permission checks (managed mode).
+// GroupWriterAware tools receive a GroupWriterCache for group permission checks.
 type GroupWriterAware interface {
 	SetGroupWriterCache(*store.GroupWriterCache)
 }
 
-// MemoryStoreAware tools can receive a MemoryStore for managed-mode queries.
+// MemoryStoreAware tools can receive a MemoryStore for Postgres queries.
 type MemoryStoreAware interface {
 	SetMemoryStore(store.MemoryStore)
 }

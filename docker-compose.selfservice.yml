@@ -1,7 +1,7 @@
 # Self-service overlay — adds web dashboard UI (nginx + React SPA).
 #
 # Recommended usage:
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.selfservice.yml up -d --build
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
 #
 # Dashboard: http://localhost:3000
 

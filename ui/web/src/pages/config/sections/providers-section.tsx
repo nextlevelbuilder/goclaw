@@ -85,8 +85,8 @@ export function ProvidersSection({ data, onSave, saving }: Props) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">LLM Providers</CardTitle>
-        <CardDescription>API keys are managed via environment variables</CardDescription>
+        <CardTitle className="text-base">LLM Provider Defaults</CardTitle>
+        <CardDescription>Config-level provider settings. Manage providers on the Providers page.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
         {activeProviders.length === 0 ? (

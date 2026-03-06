@@ -48,32 +48,32 @@ type serverState struct {
 }
 
 // Manager orchestrates MCP server connections and tool registration.
-// Supports two modes:
-//   - Standalone: reads from config.MCPServerConfig map (shared across all agents)
-//   - Managed: queries MCPServerStore per agent+user for permission-filtered servers
+// Supports two sources:
+//   - Config-based: reads from config.MCPServerConfig map (shared across all agents)
+//   - DB-backed: queries MCPServerStore per agent+user for permission-filtered servers
 type Manager struct {
 	mu       sync.RWMutex
 	servers  map[string]*serverState
 	registry *tools.Registry
 
-	// Standalone mode
+	// Config-based servers
 	configs map[string]*config.MCPServerConfig
 
-	// Managed mode
+	// DB-backed servers
 	store store.MCPServerStore
 }
 
 // ManagerOption configures the Manager.
 type ManagerOption func(*Manager)
 
-// WithConfigs sets static MCP server configs (standalone mode).
+// WithConfigs sets static MCP server configs from the config file.
 func WithConfigs(cfgs map[string]*config.MCPServerConfig) ManagerOption {
 	return func(m *Manager) {
 		m.configs = cfgs
 	}
 }
 
-// WithStore sets the MCPServerStore for managed mode.
+// WithStore sets the MCPServerStore for DB-backed MCP server loading.
 func WithStore(s store.MCPServerStore) ManagerOption {
 	return func(m *Manager) {
 		m.store = s
@@ -92,7 +92,7 @@ func NewManager(registry *tools.Registry, opts ...ManagerOption) *Manager {
 	return m
 }
 
-// Start connects to all configured MCP servers (standalone mode).
+// Start connects to all config-file MCP servers.
 // Non-fatal: logs warnings for servers that fail to connect and continues.
 func (m *Manager) Start(ctx context.Context) error {
 	if len(m.configs) == 0 {
@@ -118,7 +118,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	return nil
 }
 
-// LoadForAgent connects MCP servers accessible by a specific agent+user (managed mode).
+// LoadForAgent connects MCP servers accessible by a specific agent+user.
 // Previously registered MCP tools for this manager are cleared and reloaded.
 func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID string) error {
 	if m.store == nil {

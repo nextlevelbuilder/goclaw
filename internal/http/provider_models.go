@@ -53,6 +53,8 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models, err = fetchGeminiModels(ctx, p.APIKey)
 	case "bailian":
 		models = bailianModels()
+	case "minimax_native":
+		models = minimaxModels()
 	default:
 		// All other types use OpenAI-compatible /models endpoint
 		apiBase := strings.TrimRight(p.APIBase, "/")
@@ -160,6 +162,16 @@ func bailianModels() []ModelInfo {
 		{ID: "qwen3-coder-next", Name: "Qwen 3 Coder Next"},
 		{ID: "qwen3-coder-plus", Name: "Qwen 3 Coder Plus"},
 		{ID: "glm-4.7", Name: "GLM 4.7"},
+	}
+}
+
+// minimaxModels returns a hardcoded list of MiniMax models.
+// MiniMax does not expose a /v1/models endpoint.
+func minimaxModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "MiniMax-Text-01", Name: "MiniMax Text 01"},
+		{ID: "MiniMax-M1", Name: "MiniMax M1"},
+		{ID: "MiniMax-M2.5", Name: "MiniMax M2.5"},
 	}
 }
 

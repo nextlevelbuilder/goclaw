@@ -47,9 +47,8 @@ func runUpgradeStatus() error {
 
 	fmt.Printf("  App version:     %s (protocol %d)\n", Version, protocol.ProtocolVersion)
 
-	if cfg.Database.Mode != "managed" || cfg.Database.PostgresDSN == "" {
-		fmt.Println("  Mode:            standalone (no database)")
-		fmt.Println("  Status:          N/A (no schema migrations needed)")
+	if cfg.Database.PostgresDSN == "" {
+		fmt.Println("  Database:        NOT CONFIGURED (set GOCLAW_POSTGRES_DSN)")
 		return nil
 	}
 
@@ -107,8 +106,8 @@ func runUpgrade(dryRun bool) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	if cfg.Database.Mode != "managed" || cfg.Database.PostgresDSN == "" {
-		fmt.Println("Standalone mode — no database migrations needed.")
+	if cfg.Database.PostgresDSN == "" {
+		fmt.Println("Database not configured. Set GOCLAW_POSTGRES_DSN to enable migrations.")
 		return nil
 	}
 

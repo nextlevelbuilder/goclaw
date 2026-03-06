@@ -16,7 +16,6 @@ import (
 )
 
 // buildEnsureUserFiles creates the per-user file seeding callback.
-// Used by both managed and standalone modes — no mode-specific logic.
 // Seeds per-user context files on first chat (new user profile).
 func buildEnsureUserFiles(as store.AgentStore, msgBus *bus.MessageBus) agent.EnsureUserFilesFunc {
 	return func(ctx context.Context, agentID uuid.UUID, userID, agentType, workspace, channel string) (string, error) {
@@ -64,7 +63,6 @@ func buildBootstrapCleanup(as store.AgentStore) agent.BootstrapCleanupFunc {
 }
 
 // buildContextFileLoader creates the per-request context file loader callback.
-// Used by both managed and standalone modes — no mode-specific logic.
 // Delegates to the ContextFileInterceptor for type-aware routing.
 func buildContextFileLoader(intc *tools.ContextFileInterceptor) agent.ContextFileLoaderFunc {
 	return func(ctx context.Context, agentID uuid.UUID, userID, agentType string) []bootstrap.ContextFile {

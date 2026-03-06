@@ -292,7 +292,6 @@ flowchart TD
 | Method | Description |
 |--------|-------------|
 | `logs.tail` | Tail gateway logs |
-| `heartbeat` | Trigger heartbeat check |
 
 ---
 

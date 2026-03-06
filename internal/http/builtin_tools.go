@@ -10,7 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// BuiltinToolsHandler handles built-in tool management endpoints (managed mode).
+// BuiltinToolsHandler handles built-in tool management endpoints.
 // Built-in tools are seeded at startup; only enabled and settings are editable.
 type BuiltinToolsHandler struct {
 	store  store.BuiltinToolStore

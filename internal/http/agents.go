@@ -14,7 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// AgentsHandler handles agent CRUD and sharing endpoints (managed mode only).
+// AgentsHandler handles agent CRUD and sharing endpoints.
 type AgentsHandler struct {
 	agents   store.AgentStore
 	token    string

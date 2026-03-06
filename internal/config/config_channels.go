@@ -112,7 +112,7 @@ type ZaloPersonalConfig struct {
 	DMPolicy        string              `json:"dm_policy,omitempty"`        // "pairing" (default), "allowlist", "open", "disabled"
 	GroupPolicy     string              `json:"group_policy,omitempty"`     // "open" (default), "allowlist", "disabled"
 	RequireMention  *bool               `json:"require_mention,omitempty"`  // require @bot mention in groups (default true)
-	CredentialsPath string              `json:"credentials_path,omitempty"` // path to saved cookies JSON (standalone)
+	CredentialsPath string              `json:"credentials_path,omitempty"` // path to saved cookies JSON
 }
 
 type FeishuConfig struct {
@@ -189,7 +189,7 @@ type QuotaWindow struct {
 // IsZero returns true if no limits are set.
 func (w QuotaWindow) IsZero() bool { return w.Hour == 0 && w.Day == 0 && w.Week == 0 }
 
-// QuotaConfig configures per-user/group request quotas (managed mode only).
+// QuotaConfig configures per-user/group request quotas.
 // Config merge priority: Groups > Channels > Providers > Default.
 type QuotaConfig struct {
 	Enabled   bool                   `json:"enabled"`
@@ -210,7 +210,7 @@ type GatewayConfig struct {
 	RateLimitRPM      int          `json:"rate_limit_rpm,omitempty"`      // rate limit: requests per minute per user (default 20, 0 = disabled)
 	InjectionAction   string       `json:"injection_action,omitempty"`    // prompt injection action: "log", "warn" (default), "block", "off"
 	InboundDebounceMs int          `json:"inbound_debounce_ms,omitempty"` // merge rapid messages from same sender (default 1000ms, -1 = disabled)
-	Quota             *QuotaConfig `json:"quota,omitempty"`               // per-user/group request quotas (managed mode only)
+	Quota             *QuotaConfig `json:"quota,omitempty"`               // per-user/group request quotas
 }
 
 // ToolsConfig controls tool availability, policy, and web search.

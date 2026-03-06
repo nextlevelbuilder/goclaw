@@ -24,13 +24,12 @@ type AgentsMethods struct {
 	cfg         *config.Config
 	cfgPath     string
 	workspace   string
-	agentStore  store.AgentStore             // nil in standalone mode
-	interceptor *tools.ContextFileInterceptor // nil in standalone mode; invalidated on file writes
-	isManaged   bool
+	agentStore  store.AgentStore
+	interceptor *tools.ContextFileInterceptor // invalidated on file writes
 }
 
-func NewAgentsMethods(agents *agent.Router, cfg *config.Config, cfgPath, workspace string, agentStore store.AgentStore, isManaged bool, interceptor *tools.ContextFileInterceptor) *AgentsMethods {
-	return &AgentsMethods{agents: agents, cfg: cfg, cfgPath: cfgPath, workspace: workspace, agentStore: agentStore, isManaged: isManaged, interceptor: interceptor}
+func NewAgentsMethods(agents *agent.Router, cfg *config.Config, cfgPath, workspace string, agentStore store.AgentStore, interceptor *tools.ContextFileInterceptor) *AgentsMethods {
+	return &AgentsMethods{agents: agents, cfg: cfg, cfgPath: cfgPath, workspace: workspace, agentStore: agentStore, interceptor: interceptor}
 }
 
 // isOwnerUser checks if the given user ID is in the configured owner IDs.
@@ -107,8 +106,7 @@ func (m *AgentsMethods) handleAgentWait(_ context.Context, client *gateway.Clien
 }
 
 func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	// In managed mode, query the store so ALL accessible agents appear (not just router-cached ones).
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		userID := client.UserID()
 		if userID == "" {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "user context required"))
@@ -149,7 +147,7 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
-	// Standalone mode: return router-cached agents.
+	// Fallback: return router-cached agents.
 	infos := m.agents.ListInfo()
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]interface{}{
 		"agents": infos,
@@ -167,7 +165,7 @@ func (m *AgentsMethods) handleCreate(_ context.Context, client *gateway.Client, 
 		Avatar    string   `json:"avatar"`
 		AgentType string   `json:"agent_type"`              // "open" (default) or "predefined"
 		OwnerIDs  []string `json:"owner_ids,omitempty"`     // first entry used as DB owner_id; falls back to "system"
-		// Per-agent config overrides (managed mode only)
+		// Per-agent config overrides
 		ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 		SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`
 		SandboxConfig    json.RawMessage `json:"sandbox_config,omitempty"`
@@ -204,7 +202,7 @@ func (m *AgentsMethods) handleCreate(_ context.Context, client *gateway.Client, 
 		ws = config.ExpandHome(ws)
 	}
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: create agent in DB ---
 		ctx := context.Background()
 
@@ -259,7 +257,7 @@ func (m *AgentsMethods) handleCreate(_ context.Context, client *gateway.Client, 
 		// Invalidate router cache so resolver re-loads from DB
 		m.agents.InvalidateAgent(agentID)
 	} else {
-		// --- Standalone mode: config.json + filesystem ---
+		// --- Fallback: config.json + filesystem ---
 		if _, ok := m.cfg.Agents.List[agentID]; ok {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "agent already exists: "+agentID))
 			return
@@ -314,7 +312,7 @@ func (m *AgentsMethods) handleUpdate(_ context.Context, client *gateway.Client, 
 		Workspace string `json:"workspace"`
 		Model     string `json:"model"`
 		Avatar    string `json:"avatar"`
-		// Per-agent config overrides (managed mode only)
+		// Per-agent config overrides
 		ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 		SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`
 		SandboxConfig    json.RawMessage `json:"sandbox_config,omitempty"`
@@ -332,7 +330,7 @@ func (m *AgentsMethods) handleUpdate(_ context.Context, client *gateway.Client, 
 		return
 	}
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: update agent in DB ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -397,7 +395,7 @@ func (m *AgentsMethods) handleUpdate(_ context.Context, client *gateway.Client, 
 
 		m.agents.InvalidateAgent(params.AgentID)
 	} else {
-		// --- Standalone mode: config.json ---
+		// --- Fallback: config.json ---
 		spec, ok := m.cfg.Agents.List[params.AgentID]
 		if !ok {
 			if params.AgentID != "default" {
@@ -473,7 +471,7 @@ func (m *AgentsMethods) handleDelete(_ context.Context, client *gateway.Client, 
 
 	var removedBindings int
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: delete from DB ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -495,7 +493,7 @@ func (m *AgentsMethods) handleDelete(_ context.Context, client *gateway.Client, 
 			os.RemoveAll(ag.Workspace)
 		}
 	} else {
-		// --- Standalone mode: config.json ---
+		// --- Fallback: config.json ---
 		spec, ok := m.cfg.Agents.List[params.AgentID]
 		if !ok {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, "agent not found: "+params.AgentID))

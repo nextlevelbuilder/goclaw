@@ -15,7 +15,7 @@ type SessionData struct {
 	Created  time.Time           `json:"created"`
 	Updated  time.Time           `json:"updated"`
 
-	AgentUUID uuid.UUID `json:"agentUUID,omitempty"` // DB agent UUID (managed mode)
+	AgentUUID uuid.UUID `json:"agentUUID,omitempty"` // DB agent UUID
 	UserID    string    `json:"userID,omitempty"`    // External user ID (e.g. Telegram user ID)
 
 	Model                      string `json:"model,omitempty"`

@@ -65,16 +65,10 @@ type TailscaleConfig struct {
 	EnableTLS bool   `json:"enable_tls,omitempty"` // use ListenTLS for auto HTTPS certs
 }
 
-// DatabaseConfig configures Postgres for managed mode.
+// DatabaseConfig configures the PostgreSQL connection.
 // PostgresDSN is NEVER read from config.json (secret) — only from env GOCLAW_POSTGRES_DSN.
 type DatabaseConfig struct {
-	PostgresDSN string `json:"-"`              // from env GOCLAW_POSTGRES_DSN only
-	Mode        string `json:"mode,omitempty"` // "standalone" (default) or "managed"
-}
-
-// IsManagedMode returns true if the gateway is running in managed (multi-tenant) mode.
-func (c *Config) IsManagedMode() bool {
-	return c.Database.Mode == "managed" && c.Database.PostgresDSN != ""
+	PostgresDSN string `json:"-"` // from env GOCLAW_POSTGRES_DSN only
 }
 
 // SkillsConfig configures the skills storage system.
@@ -126,8 +120,6 @@ type AgentDefaults struct {
 	Memory              *MemoryConfig         `json:"memory,omitempty"`
 	Compaction          *CompactionConfig      `json:"compaction,omitempty"`
 	ContextPruning      *ContextPruningConfig  `json:"contextPruning,omitempty"`
-	Heartbeat           *HeartbeatConfig       `json:"heartbeat,omitempty"`
-
 	// Bootstrap context truncation limits (matching TS bootstrapMaxChars / bootstrapTotalMaxChars)
 	BootstrapMaxChars      int `json:"bootstrapMaxChars,omitempty"`      // per-file max before truncation (default 20000)
 	BootstrapTotalMaxChars int `json:"bootstrapTotalMaxChars,omitempty"` // total budget across all files (default 24000)
@@ -176,26 +168,6 @@ type ContextPruningSoftTrim struct {
 type ContextPruningHardClear struct {
 	Enabled     *bool  `json:"enabled,omitempty"`     // default true
 	Placeholder string `json:"placeholder,omitempty"` // replacement text (default "[Old tool result content cleared]")
-}
-
-// HeartbeatConfig configures periodic agent heartbeats.
-// Matching TS agents.defaults.heartbeat.
-type HeartbeatConfig struct {
-	Every       string             `json:"every,omitempty"`       // duration string: "30m", "1h", "0m"=disabled (default "30m")
-	ActiveHours *ActiveHoursConfig `json:"activeHours,omitempty"` // restrict to time window
-	Model       string             `json:"model,omitempty"`       // optional model override
-	Session     string             `json:"session,omitempty"`     // "main" (default) or explicit session key
-	Target      string             `json:"target,omitempty"`      // "last" (default), "none", or channel ID
-	To          string             `json:"to,omitempty"`          // optional recipient override (chat ID)
-	Prompt      string             `json:"prompt,omitempty"`      // custom heartbeat prompt
-	AckMaxChars int                `json:"ackMaxChars,omitempty"` // max chars after HEARTBEAT_OK before dropping (default 300)
-}
-
-// ActiveHoursConfig restricts heartbeats to a time window.
-type ActiveHoursConfig struct {
-	Start    string `json:"start,omitempty"`    // "HH:MM" inclusive
-	End      string `json:"end,omitempty"`      // "HH:MM" exclusive
-	Timezone string `json:"timezone,omitempty"` // IANA timezone (default: local)
 }
 
 // MemoryConfig configures the agent memory system (SQLite + FTS5 + optional embeddings).

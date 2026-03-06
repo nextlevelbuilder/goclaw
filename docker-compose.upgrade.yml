@@ -2,13 +2,13 @@
 #
 # Usage:
 #   # Preview changes (dry-run):
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.upgrade.yml run --rm upgrade --dry-run
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml run --rm upgrade --dry-run
 #
 #   # Apply upgrade:
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.upgrade.yml run --rm upgrade
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml run --rm upgrade
 #
 #   # Check status:
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.upgrade.yml run --rm upgrade --status
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml run --rm upgrade --status
 #
 # The upgrade service runs goclaw upgrade and exits. Use --rm to auto-remove the container.
 
@@ -23,7 +23,6 @@ services:
       - path: .env
         required: false
     environment:
-      - GOCLAW_MODE=managed
       - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
       - GOCLAW_CONFIG=/app/data/config.json
       - GOCLAW_MIGRATIONS_DIR=/app/migrations

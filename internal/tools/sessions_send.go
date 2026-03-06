@@ -110,7 +110,7 @@ func (t *SessionsSendTool) Execute(ctx context.Context, args map[string]interfac
 func resolveAgentIDString(ctx context.Context) string {
 	id := store.AgentIDFromContext(ctx)
 	if id.String() == "00000000-0000-0000-0000-000000000000" {
-		return "" // standalone mode
+		return "" // no agent ID in context
 	}
 	return id.String()
 }

@@ -70,7 +70,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			agentID = resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
 		}
 
-		// Check handoff routing override (managed mode only)
+		// Check handoff routing override
 		if teamStore != nil && msg.AgentID == "" {
 			if route, _ := teamStore.GetHandoffRoute(ctx, msg.Channel, msg.ChatID); route != nil {
 				agentID = route.ToAgentKey
@@ -126,7 +126,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			userID = fmt.Sprintf("group:%s:%s", msg.Channel, groupID)
 		}
 
-		// --- Quota check (managed mode only) ---
+		// --- Quota check ---
 		if quotaChecker != nil {
 			qResult := quotaChecker.Check(ctx, userID, msg.Channel, agentLoop.ProviderName())
 			if !qResult.Allowed {

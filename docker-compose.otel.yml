@@ -1,7 +1,7 @@
 # OTel overlay — rebuilds with OTel support + adds Jaeger for trace visualization.
 #
-# Usage (with managed mode):
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.otel.yml up
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.otel.yml up
 #
 # Jaeger UI: http://localhost:16686
 

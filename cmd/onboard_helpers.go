@@ -59,12 +59,12 @@ func onboardWriteEnvFile(path string, cfg *config.Config, primaryKey, primaryEnv
 		lines = append(lines, fmt.Sprintf("export GOCLAW_FEISHU_APP_SECRET=%s", cfg.Channels.Feishu.AppSecret))
 	}
 
-	// Database (managed mode)
+	// Database
 	if cfg.Database.PostgresDSN != "" {
 		lines = append(lines, fmt.Sprintf("export GOCLAW_POSTGRES_DSN=%s", cfg.Database.PostgresDSN))
 	}
 
-	// Encryption key for API keys in DB (managed mode)
+	// Encryption key for API keys in DB
 	if encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY"); encKey != "" {
 		lines = append(lines, fmt.Sprintf("export GOCLAW_ENCRYPTION_KEY=%s", encKey))
 	}

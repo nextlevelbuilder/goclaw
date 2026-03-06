@@ -18,7 +18,7 @@ type MemorySearchResult struct {
 	Score     float64 `json:"score"`
 	Snippet   string  `json:"snippet"`
 	Source    string  `json:"source"`
-	Scope     string  `json:"scope,omitempty"` // "global" or "personal" (managed mode)
+	Scope     string  `json:"scope,omitempty"` // "global" or "personal"
 }
 
 // MemorySearchOptions configures a memory search query.

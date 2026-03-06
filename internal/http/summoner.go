@@ -29,7 +29,7 @@ const (
 const frontmatterKey = "__frontmatter__"
 
 // summoningFiles is the ordered list of context files the LLM should generate.
-// Only personality files — operational files (AGENTS.md, TOOLS.md, HEARTBEAT.md)
+// Only personality files — operational files (AGENTS.md, TOOLS.md)
 // are kept as fixed templates from bootstrap.SeedToStore().
 // USER_PREDEFINED.md is optional — generated only when description mentions user context.
 var summoningFiles = []string{

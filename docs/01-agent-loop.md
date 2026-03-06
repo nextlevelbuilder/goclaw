@@ -171,8 +171,7 @@ The system prompt is assembled dynamically from 15+ sections. Two modes control 
 13. **Extra context** -- additional prompt text wrapped in `<extra_context>` XML tags.
 14. **Project Context** -- context files loaded from the database or filesystem, wrapped in `<context_file>` XML tags with a defensive preamble.
 15. **Silent Replies** -- instructions for the NO_REPLY convention.
-16. **Heartbeats** -- instructions for periodic wake-up behavior.
-17. **Sub-Agent Spawning** -- rules for launching child agents.
+16. **Sub-Agent Spawning** -- rules for launching child agents.
 18. **Delegation** -- auto-generated `DELEGATION.md` listing available delegation targets (inline if ≤15, search instruction if >15).
 19. **Team** -- `TEAM.md` injected for team leads only (team name, role, teammate list).
 20. **Runtime** -- runtime metadata (agent ID, session key, provider info).

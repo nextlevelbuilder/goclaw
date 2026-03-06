@@ -41,7 +41,7 @@ type linksListParams struct {
 
 func (m *AgentLinksMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.linkStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not configured"))
 		return
 	}
 
@@ -106,7 +106,7 @@ type linksCreateParams struct {
 
 func (m *AgentLinksMethods) handleCreate(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.linkStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not configured"))
 		return
 	}
 
@@ -219,7 +219,7 @@ type linksUpdateParams struct {
 
 func (m *AgentLinksMethods) handleUpdate(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.linkStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not configured"))
 		return
 	}
 
@@ -313,7 +313,7 @@ type linksDeleteParams struct {
 
 func (m *AgentLinksMethods) handleDelete(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	if m.linkStore == nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not available (standalone mode)"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, "agent links not configured"))
 		return
 	}
 

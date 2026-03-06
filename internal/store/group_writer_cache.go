@@ -4,29 +4,28 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/cache"
 )
 
 const groupWriterCacheTTL = 5 * time.Minute
 
-type gwCacheEntry struct {
-	writers  []GroupFileWriterData
-	cachedAt time.Time
-}
-
-// GroupWriterCache wraps AgentStore.ListGroupFileWriters with a sync.Map TTL cache.
+// GroupWriterCache wraps AgentStore.ListGroupFileWriters with a TTL cache.
 // Used by tools and agent loop to check group write permissions without repeated DB queries.
 type GroupWriterCache struct {
 	agentStore AgentStore
-	cache      sync.Map // "agentUUID:groupID" → *gwCacheEntry
+	cache      *cache.InMemoryCache[[]GroupFileWriterData]
 }
 
 // NewGroupWriterCache creates a new cache backed by the given agent store.
 func NewGroupWriterCache(as AgentStore) *GroupWriterCache {
-	return &GroupWriterCache{agentStore: as}
+	return &GroupWriterCache{
+		agentStore: as,
+		cache:      cache.NewInMemoryCache[[]GroupFileWriterData](),
+	}
 }
 
 func (c *GroupWriterCache) cacheKey(agentID uuid.UUID, groupID string) string {
@@ -36,18 +35,14 @@ func (c *GroupWriterCache) cacheKey(agentID uuid.UUID, groupID string) string {
 // ListWriters returns cached writers, falling back to DB on miss/expiry.
 func (c *GroupWriterCache) ListWriters(ctx context.Context, agentID uuid.UUID, groupID string) ([]GroupFileWriterData, error) {
 	key := c.cacheKey(agentID, groupID)
-	if entry, ok := c.cache.Load(key); ok {
-		ce := entry.(*gwCacheEntry)
-		if time.Since(ce.cachedAt) < groupWriterCacheTTL {
-			return ce.writers, nil
-		}
-		c.cache.Delete(key)
+	if writers, ok := c.cache.Get(ctx, key); ok {
+		return writers, nil
 	}
 	writers, err := c.agentStore.ListGroupFileWriters(ctx, agentID, groupID)
 	if err != nil {
 		return nil, err
 	}
-	c.cache.Store(key, &gwCacheEntry{writers: writers, cachedAt: time.Now()})
+	c.cache.Set(ctx, key, writers, groupWriterCacheTTL)
 	return writers, nil
 }
 
@@ -67,22 +62,21 @@ func (c *GroupWriterCache) IsWriter(ctx context.Context, agentID uuid.UUID, grou
 
 // Invalidate clears cache entries matching the given groupID.
 func (c *GroupWriterCache) Invalidate(groupID string) {
-	c.cache.Range(func(key, _ any) bool {
-		if k, ok := key.(string); ok && strings.HasSuffix(k, ":"+groupID) {
-			c.cache.Delete(key)
-		}
-		return true
-	})
+	// DeleteByPrefix can't match suffix, so we use a sentinel prefix approach:
+	// keys are "agentUUID:groupID" — walk via Clear is not viable, so we
+	// store a reverse suffix index would add complexity. Instead, clear all
+	// and let the next access re-populate. Invalidate is called rarely (writer list changes).
+	c.cache.Clear(context.Background())
 }
 
 // InvalidateAll clears all cached entries.
 func (c *GroupWriterCache) InvalidateAll() {
-	c.cache = sync.Map{}
+	c.cache.Clear(context.Background())
 }
 
 // CheckGroupWritePermission returns an error if the caller is in a group context
 // and is not a file writer. Returns nil if write is allowed.
-// Fail-open: returns nil on DB errors or missing context (cron, subagent, standalone).
+// Fail-open: returns nil on DB errors or missing context (cron, subagent).
 func CheckGroupWritePermission(ctx context.Context, cache *GroupWriterCache) error {
 	userID := UserIDFromContext(ctx)
 	if !strings.HasPrefix(userID, "group:") {
@@ -90,7 +84,7 @@ func CheckGroupWritePermission(ctx context.Context, cache *GroupWriterCache) err
 	}
 	agentID := AgentIDFromContext(ctx)
 	if agentID == uuid.Nil {
-		return nil // standalone mode
+		return nil // no agent context
 	}
 	senderID := SenderIDFromContext(ctx)
 	if senderID == "" {

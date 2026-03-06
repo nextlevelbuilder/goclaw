@@ -3,27 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
-
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
-// isManagedMode returns true if the config specifies managed (Postgres) mode.
-func isManagedMode() bool {
-	cfg, err := config.Load(resolveConfigPath())
-	if err != nil {
-		return false
-	}
-	return cfg.Database.Mode == "managed" && cfg.Database.PostgresDSN != ""
-}
-
-// requireGatewayForManaged exits with a helpful error if managed mode is active
-// and the gateway is not reachable.
-func requireGatewayForManaged() {
-	if !isManagedMode() {
-		return
-	}
+// requireGateway exits with a helpful error if the gateway is not reachable.
+func requireGateway() {
 	if !isGatewayReachable() {
-		fmt.Fprintln(os.Stderr, "Error: managed mode requires the gateway to be running.")
+		fmt.Fprintln(os.Stderr, "Error: the gateway must be running for this command.")
 		fmt.Fprintln(os.Stderr, "Start it first:  goclaw")
 		os.Exit(1)
 	}

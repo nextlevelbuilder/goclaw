@@ -12,7 +12,6 @@ import (
 )
 
 // SkillsMethods handles skills.list, skills.get, skills.update.
-// Uses store.SkillStore interface — PGSkillStore in managed mode, FileSkillStore in standalone.
 type SkillsMethods struct {
 	store store.SkillStore
 }
@@ -99,7 +98,7 @@ func (m *SkillsMethods) handleUpdate(_ context.Context, client *gateway.Client, 
 	// Check if the store supports updates (PGSkillStore does, FileSkillStore doesn't)
 	updater, ok := m.store.(skillUpdater)
 	if !ok {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, "skills.update not supported in standalone mode"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, "skills.update not supported for file-based skills"))
 		return
 	}
 

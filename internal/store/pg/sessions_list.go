@@ -162,12 +162,10 @@ func (s *PGSessionStore) LastUsedChannel(agentID string) (string, string) {
 		 WHERE session_key LIKE $1
 		   AND session_key NOT LIKE $2
 		   AND session_key NOT LIKE $3
-		   AND session_key NOT LIKE $4
 		 ORDER BY updated_at DESC LIMIT 1`,
 		prefix,
 		"agent:"+agentID+":cron:%",
 		"agent:"+agentID+":subagent:%",
-		"agent:"+agentID+":heartbeat:%",
 	).Scan(&sessionKey)
 	if err != nil {
 		return "", ""

@@ -12,8 +12,8 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useChannels } from "./hooks/use-channels";
 import { useChannelInstances, type ChannelInstanceData, type ChannelInstanceInput } from "./hooks/use-channel-instances";
 import { ChannelInstanceFormDialog } from "./channel-instance-form-dialog";
-import { channelsWithAuth, standaloneAuthDialogs } from "./channel-wizard-registry";
-import { ChannelsStatusView, channelTypeLabels } from "./channels-status-view";
+import { channelsWithAuth, reauthDialogs } from "./channel-wizard-registry";
+import { channelTypeLabels } from "./channels-status-view";
 import { ChannelDetailPage } from "./channel-detail/channel-detail-page";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useMinLoading } from "@/hooks/use-min-loading";
@@ -49,7 +49,7 @@ export function ChannelsPage() {
   };
 
   const {
-    instances, total, loading: instancesLoading, supported,
+    instances, total, loading: instancesLoading,
     refresh: refreshInstances, createInstance, updateInstance, deleteInstance,
   } = useChannelInstances({
     search: debouncedSearch || undefined,
@@ -65,17 +65,12 @@ export function ChannelsPage() {
 
   const refresh = () => {
     refreshStatus();
-    if (supported) refreshInstances();
+    refreshInstances();
   };
 
   // Detail view
   if (detailId) {
     return <ChannelDetailPage instanceId={detailId} onBack={() => navigate("/channels")} />;
-  }
-
-  // Standalone mode: show status-only cards
-  if (!supported) {
-    return <ChannelsStatusView channels={channels} loading={statusLoading} spinning={spinning} refresh={refreshStatus} />;
   }
 
   const handleCreate = async (data: ChannelInstanceInput) => {
@@ -281,7 +276,7 @@ export function ChannelsPage() {
       />
 
       {qrTarget && (() => {
-        const AuthDialog = standaloneAuthDialogs[qrTarget.channel_type];
+        const AuthDialog = reauthDialogs[qrTarget.channel_type];
         return AuthDialog ? (
           <AuthDialog
             open={!!qrTarget}

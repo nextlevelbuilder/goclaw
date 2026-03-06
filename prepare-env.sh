@@ -111,5 +111,5 @@ fi
 echo ""
 echo "=== Done ==="
 echo ""
-echo "  Run: docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.selfservice.yml up -d --build"
+echo "  Run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build"
 echo ""

@@ -11,7 +11,7 @@ type contextKey string
 const (
 	// UserIDKey is the context key for the external user ID (TEXT, free-form).
 	UserIDKey contextKey = "goclaw_user_id"
-	// AgentIDKey is the context key for the agent UUID (managed mode).
+	// AgentIDKey is the context key for the agent UUID.
 	AgentIDKey contextKey = "goclaw_agent_id"
 	// AgentTypeKey is the context key for the agent type ("open" or "predefined").
 	AgentTypeKey contextKey = "goclaw_agent_type"

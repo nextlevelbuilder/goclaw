@@ -13,14 +13,14 @@ import (
 // Matching OpenClaw src/agents/tools/cron-tool.ts.
 type CronTool struct {
 	cronStore        store.CronStore
-	groupWriterCache *store.GroupWriterCache // nil = no group restriction (standalone mode)
+	groupWriterCache *store.GroupWriterCache // nil = no group restriction
 }
 
 func NewCronTool(cronStore store.CronStore) *CronTool {
 	return &CronTool{cronStore: cronStore}
 }
 
-// SetGroupWriterCache enables group cron mutation restriction (managed mode).
+// SetGroupWriterCache enables group cron mutation restriction.
 func (t *CronTool) SetGroupWriterCache(c *store.GroupWriterCache) {
 	t.groupWriterCache = c
 }
@@ -115,7 +115,7 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]interface{}) *Re
 		return ErrorResult("action parameter is required")
 	}
 
-	// Group write permission check for mutation actions (managed mode)
+	// Group write permission check for mutation actions
 	if t.groupWriterCache != nil && (action == "add" || action == "update" || action == "remove") {
 		if err := store.CheckGroupWritePermission(ctx, t.groupWriterCache); err != nil {
 			return ErrorResult("permission denied: only file writers can manage cron jobs in group chats")
@@ -257,14 +257,14 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]interface{}, a
 }
 
 // checkJobOwnership validates that the job belongs to the current agent+user scope.
-// In standalone mode (empty agentID/userID), all jobs are accessible.
+// When agentID/userID is empty, all jobs are accessible.
 func (t *CronTool) checkJobOwnership(jobID, agentID, userID string) (*store.CronJob, *Result) {
 	job, ok := t.cronStore.GetJob(jobID)
 	if !ok {
 		return nil, ErrorResult(fmt.Sprintf("job %s not found", jobID))
 	}
 
-	// In managed mode, verify ownership
+	// Verify ownership
 	if agentID != "" && job.AgentID != agentID {
 		return nil, ErrorResult(fmt.Sprintf("job %s not found", jobID))
 	}

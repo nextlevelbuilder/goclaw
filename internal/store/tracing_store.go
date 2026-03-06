@@ -102,7 +102,7 @@ type TraceListOpts struct {
 	Offset        int
 }
 
-// TracingStore manages LLM traces and spans (managed mode only).
+// TracingStore manages LLM traces and spans.
 type TracingStore interface {
 	CreateTrace(ctx context.Context, trace *TraceData) error
 	UpdateTrace(ctx context.Context, traceID uuid.UUID, updates map[string]any) error

@@ -42,7 +42,7 @@ type Channel struct {
 	sess     *protocol.Session
 	listener *protocol.Listener
 
-	// Pre-loaded credentials (managed mode: from DB, standalone: from file or QR).
+	// Pre-loaded credentials (from DB or from file/QR as fallback).
 	preloadedCreds *protocol.Credentials
 
 	requireMention bool

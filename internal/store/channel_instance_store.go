@@ -42,7 +42,7 @@ type ChannelInstanceListOpts struct {
 	Offset int
 }
 
-// ChannelInstanceStore manages channel instance definitions (managed mode only).
+// ChannelInstanceStore manages channel instance definitions.
 type ChannelInstanceStore interface {
 	Create(ctx context.Context, inst *ChannelInstanceData) error
 	Get(ctx context.Context, id uuid.UUID) (*ChannelInstanceData, error)

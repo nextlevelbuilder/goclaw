@@ -13,17 +13,17 @@ import (
 )
 
 // SkillSearchTool implements the skill_search tool with BM25 search
-// and optional hybrid search (BM25 + embedding) in managed mode.
+// and optional hybrid search (BM25 + embedding).
 type SkillSearchTool struct {
 	index       *skills.Index
 	loader      *skills.Loader
 	lastVersion int64 // tracks loader version for lazy rebuild
 
-	// Optional: embedding-based search (managed mode only)
+	// Optional: embedding-based search
 	embSearcher store.EmbeddingSkillSearcher
 	embProvider store.EmbeddingProvider
 
-	// Optional: per-agent skill access filtering (managed mode only).
+	// Optional: per-agent skill access filtering.
 	// When set, search results are filtered to only include skills
 	// accessible to the calling agent (public + agent-granted internal).
 	skillAccess store.SkillAccessStore

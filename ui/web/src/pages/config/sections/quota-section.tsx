@@ -36,7 +36,7 @@ interface QuotaData {
 }
 
 const DEFAULT_QUOTA: QuotaData = {
-  enabled: false,
+  enabled: true,
   default: { hour: 40, day: 200, week: 1000 },
 };
 

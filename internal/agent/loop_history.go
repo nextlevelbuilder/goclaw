@@ -30,7 +30,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	_, hasSpawn := l.tools.Get("spawn")
 	_, hasSkillSearch := l.tools.Get("skill_search")
 
-	// Per-user workspace: show the user's subdirectory in the system prompt (managed mode).
+	// Per-user workspace: show the user's subdirectory in the system prompt.
 	// Uses cached workspace from user_agent_profiles (includes channel isolation).
 	promptWorkspace := l.workspace
 	if l.agentUUID != uuid.Nil && userID != "" && l.workspace != "" {
@@ -51,7 +51,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 	}
 
-	// Group writer restrictions: filter context files + inject prompt (managed mode only)
+	// Group writer restrictions: filter context files + inject prompt
 	if l.groupWriterCache != nil && strings.HasPrefix(userID, "group:") {
 		senderID := store.SenderIDFromContext(ctx)
 		writerPrompt, filtered := l.buildGroupWriterPrompt(ctx, userID, senderID, contextFiles)

@@ -33,16 +33,16 @@ type Server struct {
 
 	policyEngine   *permissions.PolicyEngine
 	pairingService store.PairingStore
-	agentsHandler  *httpapi.AgentsHandler // managed mode: agent CRUD API
-	skillsHandler  *httpapi.SkillsHandler // managed mode: skill management API
-	tracesHandler  *httpapi.TracesHandler // managed mode: LLM trace listing API
-	mcpHandler         *httpapi.MCPHandler         // managed mode: MCP server management API
-	customToolsHandler      *httpapi.CustomToolsHandler      // managed mode: custom tool CRUD API
-	channelInstancesHandler *httpapi.ChannelInstancesHandler // managed mode: channel instance CRUD API
-	providersHandler        *httpapi.ProvidersHandler        // managed mode: provider CRUD API
-	delegationsHandler      *httpapi.DelegationsHandler      // managed mode: delegation history API
-	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // managed mode: builtin tool management API
-	agentStore         store.AgentStore             // managed mode: for context injection in tools_invoke
+	agentsHandler  *httpapi.AgentsHandler // agent CRUD API
+	skillsHandler  *httpapi.SkillsHandler // skill management API
+	tracesHandler  *httpapi.TracesHandler // LLM trace listing API
+	mcpHandler         *httpapi.MCPHandler         // MCP server management API
+	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
+	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
+	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
+	delegationsHandler      *httpapi.DelegationsHandler      // delegation history API
+	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
+	agentStore         store.AgentStore             // for context injection in tools_invoke
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -52,6 +52,8 @@ type Server struct {
 	startedAt time.Time
 	version   string
 	db        interface{ PingContext(context.Context) error } // for health check DB ping
+
+	logTee *LogTee // optional; auto-unsubscribes clients on disconnect
 
 	httpServer *http.Server
 	mux        *http.ServeMux
@@ -269,33 +271,33 @@ func (s *Server) SetPolicyEngine(pe *permissions.PolicyEngine) { s.policyEngine 
 // SetPairingService sets the pairing service for channel authentication.
 func (s *Server) SetPairingService(ps store.PairingStore) { s.pairingService = ps }
 
-// SetAgentsHandler sets the managed-mode agent CRUD handler.
+// SetAgentsHandler sets the agent CRUD handler.
 func (s *Server) SetAgentsHandler(h *httpapi.AgentsHandler) { s.agentsHandler = h }
 
-// SetSkillsHandler sets the managed-mode skill management handler.
+// SetSkillsHandler sets the skill management handler.
 func (s *Server) SetSkillsHandler(h *httpapi.SkillsHandler) { s.skillsHandler = h }
 
-// SetTracesHandler sets the managed-mode LLM trace listing handler.
+// SetTracesHandler sets the LLM trace listing handler.
 func (s *Server) SetTracesHandler(h *httpapi.TracesHandler) { s.tracesHandler = h }
 
-// SetMCPHandler sets the managed-mode MCP server management handler.
+// SetMCPHandler sets the MCP server management handler.
 func (s *Server) SetMCPHandler(h *httpapi.MCPHandler) { s.mcpHandler = h }
 
-// SetCustomToolsHandler sets the managed-mode custom tool CRUD handler.
+// SetCustomToolsHandler sets the custom tool CRUD handler.
 func (s *Server) SetCustomToolsHandler(h *httpapi.CustomToolsHandler) { s.customToolsHandler = h }
 
-// SetChannelInstancesHandler sets the managed-mode channel instance CRUD handler.
+// SetChannelInstancesHandler sets the channel instance CRUD handler.
 func (s *Server) SetChannelInstancesHandler(h *httpapi.ChannelInstancesHandler) {
 	s.channelInstancesHandler = h
 }
 
-// SetProvidersHandler sets the managed-mode provider CRUD handler.
+// SetProvidersHandler sets the provider CRUD handler.
 func (s *Server) SetProvidersHandler(h *httpapi.ProvidersHandler) { s.providersHandler = h }
 
-// SetDelegationsHandler sets the managed-mode delegation history handler.
+// SetDelegationsHandler sets the delegation history handler.
 func (s *Server) SetDelegationsHandler(h *httpapi.DelegationsHandler) { s.delegationsHandler = h }
 
-// SetBuiltinToolsHandler sets the managed-mode builtin tool management handler.
+// SetBuiltinToolsHandler sets the builtin tool management handler.
 func (s *Server) SetBuiltinToolsHandler(h *httpapi.BuiltinToolsHandler) {
 	s.builtinToolsHandler = h
 }
@@ -375,7 +377,15 @@ func (s *Server) unregisterClient(c *Client) {
 	defer s.mu.Unlock()
 	delete(s.clients, c.id)
 	s.eventPub.Unsubscribe(c.id)
+	if s.logTee != nil {
+		s.logTee.Unsubscribe(c.id)
+	}
 	slog.Info("client disconnected", "id", c.id)
+}
+
+// SetLogTee attaches a LogTee so that disconnecting clients are auto-unsubscribed.
+func (s *Server) SetLogTee(lt *LogTee) {
+	s.logTee = lt
 }
 
 // StartTestServer creates a listener on :0 (random port) and returns the

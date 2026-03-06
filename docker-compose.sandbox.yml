@@ -4,8 +4,8 @@
 #   1. Build the sandbox image:  docker build -t goclaw-sandbox:bookworm-slim -f Dockerfile.sandbox .
 #   2. Ensure Docker socket is accessible
 #
-# Usage (with managed mode):
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.sandbox.yml up
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.sandbox.yml up
 #
 # SECURITY NOTE: Mounting Docker socket gives the container control over host Docker.
 # Only use in trusted environments where agent code execution isolation is required.

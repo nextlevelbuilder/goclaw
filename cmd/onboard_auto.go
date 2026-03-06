@@ -88,12 +88,8 @@ func runAutoOnboard(cfgPath string) bool {
 		slog.Info("auto-onboard: generated gateway token")
 	}
 
-	// 3. Managed mode: Postgres setup
-	// Auto-detect: if GOCLAW_POSTGRES_DSN is set, assume managed mode even without GOCLAW_MODE
-	if cfg.Database.PostgresDSN != "" && cfg.Database.Mode == "" {
-		cfg.Database.Mode = "managed"
-	}
-	if cfg.Database.Mode == "managed" && cfg.Database.PostgresDSN != "" {
+	// 3. Database: Postgres setup
+	if cfg.Database.PostgresDSN != "" {
 		fmt.Print("  Testing Postgres connection...")
 
 		// Retry loop: database container may still be starting
@@ -219,38 +215,12 @@ func detectProvider(cfg *config.Config) (string, string) {
 // saveCleanConfig saves a minimal config.json without noise (empty providers,
 // disabled channels, stripped secrets). Only includes sections relevant to
 // the active configuration so the file serves as clean documentation.
-// In managed mode, channels are stored in the DB (channel_instances table),
+// Channels are stored in the DB (channel_instances table),
 // so they are omitted from config.json to avoid dual-connection.
 func saveCleanConfig(cfgPath string, cfg *config.Config) error {
-	isManaged := cfg.Database.Mode == "managed"
-
-	// Build channels map — only include enabled channels.
-	// In managed mode, skip channels entirely (they're DB instances now).
+	// Channels are stored in the DB (channel_instances table),
+	// so they are omitted from config.json to avoid dual-connection.
 	channels := make(map[string]interface{})
-	if !isManaged {
-		if cfg.Channels.Telegram.Enabled {
-			channels["telegram"] = map[string]interface{}{
-				"enabled":        true,
-				"reaction_level": nonEmpty(cfg.Channels.Telegram.ReactionLevel, "full"),
-				"history_limit":  nonZero(cfg.Channels.Telegram.HistoryLimit, 50),
-			}
-		}
-		if cfg.Channels.Discord.Enabled {
-			channels["discord"] = map[string]interface{}{"enabled": true}
-		}
-		if cfg.Channels.Slack.Enabled {
-			channels["slack"] = map[string]interface{}{"enabled": true}
-		}
-		if cfg.Channels.Feishu.Enabled {
-			channels["feishu"] = map[string]interface{}{"enabled": true}
-		}
-		if cfg.Channels.Zalo.Enabled {
-			channels["zalo"] = map[string]interface{}{"enabled": true}
-		}
-		if cfg.Channels.WhatsApp.Enabled {
-			channels["whatsapp"] = map[string]interface{}{"enabled": true}
-		}
-	}
 
 	// Build tools section.
 	tools := map[string]interface{}{
@@ -322,11 +292,6 @@ func saveCleanConfig(cfgPath string, cfg *config.Config) error {
 		root["channels"] = channels
 	}
 
-	if cfg.Database.Mode != "" {
-		root["database"] = map[string]interface{}{
-			"mode": cfg.Database.Mode,
-		}
-	}
 
 	data, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {

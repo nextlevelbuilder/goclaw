@@ -63,7 +63,6 @@ export function AgentsDefaultsSection({ data, onSave, saving }: Props) {
   const memory = defaults.memory ?? {};
   const compaction = defaults.compaction ?? {};
   const pruning = defaults.contextPruning ?? {};
-  const heartbeat = defaults.heartbeat ?? {};
   const sandbox = defaults.sandbox ?? {};
 
   return (
@@ -222,20 +221,6 @@ export function AgentsDefaultsSection({ data, onSave, saving }: Props) {
         </SubSection>
 
         <SubSection
-          title="Heartbeat"
-          desc="Periodic agent wake-up"
-          open={openSubs.has("heartbeat")}
-          onToggle={() => toggleSub("heartbeat")}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Every" tip="How often the agent wakes up. Go duration format (e.g. 30m, 1h). 0m = disabled." value={heartbeat.every} onChange={(v) => updateNested("heartbeat", { every: v })} placeholder="30m (0m = disabled)" />
-            <Field label="Model Override" tip="Use a different model for heartbeat checks. Leave empty for default." value={heartbeat.model} onChange={(v) => updateNested("heartbeat", { model: v })} placeholder="Use default" />
-            <Field label="Session" tip="Session key to use for heartbeat messages." value={heartbeat.session} onChange={(v) => updateNested("heartbeat", { session: v })} placeholder="main" />
-            <Field label="Target" tip="Target for heartbeat. 'last' resumes the last active session." value={heartbeat.target} onChange={(v) => updateNested("heartbeat", { target: v })} placeholder="last" />
-          </div>
-        </SubSection>
-
-        <SubSection
           title="Sandbox"
           desc="Docker-based code sandbox"
           open={openSubs.has("sandbox")}
@@ -295,7 +280,7 @@ function SubSection({
     <div className="rounded-md border">
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
+        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
         onClick={onToggle}
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}

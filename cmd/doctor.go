@@ -49,13 +49,15 @@ func runDoctor() {
 		return
 	}
 
-	// Database (managed mode only) — open early so we can show DB providers.
+	// Database
 	var db *sql.DB
-	isManaged := cfg.Database.Mode == "managed" && cfg.Database.PostgresDSN != ""
-	if isManaged {
+	if cfg.Database.PostgresDSN == "" {
 		fmt.Println()
 		fmt.Println("  Database:")
-		fmt.Printf("    %-12s managed\n", "Mode:")
+		fmt.Printf("    %-12s NOT CONFIGURED (set GOCLAW_POSTGRES_DSN)\n", "Status:")
+	} else {
+		fmt.Println()
+		fmt.Println("  Database:")
 		var dbErr error
 		db, dbErr = sql.Open("pgx", cfg.Database.PostgresDSN)
 		if dbErr != nil {
@@ -89,12 +91,11 @@ func runDoctor() {
 		}
 	}
 
-	// Providers — show DB providers in managed mode, config providers otherwise.
+	// Providers — show DB providers, plus config-only providers (env vars).
 	fmt.Println()
 	fmt.Println("  Providers:")
-	if isManaged && db != nil {
+	if db != nil {
 		checkDBProviders(db)
-		// Also show config-only providers (env vars) not in DB.
 		checkProvider("Anthropic (env)", cfg.Providers.Anthropic.APIKey)
 		checkProvider("OpenAI (env)", cfg.Providers.OpenAI.APIKey)
 		checkProvider("OpenRouter (env)", cfg.Providers.OpenRouter.APIKey)
@@ -109,10 +110,10 @@ func runDoctor() {
 		checkProvider("XAI", cfg.Providers.XAI.APIKey)
 	}
 
-	// Channels — show DB channels in managed mode, config channels otherwise.
+	// Channels — show DB channels, fallback to config channels.
 	fmt.Println()
 	fmt.Println("  Channels:")
-	if isManaged && db != nil {
+	if db != nil {
 		checkDBChannels(db)
 	} else {
 		checkChannel("Telegram", cfg.Channels.Telegram.Enabled, cfg.Channels.Telegram.Token != "")

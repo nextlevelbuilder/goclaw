@@ -51,7 +51,7 @@ type LLMProviderData struct {
 	Enabled      bool   `json:"enabled"`
 }
 
-// ProviderStore manages LLM providers (managed mode only).
+// ProviderStore manages LLM providers.
 type ProviderStore interface {
 	CreateProvider(ctx context.Context, p *LLMProviderData) error
 	GetProvider(ctx context.Context, id uuid.UUID) (*LLMProviderData, error)

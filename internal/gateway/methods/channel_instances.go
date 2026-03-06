@@ -13,7 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// ChannelInstancesMethods handles channel instance CRUD via WebSocket RPC (managed mode).
+// ChannelInstancesMethods handles channel instance CRUD via WebSocket RPC.
 type ChannelInstancesMethods struct {
 	store  store.ChannelInstanceStore
 	msgBus *bus.MessageBus

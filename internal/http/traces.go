@@ -9,7 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// TracesHandler handles LLM trace listing and detail endpoints (managed mode).
+// TracesHandler handles LLM trace listing and detail endpoints.
 type TracesHandler struct {
 	tracing store.TracingStore
 	token   string

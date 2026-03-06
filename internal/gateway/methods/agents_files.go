@@ -14,7 +14,7 @@ import (
 )
 
 // allowedAgentFiles is the list of files exposed via agents.files.* RPCs.
-// TOOLS.md and HEARTBEAT.md excluded — only useful in standalone mode.
+// TOOLS.md excluded — not applicable.
 var allowedAgentFiles = []string{
 	bootstrap.AgentsFile, bootstrap.SoulFile, bootstrap.IdentityFile,
 	bootstrap.UserFile, bootstrap.UserPredefinedFile, bootstrap.BootstrapFile, bootstrap.MemoryJSONFile,
@@ -32,7 +32,7 @@ func (m *AgentsMethods) handleFilesList(_ context.Context, client *gateway.Clien
 		params.AgentID = "default"
 	}
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: list from DB ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -76,7 +76,7 @@ func (m *AgentsMethods) handleFilesList(_ context.Context, client *gateway.Clien
 		return
 	}
 
-	// --- Standalone mode: filesystem ---
+	// --- Fallback: filesystem ---
 	ws := m.resolveWorkspace(params.AgentID)
 	files := make([]map[string]interface{}, 0, len(allowedAgentFiles))
 
@@ -130,7 +130,7 @@ func (m *AgentsMethods) handleFilesGet(_ context.Context, client *gateway.Client
 		return
 	}
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: read from DB ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -171,7 +171,7 @@ func (m *AgentsMethods) handleFilesGet(_ context.Context, client *gateway.Client
 		return
 	}
 
-	// --- Standalone mode: filesystem ---
+	// --- Fallback: filesystem ---
 	ws := m.resolveWorkspace(params.AgentID)
 	p := filepath.Join(ws, params.Name)
 
@@ -228,7 +228,7 @@ func (m *AgentsMethods) handleFilesSet(_ context.Context, client *gateway.Client
 		return
 	}
 
-	if m.isManaged && m.agentStore != nil {
+	if m.agentStore != nil {
 		// --- Managed mode: write to DB ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
@@ -261,7 +261,7 @@ func (m *AgentsMethods) handleFilesSet(_ context.Context, client *gateway.Client
 		return
 	}
 
-	// --- Standalone mode: filesystem ---
+	// --- Fallback: filesystem ---
 	ws := m.resolveWorkspace(params.AgentID)
 	os.MkdirAll(ws, 0755)
 	p := filepath.Join(ws, params.Name)

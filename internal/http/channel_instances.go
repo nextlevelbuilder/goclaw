@@ -13,7 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// ChannelInstancesHandler handles channel instance CRUD endpoints (managed mode).
+// ChannelInstancesHandler handles channel instance CRUD endpoints.
 type ChannelInstancesHandler struct {
 	store      store.ChannelInstanceStore
 	agentStore store.AgentStore

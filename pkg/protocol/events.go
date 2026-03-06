@@ -17,7 +17,6 @@ const (
 	EventDevicePairRes      = "device.pair.resolved"
 	EventVoicewakeChanged   = "voicewake.changed"
 	EventConnectChallenge   = "connect.challenge"
-	EventHeartbeat          = "heartbeat"
 	EventTalkMode           = "talk.mode"
 
 	// Agent summoning events (predefined agent setup via LLM).

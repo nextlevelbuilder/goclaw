@@ -20,26 +20,14 @@ func GenNewID() uuid.UUID {
 
 // StoreConfig configures the store layer.
 type StoreConfig struct {
-	// PostgresDSN is the Postgres connection string. If empty, standalone (file) mode is used.
+	// PostgresDSN is the Postgres connection string (required).
 	PostgresDSN string
-
-	// Mode: "standalone" (default) or "managed".
-	Mode string
 
 	// SkillsStorageDir is the directory for skill file content (default: ~/.goclaw/skills-store/).
 	SkillsStorageDir string
 
-	// SessionsDir is the directory for file-based session storage (standalone mode).
-	SessionsDir string
-
 	// Workspace is the default agent workspace path.
 	Workspace string
-
-	// CronStorePath is the file path for cron job persistence (standalone mode).
-	CronStorePath string
-
-	// PairingStorePath is the file path for pairing data persistence (standalone mode).
-	PairingStorePath string
 
 	// GlobalSkillsDir is the global skills directory (e.g. ~/.goclaw/skills).
 	GlobalSkillsDir string
@@ -50,9 +38,4 @@ type StoreConfig struct {
 	// EncryptionKey is the AES-256 key for encrypting sensitive data (API keys).
 	// If empty, sensitive data is stored in plain text.
 	EncryptionKey string
-}
-
-// IsManaged returns true if the system is in managed (Postgres) mode.
-func (c StoreConfig) IsManaged() bool {
-	return c.PostgresDSN != "" && c.Mode == "managed"
 }

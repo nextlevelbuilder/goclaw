@@ -24,8 +24,8 @@ type Channel struct {
 	bot              *telego.Bot
 	config           config.TelegramConfig
 	pairingService   store.PairingStore
-	agentStore       store.AgentStore // for group file writer management (nil in standalone)
-	teamStore        store.TeamStore  // for /tasks, /task_detail commands (nil in standalone)
+	agentStore       store.AgentStore // for group file writer management (nil if not configured)
+	teamStore        store.TeamStore  // for /tasks, /task_detail commands (nil if not configured)
 	placeholders     sync.Map         // localKey string → messageID int
 	stopThinking     sync.Map         // localKey string → *thinkingCancel
 	typingCtrls      sync.Map         // localKey string → *typing.Controller

@@ -41,10 +41,8 @@ func SeedToStore(ctx context.Context, agentStore store.AgentStore, agentID uuid.
 		if name == UserFile {
 			continue
 		}
-		// TOOLS.md and HEARTBEAT.md are only useful in standalone mode.
-		// TOOLS.md: local tool notes (camera, SSH, device names).
-		// HEARTBEAT.md: replaced by cron jobs in managed mode.
-		if name == ToolsFile || name == HeartbeatFile {
+		// TOOLS.md: local tool notes (camera, SSH, device names) — not applicable.
+		if name == ToolsFile {
 			continue
 		}
 		if hasContent[name] {
@@ -83,7 +81,7 @@ func SeedToStore(ctx context.Context, agentStore store.AgentStore, agentID uuid.
 }
 
 // userSeedFilesOpen is the full set of files seeded per-user for open agents.
-// TOOLS.md and HEARTBEAT.md excluded — only useful in standalone mode.
+// TOOLS.md excluded — not applicable.
 var userSeedFilesOpen = []string{
 	AgentsFile,
 	SoulFile,

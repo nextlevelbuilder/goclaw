@@ -79,14 +79,14 @@ export function SystemHealthCard({
             icon={Timer}
             value={formatUptime(liveUptime)}
           />
-          {health?.mode === "managed" && (
+          {health?.database && (
             <HealthCell
               label="Database"
               icon={Database}
               value={
                 health.database === "ok"
                   ? "Connected"
-                  : health.database ?? "--"
+                  : health.database
               }
               statusOk={health.database === "ok"}
             />

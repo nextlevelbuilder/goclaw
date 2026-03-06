@@ -12,7 +12,7 @@ import (
 )
 
 // EditTool performs search-and-replace edits on files.
-// Supports context file interceptor (managed mode) and sandbox routing.
+// Supports context file interceptor and sandbox routing.
 type EditTool struct {
 	workspace        string
 	restrict         bool
@@ -20,7 +20,7 @@ type EditTool struct {
 	sandboxMgr       sandbox.Manager
 	contextFileIntc  *ContextFileInterceptor
 	memIntc          *MemoryInterceptor
-	groupWriterCache *store.GroupWriterCache // nil = no group write restriction (standalone mode)
+	groupWriterCache *store.GroupWriterCache // nil = no group write restriction
 }
 
 // DenyPaths adds path prefixes that edit must reject.
@@ -36,7 +36,7 @@ func (t *EditTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 	t.memIntc = intc
 }
 
-// SetGroupWriterCache enables group write permission checks (managed mode).
+// SetGroupWriterCache enables group write permission checks.
 func (t *EditTool) SetGroupWriterCache(c *store.GroupWriterCache) {
 	t.groupWriterCache = c
 }
@@ -97,14 +97,14 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]interface{}) *Re
 		return ErrorResult("old_string and new_string are identical")
 	}
 
-	// Group write permission check (managed mode)
+	// Group write permission check
 	if t.groupWriterCache != nil {
 		if err := store.CheckGroupWritePermission(ctx, t.groupWriterCache); err != nil {
 			return ErrorResult(err.Error())
 		}
 	}
 
-	// Virtual FS: context files (managed mode)
+	// Virtual FS: context files
 	if t.contextFileIntc != nil {
 		if content, handled, err := t.contextFileIntc.ReadFile(ctx, path); handled {
 			if err != nil {
@@ -124,7 +124,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]interface{}) *Re
 		}
 	}
 
-	// Virtual FS: memory files (managed mode)
+	// Virtual FS: memory files
 	if t.memIntc != nil {
 		if content, handled, err := t.memIntc.ReadFile(ctx, path); handled {
 			if err != nil {
@@ -150,7 +150,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]interface{}) *Re
 		return t.executeInSandbox(ctx, path, oldStr, newStr, replaceAll, sandboxKey)
 	}
 
-	// Host execution — use per-user workspace from context if available (managed mode)
+	// Host execution — use per-user workspace from context if available
 	workspace := ToolWorkspaceFromCtx(ctx)
 	if workspace == "" {
 		workspace = t.workspace

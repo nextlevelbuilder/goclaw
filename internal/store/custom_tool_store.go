@@ -30,7 +30,7 @@ type CustomToolListOpts struct {
 	Offset  int
 }
 
-// CustomToolStore manages custom tool definitions (managed mode only).
+// CustomToolStore manages custom tool definitions.
 type CustomToolStore interface {
 	Create(ctx context.Context, def *CustomToolDef) error
 	Get(ctx context.Context, id uuid.UUID) (*CustomToolDef, error)

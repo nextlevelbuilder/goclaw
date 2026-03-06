@@ -31,7 +31,7 @@ func tokenMatch(provided, expected string) bool {
 }
 
 // extractUserID extracts the external user ID from the request header.
-// Returns "" if no user ID is provided (anonymous / standalone mode).
+// Returns "" if no user ID is provided (anonymous).
 // Rejects IDs exceeding MaxUserIDLength (VARCHAR(255) DB constraint).
 func extractUserID(r *http.Request) string {
 	id := r.Header.Get("X-GoClaw-User-Id")

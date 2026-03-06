@@ -26,7 +26,7 @@ type quotaCounts struct {
 
 // QuotaChecker enforces per-user/group request quotas by counting top-level
 // traces in the database. Results are cached in-memory for cacheTTL.
-// Managed mode only — nil-safe (standalone mode passes nil).
+// Nil-safe (nil means quota not configured).
 type QuotaChecker struct {
 	db       *sql.DB
 	config   config.QuotaConfig

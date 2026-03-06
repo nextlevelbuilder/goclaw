@@ -49,7 +49,7 @@ type Loader struct {
 	globalSkills        string // ~/.goclaw/skills/
 	builtinSkills       string // bundled with binary
 
-	// Managed skills directory (set via SetManagedDir in managed mode).
+	// DB-managed skills directory (set via SetManagedDir).
 	// Uses versioned subdirectory structure: <dir>/<slug>/<version>/SKILL.md
 	managedSkillsDir string
 
@@ -92,7 +92,7 @@ func NewLoader(workspace, globalSkills, builtinSkills string) *Loader {
 
 // SetManagedDir sets the managed skills directory (skills-store).
 // Managed skills use versioned subdirectories: <dir>/<slug>/<version>/SKILL.md.
-// Called in managed mode after PG stores are created.
+// Called after PG stores are created.
 func (l *Loader) SetManagedDir(dir string) {
 	l.managedSkillsDir = dir
 	l.BumpVersion() // trigger re-scan

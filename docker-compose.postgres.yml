@@ -1,7 +1,7 @@
-# Managed overlay — PostgreSQL (pgvector) for multi-tenant storage.
+# PostgreSQL overlay — pgvector for multi-tenant storage.
 #
-# Recommended usage (with Web Dashboard):
-#   docker compose -f docker-compose.yml -f docker-compose.managed.yml -f docker-compose.selfservice.yml up -d --build
+# Usage (with Web Dashboard):
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
 #
 # Required env vars (set in .env or shell):
 #   GOCLAW_OPENROUTER_API_KEY (or another provider key)
@@ -30,7 +30,6 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - GOCLAW_MODE=managed
       - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
     volumes:
       - goclaw-skills:/app/skills

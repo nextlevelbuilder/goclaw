@@ -21,7 +21,7 @@ import (
 //   - mode="sync": block until done; mode="async" (default): return immediately
 type SpawnTool struct {
 	subagentMgr *SubagentManager
-	delegateMgr *DelegateManager // nil in standalone mode; injected via SetDelegateManager
+	delegateMgr *DelegateManager // nil if not configured; injected via SetDelegateManager
 	parentID    string
 	depth       int
 }
@@ -34,7 +34,7 @@ func NewSpawnTool(manager *SubagentManager, parentID string, depth int) *SpawnTo
 	}
 }
 
-// SetDelegateManager injects delegation capability (managed mode only).
+// SetDelegateManager injects delegation capability.
 func (t *SpawnTool) SetDelegateManager(dm *DelegateManager) { t.delegateMgr = dm }
 
 func (t *SpawnTool) Name() string { return "spawn" }

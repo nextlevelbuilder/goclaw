@@ -14,7 +14,7 @@ import (
 type ToolsInvokeHandler struct {
 	registry   *tools.Registry
 	token      string
-	agentStore store.AgentStore // nil in standalone mode
+	agentStore store.AgentStore // nil if not configured
 }
 
 // NewToolsInvokeHandler creates a handler for the tools invoke endpoint.

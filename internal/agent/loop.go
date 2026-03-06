@@ -48,7 +48,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		Payload: map[string]interface{}{"message": req.Message},
 	})
 
-	// Create trace (managed mode only)
+	// Create trace
 	var traceID uuid.UUID
 	isChildTrace := req.ParentTraceID != uuid.Nil && l.traceCollector != nil
 
@@ -163,7 +163,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		l.emit(event)
 	}
 
-	// Inject agent UUID into context for tool routing (managed mode)
+	// Inject agent UUID into context for tool routing
 	if l.agentUUID != uuid.Nil {
 		ctx = store.WithAgentID(ctx, l.agentUUID)
 	}
@@ -171,7 +171,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if req.UserID != "" {
 		ctx = store.WithUserID(ctx, req.UserID)
 	}
-	// Inject agent type into context for interceptor routing (managed mode)
+	// Inject agent type into context for interceptor routing
 	if l.agentType != "" {
 		ctx = store.WithAgentType(ctx, l.agentType)
 	}
@@ -200,7 +200,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		cachedWs, loaded := l.userWorkspaces.Load(req.UserID)
 		if !loaded {
 			// First request for this user: get/create profile → returns stored workspace.
-			// Also seeds per-user context files on first chat (managed mode).
+			// Also seeds per-user context files on first chat.
 			ws := l.workspace
 			if l.ensureUserFiles != nil {
 				var err error
@@ -258,7 +258,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		}
 	}
 
-	// Inject agent key into context for tool-level resolution (managed mode: multiple agents share tool registry)
+	// Inject agent key into context for tool-level resolution (multiple agents share tool registry)
 	ctx = tools.WithToolAgentKey(ctx, l.id)
 
 	// Security: truncate oversized user messages gracefully (feed truncation notice into LLM)

@@ -153,12 +153,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildSilentRepliesSection()...)
 	}
 
-	// 13. ## Heartbeats (full only)
-	if !isMinimal {
-		lines = append(lines, buildHeartbeatsSection()...)
-	}
-
-	// 14. ## Sub-Agent Spawning
+	// 13. ## Sub-Agent Spawning
 	if cfg.HasSpawn {
 		lines = append(lines, buildSpawnSection()...)
 	}

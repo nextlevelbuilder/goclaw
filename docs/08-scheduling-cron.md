@@ -1,14 +1,13 @@
-# 08 - Scheduling, Cron & Heartbeat
+# 08 - Scheduling & Cron
 
-Concurrency control and periodic task execution. The scheduler provides lane-based isolation and per-session serialization. Cron and heartbeat extend the agent loop with time-triggered behavior.
+Concurrency control and periodic task execution. The scheduler provides lane-based isolation and per-session serialization. Cron extends the agent loop with time-triggered behavior.
 
-> **Managed mode**: Cron jobs and run logs are stored in the `cron_jobs` and `cron_run_logs` PostgreSQL tables. Cache invalidation propagates via the `cache:cron` event on the message bus. In standalone mode, cron state is persisted to JSON files.
+> Cron jobs and run logs are stored in the `cron_jobs` and `cron_run_logs` PostgreSQL tables. Cache invalidation propagates via the `cache:cron` event on the message bus.
 
 ### Responsibilities
 
 - Scheduler: lane-based concurrency control, per-session message queue serialization
 - Cron: three schedule kinds (at/every/cron), run logging, retry with exponential backoff
-- Heartbeat: periodic agent wake-up, HEARTBEAT_OK detection, dedup within 24h
 
 ---
 
@@ -165,45 +164,6 @@ Jobs can be `active` or `paused`. Paused jobs skip execution during the due chec
 
 ---
 
-## 5. Heartbeat -- 5 Steps
-
-Periodically wakes the agent to check on events (calendar, inbox, alerts) and surfaces anything that needs attention.
-
-> **Standalone mode only in practice**: HEARTBEAT.md is seeded from bootstrap templates only in standalone mode. In managed mode, HEARTBEAT.md is excluded from seeding (replaced by cron jobs). The heartbeat service still runs in both modes, but without a HEARTBEAT.md file with content, Step 2 skips execution.
-
-```mermaid
-flowchart TD
-    TICK["tick() -- every interval (default 30 min)"] --> S1{"Step 1:<br/>Within Active Hours?"}
-    S1 -->|Outside hours| SKIP1["Skip"]
-    S1 -->|Within hours| S2{"Step 2:<br/>HEARTBEAT.md exists<br/>and has meaningful content?"}
-    S2 -->|No| SKIP2["Skip"]
-    S2 -->|Yes| S3["Step 3: runner()<br/>Run agent with heartbeat prompt"]
-    S3 --> S4{"Step 4:<br/>Reply contains HEARTBEAT_OK?"}
-    S4 -->|OK| LOG["Log debug, discard reply"]
-    S4 -->|Has content| S5{"Step 5:<br/>Dedup -- same content<br/>within 24h?"}
-    S5 -->|Duplicate| SKIP3["Skip"]
-    S5 -->|New| DELIVER["deliver() via resolveTarget()<br/>then msgBus.PublishOutbound()"]
-```
-
-### Heartbeat Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| Interval (`every`) | 30 minutes | Time between heartbeat wakes (`"0m"` to disable) |
-| ActiveHours | (none) | Time window restriction, supports wrap-around midnight |
-| Target | `"last"` | `"last"` (last-used channel), `"none"`, or explicit channel name |
-| To | (empty) | Explicit chat ID (overrides target resolver) |
-| Prompt | (default) | Custom system prompt for heartbeat runs |
-| Model | (agent default) | Override LLM model for heartbeat runs |
-| Session | `agent:{id}:heartbeat:main` | Custom session key |
-| AckMaxChars | 300 | Content alongside HEARTBEAT_OK up to this length is still treated as OK |
-
-### HEARTBEAT_OK Detection
-
-Recognizes multiple formatting variants: `HEARTBEAT_OK`, `**HEARTBEAT_OK**`, `` `HEARTBEAT_OK` ``, `<b>HEARTBEAT_OK</b>`. Content accompanying the token is treated as an acknowledgment (OK) if it does not exceed `AckMaxChars`.
-
----
-
 ## File Reference
 
 | File | Description |
@@ -212,13 +172,11 @@ Recognizes multiple formatting variants: `HEARTBEAT_OK`, `**HEARTBEAT_OK**`, `` 
 | `internal/scheduler/queue.go` | SessionQueue, Scheduler, drop policies, debounce |
 | `internal/cron/service.go` | Cron run loop, schedule parsing, job lifecycle |
 | `internal/cron/retry.go` | Retry with exponential backoff + jitter |
-| `internal/heartbeat/service.go` | Heartbeat loop, HEARTBEAT_OK detection, active hours |
 | `internal/store/cron_store.go` | CronStore interface (jobs + run logs) |
-| `internal/store/file/cron.go` | File-based cron implementation (standalone mode) |
 | `internal/store/pg/cron.go` | PostgreSQL cron implementation |
 | `internal/store/pg/cron_scheduler.go` | PG job cache, due-job detection, execution |
 | `cmd/gateway_cron.go` | makeCronJobHandler (routes cron execution to scheduler) |
-| `cmd/gateway_agents.go` | setupHeartbeat, agent initialization |
+| `cmd/gateway_agents.go` | Agent initialization |
 | `internal/gateway/methods/cron.go` | RPC method handlers (list, create, update, delete, toggle, run, runs) |
 
 ---

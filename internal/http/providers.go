@@ -11,7 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// ProvidersHandler handles LLM provider CRUD endpoints (managed mode).
+// ProvidersHandler handles LLM provider CRUD endpoints.
 type ProvidersHandler struct {
 	store       store.ProviderStore
 	token       string

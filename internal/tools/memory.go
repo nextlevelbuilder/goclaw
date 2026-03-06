@@ -8,21 +8,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MemorySearchTool implements the memory_search tool for hybrid semantic + FTS search.
 type MemorySearchTool struct {
-	manager  *memory.Manager   // standalone mode (SQLite-backed)
-	memStore store.MemoryStore // managed mode (Postgres-backed), nil in standalone
+	memStore store.MemoryStore // Postgres-backed
 }
 
-func NewMemorySearchTool(manager *memory.Manager) *MemorySearchTool {
-	return &MemorySearchTool{manager: manager}
+func NewMemorySearchTool() *MemorySearchTool {
+	return &MemorySearchTool{}
 }
 
-// SetMemoryStore enables managed mode: queries go to Postgres with agentID/userID scoping.
+// SetMemoryStore enables Postgres queries with agentID/userID scoping.
 func (t *MemorySearchTool) SetMemoryStore(ms store.MemoryStore) {
 	t.memStore = ms
 }
@@ -69,41 +67,13 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]interfac
 		minScore = ms
 	}
 
-	// Managed mode: use MemoryStore with agentID/userID from context
 	agentID := store.AgentIDFromContext(ctx)
-	if t.memStore != nil && agentID != uuid.Nil {
-		return t.executeManaged(ctx, query, agentID.String(), maxResults, minScore)
-	}
-
-	// Standalone mode: use memory.Manager
-	if t.manager == nil {
+	if t.memStore == nil || agentID == uuid.Nil {
 		return ErrorResult("memory system not available")
 	}
 
-	opts := memory.SearchOptions{
-		Query:      query,
-		MaxResults: maxResults,
-		MinScore:   minScore,
-	}
-
-	results, err := t.manager.Search(ctx, query, opts)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("memory search failed: %v", err))
-	}
-	if len(results) == 0 {
-		return NewResult("No memory results found for query: " + query)
-	}
-
-	data, _ := json.MarshalIndent(map[string]interface{}{
-		"results": results,
-		"count":   len(results),
-	}, "", "  ")
-	return NewResult(string(data))
-}
-
-func (t *MemorySearchTool) executeManaged(ctx context.Context, query, agentID string, maxResults int, minScore float64) *Result {
 	userID := store.UserIDFromContext(ctx)
-	results, err := t.memStore.Search(ctx, query, agentID, userID, store.MemorySearchOptions{
+	results, err := t.memStore.Search(ctx, query, agentID.String(), userID, store.MemorySearchOptions{
 		MaxResults: maxResults,
 		MinScore:   minScore,
 	})
@@ -123,15 +93,14 @@ func (t *MemorySearchTool) executeManaged(ctx context.Context, query, agentID st
 
 // MemoryGetTool implements the memory_get tool for reading specific memory files.
 type MemoryGetTool struct {
-	manager  *memory.Manager
-	memStore store.MemoryStore // managed mode (Postgres-backed), nil in standalone
+	memStore store.MemoryStore // Postgres-backed
 }
 
-func NewMemoryGetTool(manager *memory.Manager) *MemoryGetTool {
-	return &MemoryGetTool{manager: manager}
+func NewMemoryGetTool() *MemoryGetTool {
+	return &MemoryGetTool{}
 }
 
-// SetMemoryStore enables managed mode: reads from Postgres memory_documents.
+// SetMemoryStore enables reading from Postgres memory_documents.
 func (t *MemoryGetTool) SetMemoryStore(ms store.MemoryStore) {
 	t.memStore = ms
 }
@@ -177,40 +146,18 @@ func (t *MemoryGetTool) Execute(ctx context.Context, args map[string]interface{}
 		numLines = int(lines)
 	}
 
-	// Managed mode: read from MemoryStore
 	agentID := store.AgentIDFromContext(ctx)
-	if t.memStore != nil && agentID != uuid.Nil {
-		return t.executeManaged(ctx, path, agentID.String(), fromLine, numLines)
-	}
-
-	// Standalone mode
-	if t.manager == nil {
+	if t.memStore == nil || agentID == uuid.Nil {
 		return ErrorResult("memory system not available")
 	}
 
-	text, err := t.manager.GetFile(path, fromLine, numLines)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to read %s: %v", path, err))
-	}
-	if text == "" {
-		return NewResult(fmt.Sprintf("File %s is empty or the specified range has no content.", path))
-	}
-
-	data, _ := json.MarshalIndent(map[string]interface{}{
-		"path": path,
-		"text": text,
-	}, "", "  ")
-	return NewResult(string(data))
-}
-
-func (t *MemoryGetTool) executeManaged(ctx context.Context, path, agentID string, fromLine, numLines int) *Result {
 	userID := store.UserIDFromContext(ctx)
 
 	// Try per-user first, then global
-	content, err := t.memStore.GetDocument(ctx, agentID, userID, path)
+	content, err := t.memStore.GetDocument(ctx, agentID.String(), userID, path)
 	if err != nil && userID != "" {
 		// Fallback to global
-		content, err = t.memStore.GetDocument(ctx, agentID, "", path)
+		content, err = t.memStore.GetDocument(ctx, agentID.String(), "", path)
 	}
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read %s: %v", path, err))

@@ -16,9 +16,9 @@ type WriteFileTool struct {
 	restrict         bool
 	deniedPrefixes   []string // path prefixes to deny access to (e.g. .goclaw)
 	sandboxMgr       sandbox.Manager
-	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing (standalone mode)
-	memIntc          *MemoryInterceptor      // nil = no memory routing (standalone mode)
-	groupWriterCache *store.GroupWriterCache  // nil = no group write restriction (standalone mode)
+	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
+	memIntc          *MemoryInterceptor      // nil = no memory routing
+	groupWriterCache *store.GroupWriterCache  // nil = no group write restriction
 }
 
 // DenyPaths adds path prefixes that write_file must reject.
@@ -26,17 +26,17 @@ func (t *WriteFileTool) DenyPaths(prefixes ...string) {
 	t.deniedPrefixes = append(t.deniedPrefixes, prefixes...)
 }
 
-// SetContextFileInterceptor enables virtual FS routing for context files (managed mode).
+// SetContextFileInterceptor enables virtual FS routing for context files.
 func (t *WriteFileTool) SetContextFileInterceptor(intc *ContextFileInterceptor) {
 	t.contextFileIntc = intc
 }
 
-// SetMemoryInterceptor enables virtual FS routing for memory files (managed mode).
+// SetMemoryInterceptor enables virtual FS routing for memory files.
 func (t *WriteFileTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 	t.memIntc = intc
 }
 
-// SetGroupWriterCache enables group write permission checks (managed mode).
+// SetGroupWriterCache enables group write permission checks.
 func (t *WriteFileTool) SetGroupWriterCache(c *store.GroupWriterCache) {
 	t.groupWriterCache = c
 }
@@ -83,14 +83,14 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 		return ErrorResult("path is required")
 	}
 
-	// Group write permission check (managed mode)
+	// Group write permission check
 	if t.groupWriterCache != nil {
 		if err := store.CheckGroupWritePermission(ctx, t.groupWriterCache); err != nil {
 			return ErrorResult(err.Error())
 		}
 	}
 
-	// Virtual FS: route context files to DB (managed mode)
+	// Virtual FS: route context files to DB
 	if t.contextFileIntc != nil {
 		if handled, err := t.contextFileIntc.WriteFile(ctx, path, content); handled {
 			if err != nil {
@@ -100,7 +100,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 		}
 	}
 
-	// Virtual FS: route memory files to DB (managed mode)
+	// Virtual FS: route memory files to DB
 	if t.memIntc != nil {
 		if handled, err := t.memIntc.WriteFile(ctx, path, content); handled {
 			if err != nil {
@@ -116,7 +116,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]interface{}
 		return t.executeInSandbox(ctx, path, content, sandboxKey, deliver)
 	}
 
-	// Host execution — use per-user workspace from context if available (managed mode)
+	// Host execution — use per-user workspace from context if available
 	workspace := ToolWorkspaceFromCtx(ctx)
 	if workspace == "" {
 		workspace = t.workspace

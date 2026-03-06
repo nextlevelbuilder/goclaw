@@ -22,8 +22,7 @@ Markdown files loaded at agent initialization and embedded into the system promp
 | 3 | TOOLS.md | Local tool notes (camera, SSH, TTS, etc.) | Yes | Yes |
 | 4 | IDENTITY.md | Agent name, creature, vibe, emoji | Yes | No |
 | 5 | USER.md | User profile (name, timezone, preferences) | Yes | No |
-| 6 | HEARTBEAT.md | Periodic check task list | Yes | No |
-| 7 | BOOTSTRAP.md | First-run ritual (deleted after completion) | Yes | No |
+| 6 | BOOTSTRAP.md | First-run ritual (deleted after completion) | Yes | No |
 
 Subagent and cron sessions load only AGENTS.md + TOOLS.md (the `minimalAllowlist`).
 
@@ -60,28 +59,11 @@ When a file is truncated, a marker is inserted between the head and tail section
 
 ## 3. Seeding -- Template Creation
 
-Templates are embedded in the binary via Go `embed` (directory: `internal/bootstrap/templates/`). Seeding automatically creates default files for new workspaces or new users.
+Templates are embedded in the binary via Go `embed` (directory: `internal/bootstrap/templates/`). Seeding automatically creates default files for new users.
 
 ```mermaid
 flowchart TD
-    subgraph "Standalone Mode"
-        SA["EnsureWorkspaceFiles()"] --> SA1["Iterate over embedded templates"]
-        SA1 --> SA2{"File already exists?<br/>(O_EXCL atomic check)"}
-        SA2 -->|Yes| SKIP1["Skip"]
-        SA2 -->|No| CREATE1["Create template file on disk"]
-    end
-
-    subgraph "Standalone Mode -- Per-User (FileAgentStore)"
-        SU["SeedUserFiles()"] --> SU1{"Agent type?"}
-        SU1 -->|open| SU_OPEN["Seed all 7 files to SQLite"]
-        SU1 -->|predefined| SU_PRED["Seed USER.md + BOOTSTRAP.md to SQLite"]
-        SU_OPEN --> SU_CHK{"Row already exists?"}
-        SU_PRED --> SU_CHK
-        SU_CHK -->|Yes| SKIP_SU["Skip"]
-        SU_CHK -->|No| SU_WRITE["INSERT into user_context_files"]
-    end
-
-    subgraph "Managed Mode -- Agent Level"
+    subgraph "Agent Level"
         SB["SeedToStore()"] --> SB1{"Agent type = open?"}
         SB1 -->|Yes| SKIP_AGENT["Skip (open agents use per-user only)"]
         SB1 -->|No| SB2["Seed 6 files to agent_context_files<br/>(all except BOOTSTRAP.md)"]
@@ -90,7 +72,7 @@ flowchart TD
         SB3 -->|No| WRITE2["Write embedded template"]
     end
 
-    subgraph "Managed Mode -- Per-User"
+    subgraph "Per-User"
         MC["SeedUserFiles()"] --> MC1{"Agent type?"}
         MC1 -->|open| OPEN["Seed all 7 files to user_context_files"]
         MC1 -->|predefined| PRED["Seed USER.md + BOOTSTRAP.md to user_context_files"]
@@ -103,31 +85,26 @@ flowchart TD
 
 `SeedUserFiles()` is idempotent -- safe to call multiple times without overwriting personalized content.
 
-### Standalone UUID Generation
-
-Standalone agents are defined in `config.json` without database-generated UUIDs. `FileAgentStore` uses UUID v5 (`uuid.NewSHA1(namespace, "goclaw-standalone:{agentKey}")`) to produce deterministic IDs from agent keys. This ensures SQLite rows for per-user files survive process restarts without coordination.
-
 ### Predefined Agent Bootstrap
 
-Both standalone and managed mode now seed `BOOTSTRAP.md` for predefined agents (per-user). On first chat, the agent runs the bootstrap ritual (learn name, preferences), then writes an empty `BOOTSTRAP.md` which triggers deletion. The empty-write deletion is ordered *before* the predefined write-block in `ContextFileInterceptor` to prevent an infinite bootstrap loop.
+`BOOTSTRAP.md` is seeded for predefined agents (per-user). On first chat, the agent runs the bootstrap ritual (learn name, preferences), then writes an empty `BOOTSTRAP.md` which triggers deletion. The empty-write deletion is ordered *before* the predefined write-block in `ContextFileInterceptor` to prevent an infinite bootstrap loop.
 
 ---
 
 ## 4. Agent Type Routing
 
-Two agent types determine which context files live at the agent level versus the per-user level. Agent types are now available in both managed and standalone modes.
+Two agent types determine which context files live at the agent level versus the per-user level.
 
 | Agent Type | Agent-Level Files | Per-User Files |
 |------------|-------------------|----------------|
-| `open` | None | All 7 files (AGENTS, SOUL, TOOLS, IDENTITY, USER, HEARTBEAT, BOOTSTRAP) |
+| `open` | None | All files (AGENTS, SOUL, TOOLS, IDENTITY, USER, BOOTSTRAP) |
 | `predefined` | 6 files (shared across all users) | USER.md + BOOTSTRAP.md |
 
 For `open` agents, each user gets their own full set of context files. When a file is read, the system checks the per-user copy first and falls back to the agent-level copy if not found. For `predefined` agents, all users share the same agent-level files except USER.md (personalized) and BOOTSTRAP.md (per-user first-run ritual, deleted after completion).
 
-| Mode | Agent Type Source | Per-User Storage |
-|------|------------------|-----------------|
-| Managed | `agents` PostgreSQL table | `user_context_files` table |
-| Standalone | `config.json` agent entries | SQLite via `FileAgentStore` |
+| Source | Per-User Storage |
+|--------|-----------------|
+| `agents` PostgreSQL table | `user_context_files` table |
 
 ---
 
@@ -155,8 +132,7 @@ flowchart TD
     S9 --> S10["10. Extra Context / Subagent Context"]
     S10 --> S11["11. Project Context<br/>(bootstrap files + virtual files)"]
     S11 --> S12["12. Silent Replies (full only)"]
-    S12 --> S13["13. Heartbeats (full only)"]
-    S13 --> S14["14. Sub-Agent Spawning (conditional)"]
+    S12 --> S14["14. Sub-Agent Spawning (conditional)"]
     S14 --> S15["15. Runtime"]
 ```
 
@@ -178,7 +154,6 @@ flowchart TD
 | 10. Extra Context | Conditional | Conditional |
 | 11. Project Context | Yes | Yes |
 | 12. Silent Replies | Yes | No |
-| 13. Heartbeats | Yes | No |
 | 14. Sub-Agent Spawning | Conditional | Conditional |
 | 15. Runtime | Yes | Yes |
 
@@ -213,7 +188,7 @@ This ensures resolver-injected virtual files (`DELEGATION.md`, `TEAM.md`) surviv
 
 ## 7. Agent Summoning (Managed Mode)
 
-Creating a predefined agent requires 5 context files (SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md, HEARTBEAT.md) with specific formatting conventions. Agent summoning generates all 5 files from a natural language description in a single LLM call.
+Creating a predefined agent requires 4 context files (SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md) with specific formatting conventions. Agent summoning generates all 4 files from a natural language description in a single LLM call.
 
 ```mermaid
 flowchart TD
@@ -432,8 +407,8 @@ Combines full-text search and vector search with weighted merging.
 
 ```mermaid
 flowchart TD
-    Q["Search(query)"] --> FTS["FTS Search<br/>Standalone: SQLite FTS5 (BM25)<br/>Managed: tsvector + plainto_tsquery"]
-    Q --> VEC["Vector Search<br/>Standalone: cosine similarity<br/>Managed: pgvector (cosine distance)"]
+    Q["Search(query)"] --> FTS["FTS Search<br/>tsvector + plainto_tsquery"]
+    Q --> VEC["Vector Search<br/>pgvector (cosine distance)"]
     FTS --> MERGE["hybridMerge()"]
     VEC --> MERGE
     MERGE --> NORM["Normalize FTS scores to 0..1<br/>Vector scores already in 0..1"]
@@ -442,15 +417,14 @@ flowchart TD
     BOOST --> RESULT["Sorted + filtered results"]
 ```
 
-### Standalone vs Managed Comparison
+### Search Implementation
 
-| Aspect | Standalone | Managed |
-|--------|-----------|---------|
-| Storage | SQLite + FTS5 | PostgreSQL + tsvector + pgvector |
-| FTS | `porter unicode61` tokenizer | `plainto_tsquery('simple')` |
-| Vector | JSON array embedding | pgvector type |
-| Scope | Global (single agent) | Per-agent + per-user |
-| File watcher | fsnotify (1500ms debounce) | Not needed (DB-backed) |
+| Aspect | Detail |
+|--------|--------|
+| Storage | PostgreSQL + tsvector + pgvector |
+| FTS | `plainto_tsquery('simple')` |
+| Vector | pgvector type |
+| Scope | Per-agent + per-user |
 
 When both FTS and vector search return results, scores are merged using the weighted sum. When only one channel returns results, its scores are used directly (weights normalized to 1.0).
 
@@ -492,8 +466,7 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 |------|-------------|
 | `internal/bootstrap/files.go` | Bootstrap file constants, loading, session filtering |
 | `internal/bootstrap/truncate.go` | Truncation pipeline (head/tail split, budget clamping) |
-| `internal/bootstrap/seed.go` | Standalone mode seeding (EnsureWorkspaceFiles) |
-| `internal/bootstrap/seed_store.go` | Managed mode seeding (SeedToStore, SeedUserFiles) |
+| `internal/bootstrap/seed_store.go` | Seeding: SeedToStore, SeedUserFiles |
 | `internal/bootstrap/load_store.go` | Load context files from DB (LoadFromStore) |
 | `internal/bootstrap/templates/*.md` | Embedded template files |
 | `internal/agent/systemprompt.go` | System prompt builder (BuildSystemPrompt, 17+ sections) |
@@ -501,7 +474,6 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 | `internal/agent/resolver.go` | Agent resolution, DELEGATION.md + TEAM.md injection |
 | `internal/agent/loop_history.go` | Context file merging (base + per-user, base-only preserved) |
 | `internal/agent/memoryflush.go` | Memory flush logic (shouldRunMemoryFlush, runMemoryFlush) |
-| `internal/store/file/agents.go` | FileAgentStore -- filesystem + SQLite backend for standalone |
 | `internal/http/summoner.go` | Agent summoning -- LLM-powered context file generation |
 | `internal/skills/loader.go` | Skill loader (5-tier hierarchy, BuildSummary, filtering) |
 | `internal/skills/search.go` | BM25 search index (tokenization, IDF scoring) |

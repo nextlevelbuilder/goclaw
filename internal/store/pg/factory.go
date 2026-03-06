@@ -7,7 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// NewPGStores creates all stores backed by Postgres (managed mode).
+// NewPGStores creates all stores backed by Postgres.
 func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 	db, err := OpenDB(cfg.PostgresDSN)
 	if err != nil {

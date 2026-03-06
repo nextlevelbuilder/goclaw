@@ -21,13 +21,13 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// wireManagedExtras wires managed-mode components that require PG stores:
+// wireExtras wires components that require PG stores:
 // agent resolver (lazy-creates Loops from DB), virtual FS interceptors, memory tools,
 // and cache invalidation event subscribers.
 // PG store creation and tracing are handled in gateway.go before this is called.
 // Returns the ContextFileInterceptor so callers can pass it to AgentsMethods
 // for immediate cache invalidation on agents.files.set.
-func wireManagedExtras(
+func wireExtras(
 	stores *store.Stores,
 	agentRouter *agent.Router,
 	providerReg *providers.Registry,
@@ -165,7 +165,7 @@ func wireManagedExtras(
 		}
 	}
 
-	// Wire group writer cache for permission checks (managed mode only)
+	// Wire group writer cache for permission checks
 	if groupWriterCache != nil {
 		for _, toolName := range []string{"read_file", "write_file", "edit", "cron"} {
 			if t, ok := toolsReg.Get(toolName); ok {
@@ -397,7 +397,7 @@ func wireManagedExtras(
 			if embProvider := resolveEmbeddingProvider(appCfg, memCfg); embProvider != nil {
 				agentStore.SetEmbeddingProvider(embProvider)
 				delegateEmbProvider = embProvider
-				slog.Info("managed mode: agent embeddings enabled")
+				slog.Info("agent embeddings enabled")
 
 				// Backfill embeddings for existing agents with frontmatter
 				go func() {
@@ -411,7 +411,7 @@ func wireManagedExtras(
 			}
 		}
 		toolsReg.Register(tools.NewDelegateSearchTool(stores.AgentLinks, delegateEmbProvider))
-		slog.Info("managed mode: delegate + delegate_search tools registered")
+		slog.Info("delegate + delegate_search tools registered")
 	}
 
 	// Register team tools (team_tasks + team_message) if team store is available.
@@ -434,7 +434,7 @@ func wireManagedExtras(
 			}
 			teamMgr.InvalidateTeam()
 		})
-		slog.Info("managed mode: team tools registered")
+		slog.Info("team tools registered")
 	}
 
 	// User workspace cache: invalidate per-user workspace path on profile changes
@@ -469,12 +469,12 @@ func wireManagedExtras(
 		})
 	}
 
-	slog.Info("managed mode: resolver + interceptors + cache subscribers wired")
+	slog.Info("resolver + interceptors + cache subscribers wired")
 	return contextFileInterceptor, delegateMgr
 }
 
-// wireManagedHTTP creates managed-mode HTTP handlers (agents + skills + traces + MCP + custom tools + channel instances + providers + delegations + builtin tools).
-func wireManagedHTTP(stores *store.Stores, token string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, isOwner func(string) bool) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.CustomToolsHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.DelegationsHandler, *httpapi.BuiltinToolsHandler) {
+// wireHTTP creates HTTP handlers (agents + skills + traces + MCP + custom tools + channel instances + providers + delegations + builtin tools).
+func wireHTTP(stores *store.Stores, token string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, isOwner func(string) bool) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.CustomToolsHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.DelegationsHandler, *httpapi.BuiltinToolsHandler) {
 	var agentsH *httpapi.AgentsHandler
 	var skillsH *httpapi.SkillsHandler
 	var tracesH *httpapi.TracesHandler

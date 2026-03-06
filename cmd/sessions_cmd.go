@@ -9,10 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/nextlevelbuilder/goclaw/internal/config"
-	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/file"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -34,13 +31,7 @@ func sessionsListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all sessions",
 		Run: func(cmd *cobra.Command, args []string) {
-			if isManagedMode() {
-				sessionsListRPC(agentFilter, jsonOutput)
-				return
-			}
-			mgr := loadSessionsStore()
-			infos := mgr.List(agentFilter)
-			printSessionInfos(infos, jsonOutput)
+			sessionsListRPC(agentFilter, jsonOutput)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "output as JSON")
@@ -54,16 +45,7 @@ func sessionsDeleteCmd() *cobra.Command {
 		Short: "Delete a session",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if isManagedMode() {
-				sessionsDeleteRPC(args[0])
-				return
-			}
-			mgr := loadSessionsStore()
-			if err := mgr.Delete(args[0]); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Deleted session: %s\n", args[0])
+			sessionsDeleteRPC(args[0])
 		},
 	}
 }
@@ -74,21 +56,15 @@ func sessionsResetCmd() *cobra.Command {
 		Short: "Clear session history (keep session)",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if isManagedMode() {
-				sessionsResetRPC(args[0])
-				return
-			}
-			mgr := loadSessionsStore()
-			mgr.Reset(args[0])
-			fmt.Printf("Reset session: %s\n", args[0])
+			sessionsResetRPC(args[0])
 		},
 	}
 }
 
-// --- RPC implementations (managed mode) ---
+// --- RPC implementations ---
 
 func sessionsListRPC(agentFilter string, jsonOutput bool) {
-	requireGatewayForManaged()
+	requireGateway()
 
 	params, _ := json.Marshal(map[string]string{"agentId": agentFilter})
 	resp, err := gatewayRPC(protocol.MethodSessionsList, params)
@@ -115,7 +91,7 @@ func sessionsListRPC(agentFilter string, jsonOutput bool) {
 }
 
 func sessionsDeleteRPC(key string) {
-	requireGatewayForManaged()
+	requireGateway()
 
 	params, _ := json.Marshal(map[string]string{"key": key})
 	resp, err := gatewayRPC(protocol.MethodSessionsDelete, params)
@@ -131,7 +107,7 @@ func sessionsDeleteRPC(key string) {
 }
 
 func sessionsResetRPC(key string) {
-	requireGatewayForManaged()
+	requireGateway()
 
 	params, _ := json.Marshal(map[string]string{"key": key})
 	resp, err := gatewayRPC(protocol.MethodSessionsReset, params)
@@ -171,15 +147,6 @@ func printSessionInfos(infos []store.SessionInfo, jsonOutput bool) {
 		)
 	}
 	tw.Flush()
-}
-
-// --- File-based helpers (standalone mode) ---
-
-func loadSessionsStore() store.SessionStore {
-	cfgPath := resolveConfigPath()
-	cfg, _ := config.Load(cfgPath)
-	storage := config.ExpandHome(cfg.Sessions.Storage)
-	return file.NewFileSessionStore(sessions.NewManager(storage))
 }
 
 func truncateStr(s string, max int) string {

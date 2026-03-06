@@ -168,7 +168,7 @@ type UserAgentOverrideData struct {
 	Model    string    `json:"model,omitempty"`
 }
 
-// AgentStore manages agents and access control (managed mode only).
+// AgentStore manages agents and access control.
 type AgentStore interface {
 	Create(ctx context.Context, agent *AgentData) error
 	GetByKey(ctx context.Context, agentKey string) (*AgentData, error)

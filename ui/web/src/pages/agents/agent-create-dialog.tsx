@@ -258,11 +258,11 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
           {loading ? (
             <Button disabled>Creating...</Button>
           ) : !verifyResult?.valid && selectedProviderId && model.trim() ? (
-            <Button onClick={handleVerifyAndCreate} disabled={verifying || !displayName.trim() || !agentKey.trim() || !isValidSlug(agentKey)}>
+            <Button onClick={handleVerifyAndCreate} disabled={verifying || !displayName.trim() || !agentKey.trim() || !isValidSlug(agentKey) || (agentType === "predefined" && !description.trim())}>
               {verifying ? "Checking..." : "Check & Create"}
             </Button>
           ) : (
-            <Button onClick={handleCreate} disabled={!displayName.trim() || !agentKey.trim() || !isValidSlug(agentKey) || !provider.trim() || !model.trim() || !verifyResult?.valid}>
+            <Button onClick={handleCreate} disabled={!displayName.trim() || !agentKey.trim() || !isValidSlug(agentKey) || !provider.trim() || !model.trim() || !verifyResult?.valid || (agentType === "predefined" && !description.trim())}>
               Create
             </Button>
           )}

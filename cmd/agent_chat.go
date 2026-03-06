@@ -23,7 +23,6 @@ func agentChatCmd() *cobra.Command {
 		Use:   "chat",
 		Short: "Chat with an agent interactively or send a one-shot message",
 		Long: `Chat with an agent via the running gateway (WebSocket client mode).
-Falls back to standalone mode if the gateway is not running.
 
 Examples:
   goclaw agent chat                          # Interactive REPL
@@ -62,15 +61,14 @@ func runAgentChat(agentName, message, sessionKey string) {
 	}
 	addr := fmt.Sprintf("%s:%d", host, cfg.Gateway.Port)
 
-	if isGatewayRunning(addr) {
-		fmt.Fprintf(os.Stderr, "Connected to gateway at %s\n", addr)
-		runClientMode(cfg, addr, agentName, message, sessionKey)
-		return
+	if !isGatewayRunning(addr) {
+		fmt.Fprintln(os.Stderr, "Error: the gateway must be running for this command.")
+		fmt.Fprintln(os.Stderr, "Start it first:  goclaw")
+		os.Exit(1)
 	}
 
-	// Fallback: standalone mode
-	fmt.Fprintf(os.Stderr, "Gateway not running, using standalone mode\n")
-	runStandaloneMode(cfg, agentName, message, sessionKey)
+	fmt.Fprintf(os.Stderr, "Connected to gateway at %s\n", addr)
+	runClientMode(cfg, addr, agentName, message, sessionKey)
 }
 
 // --- Gateway detection ---

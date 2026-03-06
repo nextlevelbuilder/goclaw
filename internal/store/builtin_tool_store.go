@@ -22,7 +22,7 @@ type BuiltinToolDef struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
-// BuiltinToolStore manages built-in tool definitions (managed mode only).
+// BuiltinToolStore manages built-in tool definitions.
 // Built-in tools are seeded on startup; only enabled/settings are user-editable.
 type BuiltinToolStore interface {
 	List(ctx context.Context) ([]BuiltinToolDef, error)

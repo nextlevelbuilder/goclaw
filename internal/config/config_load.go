@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -160,7 +161,11 @@ func (c *Config) applyEnvOverrides() {
 
 	// Database
 	envStr("GOCLAW_POSTGRES_DSN", &c.Database.PostgresDSN)
-	envStr("GOCLAW_MODE", &c.Database.Mode)
+
+	// Deprecation warning for GOCLAW_MODE (removed — PostgreSQL is always active)
+	if v := os.Getenv("GOCLAW_MODE"); v != "" {
+		slog.Warn("GOCLAW_MODE is deprecated; managed mode is now the only mode", "value", v)
+	}
 
 	// Telemetry
 	envStr("GOCLAW_TELEMETRY_ENDPOINT", &c.Telemetry.Endpoint)
@@ -240,7 +245,7 @@ func (c *Config) applyEnvOverrides() {
 // src/config/defaults.ts.
 //
 // Go port does not have OAuth vs API-key distinction — we always treat it as
-// API-key mode (heartbeat 30m).
+// API-key mode.
 func (c *Config) applyContextPruningDefaults() {
 	// Only apply when Anthropic is configured.
 	if c.Providers.Anthropic.APIKey == "" {

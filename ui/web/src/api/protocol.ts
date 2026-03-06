@@ -95,7 +95,7 @@ export const Methods = {
   CHANNELS_STATUS: "channels.status",
   CHANNELS_TOGGLE: "channels.toggle",
 
-  // Channel instances (managed mode)
+  // Channel instances
   CHANNEL_INSTANCES_LIST: "channels.instances.list",
   CHANNEL_INSTANCES_CREATE: "channels.instances.create",
   CHANNEL_INSTANCES_UPDATE: "channels.instances.update",
@@ -126,7 +126,7 @@ export const Methods = {
   AGENTS_LINKS_UPDATE: "agents.links.update",
   AGENTS_LINKS_DELETE: "agents.links.delete",
 
-  // Agent teams (managed mode)
+  // Agent teams
   TEAMS_LIST: "teams.list",
   TEAMS_CREATE: "teams.create",
   TEAMS_GET: "teams.get",
@@ -137,13 +137,12 @@ export const Methods = {
   TEAMS_UPDATE: "teams.update",
   TEAMS_KNOWN_USERS: "teams.known_users",
 
-  // Delegation history (managed mode)
+  // Delegation history
   DELEGATIONS_LIST: "delegations.list",
   DELEGATIONS_GET: "delegations.get",
 
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
-  HEARTBEAT: "heartbeat",
 } as const;
 
 // --- Event names (from pkg/protocol/events.go) ---
@@ -164,7 +163,6 @@ export const Events = {
   DEVICE_PAIR_RESOLVED: "device.pair.resolved",
   VOICEWAKE_CHANGED: "voicewake.changed",
   CONNECT_CHALLENGE: "connect.challenge",
-  HEARTBEAT: "heartbeat",
   TALK_MODE: "talk.mode",
   HANDOFF: "handoff",
 

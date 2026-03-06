@@ -1,58 +1,40 @@
 # 06 - Store Layer and Data Model
 
-The store layer abstracts all persistence behind Go interfaces, allowing the same core engine to run with file-based storage (standalone mode) or PostgreSQL (managed mode). Each store interface has independent implementations, and the system determines which backend to use based on configuration at startup.
+The store layer abstracts all persistence behind Go interfaces backed by PostgreSQL. Each store interface has a PostgreSQL implementation wired at startup.
 
 ---
 
-## 1. Store Layer Routing
+## 1. Store Layer
 
 ```mermaid
 flowchart TD
-    START["Gateway Startup"] --> CHECK{"StoreConfig.IsManaged()?<br/>(DSN + mode = managed)"}
-    CHECK -->|Yes| PG["PostgreSQL Backend"]
-    CHECK -->|No| FILE["File Backend"]
+    START["Gateway Startup"] --> PG["PostgreSQL Backend"]
 
     PG --> PG_STORES["PGSessionStore<br/>PGAgentStore<br/>PGProviderStore<br/>PGCronStore<br/>PGPairingStore<br/>PGSkillStore<br/>PGMemoryStore<br/>PGTracingStore<br/>PGMCPServerStore<br/>PGCustomToolStore<br/>PGChannelInstanceStore<br/>PGConfigSecretsStore<br/>PGAgentLinkStore<br/>PGTeamStore"]
-
-    FILE --> FILE_STORES["FileSessionStore<br/>FileMemoryStore (SQLite + FTS5)<br/>FileCronStore<br/>FilePairingStore<br/>FileSkillStore<br/>FileAgentStore (filesystem + SQLite)<br/>ProviderStore = nil<br/>TracingStore = nil<br/>MCPServerStore = nil<br/>CustomToolStore = nil<br/>AgentLinks = nil<br/>Teams = nil"]
 ```
 
 ---
 
 ## 2. Store Interface Map
 
-The `Stores` struct is the top-level container holding all storage backends. In standalone mode, managed-only stores are `nil`.
+The `Stores` struct is the top-level container holding all PostgreSQL-backed storage implementations.
 
-| Interface | Standalone Implementation | Managed Implementation | Mode |
-|-----------|--------------------------|------------------------|------|
-| SessionStore | `FileSessionStore` via `sessions.Manager` | `PGSessionStore` | Both |
-| MemoryStore | `FileMemoryStore` (SQLite + FTS5 + embeddings) | `PGMemoryStore` (tsvector + pgvector) | Both |
-| CronStore | `FileCronStore` | `PGCronStore` | Both |
-| PairingStore | `FilePairingStore` via `pairing.Service` | `PGPairingStore` | Both |
-| SkillStore | `FileSkillStore` via `skills.Loader` | `PGSkillStore` | Both |
-| AgentStore | `FileAgentStore` (filesystem + SQLite) | `PGAgentStore` | Both |
-| ProviderStore | `nil` | `PGProviderStore` | Managed only |
-| TracingStore | `nil` | `PGTracingStore` | Managed only |
-| MCPServerStore | `nil` | `PGMCPServerStore` | Managed only |
-| CustomToolStore | `nil` | `PGCustomToolStore` | Managed only |
-| ChannelInstanceStore | `nil` | `PGChannelInstanceStore` | Managed only |
-| ConfigSecretsStore | `nil` | `PGConfigSecretsStore` | Managed only |
-| AgentLinkStore | `nil` | `PGAgentLinkStore` | Managed only |
-| TeamStore | `nil` | `PGTeamStore` | Managed only |
-
-### Standalone AgentStore (FileAgentStore)
-
-In standalone mode, `FileAgentStore` provides per-user context files and profiles without PostgreSQL. It combines filesystem storage (agent-level files like SOUL.md) with SQLite (`~/.goclaw/data/agents.db`) for per-user data:
-
-| Data | Storage |
-|------|---------|
-| Agent metadata | In-memory from `config.json` |
-| Agent-level files (SOUL.md, IDENTITY.md, ...) | Filesystem at workspace root |
-| Per-user files (USER.md, BOOTSTRAP.md) | SQLite `user_context_files` |
-| User profiles | SQLite `user_profiles` |
-| Group file writers | SQLite `group_file_writers` |
-
-Agent UUIDs use UUID v5 (deterministic): `uuid.NewSHA1(namespace, "goclaw-standalone:{agentKey}")` -- stable across restarts without database sequences.
+| Interface | Implementation |
+|-----------|---------------|
+| SessionStore | `PGSessionStore` |
+| MemoryStore | `PGMemoryStore` (tsvector + pgvector) |
+| CronStore | `PGCronStore` |
+| PairingStore | `PGPairingStore` |
+| SkillStore | `PGSkillStore` |
+| AgentStore | `PGAgentStore` |
+| ProviderStore | `PGProviderStore` |
+| TracingStore | `PGTracingStore` |
+| MCPServerStore | `PGMCPServerStore` |
+| CustomToolStore | `PGCustomToolStore` |
+| ChannelInstanceStore | `PGChannelInstanceStore` |
+| ConfigSecretsStore | `PGConfigSecretsStore` |
+| AgentLinkStore | `PGAgentLinkStore` |
+| TeamStore | `PGTeamStore` |
 
 ---
 
@@ -70,7 +52,7 @@ flowchart TD
         CACHE --> GETSM["GetSummary()"]
     end
 
-    CACHE -->|"Save(key)"| DB[("PostgreSQL / JSON file")]
+    CACHE -->|"Save(key)"| DB[("PostgreSQL")]
     DB -->|"Cache miss via GetOrCreate"| CACHE
 ```
 
@@ -90,12 +72,6 @@ flowchart TD
 | Subagent | `agent:{agentId}:subagent:{label}` | `agent:default:subagent:my-task` |
 | Cron | `agent:{agentId}:cron:{jobId}:run:{runId}` | `agent:default:cron:reminder:run:abc123` |
 | Main | `agent:{agentId}:{mainKey}` | `agent:default:main` |
-
-### File-Based Persistence (Standalone)
-
-- Startup: `loadAll()` reads all `.json` files into memory
-- Save: temp file + rename (atomic write, prevents corruption on crash)
-- Filename: session key with `:` replaced by `_`, plus `.json` extension
 
 ---
 
@@ -182,14 +158,14 @@ flowchart TD
 
 When FTS returns no results (e.g., cross-language queries), a `likeSearch()` fallback runs ILIKE queries using up to 5 keywords (minimum 3 characters each), scoped to the agent's index.
 
-### Standalone vs Managed
+### Search Implementation
 
-| Aspect | Standalone | Managed |
-|--------|-----------|---------|
-| FTS engine | SQLite FTS5 | PostgreSQL tsvector |
-| Vector | Embedding cache | pgvector extension |
-| Search function | `plainto_tsquery('simple', ...)` | Same |
-| Distance operator | N/A | `<=>` (cosine) |
+| Aspect | Detail |
+|--------|--------|
+| FTS engine | PostgreSQL tsvector |
+| Vector | pgvector extension |
+| Search function | `plainto_tsquery('simple', ...)` |
+| Distance operator | `<=>` (cosine) |
 
 ---
 
@@ -208,8 +184,8 @@ Context files are stored in two tables and routed based on agent type.
 
 | Agent Type | Agent-Level Files | Per-User Files |
 |------------|-------------------|----------------|
-| `open` | Template fallback only | All 7 files (SOUL, IDENTITY, AGENTS, TOOLS, HEARTBEAT, BOOTSTRAP, USER) |
-| `predefined` | 6 files (SOUL, IDENTITY, AGENTS, TOOLS, HEARTBEAT, BOOTSTRAP) | Only USER.md |
+| `open` | Template fallback only | All files (SOUL, IDENTITY, AGENTS, TOOLS, BOOTSTRAP, USER) |
+| `predefined` | Agent-level files (SOUL, IDENTITY, AGENTS, TOOLS, BOOTSTRAP) | Only USER.md |
 
 The `ContextFileInterceptor` checks agent type from context and routes read/write operations accordingly. For open agents, per-user files take priority with agent-level as fallback.
 
@@ -577,7 +553,6 @@ All "create or update" operations use `INSERT ... ON CONFLICT DO UPDATE`, ensuri
 | `internal/store/pairing_store.go` | `PairingStore` interface |
 | `internal/store/cron_store.go` | `CronStore` interface |
 | `internal/store/custom_tool_store.go` | `CustomToolStore` interface |
-| `internal/store/file/agents.go` | `FileAgentStore`: filesystem + SQLite backend for standalone mode |
 | `internal/store/pg/factory.go` | PG store factory: creates all PG store instances from a connection pool |
 | `internal/store/pg/sessions.go` | `PGSessionStore`: session cache, Save, GetOrCreate |
 | `internal/store/pg/agents.go` | `PGAgentStore`: CRUD, soft delete, access control |

@@ -76,7 +76,7 @@ type MCPAccessInfo struct {
 	ToolDeny  []string      `json:"tool_deny,omitempty"`  // effective deny list
 }
 
-// MCPServerStore manages MCP server configs and access grants (managed mode only).
+// MCPServerStore manages MCP server configs and access grants.
 type MCPServerStore interface {
 	// Server CRUD
 	CreateServer(ctx context.Context, s *MCPServerData) error

@@ -14,7 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// CustomToolsHandler handles custom tool CRUD endpoints (managed mode).
+// CustomToolsHandler handles custom tool CRUD endpoints.
 type CustomToolsHandler struct {
 	store    store.CustomToolStore
 	token    string
