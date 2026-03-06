@@ -66,38 +66,106 @@ func NewAgentSummoner(agents store.AgentStore, providerReg *providers.Registry, 
 
 // SummonAgent generates context files from a natural language description.
 // Meant to be called as a goroutine: go summoner.SummonAgent(...)
+// Generates SOUL.md first, then IDENTITY.md + USER_PREDEFINED.md using SOUL.md as context,
+// emitting progress events after each file so the UI can show incremental progress.
+// On retry, skips files that were already generated (differ from template).
 // On success: stores generated files and sets agent status to "active".
 // On failure: keeps template files (already seeded) and sets status to store.AgentStatusSummonFailed.
 func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, description string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
 	defer cancel()
 
 	s.ensureUserPredefined(ctx, agentID)
 
 	s.emitEvent(agentID, SummonEventStarted, "", "")
 
-	files, err := s.generateFiles(ctx, providerName, model, s.buildCreatePrompt(description))
-	if err != nil {
-		slog.Warn("summoning: LLM generation failed, falling back to templates",
-			"agent", agentID, "error", err)
-		s.emitEvent(agentID, SummonEventFailed, "", err.Error())
-		// Use fresh context — the original may have timed out, but we still need to update status.
-		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
-		return
+	// Check which files already exist (from a previous partial run)
+	existing, _ := s.agents.GetAgentContextFiles(ctx, agentID)
+	existingMap := make(map[string]string, len(existing))
+	for _, f := range existing {
+		existingMap[f.FileName] = f.Content
 	}
 
-	s.storeFiles(ctx, agentID, files)
+	var soulContent string
+	var frontmatter string
 
-	// Save frontmatter + display_name extracted from IDENTITY.md
+	// Step 1: Generate SOUL.md (skip if already generated, i.e. differs from template)
+	if s.isGenerated(existingMap, bootstrap.SoulFile) {
+		soulContent = existingMap[bootstrap.SoulFile]
+		slog.Info("summoning: SOUL.md already generated, skipping", "agent", agentID)
+		s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.SoulFile, "")
+	} else {
+		soulFiles, err := s.generateFiles(ctx, providerName, model, s.buildSoulPrompt(description))
+		if err != nil {
+			slog.Warn("summoning: SOUL.md generation failed", "agent", agentID, "error", err)
+			s.emitEvent(agentID, SummonEventFailed, "", err.Error())
+			s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+			return
+		}
+
+		soulContent = soulFiles[bootstrap.SoulFile]
+		frontmatter = soulFiles[frontmatterKey]
+		if soulContent != "" {
+			if err := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.SoulFile, soulContent); err != nil {
+				slog.Warn("summoning: failed to store SOUL.md", "agent", agentID, "error", err)
+			} else {
+				s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.SoulFile, "")
+			}
+		}
+	}
+
+	// Step 2: Generate IDENTITY.md + USER_PREDEFINED.md using SOUL.md as context
+	identityNeeded := !s.isGenerated(existingMap, bootstrap.IdentityFile)
+	userPredNeeded := !s.isGenerated(existingMap, bootstrap.UserPredefinedFile)
+
+	var identityContent string
+	if !identityNeeded && !userPredNeeded {
+		// Both already generated from a previous run
+		identityContent = existingMap[bootstrap.IdentityFile]
+		slog.Info("summoning: IDENTITY.md + USER_PREDEFINED.md already generated, skipping", "agent", agentID)
+		s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
+	} else {
+		idFiles, err := s.generateFiles(ctx, providerName, model, s.buildIdentityPrompt(description, soulContent))
+		if err != nil {
+			slog.Warn("summoning: IDENTITY.md generation failed", "agent", agentID, "error", err)
+			s.emitEvent(agentID, SummonEventFailed, "", err.Error())
+			s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+			return
+		}
+
+		identityContent = idFiles[bootstrap.IdentityFile]
+		if frontmatter == "" {
+			frontmatter = idFiles[frontmatterKey]
+		}
+
+		// Store IDENTITY.md
+		if identityContent != "" && identityNeeded {
+			if err := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.IdentityFile, identityContent); err != nil {
+				slog.Warn("summoning: failed to store IDENTITY.md", "agent", agentID, "error", err)
+			} else {
+				s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
+			}
+		}
+
+		// Store USER_PREDEFINED.md (optional — only if LLM generated it)
+		if upContent := idFiles[bootstrap.UserPredefinedFile]; upContent != "" && userPredNeeded {
+			if err := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.UserPredefinedFile, upContent); err != nil {
+				slog.Warn("summoning: failed to store USER_PREDEFINED.md", "agent", agentID, "error", err)
+			} else {
+				s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.UserPredefinedFile, "")
+			}
+		}
+	}
+
+	// Save frontmatter + display_name
 	updates := map[string]any{}
-	fm := files[frontmatterKey]
-	if fm == "" {
-		fm = truncateUTF8(description, 200)
+	if frontmatter == "" {
+		frontmatter = truncateUTF8(description, 200)
 	}
-	if fm != "" {
-		updates["frontmatter"] = fm
+	if frontmatter != "" {
+		updates["frontmatter"] = frontmatter
 	}
-	if name := extractIdentityName(files[bootstrap.IdentityFile]); name != "" {
+	if name := extractIdentityName(identityContent); name != "" {
 		updates["display_name"] = name
 	}
 	if len(updates) > 0 {
@@ -109,7 +177,7 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 	s.setAgentStatus(ctx, agentID, store.AgentStatusActive)
 	s.emitEvent(agentID, SummonEventCompleted, "", "")
 
-	slog.Info("summoning: completed", "agent", agentID, "files", len(files))
+	slog.Info("summoning: completed", "agent", agentID)
 }
 
 // RegenerateAgent updates context files based on an edit prompt.
@@ -165,12 +233,27 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, providerName, model, 
 	slog.Info("summoning: regeneration completed", "agent", agentID, "files", len(files))
 }
 
+// isGenerated checks if a context file has been generated (differs from the default template).
+func (s *AgentSummoner) isGenerated(existingMap map[string]string, fileName string) bool {
+	content, ok := existingMap[fileName]
+	if !ok || content == "" {
+		return false
+	}
+	template, err := bootstrap.ReadTemplate(fileName)
+	if err != nil {
+		return false
+	}
+	return content != template
+}
+
 // generateFiles calls the LLM and parses the XML-tagged response into file map.
 func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, prompt string) (map[string]string, error) {
 	provider, err := s.resolveProvider(providerName)
 	if err != nil {
 		return nil, fmt.Errorf("resolve provider: %w", err)
 	}
+
+	slog.Info("summoning: calling LLM", "provider", providerName, "model", model, "prompt_len", len(prompt))
 
 	resp, err := provider.Chat(ctx, providers.ChatRequest{
 		Messages: []providers.Message{
@@ -183,8 +266,10 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("LLM call: %w", err)
+		return nil, fmt.Errorf("%s: %w", providerName, err)
 	}
+
+	slog.Info("summoning: LLM responded", "provider", providerName, "content_len", len(resp.Content))
 
 	files := parseFileResponse(resp.Content)
 	if len(files) == 0 {
@@ -273,40 +358,20 @@ func (s *AgentSummoner) emitEvent(agentID uuid.UUID, eventType, fileName, errMsg
 	})
 }
 
-// buildCreatePrompt constructs the prompt for initial SOUL.md + IDENTITY.md generation.
-// Only personality files are LLM-generated; operational files stay as fixed templates.
-// USER_PREDEFINED.md is optionally generated when description mentions user context.
-func (s *AgentSummoner) buildCreatePrompt(description string) string {
+// buildSoulPrompt constructs the prompt for SOUL.md generation.
+func (s *AgentSummoner) buildSoulPrompt(description string) string {
 	var sb strings.Builder
-	sb.WriteString("You are setting up a new AI assistant. Based on the description below, generate the required files.\n\n")
+	sb.WriteString("You are setting up a new AI assistant. Based on the description below, generate the SOUL.md file that defines its personality.\n\n")
 
 	fmt.Fprintf(&sb, "<description>\n%s\n</description>\n\n", description)
 
-	// Load templates as reference
 	soulTemplate, err := bootstrap.ReadTemplate(bootstrap.SoulFile)
 	if err != nil {
 		slog.Warn("summoning: failed to read SOUL.md template", "error", err)
 	}
-	identityTemplate, err := bootstrap.ReadTemplate(bootstrap.IdentityFile)
-	if err != nil {
-		slog.Warn("summoning: failed to read IDENTITY.md template", "error", err)
-	}
-	userPredefinedTemplate, err := bootstrap.ReadTemplate(bootstrap.UserPredefinedFile)
-	if err != nil {
-		slog.Warn("summoning: failed to read USER_PREDEFINED.md template", "error", err)
-	}
-
-	sb.WriteString("<templates>\n")
 	if soulTemplate != "" {
-		fmt.Fprintf(&sb, "<file name=\"SOUL.md\">\n%s\n</file>\n", soulTemplate)
+		fmt.Fprintf(&sb, "<template>\n%s\n</template>\n\n", soulTemplate)
 	}
-	if identityTemplate != "" {
-		fmt.Fprintf(&sb, "<file name=\"IDENTITY.md\">\n%s\n</file>\n", identityTemplate)
-	}
-	if userPredefinedTemplate != "" {
-		fmt.Fprintf(&sb, "<file name=\"USER_PREDEFINED.md\">\n%s\n</file>\n", userPredefinedTemplate)
-	}
-	sb.WriteString("</templates>\n\n")
 
 	sb.WriteString(`IMPORTANT RULES:
 
@@ -321,24 +386,9 @@ func (s *AgentSummoner) buildCreatePrompt(description string) string {
    - "## Continuity" — keep as-is (just translate if needed).
    - KEEP the exact English headings. Do NOT add the agent's name into Core Truths or Boundaries.
 
-3. IDENTITY.md rules:
-   - KEEP the exact English heading: "# IDENTITY.md - Who Am I?"
-   - Fill in ONLY the field values: Name, Creature, Purpose, Vibe, Emoji based on the description.
-   - Purpose: mission statement — what this agent does, key resources, focus areas. Can be multiple lines. Include URLs or references mentioned in the description.
-   - REMOVE all template placeholder/instruction text (the italic hints in parentheses).
-   - Leave Avatar blank.
-   - Keep the footer note section as-is.
+3. Generate a short expertise summary (1-2 sentences, under 200 characters) for delegation discovery.
 
-4. Generate a short expertise summary (1-2 sentences, under 200 characters) for delegation discovery.
-
-5. USER_PREDEFINED.md (OPTIONAL — only generate if relevant):
-   - Generate this file if the description mentions ANY of: owner/creator info (name, username, role), target users/audience, user groups, communication policies, language requirements, or group-specific context.
-   - This is the RIGHT place for information about specific people (owner, creator, team members, contacts) — do NOT put personal/people info in SOUL.md or IDENTITY.md.
-   - If the description is purely about the agent's personality/expertise with no people or user-context, OMIT this file entirely.
-   - Content: owner/creator info, baseline rules for ALL users — default language, communication norms, audience assumptions, boundaries that individual users cannot override.
-   - Keep headings in English. Write content in the same language as the description.
-
-Output format — generate in this EXACT order:
+Output format:
 
 <frontmatter>
 (short expertise summary here)
@@ -346,7 +396,62 @@ Output format — generate in this EXACT order:
 
 <file name="SOUL.md">
 (content here)
-</file>
+</file>`)
+
+	return sb.String()
+}
+
+// buildIdentityPrompt constructs the prompt for IDENTITY.md + USER_PREDEFINED.md generation,
+// using the already-generated SOUL.md as context for consistency.
+func (s *AgentSummoner) buildIdentityPrompt(description, soulContent string) string {
+	var sb strings.Builder
+	sb.WriteString("You are setting up a new AI assistant. The SOUL.md (personality) has already been generated. Now generate IDENTITY.md and optionally USER_PREDEFINED.md based on the description and soul.\n\n")
+
+	fmt.Fprintf(&sb, "<description>\n%s\n</description>\n\n", description)
+
+	if soulContent != "" {
+		fmt.Fprintf(&sb, "<soul>\n%s\n</soul>\n\n", soulContent)
+	}
+
+	identityTemplate, err := bootstrap.ReadTemplate(bootstrap.IdentityFile)
+	if err != nil {
+		slog.Warn("summoning: failed to read IDENTITY.md template", "error", err)
+	}
+	userPredefinedTemplate, err := bootstrap.ReadTemplate(bootstrap.UserPredefinedFile)
+	if err != nil {
+		slog.Warn("summoning: failed to read USER_PREDEFINED.md template", "error", err)
+	}
+
+	sb.WriteString("<templates>\n")
+	if identityTemplate != "" {
+		fmt.Fprintf(&sb, "<file name=\"IDENTITY.md\">\n%s\n</file>\n", identityTemplate)
+	}
+	if userPredefinedTemplate != "" {
+		fmt.Fprintf(&sb, "<file name=\"USER_PREDEFINED.md\">\n%s\n</file>\n", userPredefinedTemplate)
+	}
+	sb.WriteString("</templates>\n\n")
+
+	sb.WriteString(`IMPORTANT RULES:
+
+1. Language: Write ALL content in the SAME LANGUAGE as the <description>. Keep headings in English.
+
+2. IDENTITY.md rules:
+   - KEEP the exact English heading: "# IDENTITY.md - Who Am I?"
+   - Fill in ONLY the field values: Name, Creature, Purpose, Vibe, Emoji based on the description and soul.
+   - The Name, Creature, and Vibe should MATCH the personality defined in the soul.
+   - Purpose: mission statement — what this agent does, key resources, focus areas. Can be multiple lines. Include URLs or references mentioned in the description.
+   - REMOVE all template placeholder/instruction text (the italic hints in parentheses).
+   - Leave Avatar blank.
+   - Keep the footer note section as-is.
+
+3. USER_PREDEFINED.md (OPTIONAL — only generate if relevant):
+   - Generate this file if the description mentions ANY of: owner/creator info (name, username, role), target users/audience, user groups, communication policies, language requirements, or group-specific context.
+   - This is the RIGHT place for information about specific people (owner, creator, team members, contacts) — do NOT put personal/people info in IDENTITY.md.
+   - If the description is purely about the agent's personality/expertise with no people or user-context, OMIT this file entirely.
+   - Content: owner/creator info, baseline rules for ALL users — default language, communication norms, audience assumptions, boundaries that individual users cannot override.
+   - Keep headings in English. Write content in the same language as the description.
+
+Output format:
 
 <file name="IDENTITY.md">
 (content here)
