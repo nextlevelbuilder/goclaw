@@ -94,6 +94,9 @@ func (c *Channel) Start(_ context.Context) error {
 	return nil
 }
 
+// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
 // Stop closes the Discord gateway connection.
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping discord bot")

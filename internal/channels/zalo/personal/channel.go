@@ -75,6 +75,9 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 	}, nil
 }
 
+// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
 // session returns the current session snapshot (thread-safe).
 func (c *Channel) session() *protocol.Session {
 	c.mu.RLock()

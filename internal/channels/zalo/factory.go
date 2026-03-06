@@ -22,6 +22,7 @@ type zaloInstanceConfig struct {
 	WebhookURL string   `json:"webhook_url,omitempty"`
 	MediaMaxMB int      `json:"media_max_mb,omitempty"`
 	AllowFrom  []string `json:"allow_from,omitempty"`
+	BlockReply *bool    `json:"block_reply,omitempty"`
 }
 
 // Factory creates a Zalo OA channel from DB instance data.
@@ -53,6 +54,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		WebhookURL:    ic.WebhookURL,
 		WebhookSecret: c.WebhookSecret,
 		MediaMaxMB:    ic.MediaMaxMB,
+		BlockReply:    ic.BlockReply,
 	}
 
 	ch, err := New(zCfg, msgBus, pairingSvc)

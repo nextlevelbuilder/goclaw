@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InfoLabel } from "@/components/shared/info-label";
@@ -17,6 +18,7 @@ interface GatewayData {
   rate_limit_rpm?: number;
   injection_action?: string;
   inbound_debounce_ms?: number;
+  block_reply?: boolean;
 }
 
 const DEFAULT: GatewayData = {};
@@ -158,6 +160,12 @@ export function GatewaySection({ data, onSave, saving }: Props) {
                 <SelectItem value="block">Block</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <InfoLabel tip="Deliver intermediate assistant text to non-streaming channels during tool iterations. Each assistant block is sent before tool execution.">Block Reply</InfoLabel>
+            <div className="flex items-center h-9">
+              <Switch checked={draft.block_reply ?? false} onCheckedChange={(v) => update({ block_reply: v })} />
+            </div>
           </div>
         </div>
 

@@ -22,6 +22,7 @@ type discordInstanceConfig struct {
 	AllowFrom      []string `json:"allow_from,omitempty"`
 	RequireMention *bool    `json:"require_mention,omitempty"`
 	HistoryLimit   int      `json:"history_limit,omitempty"`
+	BlockReply     *bool    `json:"block_reply,omitempty"`
 }
 
 // Factory creates a Discord channel from DB instance data.
@@ -53,6 +54,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		GroupPolicy:    ic.GroupPolicy,
 		RequireMention: ic.RequireMention,
 		HistoryLimit:   ic.HistoryLimit,
+		BlockReply:     ic.BlockReply,
 	}
 
 	// DB instances default to "pairing" for groups (secure by default).

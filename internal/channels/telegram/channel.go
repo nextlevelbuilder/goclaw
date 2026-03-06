@@ -202,6 +202,9 @@ func (c *Channel) StreamEnabled(isGroup bool) bool {
 	return c.config.DMStream != nil && *c.config.DMStream
 }
 
+// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
 // Stop shuts down the Telegram bot by cancelling the long polling context
 // and waiting for the polling goroutine to exit.
 func (c *Channel) Stop(_ context.Context) error {

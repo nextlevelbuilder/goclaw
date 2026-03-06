@@ -89,6 +89,12 @@ type StreamingChannel interface {
 	OnStreamEnd(ctx context.Context, chatID string, finalText string) error
 }
 
+// BlockReplyChannel is optionally implemented by channels that override
+// the gateway-level block_reply setting. Returns nil to inherit the gateway default.
+type BlockReplyChannel interface {
+	BlockReplyEnabled() *bool
+}
+
 // WebhookChannel extends Channel with an HTTP handler that can be mounted
 // on the main gateway mux instead of starting a separate HTTP server.
 // This allows webhook-based channels (e.g. Feishu/Lark) to share the main

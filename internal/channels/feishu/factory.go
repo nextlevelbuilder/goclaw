@@ -36,6 +36,7 @@ type feishuInstanceConfig struct {
 	Streaming        *bool    `json:"streaming,omitempty"`
 	ReactionLevel    string   `json:"reaction_level,omitempty"`
 	HistoryLimit     int      `json:"history_limit,omitempty"`
+	BlockReply       *bool    `json:"block_reply,omitempty"`
 }
 
 // Factory creates a Feishu/Lark channel from DB instance data.
@@ -81,6 +82,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		Streaming:         ic.Streaming,
 		ReactionLevel:     ic.ReactionLevel,
 		HistoryLimit:      ic.HistoryLimit,
+		BlockReply:        ic.BlockReply,
 	}
 
 	// DB instances default to "pairing" for groups (secure by default).

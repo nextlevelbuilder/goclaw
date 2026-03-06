@@ -20,7 +20,7 @@ import {
 import type { ChannelInstanceData, ChannelInstanceInput } from "./hooks/use-channel-instances";
 import type { AgentData } from "@/types/agent";
 import { slugify, isValidSlug } from "@/lib/slug";
-import { credentialsSchema, configSchema, wizardConfig } from "./channel-schemas";
+import { credentialsSchema, configSchema, wizardConfig, type FieldDef } from "./channel-schemas";
 import { ChannelFields } from "./channel-fields";
 import { wizardAuthSteps, wizardConfigSteps, wizardEditConfigs } from "./channel-wizard-registry";
 import { TelegramGroupOverrides } from "./telegram-group-overrides";
@@ -89,7 +89,16 @@ export function ChannelInstanceFormDialog({
       for (const f of schema) {
         if (f.defaultValue !== undefined) defaults[f.key] = f.defaultValue;
       }
-      setConfigValues({ ...defaults, ...(instance?.config ?? {}) });
+      const merged: Record<string, unknown> = { ...defaults, ...(instance?.config ?? {}) };
+      // Convert boolean values to strings for select fields that use "true"/"false" options
+      const boolSelectKeys = new Set(
+        schema.filter((f) => f.type === "select" && f.options?.some((o) => o.value === "true")).map((f) => f.key),
+      );
+      for (const key of boolSelectKeys) {
+        if (typeof merged[key] === "boolean") merged[key] = String(merged[key]);
+        else if (merged[key] === undefined || merged[key] === null) merged[key] = "inherit";
+      }
+      setConfigValues(merged);
       setEnabled(instance?.enabled ?? true);
       setError("");
       setStep("form");
@@ -117,6 +126,20 @@ export function ChannelInstanceFormDialog({
     setConfigValues((prev) => ({ ...prev, [key]: value }));
   }, []);
 
+  // Convert select fields with "true"/"false"/"inherit" values to proper JSON types.
+  // "inherit" → remove key (nil on Go side), "true"/"false" → boolean.
+  const coerceBoolSelects = (cfg: Record<string, unknown>, schema: FieldDef[]) => {
+    const boolSelectKeys = new Set(
+      schema.filter((f) => f.type === "select" && f.options?.some((o) => o.value === "true")).map((f) => f.key),
+    );
+    for (const key of boolSelectKeys) {
+      const v = cfg[key];
+      if (v === "true") cfg[key] = true;
+      else if (v === "false") cfg[key] = false;
+      else delete cfg[key]; // "inherit" or unset
+    }
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) { setError("Name is required"); return; }
     if (!isValidSlug(name.trim())) {
@@ -137,6 +160,7 @@ export function ChannelInstanceFormDialog({
     const cleanConfig = Object.fromEntries(
       Object.entries(configValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
+    coerceBoolSelects(cleanConfig, configSchema[channelType] ?? []);
     const cleanCreds = Object.fromEntries(
       Object.entries(credsValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
@@ -180,6 +204,7 @@ export function ChannelInstanceFormDialog({
     const cleanConfig = Object.fromEntries(
       Object.entries(configValues).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
+    coerceBoolSelects(cleanConfig, configSchema[channelType] ?? []);
     setLoading(true);
     setError("");
     try {

@@ -25,6 +25,7 @@ type zaloInstanceConfig struct {
 	GroupPolicy    string   `json:"group_policy,omitempty"`
 	RequireMention *bool    `json:"require_mention,omitempty"`
 	AllowFrom      []string `json:"allow_from,omitempty"`
+	BlockReply     *bool    `json:"block_reply,omitempty"`
 }
 
 // Factory creates a Zalo Personal channel from DB instance data (managed mode).
@@ -58,6 +59,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		DMPolicy:       ic.DMPolicy,
 		GroupPolicy:    ic.GroupPolicy,
 		RequireMention: ic.RequireMention,
+		BlockReply:     ic.BlockReply,
 	}
 
 	ch, err := New(zaloCfg, msgBus, pairingSvc)

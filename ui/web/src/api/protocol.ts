@@ -176,6 +176,7 @@ export const AgentEventTypes = {
   RUN_FAILED: "run.failed",
   TOOL_CALL: "tool.call",
   TOOL_RESULT: "tool.result",
+  BLOCK_REPLY: "block.reply",
 } as const;
 
 // Chat event subtypes (in payload.type)

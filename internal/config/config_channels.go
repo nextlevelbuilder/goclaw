@@ -25,6 +25,7 @@ type TelegramConfig struct {
 	ReactionLevel  string              `json:"reaction_level,omitempty"`   // "off" (default), "minimal", "full" — status emoji reactions
 	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"`  // max media download size in bytes (default 20MB)
 	LinkPreview    *bool               `json:"link_preview,omitempty"`     // enable URL previews in messages (default true)
+	BlockReply     *bool               `json:"block_reply,omitempty"`      // override gateway block_reply for this channel (nil = inherit)
 
 	// Optional STT (Speech-to-Text) pipeline for voice/audio inbound messages.
 	// When stt_proxy_url is set, audio/voice messages are transcribed before being forwarded to the agent.
@@ -76,6 +77,7 @@ type DiscordConfig struct {
 	GroupPolicy    string              `json:"group_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
 	RequireMention *bool               `json:"require_mention,omitempty"` // require @bot mention in groups (default true)
 	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
+	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 }
 
 type SlackConfig struct {
@@ -94,6 +96,7 @@ type WhatsAppConfig struct {
 	AllowFrom   FlexibleStringSlice `json:"allow_from"`
 	DMPolicy    string              `json:"dm_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
 	GroupPolicy string              `json:"group_policy,omitempty"` // "open" (default), "allowlist", "disabled"
+	BlockReply  *bool               `json:"block_reply,omitempty"`  // override gateway block_reply (nil = inherit)
 }
 
 type ZaloConfig struct {
@@ -104,6 +107,7 @@ type ZaloConfig struct {
 	WebhookURL    string              `json:"webhook_url,omitempty"`
 	WebhookSecret string              `json:"webhook_secret,omitempty"`
 	MediaMaxMB    int                 `json:"media_max_mb,omitempty"` // default 5
+	BlockReply    *bool               `json:"block_reply,omitempty"`  // override gateway block_reply (nil = inherit)
 }
 
 type ZaloPersonalConfig struct {
@@ -113,6 +117,7 @@ type ZaloPersonalConfig struct {
 	GroupPolicy     string              `json:"group_policy,omitempty"`     // "open" (default), "allowlist", "disabled"
 	RequireMention  *bool               `json:"require_mention,omitempty"`  // require @bot mention in groups (default true)
 	CredentialsPath string              `json:"credentials_path,omitempty"` // path to saved cookies JSON (standalone)
+	BlockReply      *bool               `json:"block_reply,omitempty"`      // override gateway block_reply (nil = inherit)
 }
 
 type FeishuConfig struct {
@@ -137,6 +142,7 @@ type FeishuConfig struct {
 	Streaming         *bool               `json:"streaming,omitempty"`          // default true
 	ReactionLevel     string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full" — typing emoji reactions
 	HistoryLimit      int                 `json:"history_limit,omitempty"`
+	BlockReply        *bool               `json:"block_reply,omitempty"`        // override gateway block_reply (nil = inherit)
 }
 
 // ProvidersConfig maps provider name to its config.
@@ -211,6 +217,7 @@ type GatewayConfig struct {
 	InjectionAction   string   `json:"injection_action,omitempty"`     // prompt injection action: "log", "warn" (default), "block", "off"
 	InboundDebounceMs int      `json:"inbound_debounce_ms,omitempty"` // merge rapid messages from same sender (default 1000ms, -1 = disabled)
 	Quota             *QuotaConfig `json:"quota,omitempty"`               // per-user/group request quotas (managed mode only)
+	BlockReply        *bool        `json:"block_reply,omitempty"`         // deliver intermediate text during tool iterations (default false)
 }
 
 // ToolsConfig controls tool availability, policy, and web search.

@@ -116,6 +116,9 @@ func (c *Channel) Start(ctx context.Context) error {
 	}
 }
 
+// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+func (c *Channel) BlockReplyEnabled() *bool { return c.cfg.BlockReply }
+
 // Stop shuts down the Feishu channel.
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping feishu/lark bot")

@@ -20,6 +20,7 @@ type whatsappInstanceConfig struct {
 	DMPolicy    string   `json:"dm_policy,omitempty"`
 	GroupPolicy string   `json:"group_policy,omitempty"`
 	AllowFrom   []string `json:"allow_from,omitempty"`
+	BlockReply  *bool    `json:"block_reply,omitempty"`
 }
 
 // Factory creates a WhatsApp channel from DB instance data.
@@ -49,6 +50,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		AllowFrom:   ic.AllowFrom,
 		DMPolicy:    ic.DMPolicy,
 		GroupPolicy: ic.GroupPolicy,
+		BlockReply:  ic.BlockReply,
 	}
 
 	// DB instances default to "pairing" for groups (secure by default).

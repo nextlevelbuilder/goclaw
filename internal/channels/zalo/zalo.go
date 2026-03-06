@@ -38,6 +38,7 @@ type Channel struct {
 	token          string
 	dmPolicy       string
 	mediaMaxMB     int
+	blockReply     *bool
 	pairingService store.PairingStore
 	pairingDebounce sync.Map // senderID → time.Time
 	stopCh         chan struct{}
@@ -68,11 +69,15 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 		token:          cfg.Token,
 		dmPolicy:       dmPolicy,
 		mediaMaxMB:     mediaMax,
+		blockReply:     cfg.BlockReply,
 		pairingService: pairingSvc,
 		stopCh:         make(chan struct{}),
 		client:         &http.Client{Timeout: 60 * time.Second},
 	}, nil
 }
+
+// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+func (c *Channel) BlockReplyEnabled() *bool { return c.blockReply }
 
 // Start begins polling for Zalo updates.
 func (c *Channel) Start(ctx context.Context) error {

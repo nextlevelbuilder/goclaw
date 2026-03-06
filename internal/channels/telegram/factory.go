@@ -27,6 +27,7 @@ type telegramInstanceConfig struct {
 	ReactionLevel  string   `json:"reaction_level,omitempty"`
 	MediaMaxBytes  int64    `json:"media_max_bytes,omitempty"`
 	LinkPreview    *bool    `json:"link_preview,omitempty"`
+	BlockReply     *bool    `json:"block_reply,omitempty"`
 	AllowFrom      []string `json:"allow_from,omitempty"`
 }
 
@@ -79,6 +80,7 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		ReactionLevel:  ic.ReactionLevel,
 		MediaMaxBytes:  ic.MediaMaxBytes,
 		LinkPreview:    ic.LinkPreview,
+		BlockReply:     ic.BlockReply,
 	}
 
 	// DB instances default to "pairing" for groups (secure by default).

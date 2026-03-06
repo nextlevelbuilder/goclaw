@@ -14,6 +14,12 @@ export interface FieldDef {
 
 // --- Shared option lists ---
 
+const blockReplyOptions = [
+  { value: "inherit", label: "Inherit from gateway" },
+  { value: "true", label: "Enabled" },
+  { value: "false", label: "Disabled" },
+];
+
 const dmPolicyOptions = [
   { value: "pairing", label: "Pairing (require code)" },
   { value: "open", label: "Open (accept all)" },
@@ -68,6 +74,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "media_max_bytes", label: "Max Media Size (bytes)", type: "number", defaultValue: 20971520, help: "Default: 20MB" },
     { key: "link_preview", label: "Link Preview", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "User IDs or @usernames, one per line" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   discord: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "open" },
@@ -75,6 +82,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Discord user IDs" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   feishu: [
     { key: "domain", label: "Domain", type: "select", options: [{ value: "lark", label: "Lark (global) — webhook only" }, { value: "feishu", label: "Feishu (China)" }], defaultValue: "lark" },
@@ -92,23 +100,27 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "off", help: "Typing emoji reaction on user messages while bot is processing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Lark open_ids (ou_...)" },
     { key: "group_allow_from", label: "Group Allowed Users", type: "tags", help: "Separate allowlist for group senders" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   zalo_oa: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "webhook_url", label: "Webhook URL", type: "text", placeholder: "https://..." },
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 5 },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   zalo_personal: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "allowlist" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "allowlist" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs or group IDs" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   whatsapp: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "open" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "open" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "WhatsApp user IDs" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
 };
 

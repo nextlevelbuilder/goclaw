@@ -67,6 +67,9 @@ func (c *Channel) Start(ctx context.Context) error {
 	return nil
 }
 
+// BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
+func (c *Channel) BlockReplyEnabled() *bool { return c.config.BlockReply }
+
 // Stop gracefully shuts down the WhatsApp channel.
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping whatsapp channel")
