@@ -174,8 +174,9 @@ func (t *WebSearchTool) Execute(ctx context.Context, args map[string]interface{}
 		Freshness:  freshness,
 	}
 
-	// Check cache
-	cacheKey := buildSearchCacheKey(params)
+	// Check cache (scoped per channel to prevent cross-channel cache poisoning)
+	channel := ToolChannelFromCtx(ctx)
+	cacheKey := fmt.Sprintf("%s:%s", channel, buildSearchCacheKey(params))
 	if cached, ok := t.cache.get(cacheKey); ok {
 		slog.Debug("web_search cache hit", "query", query)
 		return NewResult(cached)

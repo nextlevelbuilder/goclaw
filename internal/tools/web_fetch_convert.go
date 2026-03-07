@@ -113,6 +113,12 @@ func (c *converter) walk(n *html.Node) {
 		return
 	}
 
+	// Skip hidden elements (display:none, hidden attr, aria-hidden, etc.)
+	// to prevent hidden-text prompt injection attacks.
+	if isHiddenElement(n) {
+		return
+	}
+
 	tag := n.DataAtom
 
 	if skipElements[tag] {
