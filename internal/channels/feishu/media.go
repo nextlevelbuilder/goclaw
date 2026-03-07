@@ -13,14 +13,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
 
-// --- Image download ---
-
-// downloadImage downloads an image by image_key.
-// Uses the im.image.get API (for images uploaded via im/v1/images).
-func (c *Channel) downloadImage(ctx context.Context, imageKey string) ([]byte, error) {
-	return c.client.DownloadImage(ctx, imageKey)
-}
-
 // downloadMessageResource downloads a message attachment (image, file, audio, video, sticker).
 // Uses the im.messageResource.get API — the primary API for inbound media.
 func (c *Channel) downloadMessageResource(ctx context.Context, messageID, fileKey, resourceType string) ([]byte, string, error) {

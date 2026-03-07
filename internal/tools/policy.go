@@ -33,12 +33,6 @@ var toolGroups = map[string][]string{
 	},
 }
 
-// ownerOnlyTools are tools that only the instance owner can execute.
-// Matching TS OWNER_ONLY_TOOL_NAMES.
-var ownerOnlyTools = map[string]bool{
-	"whatsapp_login": true,
-}
-
 // RegisterToolGroup adds or replaces a dynamic tool group.
 // Used by the MCP manager to register "mcp" and "mcp:{serverName}" groups.
 func RegisterToolGroup(name string, members []string) {

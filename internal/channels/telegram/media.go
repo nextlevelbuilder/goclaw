@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mymmrac/telego"
@@ -19,10 +18,6 @@ import (
 const (
 	// defaultMediaMaxBytes is the default max download size (20MB, Telegram Bot API limit).
 	defaultMediaMaxBytes int64 = 20 * 1024 * 1024
-
-	// mediaGroupTimeout is the delay before processing a media group (album).
-	// Telegram sends album items as separate updates; we buffer them before processing.
-	mediaGroupTimeout = 500 * time.Millisecond
 
 	// downloadMaxRetries is the number of download retry attempts.
 	downloadMaxRetries = 3
@@ -40,24 +35,6 @@ type MediaInfo struct {
 	FileName    string // original filename
 	FileSize    int64
 	Transcript  string // STT transcript for audio/voice media (empty if not transcribed)
-}
-
-// mediaGroupBuffer buffers media group (album) messages before processing them together.
-type mediaGroupBuffer struct {
-	mu     sync.Mutex
-	groups map[string]*mediaGroup
-}
-
-type mediaGroup struct {
-	messages []*telego.Message
-	timer    *time.Timer
-	chatID   int64
-}
-
-func newMediaGroupBuffer() *mediaGroupBuffer {
-	return &mediaGroupBuffer{
-		groups: make(map[string]*mediaGroup),
-	}
 }
 
 // resolveMedia extracts and downloads media from a Telegram message.

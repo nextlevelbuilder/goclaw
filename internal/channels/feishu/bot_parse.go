@@ -196,12 +196,3 @@ func resolveMentions(text string, mentions []mentionInfo, botOpenID string) stri
 	}
 	return strings.TrimSpace(text)
 }
-
-// --- Helpers ---
-
-func safeStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}

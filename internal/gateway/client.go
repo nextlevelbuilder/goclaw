@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +22,6 @@ type Client struct {
 	role          permissions.Role
 	userID        string // external user ID (TEXT, free-form), set during connect
 	send          chan []byte
-	mu            sync.Mutex
 
 	connectedAt time.Time // when the client connected
 	remoteAddr  string    // peer IP (extracted from proxy headers or RemoteAddr)

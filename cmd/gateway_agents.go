@@ -1,17 +1,13 @@
 package cmd
 
 import (
-	"context"
-	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
 )
@@ -195,27 +191,4 @@ func setupTTS(cfg *config.Config) *tts.Manager {
 	}
 
 	return mgr
-}
-
-// parseDuration parses a duration string like "30m", "1h", "0m".
-func parseDuration(s string) (time.Duration, error) {
-	return time.ParseDuration(s)
-}
-
-// resolveDefaultAgentManaged resolves the default agent ID, falling back to the
-// DB when config returns the generic "default" (which doesn't exist
-// as a real agent — agents live in the DB, not config).
-func resolveDefaultAgentManaged(cfg *config.Config, managedStores *store.Stores) string {
-	agentID := cfg.ResolveDefaultAgentID()
-
-	if managedStores == nil || managedStores.Agents == nil || agentID != config.DefaultAgentID {
-		return agentID
-	}
-
-	agent, err := managedStores.Agents.GetDefault(context.Background())
-	if err != nil {
-		slog.Warn("resolveDefaultAgentManaged: no default agent in DB", "error", err)
-		return agentID
-	}
-	return agent.AgentKey
 }

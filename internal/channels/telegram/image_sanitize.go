@@ -63,17 +63,6 @@ func sanitizeImage(inputPath string) (string, error) {
 	return "", fmt.Errorf("image too large even at lowest quality (dimensions: %dx%d)", w, h)
 }
 
-// isImageFile checks if a filename has an image extension that we can process.
-func isImageFile(filename string) bool {
-	ext := filepath.Ext(filename)
-	switch ext {
-	case ".jpg", ".jpeg", ".png":
-		return true
-	default:
-		return false
-	}
-}
-
 // Ensure standard image decoders are registered.
 func init() {
 	image.RegisterFormat("jpeg", "\xff\xd8", jpeg.Decode, jpeg.DecodeConfig)

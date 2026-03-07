@@ -24,10 +24,6 @@ func NewPGTeamStore(db *sql.DB) *PGTeamStore {
 
 const teamSelectCols = `id, name, lead_agent_id, description, status, settings, created_by, created_at, updated_at`
 
-const taskSelectCols = `id, team_id, subject, description, status, owner_agent_id, blocked_by, priority, result, created_at, updated_at`
-
-const messageSelectCols = `id, team_id, from_agent_id, to_agent_id, content, message_type, read, task_id, metadata, created_at`
-
 // ============================================================
 // Team CRUD
 // ============================================================

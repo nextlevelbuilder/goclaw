@@ -2,8 +2,6 @@ package pg
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -147,78 +145,6 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 	}
 	return results, nil
 }
-
-// likeSearch is a fallback when FTS returns nothing (e.g., cross-language query).
-// Splits query into keywords (max 5, min 3 chars each) and matches via ILIKE.
-// Scoped to agent_id (indexed) so scan is limited. Only runs as last resort.
-func (s *PGMemoryStore) likeSearch(ctx context.Context, query string, agentID interface{}, userID string, limit int) ([]scoredChunk, error) {
-	words := strings.Fields(query)
-	if len(words) == 0 {
-		return nil, nil
-	}
-
-	// Build OR conditions — cap at 5 longest keywords (>= 3 chars) to limit scan cost
-	const maxKeywords = 5
-	const minKeywordLen = 3
-	var filtered []string
-	for _, w := range words {
-		w = strings.TrimSpace(w)
-		if len(w) >= minKeywordLen {
-			filtered = append(filtered, w)
-		}
-	}
-	if len(filtered) == 0 {
-		return nil, nil
-	}
-	// Keep longest keywords first (more selective → fewer matches)
-	for i := 0; i < len(filtered); i++ {
-		for j := i + 1; j < len(filtered); j++ {
-			if len(filtered[j]) > len(filtered[i]) {
-				filtered[i], filtered[j] = filtered[j], filtered[i]
-			}
-		}
-	}
-	if len(filtered) > maxKeywords {
-		filtered = filtered[:maxKeywords]
-	}
-
-	// Build query with positional params
-	// $1 = agentID, $2..$N = keywords, then optional userID, then limit
-	args := []interface{}{agentID}
-	var conditions []string
-	for _, w := range filtered {
-		args = append(args, "%"+w+"%")
-		conditions = append(conditions, fmt.Sprintf("text ILIKE $%d", len(args)))
-	}
-
-	q := fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id, 0.5 AS score
-		FROM memory_chunks
-		WHERE agent_id = $1 AND (%s)`, strings.Join(conditions, " OR "))
-
-	if userID != "" {
-		args = append(args, userID)
-		q += fmt.Sprintf(" AND (user_id IS NULL OR user_id = $%d)", len(args))
-	} else {
-		q += " AND user_id IS NULL"
-	}
-	args = append(args, limit)
-	q += fmt.Sprintf(" LIMIT $%d", len(args))
-
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var results []scoredChunk
-	for rows.Next() {
-		var r scoredChunk
-		rows.Scan(&r.Path, &r.StartLine, &r.EndLine, &r.Text, &r.UserID, &r.Score)
-		results = append(results, r)
-	}
-	return results, nil
-}
-
 // hybridMerge combines FTS and vector results with weighted scoring.
 // Per-user results get a 1.2x boost. Deduplication: user copy wins over global.
 func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, currentUserID string) []store.MemorySearchResult {

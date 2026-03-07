@@ -348,12 +348,6 @@ func runGateway() {
 
 	// Wire cron retry config from config.json
 	cronRetryCfg := cfg.Cron.ToRetryConfig()
-	type cronRetryConfigSetter interface{ SetRetryConfig(interface{}) }
-	if svc, ok := pgStores.Cron.(interface {
-		SetRetryConfig(r interface{})
-	}); ok {
-		_ = svc
-	}
 	// Apply retry config via type assertion on the concrete cron store.
 	pgStores.Cron.SetOnJob(nil) // ensure initialized; actual handler set below
 	_ = cronRetryCfg            // config available; pg cron store reads it internally

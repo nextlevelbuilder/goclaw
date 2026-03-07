@@ -122,7 +122,3 @@ func execMapUpdate(ctx context.Context, db *sql.DB, table string, id uuid.UUID, 
 	_, err := db.ExecContext(ctx, q, args...)
 	return err
 }
-
-func nowUTC() time.Time {
-	return time.Now().UTC()
-}
