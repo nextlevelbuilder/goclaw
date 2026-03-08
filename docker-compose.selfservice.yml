@@ -12,6 +12,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${GOCLAW_UI_PORT:-3000}:80"
+    networks:
+      - default
+      - shared
     depends_on:
       - goclaw
     restart: unless-stopped

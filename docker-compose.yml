@@ -43,8 +43,15 @@ services:
           memory: 1G
           cpus: '2.0'
           pids: 200
+    networks:
+      - default
+      - shared
     restart: unless-stopped
 
 volumes:
   goclaw-data:
   goclaw-workspace:
+
+networks:
+  shared:
+    external: true
