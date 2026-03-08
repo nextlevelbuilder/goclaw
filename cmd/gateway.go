@@ -62,37 +62,6 @@ func runGateway() {
 		os.Exit(1)
 	}
 
-	// Auto-detect: if no provider API key is configured, help the user.
-	// Also trigger auto-onboard when config file doesn't exist (first run),
-	// even if env vars provide API keys — DB seeding is required.
-	_, cfgStatErr := os.Stat(cfgPath)
-	configMissing := os.IsNotExist(cfgStatErr)
-	if !cfg.HasAnyProvider() || configMissing {
-		// Docker / CI: env vars provide API keys → non-interactive auto-onboard.
-		if canAutoOnboard() {
-			if runAutoOnboard(cfgPath) {
-				cfg, _ = config.Load(cfgPath)
-			} else {
-				os.Exit(1)
-			}
-		} else if _, statErr := os.Stat(cfgPath); statErr == nil {
-			// Config file exists — user already onboarded but forgot to source .env.local.
-			envPath := filepath.Join(filepath.Dir(cfgPath), ".env.local")
-			fmt.Println("No AI provider API key found. Did you forget to load your secrets?")
-			fmt.Println()
-			fmt.Printf("  source %s && ./goclaw\n", envPath)
-			fmt.Println()
-			fmt.Println("Or re-run the setup wizard:  ./goclaw onboard")
-			os.Exit(1)
-		} else {
-			// No config file at all → first time, redirect to onboard wizard.
-			fmt.Println("No configuration found. Starting setup wizard...")
-			fmt.Println()
-			runOnboard()
-			return
-		}
-	}
-
 	// Create core components
 	msgBus := bus.New()
 
