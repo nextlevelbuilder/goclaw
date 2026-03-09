@@ -333,6 +333,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	iteration := 0
 	totalToolCalls := 0
 	var finalContent string
+	var finalThinking string
 	var asyncToolCalls []string   // track async spawn tool names for fallback
 	var mediaResults []MediaResult // media files from tool MEDIA: results
 	var deliverables []string      // actual content from tool outputs (for team task results)
@@ -532,6 +533,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			}
 			finalContent = resp.Content
+			finalThinking = resp.Thinking
 			break
 		}
 
@@ -594,7 +596,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				Type:    protocol.AgentEventToolCall,
 				AgentID: l.id,
 				RunID:   req.RunID,
-				Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
+				Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID, "arguments": truncateToolArgs(tc.Arguments, 500)},
 			})
 
 			argsJSON, _ := json.Marshal(tc.Arguments)
@@ -640,6 +642,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				"id":        tc.ID,
 				"is_error":  result.IsError,
 				"arguments": tc.Arguments,
+				"result":    truncateStr(result.ForLLM, 1000),
 			}
 			if result.IsError && result.ForLLM != "" {
 				toolResultPayload["content"] = result.ForLLM
@@ -707,7 +710,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					Type:    protocol.AgentEventToolCall,
 					AgentID: l.id,
 					RunID:   req.RunID,
-					Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
+					Payload: map[string]interface{}{"name": tc.Name, "id": tc.ID, "arguments": truncateToolArgs(tc.Arguments, 500)},
 				})
 			}
 
@@ -780,6 +783,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					"id":        r.tc.ID,
 					"is_error":  r.result.IsError,
 					"arguments": r.tc.Arguments,
+					"result":    truncateStr(r.result.ForLLM, 1000),
 				}
 				if r.result.IsError && r.result.ForLLM != "" {
 					parToolResultPayload["content"] = r.result.ForLLM
@@ -862,8 +866,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}
 
 	pendingMsgs = append(pendingMsgs, providers.Message{
-		Role:    "assistant",
-		Content: finalContent,
+		Role:     "assistant",
+		Content:  finalContent,
+		Thinking: finalThinking,
 	})
 
 	// Flush all buffered messages to session atomically.
@@ -937,4 +942,15 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}, nil
 }
 
-
+// truncateToolArgs returns a copy of arguments with string values truncated to maxLen.
+func truncateToolArgs(args map[string]interface{}, maxLen int) map[string]interface{} {
+	out := make(map[string]interface{}, len(args))
+	for k, v := range args {
+		if s, ok := v.(string); ok && len(s) > maxLen {
+			out[k] = truncateStr(s, maxLen)
+		} else {
+			out[k] = v
+		}
+	}
+	return out
+}

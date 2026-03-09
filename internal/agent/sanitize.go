@@ -106,17 +106,15 @@ func stripGarbledToolXML(content string) string {
 	cleaned := garbledToolXMLPattern.ReplaceAllString(content, "")
 	cleaned = strings.TrimSpace(cleaned)
 
-	if cleaned != "" && hasIndicator {
-		slog.Warn("stripped garbled tool call XML, preserving remaining content",
-			"original_len", len(content),
-			"remaining_len", len(cleaned),
-		)
-		return cleaned
-	}
-
 	if cleaned == "" {
 		slog.Warn("stripped entire response as garbled tool XML", "original_len", len(content))
+		return ""
 	}
+
+	slog.Warn("stripped garbled tool call XML from response",
+		"original_len", len(content),
+		"remaining_len", len(cleaned),
+	)
 	return cleaned
 }
 

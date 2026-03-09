@@ -6,6 +6,7 @@ import type { Message } from "./session";
 export interface ChatMessage extends Message {
   timestamp?: number;
   isStreaming?: boolean;
+  toolDetails?: ToolStreamEntry[];
 }
 
 /** Agent event payload from WS event "agent" */
@@ -21,6 +22,7 @@ export interface AgentEventPayload {
     is_error?: boolean;
     error?: string;
     arguments?: Record<string, unknown>;
+    result?: string;
   };
 }
 
@@ -31,6 +33,7 @@ export interface ToolStreamEntry {
   name: string;
   phase: "calling" | "completed" | "error";
   arguments?: Record<string, unknown>;
+  result?: string;
   errorContent?: string;
   startedAt: number;
   updatedAt: number;

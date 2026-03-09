@@ -1,50 +1,75 @@
 import { useState } from "react";
-import { Wrench, Check, AlertTriangle, Loader2, ChevronRight, Zap } from "lucide-react";
+import { Wrench, Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Zap } from "lucide-react";
 import type { ToolStreamEntry } from "@/types/chat";
 
 const isSkillTool = (name: string) => name === "use_skill";
+
+/** Build a short summary string from tool arguments for inline display. */
+function buildToolSummary(entry: ToolStreamEntry): string | null {
+  if (!entry.arguments) return null;
+  const args = entry.arguments;
+  const key = args.path ?? args.command ?? args.query ?? args.url ?? args.name;
+  if (typeof key === "string") return key.length > 60 ? key.slice(0, 57) + "..." : key;
+  return null;
+}
 
 interface ToolCallCardProps {
   entry: ToolStreamEntry;
 }
 
 export function ToolCallCard({ entry }: ToolCallCardProps) {
-  const [expanded, setExpanded] = useState(false);
-  const hasArgs = entry.arguments && Object.keys(entry.arguments).length > 0;
+  const hasDetails = entry.arguments || entry.result;
   const hasError = entry.phase === "error" && !!entry.errorContent;
-  const canExpand = hasArgs || hasError;
+  const canExpand = hasDetails || hasError;
+  const [expanded, setExpanded] = useState(false);
+  const summary = buildToolSummary(entry);
 
   return (
-    <div className="my-1 rounded-md border bg-muted/50 overflow-hidden">
+    <div className="my-1 rounded-md border bg-muted/50 text-sm">
       <button
         type="button"
-        onClick={() => canExpand && setExpanded(!expanded)}
-        className={`flex items-start gap-2 w-full text-left px-3 py-2 text-sm ${
-          canExpand ? "cursor-pointer hover:bg-muted/80 transition-colors" : "cursor-default"
-        }`}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        onClick={() => canExpand && setExpanded((v) => !v)}
+        disabled={!canExpand}
       >
         <ToolIcon phase={entry.phase} isSkill={isSkillTool(entry.name)} />
-        <span className="font-mono text-xs break-all">
+        <span className="font-medium shrink-0">
           {isSkillTool(entry.name)
             ? `skill: ${(entry.arguments?.name as string) || "unknown"}`
             : entry.name}
         </span>
-        <PhaseLabel phase={entry.phase} isSkill={isSkillTool(entry.name)} />
-        {canExpand && (
-          <ChevronRight
-            className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
-              expanded ? "rotate-90" : ""
-            }`}
-          />
+        {summary && (
+          <span className="truncate text-xs text-muted-foreground">{summary}</span>
         )}
+        <span className="ml-auto flex items-center gap-2 shrink-0">
+          <PhaseLabel phase={entry.phase} isSkill={isSkillTool(entry.name)} />
+          {canExpand && (
+            expanded
+              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </span>
       </button>
       {expanded && canExpand && (
-        <div className="px-3 pb-2 border-t bg-muted/30 text-[11px] overflow-auto max-h-48">
+        <div className="border-t border-muted px-3 py-2 space-y-2">
           {hasError && (
             <pre className="text-red-500 whitespace-pre-wrap">{entry.errorContent}</pre>
           )}
-          {hasArgs && (
-            <pre className="text-muted-foreground whitespace-pre-wrap break-words">{JSON.stringify(entry.arguments, null, 2)}</pre>
+          {entry.arguments && Object.keys(entry.arguments).length > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Arguments</div>
+              <pre className="whitespace-pre-wrap text-xs font-mono bg-background rounded p-2 max-h-48 overflow-y-auto">
+                {JSON.stringify(entry.arguments, null, 2)}
+              </pre>
+            </div>
+          )}
+          {entry.result && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Result</div>
+              <pre className="whitespace-pre-wrap text-xs font-mono bg-background rounded p-2 max-h-48 overflow-y-auto">
+                {entry.result}
+              </pre>
+            </div>
           )}
         </div>
       )}
@@ -87,7 +112,7 @@ function PhaseLabel({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSki
     error: "text-red-500",
   };
   return (
-    <span className={`ml-auto text-xs ${colors[phase] ?? "text-muted-foreground"}`}>
+    <span className={`text-xs ${colors[phase] ?? "text-muted-foreground"}`}>
       {labels[phase] ?? phase}
     </span>
   );

@@ -10,8 +10,8 @@ import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
 import { Events } from "@/api/protocol";
 import { parseSessionKey } from "@/lib/session-key";
 import { formatDate, formatTokens } from "@/lib/format";
-import type { SessionInfo, SessionPreview } from "@/types/session";
-import type { ChatMessage, AgentEventPayload } from "@/types/chat";
+import type { SessionInfo, SessionPreview, Message } from "@/types/session";
+import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/chat";
 
 /** Check if a message is an internal system message (subagent results, cron, etc.) */
 function isSystemMessage(msg: ChatMessage): boolean {
@@ -58,11 +58,38 @@ export function SessionDetailPage({
     onPreview(session.key)
       .then((preview) => {
         if (preview) {
+          const allMsgs = preview.messages;
+          // Build a map of tool_call_id -> tool message for result lookup
+          const toolResultMap = new Map<string, Message>();
+          for (const m of allMsgs) {
+            if (m.role === "tool" && m.tool_call_id) {
+              toolResultMap.set(m.tool_call_id, m);
+            }
+          }
           setMessages(
-            preview.messages.map((m, i) => ({
-              ...m,
-              timestamp: Date.now() - (preview.messages.length - i) * 1000,
-            })),
+            allMsgs.map((m, i) => {
+              const chatMsg: ChatMessage = {
+                ...m,
+                timestamp: Date.now() - (allMsgs.length - i) * 1000,
+              };
+              // Reconstruct toolDetails for assistant messages with tool_calls
+              if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+                chatMsg.toolDetails = m.tool_calls.map((tc) => {
+                  const toolMsg = toolResultMap.get(tc.id);
+                  return {
+                    toolCallId: tc.id,
+                    runId: "",
+                    name: tc.name,
+                    phase: (toolMsg ? "completed" : "calling") as ToolStreamEntry["phase"],
+                    startedAt: 0,
+                    updatedAt: 0,
+                    arguments: tc.arguments,
+                    result: toolMsg?.content,
+                  };
+                });
+              }
+              return chatMsg;
+            }),
           );
           setSummary(preview.summary ?? null);
         }

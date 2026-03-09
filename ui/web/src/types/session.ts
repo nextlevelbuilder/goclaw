@@ -26,6 +26,7 @@ export interface SessionPreview {
 export interface Message {
   role: "user" | "assistant" | "tool";
   content: string;
+  thinking?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
 }

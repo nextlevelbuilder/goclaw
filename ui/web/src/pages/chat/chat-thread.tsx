@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { Circle } from "lucide-react";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import { StreamingText } from "@/components/chat/streaming-text";
@@ -33,19 +32,6 @@ export function ChatThread({
     scrollTrigger,
   );
 
-  // Build map of tool_call_id → error content for tool results that indicate errors
-  const toolCallErrors = useMemo(() => {
-    const errors = new Map<string, string>();
-    for (const msg of messages) {
-      if (msg.role !== "tool" || !msg.tool_call_id || !msg.content) continue;
-      const c = msg.content.trimStart();
-      if (c.startsWith("Error") || c.startsWith("error:") || c.includes("failed:") || c.includes("Failed:")) {
-        errors.set(msg.tool_call_id, msg.content);
-      }
-    }
-    return errors;
-  }, [messages]);
-
   // Show spinner while loading history for a different session
   if (loading) {
     return (
@@ -72,7 +58,7 @@ export function ChatThread({
     >
       <div className="mx-auto max-w-3xl space-y-4">
         {messages.map((msg, i) => (
-          <MessageBubble key={`${msg.role}-${i}`} message={msg} toolCallErrors={toolCallErrors} />
+          <MessageBubble key={`${msg.role}-${i}`} message={msg} />
         ))}
 
         {/* Tool stream during active run */}

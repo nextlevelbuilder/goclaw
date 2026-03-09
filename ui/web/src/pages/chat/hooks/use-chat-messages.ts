@@ -59,10 +59,37 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         agentId,
         sessionKey,
       });
-      const msgs: ChatMessage[] = (res.messages ?? []).map((m: Message, i: number) => ({
-        ...m,
-        timestamp: Date.now() - (res.messages!.length - i) * 1000,
-      }));
+      const allMsgs = res.messages ?? [];
+      // Build a map of tool_call_id -> tool message for result lookup
+      const toolResultMap = new Map<string, Message>();
+      for (const m of allMsgs) {
+        if (m.role === "tool" && m.tool_call_id) {
+          toolResultMap.set(m.tool_call_id, m);
+        }
+      }
+      const msgs: ChatMessage[] = allMsgs.map((m: Message, i: number) => {
+        const chatMsg: ChatMessage = {
+          ...m,
+          timestamp: Date.now() - (allMsgs.length - i) * 1000,
+        };
+        // Reconstruct toolDetails for assistant messages with tool_calls
+        if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
+          chatMsg.toolDetails = m.tool_calls.map((tc) => {
+            const toolMsg = toolResultMap.get(tc.id);
+            return {
+              toolCallId: tc.id,
+              runId: "",
+              name: tc.name,
+              phase: (toolMsg ? "completed" : "calling") as ToolStreamEntry["phase"],
+              startedAt: 0,
+              updatedAt: 0,
+              arguments: tc.arguments,
+              result: toolMsg?.content,
+            };
+          });
+        }
+        return chatMsg;
+      });
       setMessages(msgs);
     } catch {
       // will retry
@@ -153,6 +180,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
                   ...t,
                   phase: isError ? ("error" as const) : ("completed" as const),
                   errorContent: isError ? event.payload?.content : undefined,
+                  result: event.payload?.result,
                   updatedAt: now,
                 }
               : t,
