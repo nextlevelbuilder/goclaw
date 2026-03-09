@@ -35,14 +35,14 @@ const (
 // Channel connects to the Zalo OA Bot API.
 type Channel struct {
 	*channels.BaseChannel
-	token          string
-	dmPolicy       string
-	mediaMaxMB     int
-	blockReply     *bool
-	pairingService store.PairingStore
+	token           string
+	dmPolicy        string
+	mediaMaxMB      int
+	blockReply      *bool
+	pairingService  store.PairingStore
 	pairingDebounce sync.Map // senderID → time.Time
-	stopCh         chan struct{}
-	client         *http.Client
+	stopCh          chan struct{}
+	client          *http.Client
 }
 
 // New creates a new Zalo channel.

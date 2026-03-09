@@ -209,13 +209,13 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]interface{}{
-		"status":   "ok",
-		"version":  s.version,
-		"uptime":   uptimeMs,
-		"mode":     mode,
-		"database": dbStatus,
-		"tools":    toolCount,
-		"clients":  clientList,
+		"status":    "ok",
+		"version":   s.version,
+		"uptime":    uptimeMs,
+		"mode":      mode,
+		"database":  dbStatus,
+		"tools":     toolCount,
+		"clients":   clientList,
 		"currentId": client.ID(),
 	}))
 }
@@ -244,4 +244,3 @@ func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *pr
 		"sessions":   sessionCount,
 	}))
 }
-

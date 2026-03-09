@@ -145,6 +145,7 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 	}
 	return results, nil
 }
+
 // hybridMerge combines FTS and vector results with weighted scoring.
 // Per-user results get a 1.2x boost. Deduplication: user copy wins over global.
 func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, currentUserID string) []store.MemorySearchResult {

@@ -461,7 +461,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	iteration := 0
 	totalToolCalls := 0
 	var finalContent string
-	var asyncToolCalls []string   // track async spawn tool names for fallback
+	var asyncToolCalls []string    // track async spawn tool names for fallback
 	var mediaResults []MediaResult // media files from tool MEDIA: results
 	var deliverables []string      // actual content from tool outputs (for team task results)
 	var blockReplies int           // count of block.reply events emitted (for dedup in consumer)
@@ -474,7 +474,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Team task orphan detection: track team_tasks create vs spawn calls.
 	// If the LLM creates tasks but forgets to spawn, inject a reminder.
 	var teamTaskCreates int  // count of team_tasks action=create calls
-	var teamTaskSpawns  int  // count of spawn calls with team_task_id
+	var teamTaskSpawns int   // count of spawn calls with team_task_id
 	var teamTaskRetried bool // only retry once to prevent infinite loops
 
 	// Inject retry hook so channels can update placeholder on LLM retries.
@@ -669,7 +669,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			Content:             resp.Content,
 			Thinking:            resp.Thinking, // reasoning_content passback for thinking models (Kimi, DeepSeek)
 			ToolCalls:           resp.ToolCalls,
-			Phase:               resp.Phase, // preserve Codex phase metadata (gpt-5.3-codex)
+			Phase:               resp.Phase,               // preserve Codex phase metadata (gpt-5.3-codex)
 			RawAssistantContent: resp.RawAssistantContent, // preserve thinking blocks for Anthropic passback
 		}
 		messages = append(messages, assistantMsg)
@@ -1080,4 +1080,3 @@ func (l *Loop) scanWebToolResult(toolName string, result *tools.Result) {
 			strings.Join(injMatches, ", "), result.ForLLM)
 	}
 }
-

@@ -81,10 +81,10 @@ type StatusReactionController struct {
 	chatID    int64
 	messageID int
 
-	mu           sync.Mutex
-	currentEmoji string
-	lastStatus   string
-	terminal     bool // true once done/error is set
+	mu            sync.Mutex
+	currentEmoji  string
+	lastStatus    string
+	terminal      bool // true once done/error is set
 	debounceTimer *time.Timer
 	stallTimer    *time.Timer
 }

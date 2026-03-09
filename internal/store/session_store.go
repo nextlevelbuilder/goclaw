@@ -18,15 +18,15 @@ type SessionData struct {
 	AgentUUID uuid.UUID `json:"agentUUID,omitempty"` // DB agent UUID
 	UserID    string    `json:"userID,omitempty"`    // External user ID (e.g. Telegram user ID)
 
-	Model                      string `json:"model,omitempty"`
-	Provider                   string `json:"provider,omitempty"`
-	Channel                    string `json:"channel,omitempty"`
-	InputTokens                int64  `json:"inputTokens,omitempty"`
-	OutputTokens               int64  `json:"outputTokens,omitempty"`
-	CompactionCount            int    `json:"compactionCount,omitempty"`
-	MemoryFlushCompactionCount int    `json:"memoryFlushCompactionCount,omitempty"`
-	MemoryFlushAt              int64  `json:"memoryFlushAt,omitempty"`
-	Label                      string `json:"label,omitempty"`
+	Model                      string            `json:"model,omitempty"`
+	Provider                   string            `json:"provider,omitempty"`
+	Channel                    string            `json:"channel,omitempty"`
+	InputTokens                int64             `json:"inputTokens,omitempty"`
+	OutputTokens               int64             `json:"outputTokens,omitempty"`
+	CompactionCount            int               `json:"compactionCount,omitempty"`
+	MemoryFlushCompactionCount int               `json:"memoryFlushCompactionCount,omitempty"`
+	MemoryFlushAt              int64             `json:"memoryFlushAt,omitempty"`
+	Label                      string            `json:"label,omitempty"`
 	SpawnedBy                  string            `json:"spawnedBy,omitempty"`
 	SpawnDepth                 int               `json:"spawnDepth,omitempty"`
 	Metadata                   map[string]string `json:"metadata,omitempty"`

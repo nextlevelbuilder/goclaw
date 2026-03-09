@@ -117,4 +117,3 @@ func scanMessageRowsJoined(rows *sql.Rows) ([]store.TeamMessageData, error) {
 	}
 	return messages, rows.Err()
 }
-

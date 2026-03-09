@@ -34,9 +34,9 @@ type DMPolicy string
 
 const (
 	DMPolicyPairing   DMPolicy = "pairing"   // Require pairing code
-	DMPolicyAllowlist DMPolicy = "allowlist"  // Only whitelisted senders
-	DMPolicyOpen      DMPolicy = "open"       // Accept all
-	DMPolicyDisabled  DMPolicy = "disabled"   // Reject all DMs
+	DMPolicyAllowlist DMPolicy = "allowlist" // Only whitelisted senders
+	DMPolicyOpen      DMPolicy = "open"      // Accept all
+	DMPolicyDisabled  DMPolicy = "disabled"  // Reject all DMs
 )
 
 // GroupPolicy controls how group messages are handled.
@@ -44,8 +44,8 @@ type GroupPolicy string
 
 const (
 	GroupPolicyOpen      GroupPolicy = "open"      // Accept all groups
-	GroupPolicyAllowlist GroupPolicy = "allowlist"  // Only whitelisted groups
-	GroupPolicyDisabled  GroupPolicy = "disabled"   // No group messages
+	GroupPolicyAllowlist GroupPolicy = "allowlist" // Only whitelisted groups
+	GroupPolicyDisabled  GroupPolicy = "disabled"  // No group messages
 )
 
 // Channel defines the interface that all channel implementations must satisfy.

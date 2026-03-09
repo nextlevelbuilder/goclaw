@@ -2,22 +2,22 @@ package protocol
 
 // WebSocket event names pushed from server to client.
 const (
-	EventAgent              = "agent"
-	EventChat               = "chat"
-	EventHealth             = "health"
-	EventCron               = "cron"
-	EventExecApprovalReq    = "exec.approval.requested"
-	EventExecApprovalRes    = "exec.approval.resolved"
-	EventPresence           = "presence"
-	EventTick               = "tick"
-	EventShutdown           = "shutdown"
-	EventNodePairRequested  = "node.pair.requested"
-	EventNodePairResolved   = "node.pair.resolved"
-	EventDevicePairReq      = "device.pair.requested"
-	EventDevicePairRes      = "device.pair.resolved"
-	EventVoicewakeChanged   = "voicewake.changed"
-	EventConnectChallenge   = "connect.challenge"
-	EventTalkMode           = "talk.mode"
+	EventAgent             = "agent"
+	EventChat              = "chat"
+	EventHealth            = "health"
+	EventCron              = "cron"
+	EventExecApprovalReq   = "exec.approval.requested"
+	EventExecApprovalRes   = "exec.approval.resolved"
+	EventPresence          = "presence"
+	EventTick              = "tick"
+	EventShutdown          = "shutdown"
+	EventNodePairRequested = "node.pair.requested"
+	EventNodePairResolved  = "node.pair.resolved"
+	EventDevicePairReq     = "device.pair.requested"
+	EventDevicePairRes     = "device.pair.resolved"
+	EventVoicewakeChanged  = "voicewake.changed"
+	EventConnectChallenge  = "connect.challenge"
+	EventTalkMode          = "talk.mode"
 
 	// Agent summoning events (predefined agent setup via LLM).
 	EventAgentSummoning = "agent.summoning"
@@ -80,7 +80,7 @@ const (
 
 // Chat event subtypes (in payload.type)
 const (
-	ChatEventChunk     = "chunk"
-	ChatEventMessage   = "message"
-	ChatEventThinking  = "thinking"
+	ChatEventChunk    = "chunk"
+	ChatEventMessage  = "message"
+	ChatEventThinking = "thinking"
 )

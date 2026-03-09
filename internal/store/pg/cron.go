@@ -475,4 +475,3 @@ func (s *PGCronStore) RunJob(jobID string, force bool) (bool, string, error) {
 	}
 	return true, content, err
 }
-

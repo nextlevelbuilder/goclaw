@@ -356,4 +356,3 @@ func (s *PGTracingStore) BatchUpdateTraceAggregates(ctx context.Context, traceID
 		WHERE id = $1`, traceID)
 	return err
 }
-

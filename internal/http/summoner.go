@@ -322,8 +322,8 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 		Options: map[string]interface{}{
 			"max_tokens":              8192,
 			"temperature":             0.7,
-			providers.OptSessionKey:    summonSessionKey,
-			providers.OptDisableTools:  true,
+			providers.OptSessionKey:   summonSessionKey,
+			providers.OptDisableTools: true,
 		},
 	})
 	if err != nil {

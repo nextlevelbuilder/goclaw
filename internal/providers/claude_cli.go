@@ -16,16 +16,16 @@ const OptDisableTools = "disable_tools"
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.
 type ClaudeCLIProvider struct {
-	cliPath            string // path to claude binary (default: "claude")
-	defaultModel       string // default: "sonnet"
-	baseWorkDir        string // base dir for agent workspaces
-	mcpConfigPath      string // pre-built MCP config file path (empty = no MCP)
-	permMode           string // permission mode (default: "bypassPermissions")
-	hooksSettingsPath  string // generated settings.json with security hooks (empty = no hooks)
-	hooksCleanup       func() // cleanup function for hooks temp files
-	mcpCleanup         func() // cleanup function for MCP config temp file
-	mu                 sync.Mutex // protects workdir creation
-	sessionMu          sync.Map   // key: string, value: *sync.Mutex — per-session lock
+	cliPath           string     // path to claude binary (default: "claude")
+	defaultModel      string     // default: "sonnet"
+	baseWorkDir       string     // base dir for agent workspaces
+	mcpConfigPath     string     // pre-built MCP config file path (empty = no MCP)
+	permMode          string     // permission mode (default: "bypassPermissions")
+	hooksSettingsPath string     // generated settings.json with security hooks (empty = no hooks)
+	hooksCleanup      func()     // cleanup function for hooks temp files
+	mcpCleanup        func()     // cleanup function for MCP config temp file
+	mu                sync.Mutex // protects workdir creation
+	sessionMu         sync.Map   // key: string, value: *sync.Mutex — per-session lock
 }
 
 // ClaudeCLIOption configures the provider.
@@ -101,7 +101,7 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 	return p
 }
 
-func (p *ClaudeCLIProvider) Name() string        { return "claude-cli" }
+func (p *ClaudeCLIProvider) Name() string         { return "claude-cli" }
 func (p *ClaudeCLIProvider) DefaultModel() string { return p.defaultModel }
 
 // Close cleans up temp files (MCP config, hooks settings). Implements io.Closer.

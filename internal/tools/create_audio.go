@@ -22,8 +22,8 @@ var audioGenModelDefaults = map[string]string{
 
 // CreateAudioTool generates music or sound effects using AI audio generation APIs.
 type CreateAudioTool struct {
-	registry         *providers.Registry
-	elevenlabsAPIKey string
+	registry          *providers.Registry
+	elevenlabsAPIKey  string
 	elevenlabsBaseURL string
 }
 
@@ -31,8 +31,8 @@ type CreateAudioTool struct {
 // elevenlabsKey and elevenlabsBase are used for ElevenLabs sound effects generation.
 func NewCreateAudioTool(registry *providers.Registry, elevenlabsKey, elevenlabsBase string) *CreateAudioTool {
 	return &CreateAudioTool{
-		registry:         registry,
-		elevenlabsAPIKey: elevenlabsKey,
+		registry:          registry,
+		elevenlabsAPIKey:  elevenlabsKey,
 		elevenlabsBaseURL: elevenlabsBase,
 	}
 }

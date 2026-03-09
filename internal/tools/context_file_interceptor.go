@@ -73,7 +73,7 @@ const defaultContextCacheTTL = 5 * time.Minute
 // Routes based on agent type: "open" → all per-user, "predefined" → only USER.md per-user.
 type ContextFileInterceptor struct {
 	agentStore       store.AgentStore
-	workspace        string // workspace root for matching absolute paths
+	workspace        string                                    // workspace root for matching absolute paths
 	agentCache       cache.Cache[[]store.AgentContextFileData] // agent-level files, keyed by agentID.String()
 	userCache        cache.Cache[[]store.AgentContextFileData] // user-level files, keyed by "agentID:userID"
 	ttl              time.Duration

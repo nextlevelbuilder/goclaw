@@ -28,8 +28,8 @@ func axValue(v *proto.AccessibilityAXValue) string {
 
 // axNodeTree is an internal tree node built from flat AX nodes.
 type axNodeTree struct {
-	node     *proto.AccessibilityAXNode
-	depth    int
+	node  *proto.AccessibilityAXNode
+	depth int
 }
 
 // buildAXTree converts flat CDP AX nodes into a tree structure.

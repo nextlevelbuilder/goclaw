@@ -40,10 +40,10 @@ type Controller struct {
 	mu sync.Mutex
 
 	// State flags
-	closed      bool // post-close guard: prevents stale startFn calls
-	runComplete bool // signal 1: agent finished processing
+	closed       bool // post-close guard: prevents stale startFn calls
+	runComplete  bool // signal 1: agent finished processing
 	dispatchIdle bool // signal 2: message delivery finished
-	stopSent    bool // prevents duplicate stopFn calls
+	stopSent     bool // prevents duplicate stopFn calls
 
 	// Configuration
 	maxDuration       time.Duration

@@ -233,12 +233,22 @@ func (dm *DelegateManager) applyQualityGates(
 						UserID:         task.UserID,
 						Channel:        task.OriginChannel,
 						ChatID:         task.OriginChatID,
-						TeamID:         func() string { if task.TeamID != uuid.Nil { return task.TeamID.String() }; return "" }(),
-						TeamTaskID:     func() string { if task.TeamTaskID != uuid.Nil { return task.TeamTaskID.String() }; return "" }(),
-						GateType:       string(gate.Type),
-						Attempt:        attempt + 1,
-						MaxRetries:     retries,
-						Feedback:       hookResult.Feedback,
+						TeamID: func() string {
+							if task.TeamID != uuid.Nil {
+								return task.TeamID.String()
+							}
+							return ""
+						}(),
+						TeamTaskID: func() string {
+							if task.TeamTaskID != uuid.Nil {
+								return task.TeamTaskID.String()
+							}
+							return ""
+						}(),
+						GateType:   string(gate.Type),
+						Attempt:    attempt + 1,
+						MaxRetries: retries,
+						Feedback:   hookResult.Feedback,
 					},
 				})
 			}

@@ -17,9 +17,9 @@ type discordCreds struct {
 
 // discordInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type discordInstanceConfig struct {
-	DMPolicy       string   `json:"dm_policy,omitempty"`
-	GroupPolicy    string   `json:"group_policy,omitempty"`
-	AllowFrom      []string `json:"allow_from,omitempty"`
+	DMPolicy          string   `json:"dm_policy,omitempty"`
+	GroupPolicy       string   `json:"group_policy,omitempty"`
+	AllowFrom         []string `json:"allow_from,omitempty"`
 	RequireMention    *bool    `json:"require_mention,omitempty"`
 	HistoryLimit      int      `json:"history_limit,omitempty"`
 	BlockReply        *bool    `json:"block_reply,omitempty"`

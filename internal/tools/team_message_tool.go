@@ -185,7 +185,7 @@ func (t *TeamMessageTool) executeBroadcast(ctx context.Context, args map[string]
 		ChatID:          ToolChatIDFromCtx(ctx),
 	})
 
-	return NewResult(fmt.Sprintf("Broadcast sent to all teammates."))
+	return NewResult("Broadcast sent to all teammates.")
 }
 
 func (t *TeamMessageTool) executeRead(ctx context.Context) *Result {

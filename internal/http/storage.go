@@ -87,8 +87,8 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		IsDir     bool   `json:"isDir"`
 		Size      int64  `json:"size"`
-		TotalSize int64  `json:"totalSize"`  // recursive size for directories
-		Protected bool   `json:"protected"`  // true if deletion is blocked
+		TotalSize int64  `json:"totalSize"` // recursive size for directories
+		Protected bool   `json:"protected"` // true if deletion is blocked
 	}
 
 	// Compute directory sizes via a two-pass approach:

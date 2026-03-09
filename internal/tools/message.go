@@ -21,7 +21,7 @@ type MessageTool struct {
 func NewMessageTool() *MessageTool { return &MessageTool{} }
 
 func (t *MessageTool) SetChannelSender(s ChannelSender) { t.sender = s }
-func (t *MessageTool) SetMessageBus(b *bus.MessageBus)   { t.msgBus = b }
+func (t *MessageTool) SetMessageBus(b *bus.MessageBus)  { t.msgBus = b }
 
 func (t *MessageTool) Name() string { return "message" }
 func (t *MessageTool) Description() string {

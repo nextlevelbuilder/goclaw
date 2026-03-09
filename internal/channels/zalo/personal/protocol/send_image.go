@@ -22,9 +22,9 @@ type ImageUploadResult struct {
 	HDUrl        string      `json:"hdUrl"`
 	ThumbURL     string      `json:"thumbUrl"`
 	PhotoID      json.Number `json:"photoId"`      // Zalo may return string or number
-	ClientFileID json.Number `json:"clientFileId"`  // Zalo may return string or number
+	ClientFileID json.Number `json:"clientFileId"` // Zalo may return string or number
 	ChunkID      int         `json:"chunkId"`
-	Finished     FlexBool    `json:"finished"`      // Zalo returns bool or int depending on endpoint
+	Finished     FlexBool    `json:"finished"` // Zalo returns bool or int depending on endpoint
 
 	// Set by caller (not from API response).
 	Width     int `json:"-"`

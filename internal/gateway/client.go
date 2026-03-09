@@ -27,10 +27,10 @@ type Client struct {
 	remoteAddr  string    // peer IP (extracted from proxy headers or RemoteAddr)
 
 	// Browser pairing state
-	pairingCode     string // 8-char code if pending approval
-	pairingPending  bool   // true while waiting for admin approval
-	pairedSenderID  string // senderID used for browser pairing auth (for revocation lookup)
-	pairedChannel   string // channel used for pairing auth (e.g., "browser")
+	pairingCode    string // 8-char code if pending approval
+	pairingPending bool   // true while waiting for admin approval
+	pairedSenderID string // senderID used for browser pairing auth (for revocation lookup)
+	pairedChannel  string // channel used for pairing auth (e.g., "browser")
 }
 
 func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
@@ -128,7 +128,7 @@ func (c *Client) handleFrame(ctx context.Context, data []byte) {
 
 		// First request must be "connect" (except browser.pairing.status for pending clients)
 		if !c.authenticated && req.Method != protocol.MethodConnect {
-			if !(c.pairingPending && req.Method == protocol.MethodBrowserPairingStatus) {
+			if !c.pairingPending || req.Method != protocol.MethodBrowserPairingStatus {
 				c.sendError(req.ID, protocol.ErrUnauthorized, "first request must be 'connect'")
 				return
 			}

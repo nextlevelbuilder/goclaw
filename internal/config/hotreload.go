@@ -15,12 +15,12 @@ type ChangeHandler func(cfg *Config)
 // Watcher watches a config file for changes and reloads it.
 // Changes are debounced (300ms) to avoid rapid reloads.
 type Watcher struct {
-	path       string
-	watcher    *fsnotify.Watcher
-	handlers   []ChangeHandler
-	debounce   time.Duration
-	stopChan   chan struct{}
-	mu         sync.Mutex
+	path     string
+	watcher  *fsnotify.Watcher
+	handlers []ChangeHandler
+	debounce time.Duration
+	stopChan chan struct{}
+	mu       sync.Mutex
 }
 
 // NewWatcher creates a config file watcher.

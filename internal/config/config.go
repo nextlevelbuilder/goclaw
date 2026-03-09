@@ -52,16 +52,16 @@ type Config struct {
 	Telemetry TelemetryConfig `json:"telemetry,omitempty"`
 	Tailscale TailscaleConfig `json:"tailscale,omitempty"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
-	mu            sync.RWMutex
+	mu        sync.RWMutex
 }
 
 // TailscaleConfig configures the optional Tailscale tsnet listener.
 // Requires building with -tags tsnet. Auth key from env only (never persisted).
 type TailscaleConfig struct {
-	Hostname  string `json:"hostname"`            // Tailscale machine name (e.g. "goclaw-gateway")
-	StateDir  string `json:"state_dir,omitempty"` // persistent state directory (default: os.UserConfigDir/tsnet-goclaw)
-	AuthKey   string `json:"-"`                   // from env GOCLAW_TSNET_AUTH_KEY only
-	Ephemeral bool   `json:"ephemeral,omitempty"` // remove node on exit (default false)
+	Hostname  string `json:"hostname"`             // Tailscale machine name (e.g. "goclaw-gateway")
+	StateDir  string `json:"state_dir,omitempty"`  // persistent state directory (default: os.UserConfigDir/tsnet-goclaw)
+	AuthKey   string `json:"-"`                    // from env GOCLAW_TSNET_AUTH_KEY only
+	Ephemeral bool   `json:"ephemeral,omitempty"`  // remove node on exit (default false)
 	EnableTLS bool   `json:"enable_tls,omitempty"` // use ListenTLS for auto HTTPS certs
 }
 
@@ -86,7 +86,7 @@ type AgentBinding struct {
 
 // BindingMatch specifies what messages this binding applies to.
 type BindingMatch struct {
-	Channel   string       `json:"channel"`            // "telegram", "discord", "slack", etc.
+	Channel   string       `json:"channel"`             // "telegram", "discord", "slack", etc.
 	AccountID string       `json:"accountId,omitempty"` // bot account ID
 	Peer      *BindingPeer `json:"peer,omitempty"`      // specific DM/group
 	GuildID   string       `json:"guildId,omitempty"`   // Discord guild
@@ -106,21 +106,21 @@ type AgentsConfig struct {
 
 // AgentDefaults are default settings for all agents.
 type AgentDefaults struct {
-	Workspace           string          `json:"workspace"`
-	RestrictToWorkspace bool            `json:"restrict_to_workspace"`
-	Provider            string          `json:"provider"`
-	Model               string          `json:"model"`
-	MaxTokens           int             `json:"max_tokens"`
-	Temperature         float64         `json:"temperature"`
-	MaxToolIterations   int             `json:"max_tool_iterations"`
-	ContextWindow       int             `json:"context_window"`
-	MaxToolCalls        int             `json:"max_tool_calls,omitempty"` // max total tool calls per run (0 = unlimited, default 25)
-	AgentType           string          `json:"agent_type,omitempty"` // "open" (default) or "predefined"
-	Subagents           *SubagentsConfig `json:"subagents,omitempty"`
-	Sandbox             *SandboxConfig         `json:"sandbox,omitempty"`
+	Workspace           string                `json:"workspace"`
+	RestrictToWorkspace bool                  `json:"restrict_to_workspace"`
+	Provider            string                `json:"provider"`
+	Model               string                `json:"model"`
+	MaxTokens           int                   `json:"max_tokens"`
+	Temperature         float64               `json:"temperature"`
+	MaxToolIterations   int                   `json:"max_tool_iterations"`
+	ContextWindow       int                   `json:"context_window"`
+	MaxToolCalls        int                   `json:"max_tool_calls,omitempty"` // max total tool calls per run (0 = unlimited, default 25)
+	AgentType           string                `json:"agent_type,omitempty"`     // "open" (default) or "predefined"
+	Subagents           *SubagentsConfig      `json:"subagents,omitempty"`
+	Sandbox             *SandboxConfig        `json:"sandbox,omitempty"`
 	Memory              *MemoryConfig         `json:"memory,omitempty"`
-	Compaction          *CompactionConfig      `json:"compaction,omitempty"`
-	ContextPruning      *ContextPruningConfig  `json:"contextPruning,omitempty"`
+	Compaction          *CompactionConfig     `json:"compaction,omitempty"`
+	ContextPruning      *ContextPruningConfig `json:"contextPruning,omitempty"`
 	// Bootstrap context truncation limits (matching TS bootstrapMaxChars / bootstrapTotalMaxChars)
 	BootstrapMaxChars      int `json:"bootstrapMaxChars,omitempty"`      // per-file max before truncation (default 20000)
 	BootstrapTotalMaxChars int `json:"bootstrapTotalMaxChars,omitempty"` // total budget across all files (default 24000)
@@ -133,7 +133,7 @@ type CompactionConfig struct {
 	MaxHistoryShare    float64            `json:"maxHistoryShare,omitempty"`    // max share of context for history (default 0.75)
 	MinMessages        int                `json:"minMessages,omitempty"`        // min messages before compaction triggers (default 50)
 	KeepLastMessages   int                `json:"keepLastMessages,omitempty"`   // messages to keep after compaction (default 4)
-	MemoryFlush        *MemoryFlushConfig `json:"memoryFlush,omitempty"`       // pre-compaction flush
+	MemoryFlush        *MemoryFlushConfig `json:"memoryFlush,omitempty"`        // pre-compaction flush
 }
 
 // MemoryFlushConfig configures the pre-compaction memory flush.
@@ -142,20 +142,20 @@ type MemoryFlushConfig struct {
 	Enabled             *bool  `json:"enabled,omitempty"`             // default true (nil = enabled)
 	SoftThresholdTokens int    `json:"softThresholdTokens,omitempty"` // flush when within N tokens of compaction (default 4000)
 	Prompt              string `json:"prompt,omitempty"`              // user prompt for flush turn
-	SystemPrompt        string `json:"systemPrompt,omitempty"`       // system prompt for flush turn
+	SystemPrompt        string `json:"systemPrompt,omitempty"`        // system prompt for flush turn
 }
 
 // ContextPruningConfig configures in-memory context pruning of old tool results.
 // Matching TS src/agents/pi-extensions/context-pruning/settings.ts.
 // Mode "cache-ttl": prune when context exceeds softTrimRatio of context window.
 type ContextPruningConfig struct {
-	Mode                string                    `json:"mode,omitempty"`                // "off" (default), "cache-ttl"
-	KeepLastAssistants  int                       `json:"keepLastAssistants,omitempty"`  // protect last N assistant msgs (default 3)
-	SoftTrimRatio       float64                   `json:"softTrimRatio,omitempty"`       // start soft trim at this % of window (default 0.3)
-	HardClearRatio      float64                   `json:"hardClearRatio,omitempty"`      // start hard clear at this % (default 0.5)
+	Mode                 string                   `json:"mode,omitempty"`                 // "off" (default), "cache-ttl"
+	KeepLastAssistants   int                      `json:"keepLastAssistants,omitempty"`   // protect last N assistant msgs (default 3)
+	SoftTrimRatio        float64                  `json:"softTrimRatio,omitempty"`        // start soft trim at this % of window (default 0.3)
+	HardClearRatio       float64                  `json:"hardClearRatio,omitempty"`       // start hard clear at this % (default 0.5)
 	MinPrunableToolChars int                      `json:"minPrunableToolChars,omitempty"` // min chars in prunable tools before acting (default 50000)
-	SoftTrim            *ContextPruningSoftTrim   `json:"softTrim,omitempty"`
-	HardClear           *ContextPruningHardClear  `json:"hardClear,omitempty"`
+	SoftTrim             *ContextPruningSoftTrim  `json:"softTrim,omitempty"`
+	HardClear            *ContextPruningHardClear `json:"hardClear,omitempty"`
 }
 
 // ContextPruningSoftTrim configures how long tool results are trimmed.
@@ -201,9 +201,9 @@ type SandboxConfig struct {
 	Env             map[string]string `json:"env,omitempty"`              // extra environment variables
 
 	// Enhanced security
-	User           string `json:"user,omitempty"`              // container user (e.g. "1000:1000", "nobody")
-	TmpfsSizeMB    int    `json:"tmpfs_size_mb,omitempty"`     // default tmpfs size in MB (0 = Docker default)
-	MaxOutputBytes int    `json:"max_output_bytes,omitempty"`  // limit exec output capture (default 1MB)
+	User           string `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
+	TmpfsSizeMB    int    `json:"tmpfs_size_mb,omitempty"`    // default tmpfs size in MB (0 = Docker default)
+	MaxOutputBytes int    `json:"max_output_bytes,omitempty"` // limit exec output capture (default 1MB)
 
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
@@ -351,9 +351,9 @@ type AgentSpec struct {
 	MaxToolIterations int             `json:"max_tool_iterations,omitempty"`
 	ContextWindow     int             `json:"context_window,omitempty"`
 	MaxToolCalls      int             `json:"max_tool_calls,omitempty"` // per-agent override
-	AgentType         string          `json:"agent_type,omitempty"` // "open" or "predefined"
-	Skills            []string        `json:"skills,omitempty"`     // nil = all skills allowed
-	Tools             *ToolPolicySpec `json:"tools,omitempty"`      // per-agent tool policy
+	AgentType         string          `json:"agent_type,omitempty"`     // "open" or "predefined"
+	Skills            []string        `json:"skills,omitempty"`         // nil = all skills allowed
+	Tools             *ToolPolicySpec `json:"tools,omitempty"`          // per-agent tool policy
 	Workspace         string          `json:"workspace,omitempty"`
 	Default           bool            `json:"default,omitempty"`
 	Sandbox           *SandboxConfig  `json:"sandbox,omitempty"`

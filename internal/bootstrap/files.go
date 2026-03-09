@@ -27,12 +27,12 @@ const (
 	UserFile           = "USER.md"
 	UserPredefinedFile = "USER_PREDEFINED.md"
 	BootstrapFile      = "BOOTSTRAP.md"
-	DelegationFile   = "DELEGATION.md"
-	TeamFile         = "TEAM.md"
-	AvailabilityFile = "AVAILABILITY.md"
-	MemoryFile     = "MEMORY.md"
-	MemoryAltFile  = "memory.md"
-	MemoryJSONFile = "MEMORY.json"
+	DelegationFile     = "DELEGATION.md"
+	TeamFile           = "TEAM.md"
+	AvailabilityFile   = "AVAILABILITY.md"
+	MemoryFile         = "MEMORY.md"
+	MemoryAltFile      = "memory.md"
+	MemoryJSONFile     = "MEMORY.json"
 )
 
 // standardFiles is the ordered list of bootstrap files to load.

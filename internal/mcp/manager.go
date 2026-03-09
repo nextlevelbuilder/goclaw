@@ -47,9 +47,9 @@ type serverState struct {
 	timeoutSec int
 	cancel     context.CancelFunc
 
-	mu              sync.Mutex
-	reconnAttempts  int
-	lastErr         string
+	mu             sync.Mutex
+	reconnAttempts int
+	lastErr        string
 }
 
 // Manager orchestrates MCP server connections and tool registration.
@@ -74,12 +74,12 @@ type Manager struct {
 
 	// Shared connection pool (nil = standalone mode)
 	pool          *Pool
-	poolServers   map[string]struct{}  // server names acquired from pool (for cleanup)
-	poolToolNames map[string][]string  // per-agent tool names for pool-backed servers
+	poolServers   map[string]struct{} // server names acquired from pool (for cleanup)
+	poolToolNames map[string][]string // per-agent tool names for pool-backed servers
 
 	// Search mode: deferred tools not registered in registry
 	deferredTools  map[string]*BridgeTool // registeredName → BridgeTool
-	activatedTools map[string]struct{}     // tracks activated tool names for group:mcp
+	activatedTools map[string]struct{}    // tracks activated tool names for group:mcp
 	searchMode     bool
 }
 

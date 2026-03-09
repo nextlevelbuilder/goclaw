@@ -14,8 +14,8 @@ const (
 
 // HookConfig defines a single quality gate.
 type HookConfig struct {
-	Event          string   `json:"event"`                    // e.g. "delegation.completed"
-	Type           HookType `json:"type"`                     // "command" or "agent"
+	Event          string   `json:"event"`                     // e.g. "delegation.completed"
+	Type           HookType `json:"type"`                      // "command" or "agent"
 	Command        string   `json:"command,omitempty"`         // for type=command: shell command to run
 	Agent          string   `json:"agent,omitempty"`           // for type=agent: reviewer agent key
 	BlockOnFailure bool     `json:"block_on_failure"`          // true = block and optionally retry

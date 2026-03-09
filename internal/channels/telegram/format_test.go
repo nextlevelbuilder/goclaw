@@ -11,12 +11,12 @@ func TestDisplayWidth(t *testing.T) {
 		want  int
 	}{
 		{"hello", 5},
-		{"Khởi động", 9},        // Vietnamese diacritics = single-width
+		{"Khởi động", 9},           // Vietnamese diacritics = single-width
 		{"Hardware tối thiểu", 18}, // Vietnamese diacritics = single-width
 		{"Ngôn ngữ", 8},
-		{"đ", 1},                 // Vietnamese d-stroke = single-width
-		{"中文", 4},               // CJK = double-width
-		{"日本語", 6},              // CJK = double-width
+		{"đ", 1},   // Vietnamese d-stroke = single-width
+		{"中文", 4},  // CJK = double-width
+		{"日本語", 6}, // CJK = double-width
 	}
 
 	for _, tt := range tests {

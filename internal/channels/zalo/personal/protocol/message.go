@@ -37,7 +37,7 @@ type TGroupMessage struct {
 
 // TMention represents an @mention in a group message.
 type TMention struct {
-	UID  string      `json:"uid"`  // user ID or "-1" for @all
+	UID  string      `json:"uid"` // user ID or "-1" for @all
 	Pos  int         `json:"pos"`
 	Len  int         `json:"len"`
 	Type MentionType `json:"type"` // 0=individual, 1=all
@@ -47,9 +47,9 @@ type TMention struct {
 type MentionType int
 
 const (
-	MentionEach MentionType = 0
-	MentionAll  MentionType = 1
-	MentionAllUID           = "-1"
+	MentionEach   MentionType = 0
+	MentionAll    MentionType = 1
+	MentionAllUID             = "-1"
 )
 
 // Content is a union type: can be a plain string or an attachment object.

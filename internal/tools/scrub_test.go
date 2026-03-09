@@ -72,10 +72,10 @@ func TestScrubCredentials_GenericKeyValue(t *testing.T) {
 func TestScrubCredentials_NoFalsePositive(t *testing.T) {
 	inputs := []string{
 		"hello world",
-		"sk-short",       // too short for OpenAI pattern
-		"ghp_tooshort",   // too short for GitHub pattern
+		"sk-short",     // too short for OpenAI pattern
+		"ghp_tooshort", // too short for GitHub pattern
 		"normal text with no secrets",
-		"AKIA1234",       // too short for AWS (needs 16 chars after AKIA)
+		"AKIA1234", // too short for AWS (needs 16 chars after AKIA)
 	}
 	for _, input := range inputs {
 		got := ScrubCredentials(input)

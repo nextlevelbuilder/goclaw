@@ -477,17 +477,18 @@ func runOnboard() {
 	// --- Apply collected values to config ---
 
 	// Provider & model
-	if providerChoice == "claude_cli" {
+	switch providerChoice {
+	case "claude_cli":
 		cfg.Agents.Defaults.Provider = "claude-cli"
 		cfg.Agents.Defaults.Model = cliModel
 		cfg.Providers.ClaudeCLI.CLIPath = cliPath
 		cfg.Providers.ClaudeCLI.Model = cliModel
-	} else if providerChoice == "custom" {
+	case "custom":
 		cfg.Agents.Defaults.Provider = "openai"
 		cfg.Providers.OpenAI.APIBase = customAPIBase
 		cfg.Providers.OpenAI.APIKey = apiKey
 		cfg.Agents.Defaults.Model = customModel
-	} else {
+	default:
 		pi := providerMap[providerChoice]
 		cfg.Agents.Defaults.Provider = pi.name
 		applyProviderAPIKey(cfg, pi.name, apiKey)

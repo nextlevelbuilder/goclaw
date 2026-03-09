@@ -17,20 +17,20 @@ const defaultProgressInterval = 30 * time.Second
 
 // DelegationTask tracks an active delegation for concurrency control and cancellation.
 type DelegationTask struct {
-	ID             string     `json:"id"`
-	SourceAgentID  uuid.UUID  `json:"source_agent_id"`
-	SourceAgentKey string     `json:"source_agent_key"`
-	TargetAgentID  uuid.UUID  `json:"target_agent_id"`
-	SourceDisplayName  string `json:"-"`
-	TargetAgentKey     string `json:"target_agent_key"`
-	TargetDisplayName  string `json:"-"`
-	UserID         string     `json:"user_id"`
-	Task           string     `json:"task"`
-	Status         string     `json:"status"` // "running", "completed", "failed", "cancelled"
-	Mode           string     `json:"mode"`   // "sync" or "async"
-	SessionKey     string     `json:"session_key"`
-	CreatedAt      time.Time  `json:"created_at"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	ID                string     `json:"id"`
+	SourceAgentID     uuid.UUID  `json:"source_agent_id"`
+	SourceAgentKey    string     `json:"source_agent_key"`
+	TargetAgentID     uuid.UUID  `json:"target_agent_id"`
+	SourceDisplayName string     `json:"-"`
+	TargetAgentKey    string     `json:"target_agent_key"`
+	TargetDisplayName string     `json:"-"`
+	UserID            string     `json:"user_id"`
+	Task              string     `json:"task"`
+	Status            string     `json:"status"` // "running", "completed", "failed", "cancelled"
+	Mode              string     `json:"mode"`   // "sync" or "async"
+	SessionKey        string     `json:"session_key"`
+	CreatedAt         time.Time  `json:"created_at"`
+	CompletedAt       *time.Time `json:"completed_at,omitempty"`
 
 	// Origin metadata for async announce routing
 	OriginChannel    string `json:"-"`
@@ -114,7 +114,7 @@ type DelegateArtifacts struct {
 // included in the final announce so the lead has all results in one message.
 type DelegateResultSummary struct {
 	AgentKey     string
-	DisplayName  string   // target agent display name
+	DisplayName  string // target agent display name
 	Content      string
 	HasMedia     bool
 	Deliverables []string // actual content from tool outputs
@@ -128,8 +128,8 @@ type AgentRunFunc func(ctx context.Context, agentKey string, req DelegateRunRequ
 type DelegateResult struct {
 	Content      string
 	Iterations   int
-	DelegationID string   // for async: the delegation ID to track/cancel
-	TeamTaskID   string   // auto-created or provided team task ID (for tracing)
+	DelegationID string          // for async: the delegation ID to track/cancel
+	TeamTaskID   string          // auto-created or provided team task ID (for tracing)
 	Media        []bus.MediaFile // media files from delegation result
 }
 
@@ -153,11 +153,11 @@ type DelegateManager struct {
 	runAgent     AgentRunFunc
 	linkStore    store.AgentLinkStore
 	agentStore   store.AgentStore
-	teamStore    store.TeamStore     // optional: enables auto-complete of team tasks
-	sessionStore store.SessionStore  // optional: enables session cleanup
+	teamStore    store.TeamStore    // optional: enables auto-complete of team tasks
+	sessionStore store.SessionStore // optional: enables session cleanup
 	mediaLoader  MediaPathLoader    // optional: enables image propagation to delegates
-	msgBus       *bus.MessageBus     // for event broadcast + async announce (PublishInbound)
-	hookEngine   *hooks.Engine       // optional: quality gate evaluation
+	msgBus       *bus.MessageBus    // for event broadcast + async announce (PublishInbound)
+	hookEngine   *hooks.Engine      // optional: quality gate evaluation
 
 	active            sync.Map // delegationID → *DelegationTask
 	pendingArtifacts  sync.Map // sourceAgentID string → *DelegateArtifacts
@@ -206,4 +206,3 @@ func (dm *DelegateManager) SetMediaLoader(ml MediaPathLoader) {
 func (dm *DelegateManager) SetProgressEnabled(enabled bool) {
 	dm.progressEnabled = enabled
 }
-

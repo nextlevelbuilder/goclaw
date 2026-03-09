@@ -12,8 +12,8 @@
 //	     - collapseConsecutiveDuplicateBlocks()
 //
 // Additional Go-specific:
-//	  5. stripEchoedSystemMessages()       → strip hallucinated [System Message] blocks
-//	  6. stripGarbledToolXML()             → strip garbled XML from models like DeepSeek
+//  5. stripEchoedSystemMessages()       → strip hallucinated [System Message] blocks
+//  6. stripGarbledToolXML()             → strip garbled XML from models like DeepSeek
 package agent
 
 import (
@@ -169,7 +169,9 @@ func stripDowngradedToolCallText(content string) string {
 
 // Matches TS stripThinkingTagsFromText() with strict mode.
 // Strips: <think>...</think>, <thinking>...</thinking>, <thought>...</thought>,
-//         <antThinking>...</antThinking>
+//
+//	<antThinking>...</antThinking>
+//
 // Go regexp doesn't support backreferences, so we use separate patterns.
 var thinkingTagPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?is)<think>.*?</think>`),

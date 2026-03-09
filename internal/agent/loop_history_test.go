@@ -206,7 +206,7 @@ func TestSanitizeHistory_DropsOrphanedToolMidHistory(t *testing.T) {
 
 func TestEstimateTokens(t *testing.T) {
 	msgs := []providers.Message{
-		{Role: "user", Content: "Hello world!"},             // 12 chars → ~4 tokens
+		{Role: "user", Content: "Hello world!"},                // 12 chars → ~4 tokens
 		{Role: "assistant", Content: "Hi there, how are you?"}, // 22 chars → ~7 tokens
 	}
 	got := EstimateTokens(msgs)

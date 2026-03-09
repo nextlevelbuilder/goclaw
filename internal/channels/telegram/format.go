@@ -298,12 +298,12 @@ func parseTableRow(line string) []string {
 // stripInlineMarkdown removes common inline markdown markers from text.
 // Used for table cells that render inside code blocks where formatting has no effect.
 var (
-	reStripBoldAsterisks   = regexp.MustCompile(`\*\*(.+?)\*\*`)
-	reStripBoldUnderscores = regexp.MustCompile(`__(.+?)__`)
-	reStripItalicAsterisk  = regexp.MustCompile(`\*([^*]+)\*`)
+	reStripBoldAsterisks    = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	reStripBoldUnderscores  = regexp.MustCompile(`__(.+?)__`)
+	reStripItalicAsterisk   = regexp.MustCompile(`\*([^*]+)\*`)
 	reStripItalicUnderscore = regexp.MustCompile(`_([^_]+)_`)
-	reStripStrikethrough   = regexp.MustCompile(`~~(.+?)~~`)
-	reStripInlineCode      = regexp.MustCompile("`([^`]+)`")
+	reStripStrikethrough    = regexp.MustCompile(`~~(.+?)~~`)
+	reStripInlineCode       = regexp.MustCompile("`([^`]+)`")
 )
 
 func stripInlineMarkdown(s string) string {

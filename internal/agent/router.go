@@ -25,7 +25,7 @@ type agentEntry struct {
 type Router struct {
 	agents     map[string]*agentEntry
 	mu         sync.RWMutex
-	activeRuns sync.Map // runID → *ActiveRun
+	activeRuns sync.Map     // runID → *ActiveRun
 	resolver   ResolverFunc // optional: lazy creation from DB
 	ttl        time.Duration
 }

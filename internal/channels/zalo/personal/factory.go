@@ -13,10 +13,10 @@ import (
 
 // zaloCreds maps the credentials JSON from the channel_instances table.
 type zaloCreds struct {
-	IMEI      string               `json:"imei"`
+	IMEI      string                `json:"imei"`
 	Cookie    *protocol.CookieUnion `json:"cookie"`
-	UserAgent string               `json:"userAgent"`
-	Language  *string              `json:"language,omitempty"`
+	UserAgent string                `json:"userAgent"`
+	Language  *string               `json:"language,omitempty"`
 }
 
 // zaloInstanceConfig maps the config JSONB from the channel_instances table.

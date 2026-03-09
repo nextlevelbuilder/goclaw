@@ -131,11 +131,11 @@ func getEncryptParam(sess *Session, typeStr string) (params map[string]any, enk 
 	}
 
 	params = map[string]any{
-		"zcid":     zcid,
-		"enc_ver":  DefaultEncryptVer,
-		"zcid_ext": zcidExt,
-		"params":   encKey.encData,
-		"type":     DefaultAPIType,
+		"zcid":           zcid,
+		"enc_ver":        DefaultEncryptVer,
+		"zcid_ext":       zcidExt,
+		"params":         encKey.encData,
+		"type":           DefaultAPIType,
 		"client_version": DefaultAPIVersion,
 	}
 

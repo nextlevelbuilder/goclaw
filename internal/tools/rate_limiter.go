@@ -9,10 +9,10 @@ import (
 // ToolRateLimiter implements a sliding window rate limiter for tool executions.
 // Tracks actions per key (typically agent:userID) within a configurable window.
 type ToolRateLimiter struct {
-	mu        sync.Mutex
-	windows   map[string][]time.Time
-	maxPerHr  int
-	window    time.Duration
+	mu       sync.Mutex
+	windows  map[string][]time.Time
+	maxPerHr int
+	window   time.Duration
 }
 
 // NewToolRateLimiter creates a rate limiter with the given max actions per hour.

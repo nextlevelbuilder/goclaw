@@ -62,8 +62,8 @@ func (m *ExecApprovalMethods) handleApprove(_ context.Context, client *gateway.C
 	}
 
 	var params struct {
-		ID    string `json:"id"`
-		Always bool  `json:"always"` // true = allow-always, false = allow-once
+		ID     string `json:"id"`
+		Always bool   `json:"always"` // true = allow-always, false = allow-once
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)

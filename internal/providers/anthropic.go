@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	defaultClaudeModel   = "claude-sonnet-4-5-20250929"
-	anthropicAPIBase     = "https://api.anthropic.com/v1"
-	anthropicAPIVersion  = "2023-06-01"
+	defaultClaudeModel  = "claude-sonnet-4-5-20250929"
+	anthropicAPIBase    = "https://api.anthropic.com/v1"
+	anthropicAPIVersion = "2023-06-01"
 )
 
 // AnthropicProvider implements Provider using the Anthropic Claude API via net/http.
@@ -55,9 +55,9 @@ func WithAnthropicBaseURL(baseURL string) AnthropicOption {
 	}
 }
 
-func (p *AnthropicProvider) Name() string            { return "anthropic" }
-func (p *AnthropicProvider) DefaultModel() string     { return p.defaultModel }
-func (p *AnthropicProvider) SupportsThinking() bool   { return true }
+func (p *AnthropicProvider) Name() string           { return "anthropic" }
+func (p *AnthropicProvider) DefaultModel() string   { return p.defaultModel }
+func (p *AnthropicProvider) SupportsThinking() bool { return true }
 
 func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	model := req.Model
@@ -182,8 +182,8 @@ func (p *AnthropicProvider) parseResponse(resp *anthropicResponse) *ChatResponse
 
 type anthropicResponse struct {
 	Content    []anthropicContentBlock `json:"content"`
-	StopReason string                 `json:"stop_reason"`
-	Usage      anthropicUsage         `json:"usage"`
+	StopReason string                  `json:"stop_reason"`
+	Usage      anthropicUsage          `json:"usage"`
 }
 
 type anthropicContentBlock struct {
@@ -221,8 +221,8 @@ type anthropicContentBlockDeltaEvent struct {
 	Delta struct {
 		Type        string `json:"type"`
 		Text        string `json:"text,omitempty"`
-		Thinking    string `json:"thinking,omitempty"`    // for thinking_delta
-		Signature   string `json:"signature,omitempty"`   // for signature_delta
+		Thinking    string `json:"thinking,omitempty"`  // for thinking_delta
+		Signature   string `json:"signature,omitempty"` // for signature_delta
 		PartialJSON string `json:"partial_json,omitempty"`
 	} `json:"delta"`
 }

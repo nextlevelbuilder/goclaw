@@ -156,17 +156,17 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 
 	delegationID := uuid.NewString()[:12]
 	task := &DelegationTask{
-		ID:             delegationID,
-		SourceAgentID:  sourceAgentID,
+		ID:                delegationID,
+		SourceAgentID:     sourceAgentID,
 		SourceAgentKey:    sourceAgent.AgentKey,
 		SourceDisplayName: sourceAgent.DisplayName,
-		TargetAgentID:  targetAgent.ID,
+		TargetAgentID:     targetAgent.ID,
 		TargetAgentKey:    opts.TargetAgentKey,
 		TargetDisplayName: targetAgent.DisplayName,
-		UserID:         userID,
-		Task:           opts.Task,
-		Status:         "running",
-		Mode:           mode,
+		UserID:            userID,
+		Task:              opts.Task,
+		Status:            "running",
+		Mode:              mode,
 		SessionKey: fmt.Sprintf("delegate:%s:%s:%s",
 			sourceAgentID.String()[:8], opts.TargetAgentKey, delegationID),
 		CreatedAt:        time.Now(),
@@ -305,8 +305,13 @@ func (dm *DelegateManager) sendProgressNotification(task *DelegationTask) {
 			UserID:         task.UserID,
 			Channel:        task.OriginChannel,
 			ChatID:         task.OriginChatID,
-			TeamID:         func() string { if task.TeamID != uuid.Nil { return task.TeamID.String() }; return "" }(),
-			Active:         progressItems,
+			TeamID: func() string {
+				if task.TeamID != uuid.Nil {
+					return task.TeamID.String()
+				}
+				return ""
+			}(),
+			Active: progressItems,
 		},
 	})
 }
@@ -335,9 +340,19 @@ func (dm *DelegateManager) buildRunRequest(task *DelegationTask, message string)
 			"- Do NOT use your persona name or self-references (e.g. do not say your name). Write factual, neutral content.\n" +
 			"- Be concise and deliver actionable results.\n" +
 			"- IMPORTANT: If the delegated task falls outside your expertise scope (as defined in your SOUL.md), politely refuse and explain that this task is not within your domain. Do NOT attempt tasks outside your scope.",
-		DelegationID:  task.ID,
-		TeamID:        func() string { if task.TeamID != uuid.Nil { return task.TeamID.String() }; return "" }(),
-		TeamTaskID:    func() string { if task.TeamTaskID != uuid.Nil { return task.TeamTaskID.String() }; return "" }(),
+		DelegationID: task.ID,
+		TeamID: func() string {
+			if task.TeamID != uuid.Nil {
+				return task.TeamID.String()
+			}
+			return ""
+		}(),
+		TeamTaskID: func() string {
+			if task.TeamTaskID != uuid.Nil {
+				return task.TeamTaskID.String()
+			}
+			return ""
+		}(),
 		ParentAgentID: task.SourceAgentKey,
 	}
 

@@ -53,8 +53,8 @@ type EventMessage struct {
 }
 
 type EventMention struct {
-	Key       string `json:"key"`
-	ID        struct {
+	Key string `json:"key"`
+	ID  struct {
 		OpenID  string `json:"open_id"`
 		UserID  string `json:"user_id"`
 		UnionID string `json:"union_id"`
@@ -69,9 +69,9 @@ type EventMention struct {
 // Schema v1.0 uses flat structure, v2.0 uses header+event.
 type webhookEvent struct {
 	// v2.0 fields
-	Schema  string          `json:"schema"`
-	Header  json.RawMessage `json:"header"`
-	Event   json.RawMessage `json:"event"`
+	Schema string          `json:"schema"`
+	Header json.RawMessage `json:"header"`
+	Event  json.RawMessage `json:"event"`
 
 	// v1.0 fields (also used for URL verification challenge)
 	Type      string `json:"type"`

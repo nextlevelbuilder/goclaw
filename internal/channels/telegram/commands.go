@@ -212,4 +212,3 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 
 	return false
 }
-

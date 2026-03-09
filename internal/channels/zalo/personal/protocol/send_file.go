@@ -17,7 +17,7 @@ import (
 type FileUploadResult struct {
 	FileID       string      `json:"fileId"`
 	FileURL      string      `json:"fileUrl"`      // populated from WS callback
-	ClientFileID json.Number `json:"clientFileId"`  // Zalo may return string or number
+	ClientFileID json.Number `json:"clientFileId"` // Zalo may return string or number
 	ChunkID      int         `json:"chunkId"`
 	Finished     int         `json:"finished"`
 

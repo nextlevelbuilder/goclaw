@@ -180,7 +180,7 @@ func NewHTTPCookies(hc []*http.Cookie) CookieUnion {
 	return CookieUnion{cookies: cookies}
 }
 
-func (cu *CookieUnion) IsValid() bool    { return cu.cookies != nil || cu.j2cookie != nil }
+func (cu *CookieUnion) IsValid() bool { return cu.cookies != nil || cu.j2cookie != nil }
 func (cu *CookieUnion) GetCookies() []Cookie {
 	if cu.cookies != nil {
 		return cu.cookies

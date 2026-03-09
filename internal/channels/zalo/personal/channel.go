@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	maxTextLength         = 2000
-	maxChannelRestarts    = 10
-	maxChannelBackoff     = 60 * time.Second
-	code3000InitialDelay  = 60 * time.Second
+	maxTextLength        = 2000
+	maxChannelRestarts   = 10
+	maxChannelBackoff    = 60 * time.Second
+	code3000InitialDelay = 60 * time.Second
 )
 
 // Channel connects to Zalo Personal Chat via the internal protocol port (from zcago, MIT).

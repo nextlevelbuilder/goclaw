@@ -14,24 +14,24 @@ import (
 
 // Session stores conversation history for one agent+scope combination.
 type Session struct {
-	Key      string              `json:"key"`       // agent:{agentId}:{sessionKey}
+	Key      string              `json:"key"` // agent:{agentId}:{sessionKey}
 	Messages []providers.Message `json:"messages"`
 	Summary  string              `json:"summary,omitempty"`
 	Created  time.Time           `json:"created"`
 	Updated  time.Time           `json:"updated"`
 
 	// Metadata (matching TS SessionEntry subset)
-	Model           string `json:"model,omitempty"`
-	Provider        string `json:"provider,omitempty"`
-	Channel         string `json:"channel,omitempty"`
-	InputTokens     int64  `json:"inputTokens,omitempty"`
-	OutputTokens    int64  `json:"outputTokens,omitempty"`
-	CompactionCount             int    `json:"compactionCount,omitempty"`
+	Model                      string `json:"model,omitempty"`
+	Provider                   string `json:"provider,omitempty"`
+	Channel                    string `json:"channel,omitempty"`
+	InputTokens                int64  `json:"inputTokens,omitempty"`
+	OutputTokens               int64  `json:"outputTokens,omitempty"`
+	CompactionCount            int    `json:"compactionCount,omitempty"`
 	MemoryFlushCompactionCount int    `json:"memoryFlushCompactionCount,omitempty"`
 	MemoryFlushAt              int64  `json:"memoryFlushAt,omitempty"` // unix ms
 	Label                      string `json:"label,omitempty"`
-	SpawnedBy       string `json:"spawnedBy,omitempty"`
-	SpawnDepth      int    `json:"spawnDepth,omitempty"`
+	SpawnedBy                  string `json:"spawnedBy,omitempty"`
+	SpawnDepth                 int    `json:"spawnDepth,omitempty"`
 
 	ContextWindow    int `json:"contextWindow,omitempty"`
 	LastPromptTokens int `json:"lastPromptTokens,omitempty"`
@@ -395,24 +395,24 @@ func (m *Manager) Save(key string) error {
 
 	// Snapshot under lock
 	snapshot := Session{
-		Key:             s.Key,
-		Summary:         s.Summary,
-		Created:         s.Created,
-		Updated:         s.Updated,
-		Model:           s.Model,
-		Provider:        s.Provider,
-		Channel:         s.Channel,
-		InputTokens:     s.InputTokens,
-		OutputTokens:    s.OutputTokens,
-		CompactionCount: s.CompactionCount,
+		Key:                        s.Key,
+		Summary:                    s.Summary,
+		Created:                    s.Created,
+		Updated:                    s.Updated,
+		Model:                      s.Model,
+		Provider:                   s.Provider,
+		Channel:                    s.Channel,
+		InputTokens:                s.InputTokens,
+		OutputTokens:               s.OutputTokens,
+		CompactionCount:            s.CompactionCount,
 		MemoryFlushCompactionCount: s.MemoryFlushCompactionCount,
-		MemoryFlushAt:   s.MemoryFlushAt,
-		Label:           s.Label,
-		SpawnedBy:       s.SpawnedBy,
-		SpawnDepth:      s.SpawnDepth,
-		ContextWindow:    s.ContextWindow,
-		LastPromptTokens: s.LastPromptTokens,
-		LastMessageCount: s.LastMessageCount,
+		MemoryFlushAt:              s.MemoryFlushAt,
+		Label:                      s.Label,
+		SpawnedBy:                  s.SpawnedBy,
+		SpawnDepth:                 s.SpawnDepth,
+		ContextWindow:              s.ContextWindow,
+		LastPromptTokens:           s.LastPromptTokens,
+		LastMessageCount:           s.LastMessageCount,
 	}
 	if len(s.Messages) > 0 {
 		snapshot.Messages = make([]providers.Message, len(s.Messages))

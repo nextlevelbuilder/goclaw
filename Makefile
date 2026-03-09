@@ -55,4 +55,16 @@ setup:
 	go mod download
 	cd ui/web && pnpm install --frozen-lockfile
 
-ci: build test vet check-web
+GOPATH ?= $(shell go env GOPATH)
+export BIN_DIR := $(GOPATH)/bin
+export GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
+
+$(GOLANGCI_LINT):
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(BIN_DIR) v2.4.0
+
+.PHONY: lint
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) --version
+	$(GOLANGCI_LINT) run -v
+
+ci: build test lint vet check-web

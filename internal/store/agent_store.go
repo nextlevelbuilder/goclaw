@@ -16,9 +16,9 @@ const (
 
 // Agent status constants.
 const (
-	AgentStatusActive      = "active"
-	AgentStatusInactive    = "inactive"
-	AgentStatusSummoning   = "summoning"
+	AgentStatusActive       = "active"
+	AgentStatusInactive     = "inactive"
+	AgentStatusSummoning    = "summoning"
 	AgentStatusSummonFailed = "summon_failed"
 )
 

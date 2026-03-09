@@ -74,12 +74,12 @@ type WebSearchTool struct {
 
 // WebSearchConfig holds configuration for the web search tool.
 type WebSearchConfig struct {
-	BraveAPIKey    string
-	BraveEnabled   bool
+	BraveAPIKey     string
+	BraveEnabled    bool
 	BraveMaxResults int
-	DDGEnabled     bool
-	DDGMaxResults  int
-	CacheTTL       time.Duration
+	DDGEnabled      bool
+	DDGMaxResults   int
+	CacheTTL        time.Duration
 }
 
 func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {

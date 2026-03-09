@@ -32,10 +32,10 @@ type SynthResult struct {
 type AutoMode string
 
 const (
-	AutoOff    AutoMode = "off"     // Disabled
-	AutoAlways AutoMode = "always"  // Apply to all eligible replies
+	AutoOff     AutoMode = "off"     // Disabled
+	AutoAlways  AutoMode = "always"  // Apply to all eligible replies
 	AutoInbound AutoMode = "inbound" // Only if user sent audio/voice
-	AutoTagged AutoMode = "tagged"  // Only if reply contains [[tts]] directive
+	AutoTagged  AutoMode = "tagged"  // Only if reply contains [[tts]] directive
 )
 
 // Mode controls which reply types get TTS.

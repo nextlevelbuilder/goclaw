@@ -294,13 +294,13 @@ func loadLoginPage(ctx context.Context, sess *Session) (string, error) {
 }
 
 var qrHeaders = http.Header{
-	"Accept":                    {"*/*"},
-	"Content-Type":              {"application/x-www-form-urlencoded"},
-	"Sec-Fetch-Dest":            {"empty"},
-	"Sec-Fetch-Mode":            {"cors"},
-	"Sec-Fetch-Site":            {"same-origin"},
-	"Referer":                   {"https://id.zalo.me/account?continue=https%3A%2F%2Fzalo.me%2Fpc"},
-	"Referrer-Policy":           {"strict-origin-when-cross-origin"},
+	"Accept":          {"*/*"},
+	"Content-Type":    {"application/x-www-form-urlencoded"},
+	"Sec-Fetch-Dest":  {"empty"},
+	"Sec-Fetch-Mode":  {"cors"},
+	"Sec-Fetch-Site":  {"same-origin"},
+	"Referer":         {"https://id.zalo.me/account?continue=https%3A%2F%2Fzalo.me%2Fpc"},
+	"Referrer-Policy": {"strict-origin-when-cross-origin"},
 }
 
 func qrPost(ctx context.Context, sess *Session, endpoint string, formData map[string]string) (*http.Response, error) {

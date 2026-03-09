@@ -104,10 +104,10 @@ func (cs *Service) AddJob(name string, schedule Schedule, message string, delive
 
 	now := nowMS()
 	job := Job{
-		ID:      generateID(),
-		Name:    name,
-		AgentID: agentID,
-		Enabled: true,
+		ID:       generateID(),
+		Name:     name,
+		AgentID:  agentID,
+		Enabled:  true,
 		Schedule: schedule,
 		Payload: Payload{
 			Kind:    "agent_turn",
@@ -269,4 +269,3 @@ func (cs *Service) Status() map[string]interface{} {
 		"nextWakeAtMs": cs.getNextWakeMS(),
 	}
 }
-

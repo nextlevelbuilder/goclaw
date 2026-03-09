@@ -19,7 +19,7 @@ type CronJob struct {
 
 // CronSchedule defines when a job should run.
 type CronSchedule struct {
-	Kind    string `json:"kind"`              // "at", "every", "cron"
+	Kind    string `json:"kind"` // "at", "every", "cron"
 	AtMS    *int64 `json:"atMs,omitempty"`
 	EveryMS *int64 `json:"everyMs,omitempty"`
 	Expr    string `json:"expr,omitempty"`

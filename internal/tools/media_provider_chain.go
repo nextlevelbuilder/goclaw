@@ -19,9 +19,9 @@ type MediaProviderEntry struct {
 	Provider   string         `json:"provider"`              // name for registry.Get()
 	Model      string         `json:"model"`
 	Enabled    bool           `json:"enabled"`
-	Timeout    int            `json:"timeout"`               // seconds, default 120
-	MaxRetries int            `json:"max_retries"`           // default 2
-	Params     map[string]any `json:"params,omitempty"`      // provider-specific config
+	Timeout    int            `json:"timeout"`          // seconds, default 120
+	MaxRetries int            `json:"max_retries"`      // default 2
+	Params     map[string]any `json:"params,omitempty"` // provider-specific config
 }
 
 // mediaProviderChain is the settings JSON structure for media tools.

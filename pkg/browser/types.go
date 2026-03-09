@@ -84,11 +84,11 @@ type WaitOpts struct {
 
 // ConsoleMessage is a captured browser console message.
 type ConsoleMessage struct {
-	Level   string `json:"level"` // "log", "warn", "error", "info"
-	Text    string `json:"text"`
-	URL     string `json:"url,omitempty"`
-	LineNo  int    `json:"lineNo,omitempty"`
-	ColNo   int    `json:"colNo,omitempty"`
+	Level  string `json:"level"` // "log", "warn", "error", "info"
+	Text   string `json:"text"`
+	URL    string `json:"url,omitempty"`
+	LineNo int    `json:"lineNo,omitempty"`
+	ColNo  int    `json:"colNo,omitempty"`
 }
 
 // StatusInfo describes the current browser state.

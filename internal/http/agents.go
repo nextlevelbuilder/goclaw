@@ -19,8 +19,8 @@ import (
 type AgentsHandler struct {
 	agents   store.AgentStore
 	token    string
-	msgBus   *bus.MessageBus  // for cache invalidation events (nil = no events)
-	summoner *AgentSummoner   // LLM-based agent setup (nil = disabled)
+	msgBus   *bus.MessageBus   // for cache invalidation events (nil = no events)
+	summoner *AgentSummoner    // LLM-based agent setup (nil = disabled)
 	isOwner  func(string) bool // checks if user ID is a system owner (nil = no owners configured)
 }
 

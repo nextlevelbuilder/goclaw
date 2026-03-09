@@ -137,9 +137,10 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, remainingActive int) strin
 		// Single item: use the same format as before (no batching overhead)
 		item := items[0]
 		statusLabel := "completed successfully"
-		if item.Status == "failed" {
+		switch item.Status {
+		case "failed":
 			statusLabel = "failed: " + item.Result
-		} else if item.Status == "cancelled" {
+		case "cancelled":
 			statusLabel = "was cancelled"
 		}
 
@@ -162,9 +163,10 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, remainingActive int) strin
 
 	for i, item := range items {
 		statusLabel := "completed"
-		if item.Status == "failed" {
+		switch item.Status {
+		case "failed":
 			statusLabel = "failed"
-		} else if item.Status == "cancelled" {
+		case "cancelled":
 			statusLabel = "cancelled"
 		}
 

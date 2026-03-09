@@ -209,18 +209,18 @@ func (m *ChannelInstancesMethods) handleDelete(ctx context.Context, client *gate
 // maskInstance returns a map representation with credentials masked.
 func maskInstance(inst store.ChannelInstanceData) map[string]interface{} {
 	result := map[string]interface{}{
-		"id":           inst.ID,
-		"name":         inst.Name,
-		"display_name": inst.DisplayName,
-		"channel_type": inst.ChannelType,
-		"agent_id":     inst.AgentID,
-		"config":       inst.Config,
-		"enabled":      inst.Enabled,
-		"is_default":       store.IsDefaultChannelInstance(inst.Name),
-		"has_credentials":  len(inst.Credentials) > 0,
-		"created_by":       inst.CreatedBy,
-		"created_at":       inst.CreatedAt,
-		"updated_at":       inst.UpdatedAt,
+		"id":              inst.ID,
+		"name":            inst.Name,
+		"display_name":    inst.DisplayName,
+		"channel_type":    inst.ChannelType,
+		"agent_id":        inst.AgentID,
+		"config":          inst.Config,
+		"enabled":         inst.Enabled,
+		"is_default":      store.IsDefaultChannelInstance(inst.Name),
+		"has_credentials": len(inst.Credentials) > 0,
+		"created_by":      inst.CreatedBy,
+		"created_at":      inst.CreatedAt,
+		"updated_at":      inst.UpdatedAt,
 	}
 
 	// Mask credentials: show keys with "***" values

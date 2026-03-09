@@ -16,7 +16,7 @@ type CustomToolDef struct {
 	Command        string          `json:"command"`
 	WorkingDir     string          `json:"working_dir,omitempty"`
 	TimeoutSeconds int             `json:"timeout_seconds"`
-	Env            []byte          `json:"-"`          // encrypted JSONB — never serialized to API
+	Env            []byte          `json:"-"` // encrypted JSONB — never serialized to API
 	AgentID        *uuid.UUID      `json:"agent_id,omitempty"`
 	Enabled        bool            `json:"enabled"`
 	CreatedBy      string          `json:"created_by"`

@@ -28,9 +28,9 @@ const (
 // Channel connects to Slack via Socket Mode for event-driven messaging.
 type Channel struct {
 	*channels.BaseChannel
-	api            *slackapi.Client      // Bot Token API client (xoxb-)
-	userAPI        *slackapi.Client      // User Token API client (xoxp-, optional)
-	sm             *socketmode.Client    // Socket Mode client (xapp-)
+	api            *slackapi.Client   // Bot Token API client (xoxb-)
+	userAPI        *slackapi.Client   // User Token API client (xoxp-, optional)
+	sm             *socketmode.Client // Socket Mode client (xapp-)
 	config         config.SlackConfig
 	botUserID      string // populated on Start() via auth.test
 	teamID         string // populated on Start() via auth.test
@@ -56,7 +56,7 @@ type Channel struct {
 	groupHistory   *channels.PendingHistory
 	historyLimit   int
 	debounceDelay  time.Duration
-	threadTTL      time.Duration // thread participation expiry (0 = disabled)
+	threadTTL      time.Duration  // thread participation expiry (0 = disabled)
 	wg             sync.WaitGroup // tracks goroutines for clean shutdown
 	cancelFn       context.CancelFunc
 }

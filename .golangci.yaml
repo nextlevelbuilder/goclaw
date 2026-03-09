@@ -1,0 +1,69 @@
+version: "2"
+linters:
+  # enable:
+    # - asasalint
+    # - bidichk
+    # - bodyclose
+    # - cyclop
+    # - decorder
+    # - dupl
+    # - err113
+    # - errname
+    # - errorlint
+    # - exhaustive
+    # - ginkgolinter
+    # - gocheckcompilerdirectives
+    # - gocognit
+    # - goconst
+    # - gocritic
+    # - goheader
+    # - lll
+    # - misspell
+    # - revive
+    # - unparam
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - errcheck
+          - err113
+          - revive
+          - lll
+          - ginkgolinter
+        path: _test.go
+      - text: should not use dot imports
+        path: _test.go
+      - text: lines are duplicate of
+        path: _test.go
+      - text: seems to be unused
+        path: _test.go
+      - text: not checked
+        path: .go
+      - linters:
+          - staticcheck
+          - unused
+          - ineffassign
+        path: .go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+run:
+  timeout: 5m
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 3
+  new: false
+  fix: true
+  uniq-by-line: true
+  whole-files: false

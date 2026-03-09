@@ -64,10 +64,10 @@ func (m *ContactsMethods) handleContacts(ctx context.Context, client *gateway.Cl
 
 	// Parse credentials (same struct as factory.go)
 	var creds struct {
-		IMEI      string               `json:"imei"`
+		IMEI      string                `json:"imei"`
 		Cookie    *protocol.CookieUnion `json:"cookie"`
-		UserAgent string               `json:"userAgent"`
-		Language  *string              `json:"language,omitempty"`
+		UserAgent string                `json:"userAgent"`
+		Language  *string               `json:"language,omitempty"`
 	}
 	if err := json.Unmarshal(inst.Credentials, &creds); err != nil {
 		client.SendResponse(goclawprotocol.NewErrorResponse(req.ID, goclawprotocol.ErrInternal, "failed to parse credentials"))

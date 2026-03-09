@@ -35,9 +35,9 @@ func NewDynamicTool(def store.CustomToolDef, workspace string) *DynamicTool {
 	return &DynamicTool{def: def, workspace: workspace, params: params}
 }
 
-func (t *DynamicTool) Name() string                         { return t.def.Name }
-func (t *DynamicTool) Description() string                  { return t.def.Description }
-func (t *DynamicTool) Parameters() map[string]interface{}    { return t.params }
+func (t *DynamicTool) Name() string                       { return t.def.Name }
+func (t *DynamicTool) Description() string                { return t.def.Description }
+func (t *DynamicTool) Parameters() map[string]interface{} { return t.params }
 
 func (t *DynamicTool) Execute(ctx context.Context, args map[string]interface{}) *Result {
 	// Render command template with shell-escaped args

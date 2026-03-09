@@ -67,36 +67,36 @@ type Config struct {
 	// Security hardening (matching TS buildSandboxCreateArgs)
 	ReadOnlyRoot    bool     `json:"read_only_root"`
 	CapDrop         []string `json:"cap_drop,omitempty"`
-	Tmpfs           []string `json:"tmpfs,omitempty"`           // e.g. "/tmp", "/tmp:size=64m"
-	TmpfsSizeMB     int      `json:"tmpfs_size_mb,omitempty"`   // default size for tmpfs mounts without explicit :size= (0 = Docker default)
+	Tmpfs           []string `json:"tmpfs,omitempty"`         // e.g. "/tmp", "/tmp:size=64m"
+	TmpfsSizeMB     int      `json:"tmpfs_size_mb,omitempty"` // default size for tmpfs mounts without explicit :size= (0 = Docker default)
 	PidsLimit       int      `json:"pids_limit,omitempty"`
-	User            string   `json:"user,omitempty"`            // container user (e.g. "1000:1000", "nobody")
+	User            string   `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
 	MaxOutputBytes  int      `json:"max_output_bytes,omitempty"` // limit exec stdout+stderr capture (default 1MB, 0 = unlimited)
 	SetupCommand    string   `json:"setup_command,omitempty"`
 	ContainerPrefix string   `json:"container_prefix,omitempty"`
 	Workdir         string   `json:"workdir,omitempty"` // container workdir (default "/workspace")
 
 	// Pruning (matching TS SandboxPruneSettings)
-	IdleHours   int `json:"idle_hours,omitempty"`   // prune containers idle > N hours (default 24)
-	MaxAgeDays  int `json:"max_age_days,omitempty"` // prune containers older than N days (default 7)
+	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
+	MaxAgeDays       int `json:"max_age_days,omitempty"`       // prune containers older than N days (default 7)
 	PruneIntervalMin int `json:"prune_interval_min,omitempty"` // check interval in minutes (default 5)
 }
 
 // DefaultConfig returns sensible defaults matching TS sandbox defaults.
 func DefaultConfig() Config {
 	return Config{
-		Mode:            ModeOff,
-		Image:           "goclaw-sandbox:bookworm-slim",
-		WorkspaceAccess: AccessRW,
-		Scope:           ScopeSession,
-		MemoryMB:        512,
-		CPUs:            1.0,
-		TimeoutSec:      300,
-		NetworkEnabled:  false,
-		ReadOnlyRoot:    true,
-		CapDrop:         []string{"ALL"},
-		Tmpfs:           []string{"/tmp", "/var/tmp", "/run"},
-		MaxOutputBytes:  1 << 20, // 1MB
+		Mode:             ModeOff,
+		Image:            "goclaw-sandbox:bookworm-slim",
+		WorkspaceAccess:  AccessRW,
+		Scope:            ScopeSession,
+		MemoryMB:         512,
+		CPUs:             1.0,
+		TimeoutSec:       300,
+		NetworkEnabled:   false,
+		ReadOnlyRoot:     true,
+		CapDrop:          []string{"ALL"},
+		Tmpfs:            []string{"/tmp", "/var/tmp", "/run"},
+		MaxOutputBytes:   1 << 20, // 1MB
 		ContainerPrefix:  "goclaw-sbx-",
 		Workdir:          "/workspace",
 		IdleHours:        24,

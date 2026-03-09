@@ -9,11 +9,11 @@ import (
 type contextKey string
 
 const (
-	traceIDKey              contextKey = "goclaw_trace_id"
-	parentSpanKey           contextKey = "goclaw_parent_span_id"
-	collectorKey            contextKey = "goclaw_trace_collector"
-	announceParentKey       contextKey = "goclaw_announce_parent_span_id"
-	delegateParentTraceKey  contextKey = "goclaw_delegate_parent_trace_id"
+	traceIDKey             contextKey = "goclaw_trace_id"
+	parentSpanKey          contextKey = "goclaw_parent_span_id"
+	collectorKey           contextKey = "goclaw_trace_collector"
+	announceParentKey      contextKey = "goclaw_announce_parent_span_id"
+	delegateParentTraceKey contextKey = "goclaw_delegate_parent_trace_id"
 )
 
 // WithTraceID returns a context with the given trace ID.

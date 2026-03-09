@@ -96,11 +96,11 @@ type PendingApproval struct {
 
 // ExecApprovalManager manages pending approval requests and the dynamic allowlist.
 type ExecApprovalManager struct {
-	config       ExecApprovalConfig
-	pending      map[string]*PendingApproval
-	alwaysAllow  map[string]bool // patterns added via "allow-always" decisions
-	mu           sync.Mutex
-	nextID       int
+	config      ExecApprovalConfig
+	pending     map[string]*PendingApproval
+	alwaysAllow map[string]bool // patterns added via "allow-always" decisions
+	mu          sync.Mutex
+	nextID      int
 }
 
 // NewExecApprovalManager creates an approval manager with the given config.

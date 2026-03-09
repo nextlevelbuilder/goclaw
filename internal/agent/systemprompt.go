@@ -23,25 +23,25 @@ type SystemPromptConfig struct {
 	AgentID       string
 	Model         string
 	Workspace     string
-	Channel       string                 // runtime channel instance name (e.g. "my-telegram-bot")
-	ChannelType   string                 // platform type (e.g. "zalo_personal", "telegram")
-	PeerKind      string                 // "direct" or "group"
-	OwnerIDs      []string               // owner sender IDs
-	Mode          PromptMode             // full or minimal
-	ToolNames     []string               // registered tool names
-	SkillsSummary string                 // XML from skills.Loader.BuildSummary()
-	HasMemory     bool                   // memory_search/memory_get available?
-	HasSpawn      bool                   // spawn tool available?
+	Channel       string                  // runtime channel instance name (e.g. "my-telegram-bot")
+	ChannelType   string                  // platform type (e.g. "zalo_personal", "telegram")
+	PeerKind      string                  // "direct" or "group"
+	OwnerIDs      []string                // owner sender IDs
+	Mode          PromptMode              // full or minimal
+	ToolNames     []string                // registered tool names
+	SkillsSummary string                  // XML from skills.Loader.BuildSummary()
+	HasMemory     bool                    // memory_search/memory_get available?
+	HasSpawn      bool                    // spawn tool available?
 	ContextFiles  []bootstrap.ContextFile // bootstrap files for # Project Context
-	ExtraPrompt   string                 // extra system prompt (subagent context, etc.)
-	AgentType     string                 // "open" or "predefined" — affects context file framing
+	ExtraPrompt   string                  // extra system prompt (subagent context, etc.)
+	AgentType     string                  // "open" or "predefined" — affects context file framing
 
 	HasSkillSearch   bool // skill_search tool registered? (for search-mode prompt)
 	HasMCPToolSearch bool // mcp_tool_search tool registered? (MCP search mode)
 
 	// Sandbox info — matching TS sandboxInfo in system-prompt.ts
-	SandboxEnabled       bool   // exec tool runs inside Docker sandbox?
-	SandboxContainerDir  string // container-side workdir (e.g. "/workspace")
+	SandboxEnabled         bool   // exec tool runs inside Docker sandbox?
+	SandboxContainerDir    string // container-side workdir (e.g. "/workspace")
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
 
 	// Self-evolution: predefined agents can update SOUL.md (style/tone)
@@ -51,16 +51,16 @@ type SystemPromptConfig struct {
 // coreToolSummaries maps tool names to one-line descriptions.
 // Shown in the ## Tooling section of the system prompt.
 var coreToolSummaries = map[string]string{
-	"read_file":     "Read file contents",
-	"write_file":    "Create or overwrite files",
-	"list_files":    "List directory contents",
-	"exec":          "Run shell commands",
-	"memory_search": "Search indexed memory files (MEMORY.md + memory/*.md)",
-	"memory_get":    "Read specific sections of memory files",
-	"spawn":         "Spawn a subagent or delegate to another agent",
-	"web_search":    "Search the web",
-	"web_fetch":     "Fetch and extract content from a URL",
-	"cron":          "Manage scheduled jobs and reminders",
+	"read_file":        "Read file contents",
+	"write_file":       "Create or overwrite files",
+	"list_files":       "List directory contents",
+	"exec":             "Run shell commands",
+	"memory_search":    "Search indexed memory files (MEMORY.md + memory/*.md)",
+	"memory_get":       "Read specific sections of memory files",
+	"spawn":            "Spawn a subagent or delegate to another agent",
+	"web_search":       "Search the web",
+	"web_fetch":        "Fetch and extract content from a URL",
+	"cron":             "Manage scheduled jobs and reminders",
 	"skill_search":     "Search available skills by keyword (weather, translate, github, etc.)",
 	"mcp_tool_search":  "Search for available MCP external integration tools by keyword",
 	"browser":          "Browse web pages interactively",
@@ -346,4 +346,3 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 		"",
 	}
 }
-

@@ -44,7 +44,7 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 	}
 }
 
-func (p *CodexProvider) Name() string          { return p.name }
+func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
 

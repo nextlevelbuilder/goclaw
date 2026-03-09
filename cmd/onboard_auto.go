@@ -244,14 +244,14 @@ func saveCleanConfig(cfgPath string, cfg *config.Config) error {
 	// Build agents section.
 	agents := map[string]interface{}{
 		"defaults": map[string]interface{}{
-			"workspace":            cfg.Agents.Defaults.Workspace,
+			"workspace":             cfg.Agents.Defaults.Workspace,
 			"restrict_to_workspace": cfg.Agents.Defaults.RestrictToWorkspace,
-			"provider":             cfg.Agents.Defaults.Provider,
-			"model":                cfg.Agents.Defaults.Model,
-			"max_tokens":           cfg.Agents.Defaults.MaxTokens,
-			"temperature":          cfg.Agents.Defaults.Temperature,
-			"max_tool_iterations":  cfg.Agents.Defaults.MaxToolIterations,
-			"context_window":       cfg.Agents.Defaults.ContextWindow,
+			"provider":              cfg.Agents.Defaults.Provider,
+			"model":                 cfg.Agents.Defaults.Model,
+			"max_tokens":            cfg.Agents.Defaults.MaxTokens,
+			"temperature":           cfg.Agents.Defaults.Temperature,
+			"max_tool_iterations":   cfg.Agents.Defaults.MaxToolIterations,
+			"context_window":        cfg.Agents.Defaults.ContextWindow,
 		},
 	}
 
@@ -283,15 +283,14 @@ func saveCleanConfig(cfgPath string, cfg *config.Config) error {
 
 	// Build root config map.
 	root := map[string]interface{}{
-		"agents":   agents,
-		"gateway":  gateway,
-		"tools":    tools,
+		"agents":  agents,
+		"gateway": gateway,
+		"tools":   tools,
 	}
 
 	if len(channels) > 0 {
 		root["channels"] = channels
 	}
-
 
 	data, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {

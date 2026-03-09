@@ -268,4 +268,3 @@ func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo
 	}
 	return models, nil
 }
-

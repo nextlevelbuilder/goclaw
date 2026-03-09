@@ -55,7 +55,7 @@ var skipElements = map[atom.Atom]bool{
 	atom.Nav:      true,
 	atom.Footer:   true,
 	atom.Picture:  true,
-	atom.Source:    true,
+	atom.Source:   true,
 }
 
 // Additional elements to skip in text mode only.

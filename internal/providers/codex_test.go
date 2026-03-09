@@ -625,4 +625,3 @@ func TestCodexProviderBuildRequestBodyWithImages(t *testing.T) {
 		t.Errorf("content[1] type = %v, want input_text", content[1]["type"])
 	}
 }
-

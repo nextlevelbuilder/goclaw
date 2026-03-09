@@ -27,7 +27,7 @@ func geminiNativeDocumentCall(ctx context.Context, apiKey, model, prompt string,
 					{
 						"inline_data": map[string]interface{}{
 							"mime_type": docMime,
-							"data":     b64,
+							"data":      b64,
 						},
 					},
 					{
@@ -117,4 +117,3 @@ func geminiNativeDocumentCall(ctx context.Context, apiKey, model, prompt string,
 		},
 	}, nil
 }
-

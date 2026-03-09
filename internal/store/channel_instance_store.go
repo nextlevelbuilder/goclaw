@@ -15,7 +15,7 @@ type ChannelInstanceData struct {
 	DisplayName string          `json:"display_name"`
 	ChannelType string          `json:"channel_type"`
 	AgentID     uuid.UUID       `json:"agent_id"`
-	Credentials []byte          `json:"-"`    // encrypted, never serialized to API
+	Credentials []byte          `json:"-"` // encrypted, never serialized to API
 	Config      json.RawMessage `json:"config"`
 	Enabled     bool            `json:"enabled"`
 	CreatedBy   string          `json:"created_by"`

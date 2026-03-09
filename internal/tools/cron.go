@@ -82,8 +82,8 @@ func (t *CronTool) Parameters() map[string]interface{} {
 				"description": "Include disabled jobs in list (default false)",
 			},
 			"job": map[string]interface{}{
-				"type":        "object",
-				"description": "Job definition for add action (name, schedule, message, deliver, channel, to, agentId, deleteAfterRun)",
+				"type":                 "object",
+				"description":          "Job definition for add action (name, schedule, message, deliver, channel, to, agentId, deleteAfterRun)",
 				"additionalProperties": true,
 			},
 			"jobId": map[string]interface{}{
@@ -95,8 +95,8 @@ func (t *CronTool) Parameters() map[string]interface{} {
 				"description": "Backward compatibility alias for jobId",
 			},
 			"patch": map[string]interface{}{
-				"type":        "object",
-				"description": "Patch object for update action",
+				"type":                 "object",
+				"description":          "Patch object for update action",
 				"additionalProperties": true,
 			},
 			"runMode": map[string]interface{}{

@@ -269,7 +269,7 @@ func TestIsPathInside(t *testing.T) {
 	}{
 		{"/a/b/c", "/a/b", true},
 		{"/a/b", "/a/b", true},
-		{"/a/bc", "/a/b", false},  // not a child, just prefix match
+		{"/a/bc", "/a/b", false}, // not a child, just prefix match
 		{"/a", "/a/b", false},
 		{"/x/y", "/a/b", false},
 	}

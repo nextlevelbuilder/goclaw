@@ -30,9 +30,9 @@ type RequestFrame struct {
 
 // ResponseFrame is sent by the server in response to a request.
 type ResponseFrame struct {
-	Type    string      `json:"type"`          // always "res"
-	ID      string      `json:"id"`            // matches request ID
-	OK      bool        `json:"ok"`            // true if success
+	Type    string      `json:"type"`              // always "res"
+	ID      string      `json:"id"`                // matches request ID
+	OK      bool        `json:"ok"`                // true if success
 	Payload interface{} `json:"payload,omitempty"` // response data (when ok=true)
 	Error   *ErrorShape `json:"error,omitempty"`   // error info (when ok=false)
 }

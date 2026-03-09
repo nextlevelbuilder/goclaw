@@ -50,13 +50,13 @@ func (m *CronMethods) handleList(_ context.Context, client *gateway.Client, req 
 
 func (m *CronMethods) handleCreate(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	var params struct {
-		Name     string        `json:"name"`
+		Name     string             `json:"name"`
 		Schedule store.CronSchedule `json:"schedule"`
-		Message  string        `json:"message"`
-		Deliver  bool          `json:"deliver"`
-		Channel  string        `json:"channel"`
-		To       string        `json:"to"`
-		AgentID  string        `json:"agentId"`
+		Message  string             `json:"message"`
+		Deliver  bool               `json:"deliver"`
+		Channel  string             `json:"channel"`
+		To       string             `json:"to"`
+		AgentID  string             `json:"agentId"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -140,8 +140,8 @@ func (m *CronMethods) handleStatus(_ context.Context, client *gateway.Client, re
 
 func (m *CronMethods) handleUpdate(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	var params struct {
-		JobID string        `json:"jobId"`
-		ID    string        `json:"id"` // alias (matching TS)
+		JobID string             `json:"jobId"`
+		ID    string             `json:"id"` // alias (matching TS)
 		Patch store.CronJobPatch `json:"patch"`
 	}
 	if req.Params != nil {

@@ -346,8 +346,8 @@ window.__INITIAL_STATE__ = {"user":null,"theme":"dark"};
 		"analytics loaded", "console.log",
 		"main.abc123.css", "main.def456.js",
 		"enable JavaScript",
-		"viewport",     // meta from head
-		"All rights",   // footer
+		"viewport",                 // meta from head
+		"All rights",               // footer
 		"Home", "About", "Contact", // nav
 	} {
 		if strings.Contains(got, bad) {

@@ -40,7 +40,7 @@ type Channel struct {
 	dedup           sync.Map // message_id → struct{}
 	pairingDebounce sync.Map // senderID → time.Time
 	reactions       sync.Map // chatID → *reactionState
-	approvedGroups sync.Map // chatID → true (in-memory cache for paired groups)
+	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
 	groupAllowList  []string
 	groupHistory    *channels.PendingHistory
 	historyLimit    int

@@ -13,16 +13,16 @@ import (
 
 // messageContext holds parsed information from a Feishu message event.
 type messageContext struct {
-	ChatID      string
-	MessageID   string
-	SenderID    string // sender_id.open_id
-	ChatType    string // "p2p" or "group"
-	Content     string
-	ContentType string // "text", "post", "image", etc.
+	ChatID       string
+	MessageID    string
+	SenderID     string // sender_id.open_id
+	ChatType     string // "p2p" or "group"
+	Content      string
+	ContentType  string // "text", "post", "image", etc.
 	MentionedBot bool
-	RootID      string // thread root message ID
-	ParentID    string // parent message ID
-	Mentions    []mentionInfo
+	RootID       string // thread root message ID
+	ParentID     string // parent message ID
+	Mentions     []mentionInfo
 }
 
 type mentionInfo struct {

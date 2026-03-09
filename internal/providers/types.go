@@ -7,12 +7,12 @@ import (
 
 // Options keys used in ChatRequest.Options across providers.
 const (
-	OptMaxTokens      = "max_tokens"
-	OptTemperature    = "temperature"
-	OptThinkingLevel  = "thinking_level"
+	OptMaxTokens       = "max_tokens"
+	OptTemperature     = "temperature"
+	OptThinkingLevel   = "thinking_level"
 	OptReasoningEffort = "reasoning_effort"
-	OptEnableThinking = "enable_thinking"
-	OptThinkingBudget = "thinking_budget"
+	OptEnableThinking  = "enable_thinking"
+	OptThinkingBudget  = "thinking_budget"
 )
 
 // TokenSource provides an OAuth access token (with auto-refresh).
@@ -70,9 +70,9 @@ type ChatResponse struct {
 
 // StreamChunk is a piece of a streaming response.
 type StreamChunk struct {
-	Content   string `json:"content,omitempty"`
-	Thinking  string `json:"thinking,omitempty"`
-	Done      bool   `json:"done,omitempty"`
+	Content  string `json:"content,omitempty"`
+	Thinking string `json:"thinking,omitempty"`
+	Done     bool   `json:"done,omitempty"`
 }
 
 // ImageContent represents a base64-encoded image for vision-capable models.
@@ -92,11 +92,11 @@ type MediaRef struct {
 
 // Message represents a conversation message.
 type Message struct {
-	Role       string         `json:"role"`                  // "system", "user", "assistant", "tool"
+	Role       string         `json:"role"` // "system", "user", "assistant", "tool"
 	Content    string         `json:"content"`
-	Thinking   string         `json:"thinking,omitempty"`    // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
-	Images     []ImageContent `json:"images,omitempty"`      // vision: base64 images (runtime only, not persisted)
-	MediaRefs  []MediaRef     `json:"media_refs,omitempty"`  // persistent media file references
+	Thinking   string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
+	Images     []ImageContent `json:"images,omitempty"`     // vision: base64 images (runtime only, not persisted)
+	MediaRefs  []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
 	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
 	ToolCallID string         `json:"tool_call_id,omitempty"` // for role="tool" responses
 

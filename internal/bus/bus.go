@@ -12,7 +12,7 @@ type MessageBus struct {
 	outbound chan OutboundMessage
 
 	// Channel message handlers (channel name → handler)
-	handlers map[string]MessageHandler
+	handlers  map[string]MessageHandler
 	handlerMu sync.RWMutex
 
 	// Event subscribers (subscriber ID → handler)

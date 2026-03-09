@@ -163,8 +163,8 @@ func (m *AgentsMethods) handleCreate(_ context.Context, client *gateway.Client, 
 		Workspace string   `json:"workspace"`
 		Emoji     string   `json:"emoji"`
 		Avatar    string   `json:"avatar"`
-		AgentType string   `json:"agent_type"`              // "open" (default) or "predefined"
-		OwnerIDs  []string `json:"owner_ids,omitempty"`     // first entry used as DB owner_id; falls back to "system"
+		AgentType string   `json:"agent_type"`          // "open" (default) or "predefined"
+		OwnerIDs  []string `json:"owner_ids,omitempty"` // first entry used as DB owner_id; falls back to "system"
 		// Per-agent config overrides
 		ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 		SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`

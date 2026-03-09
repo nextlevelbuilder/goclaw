@@ -4,10 +4,10 @@ package oauth
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -16,16 +16,16 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
-	"sync"
 	"runtime"
+	"sync"
 	"time"
 )
 
 const (
-	OpenAIAuthURL    = "https://auth.openai.com/oauth/authorize"
-	OpenAITokenURL   = "https://auth.openai.com/oauth/token"
-	OpenAIClientID   = "app_EMoamEEZ73f0CkXaXp7hrann"
-	OpenAIScopes     = "openid profile email offline_access api.connectors.read api.connectors.invoke"
+	OpenAIAuthURL     = "https://auth.openai.com/oauth/authorize"
+	OpenAITokenURL    = "https://auth.openai.com/oauth/token"
+	OpenAIClientID    = "app_EMoamEEZ73f0CkXaXp7hrann"
+	OpenAIScopes      = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 	OpenAIRedirectURI = "http://localhost:1455/auth/callback"
 
 	callbackPort = "1455"
@@ -133,15 +133,15 @@ func StartLoginOpenAI() (*PendingLogin, error) {
 
 	params := url.Values{
 		"client_id":                  {OpenAIClientID},
-		"redirect_uri":              {OpenAIRedirectURI},
-		"response_type":             {"code"},
-		"scope":                     {OpenAIScopes},
-		"code_challenge":            {challenge},
+		"redirect_uri":               {OpenAIRedirectURI},
+		"response_type":              {"code"},
+		"scope":                      {OpenAIScopes},
+		"code_challenge":             {challenge},
 		"code_challenge_method":      {"S256"},
-		"state":                     {state},
+		"state":                      {state},
 		"codex_cli_simplified_flow":  {"true"},
 		"id_token_add_organizations": {"true"},
-		"originator":                {"pi"},
+		"originator":                 {"pi"},
 	}
 	authURL := OpenAIAuthURL + "?" + params.Encode()
 

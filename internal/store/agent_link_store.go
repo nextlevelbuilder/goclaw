@@ -25,7 +25,7 @@ type AgentLinkData struct {
 	BaseModel
 	SourceAgentID uuid.UUID       `json:"source_agent_id"`
 	TargetAgentID uuid.UUID       `json:"target_agent_id"`
-	Direction     string          `json:"direction"` // "outbound", "inbound", "bidirectional"
+	Direction     string          `json:"direction"`         // "outbound", "inbound", "bidirectional"
 	TeamID        *uuid.UUID      `json:"team_id,omitempty"` // non-nil = auto-created by team
 	Description   string          `json:"description,omitempty"`
 	MaxConcurrent int             `json:"max_concurrent"`

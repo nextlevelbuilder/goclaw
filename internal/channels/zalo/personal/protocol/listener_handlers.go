@@ -235,9 +235,9 @@ func (ln *Listener) sendPing(ctx context.Context) {
 	body, _ := json.Marshal(data)
 
 	buf := make([]byte, 4+len(body))
-	buf[0] = 1 // version
+	buf[0] = 1                                 // version
 	binary.LittleEndian.PutUint16(buf[1:3], 2) // cmd=2
-	buf[3] = 1 // subCmd=1
+	buf[3] = 1                                 // subCmd=1
 	copy(buf[4:], body)
 
 	ln.mu.RLock()

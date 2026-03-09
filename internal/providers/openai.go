@@ -47,11 +47,11 @@ func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 	return p
 }
 
-func (p *OpenAIProvider) Name() string            { return p.name }
-func (p *OpenAIProvider) DefaultModel() string     { return p.defaultModel }
-func (p *OpenAIProvider) SupportsThinking() bool   { return true }
-func (p *OpenAIProvider) APIKey() string       { return p.apiKey }
-func (p *OpenAIProvider) APIBase() string      { return p.apiBase }
+func (p *OpenAIProvider) Name() string           { return p.name }
+func (p *OpenAIProvider) DefaultModel() string   { return p.defaultModel }
+func (p *OpenAIProvider) SupportsThinking() bool { return true }
+func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
+func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
 
 // resolveModel returns the model ID to use for a request.
 // For OpenRouter, model IDs require a provider prefix (e.g. "anthropic/claude-sonnet-4-5-20250929").
@@ -404,4 +404,3 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 
 	return result
 }
-

@@ -650,11 +650,11 @@ func (c *Channel) uploadFile(channelID, threadTS string, media bus.MediaAttachme
 	}
 
 	params := slackapi.UploadFileParameters{
-		Filename:       fileName,
-		FileSize:       len(data),
-		Reader:         bytes.NewReader(data),
-		Title:          fileName,
-		Channel:        channelID,
+		Filename:        fileName,
+		FileSize:        len(data),
+		Reader:          bytes.NewReader(data),
+		Title:           fileName,
+		Channel:         channelID,
 		ThreadTimestamp: threadTS,
 	}
 

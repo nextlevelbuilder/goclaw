@@ -16,15 +16,15 @@ import (
 
 // RunContext tracks an active agent run for streaming/reaction event forwarding.
 type RunContext struct {
-	ChannelName  string
-	ChatID       string
-	MessageID    string // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
-	Metadata     map[string]string // outbound routing metadata (thread_id, local_key, group_id)
+	ChannelName       string
+	ChatID            string
+	MessageID         string            // platform message ID (string to support Feishu "om_xxx", Telegram "12345", etc.)
+	Metadata          map[string]string // outbound routing metadata (thread_id, local_key, group_id)
 	Streaming         bool              // whether run uses streaming (to avoid double-delivery of block replies)
 	BlockReplyEnabled bool              // whether block.reply delivery is enabled for this run (resolved at RegisterRun time)
-	mu           sync.Mutex
-	streamBuffer string // accumulated streaming text (chunks are deltas)
-	inToolPhase  bool   // true after tool.call, reset on next chunk (new LLM iteration)
+	mu                sync.Mutex
+	streamBuffer      string // accumulated streaming text (chunks are deltas)
+	inToolPhase       bool   // true after tool.call, reset on next chunk (new LLM iteration)
 }
 
 // Manager manages all registered channels, handling their lifecycle
