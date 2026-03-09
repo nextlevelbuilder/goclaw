@@ -317,19 +317,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 				Metadata: meta,
 			}
 
-			// Convert media results from agent run to outbound media attachments
-			for _, mr := range outcome.Result.Media {
-				outMsg.Media = append(outMsg.Media, bus.MediaAttachment{
-					URL:         mr.Path,
-					ContentType: mr.ContentType,
-				})
-				if mr.AsVoice {
-					if outMsg.Metadata == nil {
-						outMsg.Metadata = make(map[string]string)
-					}
-					outMsg.Metadata["audio_as_voice"] = "true"
-				}
-			}
+			appendMediaToOutbound(&outMsg, outcome.Result.Media)
 
 			msgBus.PublishOutbound(outMsg)
 		}(msg.Channel, msg.ChatID, sessionKey, runID, outMeta, blockReply)
@@ -492,12 +480,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 					Content:  announceContent,
 					Metadata: meta,
 				}
-				for _, mr := range outcome.Result.Media {
-					outMsg.Media = append(outMsg.Media, bus.MediaAttachment{
-						URL:         mr.Path,
-						ContentType: mr.ContentType,
-					})
-				}
+				appendMediaToOutbound(&outMsg, outcome.Result.Media)
 				msgBus.PublishOutbound(outMsg)
 			}(sessionKey, origChannel, msg.ChatID, msg.SenderID, msg.Metadata["subagent_label"], outMeta, announceReq)
 			continue
@@ -621,12 +604,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 					Content:  announceContent,
 					Metadata: meta,
 				}
-				for _, mr := range outcome.Result.Media {
-					outMsg.Media = append(outMsg.Media, bus.MediaAttachment{
-						URL:         mr.Path,
-						ContentType: mr.ContentType,
-					})
-				}
+				appendMediaToOutbound(&outMsg, outcome.Result.Media)
 				msgBus.PublishOutbound(outMsg)
 			}(sessionKey, origChannel, msg.ChatID, msg.SenderID, outMeta, announceReq)
 			continue
@@ -687,15 +665,17 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 					slog.Error("handoff announce: agent run failed", "error", outcome.Err)
 					return
 				}
-				if outcome.Result.Content == "" || agent.IsSilentReply(outcome.Result.Content) {
+				if (outcome.Result.Content == "" && len(outcome.Result.Media) == 0) || agent.IsSilentReply(outcome.Result.Content) {
 					return
 				}
-				msgBus.PublishOutbound(bus.OutboundMessage{
+				outMsg := bus.OutboundMessage{
 					Channel:  origCh,
 					ChatID:   chatID,
 					Content:  outcome.Result.Content,
 					Metadata: meta,
-				})
+				}
+				appendMediaToOutbound(&outMsg, outcome.Result.Media)
+				msgBus.PublishOutbound(outMsg)
 			}(origChannel, msg.ChatID, outMeta)
 			continue
 		}
@@ -755,18 +735,20 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 					slog.Error("teammate message: agent run failed", "error", outcome.Err)
 					return
 				}
-				if outcome.Result.Content == "" || agent.IsSilentReply(outcome.Result.Content) {
+				if (outcome.Result.Content == "" && len(outcome.Result.Media) == 0) || agent.IsSilentReply(outcome.Result.Content) {
 					slog.Info("teammate message: suppressed silent/empty reply", "from", senderID)
 					return
 				}
 				// Deliver response to origin channel (same as delegate/subagent announce).
 				// This allows the lead to respond to users after receiving teammate updates.
-				msgBus.PublishOutbound(bus.OutboundMessage{
+				outMsg := bus.OutboundMessage{
 					Channel:  origCh,
 					ChatID:   chatID,
 					Content:  outcome.Result.Content,
 					Metadata: meta,
-				})
+				}
+				appendMediaToOutbound(&outMsg, outcome.Result.Media)
+				msgBus.PublishOutbound(outMsg)
 			}(origChannel, msg.ChatID, msg.SenderID, outMeta)
 			continue
 		}
@@ -840,5 +822,22 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 
 		// --- Normal messages: route through debouncer ---
 		debouncer.Push(msg)
+	}
+}
+
+// appendMediaToOutbound converts agent MediaResults to outbound MediaAttachments
+// on the given OutboundMessage. Handles voice annotation when applicable.
+func appendMediaToOutbound(msg *bus.OutboundMessage, media []agent.MediaResult) {
+	for _, mr := range media {
+		msg.Media = append(msg.Media, bus.MediaAttachment{
+			URL:         mr.Path,
+			ContentType: mr.ContentType,
+		})
+		if mr.AsVoice {
+			if msg.Metadata == nil {
+				msg.Metadata = make(map[string]string)
+			}
+			msg.Metadata["audio_as_voice"] = "true"
+		}
 	}
 }

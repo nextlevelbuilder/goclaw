@@ -72,6 +72,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			if peerKind == "group" {
 				outMsg.Metadata = map[string]string{"group_id": job.Payload.To}
 			}
+			appendMediaToOutbound(&outMsg, result.Media)
 			msgBus.PublishOutbound(outMsg)
 		}
 
