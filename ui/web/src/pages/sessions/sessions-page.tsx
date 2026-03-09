@@ -21,7 +21,7 @@ export function SessionsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  const { sessions, total, loading, preview, deleteSession, resetSession } = useSessions({
+  const { sessions, total, loading, preview, deleteSession, resetSession, patchSession } = useSessions({
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
@@ -44,6 +44,7 @@ export function SessionsPage() {
           navigate("/sessions");
         }}
         onReset={resetSession}
+        onPatch={patchSession}
       />
     );
   }
@@ -146,7 +147,7 @@ function SessionRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <Badge variant="outline">{parsed.agentId}</Badge>
+        <Badge variant="outline">{session.agentName || parsed.agentId}</Badge>
       </td>
       <td className="px-4 py-3 text-sm text-muted-foreground">
         {session.channel || "ws"}

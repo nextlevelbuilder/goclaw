@@ -10,6 +10,7 @@ import type { ChannelStatus } from "./hooks/use-channels";
 const channelTypeLabels: Record<string, string> = {
   telegram: "Telegram",
   discord: "Discord",
+  slack: "Slack",
   feishu: "Feishu / Lark",
   zalo_oa: "Zalo OA",
   zalo_personal: "Zalo Personal",

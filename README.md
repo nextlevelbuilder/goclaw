@@ -38,7 +38,7 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Feature                    | OpenClaw                             | ZeroClaw                                     | PicoClaw                              | **GoClaw**                     |
 | -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- | ------------------------------ |
 | Multi-tenant (PostgreSQL)  | —                                    | —                                            | —                                     | ✅                             |
-| Custom tools (runtime API) | Config-based only                    | —                                            | —                                     | ✅                             |
+| Hooks system               | —                                    | —                                            | —                                     | 🔜 Planned                    |
 | MCP integration            | — (uses ACP)                         | —                                            | —                                     | ✅ (stdio/SSE/streamable-http) |
 | Agent teams                | —                                    | —                                            | —                                     | ✅ Task board + mailbox        |
 | Agent handoff              | —                                    | —                                            | —                                     | ✅ Conversation transfer       |
@@ -56,7 +56,7 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (PostgreSQL)                |
 | Encrypted secrets          | — (env vars only)                    | ✅ ChaCha20-Poly1305                         | — (plaintext JSON)                    | ✅ AES-256-GCM in DB           |
 
-> **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, conversation handoff, evaluate-loop quality gates, runtime custom tools via API, and MCP protocol support.
+> **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, conversation handoff, evaluate-loop quality gates, and MCP protocol support.
 
 ## Architecture
 
@@ -313,8 +313,8 @@ Quality gates validate agent output before it reaches users. Configured in agent
 
 ### Tools & Integrations
 - **30+ built-in tools** — File system, shell exec, web search/fetch, memory, browser automation, TTS, and more
-- **Custom tools** — Define shell-based tools at runtime via HTTP API with JSON Schema parameters and encrypted env vars
 - **MCP integration** — Connect external MCP servers via stdio, SSE, or streamable-http with per-agent/per-user grants
+- **Hooks system** — Event-driven hooks for agent lifecycle events (planned)
 
 ### Messaging Channels
 - **Telegram** — Full integration with streaming, rich formatting (HTML, tables, code blocks), reactions, media, forum topics (per-topic config and session isolation), speech-to-text, bot commands, group file writer restrictions
@@ -433,7 +433,7 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 - Agent teams, delegation, handoff, evaluate loops, quality gates
 - LLM call tracing with spans and prompt cache metrics
 - MCP server integration with per-agent and per-user access grants
-- Custom tools with JSON Schema and encrypted env vars
+- Event-driven hooks for agent lifecycle (planned)
 - Embedding-based skill search (hybrid BM25 + pgvector)
 - Web dashboard for agents, traces, skills, teams, and MCP servers
 - API key encryption (AES-256-GCM)
@@ -907,29 +907,28 @@ GOCLAW_OPENROUTER_API_KEY=sk-or-xxx go test -v ./tests/integration/ -timeout 120
 - **Browser automation** — Rod/CDP integration for headless Chrome, tested in production agent workflows.
 - **Lane-based scheduler** — Main/subagent/delegate/cron lane isolation with concurrent execution tested. Group chats support up to 3 concurrent agent runs per session with adaptive throttle and deferred session writes for history isolation.
 - **Security hardening** — Rate limiting, prompt injection detection, CORS, shell deny patterns, SSRF protection, credential scrubbing all implemented and verified.
-- **Web dashboard (core)** — Channel management, agent management, pairing approval, traces & spans viewer all implemented and working well.
+- **Web dashboard** — Channel management, agent management, pairing approval, traces & spans viewer, skills, MCP, cron, sessions, teams, and config pages all implemented and working.
 - **Prompt caching** — Anthropic (explicit `cache_control`), OpenAI/MiniMax/OpenRouter (automatic). Cache metrics tracked in trace spans and displayed in web dashboard.
+- **Agent delegation** — Inter-agent task delegation with permission links, sync/async modes, per-user restrictions, concurrency limits, and hybrid agent search. Tested in production.
+- **Agent teams** — Team creation with lead/member roles, shared task board (create, claim, complete, search, blocked_by dependencies), team mailbox (send, broadcast, read). Tested in production.
+- **Evaluate loop** — Generator-evaluator feedback cycles with configurable max rounds and pass criteria. Tested in production.
+- **Delegation history** — Queryable audit trail of inter-agent delegations. Tested in production.
+- **Skill system** — BM25 search, ZIP upload, SKILL.md parsing, and embedding hybrid search. Tested in production.
+- **MCP integration** — stdio, SSE, and streamable-http transports with per-agent/per-user grants. Tested in production.
+- **Cron scheduling** — `at`, `every`, and cron expression scheduling. Tested in production.
+- **Docker sandbox** — Isolated code execution in containers. Tested in production.
+- **Text-to-Speech** — OpenAI, ElevenLabs, Edge, MiniMax providers. Tested in production.
+- **HTTP API** — `/v1/chat/completions`, `/v1/agents`, `/v1/skills`, etc. Tested in production.
 
 ### Implemented but Not Fully Tested
 
-- **Agent delegation** — Inter-agent task delegation with permission links, sync/async modes, per-user restrictions, concurrency limits, and hybrid agent search. Core implementation complete, needs E2E testing with real multi-agent workflows.
-- **Agent teams** — Team creation with lead/member roles, shared task board (create, claim, complete, search, blocked_by dependencies), team mailbox (send, broadcast, read). Core implementation complete, needs E2E testing.
 - **Agent handoff** — Conversation transfer between agents with routing overrides. Implementation complete, needs E2E testing.
-- **Evaluate loop** — Generator-evaluator feedback cycles with configurable max rounds and pass criteria. Implementation complete, needs E2E testing.
 - **Quality gates** — Hook-based output validation with command and agent evaluator types. Implementation complete, needs E2E testing.
-- **Delegation history** — Queryable audit trail of inter-agent delegations. Implementation complete, needs validation at scale.
 - **Other messaging channels** — Discord, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp channel adapters are implemented but have not been tested end-to-end in production. Only Telegram has been validated with real users.
-- **Skill system** — BM25 search, ZIP upload, SKILL.md parsing, and embedding hybrid search are implemented. Basic functionality verified but no full E2E flow testing with real agent usage.
-- **Custom tools (runtime API)** — Shell-based custom tools with JSON Schema params, encrypted env vars, and HTTP CRUD are implemented. Not yet tested in a production workflow.
-- **MCP integration** — stdio, SSE, and streamable-http transports with per-agent/per-user grants implemented. Not tested with real MCP servers in production.
-- **Cron scheduling** — `at`, `every`, and cron expression scheduling implemented. Basic functionality works but no long-running production validation.
-- **Text-to-Speech** — OpenAI, ElevenLabs, Edge, MiniMax providers implemented. Not tested end-to-end.
-- **Docker sandbox** — Isolated code execution container support implemented. Not tested in production.
+- **Hooks system** — Event-driven hooks for agent lifecycle events. Not yet implemented.
 - **OpenTelemetry export** — OTLP gRPC/HTTP exporter implemented (build-tag gated). In-app tracing works; external OTel export not validated in production.
 - **Tailscale integration** — tsnet listener implemented (build-tag gated). Not tested in a real deployment.
 - **Browser pairing** — Pairing code flow implemented with CLI and web UI approval. Basic flow tested but not validated at scale.
-- **HTTP API (`/v1/chat/completions`, `/v1/agents`, etc.)** — Endpoints implemented. Used by web dashboard but not tested for third-party consumer use cases.
-- **Web dashboard (other pages)** — Skills, MCP, custom tools, cron, sessions, teams, and config pages have basic rendering but UX not yet optimized for easy management and monitoring.
 
 ## Acknowledgments
 

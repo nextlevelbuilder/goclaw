@@ -17,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
+	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
@@ -700,6 +701,7 @@ func runGateway() {
 		instanceLoader.RegisterFactory("zalo_oa", zalo.Factory)
 		instanceLoader.RegisterFactory("zalo_personal", zalopersonal.Factory)
 		instanceLoader.RegisterFactory("whatsapp", whatsapp.Factory)
+		instanceLoader.RegisterFactory("slack", slackchannel.Factory)
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
 		}
@@ -753,6 +755,16 @@ func runGateway() {
 		} else {
 			channelMgr.RegisterChannel("zalo_personal", zp)
 			slog.Info("zca (zalo personal) channel enabled (config)")
+		}
+	}
+
+	if cfg.Channels.Slack.Enabled && cfg.Channels.Slack.BotToken != "" && cfg.Channels.Slack.AppToken != "" && instanceLoader == nil {
+		sl, err := slackchannel.New(cfg.Channels.Slack, msgBus, nil)
+		if err != nil {
+			slog.Error("failed to initialize slack channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel("slack", sl)
+			slog.Info("slack channel enabled (config)")
 		}
 	}
 

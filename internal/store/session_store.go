@@ -62,6 +62,22 @@ type SessionListResult struct {
 	Total    int           `json:"total"`
 }
 
+// SessionInfoRich is an enriched session info for API responses (includes model, tokens, agent name).
+type SessionInfoRich struct {
+	SessionInfo
+	Model        string `json:"model,omitempty"`
+	Provider     string `json:"provider,omitempty"`
+	InputTokens  int64  `json:"inputTokens,omitempty"`
+	OutputTokens int64  `json:"outputTokens,omitempty"`
+	AgentName    string `json:"agentName,omitempty"`
+}
+
+// SessionListRichResult is the paginated result of ListPagedRich.
+type SessionListRichResult struct {
+	Sessions []SessionInfoRich `json:"sessions"`
+	Total    int               `json:"total"`
+}
+
 // SessionStore manages conversation sessions.
 type SessionStore interface {
 	GetOrCreate(key string) *SessionData
@@ -88,6 +104,7 @@ type SessionStore interface {
 	Delete(key string) error
 	List(agentID string) []SessionInfo
 	ListPaged(opts SessionListOpts) SessionListResult
+	ListPagedRich(opts SessionListOpts) SessionListRichResult
 	Save(key string) error
 	LastUsedChannel(agentID string) (channel, chatID string)
 }

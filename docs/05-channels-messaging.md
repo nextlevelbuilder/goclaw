@@ -11,6 +11,7 @@ flowchart LR
     subgraph Platforms
         TG["Telegram"]
         DC["Discord"]
+        SL["Slack"]
         FS["Feishu/Lark"]
         ZL["Zalo OA"]
         ZLP["Zalo Personal"]
@@ -34,6 +35,7 @@ flowchart LR
 
     TG --> CH
     DC --> CH
+    SL --> CH
     FS --> CH
     ZL --> CH
     ZLP --> CH
@@ -46,6 +48,7 @@ flowchart LR
     DISPATCH --> SEND
     SEND --> TG
     SEND --> DC
+    SEND --> SL
     SEND --> FS
     SEND --> ZL
     SEND --> ZLP
@@ -154,22 +157,22 @@ flowchart TD
 
 ## 4. Channel Comparison
 
-| Feature | Telegram | Feishu/Lark | Discord | WhatsApp | Zalo OA | Zalo Personal |
-|---------|----------|-------------|---------|----------|---------|---------------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | External WS bridge | Long polling | Internal protocol |
-| DM support | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
-| Group support | Yes (mention gating) | Yes | Yes | Yes | No | Yes |
-| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | N/A (bridge) | 2,000 chars | 2,000 chars |
-| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | JSON messages | Images (5 MB) | -- |
-| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- |
-| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- |
-| Rich formatting | Markdown → HTML | Card messages | Markdown | Plain text | Plain text | Plain text |
-| Bot commands | 10+ commands | -- | -- | -- | -- | -- |
-| Tool allow list | Per-topic | -- | -- | -- | -- | -- |
-| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes |
-| Status reactions | Yes | Yes | -- | -- | -- | -- |
+| Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal |
+|---------|----------|-------------|---------|-------|----------|---------|---------------|
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | External WS bridge | Long polling | Internal protocol |
+| DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
+| Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
+| Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | N/A (bridge) | 2,000 chars | 2,000 chars |
+| Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | JSON messages | Images (5 MB) | -- |
+| Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- |
+| Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- |
+| Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text |
+| Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- |
+| Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- |
+| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
+| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- |
 
 ---
 
@@ -385,7 +388,50 @@ The Discord channel uses the `discordgo` library to connect via the Discord Gate
 
 ---
 
-## 8. WhatsApp
+## 8. Slack
+
+The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (WebSocket).
+
+### Key Behaviors
+
+- **Socket Mode**: Uses `xapp-` App-Level Token for WebSocket connection (no public URL needed)
+- **Three token types**: `xoxb-` (Bot Token, required), `xapp-` (App-Level Token, required), `xoxp-` (User Token, optional for custom identity)
+- **Token prefix validation**: Tokens validated at startup (`xoxb-`, `xapp-`, `xoxp-` prefixes)
+- **Message limit**: 4,000-character limit with automatic splitting at newline boundaries
+- **Placeholder editing**: Sends "Thinking..." → edits with actual response (same as Discord)
+- **Mention gating**: `requireMention` default true; `<@botUserID>` stripped from content
+- **Thread participation cache**: After bot replies in a thread, subsequent messages in that thread auto-trigger response without @mention (24h TTL)
+- **Message dedup**: `channel+ts` key prevents duplicate processing on Socket Mode reconnect
+- **Message debounce**: Per-thread batching of rapid messages (300ms default, configurable)
+- **Dead socket classification**: Non-retryable auth errors (invalid_auth, token_revoked) fail fast instead of infinite reconnect
+- **Streaming**: Edit-in-place via `chat.update` with 1000ms throttle (Slack Tier 3 rate limit)
+- **Reactions**: Status emoji on user messages (thinking_face, hammer_and_wrench, white_check_mark, x, hourglass)
+- **SSRF protection**: File download hostname allowlist (*.slack.com, *.slack-edge.com, *.slack-files.com), auth token stripped on redirect
+- **Health probe**: `auth.test()` with 2.5s timeout for monitoring integration
+
+### Formatting Pipeline
+
+```
+LLM markdown → htmlTagsToMarkdown() → extractSlackTokens() → escapeHTMLEntities()
+→ extractCodeBlocks() → convertTablesToCodeBlocks() → bold/strike/header/link conversion
+→ restore tokens/code blocks → Slack mrkdwn
+```
+
+Key conversions: `**bold**` → `*bold*`, `~~strike~~` → `~strike~`, `[text](url)` → `<url|text>`, `# Header` → `*Header*`, tables → code blocks.
+
+### Environment Variables
+
+```
+GOCLAW_SLACK_BOT_TOKEN   → channels.slack.bot_token
+GOCLAW_SLACK_APP_TOKEN   → channels.slack.app_token
+GOCLAW_SLACK_USER_TOKEN  → channels.slack.user_token (optional)
+```
+
+Auto-enables when both bot_token and app_token are set.
+
+---
+
+## 9. WhatsApp
 
 The WhatsApp channel communicates through an external WebSocket bridge (e.g., whatsapp-web.js based). GoClaw does not implement the WhatsApp protocol directly.
 
@@ -399,7 +445,7 @@ The WhatsApp channel communicates through an external WebSocket bridge (e.g., wh
 
 ---
 
-## 9. Zalo OA
+## 10. Zalo OA
 
 The Zalo OA (Official Account) channel connects to the Zalo OA Bot API.
 
@@ -414,7 +460,7 @@ The Zalo OA (Official Account) channel connects to the Zalo OA Bot API.
 
 ---
 
-## 10. Zalo Personal
+## 11. Zalo Personal
 
 The Zalo Personal channel provides access to personal Zalo accounts using a reverse-engineered protocol. This is an unofficial integration.
 
@@ -443,7 +489,7 @@ Zalo Personal uses an unofficial, reverse-engineered protocol. The account used 
 
 ---
 
-## 11. Channel-Isolated Workspaces
+## 12. Channel-Isolated Workspaces
 
 Each channel instance can target a specific agent, providing workspace isolation across channels.
 
@@ -462,7 +508,7 @@ In managed mode, channel instances are loaded from the database with their assig
 
 ---
 
-## 12. Local Key Propagation
+## 13. Local Key Propagation
 
 Thread/topic context is preserved through the entire message pipeline using a `local_key` in message metadata. This ensures subagent, delegation, and team message results land in the correct thread — not the root chat.
 
@@ -478,7 +524,7 @@ All channel state — placeholders, streams, reactions, typing controllers, thre
 
 ---
 
-## 13. Per-User Isolation
+## 14. Per-User Isolation
 
 Channels provide per-user isolation through compound sender IDs and context propagation:
 
@@ -489,7 +535,7 @@ Channels provide per-user isolation through compound sender IDs and context prop
 
 ---
 
-## 14. Pairing System
+## 15. Pairing System
 
 The pairing system provides a DM authentication flow for channels using the `pairing` DM policy.
 
@@ -540,6 +586,9 @@ flowchart TD
 | `internal/channels/feishu/bot.go` | Bot message handlers |
 | `internal/channels/feishu/bot_policy.go` | Policy evaluation |
 | `internal/channels/discord/discord.go` | Discord: gateway events, placeholder editing |
+| `internal/channels/slack/slack.go` | Slack: Socket Mode, mention gating, thread caching |
+| `internal/channels/slack/format.go` | Markdown → Slack mrkdwn pipeline |
+| `internal/channels/slack/reactions.go` | Status emoji reactions on messages |
 | `internal/channels/whatsapp/whatsapp.go` | WhatsApp: external WS bridge |
 | `internal/channels/zalo/zalo.go` | Zalo OA: Bot API, long polling |
 | `internal/channels/zalo/personal/channel.go` | Zalo Personal: reverse-engineered protocol |

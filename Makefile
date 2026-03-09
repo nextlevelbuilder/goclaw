@@ -17,12 +17,14 @@ version:
 	@echo $(VERSION)
 
 COMPOSE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml
+UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml
 
 net:
 	docker network inspect shared >/dev/null 2>&1 || docker network create shared
 
 up: net
 	$(COMPOSE) up -d --build
+	$(UPGRADE) run --rm upgrade
 
 down:
 	$(COMPOSE) down

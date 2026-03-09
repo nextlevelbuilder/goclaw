@@ -13,6 +13,7 @@ export interface SessionInfo {
   outputTokens?: number;
   userID?: string;
   metadata?: Record<string, string>;
+  agentName?: string;
 }
 
 export interface SessionPreview {

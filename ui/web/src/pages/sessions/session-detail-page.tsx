@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
-import { ArrowLeft, Trash2, RotateCcw, Info, Eye } from "lucide-react";
+import { ArrowLeft, Trash2, RotateCcw, Info, Eye, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageBubble } from "@/components/chat/message-bubble";
@@ -33,6 +33,7 @@ interface SessionDetailPageProps {
   onPreview: (key: string) => Promise<SessionPreview | null>;
   onDelete: (key: string) => Promise<void>;
   onReset: (key: string) => Promise<void>;
+  onPatch?: (key: string, updates: { label?: string }) => Promise<void>;
 }
 
 export function SessionDetailPage({
@@ -41,12 +42,15 @@ export function SessionDetailPage({
   onPreview,
   onDelete,
   onReset,
+  onPatch,
 }: SessionDetailPageProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const parsed = parseSessionKey(session.key);
 
@@ -99,11 +103,51 @@ export function SessionDetailPage({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h3 className="font-medium">
-              {session.metadata?.chat_title || session.metadata?.display_name || session.label || parsed.scope}
-            </h3>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline">{parsed.agentId}</Badge>
+            {editingTitle ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  className="h-7 rounded border bg-background px-2 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      onPatch?.(session.key, { label: titleDraft });
+                      setEditingTitle(false);
+                    } else if (e.key === "Escape") {
+                      setEditingTitle(false);
+                    }
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => {
+                    onPatch?.(session.key, { label: titleDraft });
+                    setEditingTitle(false);
+                  }}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingTitle(false)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <h3
+                className="group flex cursor-pointer items-center gap-1.5 font-medium hover:text-primary"
+                onClick={() => {
+                  setTitleDraft(session.label || session.metadata?.chat_title || session.metadata?.display_name || "");
+                  setEditingTitle(true);
+                }}
+              >
+                {session.metadata?.chat_title || session.metadata?.display_name || session.label || parsed.scope}
+                <Pencil className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-50" />
+              </h3>
+            )}
+            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">{session.agentName || parsed.agentId}</Badge>
               {session.channel && session.channel !== "ws" && (
                 <Badge variant="secondary" className="gap-1">
                   <Eye className="h-3 w-3" />

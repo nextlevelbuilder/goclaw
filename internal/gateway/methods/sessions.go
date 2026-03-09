@@ -42,7 +42,7 @@ func (m *SessionsMethods) handleList(_ context.Context, client *gateway.Client, 
 		params.Limit = 20
 	}
 
-	result := m.sessions.ListPaged(store.SessionListOpts{
+	result := m.sessions.ListPagedRich(store.SessionListOpts{
 		AgentID: params.AgentID,
 		Limit:   params.Limit,
 		Offset:  params.Offset,

@@ -134,6 +134,101 @@ func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionList
 	return store.SessionListResult{Sessions: result, Total: total}
 }
 
+// ListPagedRich returns enriched session info for API responses (includes model, tokens, agent name).
+func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.SessionListRichResult {
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	offset := opts.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	var where string
+	var whereArgs []interface{}
+
+	if opts.AgentID != "" {
+		where = " WHERE s.session_key LIKE $1"
+		whereArgs = append(whereArgs, "agent:"+opts.AgentID+":%")
+	}
+
+	// Count total
+	var total int
+	countQ := "SELECT COUNT(*) FROM sessions s" + where
+	if err := s.db.QueryRow(countQ, whereArgs...).Scan(&total); err != nil {
+		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: 0}
+	}
+
+	// Fetch page with agent name via LEFT JOIN
+	var selectQ string
+	var selectArgs []interface{}
+
+	const richCols = `s.session_key, jsonb_array_length(s.messages), s.created_at, s.updated_at,
+		s.label, s.channel, s.user_id, COALESCE(s.metadata, '{}'),
+		s.model, s.provider, s.input_tokens, s.output_tokens,
+		COALESCE(a.display_name, '')`
+
+	if opts.AgentID != "" {
+		selectQ = `SELECT ` + richCols + `
+		           FROM sessions s LEFT JOIN agents a ON s.agent_id = a.id
+		           WHERE s.session_key LIKE $1 ORDER BY s.updated_at DESC LIMIT $2 OFFSET $3`
+		selectArgs = []interface{}{whereArgs[0], limit, offset}
+	} else {
+		selectQ = `SELECT ` + richCols + `
+		           FROM sessions s LEFT JOIN agents a ON s.agent_id = a.id
+		           ORDER BY s.updated_at DESC LIMIT $1 OFFSET $2`
+		selectArgs = []interface{}{limit, offset}
+	}
+
+	rows, err := s.db.Query(selectQ, selectArgs...)
+	if err != nil {
+		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: total}
+	}
+	defer rows.Close()
+
+	var result []store.SessionInfoRich
+	for rows.Next() {
+		var key string
+		var msgCount int
+		var createdAt, updatedAt time.Time
+		var label, channel, userID *string
+		var metaJSON []byte
+		var model, provider *string
+		var inputTokens, outputTokens int64
+		var agentName string
+		if err := rows.Scan(&key, &msgCount, &createdAt, &updatedAt, &label, &channel, &userID, &metaJSON,
+			&model, &provider, &inputTokens, &outputTokens, &agentName); err != nil {
+			continue
+		}
+		var meta map[string]string
+		if len(metaJSON) > 0 {
+			json.Unmarshal(metaJSON, &meta)
+		}
+		result = append(result, store.SessionInfoRich{
+			SessionInfo: store.SessionInfo{
+				Key:          key,
+				MessageCount: msgCount,
+				Created:      createdAt,
+				Updated:      updatedAt,
+				Label:        derefStr(label),
+				Channel:      derefStr(channel),
+				UserID:       derefStr(userID),
+				Metadata:     meta,
+			},
+			Model:        derefStr(model),
+			Provider:     derefStr(provider),
+			InputTokens:  inputTokens,
+			OutputTokens: outputTokens,
+			AgentName:    agentName,
+		})
+	}
+	if result == nil {
+		result = []store.SessionInfoRich{}
+	}
+	return store.SessionListRichResult{Sessions: result, Total: total}
+}
+
 func (s *PGSessionStore) Save(key string) error {
 	s.mu.RLock()
 	data, ok := s.cache[key]

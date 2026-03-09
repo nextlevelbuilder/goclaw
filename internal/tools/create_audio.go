@@ -40,7 +40,7 @@ func NewCreateAudioTool(registry *providers.Registry, elevenlabsKey, elevenlabsB
 func (t *CreateAudioTool) Name() string { return "create_audio" }
 
 func (t *CreateAudioTool) Description() string {
-	return "Generate music, sound effects, or ambient audio from a text description. Returns a MEDIA: path to the generated audio file."
+	return "Generate music, sound effects, or ambient audio from a text description. Returns a MEDIA: path to the generated audio file. Note: for music, duration is determined by lyrics length — provide longer/shorter lyrics to control length. The 'duration' parameter only applies to sound effects."
 }
 
 func (t *CreateAudioTool) Parameters() map[string]interface{} {
@@ -57,7 +57,7 @@ func (t *CreateAudioTool) Parameters() map[string]interface{} {
 			},
 			"duration": map[string]interface{}{
 				"type":        "integer",
-				"description": "Duration in seconds.",
+				"description": "Duration in seconds (only for sound effects). For music, duration is controlled by lyrics length.",
 			},
 			"lyrics": map[string]interface{}{
 				"type":        "string",
@@ -125,9 +125,6 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]interface
 			chain[i].Params["prompt"] = prompt
 			chain[i].Params["lyrics"] = lyrics
 			chain[i].Params["instrumental"] = instrumental
-			if duration > 0 {
-				chain[i].Params["duration"] = duration
-			}
 		}
 
 		// Override timeout to 300s for music generation (slow API).

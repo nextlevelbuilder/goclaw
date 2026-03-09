@@ -74,7 +74,7 @@ export function useSessions(opts: UseSessionsOptions = {}) {
   );
 
   const patchSession = useCallback(
-    async (key: string, updates: { label?: string; model?: string }) => {
+    async (key: string, updates: { label?: string; model?: string; metadata?: Record<string, string> }) => {
       if (!ws.isConnected) return;
       await ws.call(Methods.SESSIONS_PATCH, { key, ...updates });
       await invalidate();
