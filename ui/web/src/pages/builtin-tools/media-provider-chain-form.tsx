@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Trash2, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { uniqueId } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,7 +77,7 @@ function parseInitialEntries(
   // New format: { providers: [...] }
   if (Array.isArray(settings.providers)) {
     return (settings.providers as Record<string, unknown>[]).map((p) => ({
-      id: crypto.randomUUID(),
+      id: uniqueId(),
       provider_id: String(p.provider_id ?? ""),
       provider: String(p.provider ?? ""),
       model: String(p.model ?? ""),
@@ -93,7 +94,7 @@ function parseInitialEntries(
     const providerData = providers.find((p) => p.name === providerName);
     return [
       {
-        id: crypto.randomUUID(),
+        id: uniqueId(),
         provider_id: providerData?.id ?? "",
         provider: providerName,
         model: String(settings.model ?? ""),
@@ -394,7 +395,7 @@ export function MediaProviderChainForm({
     setEntries((prev) => [
       ...prev,
       {
-        id: crypto.randomUUID(),
+        id: uniqueId(),
         provider_id: "",
         provider: "",
         model: "",

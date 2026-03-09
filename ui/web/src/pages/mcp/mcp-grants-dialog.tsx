@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, uniqueId } from "@/lib/utils";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import type { MCPServerData, MCPAgentGrant, MCPToolInfo } from "./hooks/use-mcp";
 
@@ -123,7 +123,7 @@ export function MCPGrantsDialog({
         setGrants((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: uniqueId(),
             server_id: server.id,
             agent_id: agentId,
             enabled: true,
