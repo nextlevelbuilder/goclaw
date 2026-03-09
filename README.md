@@ -16,8 +16,8 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 - **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), isolated sessions — the only Claw project with DB-native multi-tenancy
 - **Single Binary** — ~25 MB static Go binary, no Node.js runtime, <1s startup, runs on a $5 VPS
 - **Production Security** — 5-layer defense: rate limiting, prompt injection detection, SSRF protection, shell deny patterns, AES-256-GCM encryption
-- **13+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope (Qwen), Bailian Coding
-- **6 Messaging Channels** — Telegram (forum topics, STT), Discord, Zalo OA, Zalo Personal (DM + groups), Feishu/Lark (streaming cards, media), WhatsApp with `/stop` and `/stopall` commands
+- **13+ LLM Providers** — Anthropic (native HTTP+SSE with prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope (Qwen), Bailian Coding + Claude CLI (stdio + MCP bridge), Codex (gpt-5.3-codex via OAuth)
+- **7 Messaging Channels** — Telegram (forum topics, STT), Discord, Slack, Zalo OA, Zalo Personal (DM + groups), Feishu/Lark (streaming cards, media), WhatsApp with `/stop` and `/stopall` commands
 - **Extended Thinking** — Per-provider thinking mode (Anthropic budget tokens, OpenAI reasoning effort, DashScope thinking budget) with streaming support
 
 ## Claw Ecosystem
@@ -38,7 +38,7 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Feature                    | OpenClaw                             | ZeroClaw                                     | PicoClaw                              | **GoClaw**                     |
 | -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- | ------------------------------ |
 | Multi-tenant (PostgreSQL)  | —                                    | —                                            | —                                     | ✅                             |
-| Hooks system               | —                                    | —                                            | —                                     | 🔜 Planned                    |
+| Hooks system               | —                                    | —                                            | —                                     | ✅ Command + agent evaluators  |
 | MCP integration            | — (uses ACP)                         | —                                            | —                                     | ✅ (stdio/SSE/streamable-http) |
 | Agent teams                | —                                    | —                                            | —                                     | ✅ Task board + mailbox        |
 | Agent handoff              | —                                    | —                                            | —                                     | ✅ Conversation transfer       |
@@ -47,16 +47,17 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Security hardening         | ✅ (SSRF, path traversal, injection) | ✅ (sandbox, rate limit, injection, pairing) | Basic (workspace restrict, exec deny) | ✅ 5-layer defense             |
 | OTel observability         | ✅ (opt-in extension)                | ✅ (Prometheus + OTLP)                       | —                                     | ✅ OTLP (opt-in build tag)     |
 | Prompt caching             | —                                    | —                                            | —                                     | ✅ Anthropic + OpenAI-compat   |
+| Knowledge graph            | —                                    | —                                            | —                                     | ✅ LLM extraction + traversal  |
 | Skill system               | ✅ Embeddings/semantic               | ✅ SKILL.md + TOML                           | ✅ Basic                              | ✅ BM25 + pgvector hybrid      |
 | Lane-based scheduler       | ✅                                   | Bounded concurrency                          | —                                     | ✅ (main/subagent/delegate/cron + concurrent group runs) |
-| Messaging channels         | 37+                                  | 15+                                          | 10+                                   | 6+                             |
+| Messaging channels         | 37+                                  | 15+                                          | 10+                                   | 7+                             |
 | Companion apps             | macOS, iOS, Android                  | Python SDK                                   | —                                     | Web dashboard                  |
 | Live Canvas / Voice        | ✅ (A2UI + TTS/STT)                  | —                                            | Voice transcription                   | TTS (4 providers)              |
 | LLM providers              | 10+                                  | 8 native + 29 compat                         | 13+                                   | **13+**                        |
 | Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (PostgreSQL)                |
 | Encrypted secrets          | — (env vars only)                    | ✅ ChaCha20-Poly1305                         | — (plaintext JSON)                    | ✅ AES-256-GCM in DB           |
 
-> **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, conversation handoff, evaluate-loop quality gates, and MCP protocol support.
+> **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, conversation handoff, evaluate-loop quality gates, hooks system, knowledge graph, and MCP protocol support.
 
 ## Architecture
 
@@ -66,6 +67,7 @@ graph TB
         WEB["Web Dashboard<br/>(React SPA)"]
         TG["Telegram"]
         DC["Discord"]
+        SL["Slack"]
         FS["Feishu/Lark"]
         ZL["Zalo OA"]
         ZLP["Zalo Personal"]
@@ -88,7 +90,7 @@ graph TB
     end
 
     WEB --> WS
-    TG & DC & FS & ZL & ZLP --> CM
+    TG & DC & SL & FS & ZL & ZLP --> CM
     API --> REST
     LOOP --> PG
 ```
@@ -296,8 +298,8 @@ Quality gates validate agent output before it reaches users. Configured in agent
 
 ### LLM Providers
 - **13+ providers** — OpenRouter, Anthropic, OpenAI, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope (Qwen), Bailian Coding, and any OpenAI-compatible endpoint
-- **Anthropic native** — Direct HTTP+SSE integration with prompt caching (`cache_control`) for ~90% cost reduction on repeated prefixes
-- **OpenAI-compatible** — Automatic prompt caching for OpenAI, MiniMax, OpenRouter (cache metrics tracked in traces)
+- **Anthropic native** — Direct HTTP+SSE integration with prompt caching (`cache_control`) for ~90% cost reduction on repeated prefixes. Also supports Claude CLI mode (stdio + MCP bridge with session management)
+- **OpenAI-compatible** — Automatic prompt caching for OpenAI, MiniMax, OpenRouter (cache metrics tracked in traces). Also supports Codex mode (gpt-5.3-codex via OAuth with "phase" metadata)
 - **Extended thinking** — Per-provider thinking mode: Anthropic (budget tokens), OpenAI-compat (reasoning effort), DashScope (thinking budget) with streaming support
 
 ### Agent Orchestration
@@ -314,18 +316,21 @@ Quality gates validate agent output before it reaches users. Configured in agent
 ### Tools & Integrations
 - **30+ built-in tools** — File system, shell exec, web search/fetch, memory, browser automation, TTS, and more
 - **MCP integration** — Connect external MCP servers via stdio, SSE, or streamable-http with per-agent/per-user grants
-- **Hooks system** — Event-driven hooks for agent lifecycle events (planned)
+- **Hooks system** — Event-driven hooks with command evaluators (shell exit code) and agent evaluators (delegate to reviewer) for output validation
 
 ### Messaging Channels
 - **Telegram** — Full integration with streaming, rich formatting (HTML, tables, code blocks), reactions, media, forum topics (per-topic config and session isolation), speech-to-text, bot commands, group file writer restrictions
+- **Slack** — Channel integration with bot commands
 - **Feishu/Lark** — Streaming card updates, media attachments (images/files), mention resolution, topic session mode
 - **Zalo OA** — Official Account integration for DM conversations
 - **Zalo Personal** — Unofficial reverse-engineered protocol supporting DM + group messages with restrictive default policies
 - **Discord, WhatsApp** — Channel adapters with `/stop` and `/stopall` commands
+- **Persistent pending messages** — Group chat messages persisted to PostgreSQL with auto-compaction (LLM summarization) when queues exceed threshold
 
 ### Knowledge & Memory
 - **Skills** — SKILL.md-based knowledge base with BM25 + embedding hybrid search (pgvector)
-- **Long-term memory** — pgvector hybrid search (full-text + vector similarity)
+- **Long-term memory** — pgvector hybrid search (full-text + vector similarity) with admin dashboard for CRUD, search, and bulk re-indexing
+- **Knowledge graph** — LLM-powered entity/relationship extraction from memory, graph traversal (recursive CTE, max depth 3), and force-directed visualization. Agent tool: `knowledge_graph_search`
 
 ### Infrastructure
 - **Cron scheduling** — `at`, `every`, and cron expression syntax for scheduled agent tasks
@@ -345,7 +350,7 @@ Quality gates validate agent output before it reaches users. Configured in agent
 - **Browser pairing** — Token-free browser auth with admin-approved pairing codes
 
 ### Web Dashboard
-- Agent management, traces & spans viewer, skills, teams, MCP servers, and pairing approval
+- Agent management, traces & spans viewer, skills, teams, MCP servers, pairing approval, memory management (CRUD + search + chunking), knowledge graph (table + force-directed visualization), and pending messages dashboard
 
 ## Quick Start
 
@@ -433,7 +438,7 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 - Agent teams, delegation, handoff, evaluate loops, quality gates
 - LLM call tracing with spans and prompt cache metrics
 - MCP server integration with per-agent and per-user access grants
-- Event-driven hooks for agent lifecycle (planned)
+- Event-driven hooks for agent lifecycle with command and agent evaluators
 - Embedding-based skill search (hybrid BM25 + pgvector)
 - Web dashboard for agents, traces, skills, teams, and MCP servers
 - API key encryption (AES-256-GCM)
@@ -457,6 +462,9 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -tags otel -o goclaw .
 
 # With Tailscale support (~54MB binary)
 CGO_ENABLED=0 go build -ldflags="-s -w" -tags tsnet -o goclaw .
+
+# With Redis cache backend
+CGO_ENABLED=0 go build -ldflags="-s -w" -tags redis -o goclaw .
 
 # With both OTel + Tailscale
 CGO_ENABLED=0 go build -ldflags="-s -w" -tags "otel,tsnet" -o goclaw .
@@ -689,11 +697,13 @@ Composable files for different deployment scenarios:
 | File                             | Purpose                                            |
 | -------------------------------- | -------------------------------------------------- |
 | `docker-compose.yml`             | Base service definition                            |
-| `docker-compose.postgres.yml`     | PostgreSQL (pgvector/pgvector:pg18)                |
+| `docker-compose.postgres.yml`    | PostgreSQL (pgvector/pgvector:pg18)                |
 | `docker-compose.upgrade.yml`     | One-shot database upgrade service                  |
 | `docker-compose.selfservice.yml` | Web dashboard UI (nginx + React SPA)               |
+| `docker-compose.browser.yml`     | Headless Chrome for browser automation             |
 | `docker-compose.sandbox.yml`     | Docker-based code execution sandbox                |
 | `docker-compose.otel.yml`        | OpenTelemetry + Jaeger tracing                     |
+| `docker-compose.redis.yml`       | Redis cache backend (build-tag gated)              |
 | `docker-compose.tailscale.yml`   | Tailscale VPN mesh listener                        |
 
 ### Examples
@@ -780,13 +790,19 @@ This creates `.env` with `GOCLAW_ENCRYPTION_KEY` and `GOCLAW_GATEWAY_TOKEN` pre-
 | `search`           | fs            | Search file contents by pattern                              |
 | `glob`             | fs            | Find files by glob pattern                                   |
 | `exec`             | runtime       | Execute shell commands (with approval workflow)              |
-| `process`          | runtime       | Manage running processes                                     |
 | `web_search`       | web           | Search the web (Brave, DuckDuckGo)                           |
 | `web_fetch`        | web           | Fetch and parse web content                                  |
 | `memory_search`    | memory        | Search long-term memory (FTS + vector)                       |
 | `memory_get`       | memory        | Retrieve memory entries                                      |
 | `skill_search`     | —             | Search skills (BM25 + embedding hybrid)                      |
-| `image`            | —             | Image generation/manipulation                                |
+| `knowledge_graph_search` | memory  | Search entities and traverse knowledge graph relationships   |
+| `create_image`     | media         | Image generation (DashScope, MiniMax)                        |
+| `create_audio`     | media         | Audio generation (OpenAI, ElevenLabs, MiniMax, Suno)         |
+| `create_video`     | media         | Video generation (MiniMax, Veo)                              |
+| `read_document`    | media         | Document reading (Gemini File API, provider chain)           |
+| `read_image`       | media         | Image analysis                                               |
+| `read_audio`       | media         | Audio transcription and analysis                             |
+| `read_video`       | media         | Video analysis                                               |
 | `message`          | messaging     | Send messages to channels                                    |
 | `tts`              | —             | Text-to-Speech synthesis                                     |
 | `spawn`            | —             | Spawn a subagent                                             |
@@ -805,7 +821,7 @@ This creates `.env` with `GOCLAW_ENCRYPTION_KEY` and `GOCLAW_GATEWAY_TOKEN` pre-
 | `cron`             | automation    | Schedule and manage cron jobs                                |
 | `gateway`          | automation    | Gateway administration                                       |
 | `browser`          | ui            | Browser automation (navigate, click, type, screenshot)       |
-| `canvas`           | ui            | Visual canvas for diagrams                                   |
+| `announce_queue`   | automation    | Async result announcement (for async delegations)            |
 
 ## Browser Pairing
 
@@ -919,15 +935,22 @@ GOCLAW_OPENROUTER_API_KEY=sk-or-xxx go test -v ./tests/integration/ -timeout 120
 - **Docker sandbox** — Isolated code execution in containers. Tested in production.
 - **Text-to-Speech** — OpenAI, ElevenLabs, Edge, MiniMax providers. Tested in production.
 - **HTTP API** — `/v1/chat/completions`, `/v1/agents`, `/v1/skills`, etc. Tested in production.
+- **Hooks system** — Event-driven hooks with command evaluators (shell exit code) and agent evaluators (delegate to reviewer). Blocking gates with auto-retry and recursion-safe evaluation.
+- **Media tools** — `create_image` (DashScope, MiniMax), `create_audio` (OpenAI, ElevenLabs, MiniMax, Suno), `create_video` (MiniMax, Veo), `read_document` (Gemini File API), `read_image`, `read_audio`, `read_video`. Persistent media storage with lazy-loaded MediaRef.
+- **Additional provider modes** — Claude CLI (Anthropic via stdio + MCP bridge), Codex (OpenAI gpt-5.3-codex via OAuth).
+- **Knowledge graph** — LLM-powered entity extraction, graph traversal, force-directed visualization, and `knowledge_graph_search` agent tool.
+- **Memory management** — Admin dashboard for memory documents (CRUD, semantic search, chunk/embedding details, bulk re-indexing).
+- **Persistent pending messages** — Channel messages persisted to PostgreSQL with auto-compaction (LLM summarization) and monitoring dashboard.
 
 ### Implemented but Not Fully Tested
 
 - **Agent handoff** — Conversation transfer between agents with routing overrides. Implementation complete, needs E2E testing.
 - **Quality gates** — Hook-based output validation with command and agent evaluator types. Implementation complete, needs E2E testing.
+- **Slack** — Channel integration implemented, not yet validated with real users.
 - **Other messaging channels** — Discord, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp channel adapters are implemented but have not been tested end-to-end in production. Only Telegram has been validated with real users.
-- **Hooks system** — Event-driven hooks for agent lifecycle events. Not yet implemented.
 - **OpenTelemetry export** — OTLP gRPC/HTTP exporter implemented (build-tag gated). In-app tracing works; external OTel export not validated in production.
 - **Tailscale integration** — tsnet listener implemented (build-tag gated). Not tested in a real deployment.
+- **Redis cache** — Optional distributed cache backend (build-tag gated). Not tested in production.
 - **Browser pairing** — Pairing code flow implemented with CLI and web UI approval. Basic flow tested but not validated at scale.
 
 ## Acknowledgments

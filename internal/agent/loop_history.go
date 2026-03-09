@@ -29,6 +29,24 @@ func (l *Loop) filteredToolNames() []string {
 	return names
 }
 
+// buildMCPToolDescs extracts real descriptions for MCP tools from the registry.
+// Returns nil if no MCP tools are present.
+func (l *Loop) buildMCPToolDescs(toolNames []string) map[string]string {
+	descs := make(map[string]string)
+	for _, name := range toolNames {
+		if !strings.HasPrefix(name, "mcp_") || name == "mcp_tool_search" {
+			continue
+		}
+		if tool, ok := l.tools.Get(name); ok {
+			descs[name] = tool.Description()
+		}
+	}
+	if len(descs) == 0 {
+		return nil
+	}
+	return descs
+}
+
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
@@ -44,6 +62,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	_, hasSpawn := l.tools.Get("spawn")
 	_, hasSkillSearch := l.tools.Get("skill_search")
 	_, hasMCPToolSearch := l.tools.Get("mcp_tool_search")
+	_, hasKG := l.tools.Get("knowledge_graph_search")
 
 	// Per-user workspace: show the user's subdirectory in the system prompt.
 	// Uses cached workspace from user_agent_profiles (includes channel isolation).
@@ -79,6 +98,13 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		}
 	}
 
+	// Build MCP tool descriptions for inline mode (not search mode).
+	toolNames := l.filteredToolNames()
+	var mcpToolDescs map[string]string
+	if !hasMCPToolSearch {
+		mcpToolDescs = l.buildMCPToolDescs(toolNames)
+	}
+
 	systemPrompt := BuildSystemPrompt(SystemPromptConfig{
 		AgentID:                l.id,
 		Model:                  l.model,
@@ -88,12 +114,14 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		PeerKind:               peerKind,
 		OwnerIDs:               l.ownerIDs,
 		Mode:                   mode,
-		ToolNames:              l.filteredToolNames(),
+		ToolNames:              toolNames,
 		SkillsSummary:          l.resolveSkillsSummary(skillFilter),
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
 		HasSkillSearch:         hasSkillSearch,
 		HasMCPToolSearch:       hasMCPToolSearch,
+		HasKnowledgeGraph:     hasKG,
+		MCPToolDescs:           mcpToolDescs,
 		ContextFiles:           contextFiles,
 		AgentType:              l.agentType,
 		ExtraPrompt:            extraSystemPrompt,

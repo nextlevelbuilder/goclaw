@@ -40,5 +40,6 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Teams:            NewPGTeamStore(db),
 		BuiltinTools:     NewPGBuiltinToolStore(db),
 		PendingMessages:  NewPGPendingMessageStore(db),
+		KnowledgeGraph:   NewPGKnowledgeGraphStore(db),
 	}, nil
 }

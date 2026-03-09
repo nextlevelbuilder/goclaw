@@ -37,6 +37,10 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "memory_get", DisplayName: "Memory Get", Description: "Retrieve a specific memory entry by key", Category: "memory", Enabled: true,
 			Requires: []string{"memory"},
 		},
+		{Name: "knowledge_graph_search", DisplayName: "Knowledge Graph Search", Description: "Search entities and traverse relationships in the knowledge graph", Category: "memory", Enabled: true,
+			Settings: json.RawMessage(`{"extract_on_memory_write":false,"extraction_provider":"","extraction_model":"","min_confidence":0.75}`),
+			Requires: []string{"knowledge_graph"},
+		},
 
 		// media
 		{Name: "read_image", DisplayName: "Read Image", Description: "Analyze images using a vision-capable LLM provider", Category: "media", Enabled: true,

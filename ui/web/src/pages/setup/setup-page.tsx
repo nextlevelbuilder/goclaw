@@ -52,7 +52,8 @@ export function SetupPage() {
   if (showComplete) { completedSteps.push(1, 2, 3, 4); }
 
   // For resuming: find existing provider/agent from server data
-  const activeProvider = createdProvider ?? providers.find((p) => p.enabled && p.api_key === "***") ?? null;
+  const activeProvider = createdProvider ?? providers.find((p) => p.enabled &&
+    (p.api_key === "***" || p.provider_type === "claude_cli" || p.provider_type === "chatgpt_oauth")) ?? null;
   const activeAgent = createdAgent ?? agents[0] ?? null;
 
   const handleFinish = () => setShowComplete(true);

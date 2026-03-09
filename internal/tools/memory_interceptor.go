@@ -59,16 +59,26 @@ func isMemoryPath(path, workspace string) bool {
 	return false
 }
 
+// KGExtractFunc is a callback invoked after a memory write to extract KG entities.
+// agentID, userID, content are passed from the write context.
+type KGExtractFunc func(ctx context.Context, agentID, userID, content string)
+
 // MemoryInterceptor routes memory file reads/writes to the MemoryStore.
 // Keeps MEMORY.md and memory/* in Postgres.
 type MemoryInterceptor struct {
-	memStore  store.MemoryStore
-	workspace string
+	memStore    store.MemoryStore
+	workspace   string
+	kgExtractFn KGExtractFunc
 }
 
 // NewMemoryInterceptor creates an interceptor backed by the given memory store.
 func NewMemoryInterceptor(ms store.MemoryStore, workspace string) *MemoryInterceptor {
 	return &MemoryInterceptor{memStore: ms, workspace: workspace}
+}
+
+// SetKGExtractFunc sets the callback for KG extraction after memory writes.
+func (m *MemoryInterceptor) SetKGExtractFunc(fn KGExtractFunc) {
+	m.kgExtractFn = fn
 }
 
 // ReadFile attempts to read a memory file from the DB.
@@ -135,6 +145,11 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 			slog.Warn("memory interceptor: index failed after write", "path", path, "error", err)
 			// Non-fatal: document was saved, indexing will catch up
 		}
+	}
+
+	// Trigger KG extraction in background if configured
+	if m.kgExtractFn != nil && content != "" {
+		go m.kgExtractFn(context.WithoutCancel(ctx), agentStr, userID, content)
 	}
 
 	return true, nil

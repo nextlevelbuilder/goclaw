@@ -116,6 +116,11 @@ func (s *PGBuiltinToolStore) Seed(ctx context.Context, tools []store.BuiltinTool
 		   category = EXCLUDED.category,
 		   requires = EXCLUDED.requires,
 		   metadata = EXCLUDED.metadata,
+		   settings = CASE
+		     WHEN builtin_tools.settings IS NULL OR builtin_tools.settings::text IN ('{}', 'null')
+		     THEN EXCLUDED.settings
+		     ELSE builtin_tools.settings
+		   END,
 		   updated_at = EXCLUDED.updated_at`)
 	if err != nil {
 		return fmt.Errorf("prepare seed stmt: %w", err)

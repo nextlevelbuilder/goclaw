@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Brain, Plus, RefreshCw, Search, Database, Trash2, RotateCw } from "lucide-react";
+import { Brain, Plus, RefreshCw, Search, Database, Trash2, RotateCw, Network } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { useMemoryDocuments } from "./hooks/use-memory";
 import { MemoryDocumentDialog } from "./memory-document-dialog";
 import { MemoryCreateDialog } from "./memory-create-dialog";
 import { MemorySearchDialog } from "./memory-search-dialog";
+import { KGEntitiesTab } from "./kg-entities-tab";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import type { MemoryDocument } from "@/types/memory";
@@ -27,6 +28,7 @@ export function MemoryPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [indexAllLoading, setIndexAllLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"documents" | "kg">("documents");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -167,8 +169,33 @@ export function MemoryPage() {
         )}
       </div>
 
+      {/* Tab bar (only when agent selected) */}
+      {agentId && (
+        <div className="mt-4 flex border-b">
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeTab === "documents" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setActiveTab("documents")}
+          >
+            <Brain className="inline h-3.5 w-3.5 mr-1.5" />Documents
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeTab === "kg" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setActiveTab("kg")}
+          >
+            <Network className="inline h-3.5 w-3.5 mr-1.5" />Knowledge Graph
+          </button>
+        </div>
+      )}
+
+      {/* KG tab */}
+      {agentId && activeTab === "kg" && (
+        <div className="mt-4">
+          <KGEntitiesTab agentId={agentId} userId={userIdFilter || undefined} />
+        </div>
+      )}
+
       {/* Document table */}
-      <div className="mt-4">
+      <div className="mt-4" style={{ display: activeTab === "documents" || !agentId ? undefined : "none" }}>
         {showSkeleton ? (
           <TableSkeleton rows={5} />
         ) : documents.length === 0 ? (

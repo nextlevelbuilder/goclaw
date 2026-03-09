@@ -62,4 +62,10 @@ export const queryKeys = {
     all: ["memory"] as const,
     list: (params: Record<string, unknown>) => ["memory", params] as const,
   },
+  kg: {
+    all: ["kg"] as const,
+    list: (params: Record<string, unknown>) => ["kg", params] as const,
+    stats: (agentId: string, userId?: string) => ["kg", "stats", agentId, userId] as const,
+    graph: (agentId: string, userId?: string) => ["kg", "graph", agentId, userId] as const,
+  },
 };

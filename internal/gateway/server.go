@@ -48,6 +48,7 @@ type Server struct {
 	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
 	pendingMessagesHandler  *httpapi.PendingMessagesHandler  // pending messages API
 	memoryHandler           *httpapi.MemoryHandler           // memory management API
+	kgHandler               *httpapi.KnowledgeGraphHandler   // knowledge graph API
 	oauthHandler            *httpapi.OAuthHandler            // OAuth endpoints
 	filesHandler            *httpapi.FilesHandler            // workspace file serving
 	storageHandler          *httpapi.StorageHandler          // storage file management
@@ -212,6 +213,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// Memory management API
 	if s.memoryHandler != nil {
 		s.memoryHandler.RegisterRoutes(mux)
+	}
+
+	// Knowledge graph API
+	if s.kgHandler != nil {
+		s.kgHandler.RegisterRoutes(mux)
 	}
 
 	// Workspace file serving (available in all modes)
@@ -448,6 +454,9 @@ func (s *Server) SetMediaServeHandler(h *httpapi.MediaServeHandler) { s.mediaSer
 
 // SetMemoryHandler sets the memory management handler.
 func (s *Server) SetMemoryHandler(h *httpapi.MemoryHandler) { s.memoryHandler = h }
+
+// SetKnowledgeGraphHandler sets the knowledge graph handler.
+func (s *Server) SetKnowledgeGraphHandler(h *httpapi.KnowledgeGraphHandler) { s.kgHandler = h }
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }

@@ -21,4 +21,5 @@ type Stores struct {
 	Teams            TeamStore
 	BuiltinTools     BuiltinToolStore
 	PendingMessages  PendingMessageStore
+	KnowledgeGraph   KnowledgeGraphStore
 }

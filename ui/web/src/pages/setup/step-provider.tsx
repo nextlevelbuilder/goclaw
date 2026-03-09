@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
+import { CLISection } from "@/pages/providers/provider-cli-section";
 import { slugify } from "@/lib/slug";
 import type { ProviderData } from "@/types/provider";
 
@@ -31,11 +32,14 @@ export function StepProvider({ onComplete }: StepProviderProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const isCLI = providerType === "claude_cli";
+
   const handleTypeChange = (value: string) => {
     setProviderType(value);
     const preset = PROVIDER_TYPES.find((t) => t.value === value);
     setName(slugify(value));
     setApiBase(preset?.apiBase || "");
+    setApiKey("");
     setError("");
   };
 
@@ -47,7 +51,7 @@ export function StepProvider({ onComplete }: StepProviderProps) {
   );
 
   const handleCreate = async () => {
-    if (!apiKey.trim()) { setError("API key is required"); return; }
+    if (!isCLI && !apiKey.trim()) { setError("API key is required"); return; }
     setLoading(true);
     setError("");
     try {
@@ -55,7 +59,7 @@ export function StepProvider({ onComplete }: StepProviderProps) {
         name: name.trim(),
         provider_type: providerType,
         api_base: apiBase.trim() || undefined,
-        api_key: apiKey.trim(),
+        api_key: isCLI ? undefined : apiKey.trim(),
         enabled: true,
       }) as ProviderData;
       onComplete(provider);
@@ -73,7 +77,9 @@ export function StepProvider({ onComplete }: StepProviderProps) {
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">Configure LLM Provider</h2>
             <p className="text-sm text-muted-foreground">
-              Connect to an AI provider to power your agents. You'll need an API key.
+              {isCLI
+                ? "Connect using your local Claude CLI installation. No API key needed."
+                : "Connect to an AI provider to power your agents. You'll need an API key."}
             </p>
           </div>
 
@@ -101,35 +107,41 @@ export function StepProvider({ onComplete }: StepProviderProps) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="inline-flex items-center gap-1.5">
-              API Key *
-              <InfoTip text="Your provider's secret key. Encrypted server-side and never exposed in API responses." />
-            </Label>
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
-            />
-          </div>
+          {isCLI ? (
+            <CLISection open={true} />
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label className="inline-flex items-center gap-1.5">
+                  API Key *
+                  <InfoTip text="Your provider's secret key. Encrypted server-side and never exposed in API responses." />
+                </Label>
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label className="inline-flex items-center gap-1.5">
-              API Base URL
-              <InfoTip text="The endpoint URL for API requests. Auto-filled based on provider type. Override only if using a custom proxy." />
-            </Label>
-            <Input
-              value={apiBase}
-              onChange={(e) => setApiBase(e.target.value)}
-              placeholder={apiBasePlaceholder}
-            />
-          </div>
+              <div className="space-y-2">
+                <Label className="inline-flex items-center gap-1.5">
+                  API Base URL
+                  <InfoTip text="The endpoint URL for API requests. Auto-filled based on provider type. Override only if using a custom proxy." />
+                </Label>
+                <Input
+                  value={apiBase}
+                  onChange={(e) => setApiBase(e.target.value)}
+                  placeholder={apiBasePlaceholder}
+                />
+              </div>
+            </>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex justify-end">
-            <Button onClick={handleCreate} disabled={loading || !apiKey.trim()}>
+            <Button onClick={handleCreate} disabled={loading || (!isCLI && !apiKey.trim())}>
               {loading ? "Creating..." : "Create Provider"}
             </Button>
           </div>

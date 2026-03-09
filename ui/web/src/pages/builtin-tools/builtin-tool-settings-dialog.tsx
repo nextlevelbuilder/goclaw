@@ -12,6 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import type { BuiltinToolData } from "./hooks/use-builtin-tools";
 import { MEDIA_TOOLS } from "./media-provider-params-schema";
 import { MediaProviderChainForm } from "./media-provider-chain-form";
+import { KGSettingsForm } from "./kg-settings-form";
+
+const KG_TOOL = "knowledge_graph_search";
 
 interface Props {
   tool: BuiltinToolData | null;
@@ -22,13 +25,21 @@ interface Props {
 
 export function BuiltinToolSettingsDialog({ tool, open, onOpenChange, onSave }: Props) {
   const isMedia = tool ? MEDIA_TOOLS.has(tool.name) : false;
+  const isKG = tool?.name === KG_TOOL;
+  const wide = isMedia || isKG;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={isMedia ? "sm:max-w-2xl" : "sm:max-w-md"}>
+      <DialogContent className={wide ? "sm:max-w-2xl" : "sm:max-w-md"}>
         {isMedia && tool ? (
           <MediaProviderChainForm
             toolName={tool.name}
+            initialSettings={tool.settings ?? {}}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isKG && tool ? (
+          <KGSettingsForm
             initialSettings={tool.settings ?? {}}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
             onCancel={() => onOpenChange(false)}

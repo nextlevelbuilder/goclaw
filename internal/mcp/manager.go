@@ -25,7 +25,7 @@ const (
 	// mcpToolInlineMaxCount is the threshold above which MCP tools switch
 	// to search mode (deferred loading via mcp_tool_search) instead of
 	// being registered inline in the tool registry.
-	mcpToolInlineMaxCount = 30
+	mcpToolInlineMaxCount = 40
 )
 
 // ServerStatus reports the connection status of an MCP server.

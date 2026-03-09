@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"path/filepath"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
+	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -162,6 +164,15 @@ func wireExtras(
 	// Wire virtual FS interceptors: route context + memory file reads/writes to DB.
 	// Share ONE ContextFileInterceptor instance between read_file and write_file
 	// so they share the same cache.
+	// Write-capable tools share a memory interceptor with optional KG extraction hook.
+	var writeMemIntc *tools.MemoryInterceptor
+	if stores.Memory != nil {
+		writeMemIntc = tools.NewMemoryInterceptor(stores.Memory, workspace)
+		// Hook KG extraction on memory writes if KG store is available
+		if stores.KnowledgeGraph != nil && stores.BuiltinTools != nil {
+			writeMemIntc.SetKGExtractFunc(buildKGExtractFunc(stores.KnowledgeGraph, stores.BuiltinTools, providerReg))
+		}
+	}
 	if readTool, ok := toolsReg.Get("read_file"); ok {
 		if ia, ok := readTool.(tools.InterceptorAware); ok {
 			if contextFileInterceptor != nil {
@@ -177,8 +188,8 @@ func wireExtras(
 			if contextFileInterceptor != nil {
 				ia.SetContextFileInterceptor(contextFileInterceptor)
 			}
-			if stores.Memory != nil {
-				ia.SetMemoryInterceptor(tools.NewMemoryInterceptor(stores.Memory, workspace))
+			if writeMemIntc != nil {
+				ia.SetMemoryInterceptor(writeMemIntc)
 			}
 		}
 	}
@@ -187,8 +198,8 @@ func wireExtras(
 			if contextFileInterceptor != nil {
 				ia.SetContextFileInterceptor(contextFileInterceptor)
 			}
-			if stores.Memory != nil {
-				ia.SetMemoryInterceptor(tools.NewMemoryInterceptor(stores.Memory, workspace))
+			if writeMemIntc != nil {
+				ia.SetMemoryInterceptor(writeMemIntc)
 			}
 		}
 	}
@@ -227,6 +238,16 @@ func wireExtras(
 			}
 		}
 		slog.Info("memory layering enabled (Postgres)")
+	}
+
+	// Wire knowledge graph store on KG tool
+	if stores.KnowledgeGraph != nil {
+		if kgTool, ok := toolsReg.Get("knowledge_graph_search"); ok {
+			if kgt, ok := kgTool.(*tools.KnowledgeGraphSearchTool); ok {
+				kgt.SetKGStore(stores.KnowledgeGraph)
+			}
+		}
+		slog.Info("knowledge graph tool wired (Postgres)")
 	}
 
 	// --- Cache invalidation event subscribers ---
@@ -512,5 +533,64 @@ func wireExtras(
 
 	slog.Info("resolver + interceptors + cache subscribers wired")
 	return contextFileInterceptor, delegateMgr, mcpPool, mediaStore
+}
+
+// kgSettings holds KG extraction settings from the builtin_tools table.
+type kgSettings struct {
+	ExtractOnMemoryWrite bool    `json:"extract_on_memory_write"`
+	ExtractionProvider   string  `json:"extraction_provider"`
+	ExtractionModel      string  `json:"extraction_model"`
+	MinConfidence        float64 `json:"min_confidence"`
+}
+
+// buildKGExtractFunc returns a callback that extracts entities from memory content.
+// Settings are read from the builtin_tools table on each invocation (not cached),
+// so changes take effect immediately without restart.
+func buildKGExtractFunc(kgStore store.KnowledgeGraphStore, bts store.BuiltinToolStore, providerReg *providers.Registry) tools.KGExtractFunc {
+	return func(ctx context.Context, agentID, userID, content string) {
+		slog.Info("kg extract: triggered", "agent", agentID, "user", userID, "content_len", len(content))
+		// Read settings from DB on each call so admin changes take effect immediately
+		raw, err := bts.GetSettings(ctx, "knowledge_graph_search")
+		if err != nil || raw == nil {
+			slog.Warn("kg extract: no settings found", "error", err)
+			return
+		}
+		var settings kgSettings
+		if err := json.Unmarshal(raw, &settings); err != nil {
+			slog.Warn("kg extract: invalid settings", "error", err)
+			return
+		}
+		if !settings.ExtractOnMemoryWrite || settings.ExtractionProvider == "" || settings.ExtractionModel == "" {
+			return
+		}
+
+		p, err := providerReg.Get(settings.ExtractionProvider)
+		if err != nil {
+			slog.Warn("kg extract: provider not found", "provider", settings.ExtractionProvider, "error", err)
+			return
+		}
+		extractor := kg.NewExtractor(p, settings.ExtractionModel, settings.MinConfidence)
+		result, err := extractor.Extract(ctx, content)
+		if err != nil {
+			slog.Warn("kg extract: extraction failed", "agent", agentID, "error", err)
+			return
+		}
+		if len(result.Entities) == 0 && len(result.Relations) == 0 {
+			return
+		}
+		for i := range result.Entities {
+			result.Entities[i].AgentID = agentID
+			result.Entities[i].UserID = userID
+		}
+		for i := range result.Relations {
+			result.Relations[i].AgentID = agentID
+			result.Relations[i].UserID = userID
+		}
+		if err := kgStore.IngestExtraction(ctx, agentID, userID, result.Entities, result.Relations); err != nil {
+			slog.Warn("kg extract: ingest failed", "agent", agentID, "error", err)
+			return
+		}
+		slog.Info("kg extract: ingested from memory write", "agent", agentID, "entities", len(result.Entities), "relations", len(result.Relations))
+	}
 }
 

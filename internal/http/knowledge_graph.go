@@ -1,0 +1,57 @@
+package http
+
+import (
+	"net/http"
+
+	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+// KnowledgeGraphHandler handles KG entity/relation management endpoints.
+type KnowledgeGraphHandler struct {
+	store       store.KnowledgeGraphStore
+	providerReg *providers.Registry
+	token       string
+}
+
+// NewKnowledgeGraphHandler creates a handler for KG management endpoints.
+func NewKnowledgeGraphHandler(s store.KnowledgeGraphStore, providerReg *providers.Registry, token string) *KnowledgeGraphHandler {
+	return &KnowledgeGraphHandler{store: s, providerReg: providerReg, token: token}
+}
+
+// NewExtractor creates an Extractor from the given provider name and model.
+func (h *KnowledgeGraphHandler) NewExtractor(providerName, model string, minConfidence float64) *kg.Extractor {
+	if h.providerReg == nil || providerName == "" || model == "" {
+		return nil
+	}
+	p, err := h.providerReg.Get(providerName)
+	if err != nil {
+		return nil
+	}
+	return kg.NewExtractor(p, model, minConfidence)
+}
+
+// RegisterRoutes registers all KG routes on the given mux.
+func (h *KnowledgeGraphHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/agents/{agentID}/kg/entities", h.auth(h.handleListEntities))
+	mux.HandleFunc("GET /v1/agents/{agentID}/kg/entities/{entityID}", h.auth(h.handleGetEntity))
+	mux.HandleFunc("POST /v1/agents/{agentID}/kg/entities", h.auth(h.handleUpsertEntity))
+	mux.HandleFunc("DELETE /v1/agents/{agentID}/kg/entities/{entityID}", h.auth(h.handleDeleteEntity))
+	mux.HandleFunc("POST /v1/agents/{agentID}/kg/traverse", h.auth(h.handleTraverse))
+	mux.HandleFunc("POST /v1/agents/{agentID}/kg/extract", h.auth(h.handleExtract))
+	mux.HandleFunc("GET /v1/agents/{agentID}/kg/stats", h.auth(h.handleStats))
+	mux.HandleFunc("GET /v1/agents/{agentID}/kg/graph", h.auth(h.handleGraph))
+}
+
+func (h *KnowledgeGraphHandler) auth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.token != "" {
+			if extractBearerToken(r) != h.token {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				return
+			}
+		}
+		next(w, r)
+	}
+}
