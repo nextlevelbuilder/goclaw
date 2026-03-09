@@ -453,18 +453,20 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 // buildGroupWriterPrompt builds the system prompt section for group file writer restrictions.
 // For non-writers: injects refusal instructions + removes SOUL.md/AGENTS.md from context files.
 func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID string, files []bootstrap.ContextFile) (string, []bootstrap.ContextFile) {
-	// System-initiated runs (cron, delegate, subagent) have no sender ID.
-	// Skip refusal prompt — tool-level enforcement (context_file_interceptor)
-	// already fails open for empty senderID, and these runs were authorized
-	// at creation time (cron requires writer permission to create;
-	// delegate/subagent inherit from an already-authorized parent run).
-	if senderID == "" {
-		return "", files
-	}
-
 	writers, err := l.groupWriterCache.ListWriters(ctx, l.agentUUID, groupID)
 	if err != nil || len(writers) == 0 {
 		return "", files // fail-open
+	}
+
+	// System-initiated runs (cron, delegate, subagent) have no sender ID.
+	// Allow reading, messaging, and tool use freely, but still protect
+	// identity files (SOUL.md, IDENTITY.md, etc.) from modification.
+	if senderID == "" {
+		var sb strings.Builder
+		sb.WriteString("## Group File Permissions\n\n")
+		sb.WriteString("This is a system-initiated run (cron/scheduled task). You may read files, send messages, and use tools freely.\n")
+		sb.WriteString("However, do NOT modify protected identity files (SOUL.md, IDENTITY.md, AGENTS.md, USER.md) unless explicitly instructed by the task.\n")
+		return sb.String(), files
 	}
 
 	numericID := strings.SplitN(senderID, "|", 2)[0]
