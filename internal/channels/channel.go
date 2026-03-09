@@ -271,7 +271,12 @@ func (c *BaseChannel) ValidatePolicy(dmPolicy, groupPolicy string) {
 // This is the standard way for channels to forward received messages.
 // peerKind should be "direct" or "group" (see sessions.PeerDirect, sessions.PeerGroup).
 func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []string, metadata map[string]string, peerKind string) {
-	if !c.IsAllowed(senderID) {
+	// For DMs, enforce the allowlist as a safety net.
+	// For group messages, skip this check — group access is already enforced
+	// by the channel-specific group policy (checkGroupPolicy / CheckPolicy).
+	// Re-checking the sender here would incorrectly block users who are not
+	// individually listed but are in an allowed (or open-policy) group.
+	if peerKind != "group" && !c.IsAllowed(senderID) {
 		return
 	}
 
