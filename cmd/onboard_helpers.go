@@ -49,6 +49,10 @@ func applyProviderAPIKey(cfg *config.Config, provider, key string) {
 		cfg.Providers.Cohere.APIKey = key
 	case "perplexity":
 		cfg.Providers.Perplexity.APIKey = key
+	case "dashscope":
+		cfg.Providers.DashScope.APIKey = key
+	case "bailian":
+		cfg.Providers.Bailian.APIKey = key
 	}
 }
 
@@ -93,6 +97,8 @@ func onboardWriteEnvFile(path string, cfg *config.Config, primaryKey, primaryEnv
 	addIfSet("GOCLAW_MINIMAX_API_KEY", cfg.Providers.MiniMax.APIKey)
 	addIfSet("GOCLAW_COHERE_API_KEY", cfg.Providers.Cohere.APIKey)
 	addIfSet("GOCLAW_PERPLEXITY_API_KEY", cfg.Providers.Perplexity.APIKey)
+	addIfSet("GOCLAW_DASHSCOPE_API_KEY", cfg.Providers.DashScope.APIKey)
+	addIfSet("GOCLAW_BAILIAN_API_KEY", cfg.Providers.Bailian.APIKey)
 
 	if cfg.Gateway.Token != "" {
 		lines = append(lines, fmt.Sprintf("export GOCLAW_GATEWAY_TOKEN=%s", cfg.Gateway.Token))
@@ -107,6 +113,13 @@ func onboardWriteEnvFile(path string, cfg *config.Config, primaryKey, primaryEnv
 	if cfg.Channels.Feishu.Enabled && cfg.Channels.Feishu.AppSecret != "" {
 		lines = append(lines, fmt.Sprintf("export GOCLAW_FEISHU_APP_ID=%s", cfg.Channels.Feishu.AppID))
 		lines = append(lines, fmt.Sprintf("export GOCLAW_FEISHU_APP_SECRET=%s", cfg.Channels.Feishu.AppSecret))
+	}
+	if cfg.Channels.Discord.Enabled && cfg.Channels.Discord.Token != "" {
+		lines = append(lines, fmt.Sprintf("export GOCLAW_DISCORD_TOKEN=%s", cfg.Channels.Discord.Token))
+	}
+	if cfg.Channels.Slack.Enabled && cfg.Channels.Slack.BotToken != "" {
+		lines = append(lines, fmt.Sprintf("export GOCLAW_SLACK_BOT_TOKEN=%s", cfg.Channels.Slack.BotToken))
+		lines = append(lines, fmt.Sprintf("export GOCLAW_SLACK_APP_TOKEN=%s", cfg.Channels.Slack.AppToken))
 	}
 
 	// Database

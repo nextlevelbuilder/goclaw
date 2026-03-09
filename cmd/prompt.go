@@ -52,7 +52,7 @@ func promptPassword(title, description string) (string, error) {
 }
 
 // filterThreshold: enable type-to-filter only when there are more than this many options.
-const filterThreshold = 5
+const filterThreshold = 10
 
 const scrollableThreshold = 15 // enable scrollbars when there are more than this many options
 

@@ -30,6 +30,10 @@ func resolveProviderAPIKey(cfg *config.Config, providerName string) string {
 		return cfg.Providers.Cohere.APIKey
 	case "perplexity":
 		return cfg.Providers.Perplexity.APIKey
+	case "dashscope":
+		return cfg.Providers.DashScope.APIKey
+	case "bailian":
+		return cfg.Providers.Bailian.APIKey
 	default:
 		return ""
 	}
@@ -90,6 +94,10 @@ func resolveProviderAPIBase(providerName string) string {
 		return "https://api.cohere.com/v2"
 	case "perplexity":
 		return "https://api.perplexity.ai"
+	case "dashscope":
+		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	case "bailian":
+		return "https://coding-intl.dashscope.aliyuncs.com/v1"
 	case "yescale":
 		return "https://api.yescale.one/v1"
 	default:

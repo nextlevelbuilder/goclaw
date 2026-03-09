@@ -42,6 +42,8 @@ var providerMap = map[string]providerInfo{
 	"minimax":    {"minimax", "GOCLAW_MINIMAX_API_KEY", "MiniMax-M2.5"},
 	"cohere":     {"cohere", "GOCLAW_COHERE_API_KEY", "command-a"},
 	"perplexity": {"perplexity", "GOCLAW_PERPLEXITY_API_KEY", "sonar-pro"},
+	"dashscope":  {"dashscope", "GOCLAW_DASHSCOPE_API_KEY", "qwen3-max"},
+	"bailian":    {"bailian", "GOCLAW_BAILIAN_API_KEY", "qwen3.5-plus"},
 	"claude_cli": {"claude-cli", "", "sonnet"},
 	"custom":     {"custom", "", ""},
 }
@@ -111,6 +113,10 @@ func runOnboard() {
 		feishuSecret     string
 		feishuDomain     = "lark"
 		feishuConnMode   = "websocket"
+		discordToken     string
+		slackBotToken    string
+		slackAppToken    string
+		whatsappBridge   string
 
 		selectedFeatures []string
 		embProvider      string
@@ -148,6 +154,22 @@ func runOnboard() {
 		feishuSecret = cfg.Channels.Feishu.AppSecret
 		feishuDomain = cfg.Channels.Feishu.Domain
 		feishuConnMode = cfg.Channels.Feishu.ConnectionMode
+	}
+	if cfg.Channels.Discord.Enabled {
+		selectedChannels = append(selectedChannels, "discord")
+		discordToken = cfg.Channels.Discord.Token
+	}
+	if cfg.Channels.Slack.Enabled {
+		selectedChannels = append(selectedChannels, "slack")
+		slackBotToken = cfg.Channels.Slack.BotToken
+		slackAppToken = cfg.Channels.Slack.AppToken
+	}
+	if cfg.Channels.WhatsApp.Enabled {
+		selectedChannels = append(selectedChannels, "whatsapp")
+		whatsappBridge = cfg.Channels.WhatsApp.BridgeURL
+	}
+	if cfg.Channels.ZaloPersonal.Enabled {
+		selectedChannels = append(selectedChannels, "zalo_personal")
 	}
 	if cfg.Agents.Defaults.Memory != nil && (cfg.Agents.Defaults.Memory.Enabled == nil || *cfg.Agents.Defaults.Memory.Enabled) {
 		selectedFeatures = append(selectedFeatures, "memory")
@@ -189,6 +211,8 @@ func runOnboard() {
 		{"MiniMax     (MiniMax models)", "minimax"},
 		{"Cohere      (Command models)", "cohere"},
 		{"Perplexity  (Sonar search models)", "perplexity"},
+		{"DashScope   (Alibaba Cloud Model Studio — Qwen API)", "dashscope"},
+		{"Bailian     (Alibaba Cloud Model Studio — Coding Plan)", "bailian"},
 		{"Claude CLI  (use local claude CLI — no API key needed)", "claude_cli"},
 		{"Custom      (any OpenAI-compatible endpoint)", "custom"},
 	}
@@ -327,8 +351,12 @@ func runOnboard() {
 	// ── Step 2: Channels ──
 	selectedChannels, err = promptMultiSelect("Step 2 · Channels (select at least 1)", "Enter numbers to toggle channels", []SelectOption[string]{
 		{"Telegram", "telegram"},
+		{"Discord", "discord"},
+		{"Slack", "slack"},
+		{"WhatsApp (via bridge)", "whatsapp"},
 		{"Zalo OA", "zalo"},
-		{"Feishu / Lark", "feishu"},
+		{"Zalo Personal", "zalo_personal"},
+		{"Larksuite", "feishu"},
 	}, selectedChannels)
 	if err != nil {
 		fmt.Println("Cancelled.")
@@ -374,6 +402,44 @@ func runOnboard() {
 
 	if hasChannel("feishu") {
 		if err := promptFeishuConfig(&feishuAppID, &feishuSecret, &feishuDomain, &feishuConnMode); err != nil {
+			fmt.Println("Cancelled.")
+			return
+		}
+	}
+
+	if hasChannel("discord") {
+		discordToken, err = promptPassword("Discord Bot Token", "Get from https://discord.com/developers/applications")
+		if err != nil {
+			fmt.Println("Cancelled.")
+			return
+		}
+		if discordToken == "" {
+			discordToken = cfg.Channels.Discord.Token
+		}
+	}
+
+	if hasChannel("slack") {
+		slackBotToken, err = promptPassword("Slack Bot Token", "xoxb-... (Bot User OAuth Token)")
+		if err != nil {
+			fmt.Println("Cancelled.")
+			return
+		}
+		if slackBotToken == "" {
+			slackBotToken = cfg.Channels.Slack.BotToken
+		}
+		slackAppToken, err = promptPassword("Slack App Token", "xapp-... (App-Level Token for Socket Mode)")
+		if err != nil {
+			fmt.Println("Cancelled.")
+			return
+		}
+		if slackAppToken == "" {
+			slackAppToken = cfg.Channels.Slack.AppToken
+		}
+	}
+
+	if hasChannel("whatsapp") {
+		whatsappBridge, err = promptString("WhatsApp Bridge URL", "URL of your WhatsApp bridge (e.g. http://localhost:8080)", whatsappBridge)
+		if err != nil {
 			fmt.Println("Cancelled.")
 			return
 		}
@@ -457,6 +523,15 @@ func runOnboard() {
 	}
 	if hasChannel("feishu") && (feishuAppID == "" || feishuSecret == "") {
 		errors = append(errors, "Feishu App ID and App Secret are required")
+	}
+	if hasChannel("discord") && discordToken == "" {
+		errors = append(errors, "Discord bot token is required")
+	}
+	if hasChannel("slack") && (slackBotToken == "" || slackAppToken == "") {
+		errors = append(errors, "Slack Bot Token and App Token are required")
+	}
+	if hasChannel("whatsapp") && whatsappBridge == "" {
+		errors = append(errors, "WhatsApp bridge URL is required")
 	}
 
 	if postgresDSN == "" {
@@ -543,6 +618,26 @@ func runOnboard() {
 		cfg.Channels.Feishu.Domain = feishuDomain
 		cfg.Channels.Feishu.ConnectionMode = feishuConnMode
 	}
+
+	cfg.Channels.Discord.Enabled = hasChannel("discord")
+	if cfg.Channels.Discord.Enabled {
+		cfg.Channels.Discord.Token = discordToken
+		cfg.Channels.Discord.DMPolicy = "pairing"
+	}
+
+	cfg.Channels.Slack.Enabled = hasChannel("slack")
+	if cfg.Channels.Slack.Enabled {
+		cfg.Channels.Slack.BotToken = slackBotToken
+		cfg.Channels.Slack.AppToken = slackAppToken
+		cfg.Channels.Slack.DMPolicy = "pairing"
+	}
+
+	cfg.Channels.WhatsApp.Enabled = hasChannel("whatsapp")
+	if cfg.Channels.WhatsApp.Enabled {
+		cfg.Channels.WhatsApp.BridgeURL = whatsappBridge
+	}
+
+	cfg.Channels.ZaloPersonal.Enabled = hasChannel("zalo_personal")
 
 	// Features
 	if hasFeature("memory") {
@@ -640,6 +735,9 @@ func runOnboard() {
 	savedTgToken := cfg.Channels.Telegram.Token
 	savedZaloToken := cfg.Channels.Zalo.Token
 	savedFeishuAppSecret := cfg.Channels.Feishu.AppSecret
+	savedDiscordToken := cfg.Channels.Discord.Token
+	savedSlackBotToken := cfg.Channels.Slack.BotToken
+	savedSlackAppToken := cfg.Channels.Slack.AppToken
 	savedTtsOpenAIKey := cfg.Tts.OpenAI.APIKey
 	savedTtsElevenLabsKey := cfg.Tts.ElevenLabs.APIKey
 	savedTtsMiniMaxKey := cfg.Tts.MiniMax.APIKey
@@ -652,6 +750,9 @@ func runOnboard() {
 	cfg.Channels.Telegram.Token = ""
 	cfg.Channels.Zalo.Token = ""
 	cfg.Channels.Feishu.AppSecret = ""
+	cfg.Channels.Discord.Token = ""
+	cfg.Channels.Slack.BotToken = ""
+	cfg.Channels.Slack.AppToken = ""
 	cfg.Tts.OpenAI.APIKey = ""
 	cfg.Tts.ElevenLabs.APIKey = ""
 	cfg.Tts.MiniMax.APIKey = ""
@@ -663,6 +764,9 @@ func runOnboard() {
 	cfg.Channels.Telegram.Token = savedTgToken
 	cfg.Channels.Zalo.Token = savedZaloToken
 	cfg.Channels.Feishu.AppSecret = savedFeishuAppSecret
+	cfg.Channels.Discord.Token = savedDiscordToken
+	cfg.Channels.Slack.BotToken = savedSlackBotToken
+	cfg.Channels.Slack.AppToken = savedSlackAppToken
 	cfg.Tts.OpenAI.APIKey = savedTtsOpenAIKey
 	cfg.Tts.ElevenLabs.APIKey = savedTtsElevenLabsKey
 	cfg.Tts.MiniMax.APIKey = savedTtsMiniMaxKey
@@ -697,7 +801,19 @@ func runOnboard() {
 		fmt.Println("  Zalo:      enabled")
 	}
 	if cfg.Channels.Feishu.Enabled {
-		fmt.Printf("  Feishu:    enabled (%s, %s)\n", cfg.Channels.Feishu.Domain, cfg.Channels.Feishu.ConnectionMode)
+		fmt.Printf("  Lark:      enabled (%s, %s)\n", cfg.Channels.Feishu.Domain, cfg.Channels.Feishu.ConnectionMode)
+	}
+	if cfg.Channels.Discord.Enabled {
+		fmt.Println("  Discord:   enabled")
+	}
+	if cfg.Channels.Slack.Enabled {
+		fmt.Println("  Slack:     enabled")
+	}
+	if cfg.Channels.WhatsApp.Enabled {
+		fmt.Println("  WhatsApp:  enabled")
+	}
+	if cfg.Channels.ZaloPersonal.Enabled {
+		fmt.Println("  Zalo Personal: enabled")
 	}
 	if cfg.Agents.Defaults.Memory != nil && (cfg.Agents.Defaults.Memory.Enabled == nil || *cfg.Agents.Defaults.Memory.Enabled) {
 		embProv := cfg.Agents.Defaults.Memory.EmbeddingProvider
