@@ -108,6 +108,9 @@ func (s *seedStubStore) ListUserInstances(_ context.Context, _ uuid.UUID) ([]sto
 func (s *seedStubStore) UpdateUserProfileMetadata(_ context.Context, _ uuid.UUID, _ string, _ map[string]string) error {
 	return nil
 }
+func (s *seedStubStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 // ---- Tests ----
 

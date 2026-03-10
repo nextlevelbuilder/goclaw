@@ -90,6 +90,9 @@ func (s *stubAgentStore) ListUserInstances(_ context.Context, _ uuid.UUID) ([]st
 func (s *stubAgentStore) UpdateUserProfileMetadata(_ context.Context, _ uuid.UUID, _ string, _ map[string]string) error {
 	return nil
 }
+func (s *stubAgentStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 // ---- Tests ----
 

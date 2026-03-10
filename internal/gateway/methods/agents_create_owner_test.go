@@ -101,6 +101,9 @@ func (s *createCaptureStore) ListUserInstances(_ context.Context, _ uuid.UUID) (
 func (s *createCaptureStore) UpdateUserProfileMetadata(_ context.Context, _ uuid.UUID, _ string, _ map[string]string) error {
 	return nil
 }
+func (s *createCaptureStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
+}
 
 // ---- helpers ----
 
