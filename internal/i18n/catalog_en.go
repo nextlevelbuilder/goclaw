@@ -53,7 +53,7 @@ func init() {
 		// HTTP API
 		MsgInvalidAuth:           "invalid authentication",
 		MsgMsgsRequired:          "messages is required",
-		MsgUserIDHeader:          "X-GoClaw-User-Id header is required in managed mode",
+		MsgUserIDHeader:          "X-GoClaw-User-Id header is required",
 		MsgFileTooLarge:          "file too large or invalid multipart form",
 		MsgMissingFileField:      "missing 'file' field",
 		MsgInvalidFilename:       "invalid filename",

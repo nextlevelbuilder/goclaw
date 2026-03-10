@@ -37,24 +37,24 @@ func runOnboard() {
 		}
 	}
 
-	// ── Step 1: Postgres DSN ──
+	// ── Step 1: Postgres connection ──
 	postgresDSN := os.Getenv("GOCLAW_POSTGRES_DSN")
 	if postgresDSN == "" {
 		postgresDSN = cfg.Database.PostgresDSN
 	}
 	if postgresDSN == "" {
-		var err error
-		postgresDSN, err = promptString("Postgres DSN", "Connection string (e.g. postgres://user:pass@host:5432/dbname)", "")
+		fmt.Println("── Database Connection ──")
+		fmt.Println("  Enter your PostgreSQL connection details (press Enter for defaults).")
+		fmt.Println()
+
+		dsn, err := promptPostgresFields()
 		if err != nil {
 			fmt.Println("Cancelled.")
 			return
 		}
+		postgresDSN = dsn
 	} else {
 		fmt.Printf("  Using Postgres DSN from environment\n")
-	}
-	if postgresDSN == "" {
-		fmt.Println("  Error: Postgres DSN is required.")
-		return
 	}
 
 	// ── Step 2: Test connection ──

@@ -53,7 +53,7 @@ func init() {
 		// HTTP API
 		MsgInvalidAuth:           "身份验证无效",
 		MsgMsgsRequired:          "messages 是必填项",
-		MsgUserIDHeader:          "托管模式下需要 X-GoClaw-User-Id 请求头",
+		MsgUserIDHeader:          "需要 X-GoClaw-User-Id 请求头",
 		MsgFileTooLarge:          "文件过大或 multipart 表单无效",
 		MsgMissingFileField:      "缺少 'file' 字段",
 		MsgInvalidFilename:       "文件名无效",

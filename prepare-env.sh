@@ -81,33 +81,6 @@ else
   echo "  [exists]    GOCLAW_GATEWAY_TOKEN"
 fi
 
-# 4. Check provider API key
-has_provider=false
-for key in GOCLAW_OPENROUTER_API_KEY GOCLAW_ANTHROPIC_API_KEY GOCLAW_OPENAI_API_KEY \
-           GOCLAW_MINIMAX_API_KEY GOCLAW_GROQ_API_KEY GOCLAW_DEEPSEEK_API_KEY \
-           GOCLAW_GEMINI_API_KEY GOCLAW_MISTRAL_API_KEY GOCLAW_XAI_API_KEY \
-           GOCLAW_COHERE_API_KEY GOCLAW_PERPLEXITY_API_KEY; do
-  val="$(get_env_val "$key")"
-  if [ -n "$val" ]; then
-    has_provider=true
-    echo "  [exists]    $key"
-    break
-  fi
-done
-
-if [ "$has_provider" = false ]; then
-  echo "  [missing]   No LLM provider API key found"
-  echo ""
-  echo "  Add at least one provider key to .env before starting:"
-  echo "    GOCLAW_OPENROUTER_API_KEY=sk-or-..."
-  echo "    GOCLAW_ANTHROPIC_API_KEY=sk-ant-..."
-  echo "    GOCLAW_MINIMAX_API_KEY=..."
-  echo ""
-  echo "=== Done (action required) ==="
-  echo ""
-  exit 0
-fi
-
 echo ""
 echo "=== Done ==="
 echo ""

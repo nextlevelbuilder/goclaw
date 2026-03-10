@@ -909,7 +909,6 @@ func runGateway() {
 	slog.Info("goclaw gateway starting",
 		"version", Version,
 		"protocol", protocol.ProtocolVersion,
-		"mode", "managed",
 		"agents", agentRouter.List(),
 		"tools", toolsReg.Count(),
 		"channels", channelMgr.GetEnabledChannels(),

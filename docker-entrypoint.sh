@@ -3,9 +3,9 @@ set -e
 
 case "${1:-serve}" in
   serve)
-    # Managed mode: auto-upgrade (schema migrations + data hooks) before starting.
-    if [ "$GOCLAW_MODE" = "managed" ] && [ -n "$GOCLAW_POSTGRES_DSN" ]; then
-      echo "Managed mode: running upgrade..."
+    # Auto-upgrade (schema migrations + data hooks) before starting.
+    if [ -n "$GOCLAW_POSTGRES_DSN" ]; then
+      echo "Running database upgrade..."
       /app/goclaw upgrade || \
         echo "Upgrade warning (may already be up-to-date)"
     fi

@@ -53,7 +53,7 @@ func init() {
 		// HTTP API
 		MsgInvalidAuth:           "xác thực không hợp lệ",
 		MsgMsgsRequired:          "messages là bắt buộc",
-		MsgUserIDHeader:          "header X-GoClaw-User-Id là bắt buộc ở chế độ managed",
+		MsgUserIDHeader:          "header X-GoClaw-User-Id là bắt buộc",
 		MsgFileTooLarge:          "tệp quá lớn hoặc form multipart không hợp lệ",
 		MsgMissingFileField:      "thiếu trường 'file'",
 		MsgInvalidFilename:       "tên tệp không hợp lệ",

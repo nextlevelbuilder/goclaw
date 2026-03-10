@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -12,6 +13,44 @@ func onboardGenerateToken(bytes int) string {
 	b := make([]byte, bytes)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// promptPostgresFields prompts for individual database fields and builds a DSN.
+func promptPostgresFields() (string, error) {
+	host, err := promptString("Host", "", "localhost")
+	if err != nil {
+		return "", err
+	}
+	port, err := promptString("Port", "", "5432")
+	if err != nil {
+		return "", err
+	}
+	dbName, err := promptString("Database name", "", "goclaw")
+	if err != nil {
+		return "", err
+	}
+	user, err := promptString("Username", "", "postgres")
+	if err != nil {
+		return "", err
+	}
+	password, err := promptPassword("Password", "Leave empty if no password")
+	if err != nil {
+		return "", err
+	}
+	sslMode, err := promptString("SSL mode", "", "disable")
+	if err != nil {
+		return "", err
+	}
+
+	// Build DSN with proper escaping
+	var userInfo *url.Userinfo
+	if password != "" {
+		userInfo = url.UserPassword(user, password)
+	} else {
+		userInfo = url.User(user)
+	}
+	dsn := fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=%s", userInfo.String(), host, port, dbName, sslMode)
+	return dsn, nil
 }
 
 // onboardWriteEnvFile writes the minimal .env.local with only the 3 required secrets.
