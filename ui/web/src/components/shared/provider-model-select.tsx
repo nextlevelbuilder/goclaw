@@ -88,7 +88,13 @@ export function ProviderModelSelect({
 
   const handleProviderChange = (v: string) => {
     onProviderChange(v);
-    onModelChange("");
+    // Only clear model when NOT in allowEmpty mode.
+    // In allowEmpty mode (embedding config), both callbacks update the same
+    // parent state object — calling onModelChange("") with a stale closure
+    // would overwrite the provider change we just made.
+    if (!allowEmpty) {
+      onModelChange("");
+    }
   };
 
   const handleVerify = async () => {
@@ -101,11 +107,14 @@ export function ProviderModelSelect({
       <div className="grid gap-1.5">
         <InfoLabel tip={providerTip ?? t("providerTip")}>{providerLabel ?? t("provider")}</InfoLabel>
         {enabledProviders.length > 0 ? (
-          <Select value={provider} onValueChange={handleProviderChange}>
+          <Select value={provider || "__empty__"} onValueChange={(v) => handleProviderChange(v === "__empty__" ? "" : v)}>
             <SelectTrigger>
               <SelectValue placeholder={providerPlaceholder ?? t("selectProvider")} />
             </SelectTrigger>
             <SelectContent>
+              {allowEmpty && (
+                <SelectItem value="__empty__">{providerPlaceholder || "(auto)"}</SelectItem>
+              )}
               {enabledProviders.map((p) => (
                 <SelectItem key={p.name} value={p.name}>
                   {p.display_name || p.name}

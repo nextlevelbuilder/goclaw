@@ -183,6 +183,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
             modelTip={t("agents.memory.embeddingModelTip")}
             providerPlaceholder="(auto)"
             modelPlaceholder="text-embedding-3-small"
+            allowEmpty
           />
           <div className="grid grid-cols-2 gap-4">
             <Field label={t("agents.memory.maxResults")} tip={t("agents.memory.maxResultsTip")} type="number" value={memory.max_results} onChange={(v) => updateNested("memory", { max_results: Number(v) })} placeholder="6" />
