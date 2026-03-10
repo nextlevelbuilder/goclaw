@@ -358,6 +358,9 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		} else {
 			finalContent = annotated
 		}
+	} else {
+		// DM: annotate with sender identity so the agent knows who is messaging.
+		finalContent = fmt.Sprintf("[From: %s]\n%s", senderLabel, content)
 	}
 
 	// Send typing indicator with keepalive + TTL safety net.

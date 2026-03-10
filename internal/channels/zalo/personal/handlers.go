@@ -43,8 +43,15 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 		return
 	}
 
+	// Annotate with sender display name so the agent knows who is messaging.
+	senderName := msg.Data.DName
+	if senderName != "" {
+		content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
+	}
+
 	slog.Debug("zalo_personal DM received",
 		"sender", senderID,
+		"dname", senderName,
 		"thread", threadID,
 		"preview", channels.Truncate(content, 50),
 	)
