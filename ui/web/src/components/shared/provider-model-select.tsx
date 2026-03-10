@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,14 +57,23 @@ export function ProviderModelSelect({
 }: ProviderModelSelectProps) {
   const { t } = useTranslation("common");
   const { providers } = useProviders();
-  const enabledProviders = providers.filter((p) => p.enabled);
+  const enabledProviders = useMemo(
+    () => providers.filter((p) => p.enabled),
+    [providers],
+  );
 
-  // Auto-select first enabled provider when none is set (unless allowEmpty)
+  // Stable ref for callback — prevents the auto-select effect from re-running
+  // on every parent render (inline onProviderChange creates a new ref each time).
+  const onProviderChangeRef = useRef(onProviderChange);
+  onProviderChangeRef.current = onProviderChange;
+
+  // Auto-select first enabled provider when none is set (unless allowEmpty).
+  // Uses ref for callback so this only re-runs when provider or providers actually change.
   useEffect(() => {
     if (!allowEmpty && !provider && enabledProviders.length > 0) {
-      onProviderChange(enabledProviders[0]!.name);
+      onProviderChangeRef.current(enabledProviders[0]!.name);
     }
-  }, [allowEmpty, provider, enabledProviders, onProviderChange]);
+  }, [allowEmpty, provider, enabledProviders]);
 
   const selectedProvider = useMemo(
     () => enabledProviders.find((p) => p.name === provider),

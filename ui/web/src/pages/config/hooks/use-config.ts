@@ -4,6 +4,7 @@ import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
 
 interface ConfigData {
   config: Record<string, unknown>;
@@ -50,8 +51,11 @@ export function useConfig() {
         });
         hashRef.current = res.hash;
         await invalidate();
+        toast.success("Config saved");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to apply config");
+        const msg = err instanceof Error ? err.message : "Failed to apply config";
+        setError(msg);
+        toast.error("Failed to save config", msg);
         throw err;
       } finally {
         setSaving(false);
@@ -71,8 +75,11 @@ export function useConfig() {
         });
         hashRef.current = res.hash;
         await invalidate();
+        toast.success("Config saved");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to patch config");
+        const msg = err instanceof Error ? err.message : "Failed to patch config";
+        setError(msg);
+        toast.error("Failed to save config", msg);
         throw err;
       } finally {
         setSaving(false);

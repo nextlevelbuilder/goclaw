@@ -156,9 +156,18 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_CLAUDE_CLI_MODEL", &c.Providers.ClaudeCLI.Model)
 	envStr("GOCLAW_CLAUDE_CLI_WORK_DIR", &c.Providers.ClaudeCLI.BaseWorkDir)
 
-	// Default provider/model: env overrides config.
-	envStr("GOCLAW_PROVIDER", &c.Agents.Defaults.Provider)
-	envStr("GOCLAW_MODEL", &c.Agents.Defaults.Model)
+	// Default provider/model: env is fallback only (applied when config has no value).
+	// The onboard wizard sets these in .env for initial bootstrap; once the user
+	// saves a provider/model via the Dashboard, the config-file value wins.
+	envFallback := func(key string, dst *string) {
+		if *dst == "" {
+			if v := os.Getenv(key); v != "" {
+				*dst = v
+			}
+		}
+	}
+	envFallback("GOCLAW_PROVIDER", &c.Agents.Defaults.Provider)
+	envFallback("GOCLAW_MODEL", &c.Agents.Defaults.Model)
 
 	// Workspace & sessions
 	envStr("GOCLAW_WORKSPACE", &c.Agents.Defaults.Workspace)
