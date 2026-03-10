@@ -232,6 +232,9 @@
   "cron.baseDelayTip": "Độ trễ backoff ban đầu giữa các lần thử lại (vd: 2s, 500ms).",
   "cron.maxDelay": "Độ trễ tối đa",
   "cron.maxDelayTip": "Độ trễ backoff tối đa giữa các lần thử lại (vd: 30s, 5m).",
+  "cron.defaultTimezone": "Múi giờ mặc định",
+  "cron.defaultTimezoneTip": "Múi giờ IANA cho biểu thức cron khi không được đặt cho từng job (vd: Asia/Ho_Chi_Minh). Để trống sẽ dùng múi giờ hệ thống.",
+  "cron.defaultTimezonePlaceholder": "Múi giờ hệ thống",
 
   "telemetry.title": "Telemetry (OpenTelemetry)",
   "telemetry.description": "Xuất trace và metric sang backend tương thích OpenTelemetry",

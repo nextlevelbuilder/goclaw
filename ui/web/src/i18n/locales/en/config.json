@@ -232,6 +232,9 @@
   "cron.baseDelayTip": "Initial backoff delay between retries (e.g. 2s, 500ms).",
   "cron.maxDelay": "Max Delay",
   "cron.maxDelayTip": "Maximum backoff delay between retries (e.g. 30s, 5m).",
+  "cron.defaultTimezone": "Default Timezone",
+  "cron.defaultTimezoneTip": "IANA timezone for cron expressions when not set per-job (e.g. Asia/Ho_Chi_Minh). Leave empty to use server system timezone.",
+  "cron.defaultTimezonePlaceholder": "System timezone",
 
   "telemetry.title": "Telemetry (OpenTelemetry)",
   "telemetry.description": "Export traces and metrics to an OpenTelemetry-compatible backend",

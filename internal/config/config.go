@@ -310,9 +310,10 @@ type TelemetryConfig struct {
 
 // CronConfig configures the cron job system.
 type CronConfig struct {
-	MaxRetries     int    `json:"max_retries,omitempty"`      // max retry attempts on failure (default 3, 0 = no retry)
-	RetryBaseDelay string `json:"retry_base_delay,omitempty"` // initial backoff delay (default "2s", Go duration)
-	RetryMaxDelay  string `json:"retry_max_delay,omitempty"`  // maximum backoff delay (default "30s", Go duration)
+	MaxRetries      int    `json:"max_retries,omitempty"`      // max retry attempts on failure (default 3, 0 = no retry)
+	RetryBaseDelay  string `json:"retry_base_delay,omitempty"` // initial backoff delay (default "2s", Go duration)
+	RetryMaxDelay   string `json:"retry_max_delay,omitempty"`  // maximum backoff delay (default "30s", Go duration)
+	DefaultTimezone string `json:"default_timezone,omitempty"` // IANA timezone for cron expressions when not set per-job (e.g. "Asia/Ho_Chi_Minh")
 }
 
 // ToRetryConfig converts CronConfig to cron.RetryConfig with defaults applied.

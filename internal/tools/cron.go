@@ -57,7 +57,7 @@ SCHEDULE TYPES (schedule.kind):
 - "every": Recurring interval
   { "kind": "every", "everyMs": <interval-ms> }
 - "cron": Cron expression
-  { "kind": "cron", "expr": "<5-field cron expression>", "tz": "<optional-timezone>" }
+  { "kind": "cron", "expr": "<5-field cron expression>", "tz": "<optional IANA timezone, e.g. Asia/Ho_Chi_Minh; omit to use gateway default>" }
 
 CRITICAL CONSTRAINTS:
 - name must be a valid slug (lowercase letters, numbers, hyphens only)

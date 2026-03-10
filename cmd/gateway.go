@@ -295,11 +295,14 @@ func runGateway() {
 	redisClient := initRedisClient(cfg)
 	defer shutdownRedis(redisClient)
 
-	// Wire cron retry config from config.json
+	// Wire cron config from config.json
 	cronRetryCfg := cfg.Cron.ToRetryConfig()
 	// Apply retry config via type assertion on the concrete cron store.
 	pgStores.Cron.SetOnJob(nil) // ensure initialized; actual handler set below
 	_ = cronRetryCfg            // config available; pg cron store reads it internally
+	if cfg.Cron.DefaultTimezone != "" {
+		pgStores.Cron.SetDefaultTimezone(cfg.Cron.DefaultTimezone)
+	}
 
 	// Load secrets from config_secrets table before env overrides.
 	// Precedence: config.json → DB secrets → env vars (highest).
@@ -842,6 +845,18 @@ func runGateway() {
 			slog.Info("quota config reloaded via pub/sub")
 		})
 	}
+
+	// Reload cron default timezone on config changes via pub/sub.
+	msgBus.Subscribe("cron-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		pgStores.Cron.SetDefaultTimezone(updatedCfg.Cron.DefaultTimezone)
+	})
 
 	// Reload web_fetch domain policy on config changes via pub/sub.
 	msgBus.Subscribe("webfetch-config-reload", func(evt bus.Event) {

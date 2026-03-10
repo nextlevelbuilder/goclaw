@@ -28,7 +28,8 @@ type PGCronStore struct {
 	cacheTime   time.Time
 	cacheTTL    time.Duration
 
-	retryCfg cron.RetryConfig
+	retryCfg  cron.RetryConfig
+	defaultTZ string // fallback IANA timezone for cron jobs without explicit TZ
 }
 
 func NewPGCronStore(db *sql.DB) *PGCronStore {
@@ -40,6 +41,14 @@ func (s *PGCronStore) SetRetryConfig(cfg cron.RetryConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.retryCfg = cfg
+}
+
+// SetDefaultTimezone sets the fallback IANA timezone for cron expressions
+// when a job does not specify its own timezone.
+func (s *PGCronStore) SetDefaultTimezone(tz string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.defaultTZ = tz
 }
 
 func (s *PGCronStore) Start() error {

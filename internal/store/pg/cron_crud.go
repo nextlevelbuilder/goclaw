@@ -11,6 +11,10 @@ import (
 )
 
 func (s *PGCronStore) AddJob(name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
+	// Apply default timezone for cron expressions when not set per-job.
+	if schedule.TZ == "" && schedule.Kind == "cron" && s.defaultTZ != "" {
+		schedule.TZ = s.defaultTZ
+	}
 	if schedule.TZ != "" {
 		if _, err := time.LoadLocation(schedule.TZ); err != nil {
 			return nil, fmt.Errorf("invalid timezone: %s", schedule.TZ)

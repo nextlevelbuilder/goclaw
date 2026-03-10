@@ -105,6 +105,7 @@ type CronStore interface {
 	SetOnJob(handler func(job *CronJob) (*CronJobResult, error))
 	SetOnEvent(handler func(event CronEvent))
 	RunJob(jobID string, force bool) (ran bool, reason string, err error)
+	SetDefaultTimezone(tz string)
 
 	// Due job detection (for scheduler)
 	GetDueJobs(now time.Time) []CronJob

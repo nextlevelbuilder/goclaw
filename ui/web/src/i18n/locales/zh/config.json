@@ -232,6 +232,9 @@
   "cron.baseDelayTip": "重试之间的初始退避延迟（例如 2s、500ms）。",
   "cron.maxDelay": "最大延迟",
   "cron.maxDelayTip": "重试之间的最大退避延迟（例如 30s、5m）。",
+  "cron.defaultTimezone": "默认时区",
+  "cron.defaultTimezoneTip": "未为单个任务设置时区时，cron 表达式使用的 IANA 时区（例如 Asia/Shanghai）。留空则使用服务器系统时区。",
+  "cron.defaultTimezonePlaceholder": "系统时区",
 
   "telemetry.title": "遥测（OpenTelemetry）",
   "telemetry.description": "将追踪和指标导出到兼容 OpenTelemetry 的后端",
