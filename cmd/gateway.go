@@ -139,9 +139,11 @@ func runGateway() {
 
 	// Web tools (web_search + web_fetch)
 	webSearchTool := tools.NewWebSearchTool(tools.WebSearchConfig{
-		BraveEnabled: cfg.Tools.Web.Brave.Enabled,
-		BraveAPIKey:  cfg.Tools.Web.Brave.APIKey,
-		DDGEnabled:   cfg.Tools.Web.DuckDuckGo.Enabled,
+		TavilyEnabled: cfg.Tools.Web.Tavily.Enabled,
+		TavilyAPIKey:  cfg.Tools.Web.Tavily.APIKey,
+		BraveEnabled:  cfg.Tools.Web.Brave.Enabled,
+		BraveAPIKey:   cfg.Tools.Web.Brave.APIKey,
+		DDGEnabled:    cfg.Tools.Web.DuckDuckGo.Enabled,
 	})
 	if webSearchTool != nil {
 		toolsReg.Register(webSearchTool)

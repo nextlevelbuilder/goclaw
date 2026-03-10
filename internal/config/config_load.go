@@ -125,7 +125,9 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_SLACK_APP_TOKEN", &c.Channels.Slack.AppToken)
 	envStr("GOCLAW_SLACK_USER_TOKEN", &c.Channels.Slack.UserToken)
 
-	// TTS secrets
+	// Web search tools
+	envStr("GOCLAW_BRAVE_API_KEY", &c.Tools.Web.Brave.APIKey)
+	envStr("GOCLAW_TAVILY_API_KEY", &c.Tools.Web.Tavily.APIKey)
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)
 	envStr("GOCLAW_TTS_ELEVENLABS_API_KEY", &c.Tts.ElevenLabs.APIKey)
 	envStr("GOCLAW_TTS_MINIMAX_API_KEY", &c.Tts.MiniMax.APIKey)

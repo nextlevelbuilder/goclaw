@@ -55,6 +55,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
   const web = draft.web ?? {};
   const ddg = web.duckduckgo ?? {};
   const brave = web.brave ?? {};
+  const tavily = web.tavily ?? {};
   const webFetch = draft.web_fetch ?? {};
   const browser = draft.browser ?? {};
 
@@ -66,7 +67,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Web Search */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>DuckDuckGo</Label>
@@ -102,6 +103,24 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
                 onChange={(e) => updateNested("web", { brave: { ...brave, max_results: Number(e.target.value) } })}
                 placeholder="5"
                 min={1}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Tavily</Label>
+              <Switch
+                checked={tavily.enabled ?? false}
+                onCheckedChange={(v) => updateNested("web", { tavily: { ...tavily, enabled: v } })}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-muted-foreground">API Key</Label>
+              <Input
+                type="password"
+                value={tavily.api_key ?? ""}
+                onChange={(e) => updateNested("web", { tavily: { ...tavily, api_key: e.target.value } })}
+                placeholder="tvly-..."
               />
             </div>
           </div>

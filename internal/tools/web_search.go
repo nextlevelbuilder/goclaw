@@ -74,18 +74,24 @@ type WebSearchTool struct {
 
 // WebSearchConfig holds configuration for the web search tool.
 type WebSearchConfig struct {
-	BraveAPIKey     string
-	BraveEnabled    bool
-	BraveMaxResults int
-	DDGEnabled      bool
-	DDGMaxResults   int
-	CacheTTL        time.Duration
+	TavilyAPIKey     string
+	TavilyEnabled    bool
+	TavilyMaxResults int
+	BraveAPIKey      string
+	BraveEnabled     bool
+	BraveMaxResults  int
+	DDGEnabled       bool
+	DDGMaxResults    int
+	CacheTTL         time.Duration
 }
 
 func NewWebSearchTool(cfg WebSearchConfig) *WebSearchTool {
 	var providers []SearchProvider
 
-	// Priority: Brave > DuckDuckGo (matching TS)
+	// Priority: Tavily > Brave > DuckDuckGo
+	if cfg.TavilyEnabled && cfg.TavilyAPIKey != "" {
+		providers = append(providers, newTavilySearchProvider(cfg.TavilyAPIKey))
+	}
 	if cfg.BraveEnabled && cfg.BraveAPIKey != "" {
 		providers = append(providers, newBraveSearchProvider(cfg.BraveAPIKey))
 	}

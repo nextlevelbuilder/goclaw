@@ -340,6 +340,7 @@ type ImageGenConfig struct {
 type WebToolsConfig struct {
 	Brave      BraveConfig      `json:"brave"`
 	DuckDuckGo DuckDuckGoConfig `json:"duckduckgo"`
+	Tavily     TavilyConfig     `json:"tavily"`
 }
 
 type BraveConfig struct {
@@ -351,6 +352,12 @@ type BraveConfig struct {
 type DuckDuckGoConfig struct {
 	Enabled    bool `json:"enabled"`
 	MaxResults int  `json:"max_results"`
+}
+
+type TavilyConfig struct {
+	Enabled    bool   `json:"enabled"`
+	APIKey     string `json:"api_key"`
+	MaxResults int    `json:"max_results"`
 }
 
 // SessionsConfig controls session behavior.

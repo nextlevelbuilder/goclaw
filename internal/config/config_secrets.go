@@ -59,6 +59,7 @@ func (c *Config) MaskedCopy() *Config {
 
 	// Mask web tool keys
 	maskNonEmpty(&cp.Tools.Web.Brave.APIKey)
+	maskNonEmpty(&cp.Tools.Web.Tavily.APIKey)
 
 	// Mask Tailscale auth key
 	maskNonEmpty(&cp.Tailscale.AuthKey)
@@ -108,6 +109,7 @@ func (c *Config) StripSecrets() {
 
 	// Web tool keys
 	c.Tools.Web.Brave.APIKey = ""
+	c.Tools.Web.Tavily.APIKey = ""
 
 	// Tailscale auth key
 	c.Tailscale.AuthKey = ""
@@ -162,6 +164,7 @@ func (c *Config) StripMaskedSecrets() {
 
 	// Web tool keys
 	stripIfMasked(&c.Tools.Web.Brave.APIKey)
+	stripIfMasked(&c.Tools.Web.Tavily.APIKey)
 
 	// Tailscale auth key
 	stripIfMasked(&c.Tailscale.AuthKey)
@@ -183,6 +186,7 @@ func (c *Config) ApplyDBSecrets(secrets map[string]string) {
 	apply("tts.minimax.api_key", &c.Tts.MiniMax.APIKey)
 	apply("tts.minimax.group_id", &c.Tts.MiniMax.GroupID)
 	apply("tools.web.brave.api_key", &c.Tools.Web.Brave.APIKey)
+	apply("tools.web.tavily.api_key", &c.Tools.Web.Tavily.APIKey)
 	apply("tailscale.auth_key", &c.Tailscale.AuthKey)
 }
 
@@ -203,6 +207,7 @@ func (c *Config) ExtractDBSecrets() map[string]string {
 	collect("tts.minimax.api_key", c.Tts.MiniMax.APIKey)
 	collect("tts.minimax.group_id", c.Tts.MiniMax.GroupID)
 	collect("tools.web.brave.api_key", c.Tools.Web.Brave.APIKey)
+	collect("tools.web.tavily.api_key", c.Tools.Web.Tavily.APIKey)
 	collect("tailscale.auth_key", c.Tailscale.AuthKey)
 
 	return secrets
