@@ -131,7 +131,7 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 			}
 		}
 
-		next := computeNextRun(&merged, time.Now())
+		next := computeNextRun(&merged, time.Now(), s.defaultTZ)
 		updates["next_run_at"] = next
 	}
 	if patch.DeleteAfterRun != nil {

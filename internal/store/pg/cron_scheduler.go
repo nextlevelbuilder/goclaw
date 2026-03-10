@@ -102,7 +102,7 @@ func (s *PGCronStore) recomputeStaleJobs() {
 			schedule.TZ = *tz
 		}
 
-		next := computeNextRun(&schedule, now)
+		next := computeNextRun(&schedule, now, s.defaultTZ)
 		if next == nil {
 			if scheduleKind == "at" {
 				s.db.Exec("UPDATE cron_jobs SET enabled = false, updated_at = $1 WHERE id = $2", now, id)
@@ -236,7 +236,7 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 		}
 	} else if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		schedule := job.Schedule
-		next := computeNextRun(&schedule, now)
+		next := computeNextRun(&schedule, now, s.defaultTZ)
 		s.db.Exec(
 			"UPDATE cron_jobs SET last_run_at = $1, last_status = $2, last_error = $3, next_run_at = $4, updated_at = $5 WHERE id = $6",
 			now, status, lastError, next, now, id,

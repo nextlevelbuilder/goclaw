@@ -62,7 +62,7 @@ func (s *PGCronStore) AddJob(name string, schedule store.CronSchedule, message s
 		intervalMS = schedule.EveryMS
 	}
 
-	nextRun := computeNextRun(&schedule, now)
+	nextRun := computeNextRun(&schedule, now, s.defaultTZ)
 
 	_, err := s.db.Exec(
 		`INSERT INTO cron_jobs (id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,

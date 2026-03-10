@@ -103,7 +103,10 @@ func scanCronSingleRow(row *sql.Row) (*store.CronJob, error) {
 
 // --- Helpers ---
 
-func computeNextRun(schedule *store.CronSchedule, now time.Time) *time.Time {
+// computeNextRun calculates the next run time for a schedule.
+// defaultTZ is the gateway-level fallback IANA timezone used when the
+// schedule itself does not specify a timezone (existing jobs with TZ = NULL).
+func computeNextRun(schedule *store.CronSchedule, now time.Time, defaultTZ string) *time.Time {
 	switch schedule.Kind {
 	case "at":
 		if schedule.AtMS != nil {
@@ -123,9 +126,13 @@ func computeNextRun(schedule *store.CronSchedule, now time.Time) *time.Time {
 		if schedule.Expr == "" {
 			return nil
 		}
+		tz := schedule.TZ
+		if tz == "" {
+			tz = defaultTZ
+		}
 		evalTime := now
-		if schedule.TZ != "" {
-			if loc, err := time.LoadLocation(schedule.TZ); err == nil {
+		if tz != "" {
+			if loc, err := time.LoadLocation(tz); err == nil {
 				evalTime = now.In(loc)
 			}
 		}
