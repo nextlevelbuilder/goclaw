@@ -65,14 +65,14 @@ export function CompactionSection({ enabled, value, onToggle, onChange }: Compac
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Switch
-            checked={value.memoryFlush?.enabled ?? false}
+            checked={value.memoryFlush?.enabled ?? true}
             onCheckedChange={(v) =>
               onChange({ ...value, memoryFlush: { ...value.memoryFlush, enabled: v } })
             }
           />
           <InfoLabel tip="When enabled, compacted history is also saved to long-term memory for future retrieval.">{t(`${s}.memoryFlush`)}</InfoLabel>
         </div>
-        {value.memoryFlush?.enabled && (
+        {(value.memoryFlush?.enabled ?? true) && (
           <div className="space-y-2 pl-6">
             <InfoLabel tip="Token count threshold that triggers memory flush. When summary exceeds this, older memories are flushed to storage.">{t(`${s}.softThreshold`)}</InfoLabel>
             <Input
