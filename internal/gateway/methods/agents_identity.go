@@ -41,7 +41,7 @@ func (m *AgentsMethods) handleIdentityGet(_ context.Context, client *gateway.Cli
 	}
 
 	if m.agentStore != nil {
-		// --- Managed mode: read identity from DB ---
+		// --- DB-backed: read identity from store ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err == nil {

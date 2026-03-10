@@ -18,7 +18,7 @@ import (
 func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateOpts, mode string) (*DelegationTask, *store.AgentLinkData, error) {
 	sourceAgentID := store.AgentIDFromContext(ctx)
 	if sourceAgentID == uuid.Nil {
-		return nil, nil, fmt.Errorf("delegation requires managed mode (no agent ID in context)")
+		return nil, nil, fmt.Errorf("delegation requires database stores (no agent ID in context)")
 	}
 
 	sourceAgent, err := dm.agentStore.GetByID(ctx, sourceAgentID)

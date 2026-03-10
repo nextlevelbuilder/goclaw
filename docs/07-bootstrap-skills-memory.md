@@ -186,7 +186,7 @@ This ensures resolver-injected virtual files (`DELEGATION.md`, `TEAM.md`) surviv
 
 ---
 
-## 7. Agent Summoning (Managed Mode)
+## 7. Agent Summoning
 
 Creating a predefined agent requires 4 context files (SOUL.md, IDENTITY.md, AGENTS.md, TOOLS.md) with specific formatting conventions. Agent summoning generates all 4 files from a natural language description in a single LLM call.
 
@@ -260,9 +260,9 @@ IDF is computed as: `log((N - df + 0.5) / (df + 0.5) + 1)`
 
 ---
 
-## 11. Skills -- Embedding Search (Managed Mode)
+## 11. Skills -- Embedding Search
 
-In managed mode, skill search uses a hybrid approach combining BM25 and vector similarity.
+Skill search uses a hybrid approach combining BM25 and vector similarity.
 
 ```mermaid
 flowchart TD
@@ -283,9 +283,9 @@ flowchart TD
 
 ---
 
-## 12. Skills Grants & Visibility (Managed Mode)
+## 12. Skills Grants & Visibility
 
-In managed mode, skill access is controlled through a 3-tier visibility model with explicit agent and user grants.
+Skill access is controlled through a 3-tier visibility model with explicit agent and user grants.
 
 ```mermaid
 flowchart TD
@@ -315,7 +315,7 @@ flowchart TD
 
 **Resolution**: `ListAccessible(agentID, userID)` performs a DISTINCT join across `skills`, `skill_agent_grants`, and `skill_user_grants` with the visibility filter, returning only active skills the caller can access.
 
-**Managed-mode Tier 4**: In managed mode, global skills (Tier 4 in the hierarchy) are loaded from the `skills` PostgreSQL table instead of the filesystem.
+**Tier 4**: Global skills (Tier 4 in the hierarchy) are loaded from the `skills` PostgreSQL table instead of the filesystem.
 
 ---
 
@@ -489,7 +489,7 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 
 | Document | Relevant Content |
 |----------|-----------------|
-| [00-architecture-overview.md](./00-architecture-overview.md) | Startup sequence, managed mode wiring |
+| [00-architecture-overview.md](./00-architecture-overview.md) | Startup sequence, database wiring |
 | [01-agent-loop.md](./01-agent-loop.md) | Agent loop calls BuildSystemPrompt, compaction flow |
 | [03-tools-system.md](./03-tools-system.md) | ContextFileInterceptor routing read_file/write_file to DB |
 | [06-store-data-model.md](./06-store-data-model.md) | memory_documents, memory_chunks tables |

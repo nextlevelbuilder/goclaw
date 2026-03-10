@@ -141,7 +141,7 @@ Context keys ensure each tool call receives the correct per-call values without 
 
 ## 3. Filesystem Tools and Virtual FS Routing
 
-In managed mode, filesystem operations are intercepted before hitting the host disk. Two interceptor layers route specific paths to the database instead.
+Filesystem operations are intercepted before hitting the host disk. Two interceptor layers route specific paths to the database instead.
 
 ```mermaid
 flowchart TD
@@ -570,9 +570,9 @@ GoClaw integrates with Model Context Protocol (MCP) servers via `internal/mcp/`.
 - Tools are registered with a prefix (e.g., `mcp_servername_toolname`)
 - Dynamic tool group registration: `mcp` and `mcp:{serverName}` groups
 
-### Access Control (Managed Mode)
+### Access Control
 
-In managed mode, MCP server access is controlled through per-agent and per-user grants stored in PostgreSQL.
+MCP server access is controlled through per-agent and per-user grants stored in PostgreSQL.
 
 ```mermaid
 flowchart TD
@@ -602,7 +602,7 @@ flowchart LR
 
 ---
 
-## 13. Custom Tools (Managed Mode)
+## 13. Custom Tools
 
 Define shell-based tools at runtime via the HTTP API -- no recompile or restart needed. Custom tools are stored in the `custom_tools` PostgreSQL table and loaded dynamically into the agent's tool registry.
 

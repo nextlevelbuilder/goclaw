@@ -202,9 +202,9 @@ The Anthropic provider calls `CleanSchemaForProvider("anthropic", ...)` when con
 
 ---
 
-## 7. Managed Mode -- Providers from Database
+## 7. Providers from Database
 
-In managed mode, providers are loaded from the `llm_providers` table in addition to the config file. Database providers override config providers with the same name.
+Providers are loaded from the `llm_providers` table in addition to the config file. Database providers override config providers with the same name.
 
 ### Loading Flow
 

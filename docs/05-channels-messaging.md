@@ -57,7 +57,7 @@ flowchart LR
 
 Internal channels (`cli`, `system`, `subagent`) are silently skipped by the outbound dispatcher and never forwarded to external platforms.
 
-### Handoff Routing (Managed Mode)
+### Handoff Routing
 
 Before normal agent routing, the consumer checks the `handoff_routes` table for an active routing override. If a handoff route exists for the incoming channel + chat ID, the message is redirected to the target agent instead of the original.
 
@@ -504,7 +504,7 @@ flowchart TD
     WS2 --> USER3["user_charlie/"]
 ```
 
-In managed mode, channel instances are loaded from the database with their assigned agent ID. The agent key is resolved and propagated through the message pipeline, ensuring all filesystem tools, context files, and memory operations use the correct workspace.
+Channel instances are loaded from the database with their assigned agent ID. The agent key is resolved and propagated through the message pipeline, ensuring all filesystem tools, context files, and memory operations use the correct workspace.
 
 ---
 
@@ -570,7 +570,7 @@ flowchart TD
 |------|---------|
 | `internal/channels/channel.go` | Channel interface, BaseChannel, extended interfaces, HandleMessage |
 | `internal/channels/manager.go` | Manager: registration, StartAll, StopAll, outbound dispatch, webhook collection |
-| `internal/channels/instance_loader.go` | DB-based channel instance loading (managed mode) |
+| `internal/channels/instance_loader.go` | DB-based channel instance loading |
 | `internal/channels/telegram/channel.go` | Telegram core: long polling, mention gating, typing indicators |
 | `internal/channels/telegram/handlers.go` | Message handling, media processing, forum topic detection |
 | `internal/channels/telegram/topic_config.go` | Per-topic config layering and resolution |

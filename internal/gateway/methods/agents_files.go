@@ -36,7 +36,7 @@ func (m *AgentsMethods) handleFilesList(ctx context.Context, client *gateway.Cli
 	}
 
 	if m.agentStore != nil {
-		// --- Managed mode: list from DB ---
+		// --- DB-backed: list from store ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
@@ -135,7 +135,7 @@ func (m *AgentsMethods) handleFilesGet(ctx context.Context, client *gateway.Clie
 	}
 
 	if m.agentStore != nil {
-		// --- Managed mode: read from DB ---
+		// --- DB-backed: read from store ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
@@ -234,7 +234,7 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 	}
 
 	if m.agentStore != nil {
-		// --- Managed mode: write to DB ---
+		// --- DB-backed: write to store ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {

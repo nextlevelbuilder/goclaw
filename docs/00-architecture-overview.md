@@ -233,7 +233,7 @@ sequenceDiagram
 
 ---
 
-## 7. Managed Mode Wiring
+## 7. Database Wiring
 
 The `wireManagedExtras()` function in `cmd/gateway_managed.go` wires multi-tenant components:
 
@@ -393,7 +393,7 @@ flowchart TD
 |------|---------|
 | `cmd/root.go` | Cobra CLI entry point, flag parsing |
 | `cmd/gateway.go` | Gateway startup orchestrator (`runGateway()`) |
-| `cmd/gateway_managed.go` | Managed mode wiring (`wireManagedExtras()`, `wireManagedHTTP()`) |
+| `cmd/gateway_managed.go` | Database wiring (`wireManagedExtras()`, `wireManagedHTTP()`) |
 | `cmd/gateway_callbacks.go` | Shared callbacks (user seeding, context file loading) |
 | `cmd/gateway_consumer.go` | Inbound message consumer (subagent, delegate, teammate, handoff routing) |
 | `cmd/gateway_providers.go` | Provider registration (config-based + DB-based) |
@@ -423,7 +423,7 @@ flowchart TD
 | [02-providers.md](./02-providers.md) | LLM providers, retry logic, schema cleaning |
 | [03-tools-system.md](./03-tools-system.md) | Tool registry, policy engine, interceptors, custom tools, MCP grants |
 | [04-gateway-protocol.md](./04-gateway-protocol.md) | WebSocket protocol v3, HTTP API, RBAC, identity propagation |
-| [05-channels-messaging.md](./05-channels-messaging.md) | Channel adapters, Telegram formatting, pairing, managed-mode user scoping |
+| [05-channels-messaging.md](./05-channels-messaging.md) | Channel adapters, Telegram formatting, pairing, per-user scoping |
 | [06-store-data-model.md](./06-store-data-model.md) | Store interfaces, PostgreSQL schema, session caching, custom tool store |
 | [07-bootstrap-skills-memory.md](./07-bootstrap-skills-memory.md) | Bootstrap files, skills system, memory, skills grants |
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | Scheduler lanes, cron lifecycle |

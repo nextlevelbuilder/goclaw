@@ -96,7 +96,7 @@ flowchart TD
 
 Token comparison uses `crypto/subtle.ConstantTimeCompare` to prevent timing attacks.
 
-In managed mode, `user_id` in the connect parameters is required for per-user session scoping and context file routing. GoClaw uses the **Identity Propagation** pattern — it trusts the upstream service to provide accurate user identity. The `user_id` is opaque (VARCHAR 255); multi-tenant deployments use the compound format `tenant.{tenantId}.user.{userId}`. See [00-architecture-overview.md Section 5](./00-architecture-overview.md) for details.
+The `user_id` in the connect parameters is required for per-user session scoping and context file routing. GoClaw uses the **Identity Propagation** pattern — it trusts the upstream service to provide accurate user identity. The `user_id` is opaque (VARCHAR 255); multi-tenant deployments use the compound format `tenant.{tenantId}.user.{userId}`. See [00-architecture-overview.md Section 5](./00-architecture-overview.md) for details.
 
 ### Three Roles
 
@@ -161,7 +161,7 @@ flowchart TD
 | `agent.wait` | Wait for an agent to become available |
 | `agent.identity.get` | Get agent identity (name, description) |
 | `agents.list` | List all accessible agents |
-| `agents.create` | Create a new agent (managed mode) |
+| `agents.create` | Create a new agent |
 | `agents.update` | Update agent configuration |
 | `agents.delete` | Soft-delete an agent |
 | `agents.files.list` | List agent context files |
@@ -301,7 +301,7 @@ flowchart TD
 
 - `Authorization: Bearer <token>` -- timing-safe comparison via `crypto/subtle.ConstantTimeCompare`
 - No token configured: all requests allowed
-- `X-GoClaw-User-Id`: required in managed mode for per-user scoping
+- `X-GoClaw-User-Id`: required for per-user scoping
 - `X-GoClaw-Agent-Id`: specify target agent for the request
 
 ### Endpoints
@@ -334,9 +334,9 @@ Direct tool invocation without the agent loop. Supports `dryRun: true` to return
 
 Returns `{"status":"ok","protocol":3}`.
 
-#### Managed Mode CRUD Endpoints
+#### CRUD Endpoints
 
-All managed endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id` header for per-user scoping.
+All CRUD endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id` header for per-user scoping.
 
 **Agents** (`/v1/agents`):
 
@@ -482,9 +482,9 @@ Error responses include `retryable` (boolean) and `retryAfterMs` (integer) field
 | `internal/http/chat_completions.go` | POST /v1/chat/completions (OpenAI-compatible) |
 | `internal/http/responses.go` | POST /v1/responses (OpenResponses protocol) |
 | `internal/http/tools_invoke.go` | POST /v1/tools/invoke (direct tool execution) |
-| `internal/http/agents.go` | Agent CRUD HTTP handlers (managed mode) |
-| `internal/http/skills.go` | Skills HTTP handlers (managed mode) |
-| `internal/http/traces.go` | Traces HTTP handlers (managed mode) |
+| `internal/http/agents.go` | Agent CRUD HTTP handlers |
+| `internal/http/skills.go` | Skills HTTP handlers |
+| `internal/http/traces.go` | Traces HTTP handlers |
 | `internal/http/delegations.go` | Delegation history HTTP handlers |
 | `internal/http/summoner.go` | LLM-powered agent setup (XML parsing, context file generation) |
 | `internal/http/auth.go` | Bearer token authentication, timing-safe comparison |

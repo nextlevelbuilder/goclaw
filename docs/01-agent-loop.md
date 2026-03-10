@@ -88,7 +88,7 @@ flowchart TD
 
 - Increment the `activeRuns` atomic counter (no mutex -- true concurrency, especially in group chats with `maxConcurrent = 3`).
 - Emit a `run.started` event to notify connected clients.
-- Create a trace record (managed mode) with a generated trace UUID.
+- Create a trace record with a generated trace UUID.
 - Propagate context values: `WithAgentID()`, `WithUserID()`, `WithAgentType()`. Downstream tools and interceptors rely on these.
 - Compute per-user workspace: `base + "/" + sanitize(userID)`. Inject via `WithToolWorkspace(ctx)` so all filesystem and shell tools use the correct directory.
 - Ensure per-user files exist. A `sync.Map` cache guarantees the seeding function runs at most once per user.
@@ -381,7 +381,7 @@ flowchart TD
 
 ---
 
-## 10. Resolver (Managed Mode)
+## 10. Resolver
 
 The `ManagedResolver` lazy-creates Loop instances from PostgreSQL data when the Router encounters a cache miss.
 
@@ -392,7 +392,7 @@ flowchart TD
     PROV --> BOOT["Step 3: Load bootstrap files<br/>bootstrap.LoadFromStore(agentID)"]
     BOOT --> DEFAULTS["Step 4: Apply defaults<br/>contextWindow <= 0 then 200K<br/>maxIterations <= 0 then 20"]
     DEFAULTS --> CREATE["Step 5: Create Loop<br/>NewLoop(LoopConfig)"]
-    CREATE --> WIRE["Step 6: Wire managed-mode hooks<br/>EnsureUserFilesFunc, ContextFileLoaderFunc"]
+    CREATE --> WIRE["Step 6: Wire hooks<br/>EnsureUserFilesFunc, ContextFileLoaderFunc"]
     WIRE --> DONE["Return Loop to Router for caching"]
 ```
 

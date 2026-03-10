@@ -39,7 +39,7 @@ func (m *AgentsMethods) handleDelete(ctx context.Context, client *gateway.Client
 	var removedBindings int
 
 	if m.agentStore != nil {
-		// --- Managed mode: delete from DB ---
+		// --- DB-backed: delete from store ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {

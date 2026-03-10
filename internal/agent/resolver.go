@@ -323,7 +323,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
-		// Managed mode: filter skills by visibility + agent grants.
+		// Filter skills by visibility + agent grants.
 		// Only public skills and explicitly granted internal skills appear in the system prompt.
 		var skillAllowList []string
 		if deps.SkillAccessStore != nil {

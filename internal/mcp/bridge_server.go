@@ -17,7 +17,7 @@ import (
 
 // BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
 // Excluded: spawn (agent loop), create_forum_topic (channels),
-// handoff/delegate_search/evaluate_loop/team_* (managed mode stores).
+// handoff/delegate_search/evaluate_loop/team_* (require database stores).
 var BridgeToolNames = map[string]bool{
 	// Filesystem
 	"read_file":  true,

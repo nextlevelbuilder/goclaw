@@ -106,7 +106,7 @@ The exporter lives in a separate sub-package (`internal/tracing/otelexport/`) so
 
 ---
 
-## 5. Trace HTTP API (Managed Mode)
+## 5. Trace HTTP API
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -126,7 +126,7 @@ The exporter lives in a separate sub-package (`internal/tracing/otelexport/`) so
 
 ---
 
-## 6. Delegation History (Managed Mode)
+## 6. Delegation History
 
 Delegation history records are stored in the `delegation_history` table and exposed alongside traces for cross-referencing agent interactions.
 

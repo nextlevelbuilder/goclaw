@@ -2,7 +2,7 @@
 
 Defense-in-depth with five independent layers from transport to isolation. Each layer operates independently -- even if one layer is bypassed, the remaining layers continue to protect the system.
 
-> **Managed mode**: Adds AES-256-GCM encryption for secrets stored in PostgreSQL (LLM provider API keys, MCP server API keys, custom tool environment variables), plus agent-level access control via the 4-step `CanAccess` pipeline (see [06-store-data-model.md](./06-store-data-model.md)).
+> AES-256-GCM encryption protects secrets stored in PostgreSQL (LLM provider API keys, MCP server API keys, custom tool environment variables). Agent-level access control uses the 4-step `CanAccess` pipeline (see [06-store-data-model.md](./06-store-data-model.md)).
 
 ---
 
@@ -123,7 +123,7 @@ The workspace is injected into tools via `WithToolWorkspace(ctx)` context inject
 
 ---
 
-## 2. Encryption (Managed Mode)
+## 2. Encryption
 
 AES-256-GCM encryption for secrets stored in PostgreSQL. Key provided via `GOCLAW_ENCRYPTION_KEY` environment variable.
 

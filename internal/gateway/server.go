@@ -160,52 +160,52 @@ func (s *Server) BuildMux() *http.ServeMux {
 		mux.Handle("/v1/tools/invoke", toolsHandler)
 	}
 
-	// Managed mode: agent CRUD + shares API
+	// Agent CRUD + shares API
 	if s.agentsHandler != nil {
 		s.agentsHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: skill management API
+	// Skill management API
 	if s.skillsHandler != nil {
 		s.skillsHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: LLM trace listing API
+	// LLM trace listing API
 	if s.tracesHandler != nil {
 		s.tracesHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: MCP server management API
+	// MCP server management API
 	if s.mcpHandler != nil {
 		s.mcpHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: custom tool CRUD API
+	// Custom tool CRUD API
 	if s.customToolsHandler != nil {
 		s.customToolsHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: channel instance CRUD API
+	// Channel instance CRUD API
 	if s.channelInstancesHandler != nil {
 		s.channelInstancesHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: provider & model CRUD API
+	// Provider & model CRUD API
 	if s.providersHandler != nil {
 		s.providersHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: delegation history API
+	// Delegation history API
 	if s.delegationsHandler != nil {
 		s.delegationsHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: builtin tool management API
+	// Builtin tool management API
 	if s.builtinToolsHandler != nil {
 		s.builtinToolsHandler.RegisterRoutes(mux)
 	}
 
-	// Managed mode: pending messages API
+	// Pending messages API
 	if s.pendingMessagesHandler != nil {
 		s.pendingMessagesHandler.RegisterRoutes(mux)
 	}

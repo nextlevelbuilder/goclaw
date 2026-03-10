@@ -9,13 +9,13 @@
 | POST | `/v1/chat/completions` | OpenAI-compatible chat API |
 | POST | `/v1/responses` | Responses protocol |
 | POST | `/v1/tools/invoke` | Tool invocation |
-| GET/POST | `/v1/agents/*` | Agent management (managed mode) |
-| GET/POST | `/v1/skills/*` | Skills management (managed mode) |
-| GET/POST/PUT/DELETE | `/v1/tools/custom/*` | Custom tool CRUD (managed mode) |
-| GET/POST/PUT/DELETE | `/v1/mcp/*` | MCP server + grants management (managed mode) |
-| GET | `/v1/traces/*` | Trace viewer (managed mode) |
+| GET/POST | `/v1/agents/*` | Agent management |
+| GET/POST | `/v1/skills/*` | Skills management |
+| GET/POST/PUT/DELETE | `/v1/tools/custom/*` | Custom tool CRUD |
+| GET/POST/PUT/DELETE | `/v1/mcp/*` | MCP server + grants management |
+| GET | `/v1/traces/*` | Trace viewer |
 
-## Custom Tools (Managed Mode)
+## Custom Tools
 
 Define shell-based tools at runtime via HTTP API — no recompile or restart needed. The LLM can invoke custom tools identically to built-in tools.
 
@@ -67,7 +67,7 @@ Connect external [Model Context Protocol](https://modelcontextprotocol.io) serve
 
 **Supported transports:** `stdio`, `sse`, `streamable-http`
 
-**Standalone mode** — configure in `config.json`:
+**Static config** — configure in `config.json` (deprecated; use HTTP API for dynamic management):
 
 ```json
 {
@@ -87,7 +87,7 @@ Connect external [Model Context Protocol](https://modelcontextprotocol.io) serve
 }
 ```
 
-**Managed mode** — full CRUD via HTTP API with per-agent and per-user access grants:
+**HTTP API** — full CRUD with per-agent and per-user access grants:
 
 | Method | Path | Description |
 |---|---|---|

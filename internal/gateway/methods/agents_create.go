@@ -66,7 +66,7 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 	}
 
 	if m.agentStore != nil {
-		// --- Managed mode: create agent in DB ---
+		// --- DB-backed: create agent in store ---
 		ctx := context.Background()
 
 		// Check if agent already exists in DB

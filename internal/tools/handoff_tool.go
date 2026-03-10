@@ -104,7 +104,7 @@ func (t *HandoffTool) executeTransfer(ctx context.Context, args map[string]any) 
 	// Get current agent and channel context
 	sourceAgentID := store.AgentIDFromContext(ctx)
 	if sourceAgentID == uuid.Nil {
-		return ErrorResult("handoff requires managed mode")
+		return ErrorResult("handoff requires database stores")
 	}
 
 	sourceAgent, err := t.delegateMgr.agentStore.GetByID(ctx, sourceAgentID)

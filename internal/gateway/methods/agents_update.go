@@ -45,7 +45,7 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 	}
 
 	if m.agentStore != nil {
-		// --- Managed mode: update agent in DB ---
+		// --- DB-backed: update agent in store ---
 		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {

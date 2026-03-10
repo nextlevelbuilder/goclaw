@@ -47,7 +47,7 @@ func (m *TeamToolManager) SetDelegateManager(dm *DelegateManager) {
 func (m *TeamToolManager) resolveTeam(ctx context.Context) (*store.TeamData, uuid.UUID, error) {
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID == uuid.Nil {
-		return nil, uuid.Nil, fmt.Errorf("no agent context — team tools require managed mode")
+		return nil, uuid.Nil, fmt.Errorf("no agent context — team tools require database stores")
 	}
 
 	// Check cache first

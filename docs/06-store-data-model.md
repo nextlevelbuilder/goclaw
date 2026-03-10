@@ -77,7 +77,7 @@ flowchart TD
 
 ## 4. Agent Access Control
 
-In managed mode, agent access is checked via a 4-step pipeline.
+Agent access is checked via a 4-step pipeline.
 
 ```mermaid
 flowchart TD
@@ -477,7 +477,7 @@ flowchart TD
 | Key | Type | Purpose |
 |-----|------|---------|
 | `goclaw_user_id` | string | External user ID (e.g., Telegram user ID) |
-| `goclaw_agent_id` | uuid.UUID | Agent UUID (managed mode) |
+| `goclaw_agent_id` | uuid.UUID | Agent UUID |
 | `goclaw_agent_type` | string | Agent type: `"open"` or `"predefined"` |
 | `goclaw_sender_id` | string | Original individual sender ID (in group chats, `user_id` is group-scoped but `sender_id` preserves the actual person) |
 
