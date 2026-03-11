@@ -52,6 +52,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if l.selfEvolve {
 		ctx = store.WithSelfEvolve(ctx, true)
 	}
+	// Inject sandbox container directory for path mapping in tools
+	if l.sandboxContainerDir != "" {
+		ctx = tools.WithToolSandboxDir(ctx, l.sandboxContainerDir)
+	}
 	// Inject original sender ID for group file writer permission checks
 	if req.SenderID != "" {
 		ctx = store.WithSenderID(ctx, req.SenderID)

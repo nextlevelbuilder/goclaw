@@ -197,7 +197,11 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	bridge := sandbox.NewFsBridge(sb.ID(), "/workspace")
+	containerDir := ToolSandboxDirFromCtx(ctx)
+	if containerDir == "" {
+		containerDir = "/workspace" // fallback
+	}
+	bridge := sandbox.NewFsBridge(sb.ID(), containerDir)
 	content, err := bridge.ReadFile(ctx, path)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))

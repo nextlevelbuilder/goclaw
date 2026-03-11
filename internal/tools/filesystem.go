@@ -181,7 +181,11 @@ func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*san
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+	containerDir := ToolSandboxDirFromCtx(ctx)
+	if containerDir == "" {
+		containerDir = "/workspace" // fallback
+	}
+	return sandbox.NewFsBridge(sb.ID(), containerDir), nil
 }
 
 // resolvePathWithAllowed is like resolvePath but also allows paths under extra prefixes.

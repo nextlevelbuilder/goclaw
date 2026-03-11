@@ -329,11 +329,15 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 	}
 
 	// Map host workdir to container workdir
-	containerCwd := "/workspace"
+	containerDir := ToolSandboxDirFromCtx(ctx)
+	if containerDir == "" {
+		containerDir = "/workspace" // fallback
+	}
+	containerCwd := containerDir
 	if cwd != t.workingDir {
 		rel, relErr := filepath.Rel(t.workingDir, cwd)
 		if relErr == nil {
-			containerCwd = filepath.Join("/workspace", rel)
+			containerCwd = filepath.Join(containerDir, rel)
 		}
 	}
 

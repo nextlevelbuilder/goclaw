@@ -20,6 +20,7 @@ const (
 	ctxPeerKind    toolContextKey = "tool_peer_kind"
 	ctxLocalKey    toolContextKey = "tool_local_key" // composite key with topic/thread suffix for routing
 	ctxSandboxKey  toolContextKey = "tool_sandbox_key"
+	ctxSandboxDir  toolContextKey = "tool_sandbox_dir"
 	ctxAsyncCB     toolContextKey = "tool_async_cb"
 	ctxWorkspace   toolContextKey = "tool_workspace"
 	ctxAgentKey    toolContextKey = "tool_agent_key"
@@ -79,6 +80,15 @@ func WithToolSandboxKey(ctx context.Context, key string) context.Context {
 
 func ToolSandboxKeyFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxSandboxKey).(string)
+	return v
+}
+
+func WithToolSandboxDir(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, ctxSandboxDir, dir)
+}
+
+func ToolSandboxDirFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxSandboxDir).(string)
 	return v
 }
 
