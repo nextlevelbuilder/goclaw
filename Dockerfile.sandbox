@@ -4,14 +4,19 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    bash \
-    ca-certificates \
-    curl \
-    git \
-    jq \
-    python3 \
-    python3-pip \
-    ripgrep \
+  bash \
+  ca-certificates \
+  curl \
+  dnsutils \
+  git \
+  iputils-ping \
+  jq \
+  python3 \
+  python3-pip \
+  ripgrep \
+  sudo \
+  && echo "sandbox ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/sandbox \
+  && chmod 0440 /etc/sudoers.d/sandbox \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --shell /bin/bash sandbox
