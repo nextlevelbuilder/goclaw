@@ -96,6 +96,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			}
 			// Expand ~ and convert to absolute for filesystem operations.
+			ws = MigrateLegacyPath(ws, l.workspace)
 			ws = config.ExpandHome(ws)
 			if !filepath.IsAbs(ws) {
 				ws, _ = filepath.Abs(ws)

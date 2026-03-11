@@ -249,25 +249,10 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// Expand ~ in workspace path and ensure directory exists
 		workspace := ag.Workspace
 		if workspace != "" {
-			// Legacy default workspace migration:
-			// Older agents received a hardcoded "~/.goclaw/..." workspace. Inside Docker, this expands
-			// to an unmounted ephemeral directory (/app/.goclaw/...) and breaks sandbox containment.
-			// We dynamically re-route these to the GlobalWorkspace.
-			legacyPrefixes := []string{"~/.goclaw/", "/app/.goclaw/", "/.goclaw/"}
-			isLegacy := false
-			for _, p := range legacyPrefixes {
-				if strings.HasPrefix(workspace, p) {
-					workspace = filepath.Join(deps.GlobalWorkspace, strings.TrimPrefix(workspace, p))
-					isLegacy = true
-					break
-				}
-			}
-
-			if !isLegacy {
-				workspace = config.ExpandHome(workspace)
-				if !filepath.IsAbs(workspace) {
-					workspace, _ = filepath.Abs(workspace)
-				}
+			workspace = MigrateLegacyPath(workspace, deps.GlobalWorkspace)
+			workspace = config.ExpandHome(workspace)
+			if !filepath.IsAbs(workspace) {
+				workspace, _ = filepath.Abs(workspace)
 			}
 		}
 		if workspace == "" && deps.GlobalWorkspace != "" {
@@ -424,4 +409,21 @@ func (r *Router) InvalidateAll() {
 	r.agents = make(map[string]*agentEntry)
 	slog.Debug("invalidated all agent caches")
 }
+
+// MigrateLegacyPath converts legacy hardcoded workspace paths to the current GlobalWorkspace.
+// This handles older agents that received "~/.goclaw/...", "/app/.goclaw/...", or "/.goclaw/..."
+// as their default workspace, which are unmounted ephemeral locations in Docker.
+func MigrateLegacyPath(path, globalWorkspace string) string {
+	if globalWorkspace == "" {
+		return path
+	}
+	legacyPrefixes := []string{"~/.goclaw/", "/app/.goclaw/", "/.goclaw/"}
+	for _, p := range legacyPrefixes {
+		if strings.HasPrefix(path, p) {
+			return filepath.Join(globalWorkspace, strings.TrimPrefix(path, p))
+		}
+	}
+	return path
+}
+
 
