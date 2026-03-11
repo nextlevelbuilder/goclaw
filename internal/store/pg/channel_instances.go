@@ -145,19 +145,43 @@ func (s *PGChannelInstanceStore) scanInstances(rows *sql.Rows) ([]store.ChannelI
 }
 
 func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updates map[string]any) error {
-	// Encrypt credentials if present
+	// Merge and encrypt credentials if present
 	if credsVal, ok := updates["credentials"]; ok && credsVal != nil {
-		var credsBytes []byte
+		var newCreds map[string]any
 		switch v := credsVal.(type) {
-		case []byte:
-			credsBytes = v
-		case string:
-			credsBytes = []byte(v)
+		case map[string]any:
+			newCreds = v
 		default:
-			// Object/map from JSON — marshal to []byte
-			if b, err := json.Marshal(v); err == nil {
-				credsBytes = b
+			var raw []byte
+			switch vv := v.(type) {
+			case []byte:
+				raw = vv
+			case string:
+				raw = []byte(vv)
+			default:
+				if b, err := json.Marshal(v); err == nil {
+					raw = b
+				}
 			}
+			if len(raw) > 0 {
+				if err := json.Unmarshal(raw, &newCreds); err != nil {
+					newCreds = nil
+				}
+			}
+		}
+
+		// Merge with existing credentials so partial updates don't wipe other fields
+		if len(newCreds) > 0 {
+			existing, _ := s.loadExistingCreds(ctx, id)
+			for k, v := range newCreds {
+				existing[k] = v
+			}
+			newCreds = existing
+		}
+
+		var credsBytes []byte
+		if len(newCreds) > 0 {
+			credsBytes, _ = json.Marshal(newCreds)
 		}
 		if len(credsBytes) > 0 && s.encKey != "" {
 			encrypted, err := crypto.Encrypt(string(credsBytes), s.encKey)
@@ -170,6 +194,25 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 	}
 	updates["updated_at"] = time.Now()
 	return execMapUpdate(ctx, s.db, "channel_instances", id, updates)
+}
+
+// loadExistingCreds reads and decrypts the current credentials for merging.
+func (s *PGChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.UUID) (map[string]any, error) {
+	var raw []byte
+	err := s.db.QueryRowContext(ctx, "SELECT credentials FROM channel_instances WHERE id = $1", id).Scan(&raw)
+	if err != nil || len(raw) == 0 {
+		return make(map[string]any), err
+	}
+	if s.encKey != "" {
+		if dec, err := crypto.Decrypt(string(raw), s.encKey); err == nil {
+			raw = []byte(dec)
+		}
+	}
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return make(map[string]any), nil
+	}
+	return m, nil
 }
 
 func (s *PGChannelInstanceStore) Delete(ctx context.Context, id uuid.UUID) error {
