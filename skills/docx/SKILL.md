@@ -23,7 +23,7 @@ A .docx file is a ZIP archive containing XML files.
 Legacy `.doc` files must be converted before editing:
 
 ```bash
-python scripts/office/soffice.py --headless --convert-to docx document.doc
+soffice --headless --convert-to docx document.doc
 ```
 
 ### Reading Content
@@ -39,7 +39,7 @@ python scripts/office/unpack.py document.docx unpacked/
 ### Converting to Images
 
 ```bash
-python scripts/office/soffice.py --headless --convert-to pdf document.docx
+soffice --headless --convert-to pdf document.docx
 pdftoppm -jpeg -r 150 document.pdf page
 ```
 
@@ -586,5 +586,5 @@ After running `comment.py` (see Step 2), add markers to document.xml. For replie
 
 - **pandoc**: Text extraction
 - **docx**: `npm install -g docx` (new documents)
-- **LibreOffice**: PDF conversion (auto-configured for sandboxed environments via `scripts/office/soffice.py`)
+- **LibreOffice**: PDF conversion (`soffice` binary)
 - **Poppler**: `pdftoppm` for images

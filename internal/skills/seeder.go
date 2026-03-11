@@ -171,18 +171,41 @@ func (s *Seeder) copySharedDir(name string) {
 	}
 }
 
-// copyDir recursively copies a directory tree.
+// copyDir recursively copies a directory tree, following symlinks.
 func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+	// Resolve symlinks at the top level
+	resolved, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		resolved = src
+	}
+
+	return filepath.Walk(resolved, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		rel, err := filepath.Rel(src, path)
+		rel, err := filepath.Rel(resolved, path)
 		if err != nil {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+
+		// Handle symlinks within the tree
+		if info.Mode()&os.ModeSymlink != 0 {
+			realPath, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return err
+			}
+			realInfo, err := os.Stat(realPath)
+			if err != nil {
+				return err
+			}
+			if realInfo.IsDir() {
+				return copyDir(realPath, target)
+			}
+			info = realInfo
+			path = realPath
+		}
 
 		if info.IsDir() {
 			return os.MkdirAll(target, 0755)
