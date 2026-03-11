@@ -73,10 +73,26 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 
 	userID := store.UserIDFromContext(ctx)
-	results, err := t.memStore.Search(ctx, query, agentID.String(), userID, store.MemorySearchOptions{
+	searchOpts := store.MemorySearchOptions{
 		MaxResults: maxResults,
 		MinScore:   minScore,
-	})
+	}
+	// Apply per-agent memory config overrides if set
+	if mc := MemoryConfigFromCtx(ctx); mc != nil {
+		if mc.MaxResults > 0 && searchOpts.MaxResults <= 0 {
+			searchOpts.MaxResults = mc.MaxResults
+		}
+		if mc.VectorWeight > 0 {
+			searchOpts.VectorWeight = mc.VectorWeight
+		}
+		if mc.TextWeight > 0 {
+			searchOpts.TextWeight = mc.TextWeight
+		}
+		if mc.MinScore > 0 && searchOpts.MinScore <= 0 {
+			searchOpts.MinScore = mc.MinScore
+		}
+	}
+	results, err := t.memStore.Search(ctx, query, agentID.String(), userID, searchOpts)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("memory search failed: %v", err))
 	}

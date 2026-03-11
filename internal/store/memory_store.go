@@ -24,10 +24,12 @@ type MemorySearchResult struct {
 
 // MemorySearchOptions configures a memory search query.
 type MemorySearchOptions struct {
-	MaxResults int
-	MinScore   float64
-	Source     string // "memory", "sessions", ""
-	PathPrefix string
+	MaxResults   int
+	MinScore     float64
+	Source       string  // "memory", "sessions", ""
+	PathPrefix   string
+	VectorWeight float64 // per-agent override (0 = use store default)
+	TextWeight   float64 // per-agent override (0 = use store default)
 }
 
 // EmbeddingProvider generates vector embeddings for text.

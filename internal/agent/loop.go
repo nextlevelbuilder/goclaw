@@ -73,6 +73,19 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if req.ChannelType != "" {
 		ctx = tools.WithToolChannelType(ctx, req.ChannelType)
 	}
+	// Inject per-agent overrides from DB so tools honor per-agent settings.
+	if l.restrictToWs != nil {
+		ctx = tools.WithRestrictToWorkspace(ctx, *l.restrictToWs)
+	}
+	if l.subagentsCfg != nil {
+		ctx = tools.WithSubagentConfig(ctx, l.subagentsCfg)
+	}
+	if l.memoryCfg != nil {
+		ctx = tools.WithMemoryConfig(ctx, l.memoryCfg)
+	}
+	if l.sandboxCfg != nil {
+		ctx = tools.WithSandboxConfig(ctx, l.sandboxCfg)
+	}
 
 	// Per-user workspace isolation.
 	// Workspace path comes from user_agent_profiles (includes channel segment

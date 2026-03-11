@@ -14,14 +14,14 @@ func DefaultSubagentConfig() SubagentConfig {
 }
 
 // applyDenyList removes denied tools from the registry based on depth.
-func (sm *SubagentManager) applyDenyList(reg *Registry, depth int) {
+func (sm *SubagentManager) applyDenyList(reg *Registry, depth int, cfg SubagentConfig) {
 	// Always deny
 	for _, name := range SubagentDenyAlways {
 		reg.Unregister(name)
 	}
 
 	// Leaf deny (at max depth)
-	if depth >= sm.config.MaxSpawnDepth {
+	if depth >= cfg.MaxSpawnDepth {
 		for _, name := range SubagentDenyLeaf {
 			reg.Unregister(name)
 		}
@@ -30,13 +30,13 @@ func (sm *SubagentManager) applyDenyList(reg *Registry, depth int) {
 
 // buildSubagentSystemPrompt constructs the system prompt for a subagent,
 // matching the TS buildSubagentSystemPrompt pattern from subagent-announce.ts.
-func (sm *SubagentManager) buildSubagentSystemPrompt(task *SubagentTask) string {
+func (sm *SubagentManager) buildSubagentSystemPrompt(task *SubagentTask, cfg SubagentConfig) string {
 	parentLabel := "main agent"
 	if task.Depth >= 2 {
 		parentLabel = "parent orchestrator"
 	}
 
-	canSpawn := task.Depth < sm.config.MaxSpawnDepth
+	canSpawn := task.Depth < cfg.MaxSpawnDepth
 
 	prompt := fmt.Sprintf(`# Subagent Context
 
@@ -86,7 +86,7 @@ You are a leaf worker and CANNOT spawn further sub-agents. Focus on your assigne
 
 ## Session Context
 - Label: %s
-- Depth: %d / %d`, task.Label, task.Depth, sm.config.MaxSpawnDepth)
+- Depth: %d / %d`, task.Label, task.Depth, cfg.MaxSpawnDepth)
 
 	return prompt
 }

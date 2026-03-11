@@ -146,7 +146,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePathWithAllowed(path, workspace, t.restrict, t.allowedPrefixes)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), t.allowedPrefixes)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -177,7 +177,7 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 }
 
 func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace)
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}

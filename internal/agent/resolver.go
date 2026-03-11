@@ -15,6 +15,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -243,10 +244,12 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		sandboxEnabled := deps.SandboxEnabled
 		sandboxContainerDir := deps.SandboxContainerDir
 		sandboxWorkspaceAccess := deps.SandboxWorkspaceAccess
+		var sandboxCfgOverride *sandbox.Config
 		if c := ag.ParseSandboxConfig(); c != nil {
 			resolved := c.ToSandboxConfig()
 			sandboxContainerDir = resolved.ContainerWorkdir()
 			sandboxWorkspaceAccess = string(resolved.WorkspaceAccess)
+			sandboxCfgOverride = &resolved
 		}
 
 		// Expand ~ in workspace path and ensure directory exists
@@ -345,6 +348,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
+		restrictVal := ag.RestrictToWorkspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
 			AgentUUID:              ag.ID,
@@ -354,6 +358,10 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ContextWindow:          contextWindow,
 			MaxIterations:          maxIter,
 			Workspace:              workspace,
+			RestrictToWs:           &restrictVal,
+			SubagentsCfg:           ag.ParseSubagentsConfig(),
+			MemoryCfg:              ag.ParseMemoryConfig(),
+			SandboxCfg:             sandboxCfgOverride,
 			Bus:                    deps.Bus,
 			Sessions:               deps.Sessions,
 			Tools:                  toolsReg,

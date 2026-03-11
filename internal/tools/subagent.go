@@ -63,6 +63,7 @@ type SubagentTask struct {
 	OriginTraceID    uuid.UUID `json:"-"` // parent trace for announce linking
 	OriginRootSpanID uuid.UUID `json:"-"` // parent agent's root span ID
 	cancelFunc       context.CancelFunc `json:"-"` // per-task context cancel
+	spawnConfig      SubagentConfig `json:"-"` // resolved config at spawn time (per-agent override merged)
 }
 
 // SubagentManager manages the lifecycle of spawned subagents.
@@ -101,6 +102,32 @@ func NewSubagentManager(
 // If set, runTask() enqueues announces instead of publishing directly.
 func (sm *SubagentManager) SetAnnounceQueue(q *AnnounceQueue) {
 	sm.announceQueue = q
+}
+
+// effectiveConfig returns the per-agent context override merged with defaults,
+// or falls back to sm.config when no override is present.
+func (sm *SubagentManager) effectiveConfig(ctx context.Context) SubagentConfig {
+	override := SubagentConfigFromCtx(ctx)
+	if override == nil {
+		return sm.config
+	}
+	cfg := sm.config
+	if override.MaxConcurrent > 0 {
+		cfg.MaxConcurrent = override.MaxConcurrent
+	}
+	if override.MaxSpawnDepth > 0 {
+		cfg.MaxSpawnDepth = override.MaxSpawnDepth
+	}
+	if override.MaxChildrenPerAgent > 0 {
+		cfg.MaxChildrenPerAgent = override.MaxChildrenPerAgent
+	}
+	if override.ArchiveAfterMinutes > 0 {
+		cfg.ArchiveAfterMinutes = override.ArchiveAfterMinutes
+	}
+	if override.Model != "" {
+		cfg.Model = override.Model
+	}
+	return cfg
 }
 
 // CountRunningForParent returns the number of running tasks for a parent.
@@ -147,12 +174,13 @@ func (sm *SubagentManager) Spawn(
 	channel, chatID, peerKind string,
 	callback AsyncCallback,
 ) (string, error) {
+	cfg := sm.effectiveConfig(ctx)
 	sm.mu.Lock()
 
 	// Check depth limit
-	if depth >= sm.config.MaxSpawnDepth {
+	if depth >= cfg.MaxSpawnDepth {
 		sm.mu.Unlock()
-		return "", fmt.Errorf("spawn depth limit reached (%d/%d)", depth, sm.config.MaxSpawnDepth)
+		return "", fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
 	}
 
 	// Check concurrent limit
@@ -162,9 +190,9 @@ func (sm *SubagentManager) Spawn(
 			running++
 		}
 	}
-	if running >= sm.config.MaxConcurrent {
+	if running >= cfg.MaxConcurrent {
 		sm.mu.Unlock()
-		return "", fmt.Errorf("max concurrent subagents reached (%d/%d)", running, sm.config.MaxConcurrent)
+		return "", fmt.Errorf("max concurrent subagents reached (%d/%d)", running, cfg.MaxConcurrent)
 	}
 
 	// Check per-parent children limit
@@ -174,9 +202,9 @@ func (sm *SubagentManager) Spawn(
 			childCount++
 		}
 	}
-	if childCount >= sm.config.MaxChildrenPerAgent {
+	if childCount >= cfg.MaxChildrenPerAgent {
 		sm.mu.Unlock()
-		return "", fmt.Errorf("max children per agent reached (%d/%d)", childCount, sm.config.MaxChildrenPerAgent)
+		return "", fmt.Errorf("max children per agent reached (%d/%d)", childCount, cfg.MaxChildrenPerAgent)
 	}
 
 	id := generateSubagentID()
@@ -201,6 +229,7 @@ func (sm *SubagentManager) Spawn(
 		OriginTraceID:     tracing.TraceIDFromContext(ctx),
 		OriginRootSpanID:  tracing.ParentSpanIDFromContext(ctx),
 		CreatedAt:         time.Now().UnixMilli(),
+		spawnConfig:       cfg,
 	}
 	// Create per-task context for real goroutine cancellation
 	taskCtx, taskCancel := context.WithCancel(ctx)
@@ -225,11 +254,13 @@ func (sm *SubagentManager) RunSync(
 	task, label string,
 	channel, chatID string,
 ) (string, int, error) {
+	cfg := sm.effectiveConfig(ctx)
+
 	sm.mu.Lock()
 
-	if depth >= sm.config.MaxSpawnDepth {
+	if depth >= cfg.MaxSpawnDepth {
 		sm.mu.Unlock()
-		return "", 0, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, sm.config.MaxSpawnDepth)
+		return "", 0, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
 	}
 
 	id := generateSubagentID()
@@ -251,6 +282,7 @@ func (sm *SubagentManager) RunSync(
 		OriginTraceID:    tracing.TraceIDFromContext(ctx),
 		OriginRootSpanID: tracing.ParentSpanIDFromContext(ctx),
 		CreatedAt:        time.Now().UnixMilli(),
+		spawnConfig:      cfg,
 	}
 	sm.tasks[id] = subTask
 	sm.mu.Unlock()

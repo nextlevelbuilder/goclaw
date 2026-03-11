@@ -171,7 +171,8 @@ type Manager interface {
 	// For session scope: key = sessionKey
 	// For agent scope: key = agentID
 	// For shared scope: key = "shared"
-	Get(ctx context.Context, key string, workspace string) (Sandbox, error)
+	// If cfgOverride is non-nil, it is used instead of the global config for new containers.
+	Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error)
 
 	// Release destroys a sandbox by key.
 	Release(ctx context.Context, key string) error

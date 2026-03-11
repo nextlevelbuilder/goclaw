@@ -128,8 +128,8 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 			"status", task.Status, "iterations", iteration)
 
 		// Schedule auto-archive
-		if sm.config.ArchiveAfterMinutes > 0 {
-			go sm.scheduleArchive(task.ID, time.Duration(sm.config.ArchiveAfterMinutes)*time.Minute)
+		if task.spawnConfig.ArchiveAfterMinutes > 0 {
+			go sm.scheduleArchive(task.ID, time.Duration(task.spawnConfig.ArchiveAfterMinutes)*time.Minute)
 		}
 	}()
 
@@ -143,15 +143,15 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 
 	// Build tools for subagent (no spawn/subagent tools to prevent recursion)
 	toolsReg := sm.createTools()
-	sm.applyDenyList(toolsReg, task.Depth)
+	sm.applyDenyList(toolsReg, task.Depth, task.spawnConfig)
 
 	// Determine model (cascading priority matching TS sessions-spawn-tool.ts):
 	// 1. Per-task model override (highest)
 	// 2. SubagentConfig.Model (global subagent override)
 	// 3. SubagentManager default model (inherited from parent)
 	model = sm.model
-	if sm.config.Model != "" {
-		model = sm.config.Model
+	if task.spawnConfig.Model != "" {
+		model = task.spawnConfig.Model
 	}
 	if task.Model != "" {
 		model = task.Model
@@ -161,7 +161,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 	sm.emitSubagentSpanStart(traceCtx, subRootSpanID, taskStart, task, model)
 
 	// Build subagent system prompt (matching TS buildSubagentSystemPrompt pattern).
-	systemPrompt := sm.buildSubagentSystemPrompt(task)
+	systemPrompt := sm.buildSubagentSystemPrompt(task, task.spawnConfig)
 
 	messages := []providers.Message{
 		{Role: "system", Content: systemPrompt},
