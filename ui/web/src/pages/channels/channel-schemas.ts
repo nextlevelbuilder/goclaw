@@ -39,6 +39,7 @@ export const groupPolicyOptions = [
 export const credentialsSchema: Record<string, FieldDef[]> = {
   telegram: [
     { key: "token", label: "Bot Token", type: "password", required: true, placeholder: "123456:ABC-DEF...", help: "From @BotFather" },
+    { key: "api_server", label: "API Server URL (Optional)", type: "text", placeholder: "http://localhost:8081", help: "Only for local Telegram Bot API server (upload up to 2GB). Leave empty to use default api.telegram.org." },
     { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://proxy:8080" },
   ],
   discord: [

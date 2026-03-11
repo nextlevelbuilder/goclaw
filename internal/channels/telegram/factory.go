@@ -12,8 +12,9 @@ import (
 
 // telegramCreds maps the credentials JSON from the channel_instances table.
 type telegramCreds struct {
-	Token string `json:"token"`
-	Proxy string `json:"proxy,omitempty"`
+	Token     string `json:"token"`
+	Proxy     string `json:"proxy,omitempty"`
+	APIServer string `json:"api_server,omitempty"`
 }
 
 // telegramInstanceConfig maps the non-secret config JSONB from the channel_instances table.
@@ -69,6 +70,7 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		Enabled:        true,
 		Token:          c.Token,
 		Proxy:          c.Proxy,
+		APIServer:      c.APIServer,
 		AllowFrom:      ic.AllowFrom,
 		DMPolicy:       ic.DMPolicy,
 		GroupPolicy:    ic.GroupPolicy,

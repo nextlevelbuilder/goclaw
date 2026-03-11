@@ -27,6 +27,7 @@ type TelegramConfig struct {
 	Enabled        bool                `json:"enabled"`
 	Token          string              `json:"token"`
 	Proxy          string              `json:"proxy,omitempty"`
+	APIServer      string              `json:"api_server,omitempty"` // custom Telegram Bot API server URL (e.g. "http://localhost:8081")
 	AllowFrom      FlexibleStringSlice `json:"allow_from"`
 	DMPolicy       string              `json:"dm_policy,omitempty"`       // "pairing" (default), "allowlist", "open", "disabled"
 	GroupPolicy    string              `json:"group_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
