@@ -152,6 +152,7 @@ func wireExtras(
 		MCPPool:                mcpPool,
 		GroupWriterCache:       groupWriterCache,
 		MediaStore:             mediaStore,
+		GlobalWorkspace:        workspace,
 		OnEvent: func(event agent.AgentEvent) {
 			msgBus.Broadcast(bus.Event{
 				Name:    protocol.EventAgent,

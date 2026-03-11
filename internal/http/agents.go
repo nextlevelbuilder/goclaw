@@ -143,9 +143,6 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	if req.MaxToolIterations <= 0 {
 		req.MaxToolIterations = 20
 	}
-	if req.Workspace == "" {
-		req.Workspace = fmt.Sprintf("~/.goclaw/%s-workspace", req.AgentKey)
-	}
 	req.RestrictToWorkspace = true
 
 	// Default: enable compaction and memory for new agents
