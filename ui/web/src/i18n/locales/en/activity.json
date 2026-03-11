@@ -1,0 +1,26 @@
+{
+  "title": "Activity Log",
+  "description": "Audit trail of admin and configuration changes.",
+  "filters": {
+    "action": "Action",
+    "allActions": "All Actions",
+    "agentCreated": "Agent Created",
+    "agentUpdated": "Agent Updated",
+    "agentDeleted": "Agent Deleted",
+    "entityType": "Entity Type",
+    "allEntities": "All Entities",
+    "agent": "Agent"
+  },
+  "table": {
+    "action": "Action",
+    "actor": "Actor",
+    "entity": "Entity",
+    "entityId": "Entity ID",
+    "ip": "IP Address",
+    "time": "Time"
+  },
+  "empty": {
+    "title": "No activity logs",
+    "description": "Activity logs will appear here when admin actions are performed."
+  }
+}

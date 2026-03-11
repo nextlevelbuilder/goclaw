@@ -109,6 +109,13 @@ type Loop struct {
 
 	// Persistent media storage for cross-turn image/document access
 	mediaStore *media.Store
+
+	// Model pricing config for cost tracking (nil = no cost calculation)
+	modelPricing map[string]*config.ModelPricing
+
+	// Budget enforcement: monthly spending limit in cents (0 = unlimited)
+	budgetMonthlyCents int
+	tracingStore       store.TracingStore
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -199,6 +206,13 @@ type LoopConfig struct {
 
 	// Persistent media storage for cross-turn image/document access
 	MediaStore *media.Store
+
+	// Model pricing for cost tracking (key = "provider/model" or "model")
+	ModelPricing map[string]*config.ModelPricing
+
+	// Budget enforcement
+	BudgetMonthlyCents int
+	TracingStore       store.TracingStore
 }
 
 func NewLoop(cfg LoopConfig) *Loop {
@@ -263,6 +277,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 		groupWriterCache:       cfg.GroupWriterCache,
 		teamStore:              cfg.TeamStore,
 		mediaStore:             cfg.MediaStore,
+		modelPricing:           cfg.ModelPricing,
+		budgetMonthlyCents:     cfg.BudgetMonthlyCents,
+		tracingStore:           cfg.TracingStore,
 	}
 }
 

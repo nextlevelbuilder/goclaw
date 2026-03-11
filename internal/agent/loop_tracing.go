@@ -131,6 +131,13 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 				}
 			}
 		}
+		// Calculate cost if pricing config is available.
+		if pricing := tracing.LookupPricing(l.modelPricing, l.provider.Name(), l.model); pricing != nil {
+			cost := tracing.CalculateCost(pricing, resp.Usage)
+			if cost > 0 {
+				updates["total_cost"] = cost
+			}
+		}
 		updates["finish_reason"] = resp.FinishReason
 		verbose := collector.Verbose()
 		if verbose {
@@ -235,6 +242,15 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 			}
 			if b, err := json.Marshal(meta); err == nil {
 				updates["metadata"] = b
+			}
+		}
+		// Calculate cost for tool's internal LLM calls.
+		provider := result.Provider
+		model := result.Model
+		if pricing := tracing.LookupPricing(l.modelPricing, provider, model); pricing != nil {
+			cost := tracing.CalculateCost(pricing, result.Usage)
+			if cost > 0 {
+				updates["total_cost"] = cost
 			}
 		}
 	}

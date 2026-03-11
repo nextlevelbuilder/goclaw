@@ -39,6 +39,9 @@ type AgentData struct {
 	IsDefault           bool   `json:"is_default"`
 	Status              string `json:"status"`
 
+	// Budget: optional monthly spending limit in cents (nil = unlimited)
+	BudgetMonthlyCents *int `json:"budget_monthly_cents,omitempty"`
+
 	// Per-agent JSONB config (nullable — nil means "use global defaults")
 	ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 	SandboxConfig    json.RawMessage `json:"sandbox_config,omitempty"`

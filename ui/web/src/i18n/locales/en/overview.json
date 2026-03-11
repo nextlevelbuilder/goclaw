@@ -4,6 +4,7 @@
   "statCards": {
     "requestsToday": "Requests Today",
     "tokensToday": "Tokens Today",
+    "costToday": "Cost Today",
     "agents": "Agents",
     "channels": "Channels",
     "running": "running",

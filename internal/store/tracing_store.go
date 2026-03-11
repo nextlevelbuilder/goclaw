@@ -54,6 +54,7 @@ type TraceData struct {
 	OutputPreview     string          `json:"output_preview,omitempty"`
 	TotalInputTokens  int             `json:"total_input_tokens"`
 	TotalOutputTokens int             `json:"total_output_tokens"`
+	TotalCost         float64         `json:"total_cost"`
 	SpanCount         int             `json:"span_count"`
 	LLMCallCount      int             `json:"llm_call_count"`
 	ToolCallCount     int             `json:"tool_call_count"`
@@ -82,6 +83,7 @@ type SpanData struct {
 	Provider      string          `json:"provider,omitempty"`
 	InputTokens   int             `json:"input_tokens,omitempty"`
 	OutputTokens  int             `json:"output_tokens,omitempty"`
+	TotalCost     *float64        `json:"total_cost,omitempty"`
 	FinishReason  string          `json:"finish_reason,omitempty"`
 	ModelParams   json.RawMessage `json:"model_params,omitempty"`
 	ToolName      string          `json:"tool_name,omitempty"`
@@ -102,6 +104,22 @@ type TraceListOpts struct {
 	Offset        int
 }
 
+// CostSummaryOpts configures cost aggregation queries.
+type CostSummaryOpts struct {
+	AgentID *uuid.UUID
+	From    *time.Time
+	To      *time.Time
+}
+
+// CostSummaryRow is a single row of aggregated cost data.
+type CostSummaryRow struct {
+	AgentID           *uuid.UUID `json:"agent_id,omitempty"`
+	TotalCost         float64    `json:"total_cost"`
+	TotalInputTokens  int        `json:"total_input_tokens"`
+	TotalOutputTokens int        `json:"total_output_tokens"`
+	TraceCount        int        `json:"trace_count"`
+}
+
 // TracingStore manages LLM traces and spans.
 type TracingStore interface {
 	CreateTrace(ctx context.Context, trace *TraceData) error
@@ -117,4 +135,8 @@ type TracingStore interface {
 	// Batch operations (async flush)
 	BatchCreateSpans(ctx context.Context, spans []SpanData) error
 	BatchUpdateTraceAggregates(ctx context.Context, traceID uuid.UUID) error
+
+	// Cost aggregation
+	GetMonthlyAgentCost(ctx context.Context, agentID uuid.UUID, year int, month time.Month) (float64, error)
+	GetCostSummary(ctx context.Context, opts CostSummaryOpts) ([]CostSummaryRow, error)
 }

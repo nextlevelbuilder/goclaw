@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
-import { Save, Check, AlertCircle, Sparkles, Info } from "lucide-react";
+import { Save, Check, AlertCircle, Sparkles, Info, DollarSign } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -32,6 +33,11 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
   // Workspace
   const [restrictToWorkspace, setRestrictToWorkspace] = useState(agent.restrict_to_workspace);
 
+  // Budget (stored in cents, displayed in dollars)
+  const [budgetDollars, setBudgetDollars] = useState(
+    agent.budget_monthly_cents ? String(agent.budget_monthly_cents / 100) : "",
+  );
+
   // Self-evolve (predefined agents only)
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
   const [selfEvolve, setSelfEvolve] = useState(Boolean(otherCfg.self_evolve));
@@ -51,6 +57,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
     setSaved(false);
     try {
       const updatedOtherConfig = { ...otherCfg, self_evolve: selfEvolve };
+      const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
       await onUpdate({
         display_name: displayName,
         frontmatter: frontmatter || null,
@@ -62,6 +69,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
         status,
         is_default: isDefault,
         other_config: updatedOtherConfig,
+        budget_monthly_cents: budgetCents,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -109,6 +117,33 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
         restrictToWorkspace={restrictToWorkspace}
         onRestrictChange={setRestrictToWorkspace}
       />
+
+      {/* Budget */}
+      <Separator />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <DollarSign className="h-4 w-4 text-emerald-500" />
+          <h3 className="text-sm font-medium">{t("general.budget")}</h3>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="budget" className="text-sm font-normal">
+            {t("general.budgetLabel")}
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {t("general.budgetHint")}
+          </p>
+        </div>
+        <Input
+          id="budget"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="0.00"
+          value={budgetDollars}
+          onChange={(e) => setBudgetDollars(e.target.value)}
+          className="max-w-[200px]"
+        />
+      </div>
 
       {/* Self-Evolve (predefined agents only) */}
       {agent.agent_type === "predefined" && (

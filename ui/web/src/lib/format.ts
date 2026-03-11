@@ -31,6 +31,12 @@ export function formatTokens(count: number | null | undefined): string {
   return count.toString();
 }
 
+export function formatCost(cost: number | null | undefined): string {
+  if (cost == null || cost === 0) return "$0.00";
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
 export function formatDuration(ms: number | undefined | null): string {
   if (ms == null || isNaN(ms)) return "—";
   if (ms < 1000) return `${ms}ms`;

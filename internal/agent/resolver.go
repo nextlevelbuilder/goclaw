@@ -76,6 +76,12 @@ type ResolverDeps struct {
 
 	// Persistent media storage for cross-turn image/document access
 	MediaStore *media.Store
+
+	// Model pricing for cost tracking
+	ModelPricing map[string]*config.ModelPricing
+
+	// Tracing store for budget enforcement queries
+	TracingStore store.TracingStore
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -375,6 +381,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			GroupWriterCache:       deps.GroupWriterCache,
 			TeamStore:              deps.TeamStore,
 			MediaStore:             deps.MediaStore,
+			ModelPricing:           deps.ModelPricing,
+			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),
+			TracingStore:           deps.TracingStore,
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)
@@ -398,5 +407,12 @@ func (r *Router) InvalidateAll() {
 	defer r.mu.Unlock()
 	r.agents = make(map[string]*agentEntry)
 	slog.Debug("invalidated all agent caches")
+}
+
+func derefInt(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 

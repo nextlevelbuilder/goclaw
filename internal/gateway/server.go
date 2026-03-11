@@ -40,6 +40,7 @@ type Server struct {
 	agentsHandler  *httpapi.AgentsHandler // agent CRUD API
 	skillsHandler  *httpapi.SkillsHandler // skill management API
 	tracesHandler  *httpapi.TracesHandler // LLM trace listing API
+	wakeHandler    *httpapi.WakeHandler  // external wake/trigger API
 	mcpHandler         *httpapi.MCPHandler         // MCP server management API
 	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
@@ -54,6 +55,7 @@ type Server struct {
 	storageHandler          *httpapi.StorageHandler          // storage file management
 	mediaUploadHandler      *httpapi.MediaUploadHandler      // media upload endpoint
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
+	activityHandler         *httpapi.ActivityHandler         // activity audit log API
 	agentStore         store.AgentStore             // for context injection in tools_invoke
 	msgBus             *bus.MessageBus              // for MCP bridge media delivery
 
@@ -175,6 +177,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.tracesHandler.RegisterRoutes(mux)
 	}
 
+	// External wake/trigger API
+	if s.wakeHandler != nil {
+		s.wakeHandler.RegisterRoutes(mux)
+	}
+
 	// MCP server management API
 	if s.mcpHandler != nil {
 		s.mcpHandler.RegisterRoutes(mux)
@@ -238,6 +245,10 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// Media serve endpoint (available in all modes)
 	if s.mediaServeHandler != nil {
 		s.mediaServeHandler.RegisterRoutes(mux)
+	}
+
+	if s.activityHandler != nil {
+		s.activityHandler.RegisterRoutes(mux)
 	}
 
 	// OAuth endpoints (available in all modes)
@@ -410,6 +421,9 @@ func (s *Server) SetSkillsHandler(h *httpapi.SkillsHandler) { s.skillsHandler = 
 // SetTracesHandler sets the LLM trace listing handler.
 func (s *Server) SetTracesHandler(h *httpapi.TracesHandler) { s.tracesHandler = h }
 
+// SetWakeHandler sets the external wake/trigger handler.
+func (s *Server) SetWakeHandler(h *httpapi.WakeHandler) { s.wakeHandler = h }
+
 // SetMCPHandler sets the MCP server management handler.
 func (s *Server) SetMCPHandler(h *httpapi.MCPHandler) { s.mcpHandler = h }
 
@@ -457,6 +471,9 @@ func (s *Server) SetMemoryHandler(h *httpapi.MemoryHandler) { s.memoryHandler = 
 
 // SetKnowledgeGraphHandler sets the knowledge graph handler.
 func (s *Server) SetKnowledgeGraphHandler(h *httpapi.KnowledgeGraphHandler) { s.kgHandler = h }
+
+// SetActivityHandler sets the activity audit log handler.
+func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) { s.activityHandler = h }
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }

@@ -23,4 +23,5 @@ type Stores struct {
 	PendingMessages  PendingMessageStore
 	KnowledgeGraph   KnowledgeGraphStore
 	Contacts         ContactStore
+	Activity         ActivityStore
 }

@@ -102,6 +102,7 @@ export interface AgentData {
   compaction_config?: CompactionConfig | null;
   context_pruning?: ContextPruningConfig | null;
   other_config?: Record<string, unknown> | null;
+  budget_monthly_cents?: number | null;
 }
 
 export interface AgentShareData {

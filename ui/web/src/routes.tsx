@@ -90,6 +90,9 @@ const KnowledgeGraphPage = lazy(() =>
 const ContactsPage = lazy(() =>
   import("@/pages/contacts/contacts-page").then((m) => ({ default: m.ContactsPage })),
 );
+const ActivityPage = lazy(() =>
+  import("@/pages/activity/activity-page").then((m) => ({ default: m.ActivityPage })),
+);
 
 function PageLoader() {
   return (
@@ -145,6 +148,7 @@ export function AppRoutes() {
           <Route path={ROUTES.EVENTS} element={<EventsPage />} />
           <Route path={ROUTES.DELEGATIONS} element={<DelegationsPage />} />
           <Route path={ROUTES.USAGE} element={<UsagePage />} />
+          <Route path={ROUTES.ACTIVITY} element={<ActivityPage />} />
           <Route path={ROUTES.CHANNELS} element={<ChannelsPage key="list" />} />
           <Route path={ROUTES.CHANNEL_DETAIL} element={<ChannelsPage key="detail" />} />
           <Route path={ROUTES.CONTACTS} element={<ContactsPage />} />

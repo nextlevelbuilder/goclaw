@@ -29,14 +29,14 @@ func (s *PGTracingStore) CreateTrace(ctx context.Context, trace *store.TraceData
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO traces (id, parent_trace_id, agent_id, user_id, session_key, run_id, start_time, end_time,
 		 duration_ms, name, channel, input_preview, output_preview,
-		 total_input_tokens, total_output_tokens, span_count, llm_call_count, tool_call_count,
+		 total_input_tokens, total_output_tokens, total_cost, span_count, llm_call_count, tool_call_count,
 		 status, error, metadata, tags, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
 		trace.ID, nilUUID(trace.ParentTraceID), nilUUID(trace.AgentID), nilStr(trace.UserID), nilStr(trace.SessionKey),
 		nilStr(trace.RunID), trace.StartTime, nilTime(trace.EndTime),
 		nilInt(trace.DurationMS), nilStr(trace.Name), nilStr(trace.Channel),
 		nilStr(trace.InputPreview), nilStr(trace.OutputPreview),
-		trace.TotalInputTokens, trace.TotalOutputTokens, trace.SpanCount, trace.LLMCallCount, trace.ToolCallCount,
+		trace.TotalInputTokens, trace.TotalOutputTokens, trace.TotalCost, trace.SpanCount, trace.LLMCallCount, trace.ToolCallCount,
 		trace.Status, nilStr(trace.Error), jsonOrEmpty(trace.Metadata), pqStringArray(trace.Tags), trace.CreatedAt,
 	)
 	return err
@@ -58,12 +58,12 @@ func (s *PGTracingStore) GetTrace(ctx context.Context, traceID uuid.UUID) (*stor
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, parent_trace_id, agent_id, user_id, session_key, run_id, start_time, end_time,
 		 duration_ms, name, channel, input_preview, output_preview,
-		 total_input_tokens, total_output_tokens, span_count, llm_call_count, tool_call_count,
+		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0), span_count, llm_call_count, tool_call_count,
 		 status, error, metadata, tags, created_at
 		 FROM traces WHERE id = $1`, traceID,
 	).Scan(&d.ID, &parentTraceID, &agentID, &userID, &sessionKey, &runID, &d.StartTime, &endTime,
 		&durationMS, &name, &channel, &inputPreview, &outputPreview,
-		&d.TotalInputTokens, &d.TotalOutputTokens, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
+		&d.TotalInputTokens, &d.TotalOutputTokens, &d.TotalCost, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
 		&d.Status, &errStr, &metadata, &tags, &d.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (s *PGTracingStore) ListTraces(ctx context.Context, opts store.TraceListOpt
 
 	q := `SELECT id, parent_trace_id, agent_id, user_id, session_key, run_id, start_time, end_time,
 		 duration_ms, name, channel, input_preview, output_preview,
-		 total_input_tokens, total_output_tokens, span_count, llm_call_count, tool_call_count,
+		 total_input_tokens, total_output_tokens, COALESCE(total_cost, 0), span_count, llm_call_count, tool_call_count,
 		 status, error, metadata, tags, created_at
 		 FROM traces` + where
 
@@ -163,7 +163,7 @@ func (s *PGTracingStore) ListTraces(ctx context.Context, opts store.TraceListOpt
 
 		if err := rows.Scan(&d.ID, &parentTraceID, &agentID, &userID, &sessionKey, &runID, &d.StartTime, &endTime,
 			&durationMS, &name, &channel, &inputPreview, &outputPreview,
-			&d.TotalInputTokens, &d.TotalOutputTokens, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
+			&d.TotalInputTokens, &d.TotalOutputTokens, &d.TotalCost, &d.SpanCount, &d.LLMCallCount, &d.ToolCallCount,
 			&d.Status, &errStr, &metadata, &tags, &d.CreatedAt); err != nil {
 			continue
 		}
@@ -346,6 +346,7 @@ func (s *PGTracingStore) BatchUpdateTraceAggregates(ctx context.Context, traceID
 			tool_call_count = (SELECT COUNT(*) FROM spans WHERE trace_id = $1 AND span_type = 'tool_call'),
 			total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM spans WHERE trace_id = $1 AND span_type = 'llm_call' AND input_tokens IS NOT NULL), 0),
 			total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM spans WHERE trace_id = $1 AND span_type = 'llm_call' AND output_tokens IS NOT NULL), 0),
+			total_cost = COALESCE((SELECT SUM(total_cost) FROM spans WHERE trace_id = $1 AND total_cost IS NOT NULL), 0),
 			metadata = (
 				SELECT jsonb_build_object(
 					'total_cache_read_tokens', COALESCE(SUM((metadata->>'cache_read_tokens')::int), 0),
@@ -355,4 +356,65 @@ func (s *PGTracingStore) BatchUpdateTraceAggregates(ctx context.Context, traceID
 			)
 		WHERE id = $1`, traceID)
 	return err
+}
+
+func (s *PGTracingStore) GetMonthlyAgentCost(ctx context.Context, agentID uuid.UUID, year int, month time.Month) (float64, error) {
+	start := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	var cost float64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(total_cost), 0) FROM traces
+		 WHERE agent_id = $1 AND created_at >= $2 AND created_at < $3 AND parent_trace_id IS NULL`,
+		agentID, start, end,
+	).Scan(&cost)
+	return cost, err
+}
+
+func (s *PGTracingStore) GetCostSummary(ctx context.Context, opts store.CostSummaryOpts) ([]store.CostSummaryRow, error) {
+	var conditions []string
+	var args []any
+	argIdx := 1
+
+	// Only root traces (not delegations)
+	conditions = append(conditions, "parent_trace_id IS NULL")
+
+	if opts.AgentID != nil {
+		conditions = append(conditions, fmt.Sprintf("agent_id = $%d", argIdx))
+		args = append(args, *opts.AgentID)
+		argIdx++
+	}
+	if opts.From != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", argIdx))
+		args = append(args, *opts.From)
+		argIdx++
+	}
+	if opts.To != nil {
+		conditions = append(conditions, fmt.Sprintf("created_at < $%d", argIdx))
+		args = append(args, *opts.To)
+		argIdx++
+	}
+
+	where := " WHERE " + strings.Join(conditions, " AND ")
+
+	q := `SELECT agent_id, COALESCE(SUM(total_cost), 0), COALESCE(SUM(total_input_tokens), 0),
+		  COALESCE(SUM(total_output_tokens), 0), COUNT(*)
+		  FROM traces` + where + ` GROUP BY agent_id ORDER BY SUM(total_cost) DESC`
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.CostSummaryRow
+	for rows.Next() {
+		var r store.CostSummaryRow
+		var agentID *uuid.UUID
+		if err := rows.Scan(&agentID, &r.TotalCost, &r.TotalInputTokens, &r.TotalOutputTokens, &r.TraceCount); err != nil {
+			continue
+		}
+		r.AgentID = agentID
+		result = append(result, r)
+	}
+	return result, nil
 }

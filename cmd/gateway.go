@@ -603,6 +603,9 @@ func runGateway() {
 	if tracesH != nil {
 		server.SetTracesHandler(tracesH)
 	}
+	// External wake/trigger API
+	wakeH := httpapi.NewWakeHandler(agentRouter, cfg.Gateway.Token)
+	server.SetWakeHandler(wakeH)
 	if mcpH != nil {
 		server.SetMCPHandler(mcpH)
 	}
@@ -628,6 +631,11 @@ func runGateway() {
 			pendingMessagesH.SetProviderModel(pc.Provider, pc.Model)
 		}
 		server.SetPendingMessagesHandler(pendingMessagesH)
+	}
+
+	// Activity audit log API
+	if pgStores.Activity != nil {
+		server.SetActivityHandler(httpapi.NewActivityHandler(pgStores.Activity, cfg.Gateway.Token))
 	}
 
 	// Memory management API (wired directly, only needs MemoryStore + token)

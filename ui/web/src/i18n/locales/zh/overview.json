@@ -56,6 +56,7 @@
     "requestsToday": "今日请求",
     "running": "运行中",
     "tokensToday": "今日 Token",
+    "costToday": "今日费用",
     "users": "用户"
   },
   "systemHealth": {

@@ -1,0 +1,26 @@
+{
+  "title": "活动日志",
+  "description": "管理和配置变更的审计记录。",
+  "filters": {
+    "action": "操作",
+    "allActions": "全部",
+    "agentCreated": "创建 Agent",
+    "agentUpdated": "更新 Agent",
+    "agentDeleted": "删除 Agent",
+    "entityType": "实体类型",
+    "allEntities": "全部",
+    "agent": "Agent"
+  },
+  "table": {
+    "action": "操作",
+    "actor": "操作者",
+    "entity": "实体",
+    "entityId": "实体 ID",
+    "ip": "IP 地址",
+    "time": "时间"
+  },
+  "empty": {
+    "title": "暂无活动日志",
+    "description": "执行管理操作后，活动日志将在此显示。"
+  }
+}

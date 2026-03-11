@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -25,6 +26,7 @@ func NewTracesHandler(tracing store.TracingStore, token string) *TracesHandler {
 func (h *TracesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/traces", h.authMiddleware(h.handleList))
 	mux.HandleFunc("GET /v1/traces/{traceID}", h.authMiddleware(h.handleGet))
+	mux.HandleFunc("GET /v1/costs/summary", h.authMiddleware(h.handleCostSummary))
 }
 
 func (h *TracesHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -116,4 +118,33 @@ func (h *TracesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		"trace": trace,
 		"spans": spans,
 	})
+}
+
+func (h *TracesHandler) handleCostSummary(w http.ResponseWriter, r *http.Request) {
+	opts := store.CostSummaryOpts{}
+
+	if v := r.URL.Query().Get("agent_id"); v != "" {
+		id, err := uuid.Parse(v)
+		if err == nil {
+			opts.AgentID = &id
+		}
+	}
+	if v := r.URL.Query().Get("from"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			opts.From = &t
+		}
+	}
+	if v := r.URL.Query().Get("to"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			opts.To = &t
+		}
+	}
+
+	rows, err := h.tracing.GetCostSummary(r.Context(), opts)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }

@@ -369,6 +369,19 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		maxIter = req.MaxIterations
 	}
 
+	// Budget check: query monthly spent once before starting iterations.
+	if l.budgetMonthlyCents > 0 && l.tracingStore != nil && l.agentUUID != uuid.Nil {
+		now := time.Now().UTC()
+		spent, err := l.tracingStore.GetMonthlyAgentCost(ctx, l.agentUUID, now.Year(), now.Month())
+		if err == nil {
+			spentCents := int(spent * 100)
+			if spentCents >= l.budgetMonthlyCents {
+				slog.Warn("agent budget exceeded", "agent", l.id, "spent_cents", spentCents, "budget_cents", l.budgetMonthlyCents)
+				return nil, fmt.Errorf("monthly budget exceeded ($%.2f / $%.2f)", spent, float64(l.budgetMonthlyCents)/100)
+			}
+		}
+	}
+
 	for iteration < maxIter {
 		iteration++
 
