@@ -456,7 +456,7 @@ func wireExtras(
 		var delegateEmbProvider store.EmbeddingProvider
 		if agentStore, ok := stores.Agents.(*pg.PGAgentStore); ok {
 			memCfg := appCfg.Agents.Defaults.Memory
-			if embProvider := resolveEmbeddingProvider(appCfg, memCfg); embProvider != nil {
+			if embProvider := resolveEmbeddingProvider(appCfg, memCfg, providerReg); embProvider != nil {
 				agentStore.SetEmbeddingProvider(embProvider)
 				delegateEmbProvider = embProvider
 				slog.Info("agent embeddings enabled")

@@ -127,7 +127,7 @@ func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path st
 	var args []any
 	if userID == "" {
 		q = `SELECT c.id, c.start_line, c.end_line,
-				LEFT(c.text, 200) AS text_preview,
+				c.text AS text_preview,
 				(c.embedding IS NOT NULL) AS has_embedding
 			 FROM memory_chunks c
 			 JOIN memory_documents d ON c.document_id = d.id
@@ -136,7 +136,7 @@ func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path st
 		args = []any{aid, path}
 	} else {
 		q = `SELECT c.id, c.start_line, c.end_line,
-				LEFT(c.text, 200) AS text_preview,
+				c.text AS text_preview,
 				(c.embedding IS NOT NULL) AS has_embedding
 			 FROM memory_chunks c
 			 JOIN memory_documents d ON c.document_id = d.id

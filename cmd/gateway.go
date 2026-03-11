@@ -321,9 +321,18 @@ func runGateway() {
 	}
 
 	// Wire embedding provider to PGMemoryStore so IndexDocument generates vectors.
+	// Per-agent DB config takes priority over config file defaults.
 	if pgStores.Memory != nil {
 		memCfg := cfg.Agents.Defaults.Memory
-		if embProvider := resolveEmbeddingProvider(cfg, memCfg); embProvider != nil {
+		if pgStores.Agents != nil {
+			if defaultAgent, agErr := pgStores.Agents.GetByKey(context.Background(), "default"); agErr == nil {
+				if agentMemCfg := defaultAgent.ParseMemoryConfig(); agentMemCfg != nil {
+					memCfg = agentMemCfg
+					slog.Debug("using per-agent memory config from DB", "agent", defaultAgent.AgentKey)
+				}
+			}
+		}
+		if embProvider := resolveEmbeddingProvider(cfg, memCfg, providerRegistry); embProvider != nil {
 			pgStores.Memory.SetEmbeddingProvider(embProvider)
 			slog.Info("memory embeddings enabled", "provider", embProvider.Name(), "model", embProvider.Model())
 
@@ -478,7 +487,7 @@ func runGateway() {
 		}
 		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
 			memCfg := cfg.Agents.Defaults.Memory
-			if embProvider := resolveEmbeddingProvider(cfg, memCfg); embProvider != nil {
+			if embProvider := resolveEmbeddingProvider(cfg, memCfg, providerRegistry); embProvider != nil {
 				pgSkills.SetEmbeddingProvider(embProvider)
 				skillSearchTool.SetEmbeddingSearcher(pgSkills, embProvider)
 				slog.Info("skill embeddings enabled", "provider", embProvider.Name())
