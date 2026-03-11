@@ -253,9 +253,17 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			// Older agents received a hardcoded "~/.goclaw/..." workspace. Inside Docker, this expands
 			// to an unmounted ephemeral directory (/app/.goclaw/...) and breaks sandbox containment.
 			// We dynamically re-route these to the GlobalWorkspace.
-			if strings.HasPrefix(workspace, "~/.goclaw/") && deps.GlobalWorkspace != "" {
-				workspace = filepath.Join(deps.GlobalWorkspace, strings.TrimPrefix(workspace, "~/.goclaw/"))
-			} else {
+			legacyPrefixes := []string{"~/.goclaw/", "/app/.goclaw/", "/.goclaw/"}
+			isLegacy := false
+			for _, p := range legacyPrefixes {
+				if strings.HasPrefix(workspace, p) {
+					workspace = filepath.Join(deps.GlobalWorkspace, strings.TrimPrefix(workspace, p))
+					isLegacy = true
+					break
+				}
+			}
+
+			if !isLegacy {
 				workspace = config.ExpandHome(workspace)
 				if !filepath.IsAbs(workspace) {
 					workspace, _ = filepath.Abs(workspace)
