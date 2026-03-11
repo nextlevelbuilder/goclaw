@@ -75,14 +75,7 @@ func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return ErrorResult("No images available in this conversation. The user may not have sent an image.")
 	}
 
-	// Extract per-agent config for backward compat
-	var perAgentProvider, perAgentModel string
-	if cfg := VisionConfigFromCtx(ctx); cfg != nil {
-		perAgentProvider = cfg.Provider
-		perAgentModel = cfg.Model
-	}
-
-	chain := ResolveMediaProviderChain(ctx, "read_image", perAgentProvider, perAgentModel,
+	chain := ResolveMediaProviderChain(ctx, "read_image", "", "",
 		visionProviderPriority, visionModelDefaults, t.registry)
 
 	// Inject prompt and images into each chain entry's params

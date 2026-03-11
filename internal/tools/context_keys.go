@@ -125,31 +125,6 @@ func ToolSessionKeyFromCtx(ctx context.Context) string {
 	return v
 }
 
-// --- Vision / ImageGen config (per-agent overrides) ---
-
-const (
-	ctxVisionConfig   toolContextKey = "tool_vision_config"
-	ctxImageGenConfig toolContextKey = "tool_imagegen_config"
-)
-
-func WithVisionConfig(ctx context.Context, cfg *config.VisionConfig) context.Context {
-	return context.WithValue(ctx, ctxVisionConfig, cfg)
-}
-
-func VisionConfigFromCtx(ctx context.Context) *config.VisionConfig {
-	v, _ := ctx.Value(ctxVisionConfig).(*config.VisionConfig)
-	return v
-}
-
-func WithImageGenConfig(ctx context.Context, cfg *config.ImageGenConfig) context.Context {
-	return context.WithValue(ctx, ctxImageGenConfig, cfg)
-}
-
-func ImageGenConfigFromCtx(ctx context.Context) *config.ImageGenConfig {
-	v, _ := ctx.Value(ctxImageGenConfig).(*config.ImageGenConfig)
-	return v
-}
-
 // --- Builtin tool settings (global DB overrides) ---
 
 const ctxBuiltinToolSettings toolContextKey = "tool_builtin_settings"

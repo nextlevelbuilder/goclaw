@@ -341,22 +341,6 @@ type ToolPolicySpec struct {
 	Deny       []string                   `json:"deny,omitempty"`
 	AlsoAllow  []string                   `json:"alsoAllow,omitempty"`
 	ByProvider map[string]*ToolPolicySpec `json:"byProvider,omitempty"`
-	Vision     *VisionConfig              `json:"vision,omitempty"`   // per-agent vision provider/model override
-	ImageGen   *ImageGenConfig            `json:"imageGen,omitempty"` // per-agent image generation config
-}
-
-// VisionConfig configures the provider and model for vision tools (read_image).
-type VisionConfig struct {
-	Provider string `json:"provider,omitempty"` // e.g. "gemini", "anthropic"
-	Model    string `json:"model,omitempty"`    // e.g. "gemini-2.0-flash"
-}
-
-// ImageGenConfig configures the provider and model for image generation (create_image).
-type ImageGenConfig struct {
-	Provider string `json:"provider,omitempty"` // provider with image gen API (e.g. "openrouter")
-	Model    string `json:"model,omitempty"`    // e.g. "google/gemini-2.5-flash-image-preview"
-	Size     string `json:"size,omitempty"`     // default aspect ratio / size
-	Quality  string `json:"quality,omitempty"`  // "standard" or "hd"
 }
 
 type WebToolsConfig struct {
