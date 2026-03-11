@@ -14,6 +14,7 @@ import (
 type ListFilesTool struct {
 	workspace       string
 	restrict        bool
+	allowedPrefixes []string // path prefixes to allow access to (e.g. skills dirs)
 	deniedPrefixes  []string // path prefixes to deny access to (e.g. .goclaw)
 	sandboxMgr      sandbox.Manager
 	contextFileIntc *ContextFileInterceptor // unused, satisfies InterceptorAware
@@ -31,6 +32,12 @@ func (t *ListFilesTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 // DenyPaths adds path prefixes that list_files must reject/filter.
 func (t *ListFilesTool) DenyPaths(prefixes ...string) {
 	t.deniedPrefixes = append(t.deniedPrefixes, prefixes...)
+}
+
+// AllowPaths adds extra path prefixes that list_files is allowed to access
+// even when restrict_to_workspace is true (e.g. skills directories).
+func (t *ListFilesTool) AllowPaths(prefixes ...string) {
+	t.allowedPrefixes = append(t.allowedPrefixes, prefixes...)
 }
 
 func NewListFilesTool(workspace string, restrict bool) *ListFilesTool {
@@ -88,7 +95,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, t.restrict)
+	resolved, err := resolvePathWithAllowed(path, workspace, t.restrict, t.allowedPrefixes)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

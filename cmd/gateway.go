@@ -528,6 +528,20 @@ func runGateway() {
 		}
 	}
 
+	// Allow list_files to access skills directories (outside workspace).
+	if listTool, ok := toolsReg.Get("list_files"); ok {
+		if pa, ok := listTool.(tools.PathAllowable); ok {
+			pa.AllowPaths(globalSkillsDir)
+			if homeDir != "" {
+				pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
+				pa.AllowPaths(filepath.Join(homeDir, ".goclaw", "cli-workspaces"))
+			}
+			if pgStores.Skills != nil {
+				pa.AllowPaths(pgStores.Skills.Dirs()...)
+			}
+		}
+	}
+
 	// Memory tools are PG-backed; always available.
 	hasMemory := true
 
