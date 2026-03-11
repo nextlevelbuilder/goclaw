@@ -192,6 +192,23 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 }
 
 func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr string, replaceAll bool, sandboxKey string) *Result {
+	// Map effective workspace to container path
+	workspace := ToolWorkspaceFromCtx(ctx)
+	if workspace == "" {
+		workspace = t.workspace
+	}
+
+	containerCwd, err := MapHostPathToSandbox(ctx, workspace, t.workspace)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox edit: %v", err))
+	}
+
+	// Resolve the requested 'path' relative to the agent's container workdir.
+	containerPath := path
+	if !filepath.IsAbs(path) {
+		containerPath = filepath.Join(containerCwd, path)
+	}
+
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
@@ -202,7 +219,7 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		containerDir = "/workspace" // fallback
 	}
 	bridge := sandbox.NewFsBridge(sb.ID(), containerDir)
-	content, err := bridge.ReadFile(ctx, path)
+	content, err := bridge.ReadFile(ctx, containerPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))
 	}
@@ -212,7 +229,7 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		return result
 	}
 
-	if err := bridge.WriteFile(ctx, path, newContent); err != nil {
+	if err := bridge.WriteFile(ctx, containerPath, newContent); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
 	}
 

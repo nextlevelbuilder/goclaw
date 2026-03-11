@@ -329,18 +329,9 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 	}
 
 	// Map host workdir to container workdir
-	containerDir := ToolSandboxDirFromCtx(ctx)
-	if containerDir == "" {
-		containerDir = "/workspace" // fallback
-	}
-	containerCwd := containerDir
-	if cwd != t.workingDir {
-		rel, relErr := filepath.Rel(t.workingDir, cwd)
-		if relErr == nil && !strings.HasPrefix(filepath.Clean(rel), "..") {
-			containerCwd = filepath.Join(containerDir, rel)
-		} else {
-			return ErrorResult(fmt.Sprintf("sandbox exec: agent workspace (%s) is outside the global sandbox mount (%s)", cwd, t.workingDir))
-		}
+	containerCwd, err := MapHostPathToSandbox(ctx, cwd, t.workingDir)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox exec: %v", err))
 	}
 
 	result, err := sb.Exec(ctx, []string{"sh", "-c", command}, containerCwd)

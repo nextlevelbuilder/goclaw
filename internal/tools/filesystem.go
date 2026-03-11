@@ -163,12 +163,29 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 }
 
 func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey string) *Result {
+	// Map effective workspace to container path
+	workspace := ToolWorkspaceFromCtx(ctx)
+	if workspace == "" {
+		workspace = t.workspace
+	}
+
+	containerCwd, err := MapHostPathToSandbox(ctx, workspace, t.workspace)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox read: %v", err))
+	}
+
+	// Resolve the requested 'path' relative to the agent's container workdir.
+	containerPath := path
+	if !filepath.IsAbs(path) {
+		containerPath = filepath.Join(containerCwd, path)
+	}
+
 	bridge, err := t.getFsBridge(ctx, sandboxKey)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	data, err := bridge.ReadFile(ctx, path)
+	data, err := bridge.ReadFile(ctx, containerPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))
 	}

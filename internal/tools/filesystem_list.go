@@ -128,12 +128,30 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 }
 
 func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey string) *Result {
+	// Map effective workspace to container path
+	workspace := ToolWorkspaceFromCtx(ctx)
+	if workspace == "" {
+		workspace = t.workspace
+	}
+
+	containerCwd, err := MapHostPathToSandbox(ctx, workspace, t.workspace)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox list: %v", err))
+	}
+
+	// Resolve the requested 'path' relative to the agent's container workdir.
+	// FsBridge.ListDir expects either a relative path or an absolute path inside the workdir.
+	containerPath := path
+	if !filepath.IsAbs(path) {
+		containerPath = filepath.Join(containerCwd, path)
+	}
+
 	bridge, err := t.getFsBridge(ctx, sandboxKey)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	output, err := bridge.ListDir(ctx, path)
+	output, err := bridge.ListDir(ctx, containerPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to list directory: %v", err))
 	}

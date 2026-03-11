@@ -153,23 +153,36 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 }
 
 func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, sandboxKey string, deliver bool) *Result {
+	// Map effective workspace to container path
+	workspace := ToolWorkspaceFromCtx(ctx)
+	if workspace == "" {
+		workspace = t.workspace
+	}
+
+	containerCwd, err := MapHostPathToSandbox(ctx, workspace, t.workspace)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("sandbox write: %v", err))
+	}
+
+	// Resolve the requested 'path' relative to the agent's container workdir.
+	containerPath := path
+	if !filepath.IsAbs(path) {
+		containerPath = filepath.Join(containerCwd, path)
+	}
+
 	bridge, err := t.getFsBridge(ctx, sandboxKey)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	if err := bridge.WriteFile(ctx, path, content); err != nil {
+	if err := bridge.WriteFile(ctx, containerPath, content); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
 	}
 
 	result := SilentResult(fmt.Sprintf("File written: %s (%d bytes)", path, len(content)))
 	result.Deliverable = content
 	if deliver {
-		// Sandbox workspace is bind-mounted — resolve to host path for delivery
-		workspace := ToolWorkspaceFromCtx(ctx)
-		if workspace == "" {
-			workspace = t.workspace
-		}
+		// hostPath is already correctly absolute (workspace is calculated above)
 		hostPath := filepath.Join(workspace, path)
 		result.Media = []bus.MediaFile{{Path: hostPath}}
 	}
