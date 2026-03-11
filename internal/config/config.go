@@ -208,6 +208,7 @@ type SandboxConfig struct {
 	User           string `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
 	TmpfsSizeMB    int    `json:"tmpfs_size_mb,omitempty"`    // default tmpfs size in MB (0 = Docker default)
 	MaxOutputBytes int    `json:"max_output_bytes,omitempty"` // limit exec output capture (default 1MB)
+	Workdir        string `json:"workdir,omitempty"`          // container workdir (default "/workspace")
 
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
@@ -280,6 +281,9 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 	}
 	if sc.MaxOutputBytes > 0 {
 		cfg.MaxOutputBytes = sc.MaxOutputBytes
+	}
+	if sc.Workdir != "" {
+		cfg.Workdir = sc.Workdir
 	}
 
 	// Pruning
