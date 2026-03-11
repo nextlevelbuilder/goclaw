@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,18 +18,20 @@ import (
 
 // AgentsHandler handles agent CRUD and sharing endpoints.
 type AgentsHandler struct {
-	agents   store.AgentStore
-	token    string
-	msgBus   *bus.MessageBus  // for cache invalidation events (nil = no events)
-	summoner *AgentSummoner   // LLM-based agent setup (nil = disabled)
-	isOwner  func(string) bool // checks if user ID is a system owner (nil = no owners configured)
+	agents    store.AgentStore
+	token     string
+	workspace string
+	msgBus    *bus.MessageBus   // for cache invalidation events (nil = no events)
+	summoner  *AgentSummoner    // LLM-based agent setup (nil = disabled)
+	isOwner   func(string) bool // checks if user ID is a system owner (nil = no owners configured)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
 // isOwner is a function that checks if a user ID is in GOCLAW_OWNER_IDS (nil = disabled).
-func NewAgentsHandler(agents store.AgentStore, token string, msgBus *bus.MessageBus, summoner *AgentSummoner, isOwner func(string) bool) *AgentsHandler {
-	return &AgentsHandler{agents: agents, token: token, msgBus: msgBus, summoner: summoner, isOwner: isOwner}
+func NewAgentsHandler(agents store.AgentStore, token string, workspace string, msgBus *bus.MessageBus, summoner *AgentSummoner, isOwner func(string) bool) *AgentsHandler {
+	return &AgentsHandler{agents: agents, token: token, workspace: workspace, msgBus: msgBus, summoner: summoner, isOwner: isOwner}
 }
+
 
 // isOwnerUser checks if the given user ID is a system owner.
 func (h *AgentsHandler) isOwnerUser(userID string) bool {
@@ -143,6 +146,9 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.MaxToolIterations = 20
 	}
 	req.RestrictToWorkspace = true
+	if req.Workspace == "" && h.workspace != "" {
+		req.Workspace = filepath.Join(h.workspace, req.AgentKey+"-workspace")
+	}
 
 	// Default: enable compaction and memory for new agents
 	if len(req.CompactionConfig) == 0 {

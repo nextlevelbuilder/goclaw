@@ -257,6 +257,13 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 		if workspace == "" && deps.GlobalWorkspace != "" {
 			workspace = filepath.Join(deps.GlobalWorkspace, ag.AgentKey+"-workspace")
+			// Proactively update the record in the database so the UI shows it too.
+			// Run in background to avoid blocking the first chat response.
+			go func(as store.AgentStore, id uuid.UUID, ws string) {
+				if err := as.Update(context.Background(), id, map[string]any{"workspace": ws}); err != nil {
+					slog.Warn("failed to persist default agent workspace", "agent_id", id, "workspace", ws, "error", err)
+				}
+			}(deps.AgentStore, ag.ID, workspace)
 		}
 
 		if workspace != "" {
