@@ -24,6 +24,7 @@ const (
 	ctxWorkspace   toolContextKey = "tool_workspace"
 	ctxAgentKey    toolContextKey = "tool_agent_key"
 	ctxSessionKey  toolContextKey = "tool_session_key" // origin session key for announce routing
+	ctxRestrictWs  toolContextKey = "tool_restrict_to_workspace"
 )
 
 func WithToolChannel(ctx context.Context, channel string) context.Context {
@@ -98,6 +99,28 @@ func WithToolWorkspace(ctx context.Context, ws string) context.Context {
 func ToolWorkspaceFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxWorkspace).(string)
 	return v
+}
+
+// WithRestrictToWorkspace injects a per-agent restrict_to_workspace override into context.
+// Tools read this via RestrictFromCtx() to honor per-agent DB settings.
+func WithRestrictToWorkspace(ctx context.Context, restrict bool) context.Context {
+	return context.WithValue(ctx, ctxRestrictWs, restrict)
+}
+
+// RestrictFromCtx returns the per-agent restrict_to_workspace override.
+// Returns (value, true) if set in context, or (false, false) if not set.
+func RestrictFromCtx(ctx context.Context) (bool, bool) {
+	v, ok := ctx.Value(ctxRestrictWs).(bool)
+	return v, ok
+}
+
+// effectiveRestrict returns the per-agent context override if set,
+// otherwise falls back to the tool's constructor default.
+func effectiveRestrict(ctx context.Context, toolDefault bool) bool {
+	if v, ok := RestrictFromCtx(ctx); ok {
+		return v
+	}
+	return toolDefault
 }
 
 // WithToolAgentKey injects the calling agent's key into context.

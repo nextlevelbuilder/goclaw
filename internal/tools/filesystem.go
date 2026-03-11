@@ -146,7 +146,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePathWithAllowed(path, workspace, t.restrict, t.allowedPrefixes)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), t.allowedPrefixes)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

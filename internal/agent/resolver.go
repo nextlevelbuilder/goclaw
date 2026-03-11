@@ -345,6 +345,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
+		restrictVal := ag.RestrictToWorkspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
 			AgentUUID:              ag.ID,
@@ -354,6 +355,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ContextWindow:          contextWindow,
 			MaxIterations:          maxIter,
 			Workspace:              workspace,
+			RestrictToWs:           &restrictVal,
 			Bus:                    deps.Bus,
 			Sessions:               deps.Sessions,
 			Tools:                  toolsReg,

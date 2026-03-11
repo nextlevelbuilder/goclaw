@@ -88,7 +88,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, t.restrict)
+	resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, t.restrict))
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

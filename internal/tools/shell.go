@@ -250,7 +250,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		cwd = t.workingDir
 	}
 	if wd, _ := args["working_dir"].(string); wd != "" {
-		if t.restrict {
+		if effectiveRestrict(ctx, t.restrict) {
 			resolved, err := resolvePath(wd, t.workingDir, true)
 			if err != nil {
 				return ErrorResult(err.Error())

@@ -46,6 +46,7 @@ type Loop struct {
 	maxIterations int
 	maxToolCalls  int
 	workspace     string
+	restrictToWs  *bool // per-agent override from DB (nil = use tool default)
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
 	sessions        store.SessionStore
@@ -147,6 +148,7 @@ type LoopConfig struct {
 	MaxIterations   int
 	MaxToolCalls    int
 	Workspace       string
+	RestrictToWs    *bool // per-agent DB override (nil = use config default)
 	Bus             bus.EventPublisher
 	Sessions        store.SessionStore
 	Tools           *tools.Registry
@@ -248,6 +250,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		maxIterations:          cfg.MaxIterations,
 		maxToolCalls:           cfg.MaxToolCalls,
 		workspace:              cfg.Workspace,
+		restrictToWs:           cfg.RestrictToWs,
 		eventPub:               cfg.Bus,
 		sessions:               cfg.Sessions,
 		tools:                  cfg.Tools,

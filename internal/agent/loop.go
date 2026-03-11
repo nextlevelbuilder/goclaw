@@ -73,6 +73,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if req.ChannelType != "" {
 		ctx = tools.WithToolChannelType(ctx, req.ChannelType)
 	}
+	// Inject per-agent restrict_to_workspace override (from DB) so tools honor per-agent settings.
+	if l.restrictToWs != nil {
+		ctx = tools.WithRestrictToWorkspace(ctx, *l.restrictToWs)
+	}
 
 	// Per-user workspace isolation.
 	// Workspace path comes from user_agent_profiles (includes channel segment
