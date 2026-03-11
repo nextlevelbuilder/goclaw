@@ -336,8 +336,10 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 	containerCwd := containerDir
 	if cwd != t.workingDir {
 		rel, relErr := filepath.Rel(t.workingDir, cwd)
-		if relErr == nil {
+		if relErr == nil && !strings.HasPrefix(filepath.Clean(rel), "..") {
 			containerCwd = filepath.Join(containerDir, rel)
+		} else {
+			return ErrorResult(fmt.Sprintf("sandbox exec: agent workspace (%s) is outside the global sandbox mount (%s)", cwd, t.workingDir))
 		}
 	}
 
