@@ -53,8 +53,18 @@ export function useWsQueryInvalidation() {
     [queryClient],
   );
 
+  // Skill dep check events → refresh skills list (async check after startup)
+  const handleSkillDepsEvent = useCallback(
+    () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.skills.all });
+    },
+    [queryClient],
+  );
+
   useWsEvent(Events.AGENT, handleAgentEvent);
   useWsEvent(Events.TRACE_UPDATED, handleTraceUpdated);
   useWsEvent(Events.CRON, handleCronEvent);
   useWsEvent(Events.HEALTH, handleHealthEvent);
+  useWsEvent(Events.SKILL_DEPS_CHECKED, handleSkillDepsEvent);
+  useWsEvent(Events.SKILL_DEPS_COMPLETE, handleSkillDepsEvent);
 }

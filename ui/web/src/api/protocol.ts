@@ -199,6 +199,10 @@ export const Events = {
 
   // Trace lifecycle
   TRACE_UPDATED: "trace.updated",
+
+  // Skill dependency check (realtime progress during startup/rescan)
+  SKILL_DEPS_CHECKED: "skill.deps.checked",
+  SKILL_DEPS_COMPLETE: "skill.deps.complete",
 } as const;
 
 /** All event names relevant to team debug view */

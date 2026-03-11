@@ -59,6 +59,10 @@ const (
 	// Trace lifecycle events (realtime trace/span updates).
 	EventTraceUpdated = "trace.updated"
 
+	// Skill dependency check events (realtime progress during startup/rescan).
+	EventSkillDepsChecked  = "skill.deps.checked"
+	EventSkillDepsComplete = "skill.deps.complete"
+
 	// Cache invalidation events (internal, not forwarded to WS clients).
 	EventCacheInvalidate = "cache.invalidate"
 
