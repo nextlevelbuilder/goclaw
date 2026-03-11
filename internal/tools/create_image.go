@@ -131,7 +131,7 @@ func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvide
 	slog.Info("create_image: calling image generation API",
 		"provider", providerName, "model", model, "aspect_ratio", aspectRatio)
 
-	switch ProviderTypeFromName(providerName) {
+	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
 	case "gemini":
 		return t.callGeminiNativeImageGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
 	case "openrouter":

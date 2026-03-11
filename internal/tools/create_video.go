@@ -150,7 +150,7 @@ func (t *CreateVideoTool) callProvider(ctx context.Context, cp credentialProvide
 	slog.Info("create_video: calling video generation API",
 		"provider", providerName, "model", model, "duration", duration, "aspect_ratio", aspectRatio)
 
-	switch ProviderTypeFromName(providerName) {
+	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
 	case "gemini":
 		return t.callGeminiVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio, params)
 	case "minimax":

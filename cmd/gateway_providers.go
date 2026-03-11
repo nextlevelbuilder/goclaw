@@ -318,6 +318,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			registry.Register(providers.NewOpenAIProvider(p.Name, p.APIKey, base, ""))
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
+			prov.WithProviderType(p.ProviderType)
 			if p.ProviderType == store.ProviderMiniMax {
 				prov.WithChatPath("/text/chatcompletion_v2")
 			}

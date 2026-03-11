@@ -181,7 +181,7 @@ func (t *CreateAudioTool) callProvider(ctx context.Context, cp credentialProvide
 	slog.Info("create_audio: calling music generation API",
 		"provider", providerName, "model", model)
 
-	switch ProviderTypeFromName(providerName) {
+	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
 	case "minimax":
 		return callMinimaxMusicGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
 	case "suno":
