@@ -51,6 +51,10 @@ def unpack(
         output_path.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(input_path, "r") as zf:
+            for info in zf.infolist():
+                target = (output_path / info.filename).resolve()
+                if not str(target).startswith(str(output_path.resolve())):
+                    raise ValueError(f"Zip entry escapes target: {info.filename}")
             zf.extractall(output_path)
 
         xml_files = list(output_path.rglob("*.xml")) + list(output_path.rglob("*.rels"))

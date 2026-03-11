@@ -1,0 +1,4 @@
+{
+  "requires": ["python3"],
+  "requires_python": ["openpyxl", "defusedxml", "lxml"]
+}
