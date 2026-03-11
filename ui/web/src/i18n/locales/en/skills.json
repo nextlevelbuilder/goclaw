@@ -61,6 +61,13 @@
     "internalOption": "Internal (granted agents/users)",
     "publicOption": "Public (all agents)"
   },
+  "system": "System",
+  "deps": {
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}"
+  },
   "detail": {
     "title": "Skill Detail",
     "content": "Content",

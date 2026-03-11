@@ -214,7 +214,9 @@
     "noSkillsDesc": "在Skill页面上传Skill以授予Agent。",
     "skillsGranted": "已授予 {{granted}} / {{total}} 个Skill",
     "filterSkills": "筛选Skill...",
-    "noSkillsMatch": "没有Skill匹配您的搜索。"
+    "noSkillsMatch": "没有Skill匹配您的搜索。",
+    "system": "系统",
+    "alwaysAvailable": "始终可用"
   },
   "instances": {
     "loadingInstances": "加载实例中...",

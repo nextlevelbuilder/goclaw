@@ -61,6 +61,13 @@
     "internalOption": "内部（已授权的Agent/用户）",
     "publicOption": "公开（所有Agent）"
   },
+  "system": "系统",
+  "deps": {
+    "rescan": "重新扫描依赖",
+    "rescanning": "扫描中...",
+    "rescanSuccess": "已更新 {{count}} 个Skill",
+    "missing": "缺少: {{deps}}"
+  },
   "detail": {
     "title": "Skill详情",
     "content": "内容",

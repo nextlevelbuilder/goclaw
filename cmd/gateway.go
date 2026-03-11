@@ -494,6 +494,26 @@ func runGateway() {
 		if len(storeDirs) > 0 {
 			skillsLoader.SetManagedDir(storeDirs[0])
 			slog.Info("skills-store directory wired into loader", "dir", storeDirs[0])
+
+			// Seed system/bundled skills into DB
+			bundledSkillsDir := os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
+			if bundledSkillsDir == "" {
+				// Default: check for skills/ directory relative to binary
+				if info, err := os.Stat("skills"); err == nil && info.IsDir() {
+					bundledSkillsDir = "skills"
+				}
+			}
+			if bundledSkillsDir != "" {
+				if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
+					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], pgSkills)
+					seeded, skipped, err := seeder.Seed(context.Background())
+					if err != nil {
+						slog.Warn("system skills seed failed", "error", err)
+					} else if seeded > 0 {
+						slog.Info("system skills seeded", "seeded", seeded, "skipped", skipped)
+					}
+				}
+			}
 		}
 	}
 

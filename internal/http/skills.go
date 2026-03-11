@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -57,6 +58,7 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/skills/{id}/versions", h.authMiddleware(h.handleListVersions))
 	mux.HandleFunc("GET /v1/skills/{id}/files/{path...}", h.authMiddleware(h.handleReadFile))
 	mux.HandleFunc("GET /v1/skills/{id}/files", h.authMiddleware(h.handleListFiles))
+	mux.HandleFunc("POST /v1/skills/rescan-deps", h.authMiddleware(h.handleRescanDeps))
 }
 
 func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -112,6 +114,7 @@ func (h *SkillsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	delete(updates, "id")
 	delete(updates, "owner_id")
 	delete(updates, "file_path")
+	delete(updates, "is_system")
 
 	if err := h.skills.UpdateSkill(id, updates); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -132,10 +135,57 @@ func (h *SkillsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.skills.DeleteSkill(id); err != nil {
+		if err.Error() == "cannot delete system skill" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cannot delete system skill"})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
 	h.skills.BumpVersion()
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// handleRescanDeps re-checks dependencies for all skills and updates their status.
+func (h *SkillsHandler) handleRescanDeps(w http.ResponseWriter, r *http.Request) {
+	allSkills := h.skills.ListSkills()
+	updated := 0
+
+	type depResult struct {
+		Slug    string   `json:"slug"`
+		Status  string   `json:"status"`
+		Missing []string `json:"missing,omitempty"`
+	}
+	var results []depResult
+
+	for _, sk := range allSkills {
+		manifest := skills.ScanSkillDeps(sk.BaseDir)
+		if manifest == nil || manifest.IsEmpty() {
+			results = append(results, depResult{Slug: sk.Slug, Status: "ok"})
+			continue
+		}
+
+		ok, missing := skills.CheckSkillDeps(manifest)
+		id, err := uuid.Parse(sk.ID)
+		if err != nil {
+			continue
+		}
+
+		if ok {
+			results = append(results, depResult{Slug: sk.Slug, Status: "ok"})
+		} else {
+			_ = h.skills.UpdateSkill(id, map[string]any{"status": "archived"})
+			results = append(results, depResult{Slug: sk.Slug, Status: "archived", Missing: missing})
+			updated++
+		}
+	}
+
+	if updated > 0 {
+		h.skills.BumpVersion()
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"updated": updated,
+		"results": results,
+	})
 }

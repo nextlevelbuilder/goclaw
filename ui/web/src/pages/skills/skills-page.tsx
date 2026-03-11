@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Zap, Pencil, RefreshCw, Upload, Trash2 } from "lucide-react";
+import { Zap, Pencil, RefreshCw, Upload, Trash2, ScanSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -27,7 +27,7 @@ export function SkillsPage() {
   const { t } = useTranslation("skills");
   const {
     skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
-    getSkillVersions, getSkillFiles, getSkillFileContent,
+    getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps,
   } = useSkills();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && skills.length === 0);
@@ -37,6 +37,7 @@ export function SkillsPage() {
   const [editTarget, setEditTarget] = useState<SkillInfo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillInfo | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
 
   const filtered = skills.filter(
     (s: SkillInfo) =>
@@ -78,6 +79,15 @@ export function SkillsPage() {
     }
   };
 
+  const handleRescanDeps = async () => {
+    setRescanning(true);
+    try {
+      await rescanDeps();
+    } finally {
+      setRescanning(false);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6">
       <PageHeader
@@ -87,6 +97,9 @@ export function SkillsPage() {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
               <Upload className="h-3.5 w-3.5" /> {t("upload.button")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleRescanDeps} disabled={rescanning} className="gap-1">
+              <ScanSearch className="h-3.5 w-3.5" /> {t("deps.rescan")}
             </Button>
             <Button variant="outline" size="sm" onClick={refresh} disabled={spinning} className="gap-1">
               <RefreshCw className={"h-3.5 w-3.5" + (spinning ? " animate-spin" : "")} /> {t("refresh", { ns: "common" })}
@@ -138,6 +151,11 @@ export function SkillsPage() {
                         >
                           {skill.name}
                         </button>
+                        {skill.is_system && (
+                          <Badge variant="outline" className="border-blue-500 text-blue-600 text-[10px]">
+                            {t("system")}
+                          </Badge>
+                        )}
                         {skill.version ? (
                           <span className="text-xs text-muted-foreground">v{skill.version}</span>
                         ) : null}
@@ -183,14 +201,16 @@ export function SkillsPage() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDeleteTarget(skill)}
-                              className="gap-1 text-destructive hover:text-destructive"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {!skill.is_system && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setDeleteTarget(skill)}
+                                className="gap-1 text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>

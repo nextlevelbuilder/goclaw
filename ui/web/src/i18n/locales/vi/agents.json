@@ -214,7 +214,9 @@
     "noSkillsDesc": "Tải lên skill trong trang Skill để cấp cho agent.",
     "skillsGranted": "{{granted}} trong {{total}} skill được cấp",
     "filterSkills": "Lọc skill...",
-    "noSkillsMatch": "Không có skill nào phù hợp."
+    "noSkillsMatch": "Không có skill nào phù hợp.",
+    "system": "Hệ thống",
+    "alwaysAvailable": "Luôn khả dụng"
   },
   "instances": {
     "loadingInstances": "Đang tải phiên bản...",

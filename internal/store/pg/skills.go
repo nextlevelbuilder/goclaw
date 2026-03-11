@@ -64,7 +64,7 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 
 	// Cache miss or TTL expired → query DB
 	rows, err := s.db.Query(
-		`SELECT id, name, slug, description, visibility, tags, version FROM skills WHERE status = 'active' ORDER BY name`)
+		`SELECT id, name, slug, description, visibility, tags, version, is_system FROM skills WHERE status = 'active' ORDER BY name`)
 	if err != nil {
 		return nil
 	}
@@ -77,12 +77,14 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 		var desc *string
 		var tags []string
 		var version int
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version); err != nil {
+		var isSystem bool
+		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem); err != nil {
 			continue
 		}
 		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
 		info.Visibility = visibility
 		info.Tags = tags
+		info.IsSystem = isSystem
 		result = append(result, info)
 	}
 
@@ -162,15 +164,17 @@ func (s *PGSkillStore) GetSkill(name string) (*store.SkillInfo, bool) {
 	var desc *string
 	var tags []string
 	var version int
+	var isSystem bool
 	err := s.db.QueryRow(
-		"SELECT id, name, slug, description, visibility, tags, version FROM skills WHERE slug = $1 AND status = 'active'", name,
-	).Scan(&id, &skillName, &slug, &desc, &visibility, pq.Array(&tags), &version)
+		"SELECT id, name, slug, description, visibility, tags, version, is_system FROM skills WHERE slug = $1 AND status = 'active'", name,
+	).Scan(&id, &skillName, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem)
 	if err != nil {
 		return nil, false
 	}
 	info := buildSkillInfo(id.String(), skillName, slug, desc, version, s.baseDir)
 	info.Visibility = visibility
 	info.Tags = tags
+	info.IsSystem = isSystem
 	return &info, true
 }
 
@@ -223,6 +227,15 @@ func (s *PGSkillStore) UpdateSkill(id uuid.UUID, updates map[string]any) error {
 }
 
 func (s *PGSkillStore) DeleteSkill(id uuid.UUID) error {
+	// Reject deletion of system skills
+	var isSystem bool
+	if err := s.db.QueryRow("SELECT is_system FROM skills WHERE id = $1", id).Scan(&isSystem); err != nil {
+		return fmt.Errorf("check skill: %w", err)
+	}
+	if isSystem {
+		return fmt.Errorf("cannot delete system skill")
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -316,6 +329,79 @@ func (s *PGSkillStore) GetNextVersion(slug string) int {
 	var maxVersion int
 	s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM skills WHERE slug = $1", slug).Scan(&maxVersion)
 	return maxVersion + 1
+}
+
+// UpsertSystemSkill creates or updates a system skill.
+// Returns (id, changed, error). If the skill already exists with the same hash, it is skipped.
+func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParams) (uuid.UUID, bool, error) {
+	// Check if skill already exists
+	var existingID uuid.UUID
+	var existingHash *string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT id, file_hash FROM skills WHERE slug = $1", p.Slug,
+	).Scan(&existingID, &existingHash)
+
+	if err == nil {
+		// Skill exists — check if hash changed
+		if existingHash != nil && p.FileHash != nil && *existingHash == *p.FileHash {
+			return existingID, false, nil // unchanged, skip
+		}
+		// Hash changed — update
+		fmJSON := marshalFrontmatter(p.Frontmatter)
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE skills SET name = $1, description = $2, version = $3, frontmatter = $4,
+			 file_path = $5, file_size = $6, file_hash = $7, is_system = true,
+			 visibility = 'public', status = $8, updated_at = NOW()
+			 WHERE id = $9`,
+			p.Name, p.Description, p.Version, fmJSON,
+			p.FilePath, p.FileSize, p.FileHash, p.Visibility, existingID,
+		)
+		if err != nil {
+			return uuid.Nil, false, fmt.Errorf("update system skill: %w", err)
+		}
+		s.BumpVersion()
+		return existingID, true, nil
+	}
+
+	// New skill — insert
+	id := store.GenNewID()
+	fmJSON := marshalFrontmatter(p.Frontmatter)
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status,
+		 is_system, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, NOW(), NOW())`,
+		id, p.Name, p.Slug, p.Description, p.Version, p.Visibility,
+		fmJSON, p.FilePath, p.FileSize, p.FileHash,
+	)
+	if err != nil {
+		return uuid.Nil, false, fmt.Errorf("insert system skill: %w", err)
+	}
+	s.BumpVersion()
+	// Generate embedding asynchronously
+	desc := ""
+	if p.Description != nil {
+		desc = *p.Description
+	}
+	go s.generateEmbedding(context.Background(), p.Slug, p.Name, desc)
+	return id, true, nil
+}
+
+// IsSystemSkill checks if a skill slug belongs to a system skill.
+func (s *PGSkillStore) IsSystemSkill(slug string) bool {
+	var isSystem bool
+	err := s.db.QueryRow("SELECT is_system FROM skills WHERE slug = $1", slug).Scan(&isSystem)
+	return err == nil && isSystem
+}
+
+func marshalFrontmatter(fm map[string]string) []byte {
+	if len(fm) == 0 {
+		return []byte("{}")
+	}
+	b, err := json.Marshal(fm)
+	if err != nil {
+		return []byte("{}")
+	}
+	return b
 }
 
 // --- Embedding skill search (store.EmbeddingSkillSearcher) ---

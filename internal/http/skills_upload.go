@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -107,6 +108,12 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check slug conflict with system skill
+	if h.skills.IsSystemSkill(slug) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "slug conflicts with a system skill")})
+		return
+	}
+
 	// Determine version (always increment — includes archived skills so re-upload gets v2+)
 	version := h.skills.GetNextVersion(slug)
 
@@ -180,10 +187,22 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	h.skills.BumpVersion()
 	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size)
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	// Scan and check dependencies
+	response := map[string]interface{}{
 		"id":      id,
 		"slug":    slug,
 		"version": version,
 		"name":    name,
-	})
+	}
+	manifest := skills.ScanSkillDeps(destDir)
+	if manifest != nil && !manifest.IsEmpty() {
+		ok, missing := skills.CheckSkillDeps(manifest)
+		if !ok {
+			// Set skill to archived due to missing deps
+			_ = h.skills.UpdateSkill(id, map[string]any{"status": "archived"})
+			response["deps_warning"] = "missing dependencies: " + skills.FormatMissing(missing)
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, response)
 }

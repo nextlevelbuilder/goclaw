@@ -214,7 +214,9 @@
     "noSkillsDesc": "Upload skills in the Skills page to grant them to agents.",
     "skillsGranted": "{{granted}} of {{total}} skills granted",
     "filterSkills": "Filter skills...",
-    "noSkillsMatch": "No skills match your search."
+    "noSkillsMatch": "No skills match your search.",
+    "system": "System",
+    "alwaysAvailable": "Always available"
   },
   "instances": {
     "loadingInstances": "Loading instances...",

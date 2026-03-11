@@ -95,9 +95,21 @@ export function useSkills() {
     [http],
   );
 
+  const rescanDeps = useCallback(
+    async () => {
+      const res = await http.post<{ updated: number; results: Array<{ slug: string; status: string; missing?: string[] }> }>(
+        "/v1/skills/rescan-deps",
+        {},
+      );
+      await invalidate();
+      return res;
+    },
+    [http, invalidate],
+  );
+
   return {
     skills, loading, refresh: invalidate, getSkill,
     uploadSkill, updateSkill, deleteSkill,
-    getSkillVersions, getSkillFiles, getSkillFileContent,
+    getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps,
   };
 }

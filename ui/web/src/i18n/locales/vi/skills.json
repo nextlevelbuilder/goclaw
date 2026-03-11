@@ -61,6 +61,13 @@
     "internalOption": "Nội bộ (agent/người dùng được cấp quyền)",
     "publicOption": "Công khai (tất cả agent)"
   },
+  "system": "Hệ thống",
+  "deps": {
+    "rescan": "Quét lại deps",
+    "rescanning": "Đang quét...",
+    "rescanSuccess": "Đã cập nhật {{count}} skill",
+    "missing": "Thiếu: {{deps}}"
+  },
   "detail": {
     "title": "Chi tiết skill",
     "content": "Nội dung",
