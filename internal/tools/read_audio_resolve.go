@@ -60,24 +60,28 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "audio/mpeg")
 
-	// Gemini: use File API (inlineData doesn't work for audio).
-	if strings.HasPrefix(providerName, "gemini") {
-		slog.Info("read_audio: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
-		resp, err := geminiFileAPICall(ctx, cp.APIKey(), model, prompt, data, mime, 120*time.Second)
-		if err != nil {
-			return nil, nil, fmt.Errorf("gemini file API: %w", err)
+	// Provider-specific paths require API credentials; skip when cp is nil
+	// (e.g. OAuth-based providers that don't expose static keys).
+	if cp != nil {
+		// Gemini: use File API (inlineData doesn't work for audio).
+		if strings.HasPrefix(providerName, "gemini") {
+			slog.Info("read_audio: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+			resp, err := geminiFileAPICall(ctx, cp.APIKey(), model, prompt, data, mime, 120*time.Second)
+			if err != nil {
+				return nil, nil, fmt.Errorf("gemini file API: %w", err)
+			}
+			return []byte(resp.Content), resp.Usage, nil
 		}
-		return []byte(resp.Content), resp.Usage, nil
-	}
 
-	// OpenAI: use input_audio content part (supports wav, mp3).
-	if strings.HasPrefix(providerName, "openai") {
-		slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
-		resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
-		if err != nil {
-			return nil, nil, fmt.Errorf("openai audio call: %w", err)
+		// OpenAI: use input_audio content part (supports wav, mp3).
+		if strings.HasPrefix(providerName, "openai") {
+			slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+			resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
+			if err != nil {
+				return nil, nil, fmt.Errorf("openai audio call: %w", err)
+			}
+			return []byte(resp.Content), resp.Usage, nil
 		}
-		return []byte(resp.Content), resp.Usage, nil
 	}
 
 	// Other providers: try standard Chat API with base64 audio as image_url (best effort).

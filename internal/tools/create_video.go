@@ -140,6 +140,9 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 
 // callProvider dispatches to the correct video generation implementation based on provider type.
 func (t *CreateVideoTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
+	if cp == nil {
+		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for video generation", providerName)
+	}
 	prompt := GetParamString(params, "prompt", "")
 	duration := GetParamInt(params, "duration", 8)
 	aspectRatio := GetParamString(params, "aspect_ratio", "16:9")

@@ -61,8 +61,8 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "application/octet-stream")
 
-	// Gemini: use native API (OpenAI-compat endpoint doesn't support non-image MIME types).
-	if strings.HasPrefix(providerName, "gemini") {
+	// Gemini: use native API (requires credentials; OpenAI-compat endpoint doesn't support non-image MIME types).
+	if cp != nil && strings.HasPrefix(providerName, "gemini") {
 		slog.Info("read_document: using gemini native API",
 			"provider", providerName, "model", model,
 			"doc_size", len(data), "mime", mime)

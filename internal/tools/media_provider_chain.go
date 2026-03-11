@@ -169,13 +169,10 @@ func ExecuteWithChain(
 			continue
 		}
 
-		cp, ok := p.(credentialProvider)
-		if !ok {
-			slog.Warn("media_chain: provider does not expose credentials, skipping",
-				"provider", entry.Provider)
-			lastErr = fmt.Errorf("provider %q does not expose API credentials", entry.Provider)
-			continue
-		}
+		// credentialProvider is optional — providers that don't expose static
+		// credentials (e.g. OAuth-based CodexProvider) pass nil and each
+		// callProvider falls back to using the provider's Chat() API.
+		cp, _ := p.(credentialProvider)
 
 		// Retry loop for this provider
 		for attempt := 1; attempt <= entry.MaxRetries; attempt++ {
