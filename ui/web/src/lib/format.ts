@@ -48,6 +48,39 @@ export function formatDuration(ms: number | undefined | null): string {
 }
 
 /**
+ * Resolve the effective IANA timezone string.
+ * "auto" → browser's local timezone.
+ */
+export function resolveTimezone(tz: string): string {
+  if (tz === "auto") return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return tz;
+}
+
+/**
+ * Format a UTC timestamp for chart labels, respecting the user's chosen timezone.
+ * Uses Intl.DateTimeFormat for native timezone support (no extra deps).
+ */
+export function formatBucketTz(
+  bucket: string,
+  tz: string,
+  granularity: "hour" | "day",
+): string {
+  try {
+    const d = new Date(bucket);
+    const resolved = resolveTimezone(tz);
+    const opts: Intl.DateTimeFormatOptions = {
+      timeZone: resolved,
+      month: "short",
+      day: "numeric",
+      ...(granularity === "hour" ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}),
+    };
+    return new Intl.DateTimeFormat("en-US", opts).format(d);
+  } catch {
+    return bucket;
+  }
+}
+
+/**
  * Compute duration in ms from start/end time strings.
  * Falls back to 0 if either is missing.
  */

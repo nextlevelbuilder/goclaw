@@ -16,6 +16,82 @@
     "provider": "Provider",
     "input": "输入",
     "output": "输出",
-    "total": "合计"
+    "total": "合计",
+    "channel": "渠道",
+    "cost": "费用",
+    "status": "状态"
+  },
+  "analytics": {
+    "title": "用量分析",
+    "period24h": "24小时",
+    "period7d": "7天",
+    "period30d": "30天",
+    "periodCustom": "自定义",
+    "allAgents": "全部Agent",
+    "allProviders": "全部Provider",
+    "allChannels": "全部渠道",
+    "activeFilters": "已启用筛选",
+    "clearAll": "清除全部",
+    "exportCsv": "导出CSV",
+    "requests": "请求数",
+    "tokens": "令牌",
+    "cost": "费用",
+    "errors": "错误",
+    "uniqueUsers": "独立用户",
+    "llmCalls": "LLM调用",
+    "toolCalls": "工具调用",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "相较前期",
+    "configurePricing": "配置模型定价以启用费用追踪",
+    "noData": "所选时间段无数据",
+    "tokenChart": {
+      "title": "令牌使用趋势",
+      "input": "输入令牌",
+      "output": "输出令牌",
+      "cache": "缓存读取令牌",
+      "thinking": "思考令牌",
+      "total": "合计"
+    },
+    "requestChart": {
+      "title": "请求量与错误",
+      "requests": "请求数",
+      "errors": "错误数",
+      "errorRate": "错误率"
+    },
+    "distribution": {
+      "provider": "Provider 分布",
+      "model": "模型分布",
+      "channel": "渠道分布",
+      "other": "其他",
+      "calls": "次调用"
+    },
+    "durationChart": {
+      "title": "响应时长与性能",
+      "avgDuration": "平均时长",
+      "errorRate": "错误率 %"
+    },
+    "knowledgeChart": {
+      "title": "记忆与知识图谱增长",
+      "memoryDocs": "记忆文档",
+      "memoryChunks": "记忆片段",
+      "kgEntities": "KG实体",
+      "kgRelations": "KG关系"
+    },
+    "topModels": {
+      "title": "热门模型",
+      "model": "模型",
+      "provider": "Provider",
+      "llmCalls": "LLM调用",
+      "inputTokens": "输入令牌",
+      "outputTokens": "输出令牌",
+      "avgDuration": "平均时长",
+      "cost": "费用"
+    },
+    "tooltip": {
+      "date": "日期",
+      "total": "合计",
+      "errorRate": "错误率 {{value}}%"
+    }
   }
 }

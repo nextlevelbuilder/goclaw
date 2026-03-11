@@ -43,5 +43,6 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		KnowledgeGraph:   NewPGKnowledgeGraphStore(db),
 		Contacts:         NewPGContactStore(db),
 		Activity:         NewPGActivityStore(db),
+		Snapshots:        NewPGSnapshotStore(db),
 	}, nil
 }

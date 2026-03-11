@@ -16,6 +16,82 @@
     "provider": "Provider",
     "input": "Input",
     "output": "Output",
-    "total": "Total"
+    "total": "Total",
+    "channel": "Channel",
+    "cost": "Cost",
+    "status": "Status"
+  },
+  "analytics": {
+    "title": "Usage Analytics",
+    "period24h": "24h",
+    "period7d": "7 days",
+    "period30d": "30 days",
+    "periodCustom": "Custom",
+    "allAgents": "All Agents",
+    "allProviders": "All Providers",
+    "allChannels": "All Channels",
+    "activeFilters": "Active filters",
+    "clearAll": "Clear all",
+    "exportCsv": "Export CSV",
+    "requests": "Requests",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "errors": "Errors",
+    "uniqueUsers": "Unique Users",
+    "llmCalls": "LLM Calls",
+    "toolCalls": "Tool Calls",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "vs previous period",
+    "configurePricing": "Configure model pricing for cost tracking",
+    "noData": "No data for selected period",
+    "tokenChart": {
+      "title": "Token Usage Over Time",
+      "input": "Input Tokens",
+      "output": "Output Tokens",
+      "cache": "Cache Read Tokens",
+      "thinking": "Thinking Tokens",
+      "total": "Total"
+    },
+    "requestChart": {
+      "title": "Request Volume & Errors",
+      "requests": "Requests",
+      "errors": "Errors",
+      "errorRate": "Error Rate"
+    },
+    "distribution": {
+      "provider": "Provider Distribution",
+      "model": "Model Distribution",
+      "channel": "Channel Distribution",
+      "other": "Other",
+      "calls": "calls"
+    },
+    "durationChart": {
+      "title": "Duration & Performance",
+      "avgDuration": "Avg Duration",
+      "errorRate": "Error Rate %"
+    },
+    "knowledgeChart": {
+      "title": "Memory & Knowledge Graph Growth",
+      "memoryDocs": "Memory Docs",
+      "memoryChunks": "Memory Chunks",
+      "kgEntities": "KG Entities",
+      "kgRelations": "KG Relations"
+    },
+    "topModels": {
+      "title": "Top Models",
+      "model": "Model",
+      "provider": "Provider",
+      "llmCalls": "LLM Calls",
+      "inputTokens": "Input Tokens",
+      "outputTokens": "Output Tokens",
+      "avgDuration": "Avg Duration",
+      "cost": "Cost"
+    },
+    "tooltip": {
+      "date": "Date",
+      "total": "Total",
+      "errorRate": "{{value}}% error rate"
+    }
   }
 }

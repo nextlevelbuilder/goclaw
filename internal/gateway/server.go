@@ -56,6 +56,7 @@ type Server struct {
 	mediaUploadHandler      *httpapi.MediaUploadHandler      // media upload endpoint
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
 	activityHandler         *httpapi.ActivityHandler         // activity audit log API
+	usageHandler            *httpapi.UsageHandler            // usage analytics API
 	agentStore         store.AgentStore             // for context injection in tools_invoke
 	msgBus             *bus.MessageBus              // for MCP bridge media delivery
 
@@ -249,6 +250,10 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	if s.activityHandler != nil {
 		s.activityHandler.RegisterRoutes(mux)
+	}
+
+	if s.usageHandler != nil {
+		s.usageHandler.RegisterRoutes(mux)
 	}
 
 	// OAuth endpoints (available in all modes)
@@ -474,6 +479,9 @@ func (s *Server) SetKnowledgeGraphHandler(h *httpapi.KnowledgeGraphHandler) { s.
 
 // SetActivityHandler sets the activity audit log handler.
 func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) { s.activityHandler = h }
+
+// SetUsageHandler sets the usage analytics handler.
+func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.usageHandler = h }
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }

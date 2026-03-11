@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { useLiveUptime } from "./hooks/use-live-uptime";
 import { StatCard } from "./stat-card";
+import { useOverviewSparklines } from "./hooks/use-overview-sparklines";
 import { SystemHealthCard } from "./system-health-card";
 import { ConnectedClientsCard } from "./connected-clients-card";
 import { CronJobsCard } from "./cron-jobs-card";
@@ -40,6 +41,7 @@ export function OverviewPage() {
     useWsCall<StatusPayload>(Methods.STATUS);
   const { call: fetchQuota, data: quota } =
     useWsCall<QuotaUsageResult>(Methods.QUOTA_USAGE);
+  const sparklines = useOverviewSparklines();
   const { call: fetchCron, data: cronData } =
     useWsCall<CronListPayload>(Methods.CRON_LIST);
   const { call: fetchChannels, data: channelStatusData } =
@@ -142,6 +144,8 @@ export function OverviewPage() {
               ? t("statCards.users", { count: quota.uniqueUsersToday })
               : undefined
           }
+          sparkline={sparklines?.requestSparkline}
+          trend={sparklines?.trends.requests}
         />
         <StatCard
           icon={Hash}
@@ -154,11 +158,15 @@ export function OverviewPage() {
               ? t("statCards.inOut", { input: formatTokens(quota.inputTokensToday), output: formatTokens(quota.outputTokensToday) })
               : undefined
           }
+          sparkline={sparklines?.tokenSparkline}
+          trend={sparklines?.trends.tokens}
         />
         <StatCard
           icon={DollarSign}
           label={t("statCards.costToday", "Cost Today")}
           value={formatCost(quota?.costToday)}
+          sparkline={sparklines?.costSparkline}
+          trend={sparklines?.trends.cost}
         />
         <StatCard
           icon={Bot}

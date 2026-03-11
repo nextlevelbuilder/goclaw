@@ -291,6 +291,23 @@ func runGateway() {
 		initOTelExporter(context.Background(), cfg, traceCollector)
 	}
 
+	// Start snapshot worker for hourly usage aggregation
+	if pgStores.Snapshots != nil {
+		snapshotWorker := tracing.NewSnapshotWorker(pgStores.DB, pgStores.Snapshots)
+		snapshotWorker.Start()
+		defer snapshotWorker.Stop()
+
+		// Backfill historical data in background
+		go func() {
+			count, err := snapshotWorker.Backfill(context.Background())
+			if err != nil {
+				slog.Warn("snapshot backfill failed", "error", err)
+			} else if count > 0 {
+				slog.Info("snapshot backfill complete", "hours", count)
+			}
+		}()
+	}
+
 	// Redis cache: compiled via build tags. Build with 'go build -tags redis' to enable.
 	redisClient := initRedisClient(cfg)
 	defer shutdownRedis(redisClient)
@@ -636,6 +653,11 @@ func runGateway() {
 	// Activity audit log API
 	if pgStores.Activity != nil {
 		server.SetActivityHandler(httpapi.NewActivityHandler(pgStores.Activity, cfg.Gateway.Token))
+	}
+
+	// Usage analytics API
+	if pgStores.Snapshots != nil {
+		server.SetUsageHandler(httpapi.NewUsageHandler(pgStores.Snapshots, pgStores.DB, cfg.Gateway.Token))
 	}
 
 	// Memory management API (wired directly, only needs MemoryStore + token)

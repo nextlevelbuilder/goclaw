@@ -24,4 +24,5 @@ type Stores struct {
 	KnowledgeGraph   KnowledgeGraphStore
 	Contacts         ContactStore
 	Activity         ActivityStore
+	Snapshots        SnapshotStore
 }
