@@ -116,7 +116,8 @@ func (s *Seeder) Seed(ctx context.Context) (int, int, error) {
 			Slug:        slug,
 			Description: &desc,
 			OwnerID:     "system",
-			Visibility:  status,
+			Visibility:  "public",
+			Status:      status,
 			Version:     version,
 			FilePath:    destDir,
 			FileSize:    int64(len(data)),
@@ -171,9 +172,10 @@ func (s *Seeder) copySharedDir(name string) {
 	}
 }
 
-// copyDir recursively copies a directory tree, following symlinks.
+// copyDir recursively copies a directory tree.
+// Resolves the top-level path so symlinks (e.g. scripts/office -> ../../_shared/office)
+// are followed and their contents are copied as real files.
 func copyDir(src, dst string) error {
-	// Resolve symlinks at the top level
 	resolved, err := filepath.EvalSymlinks(src)
 	if err != nil {
 		resolved = src
@@ -189,23 +191,6 @@ func copyDir(src, dst string) error {
 			return err
 		}
 		target := filepath.Join(dst, rel)
-
-		// Handle symlinks within the tree
-		if info.Mode()&os.ModeSymlink != 0 {
-			realPath, err := filepath.EvalSymlinks(path)
-			if err != nil {
-				return err
-			}
-			realInfo, err := os.Stat(realPath)
-			if err != nil {
-				return err
-			}
-			if realInfo.IsDir() {
-				return copyDir(realPath, target)
-			}
-			info = realInfo
-			path = realPath
-		}
 
 		if info.IsDir() {
 			return os.MkdirAll(target, 0755)

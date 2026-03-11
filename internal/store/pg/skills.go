@@ -87,6 +87,10 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 		info.IsSystem = isSystem
 		result = append(result, info)
 	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("ListSkills: rows iteration error", "error", err)
+		return nil // don't cache partial results
+	}
 
 	s.mu.Lock()
 	s.listCache = result
@@ -94,6 +98,39 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	s.listTime = time.Now()
 	s.mu.Unlock()
 
+	return result
+}
+
+// ListAllSkills returns all skills regardless of status (for admin operations like rescan-deps).
+func (s *PGSkillStore) ListAllSkills() []store.SkillInfo {
+	rows, err := s.db.Query(
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status FROM skills ORDER BY name`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var result []store.SkillInfo
+	for rows.Next() {
+		var id uuid.UUID
+		var name, slug, visibility, status string
+		var desc *string
+		var tags []string
+		var version int
+		var isSystem bool
+		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status); err != nil {
+			continue
+		}
+		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
+		info.Visibility = visibility
+		info.Tags = tags
+		info.IsSystem = isSystem
+		info.Status = status
+		result = append(result, info)
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("ListAllSkills: rows iteration error", "error", err)
+	}
 	return result
 }
 
@@ -271,6 +308,7 @@ type SkillCreateParams struct {
 	Description *string
 	OwnerID     string
 	Visibility  string
+	Status      string // "active" or "archived" (defaults to "active" if empty)
 	Version     int
 	FilePath    string
 	FileSize    int64
@@ -354,7 +392,7 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParam
 			 visibility = 'public', status = $8, updated_at = NOW()
 			 WHERE id = $9`,
 			p.Name, p.Description, p.Version, fmJSON,
-			p.FilePath, p.FileSize, p.FileHash, p.Visibility, existingID,
+			p.FilePath, p.FileSize, p.FileHash, p.Status, existingID,
 		)
 		if err != nil {
 			return uuid.Nil, false, fmt.Errorf("update system skill: %w", err)
@@ -370,7 +408,7 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParam
 		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status,
 		 is_system, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, NOW(), NOW())`,
-		id, p.Name, p.Slug, p.Description, p.Version, p.Visibility,
+		id, p.Name, p.Slug, p.Description, p.Version, p.Status,
 		fmJSON, p.FilePath, p.FileSize, p.FileHash,
 	)
 	if err != nil {

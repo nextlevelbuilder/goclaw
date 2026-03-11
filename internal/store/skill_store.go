@@ -19,6 +19,7 @@ type SkillInfo struct {
 	Tags        []string `json:"tags,omitempty"`
 	Version     int      `json:"version,omitempty"`
 	IsSystem    bool     `json:"is_system,omitempty"`
+	Status      string   `json:"status,omitempty"`
 }
 
 // SkillSearchResult is a scored skill returned from embedding search.

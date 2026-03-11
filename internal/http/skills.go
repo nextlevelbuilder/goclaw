@@ -147,9 +147,10 @@ func (h *SkillsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
-// handleRescanDeps re-checks dependencies for all skills and updates their status.
+// handleRescanDeps re-checks dependencies for all skills (including archived) and updates their status.
+// Active skills with missing deps → archived. Archived skills with deps now available → active.
 func (h *SkillsHandler) handleRescanDeps(w http.ResponseWriter, r *http.Request) {
-	allSkills := h.skills.ListSkills()
+	allSkills := h.skills.ListAllSkills()
 	updated := 0
 
 	type depResult struct {
@@ -172,12 +173,20 @@ func (h *SkillsHandler) handleRescanDeps(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		if ok {
-			results = append(results, depResult{Slug: sk.Slug, Status: "ok"})
-		} else {
+		if ok && sk.Status == "archived" {
+			// Deps now available → re-activate
+			_ = h.skills.UpdateSkill(id, map[string]any{"status": "active"})
+			results = append(results, depResult{Slug: sk.Slug, Status: "active"})
+			updated++
+		} else if !ok && sk.Status == "active" {
+			// Deps missing → archive
 			_ = h.skills.UpdateSkill(id, map[string]any{"status": "archived"})
 			results = append(results, depResult{Slug: sk.Slug, Status: "archived", Missing: missing})
 			updated++
+		} else if !ok {
+			results = append(results, depResult{Slug: sk.Slug, Status: sk.Status, Missing: missing})
+		} else {
+			results = append(results, depResult{Slug: sk.Slug, Status: "ok"})
 		}
 	}
 

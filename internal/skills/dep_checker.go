@@ -53,32 +53,74 @@ func CheckSkillDeps(m *SkillManifest) (bool, []string) {
 }
 
 // checkPythonPackages checks which Python packages are importable.
+// Uses a single Python process that tries each import and reports failures.
 func checkPythonPackages(packages []string) []string {
-	var missing []string
+	if len(packages) == 0 {
+		return nil
+	}
+
+	// Build a Python script that tries each import individually and prints failures
+	var sb strings.Builder
+	sb.WriteString("import sys\n")
 	for _, pkg := range packages {
-		// Map pip package name back to import name for checking
 		importName := pipToImport(pkg)
-		ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
-		cmd := exec.CommandContext(ctx, "python3", "-c", fmt.Sprintf("import %s", importName))
-		err := cmd.Run()
-		cancel()
-		if err != nil {
+		sb.WriteString(fmt.Sprintf("try:\n import %s\nexcept ImportError:\n print(%q)\n", importName, pkg))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "python3", "-c", sb.String())
+	out, err := cmd.Output()
+	if err != nil {
+		// Python itself failed — all packages are missing
+		var missing []string
+		for _, pkg := range packages {
 			missing = append(missing, "pip:"+pkg)
+		}
+		return missing
+	}
+
+	var missing []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			missing = append(missing, "pip:"+line)
 		}
 	}
 	return missing
 }
 
 // checkNodePackages checks which Node packages are resolvable.
+// Uses a single Node process that tries each require and reports failures.
 func checkNodePackages(packages []string) []string {
-	var missing []string
+	if len(packages) == 0 {
+		return nil
+	}
+
+	var sb strings.Builder
 	for _, pkg := range packages {
-		ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
-		cmd := exec.CommandContext(ctx, "node", "-e", fmt.Sprintf("require.resolve('%s')", pkg))
-		err := cmd.Run()
-		cancel()
-		if err != nil {
+		sb.WriteString(fmt.Sprintf("try{require.resolve('%s')}catch(e){console.log(%q)}\n", pkg, pkg))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "node", "-e", sb.String())
+	out, err := cmd.Output()
+	if err != nil {
+		var missing []string
+		for _, pkg := range packages {
 			missing = append(missing, "npm:"+pkg)
+		}
+		return missing
+	}
+
+	var missing []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			missing = append(missing, "npm:"+line)
 		}
 	}
 	return missing
