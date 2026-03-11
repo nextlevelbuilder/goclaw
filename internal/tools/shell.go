@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
