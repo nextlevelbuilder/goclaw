@@ -249,11 +249,20 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// Expand ~ in workspace path and ensure directory exists
 		workspace := ag.Workspace
 		if workspace != "" {
-			workspace = config.ExpandHome(workspace)
-			if !filepath.IsAbs(workspace) {
-				workspace, _ = filepath.Abs(workspace)
+			// Legacy default workspace migration:
+			// Older agents received a hardcoded "~/.goclaw/..." workspace. Inside Docker, this expands
+			// to an unmounted ephemeral directory (/app/.goclaw/...) and breaks sandbox containment.
+			// We dynamically re-route these to the GlobalWorkspace.
+			if strings.HasPrefix(workspace, "~/.goclaw/") && deps.GlobalWorkspace != "" {
+				workspace = filepath.Join(deps.GlobalWorkspace, strings.TrimPrefix(workspace, "~/.goclaw/"))
+			} else {
+				workspace = config.ExpandHome(workspace)
+				if !filepath.IsAbs(workspace) {
+					workspace, _ = filepath.Abs(workspace)
+				}
 			}
-		} else if deps.GlobalWorkspace != "" {
+		}
+		if workspace == "" && deps.GlobalWorkspace != "" {
 			workspace = filepath.Join(deps.GlobalWorkspace, ag.AgentKey+"-workspace")
 		}
 
