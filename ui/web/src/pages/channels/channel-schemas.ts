@@ -68,7 +68,7 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
 
 export const configSchema: Record<string, FieldDef[]> = {
   telegram: [
-    { key: "api_server", label: "API Server URL", type: "text", placeholder: "http://localhost:8081", help: "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
+    { key: "api_server", label: "API Server URL", type: "text", placeholder: "http://127.0.0.1:8081", help: "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
     { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://proxy:8080", help: "Route bot traffic through an HTTP proxy" },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
