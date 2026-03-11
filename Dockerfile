@@ -39,24 +39,28 @@ FROM alpine:3.22
 ARG ENABLE_SANDBOX=false
 ARG ENABLE_PYTHON=false
 
-# Install ca-certificates + wget (healthcheck) + optionally docker-cli (sandbox) + python3
+# Install ca-certificates + wget (healthcheck) + optionally docker-cli (sandbox)
+# + python3 with common skill packages + nodejs for JS-based skills
 RUN set -eux; \
     apk add --no-cache ca-certificates wget; \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
         apk add --no-cache docker-cli; \
     fi; \
     if [ "$ENABLE_PYTHON" = "true" ]; then \
-        apk add --no-cache python3 py3-pip; \
-        pip3 install --break-system-packages pypdf; \
+        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli; \
+        pip3 install --break-system-packages \
+            pypdf openpyxl pandas python-pptx markitdown; \
+        npm install -g docx pptxgenjs; \
     fi
 
 # Non-root user
 RUN adduser -D -u 1000 -h /app goclaw
 WORKDIR /app
 
-# Copy binary and migrations
+# Copy binary, migrations, and bundled skills
 COPY --from=builder /out/goclaw /app/goclaw
 COPY --from=builder /src/migrations/ /app/migrations/
+COPY --from=builder /src/skills/ /app/bundled-skills/
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 

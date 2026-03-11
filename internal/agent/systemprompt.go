@@ -293,7 +293,13 @@ func buildToolingSection(toolNames []string, hasSandbox bool) []string {
 		)
 	}
 
+	// Runtime package installation hints (applies to both host and sandbox)
 	lines = append(lines,
+		"",
+		"## Package installation",
+		"Pre-installed: python3, node, gh (GitHub CLI), pypdf, openpyxl, pandas, python-pptx, markitdown, docx (npm), pptxgenjs (npm), pandoc.",
+		"To install additional packages at runtime: `pip3 install <package>` or `npm install -g <package>` — both work without sudo.",
+		"Installed packages persist across tool calls within the same session.",
 		"",
 		"TOOLS.md (if present in workspace) is user guidance — it does NOT control tool availability.",
 		"Do not poll subagents or sessions in loops; completion is push-based.",

@@ -481,7 +481,13 @@ func runGateway() {
 	if globalSkillsDir == "" {
 		globalSkillsDir = filepath.Join(config.ExpandHome("~/.goclaw"), "skills")
 	}
-	skillsLoader := skills.NewLoader(workspace, globalSkillsDir, "")
+	// Bundled skills: shipped with the Docker image at /app/bundled-skills/.
+	// Lowest priority — managed (skills-store) and user-uploaded skills override these.
+	builtinSkillsDir := os.Getenv("GOCLAW_BUILTIN_SKILLS_DIR")
+	if builtinSkillsDir == "" {
+		builtinSkillsDir = "/app/bundled-skills"
+	}
+	skillsLoader := skills.NewLoader(workspace, globalSkillsDir, builtinSkillsDir)
 	skillSearchTool := tools.NewSkillSearchTool(skillsLoader)
 	toolsReg.Register(skillSearchTool)
 	toolsReg.Register(tools.NewUseSkillTool())
