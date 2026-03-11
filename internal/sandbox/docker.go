@@ -88,7 +88,8 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		if cfg.WorkspaceAccess == AccessRO {
 			mountOpt = "ro"
 		}
-		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", workspace, containerWorkdir, mountOpt))
+		hostAccessPath := resolveHostWorkspacePath(ctx, workspace)
+		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostAccessPath, containerWorkdir, mountOpt))
 	}
 	args = append(args, "-w", containerWorkdir)
 
