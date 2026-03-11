@@ -23,6 +23,13 @@ func (t *ReadAudioTool) resolveAudioFile(ctx context.Context, mediaID string) (p
 		return "", "", fmt.Errorf("no audio files available in this conversation. The user may not have sent an audio file.")
 	}
 
+	// Sanitize media_id: LLM may pass the literal tag string (e.g. "<media:audio>")
+	// instead of a UUID. Treat tag-like values as empty to fall back to most recent.
+	if strings.Contains(mediaID, "<") || strings.Contains(mediaID, "media:") {
+		slog.Debug("read_audio: sanitizing tag-like media_id", "raw", mediaID)
+		mediaID = ""
+	}
+
 	var ref *providers.MediaRef
 	if mediaID != "" {
 		for i := range refs {
@@ -32,7 +39,10 @@ func (t *ReadAudioTool) resolveAudioFile(ctx context.Context, mediaID string) (p
 			}
 		}
 		if ref == nil {
-			return "", "", fmt.Errorf("audio with media_id %q not found in conversation", mediaID)
+			// Fallback to most recent audio instead of hard error,
+			// since LLM may generate invalid IDs.
+			slog.Warn("read_audio: media_id not found, falling back to most recent", "media_id", mediaID)
+			ref = &refs[len(refs)-1]
 		}
 	} else {
 		ref = &refs[len(refs)-1]

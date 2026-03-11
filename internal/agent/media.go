@@ -163,6 +163,47 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 	messages[lastIdx].Content = content
 }
 
+// enrichAudioIDs updates the last user message to embed persisted media IDs
+// in <media:audio> and <media:voice> tags so the LLM can reference them.
+// Without this, the LLM sees plain <media:audio> and cannot pass a valid media_id.
+func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.MediaRef) {
+	if len(messages) == 0 {
+		return
+	}
+	lastIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastIdx = i
+			break
+		}
+	}
+	if lastIdx < 0 {
+		return
+	}
+
+	content := messages[lastIdx].Content
+	for _, ref := range refs {
+		if ref.Kind != "audio" {
+			continue
+		}
+		idAttr := fmt.Sprintf(" id=%q", ref.ID)
+
+		// Replace bare <media:audio> with <media:audio id="uuid">
+		bare := "<media:audio>"
+		if strings.Contains(content, bare) {
+			content = strings.Replace(content, bare, "<media:audio"+idAttr+">", 1)
+			continue
+		}
+		// Replace bare <media:voice> with <media:voice id="uuid">
+		bareVoice := "<media:voice>"
+		if strings.Contains(content, bareVoice) {
+			content = strings.Replace(content, bareVoice, "<media:voice"+idAttr+">", 1)
+			continue
+		}
+	}
+	messages[lastIdx].Content = content
+}
+
 // mediaKindFromMime returns the media kind ("image", "video", "audio", "document")
 // based on MIME type prefix.
 func mediaKindFromMime(mime string) string {
