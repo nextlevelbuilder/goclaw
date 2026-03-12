@@ -580,7 +580,7 @@ func runGateway() {
 	toolsReg.Register(tools.NewSessionsSendTool())
 
 	// Message tool (send to channels)
-	toolsReg.Register(tools.NewMessageTool())
+	toolsReg.Register(tools.NewMessageTool(workspace, agentCfg.RestrictToWorkspace))
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
