@@ -38,6 +38,8 @@ func (m *SkillsMethods) handleList(_ context.Context, client *gateway.Client, re
 			"description": s.Description,
 			"source":      s.Source,
 			"version":     s.Version,
+			"is_system":   s.IsSystem,
+			"enabled":     s.Enabled,
 		}
 		if s.ID != "" {
 			entry["id"] = s.ID
@@ -47,6 +49,15 @@ func (m *SkillsMethods) handleList(_ context.Context, client *gateway.Client, re
 		}
 		if len(s.Tags) > 0 {
 			entry["tags"] = s.Tags
+		}
+		if s.Status != "" {
+			entry["status"] = s.Status
+		}
+		if s.Author != "" {
+			entry["author"] = s.Author
+		}
+		if len(s.MissingDeps) > 0 {
+			entry["missing_deps"] = s.MissingDeps
 		}
 		result = append(result, entry)
 	}

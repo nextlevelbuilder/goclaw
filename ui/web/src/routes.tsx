@@ -33,9 +33,6 @@ const ConfigPage = lazy(() =>
 const TracesPage = lazy(() =>
   import("@/pages/traces/traces-page").then((m) => ({ default: m.TracesPage })),
 );
-const UsagePage = lazy(() =>
-  import("@/pages/usage/usage-page").then((m) => ({ default: m.UsagePage })),
-);
 const ChannelsPage = lazy(() =>
   import("@/pages/channels/channels-page").then((m) => ({ default: m.ChannelsPage })),
 );
@@ -147,7 +144,7 @@ export function AppRoutes() {
           <Route path={ROUTES.TRACE_DETAIL} element={<TracesPage key="detail" />} />
           <Route path={ROUTES.EVENTS} element={<EventsPage />} />
           <Route path={ROUTES.DELEGATIONS} element={<DelegationsPage />} />
-          <Route path={ROUTES.USAGE} element={<UsagePage />} />
+          <Route path={ROUTES.USAGE} element={<Navigate to={ROUTES.OVERVIEW} replace />} />
           <Route path={ROUTES.ACTIVITY} element={<ActivityPage />} />
           <Route path={ROUTES.CHANNELS} element={<ChannelsPage key="list" />} />
           <Route path={ROUTES.CHANNEL_DETAIL} element={<ChannelsPage key="detail" />} />

@@ -1,4 +1,0 @@
-{
-  "requires": ["python3"],
-  "requires_python": ["pypdf", "pdfplumber", "pdf2image", "Pillow"]
-}

@@ -504,9 +504,12 @@ func runGateway() {
 			// Seed system/bundled skills into DB
 			bundledSkillsDir := os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
 			if bundledSkillsDir == "" {
-				// Default: check for skills/ directory relative to binary
-				if info, err := os.Stat("skills"); err == nil && info.IsDir() {
-					bundledSkillsDir = "skills"
+				// Check common locations: Docker default, then local dev
+				for _, candidate := range []string{"bundled-skills", "/app/bundled-skills", "skills"} {
+					if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+						bundledSkillsDir = candidate
+						break
+					}
 				}
 			}
 			if bundledSkillsDir != "" {
@@ -526,6 +529,17 @@ func runGateway() {
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// Publish skill tool — lets agents register created skills in the database
+	if pgStores.Skills != nil {
+		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
+			storeDirs := pgStores.Skills.Dirs()
+			if len(storeDirs) > 0 {
+				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], skillsLoader))
+				slog.Info("publish_skill tool registered")
 			}
 		}
 	}

@@ -95,15 +95,15 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, description, slug, frontmatter := parseSkillFrontmatter(skillContent)
+	name, description, slug, frontmatter := skills.ParseSkillFrontmatter(skillContent)
 	if name == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "name in SKILL.md frontmatter")})
 		return
 	}
 	if slug == "" {
-		slug = slugify(name)
+		slug = skills.Slugify(name)
 	}
-	if !slugRegexp.MatchString(slug) {
+	if !skills.SlugRegexp.MatchString(slug) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidSlug, "slug")})
 		return
 	}
@@ -141,7 +141,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Skip macOS/system artifacts
-		if isSystemArtifact(entryName) {
+		if skills.IsSystemArtifact(entryName) {
 			continue
 		}
 		// Security: prevent path traversal

@@ -10,7 +10,9 @@
     "name": "名称",
     "description": "描述",
     "source": "来源",
+    "author": "作者",
     "visibility": "可见性",
+    "status": "状态",
     "actions": "操作"
   },
   "noDescription": "暂无描述",
@@ -62,11 +64,36 @@
     "publicOption": "公开（所有Agent）"
   },
   "system": "系统",
+  "tabs": {
+    "core": "核心",
+    "custom": "自定义"
+  },
+  "toggle": {
+    "enable": "启用Skill",
+    "disable": "禁用Skill",
+    "disabled": "已禁用"
+  },
   "deps": {
-    "rescan": "重新扫描依赖",
-    "rescanning": "扫描中...",
-    "rescanSuccess": "已更新 {{count}} 个Skill",
-    "missing": "缺少: {{deps}}"
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed",
+    "installPartial": "Some dependencies failed",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
   },
   "detail": {
     "title": "Skill详情",

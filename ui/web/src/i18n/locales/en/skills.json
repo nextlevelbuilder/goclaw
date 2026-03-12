@@ -10,7 +10,9 @@
     "name": "Name",
     "description": "Description",
     "source": "Source",
+    "author": "Author",
     "visibility": "Visibility",
+    "status": "Status",
     "actions": "Actions"
   },
   "noDescription": "No description",
@@ -62,11 +64,36 @@
     "publicOption": "Public (all agents)"
   },
   "system": "System",
+  "tabs": {
+    "core": "Core",
+    "custom": "Custom"
+  },
+  "toggle": {
+    "enable": "Enable skill",
+    "disable": "Disable skill",
+    "disabled": "Disabled"
+  },
   "deps": {
     "rescan": "Rescan Deps",
     "rescanning": "Scanning...",
     "rescanSuccess": "Updated {{count}} skills",
-    "missing": "Missing: {{deps}}"
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed successfully",
+    "installPartial": "Some dependencies failed to install",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
   },
   "detail": {
     "title": "Skill Detail",

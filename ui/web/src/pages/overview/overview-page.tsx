@@ -1,10 +1,11 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, lazy, Suspense } from "react";
 import { Activity, Bot, DollarSign, Hash, Radio, AlertTriangle } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useWsCall } from "@/hooks/use-ws-call";
 import { useWsEvent } from "@/hooks/use-ws-event";
@@ -29,6 +30,11 @@ import { ConnectedClientsCard } from "./connected-clients-card";
 import { CronJobsCard } from "./cron-jobs-card";
 import { RecentRequestsCard } from "./recent-requests-card";
 import { QuotaUsageCard } from "./quota-usage-card";
+import { useRuntimes } from "@/pages/skills/hooks/use-runtimes";
+
+const UsagePage = lazy(() =>
+  import("@/pages/usage/usage-page").then((m) => ({ default: m.UsagePage })),
+);
 
 const REFRESH_INTERVAL = 30_000;
 
@@ -47,6 +53,7 @@ export function OverviewPage() {
   const { call: fetchChannels, data: channelStatusData } =
     useWsCall<ChannelStatusPayload>(Methods.CHANNELS_STATUS);
   const { providers, loading: providersLoading } = useProviders();
+  const { runtimes } = useRuntimes();
   const { traces } = useTraces({ limit: 8 });
 
   const hasNoProviders = !providersLoading && providers.length === 0;
@@ -110,112 +117,128 @@ export function OverviewPage() {
         }
       />
 
-      {/* Provider warning */}
-      {(hasNoProviders || hasNoEnabledProviders) && (
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>
-            {hasNoProviders
-              ? t("providers.noProvidersTitle")
-              : t("providers.noEnabledTitle")}
-          </AlertTitle>
-          <AlertDescription>
-            {hasNoProviders
-              ? t("providers.noProvidersDesc")
-              : t("providers.noEnabledDesc")}
-            <Link
-              to={ROUTES.PROVIDERS}
-              className="font-medium underline underline-offset-4 hover:text-foreground"
-            >
-              {t("providers.goToSettings")}
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
+          <TabsTrigger value="usage">{t("tabs.usage")}</TabsTrigger>
+        </TabsList>
 
-      {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard
-          icon={Activity}
-          label={t("statCards.requestsToday")}
-          value={quota?.requestsToday ?? 0}
-          sub={
-            quota?.uniqueUsersToday
-              ? t("statCards.users", { count: quota.uniqueUsersToday })
-              : undefined
-          }
-          sparkline={sparklines?.requestSparkline}
-          trend={sparklines?.trends.requests}
-        />
-        <StatCard
-          icon={Hash}
-          label={t("statCards.tokensToday")}
-          value={formatTokens(
-            (quota?.inputTokensToday ?? 0) + (quota?.outputTokensToday ?? 0),
+        <TabsContent value="overview" className="space-y-6">
+          {/* Provider warning */}
+          {(hasNoProviders || hasNoEnabledProviders) && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>
+                {hasNoProviders
+                  ? t("providers.noProvidersTitle")
+                  : t("providers.noEnabledTitle")}
+              </AlertTitle>
+              <AlertDescription>
+                {hasNoProviders
+                  ? t("providers.noProvidersDesc")
+                  : t("providers.noEnabledDesc")}
+                <Link
+                  to={ROUTES.PROVIDERS}
+                  className="font-medium underline underline-offset-4 hover:text-foreground"
+                >
+                  {t("providers.goToSettings")}
+                </Link>
+              </AlertDescription>
+            </Alert>
           )}
-          sub={
-            quota
-              ? t("statCards.inOut", { input: formatTokens(quota.inputTokensToday), output: formatTokens(quota.outputTokensToday) })
-              : undefined
-          }
-          sparkline={sparklines?.tokenSparkline}
-          trend={sparklines?.trends.tokens}
-        />
-        <StatCard
-          icon={DollarSign}
-          label={t("statCards.costToday", "Cost Today")}
-          value={formatCost(quota?.costToday)}
-          sparkline={sparklines?.costSparkline}
-          trend={sparklines?.trends.cost}
-        />
-        <StatCard
-          icon={Bot}
-          label={t("statCards.agents")}
-          value={
-            agentTotal > 0
-              ? `${runningAgents} / ${agentTotal}`
-              : "0"
-          }
-          sub={agentTotal > 0 ? t("statCards.running") : undefined}
-        />
-        <StatCard
-          icon={Radio}
-          label={t("statCards.channels")}
-          value={
-            channelEntries.length > 0
-              ? `${channelsOnline} / ${channelEntries.length}`
-              : "0"
-          }
-          sub={channelEntries.length > 0 ? t("statCards.online") : undefined}
-        />
-      </div>
 
-      {/* System Health */}
-      <SystemHealthCard
-        health={health}
-        liveUptime={liveUptime}
-        enabledProviderCount={enabledProviders.length}
-        sessions={status?.sessions ?? 0}
-        clientCount={clientList.length}
-        channelEntries={channelEntries}
-      />
+          {/* Summary cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <StatCard
+              icon={Activity}
+              label={t("statCards.requestsToday")}
+              value={quota?.requestsToday ?? 0}
+              sub={
+                quota?.uniqueUsersToday
+                  ? t("statCards.users", { count: quota.uniqueUsersToday })
+                  : undefined
+              }
+              sparkline={sparklines?.requestSparkline}
+              trend={sparklines?.trends.requests}
+            />
+            <StatCard
+              icon={Hash}
+              label={t("statCards.tokensToday")}
+              value={formatTokens(
+                (quota?.inputTokensToday ?? 0) + (quota?.outputTokensToday ?? 0),
+              )}
+              sub={
+                quota
+                  ? t("statCards.inOut", { input: formatTokens(quota.inputTokensToday), output: formatTokens(quota.outputTokensToday) })
+                  : undefined
+              }
+              sparkline={sparklines?.tokenSparkline}
+              trend={sparklines?.trends.tokens}
+            />
+            <StatCard
+              icon={DollarSign}
+              label={t("statCards.costToday", "Cost Today")}
+              value={formatCost(quota?.costToday)}
+              sparkline={sparklines?.costSparkline}
+              trend={sparklines?.trends.cost}
+            />
+            <StatCard
+              icon={Bot}
+              label={t("statCards.agents")}
+              value={
+                agentTotal > 0
+                  ? `${runningAgents} / ${agentTotal}`
+                  : "0"
+              }
+              sub={agentTotal > 0 ? t("statCards.running") : undefined}
+            />
+            <StatCard
+              icon={Radio}
+              label={t("statCards.channels")}
+              value={
+                channelEntries.length > 0
+                  ? `${channelsOnline} / ${channelEntries.length}`
+                  : "0"
+              }
+              sub={channelEntries.length > 0 ? t("statCards.online") : undefined}
+            />
+          </div>
 
-      {/* Connected Clients + Cron Jobs */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <ConnectedClientsCard
-          clients={clientList}
-          currentId={health?.currentId}
-        />
-        <CronJobsCard jobs={cronData?.jobs ?? []} />
-      </div>
+          {/* System Health */}
+          <SystemHealthCard
+            health={health}
+            liveUptime={liveUptime}
+            enabledProviderCount={enabledProviders.length}
+            sessions={status?.sessions ?? 0}
+            clientCount={clientList.length}
+            channelEntries={channelEntries}
+            runtimeEntries={runtimes?.runtimes}
+          />
 
-      {/* Recent Requests */}
-      <RecentRequestsCard traces={traces} />
+          {/* Connected Clients + Cron Jobs */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ConnectedClientsCard
+              clients={clientList}
+              currentId={health?.currentId}
+            />
+            <CronJobsCard jobs={cronData?.jobs ?? []} />
+          </div>
 
-      {/* Quota Usage */}
-      {quota?.enabled && quota.entries.length > 0 && (
-        <QuotaUsageCard quota={quota} />
-      )}
+          {/* Recent Requests */}
+          <RecentRequestsCard traces={traces} />
+
+          {/* Quota Usage */}
+          {quota?.enabled && quota.entries.length > 0 && (
+            <QuotaUsageCard quota={quota} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="usage">
+          <Suspense fallback={<div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" /></div>}>
+            <UsagePage />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -67,4 +67,6 @@ export function useWsQueryInvalidation() {
   useWsEvent(Events.HEALTH, handleHealthEvent);
   useWsEvent(Events.SKILL_DEPS_CHECKED, handleSkillDepsEvent);
   useWsEvent(Events.SKILL_DEPS_COMPLETE, handleSkillDepsEvent);
+  useWsEvent(Events.SKILL_DEPS_INSTALLING, handleSkillDepsEvent);
+  useWsEvent(Events.SKILL_DEPS_INSTALLED, handleSkillDepsEvent);
 }

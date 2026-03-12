@@ -17,6 +17,10 @@
     "title": "Cron 任务"
   },
   "description": "网关概览和配额使用情况",
+  "tabs": {
+    "overview": "概览",
+    "usage": "用量"
+  },
   "providers": {
     "goToSettings": "前往 Provider 设置",
     "noEnabledDesc": "所有 Provider 均已禁用。请至少启用一个以开始使用 Agent。",
@@ -69,7 +73,8 @@
     "sessions": "Session",
     "title": "系统健康",
     "tools": "工具",
-    "uptime": "运行时间"
+    "uptime": "运行时间",
+    "runtimes": "运行时"
   },
   "title": "概览"
 }

@@ -107,7 +107,9 @@ func (l *Loader) ListSkills() []Info {
 	seen := make(map[string]bool)
 	var skills []Info
 
-	// Priority: workspace > project-agents > personal-agents > global > builtin
+	// Priority: workspace > project-agents > personal-agents > global > managed > builtin
+	// Managed (DB-seeded) skills take priority over raw bundled files so agents
+	// always receive paths within the skills-store (workspace-accessible), not /app/bundled-skills/.
 	for _, src := range []struct {
 		dir    string
 		source string
@@ -116,7 +118,6 @@ func (l *Loader) ListSkills() []Info {
 		{l.projectAgentSkills, "agents-project"},
 		{l.personalAgentSkills, "agents-personal"},
 		{l.globalSkills, "global"},
-		{l.builtinSkills, "builtin"},
 	} {
 		if src.dir == "" {
 			continue
@@ -153,8 +154,7 @@ func (l *Loader) ListSkills() []Info {
 		}
 	}
 
-	// Managed skills: versioned subdirectories <managedSkillsDir>/<slug>/<version>/SKILL.md
-	// Only include skills not already seen from higher-priority sources.
+	// Managed skills (versioned, DB-seeded) come before builtin so their workspace paths win.
 	if l.managedSkillsDir != "" {
 		for _, info := range l.listManagedSkills() {
 			if seen[info.Slug] {
@@ -163,6 +163,38 @@ func (l *Loader) ListSkills() []Info {
 			skills = append(skills, info)
 			seen[info.Slug] = true
 			l.cache[info.Slug] = &info
+		}
+	}
+
+	// Builtin (raw bundled files) — lowest priority fallback.
+	if l.builtinSkills != "" {
+		dirs, err := os.ReadDir(l.builtinSkills)
+		if err == nil {
+			for _, d := range dirs {
+				if !d.IsDir() || seen[d.Name()] {
+					continue
+				}
+				skillFile := filepath.Join(l.builtinSkills, d.Name(), "SKILL.md")
+				if _, err := os.Stat(skillFile); err != nil {
+					continue
+				}
+				info := Info{
+					Name:    d.Name(),
+					Slug:    d.Name(),
+					Path:    skillFile,
+					BaseDir: filepath.Join(l.builtinSkills, d.Name()),
+					Source:  "builtin",
+				}
+				if meta := parseMetadata(skillFile); meta != nil {
+					info.Description = meta.Description
+					if meta.Name != "" {
+						info.Name = meta.Name
+					}
+				}
+				skills = append(skills, info)
+				seen[d.Name()] = true
+				l.cache[d.Name()] = &info
+			}
 		}
 	}
 
@@ -245,9 +277,10 @@ func (l *Loader) findLatestVersion(slug string) (int, string) {
 
 // LoadSkill reads and returns the content of a skill by name (frontmatter stripped).
 // The {baseDir} placeholder in SKILL.md is replaced with the skill's absolute directory path.
+// Priority: workspace > agents > global > managed > builtin
 func (l *Loader) LoadSkill(name string) (string, bool) {
-	// Check standard (flat) skill directories first
-	for _, dir := range []string{l.workspaceSkills, l.projectAgentSkills, l.personalAgentSkills, l.globalSkills, l.builtinSkills} {
+	// Check flat skill directories (workspace, agents, global) first
+	for _, dir := range []string{l.workspaceSkills, l.projectAgentSkills, l.personalAgentSkills, l.globalSkills} {
 		if dir == "" {
 			continue
 		}
@@ -257,12 +290,11 @@ func (l *Loader) LoadSkill(name string) (string, bool) {
 			continue
 		}
 		content := stripFrontmatter(string(data))
-		baseDir := filepath.Join(dir, name)
-		content = strings.ReplaceAll(content, "{baseDir}", baseDir)
+		content = strings.ReplaceAll(content, "{baseDir}", filepath.Join(dir, name))
 		return content, true
 	}
 
-	// Check managed skills directory (versioned structure)
+	// Managed skills (DB-seeded, versioned) take priority over raw builtin files.
 	if l.managedSkillsDir != "" {
 		latestVer, latestDir := l.findLatestVersion(name)
 		if latestVer >= 0 {
@@ -273,6 +305,17 @@ func (l *Loader) LoadSkill(name string) (string, bool) {
 				content = strings.ReplaceAll(content, "{baseDir}", latestDir)
 				return content, true
 			}
+		}
+	}
+
+	// Builtin fallback (only if not in managed)
+	if l.builtinSkills != "" {
+		path := filepath.Join(l.builtinSkills, name, "SKILL.md")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			content := stripFrontmatter(string(data))
+			content = strings.ReplaceAll(content, "{baseDir}", filepath.Join(l.builtinSkills, name))
+			return content, true
 		}
 	}
 

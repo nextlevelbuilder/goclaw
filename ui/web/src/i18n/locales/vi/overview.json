@@ -17,6 +17,10 @@
     "title": "Tác vụ định kỳ"
   },
   "description": "Tổng quan gateway và mức sử dụng quota",
+  "tabs": {
+    "overview": "Tổng quan",
+    "usage": "Sử dụng"
+  },
   "providers": {
     "goToSettings": "Đến Cài đặt Provider",
     "noEnabledDesc": "Tất cả provider đang bị tắt. Bật ít nhất một provider để sử dụng agent.",
@@ -69,7 +73,8 @@
     "sessions": "Session",
     "title": "Tình trạng hệ thống",
     "tools": "Công cụ",
-    "uptime": "Thời gian hoạt động"
+    "uptime": "Thời gian hoạt động",
+    "runtimes": "Môi trường runtime"
   },
   "title": "Bảng điều khiển"
 }

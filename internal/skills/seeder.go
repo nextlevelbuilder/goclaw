@@ -17,10 +17,11 @@ import (
 
 // SystemSkillStore is the minimal interface needed by the seeder.
 type SystemSkillStore interface {
-	UpsertSystemSkill(ctx context.Context, p pg.SkillCreateParams) (uuid.UUID, bool, error)
+	UpsertSystemSkill(ctx context.Context, p pg.SkillCreateParams) (uuid.UUID, bool, string, error)
 	GetNextVersion(slug string) int
 	BumpVersion()
 	UpdateSkill(id uuid.UUID, updates map[string]interface{}) error
+	StoreMissingDeps(id uuid.UUID, missing []string) error
 }
 
 // seededSkill tracks a skill that was seeded and needs async dep checking.
@@ -116,16 +117,25 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 			Frontmatter: fmMap,
 		}
 
-		id, changed, upsertErr := s.store.UpsertSystemSkill(ctx, p)
+		id, changed, actualDir, upsertErr := s.store.UpsertSystemSkill(ctx, p)
 		if upsertErr != nil {
 			slog.Error("seeder: failed to upsert skill", "slug", slug, "error", upsertErr)
 			continue
 		}
 
 		if !changed {
+			// Use the existing file_path from DB — destDir is GetNextVersion+1 which doesn't exist yet.
+			// Also check if the managed dir is intact: a previous copy may have failed mid-way due to
+			// symlink-to-directory errors, leaving scripts/ empty. Detect by checking if the bundled
+			// scripts/ dir has content but the managed scripts/ dir is missing or empty.
+			if needsReCopy(skillDir, actualDir) {
+				slog.Info("seeder: managed dir incomplete, re-copying", "slug", slug, "dir", actualDir)
+				if err := copyDir(skillDir, actualDir); err != nil {
+					slog.Error("seeder: failed to re-copy skill files", "slug", slug, "error", err)
+				}
+			}
 			skipped++
-			// Still need to check deps for existing skills
-			skills = append(skills, seededSkill{id: id, slug: slug, baseDir: destDir})
+			skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir})
 			continue
 		}
 
@@ -136,7 +146,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 		}
 
 		slog.Info("seeder: skill seeded", "id", id, "slug", slug, "version", version)
-		skills = append(skills, seededSkill{id: id, slug: slug, baseDir: destDir})
+		skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir})
 		seeded++
 	}
 
@@ -161,6 +171,8 @@ func (s *Seeder) CheckDepsAsync(skills []seededSkill, msgBus *bus.MessageBus) {
 			}
 
 			ok, missing := CheckSkillDeps(manifest)
+			// Always persist missing deps so UI can display them per-skill
+			_ = s.store.StoreMissingDeps(sk.id, missing)
 			status := "active"
 			if !ok {
 				status = "archived"
@@ -224,8 +236,9 @@ func (s *Seeder) copySharedDir(name string) {
 }
 
 // copyDir recursively copies a directory tree.
-// Resolves the top-level path so symlinks (e.g. scripts/office -> ../../_shared/office)
-// are followed and their contents are copied as real files.
+// Resolves the top-level path and any mid-tree symlinks pointing to directories
+// so local module symlinks (e.g. scripts/office -> ../../_shared/office)
+// are copied as real directories rather than left as dangling entries.
 func copyDir(src, dst string) error {
 	resolved, err := filepath.EvalSymlinks(src)
 	if err != nil {
@@ -247,6 +260,15 @@ func copyDir(src, dst string) error {
 			return os.MkdirAll(target, 0755)
 		}
 
+		// filepath.Walk uses Lstat; a symlink to a directory won't have IsDir()=true.
+		// Detect and recurse into directory symlinks so local modules are fully copied.
+		if info.Mode()&os.ModeSymlink != 0 {
+			if realInfo, statErr := os.Stat(path); statErr == nil && realInfo.IsDir() {
+				return copyDir(path, target)
+			}
+			return nil // skip broken symlinks
+		}
+
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -256,4 +278,21 @@ func copyDir(src, dst string) error {
 		}
 		return os.WriteFile(target, data, 0644)
 	})
+}
+
+// needsReCopy returns true when the managed copy's scripts/ is missing or has fewer
+// entries than the bundled source — symptom of a previous failed copy caused by a
+// symlink-to-directory stopping filepath.Walk early (e.g. scripts/office/ symlink).
+func needsReCopy(bundledDir, managedDir string) bool {
+	srcScripts := filepath.Join(bundledDir, "scripts")
+	srcEntries, err := os.ReadDir(srcScripts)
+	if err != nil || len(srcEntries) == 0 {
+		return false // bundled has no scripts; nothing to check
+	}
+	dstScripts := filepath.Join(managedDir, "scripts")
+	dstEntries, err := os.ReadDir(dstScripts)
+	if err != nil {
+		return true // dst scripts dir missing
+	}
+	return len(dstEntries) < len(srcEntries)
 }

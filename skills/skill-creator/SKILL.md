@@ -30,7 +30,7 @@ Create effective, eval-driven Claude skills using progressive disclosure and hum
 
 ## Skill Structure
 
-New skills **MUST** be created in CWD: `./.claude/skills/` (**NOT** `~/.claude/skills/` unless requested)
+New skills **MUST** be created in CWD: `skills/` directory (workspace root)
 
 ```
 skill-name/
@@ -54,8 +54,9 @@ Follow the process in `references/skill-creation-workflow.md`:
 5. **Write** — Implement resources, write SKILL.md, optimize for benchmarks
 6. **Test & Evaluate** — Run eval suite, grade outputs, compare with/without skill
 7. **Optimize Description** — AI-powered trigger accuracy optimization
-8. **Package** — `scripts/package_skill.py <path>`
-9. **Iterate** — Generalize from feedback, keep prompts lean
+8. **Publish** — `publish_skill(path: "skills/<name>")` to register in system database
+9. **Package** (optional) — `scripts/package_skill.py <path>` for external distribution
+10. **Iterate** — Generalize from feedback, keep prompts lean
 
 ## Eval & Testing (CRITICAL)
 
@@ -132,6 +133,26 @@ Optimization patterns: `references/benchmark-optimization-guide.md`
 | `scripts/improve_description.py` | AI-powered description optimization |
 | `scripts/run_loop.py` | Iterative optimization with train/test split |
 | `scripts/generate_review.py` | Generate interactive HTML eval viewer |
+
+## Publishing to System
+
+After creating and validating a skill, register it in the system database:
+
+```
+publish_skill(path: "skills/my-skill")
+```
+
+This tool:
+- Copies skill files to the managed skills store
+- Registers metadata (name, description, slug) in the database
+- Auto-grants the skill to the creating agent
+- Scans dependencies and reports any missing ones
+- Generates search embeddings for skill discovery
+
+If dependencies are missing, try installing them via `exec` (e.g. `pip install <pkg>`, `npm install <pkg>`).
+If system binaries are missing and you cannot install them, inform the user.
+
+Re-publishing the same slug updates the existing skill (upsert behavior, increments version).
 
 ## Validation & Distribution
 

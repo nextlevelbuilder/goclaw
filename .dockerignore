@@ -3,6 +3,9 @@
 .env*
 .dockerignore
 *.md
+!skills/
+!skills/**
+!skills/**/*.md
 docs/
 tests/
 /config.json
@@ -12,3 +15,6 @@ tmp/
 .claude/
 .vscode/
 .idea/
+ui/
+plans/
+skills-store/

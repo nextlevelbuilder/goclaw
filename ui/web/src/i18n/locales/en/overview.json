@@ -1,6 +1,10 @@
 {
   "title": "Dashboard",
   "description": "Gateway overview and quota usage",
+  "tabs": {
+    "overview": "Overview",
+    "usage": "Usage"
+  },
   "statCards": {
     "requestsToday": "Requests Today",
     "tokensToday": "Tokens Today",
@@ -29,7 +33,8 @@
     "clients": "Clients",
     "channels": "Channels",
     "active": "{{count}} active",
-    "none": "none"
+    "none": "none",
+    "runtimes": "Runtimes"
   },
   "connectedClients": {
     "title": "Connected Clients",

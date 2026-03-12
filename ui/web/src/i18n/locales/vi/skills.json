@@ -10,7 +10,9 @@
     "name": "Tên",
     "description": "Mô tả",
     "source": "Nguồn",
+    "author": "Tác giả",
     "visibility": "Hiển thị",
+    "status": "Trạng thái",
     "actions": "Thao tác"
   },
   "noDescription": "Không có mô tả",
@@ -62,11 +64,36 @@
     "publicOption": "Công khai (tất cả agent)"
   },
   "system": "Hệ thống",
+  "tabs": {
+    "core": "Hệ thống",
+    "custom": "Tùy chỉnh"
+  },
+  "toggle": {
+    "enable": "Bật skill",
+    "disable": "Tắt skill",
+    "disabled": "Đã tắt"
+  },
   "deps": {
-    "rescan": "Quét lại deps",
-    "rescanning": "Đang quét...",
-    "rescanSuccess": "Đã cập nhật {{count}} skill",
-    "missing": "Thiếu: {{deps}}"
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed",
+    "installPartial": "Some dependencies failed",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
   },
   "detail": {
     "title": "Chi tiết skill",

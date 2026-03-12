@@ -38,19 +38,32 @@ FROM alpine:3.22
 
 ARG ENABLE_SANDBOX=false
 ARG ENABLE_PYTHON=false
+ARG ENABLE_NODE=false
+ARG ENABLE_FULL_SKILLS=false
 
-# Install ca-certificates + wget (healthcheck) + optionally docker-cli (sandbox)
-# + python3 with common skill packages + nodejs for JS-based skills
+# Install ca-certificates + wget (healthcheck) + optional runtimes.
+# ENABLE_FULL_SKILLS=true pre-installs all skill deps (larger image, no on-demand install needed).
+# Otherwise, skill packages are installed on-demand via the admin UI.
 RUN set -eux; \
     apk add --no-cache ca-certificates wget; \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
         apk add --no-cache docker-cli; \
     fi; \
-    if [ "$ENABLE_PYTHON" = "true" ]; then \
-        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli; \
-        pip3 install --break-system-packages \
-            pypdf openpyxl pandas python-pptx markitdown; \
-        npm install -g docx pptxgenjs; \
+    if [ "$ENABLE_FULL_SKILLS" = "true" ]; then \
+        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli doas; \
+        echo "permit nopass goclaw as root cmd apk" > /etc/doas.d/goclaw.conf; \
+        pip3 install --no-cache-dir --break-system-packages \
+            pypdf openpyxl pandas python-pptx markitdown defusedxml lxml; \
+        npm install -g --cache /tmp/npm-cache docx pptxgenjs; \
+        rm -rf /tmp/npm-cache /root/.cache /var/cache/apk/*; \
+    else \
+        if [ "$ENABLE_PYTHON" = "true" ]; then \
+            apk add --no-cache python3 py3-pip doas; \
+            echo "permit nopass goclaw as root cmd apk" > /etc/doas.d/goclaw.conf; \
+        fi; \
+        if [ "$ENABLE_NODE" = "true" ]; then \
+            apk add --no-cache nodejs npm; \
+        fi; \
     fi
 
 # Non-root user
