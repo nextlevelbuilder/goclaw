@@ -34,6 +34,7 @@
     "storage": "存储",
     "traces": "追踪",
     "tts": "TTS",
-    "usage": "用量"
+    "usage": "用量",
+    "activity": "活动日志"
   }
 }

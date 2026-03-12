@@ -140,7 +140,7 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
                     )}
 
                     {/* Policies */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       {chData.dm_policy !== undefined && (
                         <div className="grid gap-1.5">
                           <Label>{t("channels.dmPolicy")}</Label>
@@ -191,7 +191,7 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
 
                     {/* Telegram-specific */}
                     {ch === "telegram" && (
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="flex items-center gap-4">
                           <label className="flex items-center gap-2 text-sm">
                             <input type="checkbox" checked={!!chData.dm_stream} onChange={(e) => updateChannel(ch, { dm_stream: e.target.checked })} />

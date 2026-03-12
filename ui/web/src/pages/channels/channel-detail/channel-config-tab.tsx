@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Check, AlertCircle } from "lucide-react";
+import { Save, Check, AlertCircle, Info, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChannelInstanceData } from "@/types/channel";
 import { configSchema } from "../channel-schemas";
@@ -62,6 +62,20 @@ export function ChannelConfigTab({ instance, onUpdate }: ChannelConfigTabProps) 
     );
   }
 
+  // Show webhook URL hint for Feishu/Lark in webhook mode
+  const isFeishu = instance.channel_type === "feishu";
+  const connectionMode = (values.connection_mode as string) ?? "webhook";
+  const showWebhookUrl = isFeishu && connectionMode === "webhook";
+  const webhookPath = (values.webhook_path as string) || "/feishu/events";
+  const webhookUrl = `https://<your-gateway-domain>${webhookPath}`;
+
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(webhookPath);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [webhookPath]);
+
   return (
     <div className="max-w-2xl space-y-6">
       <ChannelFields
@@ -70,6 +84,28 @@ export function ChannelConfigTab({ instance, onUpdate }: ChannelConfigTabProps) 
         onChange={handleChange}
         idPrefix="cd-cfg"
       />
+
+      {showWebhookUrl && (
+        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm dark:border-blue-800 dark:bg-blue-950">
+          <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+          <div className="flex-1 min-w-0">
+            <p className="text-blue-800 dark:text-blue-200">{t("detail.config.webhookUrlLabel")}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <code className="text-xs bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 rounded break-all">
+                {webhookUrl}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="shrink-0 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                title={t("detail.config.copyPath")}
+              >
+                {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {saveError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">

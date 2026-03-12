@@ -67,7 +67,7 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
         <div className="flex-1 min-h-0 overflow-y-auto py-2 px-1 -mx-1 space-y-4">
           {/* Entity info */}
           {entity && (
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
               <div>
                 <span className="text-muted-foreground">{t("kg.entity.externalId")}</span>{" "}
                 <span className="font-mono">{entity.external_id}</span>
@@ -111,8 +111,8 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
             ) : relations.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t("kg.entity.noRelations")}</p>
             ) : (
-              <div className="rounded-md border">
-                <table className="w-full text-xs">
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full min-w-[400px] text-xs">
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.direction")}</th>

@@ -16,6 +16,82 @@
     "provider": "Provider",
     "input": "Đầu vào",
     "output": "Đầu ra",
-    "total": "Tổng"
+    "total": "Tổng",
+    "channel": "Kênh",
+    "cost": "Chi phí",
+    "status": "Trạng thái"
+  },
+  "analytics": {
+    "title": "Phân tích sử dụng",
+    "period24h": "24h",
+    "period7d": "7 ngày",
+    "period30d": "30 ngày",
+    "periodCustom": "Tùy chọn",
+    "allAgents": "Tất cả Agent",
+    "allProviders": "Tất cả Provider",
+    "allChannels": "Tất cả kênh",
+    "activeFilters": "Bộ lọc đang áp dụng",
+    "clearAll": "Xóa tất cả",
+    "exportCsv": "Xuất CSV",
+    "requests": "Yêu cầu",
+    "tokens": "Token",
+    "cost": "Chi phí",
+    "errors": "Lỗi",
+    "uniqueUsers": "Người dùng",
+    "llmCalls": "Lượt gọi LLM",
+    "toolCalls": "Lượt gọi công cụ",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "so với kỳ trước",
+    "configurePricing": "Cấu hình giá model để theo dõi chi phí",
+    "noData": "Không có dữ liệu cho khoảng thời gian đã chọn",
+    "tokenChart": {
+      "title": "Token sử dụng theo thời gian",
+      "input": "Token đầu vào",
+      "output": "Token đầu ra",
+      "cache": "Token cache đọc",
+      "thinking": "Token suy nghĩ",
+      "total": "Tổng"
+    },
+    "requestChart": {
+      "title": "Lượng yêu cầu & Lỗi",
+      "requests": "Yêu cầu",
+      "errors": "Lỗi",
+      "errorRate": "Tỷ lệ lỗi"
+    },
+    "distribution": {
+      "provider": "Phân bố Provider",
+      "model": "Phân bố Model",
+      "channel": "Phân bố kênh",
+      "other": "Khác",
+      "calls": "lượt gọi"
+    },
+    "durationChart": {
+      "title": "Thời lượng & Hiệu suất",
+      "avgDuration": "TB thời lượng",
+      "errorRate": "Tỷ lệ lỗi %"
+    },
+    "knowledgeChart": {
+      "title": "Tăng trưởng Bộ nhớ & Đồ thị tri thức",
+      "memoryDocs": "Tài liệu",
+      "memoryChunks": "Đoạn nhớ",
+      "kgEntities": "Thực thể KG",
+      "kgRelations": "Quan hệ KG"
+    },
+    "topModels": {
+      "title": "Model hàng đầu",
+      "model": "Model",
+      "provider": "Provider",
+      "llmCalls": "Lượt gọi LLM",
+      "inputTokens": "Token đầu vào",
+      "outputTokens": "Token đầu ra",
+      "avgDuration": "TB thời lượng",
+      "cost": "Chi phí"
+    },
+    "tooltip": {
+      "date": "Ngày",
+      "total": "Tổng",
+      "errorRate": "Tỷ lệ lỗi {{value}}%"
+    }
   }
 }

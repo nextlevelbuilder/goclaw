@@ -76,6 +76,7 @@
   "sendMessage": "Send a message... (Shift+Enter for new line)",
   "stopGeneration": "Stop generation",
   "sendMessageTitle": "Send message",
+  "attachFile": "Attach file",
   "thinking": "Thinking",
   "thinkingStreaming": "Thinking...",
   "toolArguments": "Arguments",

@@ -11,6 +11,7 @@ import type {
   SandboxConfig,
   MemoryConfig,
   QualityGateConfig,
+  WorkspaceSharingConfig,
 } from "@/types/agent";
 import {
   SubagentsSection,
@@ -22,6 +23,7 @@ import {
   OtherConfigSection,
   QualityGatesSection,
   ThinkingSection,
+  WorkspaceSharingSection,
 } from "./config-sections";
 
 interface AgentConfigTabProps {
@@ -52,7 +54,10 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
   const otherObj = (agent.other_config ?? {}) as Record<string, unknown>;
   const initialGates = (Array.isArray(otherObj.quality_gates) ? otherObj.quality_gates : []) as QualityGateConfig[];
   const initialThinkingLevel = (typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off");
-  const { quality_gates: _qg, thinking_level: _tl, ...otherWithoutManaged } = otherObj;
+  const initialWsSharing = (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig;
+  const { workspace_sharing: _ws, quality_gates: _qg, thinking_level: _tl, ...otherWithoutManaged } = otherObj;
+
+  const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(initialWsSharing);
 
   const [qgEnabled, setQgEnabled] = useState(initialGates.length > 0);
   const [qualityGates, setQualityGates] = useState<QualityGateConfig[]>(initialGates);
@@ -77,7 +82,9 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
     try {
       const updates: Record<string, unknown> = {
         subagents_config: subEnabled ? sub : null,
-        tools_config: toolsEnabled ? tools : {},
+        tools_config: toolsEnabled
+          ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
+          : {},
         compaction_config: comp,
         context_pruning: pruneEnabled ? prune : null,
         sandbox_config: sbEnabled ? sb : null,
@@ -93,6 +100,9 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
       if (thinkingLevel && thinkingLevel !== "off") {
         otherBase.thinking_level = thinkingLevel;
       }
+      if (wsSharing.shared_dm || wsSharing.shared_group || (wsSharing.shared_users?.length ?? 0) > 0) {
+        otherBase.workspace_sharing = wsSharing;
+      }
       updates.other_config = Object.keys(otherBase).length > 0 ? otherBase : {};
       await onUpdate(updates);
       setSaved(true);
@@ -106,6 +116,12 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
 
   return (
     <div className="max-w-4xl space-y-4">
+      {/* Workspace & Security */}
+      <WorkspaceSharingSection
+        value={wsSharing}
+        onChange={setWsSharing}
+      />
+
       {/* Core */}
       <ThinkingSection
         value={thinkingLevel}

@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -45,7 +46,14 @@ type Loop struct {
 	contextWindow int
 	maxIterations int
 	maxToolCalls  int
-	workspace     string
+	workspace        string
+	workspaceSharing *store.WorkspaceSharingConfig
+
+	// Per-agent overrides from DB (nil = use global defaults)
+	restrictToWs  *bool
+	subagentsCfg  *config.SubagentsConfig
+	memoryCfg     *config.MemoryConfig
+	sandboxCfg    *sandbox.Config
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
 	sessions        store.SessionStore
@@ -109,6 +117,13 @@ type Loop struct {
 
 	// Persistent media storage for cross-turn image/document access
 	mediaStore *media.Store
+
+	// Model pricing config for cost tracking (nil = no cost calculation)
+	modelPricing map[string]*config.ModelPricing
+
+	// Budget enforcement: monthly spending limit in cents (0 = unlimited)
+	budgetMonthlyCents int
+	tracingStore       store.TracingStore
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -139,7 +154,15 @@ type LoopConfig struct {
 	ContextWindow   int
 	MaxIterations   int
 	MaxToolCalls    int
-	Workspace       string
+	Workspace        string
+	WorkspaceSharing *store.WorkspaceSharingConfig
+
+	// Per-agent DB overrides (nil = use global defaults)
+	RestrictToWs *bool
+	SubagentsCfg *config.SubagentsConfig
+	MemoryCfg    *config.MemoryConfig
+	SandboxCfg   *sandbox.Config
+
 	Bus             bus.EventPublisher
 	Sessions        store.SessionStore
 	Tools           *tools.Registry
@@ -199,6 +222,13 @@ type LoopConfig struct {
 
 	// Persistent media storage for cross-turn image/document access
 	MediaStore *media.Store
+
+	// Model pricing for cost tracking (key = "provider/model" or "model")
+	ModelPricing map[string]*config.ModelPricing
+
+	// Budget enforcement
+	BudgetMonthlyCents int
+	TracingStore       store.TracingStore
 }
 
 func NewLoop(cfg LoopConfig) *Loop {
@@ -234,6 +264,11 @@ func NewLoop(cfg LoopConfig) *Loop {
 		maxIterations:          cfg.MaxIterations,
 		maxToolCalls:           cfg.MaxToolCalls,
 		workspace:              cfg.Workspace,
+		workspaceSharing:       cfg.WorkspaceSharing,
+		restrictToWs:           cfg.RestrictToWs,
+		subagentsCfg:           cfg.SubagentsCfg,
+		memoryCfg:              cfg.MemoryCfg,
+		sandboxCfg:             cfg.SandboxCfg,
 		eventPub:               cfg.Bus,
 		sessions:               cfg.Sessions,
 		tools:                  cfg.Tools,
@@ -263,6 +298,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 		groupWriterCache:       cfg.GroupWriterCache,
 		teamStore:              cfg.TeamStore,
 		mediaStore:             cfg.MediaStore,
+		modelPricing:           cfg.ModelPricing,
+		budgetMonthlyCents:     cfg.BudgetMonthlyCents,
+		tracingStore:           cfg.TracingStore,
 	}
 }
 

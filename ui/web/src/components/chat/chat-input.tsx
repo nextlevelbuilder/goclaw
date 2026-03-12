@@ -1,10 +1,16 @@
 import { useState, useRef, useCallback, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Square } from "lucide-react";
+import { Send, Square, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+export interface AttachedFile {
+  file: File;
+  /** Server path after upload, set during send */
+  serverPath?: string;
+}
+
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, files?: AttachedFile[]) => void;
   onAbort: () => void;
   isRunning: boolean;
   disabled?: boolean;
@@ -13,17 +19,19 @@ interface ChatInputProps {
 export function ChatInput({ onSend, onAbort, isRunning, disabled }: ChatInputProps) {
   const { t } = useTranslation("common");
   const [value, setValue] = useState("");
+  const [files, setFiles] = useState<AttachedFile[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = useCallback(() => {
-    if (!value.trim() || disabled) return;
-    onSend(value);
+    if ((!value.trim() && files.length === 0) || disabled) return;
+    onSend(value, files.length > 0 ? files : undefined);
     setValue("");
-    // Reset textarea height
+    setFiles([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [value, onSend, disabled]);
+  }, [value, files, onSend, disabled]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -43,38 +51,101 @@ export function ChatInput({ onSend, onAbort, isRunning, disabled }: ChatInputPro
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }, []);
 
+  const handleFileSelect = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files;
+    if (!selected) return;
+    const newFiles: AttachedFile[] = Array.from(selected).map((f) => ({ file: f }));
+    setFiles((prev) => [...prev, ...newFiles]);
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   return (
-    <div className="flex items-end gap-2 border-t bg-background p-4">
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onInput={handleInput}
-        placeholder={t("sendMessage")}
-        disabled={disabled}
-        rows={1}
-        className="flex-1 resize-none rounded-lg border bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
-      />
-      {isRunning ? (
-        <Button
-          variant="destructive"
-          size="icon-lg"
-          onClick={onAbort}
-          title={t("stopGeneration")}
-        >
-          <Square className="h-4 w-4" />
-        </Button>
-      ) : (
-        <Button
-          size="icon-lg"
-          onClick={handleSend}
-          disabled={!value.trim() || disabled}
-          title={t("sendMessageTitle")}
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+    <div
+      className="border-t bg-background safe-bottom"
+      style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px))` }}
+    >
+      {/* Attached files preview */}
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+          {files.map((af, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs"
+            >
+              <span className="max-w-[150px] truncate">{af.file.name}</span>
+              <button
+                type="button"
+                onClick={() => removeFile(i)}
+                className="rounded-sm p-0.5 hover:bg-accent"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
       )}
+
+      <div className="flex items-end gap-2 p-4 pt-3">
+        {/* File attach button */}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-lg"
+          onClick={handleFileSelect}
+          disabled={disabled || isRunning}
+          title={t("attachFile")}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <Paperclip className="h-4 w-4" />
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onInput={handleInput}
+          placeholder={t("sendMessage")}
+          disabled={disabled}
+          rows={1}
+          className="flex-1 resize-none rounded-lg border bg-background px-4 py-2.5 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+        />
+        {isRunning ? (
+          <Button
+            variant="destructive"
+            size="icon-lg"
+            onClick={onAbort}
+            title={t("stopGeneration")}
+          >
+            <Square className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button
+            size="icon-lg"
+            onClick={handleSend}
+            disabled={(!value.trim() && files.length === 0) || disabled}
+            title={t("sendMessageTitle")}
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

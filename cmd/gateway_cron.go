@@ -107,9 +107,9 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 }
 
 // resolveCronPeerKind infers peer kind from the cron job's user ID.
-// Group cron jobs have userID prefixed with "group:" (set during job creation).
+// Group cron jobs have userID prefixed with "group:" or "guild:" (set during job creation).
 func resolveCronPeerKind(job *store.CronJob) string {
-	if strings.HasPrefix(job.UserID, "group:") {
+	if strings.HasPrefix(job.UserID, "group:") || strings.HasPrefix(job.UserID, "guild:") {
 		return "group"
 	}
 	return ""

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -103,6 +104,144 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile) []provider
 		slog.Debug("media: persisted file", "id", id, "kind", kind, "mime", mime, "agent", l.id)
 	}
 	return refs
+}
+
+// enrichDocumentPaths updates the last user message to include persisted file paths
+// in <media:document> tags. This allows skills (e.g. pdf skill via exec) to access
+// the file directly, matching how Claude Code skills work with file paths.
+func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []providers.MediaRef) {
+	if l.mediaStore == nil || len(messages) == 0 {
+		return
+	}
+	// Find last user message
+	lastIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastIdx = i
+			break
+		}
+	}
+	if lastIdx < 0 {
+		return
+	}
+
+	content := messages[lastIdx].Content
+	for _, ref := range refs {
+		if ref.Kind != "document" {
+			continue
+		}
+		p, err := l.mediaStore.LoadPath(ref.ID)
+		if err != nil {
+			continue
+		}
+		// Replace <media:document> or <media:document name="X"> with version that includes path.
+		// The hint tells the agent the file is directly accessible (no copy needed).
+		pathAttr := fmt.Sprintf(" path=%q", p)
+		old1 := "<media:document>"
+		new1 := "<media:document" + pathAttr + ">"
+		// Replace the LAST bare tag (current message, not group history).
+		if idx := strings.LastIndex(content, old1); idx >= 0 {
+			content = content[:idx] + new1 + content[idx+len(old1):]
+			continue
+		}
+		// For named variant, inject path attribute (last occurrence)
+		if idx := strings.LastIndex(content, "<media:document name="); idx >= 0 {
+			closeIdx := strings.Index(content[idx:], ">")
+			if closeIdx >= 0 {
+				tag := content[idx : idx+closeIdx]
+				content = content[:idx] + tag + pathAttr + ">" + content[idx+closeIdx+1:]
+			}
+		}
+		// For Slack variant with file= attribute (last occurrence)
+		if idx := strings.LastIndex(content, "<media:document file="); idx >= 0 {
+			closeIdx := strings.Index(content[idx:], ">")
+			if closeIdx >= 0 {
+				tag := content[idx : idx+closeIdx]
+				content = content[:idx] + tag + pathAttr + ">" + content[idx+closeIdx+1:]
+			}
+		}
+	}
+	messages[lastIdx].Content = content
+}
+
+// enrichAudioIDs updates the last user message to embed persisted media IDs
+// in <media:audio> and <media:voice> tags so the LLM can reference them.
+// Without this, the LLM sees plain <media:audio> and cannot pass a valid media_id.
+// Replaces the LAST bare tag (current message) rather than the first (which may be
+// in group history context), so the current turn's media gets the correct ID.
+func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.MediaRef) {
+	if len(messages) == 0 {
+		return
+	}
+	lastIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastIdx = i
+			break
+		}
+	}
+	if lastIdx < 0 {
+		return
+	}
+
+	content := messages[lastIdx].Content
+	for _, ref := range refs {
+		if ref.Kind != "audio" {
+			continue
+		}
+		idAttr := fmt.Sprintf(" id=%q", ref.ID)
+
+		// Replace the LAST bare <media:audio> with <media:audio id="uuid">
+		bare := "<media:audio>"
+		if idx := strings.LastIndex(content, bare); idx >= 0 {
+			content = content[:idx] + "<media:audio" + idAttr + ">" + content[idx+len(bare):]
+			continue
+		}
+		// Replace the LAST bare <media:voice> with <media:voice id="uuid">
+		bareVoice := "<media:voice>"
+		if idx := strings.LastIndex(content, bareVoice); idx >= 0 {
+			content = content[:idx] + "<media:voice" + idAttr + ">" + content[idx+len(bareVoice):]
+			continue
+		}
+	}
+	messages[lastIdx].Content = content
+}
+
+// enrichVideoIDs updates the last user message to embed persisted media IDs
+// in <media:video> tags so the LLM can reference them via read_video tool.
+// Without this, the LLM sees plain <media:video> and hallucinates a media_id.
+// Replaces the LAST bare tag (current message) rather than the first (which may be
+// in group history context), so the current turn's media gets the correct ID.
+func (l *Loop) enrichVideoIDs(messages []providers.Message, refs []providers.MediaRef) {
+	if len(messages) == 0 {
+		return
+	}
+	lastIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastIdx = i
+			break
+		}
+	}
+	if lastIdx < 0 {
+		return
+	}
+
+	content := messages[lastIdx].Content
+	for _, ref := range refs {
+		if ref.Kind != "video" {
+			continue
+		}
+		idAttr := fmt.Sprintf(" id=%q", ref.ID)
+
+		// Replace the LAST bare <media:video> with <media:video id="uuid">
+		bare := "<media:video>"
+		if idx := strings.LastIndex(content, bare); idx >= 0 {
+			content = content[:idx] + "<media:video" + idAttr + ">" + content[idx+len(bare):]
+			continue
+		}
+	}
+	messages[lastIdx].Content = content
 }
 
 // mediaKindFromMime returns the media kind ("image", "video", "audio", "document")

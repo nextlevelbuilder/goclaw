@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Save, Check, AlertCircle, Users, FileText, Search, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -157,15 +158,34 @@ function ContactSearchBox({ existingIDs, onSelect }: { existingIDs: Set<string>;
   const [open, setOpen] = useState(false);
   const { contacts } = useContactSearch(search);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   // Filter out contacts already in instances
   const filtered = contacts.filter((c) => !existingIDs.has(c.sender_id));
+
+  // Compute dropdown position for portal rendering
+  useLayoutEffect(() => {
+    if (!open || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+  }, [open, search]);
 
   // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
         setOpen(false);
       }
     };
@@ -185,8 +205,8 @@ function ContactSearchBox({ existingIDs, onSelect }: { existingIDs: Set<string>;
           className="h-8 w-full rounded-md border bg-transparent pl-7 pr-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      {open && search.length >= 2 && filtered.length > 0 && (
-        <div className="absolute left-1 right-1 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+      {open && search.length >= 2 && filtered.length > 0 && createPortal(
+        <div ref={dropdownRef} style={dropdownStyle} className="max-h-48 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
           {filtered.map((c) => (
             <button
               key={c.id}
@@ -211,12 +231,14 @@ function ContactSearchBox({ existingIDs, onSelect }: { existingIDs: Set<string>;
               </div>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-      {open && search.length >= 2 && filtered.length === 0 && contacts.length === 0 && (
-        <div className="absolute left-1 right-1 z-50 mt-1 rounded-md border bg-popover p-3 text-center text-xs text-muted-foreground shadow-md">
+      {open && search.length >= 2 && filtered.length === 0 && contacts.length === 0 && createPortal(
+        <div ref={dropdownRef} style={dropdownStyle} className="rounded-md border bg-popover p-3 text-center text-xs text-muted-foreground shadow-md">
           {t("instances.noContactsFound")}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

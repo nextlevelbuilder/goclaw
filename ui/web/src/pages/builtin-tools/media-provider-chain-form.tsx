@@ -203,7 +203,7 @@ function SortableProviderCard({ entry, index, toolName, enabledProviders, onUpda
       </div>
 
       {/* Row 2: provider + model selects */}
-      <div className="grid grid-cols-2 gap-2 px-3 py-1.5">
+      <div className="grid grid-cols-1 gap-2 px-3 py-1.5 sm:grid-cols-2">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">{t("builtin.mediaChain.provider")}</Label>
           <Select value={entry.provider} onValueChange={handleProviderChange}>
@@ -274,7 +274,7 @@ function SortableProviderCard({ entry, index, toolName, enabledProviders, onUpda
 
       {/* Collapsible params */}
       {expanded && paramSchema.length > 0 && (
-        <div className="border-t px-3 py-3 grid grid-cols-2 gap-3">
+        <div className="border-t px-3 py-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {paramSchema.map((field) => (
             <ParamFieldControl
               key={field.key}

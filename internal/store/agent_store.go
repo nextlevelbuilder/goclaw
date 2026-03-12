@@ -39,6 +39,9 @@ type AgentData struct {
 	IsDefault           bool   `json:"is_default"`
 	Status              string `json:"status"`
 
+	// Budget: optional monthly spending limit in cents (nil = unlimited)
+	BudgetMonthlyCents *int `json:"budget_monthly_cents,omitempty"`
+
 	// Per-agent JSONB config (nullable — nil means "use global defaults")
 	ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 	SandboxConfig    json.RawMessage `json:"sandbox_config,omitempty"`
@@ -149,6 +152,33 @@ func (a *AgentData) ParseSelfEvolve() bool {
 		return false
 	}
 	return cfg.SelfEvolve
+}
+
+// WorkspaceSharingConfig controls per-user workspace isolation.
+// When shared_dm/shared_group is true, users share the base workspace directory
+// instead of each getting an isolated subfolder.
+type WorkspaceSharingConfig struct {
+	SharedDM    bool     `json:"shared_dm"`
+	SharedGroup bool     `json:"shared_group"`
+	SharedUsers []string `json:"shared_users,omitempty"`
+}
+
+// ParseWorkspaceSharing extracts workspace_sharing from other_config JSONB.
+// Returns nil if not configured or all fields are default (isolation enabled).
+func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var cfg struct {
+		WS *WorkspaceSharingConfig `json:"workspace_sharing"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.WS == nil {
+		return nil
+	}
+	if !cfg.WS.SharedDM && !cfg.WS.SharedGroup && len(cfg.WS.SharedUsers) == 0 {
+		return nil
+	}
+	return cfg.WS
 }
 
 // AgentShareData represents an agent share grant.

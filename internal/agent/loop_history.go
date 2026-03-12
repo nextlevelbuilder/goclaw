@@ -66,11 +66,15 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 
 	// Per-user workspace: show the user's subdirectory in the system prompt.
 	// Uses cached workspace from user_agent_profiles (includes channel isolation).
+	// When workspace sharing is enabled, show the base workspace without user subfolder.
 	promptWorkspace := l.workspace
 	if l.agentUUID != uuid.Nil && userID != "" && l.workspace != "" {
 		if cachedWs, ok := l.userWorkspaces.Load(userID); ok {
-			promptWorkspace = filepath.Join(cachedWs.(string), sanitizePathSegment(userID))
-		} else {
+			promptWorkspace = cachedWs.(string)
+			if !l.shouldShareWorkspace(userID, peerKind) {
+				promptWorkspace = filepath.Join(promptWorkspace, sanitizePathSegment(userID))
+			}
+		} else if !l.shouldShareWorkspace(userID, peerKind) {
 			promptWorkspace = filepath.Join(l.workspace, sanitizePathSegment(userID))
 		}
 	}
@@ -86,7 +90,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	// Group writer restrictions: filter context files + inject prompt
-	if l.groupWriterCache != nil && strings.HasPrefix(userID, "group:") {
+	if l.groupWriterCache != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
 		senderID := store.SenderIDFromContext(ctx)
 		writerPrompt, filtered := l.buildGroupWriterPrompt(ctx, userID, senderID, contextFiles)
 		contextFiles = filtered
@@ -207,8 +211,8 @@ func (l *Loop) resolveContextFiles(ctx context.Context, userID string) []bootstr
 // these limits, inline all skills as XML in the system prompt (like TS).
 // Above these limits, only include skill_search instructions.
 const (
-	skillInlineMaxCount  = 20   // max skills to inline
-	skillInlineMaxTokens = 3500 // max estimated tokens for skill descriptions
+	skillInlineMaxCount  = 40   // max skills to inline
+	skillInlineMaxTokens = 5000 // max estimated tokens for skill descriptions
 )
 
 // resolveSkillsSummary dynamically builds the skills summary for the system prompt.

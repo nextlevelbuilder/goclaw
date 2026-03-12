@@ -230,6 +230,20 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	channel, _ := jobObj["channel"].(string)
 	to, _ := jobObj["to"].(string)
 
+	// Auto-default deliver=true when the request comes from a real channel
+	// (not CLI/system/subagent). Users chatting on Zalo/Telegram expect
+	// cron results delivered back to the same chat.
+	if !deliver {
+		if ctxChannel := ToolChannelFromCtx(ctx); ctxChannel != "" {
+			switch ctxChannel {
+			case "cli", "system", "subagent", "cron", "delegate":
+				// internal channels — don't auto-deliver
+			default:
+				deliver = true
+			}
+		}
+	}
+
 	// Auto-fill channel and to from context when deliver is requested.
 	// Always prefer context values over LLM-provided values to prevent
 	// misrouted deliveries (e.g. LLM confusing guild ID with channel ID).

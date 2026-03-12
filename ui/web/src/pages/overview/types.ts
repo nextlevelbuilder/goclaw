@@ -56,6 +56,7 @@ export interface QuotaUsageResult {
   requestsToday: number;
   inputTokensToday: number;
   outputTokensToday: number;
+  costToday: number;
   uniqueUsersToday: number;
   entries: QuotaUsageEntry[];
 }

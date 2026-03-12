@@ -76,6 +76,7 @@
   "selectProvider": "选择Provider",
   "sendMessage": "发送消息... (Shift+Enter 换行)",
   "sendMessageTitle": "发送消息",
+  "attachFile": "附加文件",
   "skillActivated": "已激活",
   "skillActivating": "激活中...",
   "status": "状态",

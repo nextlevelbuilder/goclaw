@@ -10,6 +10,7 @@ export interface TraceFilters {
   agentId?: string;
   userId?: string;
   status?: string;
+  channel?: string;
   limit?: number;
   offset?: number;
 }
@@ -27,6 +28,7 @@ export function useTraces(filters: TraceFilters = {}) {
       if (filters.agentId) params.agent_id = filters.agentId;
       if (filters.userId) params.user_id = filters.userId;
       if (filters.status) params.status = filters.status;
+      if (filters.channel) params.channel = filters.channel;
       if (filters.limit) params.limit = String(filters.limit);
       if (filters.offset !== undefined) params.offset = String(filters.offset);
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -89,17 +90,27 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "failed to read SKILL.md")})
 		return
 	}
+	if strings.TrimSpace(skillContent) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "SKILL.md is empty")})
+		return
+	}
 
-	name, description, slug, frontmatter := parseSkillFrontmatter(skillContent)
+	name, description, slug, frontmatter := skills.ParseSkillFrontmatter(skillContent)
 	if name == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "name in SKILL.md frontmatter")})
 		return
 	}
 	if slug == "" {
-		slug = slugify(name)
+		slug = skills.Slugify(name)
 	}
-	if !slugRegexp.MatchString(slug) {
+	if !skills.SlugRegexp.MatchString(slug) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidSlug, "slug")})
+		return
+	}
+
+	// Check slug conflict with system skill
+	if h.skills.IsSystemSkill(slug) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "slug conflicts with a system skill")})
 		return
 	}
 
@@ -130,7 +141,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// Skip macOS/system artifacts
-		if isSystemArtifact(entryName) {
+		if skills.IsSystemArtifact(entryName) {
 			continue
 		}
 		// Security: prevent path traversal
@@ -176,10 +187,22 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	h.skills.BumpVersion()
 	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size)
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	// Scan and check dependencies
+	response := map[string]interface{}{
 		"id":      id,
 		"slug":    slug,
 		"version": version,
 		"name":    name,
-	})
+	}
+	manifest := skills.ScanSkillDeps(destDir)
+	if manifest != nil && !manifest.IsEmpty() {
+		ok, missing := skills.CheckSkillDeps(manifest)
+		if !ok {
+			// Set skill to archived due to missing deps
+			_ = h.skills.UpdateSkill(id, map[string]any{"status": "archived"})
+			response["deps_warning"] = "missing dependencies: " + skills.FormatMissing(missing)
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, response)
 }

@@ -10,24 +10,43 @@
     "name": "Tên",
     "description": "Mô tả",
     "source": "Nguồn",
+    "author": "Tác giả",
     "visibility": "Hiển thị",
+    "status": "Trạng thái",
     "actions": "Thao tác"
   },
   "noDescription": "Không có mô tả",
+  "visibility": {
+    "clickToCycle": "Nhấp để thay đổi hiển thị"
+  },
   "delete": {
     "title": "Xóa skill",
     "description": "Bạn có chắc chắn muốn xóa \"{{name}}\"? Hành động này không thể hoàn tác.",
     "confirmLabel": "Xóa"
   },
   "upload": {
-    "title": "Tải lên skill",
-    "description": "Tải lên tệp ZIP chứa SKILL.md ở thư mục gốc với YAML frontmatter (name, description, slug).",
+    "title": "Tải lên Skill",
+    "description": "Tải lên tệp ZIP chứa SKILL.md với YAML frontmatter (name, description, slug).",
     "button": "Tải lên",
     "uploading": "Đang tải lên...",
     "dropOrClick": "Nhấp hoặc kéo thả tệp .zip",
     "dropHere": "Thả tệp .zip vào đây",
     "onlyZip": "Chỉ chấp nhận tệp .zip",
-    "cancel": "Hủy"
+    "cancel": "Hủy",
+    "done": "Xong",
+    "tooLarge": "Tệp vượt quá giới hạn 20MB",
+    "invalidZip": "Tệp ZIP không hợp lệ",
+    "noSkillMd": "ZIP phải chứa SKILL.md ở thư mục gốc",
+    "emptySkillMd": "SKILL.md trống",
+    "noFrontmatter": "SKILL.md thiếu YAML frontmatter",
+    "nameRequired": "Cần có name trong SKILL.md frontmatter",
+    "invalidSlug": "Định dạng slug không hợp lệ",
+    "failed": "Tải lên thất bại",
+    "validating": "Đang xác thực...",
+    "validCount": "{{valid}} / {{total}} hợp lệ",
+    "uploadCount": "Tải lên ({{count}})",
+    "successCount": "{{success}} / {{total}} đã tải lên thành công",
+    "remove": "Xóa tệp"
   },
   "edit": {
     "title": "Chỉnh sửa skill",
@@ -43,6 +62,38 @@
     "privateOption": "Riêng tư (chỉ chủ sở hữu)",
     "internalOption": "Nội bộ (agent/người dùng được cấp quyền)",
     "publicOption": "Công khai (tất cả agent)"
+  },
+  "system": "Hệ thống",
+  "tabs": {
+    "core": "Hệ thống",
+    "custom": "Tùy chỉnh"
+  },
+  "toggle": {
+    "enable": "Bật skill",
+    "disable": "Tắt skill",
+    "disabled": "Đã tắt"
+  },
+  "deps": {
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed",
+    "installPartial": "Some dependencies failed",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
   },
   "detail": {
     "title": "Chi tiết skill",

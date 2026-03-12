@@ -107,7 +107,9 @@
       "noSchema": "No configuration schema for this channel type.",
       "saved": "Saved",
       "saveConfig": "Save Config",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "webhookUrlLabel": "Set this as your Lark app's Event Request URL:",
+      "copyPath": "Copy path"
     },
     "groups": {
       "saved": "Saved",

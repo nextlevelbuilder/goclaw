@@ -98,5 +98,8 @@
       "requiredFields": "Required: {{fields}}",
       "failedCreate": "Failed to create channel"
     }
+  },
+  "common": {
+    "back": "Back"
   }
 }

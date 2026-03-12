@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -59,8 +58,9 @@ func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider,
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "video/mp4")
 
-	// Gemini: use File API.
-	if strings.HasPrefix(providerName, "gemini") {
+	// Gemini: use File API (requires credentials).
+	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
+	if cp != nil && ptype == "gemini" {
 		slog.Info("read_video: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
 		resp, err := geminiFileAPICall(ctx, cp.APIKey(), model, prompt, data, mime, 180*time.Second)
 		if err != nil {

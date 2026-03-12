@@ -53,7 +53,7 @@ export function ToolsProfileSection({ data, onSave, saving }: Props) {
         <CardDescription>{t("tools.description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <InfoLabel tip={t("tools.profileTip")}>{t("tools.profile")}</InfoLabel>
             <Select value={draft.profile ?? ""} onValueChange={(v) => update({ profile: v })}>

@@ -185,8 +185,8 @@ export function MemoryPage() {
             description={agentId ? t("emptyAgentDescription") : t("emptyGlobalDescription")}
           />
         ) : (
-          <div className="rounded-md border">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">{t("columns.path")}</th>

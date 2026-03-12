@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
+
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -110,7 +112,7 @@ func (h *SkillsHandler) handleListFiles(w http.ResponseWriter, r *http.Request) 
 			return nil
 		}
 		// Skip system artifacts (__MACOSX, .DS_Store, etc.)
-		if isSystemArtifact(rel) {
+		if skills.IsSystemArtifact(rel) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
@@ -199,7 +201,7 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Skip system artifacts
-	if isSystemArtifact(relPath) {
+	if skills.IsSystemArtifact(relPath) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
 		return
 	}

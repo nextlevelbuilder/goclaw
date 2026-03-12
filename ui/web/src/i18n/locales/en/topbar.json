@@ -5,6 +5,7 @@
   "toggleTheme": "Toggle theme",
   "logout": "Logout",
   "language": "Language",
+  "timezone": "Timezone",
   "pairingRequests": "Pairing requests",
   "pendingPairingRequest": "{{count}} pending pairing request",
   "pendingPairingRequests": "{{count}} pending pairing requests",

@@ -41,7 +41,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const [displayName, setDisplayName] = useState("");
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
-  const [agentType, setAgentType] = useState<"open" | "predefined">("open");
+  const [agentType, setAgentType] = useState<"open" | "predefined">("predefined");
   const [description, setDescription] = useState("");
   const [selfEvolve, setSelfEvolve] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -210,18 +210,6 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setAgentType("open")}
-                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  agentType === "open"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input bg-background hover:bg-accent"
-                }`}
-              >
-                {t("create.open")}
-                <span className="block text-xs font-normal opacity-70">{t("create.openSubLabel")}</span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setAgentType("predefined")}
                 className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                   agentType === "predefined"
@@ -231,6 +219,18 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
               >
                 {t("create.predefined")}
                 <span className="block text-xs font-normal opacity-70">{t("create.predefinedSubLabel")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAgentType("open")}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                  agentType === "open"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-input bg-background hover:bg-accent"
+                }`}
+              >
+                {t("create.open")}
+                <span className="block text-xs font-normal opacity-70">{t("create.openSubLabel")}</span>
               </button>
             </div>
           </div>

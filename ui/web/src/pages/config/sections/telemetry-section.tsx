@@ -61,7 +61,7 @@ export function TelemetrySection({ data, onSave, saving }: Props) {
           <Switch checked={draft.enabled ?? false} onCheckedChange={(v) => update({ enabled: v })} />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <InfoLabel tip={t("telemetry.endpointTip")}>{t("telemetry.endpoint")}</InfoLabel>
             <Input
@@ -84,7 +84,7 @@ export function TelemetrySection({ data, onSave, saving }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <InfoLabel tip={t("telemetry.serviceNameTip")}>{t("telemetry.serviceName")}</InfoLabel>
             <Input

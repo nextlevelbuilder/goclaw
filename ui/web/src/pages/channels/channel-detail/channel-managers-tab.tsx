@@ -81,7 +81,7 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
       <fieldset className="rounded-md border p-4 space-y-3">
         <legend className="px-1 text-sm font-medium">{t("detail.managers.addForm.title")}</legend>
         <p className="text-xs text-muted-foreground">{t("detail.managers.addForm.hint")}</p>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label className="text-xs">{t("detail.managers.addForm.groupId")}</Label>
             <Input
@@ -324,8 +324,8 @@ export function ChannelManagersTab({
                       ) : groupManagers.length === 0 ? (
                         <p className="text-sm text-muted-foreground py-2">{t("detail.managers.noManagers")}</p>
                       ) : (
-                        <div className="rounded-md border bg-background">
-                          <table className="w-full text-sm">
+                        <div className="overflow-x-auto rounded-md border bg-background">
+                          <table className="w-full min-w-[500px] text-sm">
                             <thead>
                               <tr className="border-b bg-muted/50">
                                 <th className="px-3 py-2 text-left font-medium text-xs uppercase tracking-wide text-muted-foreground">{t("detail.managers.columns.userId")}</th>

@@ -7,8 +7,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight, ChevronDown, Copy, Check } from "lucide-react";
+import { ChevronRight, ChevronDown, Copy, Check, Download } from "lucide-react";
 import { useClipboard } from "@/hooks/use-clipboard";
+import { useHttp } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { Events } from "@/api/protocol";
 import { formatDate, formatDuration, formatTokens, computeDurationMs } from "@/lib/format";
@@ -51,10 +52,29 @@ interface TraceDetailDialogProps {
 
 export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace }: TraceDetailDialogProps) {
   const { t } = useTranslation("traces");
+  const http = useHttp();
   const [trace, setTrace] = useState<TraceData | null>(null);
   const [spans, setSpans] = useState<SpanData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const { copied, copy } = useClipboard();
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const blob = await http.downloadBlob(`/v1/traces/${traceId}/export`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `trace-${traceId.slice(0, 8)}.json.gz`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail — user sees no download
+    } finally {
+      setExporting(false);
+    }
+  }, [http, traceId]);
 
   const fetchTrace = useCallback(() => {
     getTrace(traceId).then((result) => {
@@ -111,15 +131,28 @@ export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace 
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-h-[85vh] w-[95vw] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             {t("detail.title")}
             <button
               type="button"
               onClick={() => copy(traceId)}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title={t("detail.copyTraceId")}
+              className="ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {t("detail.copyTraceId")}
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting || !trace}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              {exporting ? (
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {t("detail.export")}
             </button>
           </DialogTitle>
         </DialogHeader>

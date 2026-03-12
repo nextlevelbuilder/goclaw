@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { Search, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
@@ -24,12 +25,31 @@ export function ContactInsertSearch({ onInsert }: ContactInsertSearchProps) {
   const [open, setOpen] = useState(false);
   const { contacts } = useContactSearch(search);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  // Compute dropdown position for portal rendering
+  useLayoutEffect(() => {
+    if (!open || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: Math.min(rect.width, 384), // max-w-sm = 24rem = 384px
+      zIndex: 9999,
+    });
+  }, [open, search]);
 
   // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
         setOpen(false);
       }
     };
@@ -55,8 +75,8 @@ export function ContactInsertSearch({ onInsert }: ContactInsertSearchProps) {
           className="h-8 w-full max-w-sm rounded-md border bg-transparent pl-7 pr-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      {open && search.length >= 2 && contacts.length > 0 && (
-        <div className="absolute left-0 z-50 mt-1 max-h-48 w-full max-w-sm overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+      {open && search.length >= 2 && contacts.length > 0 && createPortal(
+        <div ref={dropdownRef} style={dropdownStyle} className="max-h-48 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
           {contacts.map((c) => (
             <button
               key={c.id}
@@ -77,12 +97,14 @@ export function ContactInsertSearch({ onInsert }: ContactInsertSearchProps) {
               </div>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-      {open && search.length >= 2 && contacts.length === 0 && (
-        <div className="absolute left-0 z-50 mt-1 w-full max-w-sm rounded-md border bg-popover p-3 text-center text-xs text-muted-foreground shadow-md">
+      {open && search.length >= 2 && contacts.length === 0 && createPortal(
+        <div ref={dropdownRef} style={dropdownStyle} className="rounded-md border bg-popover p-3 text-center text-xs text-muted-foreground shadow-md">
           {t("instances.noContactsFound")}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

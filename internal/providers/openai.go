@@ -20,6 +20,7 @@ type OpenAIProvider struct {
 	apiBase      string
 	chatPath     string // defaults to "/chat/completions"
 	defaultModel string
+	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	client       *http.Client
 	retryConfig  RetryConfig
 }
@@ -52,6 +53,13 @@ func (p *OpenAIProvider) DefaultModel() string   { return p.defaultModel }
 func (p *OpenAIProvider) SupportsThinking() bool { return true }
 func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
+func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
+
+// WithProviderType sets the DB provider_type for correct API endpoint routing in media tools.
+func (p *OpenAIProvider) WithProviderType(pt string) *OpenAIProvider {
+	p.providerType = pt
+	return p
+}
 
 // resolveModel returns the model ID to use for a request.
 // For OpenRouter, model IDs require a provider prefix (e.g. "anthropic/claude-sonnet-4-5-20250929").

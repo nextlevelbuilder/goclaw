@@ -23,6 +23,13 @@ func (t *ReadAudioTool) resolveAudioFile(ctx context.Context, mediaID string) (p
 		return "", "", fmt.Errorf("no audio files available in this conversation. The user may not have sent an audio file.")
 	}
 
+	// Sanitize media_id: LLM may pass the literal tag string (e.g. "<media:audio>")
+	// instead of a UUID. Treat tag-like values as empty to fall back to most recent.
+	if strings.Contains(mediaID, "<") || strings.Contains(mediaID, "media:") {
+		slog.Debug("read_audio: sanitizing tag-like media_id", "raw", mediaID)
+		mediaID = ""
+	}
+
 	var ref *providers.MediaRef
 	if mediaID != "" {
 		for i := range refs {
@@ -32,7 +39,10 @@ func (t *ReadAudioTool) resolveAudioFile(ctx context.Context, mediaID string) (p
 			}
 		}
 		if ref == nil {
-			return "", "", fmt.Errorf("audio with media_id %q not found in conversation", mediaID)
+			// Fallback to most recent audio instead of hard error,
+			// since LLM may generate invalid IDs.
+			slog.Warn("read_audio: media_id not found, falling back to most recent", "media_id", mediaID)
+			ref = &refs[len(refs)-1]
 		}
 	} else {
 		ref = &refs[len(refs)-1]
@@ -60,24 +70,32 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "audio/mpeg")
 
-	// Gemini: use File API (inlineData doesn't work for audio).
-	if strings.HasPrefix(providerName, "gemini") {
-		slog.Info("read_audio: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
-		resp, err := geminiFileAPICall(ctx, cp.APIKey(), model, prompt, data, mime, 120*time.Second)
-		if err != nil {
-			return nil, nil, fmt.Errorf("gemini file API: %w", err)
-		}
-		return []byte(resp.Content), resp.Usage, nil
+	// Provider-specific paths require API credentials; skip when cp is nil
+	// (e.g. OAuth-based providers that don't expose static keys).
+	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
+	if cp == nil && (ptype == "gemini" || ptype == "openai") {
+		slog.Info("read_audio: no API credentials, falling back to Chat API", "provider", providerName)
 	}
-
-	// OpenAI: use input_audio content part (supports wav, mp3).
-	if strings.HasPrefix(providerName, "openai") {
-		slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
-		resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
-		if err != nil {
-			return nil, nil, fmt.Errorf("openai audio call: %w", err)
+	if cp != nil {
+		// Gemini: use File API (inlineData doesn't work for audio).
+		if ptype == "gemini" {
+			slog.Info("read_audio: using gemini file API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+			resp, err := geminiFileAPICall(ctx, cp.APIKey(), model, prompt, data, mime, 120*time.Second)
+			if err != nil {
+				return nil, nil, fmt.Errorf("gemini file API: %w", err)
+			}
+			return []byte(resp.Content), resp.Usage, nil
 		}
-		return []byte(resp.Content), resp.Usage, nil
+
+		// OpenAI: use input_audio content part (supports wav, mp3).
+		if ptype == "openai" {
+			slog.Info("read_audio: using openai input_audio API", "provider", providerName, "model", model, "size", len(data), "mime", mime)
+			resp, err := openaiAudioCall(ctx, cp.APIKey(), cp.APIBase(), model, prompt, data, mime)
+			if err != nil {
+				return nil, nil, fmt.Errorf("openai audio call: %w", err)
+			}
+			return []byte(resp.Content), resp.Usage, nil
+		}
 	}
 
 	// Other providers: try standard Chat API with base64 audio as image_url (best effort).

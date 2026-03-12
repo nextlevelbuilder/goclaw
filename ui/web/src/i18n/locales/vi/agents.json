@@ -81,6 +81,9 @@
     "selfEvolutionLabel": "Cho phép agent tiến hóa phong cách giao tiếp",
     "selfEvolutionHint": "Khi được bật, agent có thể cập nhật SOUL.md để tinh chỉnh giọng điệu, từ vựng và phong cách phản hồi dựa trên tương tác. Nhận dạng, tên và hướng dẫn hoạt động vẫn bị khóa.",
     "selfEvolutionInfo": "Agent sẽ tiến hóa phong cách theo thời gian qua các cập nhật SOUL.md. Chỉ phong cách và giọng điệu bị ảnh hưởng — nhận dạng và quy tắc quy trình làm việc vẫn cố định.",
+    "budget": "Ngân sách hàng tháng",
+    "budgetLabel": "Giới hạn ngân sách (USD)",
+    "budgetHint": "Giới hạn chi tiêu hàng tháng tùy chọn. Agent sẽ từ chối yêu cầu khi vượt quá. Để trống cho không giới hạn.",
     "saveChanges": "Lưu thay đổi",
     "saving": "Đang lưu...",
     "saved": "Đã lưu",
@@ -211,7 +214,9 @@
     "noSkillsDesc": "Tải lên skill trong trang Skill để cấp cho agent.",
     "skillsGranted": "{{granted}} trong {{total}} skill được cấp",
     "filterSkills": "Lọc skill...",
-    "noSkillsMatch": "Không có skill nào phù hợp."
+    "noSkillsMatch": "Không có skill nào phù hợp.",
+    "system": "Hệ thống",
+    "alwaysAvailable": "Luôn khả dụng"
   },
   "instances": {
     "loadingInstances": "Đang tải phiên bản...",
@@ -270,6 +275,18 @@
       "selectToolsAllow": "Chọn công cụ để cho phép...",
       "selectToolsDeny": "Chọn công cụ để từ chối...",
       "selectToolsAlsoAllow": "Chọn công cụ bổ sung..."
+    },
+    "workspaceSharing": {
+      "title": "Chia sẻ Workspace",
+      "description": "Kiểm soát cách cô lập file workspace giữa các người dùng",
+      "sharedDm": "Chia sẻ trong DM",
+      "sharedDmTip": "Tất cả người dùng DM dùng chung thư mục workspace thay vì thư mục riêng",
+      "sharedGroup": "Chia sẻ trong Group",
+      "sharedGroupTip": "Tất cả thành viên trong group chat dùng chung thư mục workspace",
+      "sharedUsers": "User được chia sẻ",
+      "sharedUsersTip": "Danh sách user ID cụ thể luôn dùng chung workspace. Định dạng: channel:userId (vd: telegram:386246614)",
+      "userIdPlaceholder": "Nhập user ID (vd: telegram:386246614)",
+      "warning": "Khi bật chia sẻ, tất cả người dùng được chia sẻ có thể đọc và ghi file trong cùng thư mục workspace. Bộ nhớ cũng được chia sẻ; file ngữ cảnh vẫn được cô lập theo từng người dùng. Thay đổi cài đặt này không di chuyển dữ liệu cũ — bộ nhớ per-user trước đó sẽ không còn truy cập được."
     },
     "compaction": {
       "title": "Nén ngữ cảnh",

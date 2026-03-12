@@ -88,7 +88,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, t.restrict)
+	resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, t.restrict))
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -142,7 +142,7 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 }
 
 func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace)
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		return nil, err
 	}

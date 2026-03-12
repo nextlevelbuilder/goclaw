@@ -31,6 +31,12 @@ export function formatTokens(count: number | null | undefined): string {
   return count.toString();
 }
 
+export function formatCost(cost: number | null | undefined): string {
+  if (cost == null || cost === 0) return "$0.00";
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
 export function formatDuration(ms: number | undefined | null): string {
   if (ms == null || isNaN(ms)) return "—";
   if (ms < 1000) return `${ms}ms`;
@@ -39,6 +45,39 @@ export function formatDuration(ms: number | undefined | null): string {
   const min = Math.floor(sec / 60);
   const remainSec = Math.floor(sec % 60);
   return `${min}m ${remainSec}s`;
+}
+
+/**
+ * Resolve the effective IANA timezone string.
+ * "auto" → browser's local timezone.
+ */
+export function resolveTimezone(tz: string): string {
+  if (tz === "auto") return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return tz;
+}
+
+/**
+ * Format a UTC timestamp for chart labels, respecting the user's chosen timezone.
+ * Uses Intl.DateTimeFormat for native timezone support (no extra deps).
+ */
+export function formatBucketTz(
+  bucket: string,
+  tz: string,
+  granularity: "hour" | "day",
+): string {
+  try {
+    const d = new Date(bucket);
+    const resolved = resolveTimezone(tz);
+    const opts: Intl.DateTimeFormatOptions = {
+      timeZone: resolved,
+      month: "short",
+      day: "numeric",
+      ...(granularity === "hour" ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}),
+    };
+    return new Intl.DateTimeFormat("en-US", opts).format(d);
+  } catch {
+    return bucket;
+  }
 }
 
 /**

@@ -156,13 +156,8 @@ func (m *TeamsMethods) handleCreate(ctx context.Context, client *gateway.Client,
 		m.autoCreateTeamLinks(ctx, team.ID, leadAgent, memberAgents, client.UserID())
 	}
 
-	// Invalidate agent caches so TEAM.md gets injected
-	if m.agentRouter != nil {
-		m.agentRouter.InvalidateAgent(leadAgent.AgentKey)
-		for _, ag := range memberAgents {
-			m.agentRouter.InvalidateAgent(ag.AgentKey)
-		}
-	}
+	// Invalidate agent + team tool caches so TEAM.md gets injected
+	m.invalidateTeamCaches(ctx, team.ID)
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"team": team,

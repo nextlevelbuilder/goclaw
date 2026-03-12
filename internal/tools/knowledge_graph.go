@@ -65,7 +65,7 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	if agentID == uuid.Nil {
 		return ErrorResult("agent context not available")
 	}
-	userID := store.UserIDFromContext(ctx)
+	userID := store.MemoryUserID(ctx)
 
 	query, _ := args["query"].(string)
 	if query == "" {

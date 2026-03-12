@@ -33,7 +33,7 @@ export function TaskDetailDialog({ task, onClose }: TaskDetailDialogProps) {
           </div>
 
           {/* Summary grid */}
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
               <span className="text-muted-foreground">{t("tasks.detail.status")}</span>{" "}
               <Badge variant={taskStatusBadgeVariant(task.status)} className="text-xs">

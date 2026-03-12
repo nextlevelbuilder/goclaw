@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, GitFork, RefreshCw, Search } from "lucide-react";
+import { Activity, GitFork, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
@@ -13,18 +19,24 @@ import { useTraces, type TraceData } from "./hooks/use-traces";
 import { TraceDetailDialog } from "./trace-detail-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
+import { useChannelInstances } from "@/pages/channels/hooks/use-channel-instances";
 
 export function TracesPage() {
   const { t } = useTranslation("traces");
   const { t: tc } = useTranslation("common");
-  const [agentFilter, setAgentFilter] = useState("");
-  const [appliedAgentFilter, setAppliedAgentFilter] = useState("");
+  const [agentFilter, setAgentFilter] = useState<string>();
+  const [channelFilter, setChannelFilter] = useState<string>();
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  const { agents } = useAgents();
+  const { instances: channels } = useChannelInstances();
+
   const { traces, total, loading, fetching, refresh, getTrace } = useTraces({
-    agentId: appliedAgentFilter || undefined,
+    agentId: agentFilter,
+    channel: channelFilter,
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
@@ -32,12 +44,6 @@ export function TracesPage() {
   const showSkeleton = useDeferredLoading(loading && traces.length === 0);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  const handleFilterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAppliedAgentFilter(agentFilter);
-    setPage(1);
-  };
 
   return (
     <div className="p-4 sm:p-6">
@@ -51,20 +57,39 @@ export function TracesPage() {
         }
       />
 
-      <form onSubmit={handleFilterSubmit} className="mt-4 flex gap-2">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={agentFilter}
-            onChange={(e) => setAgentFilter(e.target.value)}
-            placeholder={t("filterPlaceholder")}
-            className="pl-9"
-          />
-        </div>
-        <Button type="submit" variant="outline" size="sm">
-          {t("filter")}
-        </Button>
-      </form>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {/* Agent filter */}
+        <Select
+          value={agentFilter ?? "__all__"}
+          onValueChange={(v) => { setAgentFilter(v === "__all__" ? undefined : v); setPage(1); }}
+        >
+          <SelectTrigger className="h-8 w-44 text-xs">
+            <SelectValue placeholder={t("allAgents")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">{t("allAgents")}</SelectItem>
+            {agents.map((a) => (
+              <SelectItem key={a.id} value={a.id}>{a.display_name || a.agent_key || a.id}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Channel filter */}
+        <Select
+          value={channelFilter ?? "__all__"}
+          onValueChange={(v) => { setChannelFilter(v === "__all__" ? undefined : v); setPage(1); }}
+        >
+          <SelectTrigger className="h-8 w-44 text-xs">
+            <SelectValue placeholder={t("allChannels")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">{t("allChannels")}</SelectItem>
+            {channels.map((ch) => (
+              <SelectItem key={ch.id} value={ch.name}>{ch.display_name || ch.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="mt-4">
         {showSkeleton ? (

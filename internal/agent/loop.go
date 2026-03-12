@@ -56,22 +56,26 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if req.SenderID != "" {
 		ctx = store.WithSenderID(ctx, req.SenderID)
 	}
-	// Inject per-agent vision/imagegen config for read_image/create_image tools
-	if l.agentToolPolicy != nil {
-		if l.agentToolPolicy.Vision != nil {
-			ctx = tools.WithVisionConfig(ctx, l.agentToolPolicy.Vision)
-		}
-		if l.agentToolPolicy.ImageGen != nil {
-			ctx = tools.WithImageGenConfig(ctx, l.agentToolPolicy.ImageGen)
-		}
-	}
-	// Inject global builtin tool settings (DB-level defaults, lower priority than per-agent)
+	// Inject global builtin tool settings for media tools (provider chain)
 	if l.builtinToolSettings != nil {
 		ctx = tools.WithBuiltinToolSettings(ctx, l.builtinToolSettings)
 	}
 	// Inject channel type into context for tools (e.g. message tool needs it for Zalo group routing)
 	if req.ChannelType != "" {
 		ctx = tools.WithToolChannelType(ctx, req.ChannelType)
+	}
+	// Inject per-agent overrides from DB so tools honor per-agent settings.
+	if l.restrictToWs != nil {
+		ctx = tools.WithRestrictToWorkspace(ctx, *l.restrictToWs)
+	}
+	if l.subagentsCfg != nil {
+		ctx = tools.WithSubagentConfig(ctx, l.subagentsCfg)
+	}
+	if l.memoryCfg != nil {
+		ctx = tools.WithMemoryConfig(ctx, l.memoryCfg)
+	}
+	if l.sandboxCfg != nil {
+		ctx = tools.WithSandboxConfig(ctx, l.sandboxCfg)
 	}
 
 	// Per-user workspace isolation.
@@ -99,7 +103,14 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			l.userWorkspaces.Store(req.UserID, ws)
 			cachedWs = ws
 		}
-		effectiveWorkspace := filepath.Join(cachedWs.(string), sanitizePathSegment(req.UserID))
+		effectiveWorkspace := cachedWs.(string)
+		shared := l.shouldShareWorkspace(req.UserID, req.PeerKind)
+		if !shared {
+			effectiveWorkspace = filepath.Join(effectiveWorkspace, sanitizePathSegment(req.UserID))
+		} else {
+			// Shared workspace → share memory across users too.
+			ctx = store.WithSharedMemory(ctx)
+		}
 		if err := os.MkdirAll(effectiveWorkspace, 0755); err != nil {
 			slog.Warn("failed to create user workspace directory", "workspace", effectiveWorkspace, "user", req.UserID, "error", err)
 		}
@@ -234,6 +245,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}
 	if len(docRefs) > 0 {
 		ctx = tools.WithMediaDocRefs(ctx, docRefs)
+		// Enrich the last user message with persisted file paths so skills can access
+		// documents via exec (e.g. pypdf). Only for current-turn refs (just persisted).
+		l.enrichDocumentPaths(messages, mediaRefs)
 	}
 
 	// 2c. Collect audio MediaRefs (historical + current) for read_audio tool.
@@ -252,6 +266,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}
 	if len(audioRefs) > 0 {
 		ctx = tools.WithMediaAudioRefs(ctx, audioRefs)
+		// Embed media IDs into <media:audio> tags so LLM can reference them.
+		l.enrichAudioIDs(messages, mediaRefs)
 	}
 
 	// 2d. Collect video MediaRefs (historical + current) for read_video tool.
@@ -270,6 +286,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}
 	if len(videoRefs) > 0 {
 		ctx = tools.WithMediaVideoRefs(ctx, videoRefs)
+		// Embed media IDs into <media:video> tags so LLM can reference them.
+		l.enrichVideoIDs(messages, mediaRefs)
 	}
 
 	// 2e. Cross-session recovery: notify team leads about orphaned pending tasks
@@ -367,6 +385,19 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	maxIter := l.maxIterations
 	if req.MaxIterations > 0 && req.MaxIterations < maxIter {
 		maxIter = req.MaxIterations
+	}
+
+	// Budget check: query monthly spent once before starting iterations.
+	if l.budgetMonthlyCents > 0 && l.tracingStore != nil && l.agentUUID != uuid.Nil {
+		now := time.Now().UTC()
+		spent, err := l.tracingStore.GetMonthlyAgentCost(ctx, l.agentUUID, now.Year(), now.Month())
+		if err == nil {
+			spentCents := int(spent * 100)
+			if spentCents >= l.budgetMonthlyCents {
+				slog.Warn("agent budget exceeded", "agent", l.id, "spent_cents", spentCents, "budget_cents", l.budgetMonthlyCents)
+				return nil, fmt.Errorf("monthly budget exceeded ($%.2f / $%.2f)", spent, float64(l.budgetMonthlyCents)/100)
+			}
+		}
 	}
 
 	for iteration < maxIter {

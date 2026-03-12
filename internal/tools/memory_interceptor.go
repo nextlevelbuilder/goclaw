@@ -96,7 +96,7 @@ func (m *MemoryInterceptor) ReadFile(ctx context.Context, path string) (string, 
 	// Normalize absolute path to workspace-relative for DB storage
 	relPath := normalizeToRelative(path, m.workspace)
 
-	userID := store.UserIDFromContext(ctx)
+	userID := store.MemoryUserID(ctx)
 	agentStr := agentID.String()
 
 	// Try per-user first, then global
@@ -136,7 +136,7 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 	// Normalize absolute path to workspace-relative for DB storage
 	relPath := normalizeToRelative(path, m.workspace)
 
-	userID := store.UserIDFromContext(ctx)
+	userID := store.MemoryUserID(ctx)
 	agentStr := agentID.String()
 
 	// Write document to DB
@@ -175,7 +175,7 @@ func (m *MemoryInterceptor) ListFiles(ctx context.Context, path string) (string,
 		return "", false, nil
 	}
 
-	userID := store.UserIDFromContext(ctx)
+	userID := store.MemoryUserID(ctx)
 	docs, err := m.memStore.ListDocuments(ctx, agentID.String(), userID)
 	if err != nil {
 		return "", true, err

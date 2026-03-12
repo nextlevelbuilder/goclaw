@@ -91,16 +91,25 @@ export function AgentSkillsTab({ agentId }: AgentSkillsTabProps) {
                 <Badge variant={visibilityVariant(skill.visibility)} className="text-[10px]">
                   {skill.visibility}
                 </Badge>
+                {skill.is_system && (
+                  <Badge variant="outline" className="border-blue-500 text-blue-600 text-[10px]">
+                    {t("skills.system")}
+                  </Badge>
+                )}
               </div>
               {skill.description && (
                 <p className="mt-0.5 truncate text-sm text-muted-foreground">{skill.description}</p>
               )}
             </div>
-            <Switch
-              checked={skill.granted}
-              disabled={toggling === skill.id}
-              onCheckedChange={() => handleToggle(skill.id, skill.granted)}
-            />
+            {skill.is_system ? (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{t("skills.alwaysAvailable")}</span>
+            ) : (
+              <Switch
+                checked={skill.granted}
+                disabled={toggling === skill.id}
+                onCheckedChange={() => handleToggle(skill.id, skill.granted)}
+              />
+            )}
           </div>
         ))}
         {filtered.length === 0 && (

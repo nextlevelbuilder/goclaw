@@ -127,7 +127,7 @@ func (s *PGTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]stor
 		 COALESCE(a.frontmatter, '') AS frontmatter
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
-		 WHERE m.team_id = $1
+		 WHERE m.team_id = $1 AND a.status = 'active'
 		 ORDER BY m.joined_at`, teamID)
 	if err != nil {
 		return nil, err

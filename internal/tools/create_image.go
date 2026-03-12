@@ -78,14 +78,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		aspectRatio = "1:1"
 	}
 
-	// Extract per-agent config for backward compat
-	var perAgentProvider, perAgentModel string
-	if cfg := ImageGenConfigFromCtx(ctx); cfg != nil {
-		perAgentProvider = cfg.Provider
-		perAgentModel = cfg.Model
-	}
-
-	chain := ResolveMediaProviderChain(ctx, "create_image", perAgentProvider, perAgentModel,
+	chain := ResolveMediaProviderChain(ctx, "create_image", "", "",
 		imageGenProviderPriority, imageGenModelDefaults, t.registry)
 
 	// Inject prompt and aspect_ratio into each chain entry's params
@@ -129,13 +122,16 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 
 // callProvider dispatches to the correct image generation implementation based on provider type.
 func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
+	if cp == nil {
+		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for image generation", providerName)
+	}
 	prompt := GetParamString(params, "prompt", "")
 	aspectRatio := GetParamString(params, "aspect_ratio", "1:1")
 
 	slog.Info("create_image: calling image generation API",
 		"provider", providerName, "model", model, "aspect_ratio", aspectRatio)
 
-	switch ProviderTypeFromName(providerName) {
+	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
 	case "gemini":
 		return t.callGeminiNativeImageGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
 	case "openrouter":

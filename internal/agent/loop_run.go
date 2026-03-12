@@ -157,11 +157,21 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		return nil, err
 	}
 
+	completedPayload := map[string]any{"content": result.Content}
+	if result.Usage != nil {
+		completedPayload["usage"] = map[string]any{
+			"prompt_tokens":         result.Usage.PromptTokens,
+			"completion_tokens":     result.Usage.CompletionTokens,
+			"total_tokens":          result.Usage.TotalTokens,
+			"cache_creation_tokens": result.Usage.CacheCreationTokens,
+			"cache_read_tokens":     result.Usage.CacheReadTokens,
+		}
+	}
 	emitRun(AgentEvent{
 		Type:    protocol.AgentEventRunCompleted,
 		AgentID: l.id,
 		RunID:   req.RunID,
-		Payload: map[string]any{"content": result.Content},
+		Payload: completedPayload,
 	})
 	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 		l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, 500))

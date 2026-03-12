@@ -145,7 +145,7 @@ export function CronDetailPage({ job, onBack, onRun, onToggle, onDelete, getRunL
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-3xl space-y-6">
           {/* Job Info */}
-          <div className="grid grid-cols-2 gap-4 rounded-md border p-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 rounded-md border p-4 text-sm sm:grid-cols-2">
             <InfoRow label={t("detail.infoRows.schedule")} value={formatScheduleDetail(job)} />
             {job.schedule.tz && <InfoRow label={t("detail.infoRows.timezone")} value={job.schedule.tz} />}
             {job.state?.nextRunAtMs && (

@@ -22,6 +22,10 @@ export function useBootstrapStatus() {
       (p.api_key === "***" || p.provider_type === "claude_cli" || p.provider_type === "chatgpt_oauth" || p.provider_type === "ollama"));
     const hasAgent = agents.length > 0;
 
+    // Allow skipping setup entirely via localStorage
+    const skipped = localStorage.getItem("setup_skipped") === "1";
+    if (skipped) return { needsSetup: false, currentStep: "complete" as SetupStep };
+
     if (!hasProvider) return { needsSetup: true, currentStep: 1 as SetupStep };
     if (!hasAgent) return { needsSetup: true, currentStep: 2 as SetupStep };
     return { needsSetup: false, currentStep: "complete" as SetupStep };

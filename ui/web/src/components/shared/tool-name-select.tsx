@@ -1,4 +1,5 @@
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export function ToolNameSelect({
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   const allTools = useMemo<ToolOption[]>(() => {
     const builtin: ToolOption[] = builtinTools.map((t) => ({
@@ -59,11 +62,28 @@ export function ToolNameSelect({
     return { builtin: builtinGroup, custom: customGroup };
   }, [filtered]);
 
+  // Compute dropdown position for portal rendering
+  useLayoutEffect(() => {
+    if (!open || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+  }, [open, search]);
+
   // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
         setOpen(false);
       }
     };
@@ -137,8 +157,12 @@ export function ToolNameSelect({
           onClick={() => setOpen(!open)}
         />
       </div>
-      {open && (grouped.builtin.length > 0 || grouped.custom.length > 0) && (
-        <div className="bg-popover text-popover-foreground absolute top-full left-0 z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border p-1 shadow-md">
+      {open && (grouped.builtin.length > 0 || grouped.custom.length > 0) && createPortal(
+        <div
+          ref={dropdownRef}
+          style={dropdownStyle}
+          className="bg-popover text-popover-foreground pointer-events-auto max-h-60 overflow-y-auto rounded-md border p-1 shadow-md"
+        >
           {grouped.builtin.length > 0 && (
             <>
               <div className="text-muted-foreground px-2 py-1 text-[10px] font-semibold uppercase tracking-wider">
@@ -176,7 +200,8 @@ export function ToolNameSelect({
               ))}
             </>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

@@ -154,8 +154,10 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 
 // isGroupContext returns true if the current context indicates a group conversation.
 func isGroupContext(ctx context.Context) bool {
+	userID := store.UserIDFromContext(ctx)
 	return ToolPeerKindFromCtx(ctx) == "group" ||
-		strings.HasPrefix(store.UserIDFromContext(ctx), "group:")
+		strings.HasPrefix(userID, "group:") ||
+		strings.HasPrefix(userID, "guild:")
 }
 
 // parseMediaPath extracts a file path from a "MEDIA:/path/to/file" string.

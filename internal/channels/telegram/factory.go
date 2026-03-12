@@ -12,12 +12,15 @@ import (
 
 // telegramCreds maps the credentials JSON from the channel_instances table.
 type telegramCreds struct {
-	Token string `json:"token"`
-	Proxy string `json:"proxy,omitempty"`
+	Token     string `json:"token"`
+	Proxy     string `json:"proxy,omitempty"`
+	APIServer string `json:"api_server,omitempty"`
 }
 
 // telegramInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type telegramInstanceConfig struct {
+	APIServer      string   `json:"api_server,omitempty"`
+	Proxy          string   `json:"proxy,omitempty"`
 	DMPolicy       string   `json:"dm_policy,omitempty"`
 	GroupPolicy    string   `json:"group_policy,omitempty"`
 	RequireMention *bool    `json:"require_mention,omitempty"`
@@ -25,7 +28,8 @@ type telegramInstanceConfig struct {
 	DMStream       *bool    `json:"dm_stream,omitempty"`
 	GroupStream    *bool    `json:"group_stream,omitempty"`
 	ReactionLevel  string   `json:"reaction_level,omitempty"`
-	MediaMaxBytes  int64    `json:"media_max_bytes,omitempty"`
+	MediaMaxMB     int64    `json:"media_max_mb,omitempty"`
+	MediaMaxBytes  int64    `json:"media_max_bytes,omitempty"` // deprecated: use media_max_mb
 	LinkPreview    *bool    `json:"link_preview,omitempty"`
 	BlockReply     *bool    `json:"block_reply,omitempty"`
 	AllowFrom      []string `json:"allow_from,omitempty"`
@@ -65,10 +69,21 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		}
 	}
 
+	// Prefer config values; fall back to credentials for backward compat.
+	proxy := ic.Proxy
+	if proxy == "" {
+		proxy = c.Proxy
+	}
+	apiServer := ic.APIServer
+	if apiServer == "" {
+		apiServer = c.APIServer
+	}
+
 	tgCfg := config.TelegramConfig{
 		Enabled:        true,
 		Token:          c.Token,
-		Proxy:          c.Proxy,
+		Proxy:          proxy,
+		APIServer:      apiServer,
 		AllowFrom:      ic.AllowFrom,
 		DMPolicy:       ic.DMPolicy,
 		GroupPolicy:    ic.GroupPolicy,
@@ -77,7 +92,7 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		DMStream:       ic.DMStream,
 		GroupStream:    ic.GroupStream,
 		ReactionLevel:  ic.ReactionLevel,
-		MediaMaxBytes:  ic.MediaMaxBytes,
+		MediaMaxBytes:  resolveMediaMaxBytes(ic),
 		LinkPreview:    ic.LinkPreview,
 		BlockReply:     ic.BlockReply,
 	}
@@ -96,4 +111,13 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 	// Override the channel name from DB instance.
 	ch.SetName(name)
 	return ch, nil
+}
+
+// resolveMediaMaxBytes converts media_max_mb (preferred) to bytes,
+// falling back to the deprecated media_max_bytes for backward compat.
+func resolveMediaMaxBytes(ic telegramInstanceConfig) int64 {
+	if ic.MediaMaxMB > 0 {
+		return ic.MediaMaxMB * 1024 * 1024
+	}
+	return ic.MediaMaxBytes
 }

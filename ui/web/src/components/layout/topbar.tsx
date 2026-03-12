@@ -1,11 +1,11 @@
-import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Bell, Globe } from "lucide-react";
+import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Bell, Globe, Clock } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useIsMobile } from "@/hooks/use-media-query";
 import { usePendingPairingsCount } from "@/hooks/use-pending-pairings-count";
-import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, type Language } from "@/lib/constants";
+import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, TIMEZONE_OPTIONS, type Language } from "@/lib/constants";
 
 export function Topbar() {
   const { t } = useTranslation("topbar");
@@ -13,10 +13,11 @@ export function Topbar() {
   const setTheme = useUiStore((s) => s.setTheme);
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
+  const timezone = useUiStore((s) => s.timezone);
+  const setTimezone = useUiStore((s) => s.setTimezone);
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
-  const userId = useAuthStore((s) => s.userId);
   const logout = useAuthStore((s) => s.logout);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -33,7 +34,7 @@ export function Topbar() {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between border-b bg-background px-4">
+    <header className="flex h-14 items-center justify-between border-b bg-background px-4 landscape-compact">
       <div className="flex items-center gap-2">
         <button
           onClick={handleSidebarToggle}
@@ -51,10 +52,6 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        {userId && !isMobile && (
-          <span className="text-xs text-muted-foreground">{userId}</span>
-        )}
-
         <button
           onClick={() => navigate(ROUTES.NODES)}
           className="relative cursor-pointer rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -75,6 +72,19 @@ export function Topbar() {
           >
             {SUPPORTED_LANGUAGES.map((lang) => (
               <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("timezone")}>
+          <Clock className="h-4 w-4 shrink-0" />
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="cursor-pointer bg-transparent text-xs outline-none"
+          >
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <option key={tz.value} value={tz.value}>{tz.label}</option>
             ))}
           </select>
         </div>

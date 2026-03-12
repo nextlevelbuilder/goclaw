@@ -173,12 +173,15 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 
 // callProvider dispatches to the correct music generation implementation based on provider type.
 func (t *CreateAudioTool) callProvider(ctx context.Context, cp credentialProvider, providerName, model string, params map[string]any) ([]byte, *providers.Usage, error) {
+	if cp == nil {
+		return nil, nil, fmt.Errorf("provider %q does not expose API credentials required for audio generation", providerName)
+	}
 	prompt := GetParamString(params, "prompt", "")
 
 	slog.Info("create_audio: calling music generation API",
 		"provider", providerName, "model", model)
 
-	switch ProviderTypeFromName(providerName) {
+	switch GetParamString(params, "_provider_type", providerTypeFromName(providerName)) {
 	case "minimax":
 		return callMinimaxMusicGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, params)
 	case "suno":

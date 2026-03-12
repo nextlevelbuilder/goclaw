@@ -230,8 +230,13 @@ func NewDockerManager(cfg Config) *DockerManager {
 }
 
 // Get returns an existing sandbox or creates a new one for the given key.
-func (m *DockerManager) Get(ctx context.Context, key string, workspace string) (Sandbox, error) {
-	if m.config.Mode == ModeOff {
+// If cfgOverride is non-nil, it is used for new containers instead of the global config.
+func (m *DockerManager) Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error) {
+	cfg := m.config
+	if cfgOverride != nil {
+		cfg = *cfgOverride
+	}
+	if cfg.Mode == ModeOff {
 		return nil, ErrSandboxDisabled
 	}
 
@@ -250,12 +255,12 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string) (
 		return sb, nil
 	}
 
-	prefix := m.config.ContainerPrefix
+	prefix := cfg.ContainerPrefix
 	if prefix == "" {
 		prefix = "goclaw-sbx-"
 	}
 	name := prefix + sanitizeKey(key)
-	sb, err := newDockerSandbox(ctx, name, m.config, workspace)
+	sb, err := newDockerSandbox(ctx, name, cfg, workspace)
 	if err != nil {
 		return nil, err
 	}

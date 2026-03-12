@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -64,6 +65,7 @@ var coreToolSummaries = map[string]string{
 	"web_fetch":     "Fetch and extract content from a URL",
 	"cron":          "Manage scheduled jobs and reminders",
 	"skill_search":     "Search available skills by keyword (weather, translate, github, etc.)",
+	"use_skill":        "Invoke a skill by name and follow its instructions",
 	"mcp_tool_search":  "Search for available MCP external integration tools by keyword",
 	"browser":          "Browse web pages interactively",
 	"tts":              "Convert text to speech audio",
@@ -73,11 +75,11 @@ var coreToolSummaries = map[string]string{
 	"session_status":   "Show session status (model, tokens, compaction count)",
 	"sessions_history": "Fetch message history for a session",
 	"sessions_send":    "Send a message into another session",
-	"read_image":       "Analyze images attached to the conversation. MUST call this when you see <media:image> tags",
-	"read_audio":       "Analyze audio files attached to the conversation. MUST call this when you see <media:audio> tags",
-	"read_video":       "Analyze video files attached to the conversation. MUST call this when you see <media:video> tags",
+	"read_image":       "Analyze images attached to the conversation. Call this when you see <media:image> tags",
+	"read_audio":       "Analyze audio files attached to the conversation. Call this when you see <media:audio> tags",
+	"read_video":       "Analyze video files attached to the conversation. Call this when you see <media:video> tags",
 	"create_video":     "Generate videos from text descriptions using AI",
-	"read_document":    "Analyze documents (PDF, DOCX, etc.) attached to the conversation. MUST call this when you see <media:document> tags",
+	"read_document":    "Analyze documents (PDF, DOCX, etc.) attached to the conversation. Call this when you see <media:document> tags. If this tool fails, use a relevant skill instead (e.g. pdf skill with exec tool). The path attribute in <media:document path=\"...\"> is a directly accessible file in your workspace — use it directly, no need to copy",
 	"create_image":            "Generate images from text descriptions using AI",
 	"create_audio":            "Generate music or sound effects from text descriptions using AI",
 	"knowledge_graph_search":  "Search entities and traverse relationships in the knowledge graph",
@@ -86,6 +88,17 @@ var coreToolSummaries = map[string]string{
 	"delegate_search":         "Search for agents by expertise to find the right delegation target",
 	"team_tasks":              "Manage team task board (list, create, complete, cancel tasks)",
 	"team_message":            "Send messages to teammates (progress updates, questions)",
+
+	// Claude Code tool aliases — enable Claude Code skills without modification
+	"Read":       "Alias for read_file — Read file contents",
+	"Write":      "Alias for write_file — Create or overwrite files",
+	"Edit":       "Alias for edit — Edit a file by replacing exact text matches",
+	"Bash":       "Alias for exec — Run shell commands",
+	"WebFetch":   "Alias for web_fetch — Fetch and extract content from a URL",
+	"WebSearch":  "Alias for web_search — Search the web",
+	"Agent":      "Alias for spawn — Spawn a subagent or delegate to another agent",
+	"Skill":      "Alias for use_skill — Invoke a skill by name",
+	"ToolSearch": "Alias for mcp_tool_search — Search for available MCP tools",
 }
 
 // BuildSystemPrompt constructs the full system prompt with all sections.
@@ -281,6 +294,31 @@ func buildToolingSection(toolNames []string, hasSandbox bool) []string {
 		)
 	}
 
+	// Runtime package installation hints — only show when runtimes are available
+	hasPython := hasBinary("python3")
+	hasNode := hasBinary("node")
+	if hasPython || hasNode {
+		var pkgs []string
+		if hasPython {
+			pkgs = append(pkgs, "python3", "pypdf", "openpyxl", "pandas", "python-pptx", "markitdown")
+		}
+		if hasNode {
+			pkgs = append(pkgs, "node", "docx (npm)", "pptxgenjs (npm)")
+		}
+		if hasBinary("gh") {
+			pkgs = append(pkgs, "gh (GitHub CLI)")
+		}
+		if hasBinary("pandoc") {
+			pkgs = append(pkgs, "pandoc")
+		}
+		lines = append(lines,
+			"",
+			"## Package installation",
+			"Pre-installed: "+strings.Join(pkgs, ", ")+".",
+			"To install additional packages at runtime: `pip3 install <package>` or `npm install -g <package>` — both work without sudo.",
+			"Installed packages persist across tool calls within the same session.",
+		)
+	}
 	lines = append(lines,
 		"",
 		"TOOLS.md (if present in workspace) is user guidance — it does NOT control tool availability.",
@@ -407,5 +445,10 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 		guidance,
 		"",
 	}
+}
+
+func hasBinary(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 

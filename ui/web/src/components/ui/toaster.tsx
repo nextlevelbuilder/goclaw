@@ -51,7 +51,7 @@ export function Toaster() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2 pointer-events-none sm:bottom-6 sm:right-6">
+    <div className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2 pointer-events-none sm:bottom-6 sm:right-6 safe-bottom safe-right">
       {toasts.slice(-3).map((t) => (
         <ToastItem key={t.id} toast={t} />
       ))}

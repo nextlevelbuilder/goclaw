@@ -1,0 +1,26 @@
+{
+  "title": "Nhật ký hoạt động",
+  "description": "Lịch sử kiểm toán các thay đổi quản trị và cấu hình.",
+  "filters": {
+    "action": "Hành động",
+    "allActions": "Tất cả",
+    "agentCreated": "Tạo Agent",
+    "agentUpdated": "Cập nhật Agent",
+    "agentDeleted": "Xóa Agent",
+    "entityType": "Loại đối tượng",
+    "allEntities": "Tất cả",
+    "agent": "Agent"
+  },
+  "table": {
+    "action": "Hành động",
+    "actor": "Người thực hiện",
+    "entity": "Đối tượng",
+    "entityId": "ID đối tượng",
+    "ip": "Địa chỉ IP",
+    "time": "Thời gian"
+  },
+  "empty": {
+    "title": "Chưa có nhật ký",
+    "description": "Nhật ký hoạt động sẽ xuất hiện khi có thao tác quản trị."
+  }
+}

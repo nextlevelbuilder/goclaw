@@ -23,17 +23,25 @@ interface StepAgentProps {
   provider: ProviderData | null;
   model: string | null;
   onComplete: (agent: AgentData) => void;
+  onBack?: () => void;
+  existingAgent?: AgentData | null;
 }
 
-export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
+export function StepAgent({ provider, model, onComplete, onBack, existingAgent }: StepAgentProps) {
   const { t } = useTranslation("setup");
-  const { createAgent, deleteAgent, resummonAgent } = useAgents();
+  const { createAgent, updateAgent, deleteAgent, resummonAgent } = useAgents();
 
-  const [displayName] = useState("GoClaw");
-  const [agentKey, setAgentKey] = useState("goclaw");
-  const [keyTouched, setKeyTouched] = useState(false);
-  const [description, setDescription] = useState(DEFAULT_PROMPT);
-  const [selfEvolve, setSelfEvolve] = useState(false);
+  const isEditing = !!existingAgent;
+
+  const [displayName, setDisplayName] = useState(existingAgent?.display_name ?? "GoClaw");
+  const [agentKey, setAgentKey] = useState(existingAgent?.agent_key ?? "goclaw");
+  const [keyTouched, setKeyTouched] = useState(isEditing);
+  const [description, setDescription] = useState(
+    existingAgent?.other_config?.description as string ?? DEFAULT_PROMPT,
+  );
+  const [selfEvolve, setSelfEvolve] = useState(
+    !!(existingAgent?.other_config?.self_evolve),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -72,7 +80,7 @@ export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
     if (agentResult) onComplete(agentResult);
   };
 
-  const handleCreate = async () => {
+  const handleSubmit = async () => {
     if (!agentKey.trim() || !isValidSlug(agentKey)) return;
     if (!provider) { setError(t("agent.errors.noProvider")); return; }
 
@@ -83,21 +91,34 @@ export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
       const otherConfig: Record<string, unknown> = {};
       if (description.trim()) otherConfig.description = description.trim();
       if (selfEvolve) otherConfig.self_evolve = true;
-      const data: Partial<AgentData> = {
-        agent_key: agentKey.trim(),
-        display_name: displayName.trim() || undefined,
-        provider: provider.name,
-        model: model || "",
-        agent_type: "predefined",
-        is_default: true,
-        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
-      };
 
-      const result = await createAgent(data) as AgentData;
-      setAgentResult(result);
-      setSummoningOutcome("pending");
-      setCreatedAgent({ id: result.id, name: displayName.trim() || agentKey });
-      setSummoningOpen(true);
+      if (isEditing) {
+        // Update existing agent — skip summoning
+        const patch: Partial<AgentData> = {
+          display_name: displayName.trim() || undefined,
+          provider: provider.name,
+          model: model || "",
+          other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+        };
+        await updateAgent(existingAgent!.id, patch);
+        onComplete({ ...existingAgent!, ...patch } as AgentData);
+      } else {
+        const data: Partial<AgentData> = {
+          agent_key: agentKey.trim(),
+          display_name: displayName.trim() || undefined,
+          provider: provider.name,
+          model: model || "",
+          agent_type: "predefined",
+          is_default: true,
+          other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+        };
+
+        const result = await createAgent(data) as AgentData;
+        setAgentResult(result);
+        setSummoningOutcome("pending");
+        setCreatedAgent({ id: result.id, name: displayName.trim() || agentKey });
+        setSummoningOpen(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("agent.errors.failedCreate"));
     } finally {
@@ -158,8 +179,8 @@ export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
                 </Label>
                 <Input
                   value={displayName}
-                  readOnly
-                  className="bg-muted cursor-default"
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder={t("agent.displayNamePlaceholder", "e.g. GoClaw")}
                 />
               </div>
               <div className="space-y-2">
@@ -172,6 +193,7 @@ export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
                   onChange={(e) => { setKeyTouched(true); setAgentKey(e.target.value); }}
                   onBlur={() => setAgentKey(slugify(agentKey))}
                   placeholder={t("agent.agentKeyPlaceholder")}
+                  disabled={isEditing}
                 />
               </div>
             </div>
@@ -214,12 +236,19 @@ export function StepAgent({ provider, model, onComplete }: StepAgentProps) {
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 
-            <div className="flex justify-end">
+            <div className={`flex ${onBack ? "justify-between" : "justify-end"} gap-2`}>
+              {onBack && (
+                <Button variant="secondary" onClick={onBack}>
+                  ← {t("common.back")}
+                </Button>
+              )}
               <Button
-                onClick={handleCreate}
+                onClick={handleSubmit}
                 disabled={loading || !agentKey.trim() || !isValidSlug(agentKey) || !description.trim()}
               >
-                {loading ? t("agent.creating") : t("agent.create")}
+                {loading
+                  ? isEditing ? t("agent.updating", "Updating...") : t("agent.creating")
+                  : isEditing ? t("agent.update", "Update") : t("agent.create")}
               </Button>
             </div>
           </TooltipProvider>

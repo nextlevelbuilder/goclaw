@@ -195,6 +195,7 @@ type QuotaUsageResult struct {
 	RequestsToday     int               `json:"requestsToday"`
 	InputTokensToday  int64             `json:"inputTokensToday"`
 	OutputTokensToday int64             `json:"outputTokensToday"`
+	CostToday         float64           `json:"costToday"`
 	UniqueUsersToday  int               `json:"uniqueUsersToday"`
 	Entries           []QuotaUsageEntry `json:"entries"`
 }
@@ -276,11 +277,12 @@ func QueryTodaySummary(ctx context.Context, db *sql.DB, result *QuotaUsageResult
 			COUNT(*),
 			COALESCE(SUM(total_input_tokens), 0),
 			COALESCE(SUM(total_output_tokens), 0),
+			COALESCE(SUM(total_cost), 0),
 			COUNT(DISTINCT user_id)
 		FROM traces
 		WHERE parent_trace_id IS NULL AND created_at >= $1`,
 		startOfDay,
-	).Scan(&result.RequestsToday, &result.InputTokensToday, &result.OutputTokensToday, &result.UniqueUsersToday)
+	).Scan(&result.RequestsToday, &result.InputTokensToday, &result.OutputTokensToday, &result.CostToday, &result.UniqueUsersToday)
 	if err != nil {
 		slog.Warn("quota.usage: failed to query today summary", "error", err)
 	}

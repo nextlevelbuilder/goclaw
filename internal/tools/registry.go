@@ -13,6 +13,7 @@ import (
 // Registry manages tool registration and execution.
 type Registry struct {
 	tools       map[string]Tool
+	aliases     map[string]string // alias name → canonical tool name
 	mu          sync.RWMutex
 	rateLimiter *ToolRateLimiter // nil = no rate limiting
 	scrubbing   bool             // scrub credentials from output (default true)
@@ -21,6 +22,7 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		tools:     make(map[string]Tool),
+		aliases:   make(map[string]string),
 		scrubbing: true, // enabled by default
 	}
 }
@@ -42,12 +44,44 @@ func (r *Registry) Register(tool Tool) {
 	r.tools[tool.Name()] = tool
 }
 
-// Get returns a tool by name.
+// RegisterAlias maps an alias name to a canonical tool name.
+// Rejected if alias collides with an existing real tool.
+func (r *Registry) RegisterAlias(alias, canonical string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.tools[alias]; exists {
+		slog.Warn("alias conflicts with registered tool", "alias", alias, "canonical", canonical)
+		return
+	}
+	r.aliases[alias] = canonical
+}
+
+// Aliases returns a copy of the alias map.
+func (r *Registry) Aliases() map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cp := make(map[string]string, len(r.aliases))
+	maps.Copy(cp, r.aliases)
+	return cp
+}
+
+// resolve looks up a tool by name, checking real tools first, then aliases.
+func (r *Registry) resolve(name string) (Tool, bool) {
+	if t, ok := r.tools[name]; ok {
+		return t, true
+	}
+	if canonical, ok := r.aliases[name]; ok {
+		t, ok := r.tools[canonical]
+		return t, ok
+	}
+	return nil, false
+}
+
+// Get returns a tool by name (checks real tools first, then aliases).
 func (r *Registry) Get(name string) (Tool, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	t, ok := r.tools[name]
-	return t, ok
+	return r.resolve(name)
 }
 
 // Unregister removes a tool from the registry by name.
@@ -70,7 +104,7 @@ func (r *Registry) Execute(ctx context.Context, name string, args map[string]any
 // making tool instances thread-safe for concurrent execution.
 func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map[string]any, channel, chatID, peerKind, sessionKey string, asyncCB AsyncCallback) *Result {
 	r.mu.RLock()
-	tool, ok := r.tools[name]
+	tool, ok := r.resolve(name)
 	r.mu.RUnlock()
 
 	if !ok {
@@ -127,18 +161,33 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 }
 
 // ProviderDefs returns tool definitions for LLM provider APIs.
+// Includes alias definitions (same params/description, alias name).
 func (r *Registry) ProviderDefs() []providers.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	defs := make([]providers.ToolDefinition, 0, len(r.tools))
+	defs := make([]providers.ToolDefinition, 0, len(r.tools)+len(r.aliases))
 	for _, tool := range r.tools {
 		defs = append(defs, ToProviderDef(tool))
+	}
+	for alias, canonical := range r.aliases {
+		tool, ok := r.tools[canonical]
+		if !ok {
+			continue
+		}
+		defs = append(defs, providers.ToolDefinition{
+			Type: "function",
+			Function: providers.ToolFunctionSchema{
+				Name:        alias,
+				Description: tool.Description(),
+				Parameters:  tool.Parameters(),
+			},
+		})
 	}
 	return defs
 }
 
-// List returns all registered tool names.
+// List returns all registered canonical tool names (excludes aliases).
 func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -156,7 +205,7 @@ func (r *Registry) Count() int {
 	return len(r.tools)
 }
 
-// Clone creates a shallow copy of the registry with all registered tools.
+// Clone creates a shallow copy of the registry with all registered tools and aliases.
 // The clone shares the rate limiter (thread-safe) and scrubbing setting.
 // Used by subagent toolsFactory so subagents inherit parent tools (web_fetch, web_search, etc.).
 func (r *Registry) Clone() *Registry {
@@ -164,9 +213,11 @@ func (r *Registry) Clone() *Registry {
 	defer r.mu.RUnlock()
 	clone := &Registry{
 		tools:       make(map[string]Tool, len(r.tools)),
+		aliases:     make(map[string]string, len(r.aliases)),
 		rateLimiter: r.rateLimiter,
 		scrubbing:   r.scrubbing,
 	}
 	maps.Copy(clone.tools, r.tools)
+	maps.Copy(clone.aliases, r.aliases)
 	return clone
 }

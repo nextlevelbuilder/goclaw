@@ -81,15 +81,20 @@ func geminiFileUpload(ctx context.Context, apiKey, displayName string, data []by
 
 	var uploadResult struct {
 		File struct {
-			Name string `json:"name"`
-			URI  string `json:"uri"`
+			Name  string `json:"name"`
+			URI   string `json:"uri"`
+			State string `json:"state"`
 		} `json:"file"`
 	}
 	if err := json.Unmarshal(respBody, &uploadResult); err != nil {
 		return "", "", fmt.Errorf("parse upload response: %w", err)
 	}
 
-	return uploadResult.File.Name, uploadResult.File.URI, nil
+	// Only return URI if file is already ACTIVE; otherwise caller must poll.
+	if uploadResult.File.State == "ACTIVE" {
+		return uploadResult.File.Name, uploadResult.File.URI, nil
+	}
+	return uploadResult.File.Name, "", nil
 }
 
 // geminiFilePoll polls the Gemini File API until the file reaches ACTIVE state.

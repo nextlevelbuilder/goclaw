@@ -94,19 +94,21 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			}
 		}
 
-		// Group-scoped UserID: treat the group as a single "virtual user" for
-		// context files, memory, traces, and seeding. Individual senderID is
-		// preserved in the InboundMessage for pairing/dedup/mention gate.
-		// Format: "group:{channel}:{chatID}" — e.g., "group:telegram:-1002541239372"
-		// For Discord: use guild_id so all channels in the same server share
-		// context files, memory, and seeding (session key stays per-channel).
+		// Group-scoped UserID: context files, memory, traces, and seeding scope.
+		// - Discord guilds: "guild:{guildID}:user:{senderID}" — per-user per-server,
+		//   shared across all channels within the same server. Session key stays per-channel.
+		// - Other platforms: "group:{channel}:{chatID}" — shared by all users in the chat.
+		// Individual senderID is preserved in InboundMessage for pairing/dedup/mention gate.
 		userID := msg.UserID
 		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
-			groupID := msg.ChatID
-			if guildID := msg.Metadata["guild_id"]; guildID != "" {
-				groupID = guildID
+			if guildID := msg.Metadata["guild_id"]; guildID != "" && msg.SenderID != "" {
+				// Discord guild: per-user scope so each member has own profile
+				// across all channels in the same server.
+				userID = fmt.Sprintf("guild:%s:user:%s", guildID, msg.SenderID)
+			} else {
+				groupID := msg.ChatID
+				userID = fmt.Sprintf("group:%s:%s", msg.Channel, groupID)
 			}
-			userID = fmt.Sprintf("group:%s:%s", msg.Channel, groupID)
 		}
 
 		// Persist friendly names from channel metadata into session + user profile.

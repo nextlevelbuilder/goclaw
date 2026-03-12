@@ -50,6 +50,7 @@ const documentMaxBytes = 20 * 1024 * 1024
 
 // documentProviderPriority is the order in which providers are tried for document analysis.
 // Gemini has best native PDF support (50MB, 258 tokens/page).
+// "alibaba" is included as an alias for dashscope (common DB registration name).
 var documentProviderPriority = []string{"gemini", "anthropic", "openrouter", "dashscope"}
 
 // documentModelDefaults maps provider names to preferred document-capable models.

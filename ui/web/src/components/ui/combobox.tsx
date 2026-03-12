@@ -54,21 +54,31 @@ export function Combobox({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Compute dropdown position for portal mode
+  // Compute dropdown position — always use fixed positioning for portal rendering
   React.useLayoutEffect(() => {
-    if (!open || !portalContainer?.current || !containerRef.current) return;
+    if (!open || !containerRef.current) return;
     const inputRect = containerRef.current.getBoundingClientRect();
-    const portalRect = portalContainer.current.getBoundingClientRect();
-    const left = inputRect.left - portalRect.left;
-    const maxWidth = portalRect.width - left;
-    setDropdownStyle({
-      position: "absolute",
-      top: inputRect.bottom - portalRect.top + 4,
-      left,
-      width: inputRect.width,
-      maxWidth,
-      zIndex: 50,
-    });
+    if (portalContainer?.current) {
+      const portalRect = portalContainer.current.getBoundingClientRect();
+      const left = inputRect.left - portalRect.left;
+      const maxWidth = portalRect.width - left;
+      setDropdownStyle({
+        position: "absolute",
+        top: inputRect.bottom - portalRect.top + 4,
+        left,
+        width: inputRect.width,
+        maxWidth,
+        zIndex: 50,
+      });
+    } else {
+      setDropdownStyle({
+        position: "fixed",
+        top: inputRect.bottom + 4,
+        left: inputRect.left,
+        width: inputRect.width,
+        zIndex: 9999,
+      });
+    }
   }, [open, search, portalContainer]);
 
   const filtered = React.useMemo(() => {
@@ -98,11 +108,8 @@ export function Combobox({
   const dropdownContent = open && filtered.length > 0 && (
     <div
       ref={dropdownRef}
-      style={portalContainer ? dropdownStyle : undefined}
-      className={cn(
-        "bg-popover text-popover-foreground max-h-60 overflow-y-auto rounded-md border p-1 shadow-md",
-        portalContainer ? "overflow-hidden" : "absolute top-full left-0 z-50 mt-1 min-w-full",
-      )}
+      style={dropdownStyle}
+      className="bg-popover text-popover-foreground pointer-events-auto max-h-60 overflow-y-auto rounded-md border p-1 shadow-md"
     >
       {filtered.map((o) => (
         <button
@@ -139,9 +146,10 @@ export function Combobox({
           onClick={() => setOpen(!open)}
         />
       )}
-      {portalContainer?.current
-        ? dropdownContent && createPortal(dropdownContent, portalContainer.current)
-        : dropdownContent}
+      {dropdownContent && createPortal(
+        dropdownContent,
+        portalContainer?.current ?? document.body,
+      )}
     </div>
   );
 }

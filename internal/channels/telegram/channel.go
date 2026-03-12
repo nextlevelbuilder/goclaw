@@ -58,6 +58,10 @@ func (c *thinkingCancel) Cancel() {
 func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, agentStore store.AgentStore, teamStore store.TeamStore, pendingStore store.PendingMessageStore) (*Channel, error) {
 	var opts []telego.BotOption
 
+	if cfg.APIServer != "" {
+		opts = append(opts, telego.WithAPIServer(cfg.APIServer))
+	}
+
 	if cfg.Proxy != "" {
 		proxyURL, parseErr := url.Parse(cfg.Proxy)
 		if parseErr != nil {

@@ -54,12 +54,18 @@ var toolProfiles = map[string][]string{
 	"full":      {}, // empty = no restrictions
 }
 
-// Tool aliases map alternative names to canonical names.
-var toolAliases = map[string]string{
+// Legacy tool aliases — migrated to Registry.RegisterAlias() at startup.
+// Kept as seed data only; resolveAlias() is no longer used.
+var legacyToolAliases = map[string]string{
 	"bash":           "exec",
 	"apply-patch":    "apply_patch",
 	"edit_file":      "edit",
 	"sessions_spawn": "spawn",
+}
+
+// LegacyToolAliases returns legacy aliases for registration into the Registry.
+func LegacyToolAliases() map[string]string {
+	return legacyToolAliases
 }
 
 // Subagent deny lists — tools subagents cannot use.
@@ -107,11 +113,30 @@ func (pe *PolicyEngine) FilterTools(
 	}
 
 	// Resolve aliases and build definitions
+	allowedSet := make(map[string]bool, len(allowed))
 	var defs []providers.ToolDefinition
 	for _, name := range allowed {
 		canonical := resolveAlias(name)
 		if tool, ok := registry.Get(canonical); ok {
 			defs = append(defs, ToProviderDef(tool))
+			allowedSet[canonical] = true
+		}
+	}
+
+	// Add registry aliases for allowed canonical tools
+	for alias, canonical := range registry.Aliases() {
+		if !allowedSet[canonical] {
+			continue
+		}
+		if tool, ok := registry.Get(canonical); ok {
+			defs = append(defs, providers.ToolDefinition{
+				Type: "function",
+				Function: providers.ToolFunctionSchema{
+					Name:        alias,
+					Description: tool.Description(),
+					Parameters:  tool.Parameters(),
+				},
+			})
 		}
 	}
 
@@ -322,7 +347,7 @@ func unionWithSpec(current []string, allTools []string, spec []string) []string 
 }
 
 func resolveAlias(name string) string {
-	if canonical, ok := toolAliases[name]; ok {
+	if canonical, ok := legacyToolAliases[name]; ok {
 		return canonical
 	}
 	return name

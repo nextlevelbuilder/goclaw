@@ -13,11 +13,11 @@ import (
 
 // --- Pairing UX ---
 
-// buildPairingReply builds the pairing reply message matching TS behavior.
-func buildPairingReply(telegramUserID, code string) string {
+// buildPairingReply builds the pairing reply message for unpaired users.
+func buildPairingReply(code string) string {
 	return fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour Telegram user id: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		telegramUserID, code, code,
+		"🔗 This account hasn't been paired yet.\n\nPairing code: %s\n\nShare this code with the bot owner to get access.",
+		code,
 	)
 }
 
@@ -42,7 +42,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, chatID int64, userID, us
 		return
 	}
 
-	replyText := buildPairingReply(userID, code)
+	replyText := buildPairingReply(code)
 	msg := tu.Message(tu.ID(chatID), replyText)
 	if _, err := c.bot.SendMessage(ctx, msg); err != nil {
 		slog.Warn("failed to send pairing reply", "chat_id", chatID, "error", err)
@@ -77,8 +77,8 @@ func (c *Channel) sendGroupPairingReply(ctx context.Context, chatID int64, chatI
 	}
 
 	replyText := fmt.Sprintf(
-		"This group is not approved yet.\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		code, code,
+		"🔗 This group hasn't been paired yet.\n\nPairing code: %s\n\nShare this code with the bot owner to get access.",
+		code,
 	)
 	msg := tu.Message(tu.ID(chatID), replyText)
 	if messageThreadID > 0 {

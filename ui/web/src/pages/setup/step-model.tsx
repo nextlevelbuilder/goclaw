@@ -15,14 +15,16 @@ import type { ProviderData } from "@/types/provider";
 interface StepModelProps {
   provider: ProviderData;
   onComplete: (model: string) => void;
+  onBack?: () => void;
+  initialModel?: string | null;
 }
 
-export function StepModel({ provider, onComplete }: StepModelProps) {
+export function StepModel({ provider, onComplete, onBack, initialModel }: StepModelProps) {
   const { t } = useTranslation("setup");
   const { models, loading: modelsLoading } = useProviderModels(provider.id, provider.provider_type);
   const { verify, verifying, result: verifyResult, reset: resetVerify } = useProviderVerify();
 
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(initialModel ?? "");
   const [error, setError] = useState("");
 
   // Reset verification when model changes
@@ -90,17 +92,24 @@ export function StepModel({ provider, onComplete }: StepModelProps) {
             </div>
           )}
 
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={handleVerify}
-              disabled={!model.trim() || verifying || isVerified}
-            >
-              {verifying ? t("model.verifying") : isVerified ? t("model.verified") : t("model.verify")}
-            </Button>
-            <Button onClick={() => onComplete(model.trim())} disabled={!isVerified}>
-              {t("model.continue")}
-            </Button>
+          <div className={`flex ${onBack ? "justify-between" : "justify-end"} gap-2`}>
+            {onBack && (
+              <Button variant="secondary" onClick={onBack}>
+                ← {t("common.back")}
+              </Button>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleVerify}
+                disabled={!model.trim() || verifying || isVerified}
+              >
+                {verifying ? t("model.verifying") : isVerified ? t("model.verified") : t("model.verify")}
+              </Button>
+              <Button onClick={() => onComplete(model.trim())} disabled={!isVerified}>
+                {t("model.continue")}
+              </Button>
+            </div>
           </div>
         </TooltipProvider>
       </CardContent>

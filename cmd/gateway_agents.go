@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -13,23 +14,33 @@ import (
 )
 
 // resolveEmbeddingProvider auto-selects an embedding provider based on config and available API keys.
-// Matching TS embedding provider auto-selection order.
-func resolveEmbeddingProvider(cfg *config.Config, memCfg *config.MemoryConfig) memory.EmbeddingProvider {
+// Resolution order:
+//  1. Explicit provider name from memCfg → hardcoded match → registry lookup (DB providers)
+//  2. Auto-detect: openai → openrouter → gemini (config-file keys)
+//
+// The optional providerReg allows resolving DB-stored provider names (e.g. "openai-embedding")
+// that don't match the hardcoded provider names.
+func resolveEmbeddingProvider(cfg *config.Config, memCfg *config.MemoryConfig, providerReg *providers.Registry) memory.EmbeddingProvider {
 	// Explicit provider in config
 	if memCfg != nil && memCfg.EmbeddingProvider != "" {
-		return createEmbeddingProvider(memCfg.EmbeddingProvider, cfg, memCfg)
+		if p := createEmbeddingProvider(memCfg.EmbeddingProvider, cfg, memCfg, providerReg); p != nil {
+			return p
+		}
+		// Explicit name set but no match — don't auto-detect, log and return nil
+		slog.Warn("embedding provider not found", "name", memCfg.EmbeddingProvider)
+		return nil
 	}
 
 	// Auto-select: openai → openrouter → gemini
 	for _, name := range []string{"openai", "openrouter", "gemini"} {
-		if p := createEmbeddingProvider(name, cfg, memCfg); p != nil {
+		if p := createEmbeddingProvider(name, cfg, memCfg, nil); p != nil {
 			return p
 		}
 	}
 	return nil
 }
 
-func createEmbeddingProvider(name string, cfg *config.Config, memCfg *config.MemoryConfig) memory.EmbeddingProvider {
+func createEmbeddingProvider(name string, cfg *config.Config, memCfg *config.MemoryConfig, providerReg *providers.Registry) memory.EmbeddingProvider {
 	model := "text-embedding-3-small"
 	apiBase := ""
 	if memCfg != nil {
@@ -70,6 +81,22 @@ func createEmbeddingProvider(name string, cfg *config.Config, memCfg *config.Mem
 		}
 		return memory.NewOpenAIEmbeddingProvider("gemini", cfg.Providers.Gemini.APIKey, "https://generativelanguage.googleapis.com/v1beta/openai", geminiModel).
 			WithDimensions(1536)
+	}
+
+	// Fallback: resolve from provider registry (DB-stored providers like "openai-embedding").
+	// Any OpenAI-compatible provider in the registry can serve embeddings.
+	if providerReg != nil {
+		if regProv, err := providerReg.Get(name); err == nil {
+			if op, ok := regProv.(*providers.OpenAIProvider); ok {
+				embBase := op.APIBase()
+				if apiBase != "" {
+					embBase = apiBase // memCfg override takes precedence
+				}
+				slog.Info("embedding provider resolved from registry", "name", name, "base", embBase, "model", model)
+				return memory.NewOpenAIEmbeddingProvider(name, op.APIKey(), embBase, model)
+			}
+			slog.Warn("embedding provider in registry is not OpenAI-compatible", "name", name)
+		}
 	}
 	return nil
 }

@@ -36,12 +36,39 @@ func (m *ChatMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodChatInject, m.handleInject)
 }
 
+// chatMediaItem represents a media file attached to a chat message.
+type chatMediaItem struct {
+	Path     string `json:"path"`
+	Filename string `json:"filename,omitempty"`
+}
+
 type chatSendParams struct {
-	Message    string   `json:"message"`
-	AgentID    string   `json:"agentId"`
-	SessionKey string   `json:"sessionKey"`
-	Stream     bool     `json:"stream"`
-	Media      []string `json:"media,omitempty"` // local file paths from upload endpoint
+	Message    string            `json:"message"`
+	AgentID    string            `json:"agentId"`
+	SessionKey string            `json:"sessionKey"`
+	Stream     bool              `json:"stream"`
+	Media      json.RawMessage   `json:"media,omitempty"` // []string (legacy) or []chatMediaItem
+}
+
+// parseMedia handles both legacy string paths and new {path,filename} objects.
+func (p *chatSendParams) parseMedia() []chatMediaItem {
+	if len(p.Media) == 0 {
+		return nil
+	}
+	// Try new format: [{path, filename}]
+	var items []chatMediaItem
+	if err := json.Unmarshal(p.Media, &items); err == nil {
+		return items
+	}
+	// Fallback: legacy ["path1", "path2"]
+	var paths []string
+	if err := json.Unmarshal(p.Media, &paths); err == nil {
+		for _, path := range paths {
+			items = append(items, chatMediaItem{Path: path})
+		}
+		return items
+	}
+	return nil
 }
 
 func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -110,16 +137,20 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		defer m.agents.UnregisterRun(runID)
 		defer cancel()
 
-		// Convert string paths to bus.MediaFile with MIME detection.
+		// Parse media items (supports both legacy string paths and new {path,filename} objects).
+		items := params.parseMedia()
+
+		// Convert media items to bus.MediaFile with MIME detection.
 		var mediaFiles []bus.MediaFile
 		var mediaInfos []media.MediaInfo
-		for _, p := range params.Media {
-			mimeType := media.DetectMIMEType(p)
-			mediaFiles = append(mediaFiles, bus.MediaFile{Path: p, MimeType: mimeType})
+		for _, item := range items {
+			mimeType := media.DetectMIMEType(item.Path)
+			mediaFiles = append(mediaFiles, bus.MediaFile{Path: item.Path, MimeType: mimeType})
 			mediaInfos = append(mediaInfos, media.MediaInfo{
 				Type:        media.MediaKindFromMime(mimeType),
-				FilePath:    p,
+				FilePath:    item.Path,
 				ContentType: mimeType,
+				FileName:    item.Filename,
 			})
 		}
 

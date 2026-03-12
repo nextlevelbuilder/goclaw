@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 )
 
 // StorageHandler provides HTTP endpoints for browsing and managing
@@ -115,7 +116,7 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Skip system artifacts
-		if isSystemArtifact(rel) {
+		if skills.IsSystemArtifact(rel) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

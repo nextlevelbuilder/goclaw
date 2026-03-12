@@ -86,7 +86,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           showVerify
         />
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="grid gap-1.5">
             <InfoLabel tip={t("agents.maxTokensTip")}>{t("agents.maxTokens")}</InfoLabel>
             <Input
@@ -128,7 +128,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <InfoLabel tip={t("agents.workspaceTip")}>{t("agents.workspace")}</InfoLabel>
             <Input
@@ -153,7 +153,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           open={openSubs.has("subagents")}
           onToggle={() => toggleSub("subagents")}
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t("agents.subagents.maxConcurrent")} tip={t("agents.subagents.maxConcurrentTip")} type="number" value={subagents.maxConcurrent} onChange={(v) => updateNested("subagents", { maxConcurrent: Number(v) })} placeholder="20" />
             <Field label={t("agents.subagents.maxSpawnDepth")} tip={t("agents.subagents.maxSpawnDepthTip")} type="number" value={subagents.maxSpawnDepth} onChange={(v) => updateNested("subagents", { maxSpawnDepth: Number(v) })} placeholder="1" />
             <Field label={t("agents.subagents.maxChildrenPerAgent")} tip={t("agents.subagents.maxChildrenPerAgentTip")} type="number" value={subagents.maxChildrenPerAgent} onChange={(v) => updateNested("subagents", { maxChildrenPerAgent: Number(v) })} placeholder="5" />
@@ -185,7 +185,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
             modelPlaceholder="text-embedding-3-small"
             allowEmpty
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t("agents.memory.maxResults")} tip={t("agents.memory.maxResultsTip")} type="number" value={memory.max_results} onChange={(v) => updateNested("memory", { max_results: Number(v) })} placeholder="6" />
             <Field label={t("agents.memory.minScore")} tip={t("agents.memory.minScoreTip")} type="number" step="0.01" value={memory.min_score} onChange={(v) => updateNested("memory", { min_score: Number(v) })} placeholder="0.35" />
           </div>
@@ -197,7 +197,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           open={openSubs.has("compaction")}
           onToggle={() => toggleSub("compaction")}
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t("agents.compaction.reserveTokensFloor")} tip={t("agents.compaction.reserveTokensFloorTip")} type="number" value={compaction.reserveTokensFloor} onChange={(v) => updateNested("compaction", { reserveTokensFloor: Number(v) })} placeholder="20000" />
             <Field label={t("agents.compaction.maxHistoryShare")} tip={t("agents.compaction.maxHistoryShareTip")} type="number" step="0.05" value={compaction.maxHistoryShare} onChange={(v) => updateNested("compaction", { maxHistoryShare: Number(v) })} placeholder="0.75" />
           </div>
@@ -209,7 +209,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           open={openSubs.has("pruning")}
           onToggle={() => toggleSub("pruning")}
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>{t("agents.pruning.mode")}</Label>
               <Select value={pruning.mode ?? "off"} onValueChange={(v) => updateNested("contextPruning", { mode: v })}>
@@ -230,7 +230,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           open={openSubs.has("sandbox")}
           onToggle={() => toggleSub("sandbox")}
         >
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>{t("agents.sandbox.mode")}</Label>
               <Select value={sandbox.mode ?? "off"} onValueChange={(v) => updateNested("sandbox", { mode: v })}>

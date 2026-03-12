@@ -668,6 +668,15 @@ goclaw cron toggle        Enable/disable a job
 
 goclaw skills list        List available skills
 goclaw skills show        Show skill details
+```
+
+**Adding core skills:**
+
+Place a skill folder inside `skills/` (local dev) or `/app/bundled-skills/` (Docker image). Each folder must contain a `SKILL.md` with YAML frontmatter (`name`, `description`, `slug`). Folders prefixed with `_` are treated as shared code, not skills.
+
+On server startup, the seeder automatically discovers all skill folders, upserts them into the database, and runs an async dependency check. No environment variable needed — the seeder falls back to `skills/` in local dev and `/app/bundled-skills` in Docker.
+
+```
 
 goclaw models             List AI models and providers
 goclaw channels           List messaging channels

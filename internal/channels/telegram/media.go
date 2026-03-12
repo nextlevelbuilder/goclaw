@@ -17,8 +17,13 @@ import (
 )
 
 const (
-	// defaultMediaMaxBytes is the default max download size (20MB, Telegram Bot API limit).
+	// defaultMediaMaxBytes is the default max download size for the official Bot API (20 MB).
 	defaultMediaMaxBytes int64 = 20 * 1024 * 1024
+
+	// localAPIDefaultMaxBytes is the default max download size when a local Bot API server
+	// is configured. The local server supports up to 2 GB; we default to 200 MB and let
+	// downstream providers enforce their own limits.
+	localAPIDefaultMaxBytes int64 = 200 * 1024 * 1024
 
 	// downloadMaxRetries is the number of download retry attempts.
 	downloadMaxRetries = 3
@@ -34,7 +39,11 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 
 	maxBytes := c.config.MediaMaxBytes
 	if maxBytes == 0 {
-		maxBytes = defaultMediaMaxBytes
+		if c.config.APIServer != "" {
+			maxBytes = localAPIDefaultMaxBytes
+		} else {
+			maxBytes = defaultMediaMaxBytes
+		}
 	}
 
 	// Photo: take highest resolution (last element)
@@ -160,6 +169,10 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 
 // downloadMedia downloads a file from Telegram by file_id with retry logic.
 // Returns the local file path.
+//
+// When a local Bot API server is configured (api_server), the download URL
+// points to that server instead of the official api.telegram.org, removing the
+// standard 20 MB file size limit. Downstream providers enforce their own limits.
 func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int64) (string, error) {
 	var file *telego.File
 	var err error
@@ -187,13 +200,32 @@ func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int
 		return "", fmt.Errorf("empty file path for file_id %s", fileID)
 	}
 
-	// Check file size before downloading
-	if int64(file.FileSize) > maxBytes {
+	// Check file size before downloading (FileSize may be 0 for large files on local Bot API).
+	if file.FileSize > 0 && int64(file.FileSize) > maxBytes {
 		return "", fmt.Errorf("file too large: %d bytes (max %d)", file.FileSize, maxBytes)
 	}
 
-	// Build download URL
-	downloadURL := fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", c.config.Token, file.FilePath)
+	// Local Bot API (--local mode) returns absolute filesystem paths and does NOT
+	// serve files over HTTP (/file/ endpoint returns 501). When the path is absolute,
+	// copy directly from the filesystem (requires the data dir to be mounted).
+	if c.config.APIServer != "" && filepath.IsAbs(file.FilePath) {
+		if _, statErr := os.Stat(file.FilePath); statErr == nil {
+			slog.Debug("telegram media: copying from local filesystem",
+				"file_id", fileID, "path", file.FilePath, "size", file.FileSize)
+			return copyLocalFile(file.FilePath, maxBytes)
+		}
+		return "", fmt.Errorf("local bot api file not accessible (mount the data dir into the container): %s", file.FilePath)
+	}
+
+	// Download over HTTP: use custom API server if configured (non-local mode),
+	// otherwise the official Telegram API.
+	var downloadURL string
+	if c.config.APIServer != "" {
+		downloadURL = fmt.Sprintf("%s/file/bot%s/%s",
+			strings.TrimRight(c.config.APIServer, "/"), c.config.Token, file.FilePath)
+	} else {
+		downloadURL = fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", c.config.Token, file.FilePath)
+	}
 
 	resp, err := http.Get(downloadURL)
 	if err != nil {
@@ -226,6 +258,41 @@ func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int
 	if written > maxBytes {
 		os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("file exceeds max size during download: %d bytes", written)
+	}
+
+	return tmpFile.Name(), nil
+}
+
+// copyLocalFile copies a file from the local Bot API data directory to a temp file.
+func copyLocalFile(srcPath string, maxBytes int64) (string, error) {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return "", fmt.Errorf("open local file: %w", err)
+	}
+	defer src.Close()
+
+	info, err := src.Stat()
+	if err != nil {
+		return "", fmt.Errorf("stat local file: %w", err)
+	}
+	if info.Size() > maxBytes {
+		return "", fmt.Errorf("file too large: %d bytes (max %d)", info.Size(), maxBytes)
+	}
+
+	ext := filepath.Ext(srcPath)
+	if ext == "" {
+		ext = ".bin"
+	}
+
+	tmpFile, err := os.CreateTemp("", "goclaw_media_*"+ext)
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	defer tmpFile.Close()
+
+	if _, err := io.Copy(tmpFile, src); err != nil {
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("copy local file: %w", err)
 	}
 
 	return tmpFile.Name(), nil

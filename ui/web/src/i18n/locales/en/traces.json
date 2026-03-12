@@ -3,6 +3,8 @@
   "description": "LLM call traces and performance data",
   "filterPlaceholder": "Filter by agent ID...",
   "filter": "Filter",
+  "allAgents": "All agents",
+  "allChannels": "All channels",
   "emptyTitle": "No traces",
   "emptyDescription": "No traces found. Traces are recorded when agents process requests.",
   "columns": {
@@ -31,7 +33,8 @@
     "output": "Output",
     "spansCount": "Spans ({{count}})",
     "llmCalls": "LLM",
-    "toolCalls": "tool"
+    "toolCalls": "tool",
+    "export": "Export trace"
   },
   "span": {
     "model": "Model:",

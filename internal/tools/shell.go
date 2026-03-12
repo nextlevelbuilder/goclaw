@@ -250,7 +250,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		cwd = t.workingDir
 	}
 	if wd, _ := args["working_dir"].(string); wd != "" {
-		if t.restrict {
+		if effectiveRestrict(ctx, t.restrict) {
 			resolved, err := resolvePath(wd, t.workingDir, true)
 			if err != nil {
 				return ErrorResult(err.Error())
@@ -315,7 +315,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 
 // executeInSandbox routes a command through a Docker sandbox container.
 func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKey string) *Result {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workingDir)
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workingDir, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)

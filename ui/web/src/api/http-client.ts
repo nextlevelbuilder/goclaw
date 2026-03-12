@@ -32,6 +32,17 @@ export class HttpClient {
     return this.request<T>(this.buildUrl(path), { method: "DELETE" });
   }
 
+  async downloadBlob(path: string): Promise<Blob> {
+    const res = await fetch(this.buildUrl(path), {
+      method: "GET",
+      headers: this.headers(),
+    });
+    if (!res.ok) {
+      throw new ApiError("HTTP_ERROR", res.statusText);
+    }
+    return res.blob();
+  }
+
   async upload<T>(path: string, formData: FormData): Promise<T> {
     const headers: Record<string, string> = {};
     const token = this.getToken();

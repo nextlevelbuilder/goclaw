@@ -25,9 +25,10 @@ interface StepChannelProps {
   agent: AgentData | null;
   onComplete: () => void;
   onSkip: () => void;
+  onBack?: () => void;
 }
 
-export function StepChannel({ agent, onComplete, onSkip }: StepChannelProps) {
+export function StepChannel({ agent, onComplete, onSkip, onBack }: StepChannelProps) {
   const { t } = useTranslation("setup");
   const { createInstance } = useChannelInstances();
 
@@ -158,13 +159,20 @@ export function StepChannel({ agent, onComplete, onSkip }: StepChannelProps) {
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onSkip} disabled={loading}>
-            {t("channel.skipFinish")}
-          </Button>
-          <Button onClick={handleCreate} disabled={loading}>
-            {loading ? t("channel.creating") : t("channel.create")}
-          </Button>
+        <div className={`flex ${onBack ? "justify-between" : "justify-end"} gap-2`}>
+          {onBack && (
+            <Button variant="secondary" onClick={onBack}>
+              ← {t("common.back")}
+            </Button>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onSkip} disabled={loading}>
+              {t("channel.skipFinish")}
+            </Button>
+            <Button onClick={handleCreate} disabled={loading}>
+              {loading ? t("channel.creating") : t("channel.create")}
+            </Button>
+          </div>
         </div>
         </TooltipProvider>
       </CardContent>

@@ -63,8 +63,9 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	s.mu.RUnlock()
 
 	// Cache miss or TTL expired → query DB
+	// Returns active + system skills (and disabled ones — admin UI needs to see them to toggle back).
 	rows, err := s.db.Query(
-		`SELECT id, name, slug, description, visibility, tags, version FROM skills WHERE status = 'active' ORDER BY name`)
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter FROM skills WHERE status = 'active' OR is_system = true ORDER BY name`)
 	if err != nil {
 		return nil
 	}
@@ -73,17 +74,28 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	var result []store.SkillInfo
 	for rows.Next() {
 		var id uuid.UUID
-		var name, slug, visibility string
+		var name, slug, visibility, status string
 		var desc *string
 		var tags []string
 		var version int
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version); err != nil {
+		var isSystem, enabled bool
+		var depsRaw, fmRaw []byte
+		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &fmRaw); err != nil {
 			continue
 		}
 		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
 		info.Visibility = visibility
 		info.Tags = tags
+		info.IsSystem = isSystem
+		info.Status = status
+		info.Enabled = enabled
+		info.MissingDeps = parseDepsColumn(depsRaw)
+		info.Author = parseFrontmatterAuthor(fmRaw)
 		result = append(result, info)
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("ListSkills: rows iteration error", "error", err)
+		return nil // don't cache partial results
 	}
 
 	s.mu.Lock()
@@ -93,6 +105,62 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	s.mu.Unlock()
 
 	return result
+}
+
+// ListAllSkills returns all enabled skills regardless of status (for admin operations like rescan-deps).
+// Disabled skills are excluded — no point scanning or updating them.
+func (s *PGSkillStore) ListAllSkills() []store.SkillInfo {
+	rows, err := s.db.Query(
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps FROM skills WHERE enabled = true ORDER BY name`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var result []store.SkillInfo
+	for rows.Next() {
+		var id uuid.UUID
+		var name, slug, visibility, status string
+		var desc *string
+		var tags []string
+		var version int
+		var isSystem, enabled bool
+		var depsRaw []byte
+		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw); err != nil {
+			continue
+		}
+		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
+		info.Visibility = visibility
+		info.Tags = tags
+		info.IsSystem = isSystem
+		info.Status = status
+		info.Enabled = enabled
+		info.MissingDeps = parseDepsColumn(depsRaw)
+		result = append(result, info)
+	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("ListAllSkills: rows iteration error", "error", err)
+	}
+	return result
+}
+
+// StoreMissingDeps persists the missing_deps list for a skill into the deps JSONB column.
+func (s *PGSkillStore) StoreMissingDeps(id uuid.UUID, missing []string) error {
+	if missing == nil {
+		missing = []string{}
+	}
+	encoded, err := json.Marshal(map[string]any{"missing": missing})
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		`UPDATE skills SET deps = $1, updated_at = NOW() WHERE id = $2`,
+		encoded, id,
+	)
+	if err == nil {
+		s.BumpVersion()
+	}
+	return err
 }
 
 func (s *PGSkillStore) LoadSkill(name string) (string, bool) {
@@ -162,22 +230,31 @@ func (s *PGSkillStore) GetSkill(name string) (*store.SkillInfo, bool) {
 	var desc *string
 	var tags []string
 	var version int
+	var isSystem bool
 	err := s.db.QueryRow(
-		"SELECT id, name, slug, description, visibility, tags, version FROM skills WHERE slug = $1 AND status = 'active'", name,
-	).Scan(&id, &skillName, &slug, &desc, &visibility, pq.Array(&tags), &version)
+		"SELECT id, name, slug, description, visibility, tags, version, is_system FROM skills WHERE slug = $1 AND status = 'active'", name,
+	).Scan(&id, &skillName, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem)
 	if err != nil {
 		return nil, false
 	}
 	info := buildSkillInfo(id.String(), skillName, slug, desc, version, s.baseDir)
 	info.Visibility = visibility
 	info.Tags = tags
+	info.IsSystem = isSystem
 	return &info, true
 }
 
 func (s *PGSkillStore) FilterSkills(allowList []string) []store.SkillInfo {
 	all := s.ListSkills()
+	var filtered []store.SkillInfo
 	if allowList == nil {
-		return all
+		// No allowList → return all enabled skills (for agent injection)
+		for _, sk := range all {
+			if sk.Enabled {
+				filtered = append(filtered, sk)
+			}
+		}
+		return filtered
 	}
 	if len(allowList) == 0 {
 		return nil
@@ -186,9 +263,8 @@ func (s *PGSkillStore) FilterSkills(allowList []string) []store.SkillInfo {
 	for _, name := range allowList {
 		allowed[name] = true
 	}
-	var filtered []store.SkillInfo
 	for _, sk := range all {
-		if allowed[sk.Slug] {
+		if sk.Enabled && allowed[sk.Slug] {
 			filtered = append(filtered, sk)
 		}
 	}
@@ -223,6 +299,15 @@ func (s *PGSkillStore) UpdateSkill(id uuid.UUID, updates map[string]any) error {
 }
 
 func (s *PGSkillStore) DeleteSkill(id uuid.UUID) error {
+	// Reject deletion of system skills
+	var isSystem bool
+	if err := s.db.QueryRow("SELECT is_system FROM skills WHERE id = $1", id).Scan(&isSystem); err != nil {
+		return fmt.Errorf("check skill: %w", err)
+	}
+	if isSystem {
+		return fmt.Errorf("cannot delete system skill")
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -258,6 +343,7 @@ type SkillCreateParams struct {
 	Description *string
 	OwnerID     string
 	Visibility  string
+	Status      string // "active" or "archived" (defaults to "active" if empty)
 	Version     int
 	FilePath    string
 	FileSize    int64
@@ -318,6 +404,177 @@ func (s *PGSkillStore) GetNextVersion(slug string) int {
 	return maxVersion + 1
 }
 
+// UpsertSystemSkill creates or updates a system skill.
+// Returns (id, changed, actualFilePath, error).
+// When hash is unchanged, returns the existing file_path from DB so the caller
+// uses the correct directory for dep scanning (not a non-existent next-version dir).
+func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParams) (uuid.UUID, bool, string, error) {
+	// Check if skill already exists
+	var existingID uuid.UUID
+	var existingHash *string
+	var existingFilePath string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT id, file_hash, file_path FROM skills WHERE slug = $1", p.Slug,
+	).Scan(&existingID, &existingHash, &existingFilePath)
+
+	if err == nil {
+		// Skill exists — check if hash changed
+		if existingHash != nil && p.FileHash != nil && *existingHash == *p.FileHash {
+			return existingID, false, existingFilePath, nil // unchanged, use existing path
+		}
+		// existingHash is nil (old record without hash) — backfill hash without bumping version
+		if existingHash == nil && p.FileHash != nil {
+			_, _ = s.db.ExecContext(ctx,
+				`UPDATE skills SET file_hash = $1, updated_at = NOW() WHERE id = $2`,
+				p.FileHash, existingID,
+			)
+			return existingID, false, existingFilePath, nil
+		}
+		// Hash genuinely changed — full update with new version
+		fmJSON := marshalFrontmatter(p.Frontmatter)
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE skills SET name = $1, description = $2, version = $3, frontmatter = $4,
+			 file_path = $5, file_size = $6, file_hash = $7, is_system = true,
+			 visibility = 'public', status = $8, updated_at = NOW()
+			 WHERE id = $9`,
+			p.Name, p.Description, p.Version, fmJSON,
+			p.FilePath, p.FileSize, p.FileHash, p.Status, existingID,
+		)
+		if err != nil {
+			return uuid.Nil, false, "", fmt.Errorf("update system skill: %w", err)
+		}
+		s.BumpVersion()
+		return existingID, true, p.FilePath, nil
+	}
+
+	// New skill — insert
+	id := store.GenNewID()
+	fmJSON := marshalFrontmatter(p.Frontmatter)
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status,
+		 is_system, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, NOW(), NOW())`,
+		id, p.Name, p.Slug, p.Description, p.Version, p.Status,
+		fmJSON, p.FilePath, p.FileSize, p.FileHash,
+	)
+	if err != nil {
+		return uuid.Nil, false, "", fmt.Errorf("insert system skill: %w", err)
+	}
+	s.BumpVersion()
+	// Generate embedding asynchronously
+	desc := ""
+	if p.Description != nil {
+		desc = *p.Description
+	}
+	go s.generateEmbedding(context.Background(), p.Slug, p.Name, desc)
+	return id, true, p.FilePath, nil
+}
+
+// ListSystemSkillDirs returns slug->file_path map for all enabled system skills.
+// Disabled system skills are excluded — dep checking and injection are skipped for them.
+func (s *PGSkillStore) ListSystemSkillDirs() map[string]string {
+	rows, err := s.db.Query(
+		`SELECT slug, file_path FROM skills WHERE is_system = true AND enabled = true`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	dirs := make(map[string]string)
+	for rows.Next() {
+		var slug, path string
+		if err := rows.Scan(&slug, &path); err != nil {
+			continue
+		}
+		dirs[slug] = path
+	}
+	return dirs
+}
+
+// IsSystemSkill checks if a skill slug belongs to a system skill.
+func (s *PGSkillStore) IsSystemSkill(slug string) bool {
+	var isSystem bool
+	err := s.db.QueryRow("SELECT is_system FROM skills WHERE slug = $1", slug).Scan(&isSystem)
+	return err == nil && isSystem
+}
+
+// GetSkillByID returns a SkillInfo for any skill by UUID, regardless of status or enabled flag.
+// Used by admin operations (e.g. toggle) that need full skill info.
+func (s *PGSkillStore) GetSkillByID(id uuid.UUID) (store.SkillInfo, bool) {
+	var name, slug, visibility, status string
+	var desc *string
+	var tags []string
+	var version int
+	var isSystem, enabled bool
+	var depsRaw []byte
+	err := s.db.QueryRow(
+		`SELECT name, slug, description, visibility, tags, version, is_system, status, enabled, deps
+		 FROM skills WHERE id = $1`,
+		id,
+	).Scan(&name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw)
+	if err != nil {
+		return store.SkillInfo{}, false
+	}
+	info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
+	info.Visibility = visibility
+	info.Tags = tags
+	info.IsSystem = isSystem
+	info.Status = status
+	info.Enabled = enabled
+	info.MissingDeps = parseDepsColumn(depsRaw)
+	return info, true
+}
+
+// ToggleSkill enables or disables a skill by UUID.
+func (s *PGSkillStore) ToggleSkill(id uuid.UUID, enabled bool) error {
+	_, err := s.db.Exec(
+		`UPDATE skills SET enabled = $1, updated_at = NOW() WHERE id = $2`,
+		enabled, id,
+	)
+	if err == nil {
+		s.BumpVersion()
+	}
+	return err
+}
+
+// parseDepsColumn extracts the missing deps list from the deps JSONB column.
+func parseDepsColumn(raw []byte) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var d struct {
+		Missing []string `json:"missing"`
+	}
+	if err := json.Unmarshal(raw, &d); err != nil {
+		return nil
+	}
+	if len(d.Missing) == 0 {
+		return nil
+	}
+	return d.Missing
+}
+
+func parseFrontmatterAuthor(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var fm map[string]string
+	if err := json.Unmarshal(raw, &fm); err != nil {
+		return ""
+	}
+	return fm["author"]
+}
+
+func marshalFrontmatter(fm map[string]string) []byte {
+	if len(fm) == 0 {
+		return []byte("{}")
+	}
+	b, err := json.Marshal(fm)
+	if err != nil {
+		return []byte("{}")
+	}
+	return b
+}
+
 // --- Embedding skill search (store.EmbeddingSkillSearcher) ---
 
 // SetEmbeddingProvider sets the embedding provider for vector-based skill search.
@@ -336,7 +593,7 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 		`SELECT name, slug, COALESCE(description, ''), version,
 				1 - (embedding <=> $1::vector) AS score
 			FROM skills
-			WHERE status = 'active' AND embedding IS NOT NULL
+			WHERE status = 'active' AND enabled = true AND embedding IS NOT NULL
 			  AND visibility != 'private'
 			ORDER BY embedding <=> $2::vector
 			LIMIT $3`,
@@ -367,7 +624,7 @@ func (s *PGSkillStore) BackfillSkillEmbeddings(ctx context.Context) (int, error)
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, COALESCE(description, '') FROM skills WHERE status = 'active' AND embedding IS NULL`)
+		`SELECT id, name, COALESCE(description, '') FROM skills WHERE status = 'active' AND enabled = true AND embedding IS NULL`)
 	if err != nil {
 		return 0, err
 	}

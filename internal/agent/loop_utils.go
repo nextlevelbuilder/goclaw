@@ -39,6 +39,27 @@ func (l *Loop) scanWebToolResult(toolName string, result *tools.Result) {
 	}
 }
 
+// shouldShareWorkspace checks if the given user should share the base workspace
+// directory (skip per-user subfolder isolation) based on workspace_sharing config.
+func (l *Loop) shouldShareWorkspace(userID, peerKind string) bool {
+	ws := l.workspaceSharing
+	if ws == nil {
+		return false
+	}
+	for _, u := range ws.SharedUsers {
+		if u == userID {
+			return true
+		}
+	}
+	switch peerKind {
+	case "direct":
+		return ws.SharedDM
+	case "group":
+		return ws.SharedGroup
+	}
+	return false
+}
+
 // InvalidateUserWorkspace clears the cached workspace for a user,
 // forcing the next request to re-read from user_agent_profiles.
 func (l *Loop) InvalidateUserWorkspace(userID string) {

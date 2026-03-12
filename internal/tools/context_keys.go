@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 )
 
 // Tool execution context keys.
@@ -124,31 +125,6 @@ func ToolSessionKeyFromCtx(ctx context.Context) string {
 	return v
 }
 
-// --- Vision / ImageGen config (per-agent overrides) ---
-
-const (
-	ctxVisionConfig   toolContextKey = "tool_vision_config"
-	ctxImageGenConfig toolContextKey = "tool_imagegen_config"
-)
-
-func WithVisionConfig(ctx context.Context, cfg *config.VisionConfig) context.Context {
-	return context.WithValue(ctx, ctxVisionConfig, cfg)
-}
-
-func VisionConfigFromCtx(ctx context.Context) *config.VisionConfig {
-	v, _ := ctx.Value(ctxVisionConfig).(*config.VisionConfig)
-	return v
-}
-
-func WithImageGenConfig(ctx context.Context, cfg *config.ImageGenConfig) context.Context {
-	return context.WithValue(ctx, ctxImageGenConfig, cfg)
-}
-
-func ImageGenConfigFromCtx(ctx context.Context) *config.ImageGenConfig {
-	v, _ := ctx.Value(ctxImageGenConfig).(*config.ImageGenConfig)
-	return v
-}
-
 // --- Builtin tool settings (global DB overrides) ---
 
 const ctxBuiltinToolSettings toolContextKey = "tool_builtin_settings"
@@ -162,5 +138,66 @@ func WithBuiltinToolSettings(ctx context.Context, settings BuiltinToolSettings) 
 
 func BuiltinToolSettingsFromCtx(ctx context.Context) BuiltinToolSettings {
 	v, _ := ctx.Value(ctxBuiltinToolSettings).(BuiltinToolSettings)
+	return v
+}
+
+// --- Per-agent restrict_to_workspace override ---
+
+const ctxRestrictWs toolContextKey = "tool_restrict_to_workspace"
+
+// WithRestrictToWorkspace injects a per-agent restrict_to_workspace override into context.
+func WithRestrictToWorkspace(ctx context.Context, restrict bool) context.Context {
+	return context.WithValue(ctx, ctxRestrictWs, restrict)
+}
+
+// RestrictFromCtx returns the per-agent restrict_to_workspace override.
+func RestrictFromCtx(ctx context.Context) (bool, bool) {
+	v, ok := ctx.Value(ctxRestrictWs).(bool)
+	return v, ok
+}
+
+func effectiveRestrict(ctx context.Context, toolDefault bool) bool {
+	if v, ok := RestrictFromCtx(ctx); ok {
+		return v
+	}
+	return toolDefault
+}
+
+// --- Per-agent subagent config override ---
+
+const ctxSubagentCfg toolContextKey = "tool_subagent_config"
+
+func WithSubagentConfig(ctx context.Context, cfg *config.SubagentsConfig) context.Context {
+	return context.WithValue(ctx, ctxSubagentCfg, cfg)
+}
+
+func SubagentConfigFromCtx(ctx context.Context) *config.SubagentsConfig {
+	v, _ := ctx.Value(ctxSubagentCfg).(*config.SubagentsConfig)
+	return v
+}
+
+// --- Per-agent memory config override ---
+
+const ctxMemoryCfg toolContextKey = "tool_memory_config"
+
+func WithMemoryConfig(ctx context.Context, cfg *config.MemoryConfig) context.Context {
+	return context.WithValue(ctx, ctxMemoryCfg, cfg)
+}
+
+func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
+	v, _ := ctx.Value(ctxMemoryCfg).(*config.MemoryConfig)
+	return v
+}
+
+// --- Per-agent sandbox config override ---
+
+const ctxSandboxCfg toolContextKey = "tool_sandbox_config"
+
+func WithSandboxConfig(ctx context.Context, cfg *sandbox.Config) context.Context {
+	return context.WithValue(ctx, ctxSandboxCfg, cfg)
+}
+
+func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
+	v, _ := ctx.Value(ctxSandboxCfg).(*sandbox.Config)
 	return v
 }

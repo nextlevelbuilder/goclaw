@@ -39,7 +39,6 @@ export const groupPolicyOptions = [
 export const credentialsSchema: Record<string, FieldDef[]> = {
   telegram: [
     { key: "token", label: "Bot Token", type: "password", required: true, placeholder: "123456:ABC-DEF...", help: "From @BotFather" },
-    { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://proxy:8080" },
   ],
   discord: [
     { key: "token", label: "Bot Token", type: "password", required: true, placeholder: "Discord bot token" },
@@ -69,6 +68,8 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
 
 export const configSchema: Record<string, FieldDef[]> = {
   telegram: [
+    { key: "api_server", label: "API Server URL", type: "text", placeholder: "http://127.0.0.1:8081", help: "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
+    { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://proxy:8080", help: "Route bot traffic through an HTTP proxy" },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
@@ -76,7 +77,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "dm_stream", label: "DM Streaming", type: "boolean", defaultValue: false, help: "Edit placeholder progressively as LLM generates" },
     { key: "group_stream", label: "Group Streaming", type: "boolean", defaultValue: false, help: "Send & edit message progressively in groups" },
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "full" },
-    { key: "media_max_bytes", label: "Max Media Size (bytes)", type: "number", defaultValue: 20971520, help: "Default: 20MB" },
+    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Default: 20 MB (cloud API). Increase when using local Bot API server." },
     { key: "link_preview", label: "Link Preview", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "User IDs or @usernames, one per line" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },

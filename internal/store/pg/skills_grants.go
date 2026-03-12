@@ -118,7 +118,8 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
 		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND sug.user_id = $2
 		WHERE s.status = 'active' AND (
-			s.visibility = 'public'
+			s.is_system = true
+			OR s.visibility = 'public'
 			OR (s.visibility = 'private' AND s.owner_id = $2)
 			OR (s.visibility = 'internal' AND (sag.id IS NOT NULL OR sug.id IS NOT NULL))
 		)
@@ -159,6 +160,7 @@ type SkillWithGrantStatus struct {
 	Version     int       `json:"version"`
 	Granted     bool      `json:"granted"`
 	PinnedVer   *int      `json:"pinned_version,omitempty"`
+	IsSystem    bool      `json:"is_system"`
 }
 
 // ListWithGrantStatus returns all active skills with grant status for a specific agent.
@@ -166,7 +168,8 @@ func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUI
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.id, s.name, s.slug, COALESCE(s.description, ''), s.visibility, s.version,
 		        (sag.id IS NOT NULL) AS granted,
-		        sag.pinned_version
+		        sag.pinned_version,
+		        s.is_system
 		 FROM skills s
 		 LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
 		 WHERE s.status = 'active'
@@ -179,7 +182,7 @@ func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUI
 	var result []SkillWithGrantStatus
 	for rows.Next() {
 		var r SkillWithGrantStatus
-		if err := rows.Scan(&r.ID, &r.Name, &r.Slug, &r.Description, &r.Visibility, &r.Version, &r.Granted, &r.PinnedVer); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Slug, &r.Description, &r.Visibility, &r.Version, &r.Granted, &r.PinnedVer, &r.IsSystem); err != nil {
 			slog.Warn("skill_grants: scan error in ListWithGrantStatus", "error", err)
 			continue
 		}

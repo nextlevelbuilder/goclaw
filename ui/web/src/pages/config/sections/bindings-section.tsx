@@ -91,7 +91,7 @@ export function BindingsSection({ data, onSave, saving }: Props) {
         ) : (
           draft.map((binding, idx) => (
             <div key={idx} className="flex items-start gap-3 rounded-md border p-3">
-              <div className="grid flex-1 grid-cols-4 gap-3">
+              <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="grid gap-1">
                   <Label className="text-xs">{t("bindings.agentId")}</Label>
                   <Input

@@ -138,6 +138,38 @@
   }
 }
 
+/* ── Mobile UX utilities ── */
+
+/* Safe area padding for notched devices (requires viewport-fit=cover) */
+@utility safe-top { padding-top: env(safe-area-inset-top); }
+@utility safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+@utility safe-left { padding-left: env(safe-area-inset-left); }
+@utility safe-right { padding-right: env(safe-area-inset-right); }
+
+/* Allow word breaks anywhere for long URLs/text on narrow screens */
+@utility break-anywhere { overflow-wrap: anywhere; }
+
+/* Expand touch targets on coarse pointer (touch) devices for small icon buttons */
+@media (pointer: coarse) {
+  [data-slot="button"][data-size="icon"],
+  [data-slot="button"][data-size="icon-sm"],
+  [data-slot="button"][data-size="icon-xs"] {
+    position: relative;
+  }
+  [data-slot="button"][data-size="icon"]::after,
+  [data-slot="button"][data-size="icon-sm"]::after,
+  [data-slot="button"][data-size="icon-xs"]::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
+  }
+}
+
+/* Landscape compact mode for phones */
+@media (orientation: landscape) and (max-height: 500px) {
+  .landscape-compact { padding-block: 0.25rem; }
+}
+
 /* highlight.js: transparent bg, container handles it */
 .hljs { background: transparent !important; }
 

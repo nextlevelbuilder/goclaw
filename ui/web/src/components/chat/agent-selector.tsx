@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Bot, ChevronDown } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
@@ -16,6 +17,9 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
   const connected = useAuthStore((s) => s.connected);
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
     if (!connected) return;
@@ -24,14 +28,47 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
       .then((res) => {
         const active = (res.agents ?? []).filter((a) => a.status === "active");
         setAgents(active);
+        // Auto-select first agent if current value doesn't match any active agent
+        if (active.length > 0 && !active.some((a) => a.agent_key === value)) {
+          onChange(active[0]!.agent_key);
+        }
       })
       .catch(() => {});
   }, [http, connected]);
 
+  // Compute dropdown position for portal rendering
+  useLayoutEffect(() => {
+    if (!open || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    });
+  }, [open]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   const selected = agents.find((a) => a.agent_key === value);
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -44,38 +81,41 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border bg-popover p-1 shadow-md">
-            {agents.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                {t("noAgentsAvailable")}
-              </div>
-            )}
-            {agents.map((agent) => (
-              <button
-                key={agent.agent_key}
-                type="button"
-                onClick={() => {
-                  onChange(agent.agent_key);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent ${
-                  agent.agent_key === value ? "bg-accent" : ""
-                }`}
-              >
-                <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate text-left">
-                  {agent.display_name || agent.agent_key}
-                </span>
-                {agent.is_default && (
-                  <span className="text-xs text-muted-foreground">{t("default")}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </>
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          style={dropdownStyle}
+          className="max-h-60 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md"
+        >
+          {agents.length === 0 && (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              {t("noAgentsAvailable")}
+            </div>
+          )}
+          {agents.map((agent) => (
+            <button
+              key={agent.agent_key}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(agent.agent_key);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent ${
+                agent.agent_key === value ? "bg-accent" : ""
+              }`}
+            >
+              <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate text-left">
+                {agent.display_name || agent.agent_key}
+              </span>
+              {agent.is_default && (
+                <span className="text-xs text-muted-foreground">{t("default")}</span>
+              )}
+            </button>
+          ))}
+        </div>,
+        document.body,
       )}
     </div>
   );

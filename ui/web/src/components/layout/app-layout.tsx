@@ -17,7 +17,7 @@ export function AppLayout() {
   const isMobile = useIsMobile();
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-dvh overflow-hidden safe-top">
       {isMobile ? (
         <>
           {/* Backdrop */}
@@ -30,7 +30,7 @@ export function AppLayout() {
           {/* Slide-out sidebar */}
           <div
             className={cn(
-              "fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out",
+              "fixed inset-y-0 left-0 z-50 safe-top safe-bottom safe-left transition-transform duration-200 ease-in-out",
               mobileSidebarOpen ? "translate-x-0" : "-translate-x-full",
             )}
           >

@@ -7,6 +7,7 @@ export interface ToolPolicyConfig {
   allow?: string[];
   deny?: string[];
   alsoAllow?: string[];
+  byProvider?: Record<string, { profile?: string; allow?: string[]; deny?: string[]; alsoAllow?: string[] }>;
 }
 
 export interface SubagentsConfig {
@@ -76,6 +77,12 @@ export interface QualityGateConfig {
   timeout_seconds?: number;
 }
 
+export interface WorkspaceSharingConfig {
+  shared_dm?: boolean;
+  shared_group?: boolean;
+  shared_users?: string[];
+}
+
 export interface AgentData {
   id: string;
   agent_key: string;
@@ -102,6 +109,7 @@ export interface AgentData {
   compaction_config?: CompactionConfig | null;
   context_pruning?: ContextPruningConfig | null;
   other_config?: Record<string, unknown> | null;
+  budget_monthly_cents?: number | null;
 }
 
 export interface AgentShareData {

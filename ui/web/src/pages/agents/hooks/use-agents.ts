@@ -75,6 +75,20 @@ export function useAgents() {
     [http, invalidate],
   );
 
+  const updateAgent = useCallback(
+    async (id: string, data: Partial<AgentData>) => {
+      try {
+        await http.put(`/v1/agents/${id}`, data);
+        await invalidate();
+        toast.success("Agent updated", `${data.display_name || data.agent_key || "Agent"} has been updated`);
+      } catch (err) {
+        toast.error("Failed to update agent", err instanceof Error ? err.message : "Unknown error");
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
   const deleteAgent = useCallback(
     async (id: string) => {
       try {
@@ -96,5 +110,5 @@ export function useAgents() {
     [http],
   );
 
-  return { agents, loading, error, refresh: invalidate, createAgent, deleteAgent, resummonAgent };
+  return { agents, loading, error, refresh: invalidate, createAgent, updateAgent, deleteAgent, resummonAgent };
 }

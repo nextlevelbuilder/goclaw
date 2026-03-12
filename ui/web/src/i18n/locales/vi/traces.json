@@ -3,6 +3,8 @@
   "description": "Theo dõi lệnh gọi LLM và dữ liệu hiệu suất",
   "filterPlaceholder": "Lọc theo agent ID...",
   "filter": "Lọc",
+  "allAgents": "Tất cả agent",
+  "allChannels": "Tất cả kênh",
   "emptyTitle": "Không có dữ liệu theo dõi",
   "emptyDescription": "Không tìm thấy dữ liệu theo dõi. Theo dõi được ghi lại khi agent xử lý yêu cầu.",
   "columns": {
@@ -31,7 +33,8 @@
     "output": "Đầu ra",
     "spansCount": "Khoảng ({{count}})",
     "llmCalls": "LLM",
-    "toolCalls": "công cụ"
+    "toolCalls": "công cụ",
+    "export": "Xuất trace"
   },
   "span": {
     "model": "Model:",

@@ -81,6 +81,9 @@
     "selfEvolutionLabel": "Allow agent to evolve its communication style",
     "selfEvolutionHint": "When enabled, the agent can update its SOUL.md to refine tone, vocabulary, and response style based on interactions. Identity, name, and operating instructions remain locked.",
     "selfEvolutionInfo": "Agent will evolve its style over time through SOUL.md updates. Only style and tone are affected — identity and workflow rules stay fixed.",
+    "budget": "Monthly Budget",
+    "budgetLabel": "Budget limit (USD)",
+    "budgetHint": "Optional monthly spending cap. Agent will reject requests when exceeded. Leave empty for unlimited.",
     "saveChanges": "Save Changes",
     "saving": "Saving...",
     "saved": "Saved",
@@ -211,7 +214,9 @@
     "noSkillsDesc": "Upload skills in the Skills page to grant them to agents.",
     "skillsGranted": "{{granted}} of {{total}} skills granted",
     "filterSkills": "Filter skills...",
-    "noSkillsMatch": "No skills match your search."
+    "noSkillsMatch": "No skills match your search.",
+    "system": "System",
+    "alwaysAvailable": "Always available"
   },
   "instances": {
     "loadingInstances": "Loading instances...",
@@ -270,6 +275,18 @@
       "selectToolsAllow": "Select tools to allow...",
       "selectToolsDeny": "Select tools to deny...",
       "selectToolsAlsoAllow": "Select additional tools..."
+    },
+    "workspaceSharing": {
+      "title": "Workspace Sharing",
+      "description": "Control workspace file isolation between users",
+      "sharedDm": "Share in DMs",
+      "sharedDmTip": "All DM users share the same workspace directory instead of isolated per-user folders",
+      "sharedGroup": "Share in Groups",
+      "sharedGroupTip": "All members in a group chat share the same workspace directory",
+      "sharedUsers": "Shared Users",
+      "sharedUsersTip": "Specific user IDs that always share workspace regardless of DM/Group settings. Format: channel:userId (e.g. telegram:386246614)",
+      "userIdPlaceholder": "Enter user ID (e.g. telegram:386246614)",
+      "warning": "When sharing is enabled, all shared users can read and write files in the same workspace directory. Memory is also shared; context files remain isolated per user. Toggling this setting does not migrate existing data — previous per-user memories will no longer be accessible."
     },
     "compaction": {
       "title": "Compaction",

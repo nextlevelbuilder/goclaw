@@ -107,7 +107,9 @@
       "noSchema": "Không có lược đồ cấu hình cho loại channel này.",
       "saved": "Đã lưu",
       "saveConfig": "Lưu cấu hình",
-      "saving": "Đang lưu..."
+      "saving": "Đang lưu...",
+      "webhookUrlLabel": "Đặt URL này làm Event Request URL cho ứng dụng Lark:",
+      "copyPath": "Sao chép đường dẫn"
     },
     "groups": {
       "saved": "Đã lưu",

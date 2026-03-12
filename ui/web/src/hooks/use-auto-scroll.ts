@@ -20,25 +20,29 @@ export function useAutoScroll<T extends HTMLElement>(
     isNearBottom.current = scrollHeight - scrollTop - clientHeight < threshold;
   }, [threshold]);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((instant = false) => {
     const el = ref.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    if (instant) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, []);
 
-  // Auto-scroll when content changes (only if near bottom)
+  // Auto-scroll when content changes (only if near bottom) — smooth
   useEffect(() => {
     if (isNearBottom.current) {
-      scrollToBottom();
+      scrollToBottom(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  // Force scroll when trigger increments (e.g. user sends a message)
+  // Force scroll when trigger increments (e.g. user sends a message) — instant
   useEffect(() => {
     if (forceTrigger > 0) {
       isNearBottom.current = true;
-      scrollToBottom();
+      scrollToBottom(true);
     }
   }, [forceTrigger, scrollToBottom]);
 

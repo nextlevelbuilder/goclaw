@@ -34,8 +34,14 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 		}
 	}
 
-	// Merge results — normalize weights when one channel has no results
+	// Merge results — use per-query overrides if set, else store defaults
 	textW, vecW := s.cfg.TextWeight, s.cfg.VectorWeight
+	if opts.TextWeight > 0 {
+		textW = opts.TextWeight
+	}
+	if opts.VectorWeight > 0 {
+		vecW = opts.VectorWeight
+	}
 	if len(ftsResults) == 0 && len(vecResults) > 0 {
 		textW, vecW = 0, 1.0
 	} else if len(vecResults) == 0 && len(ftsResults) > 0 {

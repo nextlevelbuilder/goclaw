@@ -159,7 +159,7 @@ export function TtsPage() {
           </div>
 
           {/* Max length & timeout */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label htmlFor="tts-maxlen">{t("general.maxTextLength")}</Label>
               <Input
@@ -203,7 +203,7 @@ export function TtsPage() {
                   <Label htmlFor="oai-base">{t("openai.apiBase")}</Label>
                   <Input id="oai-base" value={draft.openai.api_base ?? ""} onChange={(e) => updateProvider("openai", { api_base: e.target.value })} placeholder="https://api.openai.com/v1" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="grid gap-1.5">
                     <Label htmlFor="oai-model">{t("openai.model")}</Label>
                     <Input id="oai-model" value={draft.openai.model ?? ""} onChange={(e) => updateProvider("openai", { model: e.target.value })} placeholder="gpt-4o-mini-tts" />
@@ -226,7 +226,7 @@ export function TtsPage() {
                   <Label htmlFor="el-base">{t("elevenlabs.baseUrl")}</Label>
                   <Input id="el-base" value={draft.elevenlabs.base_url ?? ""} onChange={(e) => updateProvider("elevenlabs", { base_url: e.target.value })} placeholder="https://api.elevenlabs.io" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="grid gap-1.5">
                     <Label htmlFor="el-voice">{t("elevenlabs.voiceId")}</Label>
                     <Input id="el-voice" value={draft.elevenlabs.voice_id ?? ""} onChange={(e) => updateProvider("elevenlabs", { voice_id: e.target.value })} placeholder="pMsXgVXv3BLzUgSXRplE" />
@@ -267,7 +267,7 @@ export function TtsPage() {
                   <Label htmlFor="mm-base">{t("minimax.apiBase")}</Label>
                   <Input id="mm-base" value={draft.minimax.api_base ?? ""} onChange={(e) => updateProvider("minimax", { api_base: e.target.value })} placeholder="https://api.minimax.io/v1" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="grid gap-1.5">
                     <Label htmlFor="mm-model">{t("minimax.model")}</Label>
                     <Input id="mm-model" value={draft.minimax.model ?? ""} onChange={(e) => updateProvider("minimax", { model: e.target.value })} placeholder="speech-02-hd" />
