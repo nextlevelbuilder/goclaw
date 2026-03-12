@@ -31,4 +31,5 @@ Rules:
 - relation_type: lowercase verb phrase with underscores (e.g. works_on, reported_to)
 - confidence: 1.0 = explicitly stated, 0.5 = inferred
 - Keep names in original language
-- Output ONLY the JSON object, no markdown, no explanation, no code blocks`
+- Output ONLY the JSON object, no markdown, no explanation, no code blocks
+- Output MUST be strictly valid JSON: no trailing commas, no comments, use proper decimal numbers (0.85 not 0. 85)`
