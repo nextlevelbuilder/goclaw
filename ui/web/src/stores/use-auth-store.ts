@@ -6,6 +6,7 @@ interface AuthState {
   userId: string;
   senderID: string; // browser pairing: persistent device identity
   keycloakToken: string; // Keycloak access token
+  displayName: string; // Keycloak user's full name
   connected: boolean;
   serverInfo: { name?: string; version?: string } | null;
 
@@ -21,6 +22,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   userId: localStorage.getItem(LOCAL_STORAGE_KEYS.USER_ID) ?? "",
   senderID: localStorage.getItem(LOCAL_STORAGE_KEYS.SENDER_ID) ?? "",
   keycloakToken: localStorage.getItem("goclaw:keycloakToken") ?? "",
+  displayName: localStorage.getItem("goclaw:displayName") ?? "",
   connected: false,
   serverInfo: null,
 
@@ -36,12 +38,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ senderID, userId });
   },
 
-  setKeycloakAuth: (keycloakToken, userId, _displayName) => {
+  setKeycloakAuth: (keycloakToken, userId, displayName) => {
     localStorage.setItem("goclaw:keycloakToken", keycloakToken);
     localStorage.setItem(LOCAL_STORAGE_KEYS.USER_ID, userId);
     // Also set as the gateway token so WS connect works
     localStorage.setItem(LOCAL_STORAGE_KEYS.TOKEN, keycloakToken);
-    set({ keycloakToken, userId, token: keycloakToken });
+    if (displayName) {
+      localStorage.setItem("goclaw:displayName", displayName);
+    }
+    set({ keycloakToken, userId, token: keycloakToken, displayName: displayName ?? "" });
   },
 
   setConnected: (connected, serverInfo) => {
@@ -53,6 +58,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem(LOCAL_STORAGE_KEYS.USER_ID);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.SENDER_ID);
     localStorage.removeItem("goclaw:keycloakToken");
-    set({ token: "", userId: "", senderID: "", keycloakToken: "", connected: false, serverInfo: null });
+    localStorage.removeItem("goclaw:displayName");
+    set({ token: "", userId: "", senderID: "", keycloakToken: "", displayName: "", connected: false, serverInfo: null });
   },
 }));

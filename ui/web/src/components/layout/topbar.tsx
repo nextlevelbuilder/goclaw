@@ -1,4 +1,4 @@
-import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Bell, Globe, Clock } from "lucide-react";
+import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Bell, Globe, Clock, User } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
@@ -19,6 +19,7 @@ export function Topbar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const logout = useAuthStore((s) => s.logout);
+  const displayName = useAuthStore((s) => s.displayName);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { pendingCount } = usePendingPairingsCount({ showToast: true });
@@ -96,6 +97,13 @@ export function Topbar() {
         >
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
+
+        {displayName && (
+          <div className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground">
+            <User className="h-4 w-4 shrink-0" />
+            <span className="max-w-[120px] truncate">{displayName}</span>
+          </div>
+        )}
 
         <button
           onClick={logout}

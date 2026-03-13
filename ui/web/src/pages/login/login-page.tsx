@@ -100,7 +100,7 @@ export function LoginPage() {
       if (!res.ok) throw new Error(`/me returned ${res.status}`);
       const userInfo = await res.json();
 
-      setKeycloakAuth(accessToken, userInfo.id, userInfo.username || userInfo.email || userInfo.id);
+      setKeycloakAuth(accessToken, userInfo.id, userInfo.name || userInfo.username || userInfo.email || userInfo.id);
       navigate(from, { replace: true });
     } catch (err) {
       console.error("Keycloak /me call failed:", err);
