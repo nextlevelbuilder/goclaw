@@ -28,6 +28,8 @@ export const ROUTES = {
   TEAM_DETAIL: "/teams/:id",
   CUSTOM_TOOLS: "/custom-tools",
   BUILTIN_TOOLS: "/builtin-tools",
+  TOOLS: "/tools",
+  TOOL_DETAIL: "/tools/:id",
   MCP: "/mcp",
   TTS: "/tts",
   STORAGE: "/storage",

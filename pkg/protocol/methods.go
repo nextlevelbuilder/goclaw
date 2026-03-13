@@ -50,6 +50,9 @@ const (
 	MethodSkillsGet   = "skills.get"
 	MethodSkillsUpdate = "skills.update"
 
+	MethodManagedToolsList = "managed-tools.list"
+	MethodManagedToolsGet  = "managed-tools.get"
+
 	MethodCronList   = "cron.list"
 	MethodCronCreate = "cron.create"
 	MethodCronUpdate = "cron.update"

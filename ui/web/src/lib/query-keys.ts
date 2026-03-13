@@ -46,6 +46,12 @@ export const queryKeys = {
   builtinTools: {
     all: ["builtinTools"] as const,
   },
+  managedTools: {
+    all: ["managedTools"] as const,
+    detail: (id: string) => ["managedTools", id] as const,
+    files: (id: string) => ["managedTools", id, "files"] as const,
+    fileContent: (id: string, path: string) => ["managedTools", id, "files", path] as const,
+  },
   config: {
     all: ["config"] as const,
   },
