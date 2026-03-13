@@ -7,6 +7,10 @@
   "emptyDescription": "创建您的第一个Team以开始使用。",
   "noMatchTitle": "未找到匹配Team",
   "noMatchDescription": "请尝试其他搜索词。",
+  "scope": {
+    "all": "所有范围",
+    "label": "范围"
+  },
   "delete": {
     "title": "删除Team",
     "description": "确定要删除「{{name}}」吗？此操作无法撤销。",
@@ -21,6 +25,7 @@
       "tasks": "任务",
       "members": "成员",
       "delegations": "委托",
+      "workspace": "工作空间",
       "settings": "设置"
     }
   },
@@ -49,7 +54,22 @@
     "noTasks": "暂无任务",
     "noTasksDescription": "任务由TeamAgent在协作过程中创建。",
     "refresh": "刷新",
+    "createTask": "创建任务",
+    "createTaskTitle": "创建任务",
+    "subjectPlaceholder": "任务主题...",
+    "descriptionPlaceholder": "可选描述...",
+    "priorityLabel": "优先级",
+    "assign": "分配",
+    "assignTo": "分配给...",
+    "unassigned": "未分配",
+    "filters": {
+      "active": "进行中",
+      "inReview": "待审核",
+      "completed": "已完成",
+      "all": "全部"
+    },
     "columns": {
+      "id": "ID",
       "subject": "主题",
       "status": "状态",
       "owner": "负责人",
@@ -64,6 +84,7 @@
       "status": "状态：",
       "priority": "优先级：",
       "owner": "负责人：",
+      "type": "类型：",
       "blockedBy": "被阻塞：",
       "description": "描述",
       "result": "结果",
@@ -71,29 +92,25 @@
       "updated": "更新时间：",
       "taskId": "任务 ID：",
       "noDescription": "无描述",
-      "noResult": "暂无结果"
-    },
-    "actions": {
+      "noResult": "暂无结果",
+      "progress": "进度",
       "approve": "批准",
       "reject": "拒绝",
-      "cancel": "取消",
-      "reasonPlaceholder": "原因（可选）...",
-      "confirmCancel": "取消此任务？",
-      "confirmReject": "拒绝此任务？"
+      "comments": "评论",
+      "noComments": "暂无评论",
+      "commentPlaceholder": "添加评论...",
+      "addComment": "评论",
+      "timeline": "时间线",
+      "attachments": "附件",
+      "followupStatus": "等待回复",
+      "followupMessage": "提醒内容：",
+      "followupCount": "已提醒：{{count}} 次",
+      "followupCountMax": "已提醒：{{count}}/{{max}} 次",
+      "followupNext": "下次提醒：",
+      "followupDone": "已全部提醒"
     },
-    "filter": {
-      "all": "全部",
-      "active": "进行中",
-      "completed": "已完成",
-      "allUsers": "所有用户"
-    },
-    "status": {
-      "pending": "待处理",
-      "pending_approval": "待审批",
-      "in_progress": "进行中",
-      "completed": "已完成",
-      "blocked": "被阻塞",
-      "failed": "失败"
+    "badges": {
+      "awaitingReply": "等待回复"
     }
   },
   "delegations": {
@@ -106,6 +123,25 @@
       "status": "状态",
       "duration": "耗时",
       "time": "时间"
+    }
+  },
+  "workspace": {
+    "title": "工作空间",
+    "noFiles": "暂无工作空间文件",
+    "noFilesDescription": "文件由TeamAgent在协作过程中创建。",
+    "refresh": "刷新",
+    "delete": "删除",
+    "confirmDelete": "删除此文件？",
+    "columns": {
+      "fileName": "文件名",
+      "size": "大小",
+      "uploadedBy": "上传者",
+      "scope": "范围",
+      "updated": "更新时间"
+    },
+    "detail": {
+      "title": "文件内容",
+      "empty": "文件为空或为二进制文件"
     }
   },
   "settings": {
@@ -135,7 +171,56 @@
     "progressNotifications": "进度通知",
     "progressNotificationsHint": "在异步委托期间，定期向对话发送「您的Team正在处理中...」消息。",
     "searchUsers": "搜索用户...",
-    "selectChannel": "选择Channel..."
+    "selectChannel": "选择Channel...",
+    "escalationPolicy": "升级策略",
+    "escalationMode": "升级模式",
+    "escalationModeHint": "控制Agent请求执行敏感工作空间操作（置顶、标记、删除他人文件、设置模板）时的处理方式。",
+    "escalationModeAuto": "自动（默认）",
+    "escalationModeAutoDesc": "LLM负责人评估请求——拒绝或创建审核任务。从不直接执行。",
+    "escalationModeReview": "审核",
+    "escalationModeReviewDesc": "始终创建待审核任务。不自动拒绝。",
+    "escalationModeReject": "拒绝",
+    "escalationModeRejectDesc": "直接拒绝所有敏感操作请求。锁定模式。",
+    "escalationModeNone": "无",
+    "escalationModeNoneDesc": "无升级策略。负责人Agent直接执行操作。",
+    "escalationActions": "升级操作",
+    "escalationActionsHint": "选择哪些工作空间操作需要升级。如未选择，所有敏感操作均需升级。",
+    "followupReminders": "跟进提醒",
+    "followupInterval": "提醒间隔（分钟）",
+    "followupIntervalHint": "在每次向用户发送跟进提醒前等待的时间。",
+    "followupMaxReminders": "最大提醒次数",
+    "followupMaxRemindersHint": "每个任务的最大提醒次数。0 = 无限制（持续提醒直到用户回复）。",
+    "teamVersion": "团队版本",
+    "versionBasic": "基础版",
+    "versionAdvanced": "高级版",
+    "versionBasicDesc": "任务管理和共享工作区。",
+    "versionAdvancedDesc": "所有V1功能，外加执行锁定、跟进提醒、审核工作流、进度追踪、评论、审计日志和自动恢复。",
+    "whatsNew": "有什么不同？",
+    "versionModal": {
+      "title": "团队版本",
+      "feature": "功能",
+      "taskManagement": "任务管理",
+      "taskManagementDesc": "创建、分配、完成、取消任务",
+      "sharedWorkspace": "共享工作区",
+      "sharedWorkspaceDesc": "文件、版本、团队协作",
+      "executionLocking": "执行锁定",
+      "executionLockingDesc": "防止任务冲突，自动恢复",
+      "followupReminders": "跟进提醒",
+      "followupRemindersDesc": "等待用户回复时自动提醒",
+      "reviewWorkflow": "审核工作流",
+      "reviewWorkflowDesc": "完成前提交人工审核",
+      "progressTracking": "进度追踪",
+      "progressTrackingDesc": "实时百分比和步骤更新",
+      "commentsAudit": "评论与审计",
+      "commentsAuditDesc": "任务评论和完整事件历史",
+      "autoRecovery": "自动恢复",
+      "autoRecoveryDesc": "卡住的任务在超时后自动重置",
+      "escalationPolicy": "升级策略",
+      "escalationPolicyDesc": "控制代理可以自主执行的操作",
+      "downgradeNote": "降级是安全的 — V2数据会保留但隐藏。",
+      "betaNote": "V2目前处于Beta阶段。",
+      "gotIt": "知道了"
+    }
   },
   "create": {
     "title": "创建Team",
@@ -168,11 +253,9 @@
     "failedUpdate": "更新Team失败",
     "failedAddMember": "添加成员失败",
     "failedRemoveMember": "移除成员失败",
-    "taskApproved": "任务已批准",
-    "taskRejected": "任务已拒绝",
-    "taskCancelled": "任务已取消",
-    "failedApproveTask": "批准任务失败",
-    "failedRejectTask": "拒绝任务失败",
-    "failedCancelTask": "取消任务失败"
+    "taskCreated": "任务已创建",
+    "taskAssigned": "任务已分配",
+    "failedCreateTask": "创建任务失败",
+    "failedAssignTask": "分配任务失败"
   }
 }

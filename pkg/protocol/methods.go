@@ -107,12 +107,26 @@ const (
 	MethodTeamsGet      = "teams.get"
 	MethodTeamsDelete   = "teams.delete"
 	MethodTeamsTaskList      = "teams.tasks.list"
+	MethodTeamsTaskGet       = "teams.tasks.get"
 	MethodTeamsTaskApprove   = "teams.tasks.approve"
 	MethodTeamsTaskReject    = "teams.tasks.reject"
+	MethodTeamsTaskComment   = "teams.tasks.comment"
+	MethodTeamsTaskComments  = "teams.tasks.comments"
+	MethodTeamsTaskEvents    = "teams.tasks.events"
+	MethodTeamsTaskCreate    = "teams.tasks.create"
+	MethodTeamsTaskAssign    = "teams.tasks.assign"
 	MethodTeamsMembersAdd    = "teams.members.add"
 	MethodTeamsMembersRemove = "teams.members.remove"
 	MethodTeamsUpdate        = "teams.update"
 	MethodTeamsKnownUsers    = "teams.known_users"
+	MethodTeamsScopes        = "teams.scopes"
+)
+
+// Team workspace
+const (
+	MethodTeamsWorkspaceList   = "teams.workspace.list"
+	MethodTeamsWorkspaceRead   = "teams.workspace.read"
+	MethodTeamsWorkspaceDelete = "teams.workspace.delete"
 )
 
 // Delegation history

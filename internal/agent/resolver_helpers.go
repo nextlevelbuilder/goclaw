@@ -82,7 +82,8 @@ Do NOT guess agent keys. Always search first.
 
 // buildTeamMD generates compact TEAM.md content for an agent that is part of a team.
 // Kept minimal — tool descriptions already live in tool Parameters()/Description().
-func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uuid.UUID) string {
+// isV2 controls whether advanced sections (orchestration, followup, review) are rendered.
+func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uuid.UUID, isV2 bool) string {
 	var sb strings.Builder
 	sb.WriteString("# Team: " + team.Name + "\n")
 	if team.Description != "" {
@@ -144,65 +145,34 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 	// Workflow guidance
 	sb.WriteString("\n## Workflow\n\n")
 	if selfRole == store.TeamRoleLead {
-		sb.WriteString("**ONE delegation = ONE spawn call.** The system auto-creates a tracking task for each delegation.\n")
-		sb.WriteString("When delegating to multiple agents, call `spawn` once per agent.\n\n")
-		sb.WriteString("Example (2 agents):\n")
-		sb.WriteString("```\n")
-		sb.WriteString("spawn agent=artist, task=\"Create illustration for...\", label=\"Create illustration\"\n")
-		sb.WriteString("spawn agent=writer, task=\"Write caption for...\", label=\"Write caption\"\n")
-		sb.WriteString("```\n\n")
-		sb.WriteString("The `label` parameter sets the task title on the board (keep it short).\n")
-		sb.WriteString("Each task auto-completes when its delegation finishes.\n")
-		sb.WriteString("Do NOT respond with text before spawning — call all spawns first, then briefly tell the user what you delegated.\n")
-		sb.WriteString("Do NOT add confirmations like \"Done!\", \"Xong rồi!\", \"Got it!\" — just state what was assigned.\n\n")
-		sb.WriteString("When multiple delegations run in parallel, the system collects ALL results and delivers\n")
-		sb.WriteString("them to you in a single combined notification. Do NOT present partial results.\n\n")
-		sb.WriteString("Advanced: For dependency chains, use `team_tasks` action=create with blocked_by,\n")
-		sb.WriteString("then `spawn` with team_task_id=<the created id>.\n\n")
-		sb.WriteString("## Orchestration Patterns\n\n")
-		sb.WriteString("You can orchestrate multiple rounds — not just one-shot parallel delegation:\n")
-		sb.WriteString("- **Sequential**: A finishes → review result → delegate to B with A's output as context\n")
-		sb.WriteString("- **Iterative**: A produces draft → delegate to B for review → delegate back to A with feedback\n")
-		sb.WriteString("- **Mixed**: A+B in parallel → review both → delegate to C combining their outputs\n\n")
-		sb.WriteString("After receiving delegation results, decide: present to user (if done) or continue orchestrating.\n\n")
-		sb.WriteString("**Communication**: When updating the user, distinguish between:\n")
-		sb.WriteString("- First delegation round → \"assigning to team\" / notifying who is working on what\n")
-		sb.WriteString("- Follow-up rounds (after receiving results) → \"updating tasks\" / sharing progress and next steps\n")
-		sb.WriteString("Never repeat the same announcement phrasing for follow-up delegations.\n\n")
-		sb.WriteString("`team_tasks` actions:\n")
-		sb.WriteString("- action=list → active tasks (pending/in_progress/blocked), no results shown\n")
-		sb.WriteString("- action=list, status=all → all tasks including completed\n")
-		sb.WriteString("- action=get, task_id=<id> → full task detail with result\n")
-		sb.WriteString("- action=search, query=<text> → search tasks by subject/description\n")
-		sb.WriteString("- action=complete, task_id=<id>, result=<summary> → manually complete a task\n")
-		sb.WriteString("- action=cancel, task_id=<id>, reason=<why> → cancel a pending task that is no longer needed\n\n")
-		sb.WriteString("For simple questions about team composition, answer directly from the member list above.\n\n")
-		sb.WriteString("## Quality Review (evaluate_loop)\n\n")
-		sb.WriteString("For important tasks that need quality review, use `evaluate_loop`:\n")
-		sb.WriteString("- generator: the agent who creates content\n")
-		sb.WriteString("- evaluator: a team reviewer (see Reviewers section above)\n")
-		sb.WriteString("- Use when: content for publishing, formal documents, quality-critical output\n")
-		sb.WriteString("- Don't use for: simple questions, quick tasks, internal notes\n\n")
-		sb.WriteString("Example: `evaluate_loop(generator=\"writer\", evaluator=\"reviewer\", task=\"...\", pass_criteria=\"...\")`\n\n")
-		sb.WriteString("## Handoff vs Spawn\n\n")
-		sb.WriteString("- Do NOT use `handoff` to delegate tasks. Use `spawn` instead.\n")
-		sb.WriteString("- `handoff` transfers the ENTIRE conversation — the user will talk directly to the other agent.\n")
-		sb.WriteString("- Only use `handoff` when the user explicitly asks to be transferred/switched to another agent.\n")
+		sb.WriteString("**ONE delegation = ONE spawn call.** System auto-creates a tracking task per delegation.\n")
+		sb.WriteString("The `label` parameter sets the task title (keep it short). Tasks auto-complete when delegation finishes.\n\n")
+		sb.WriteString("Rules:\n")
+		sb.WriteString("- Call all spawns first, then briefly tell the user what you delegated\n")
+		sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
+		sb.WriteString("- Parallel results arrive in a single combined notification — do NOT present partial results\n")
+		sb.WriteString("- For dependency chains: `team_tasks` create with blocked_by, then `spawn` with team_task_id\n")
+
+		if isV2 {
+			sb.WriteString("\n## Orchestration Patterns\n\n")
+			sb.WriteString("- **Sequential**: A finishes → review → delegate to B with A's output\n")
+			sb.WriteString("- **Iterative**: A drafts → B reviews → A revises with feedback\n")
+			sb.WriteString("- **Mixed**: A+B parallel → review both → C combines outputs\n\n")
+			sb.WriteString("After results: present to user (if done) or continue orchestrating.\n")
+			sb.WriteString("Vary announcement phrasing between delegation rounds.\n")
+
+			sb.WriteString("\n## Follow-up Reminders\n\n")
+			sb.WriteString("When waiting for user reply: create+claim task, then `await_reply` with text=<reminder>.\n")
+			sb.WriteString("System auto-sends reminders. Call `clear_followup` when user replies.\n")
+		}
+
+		sb.WriteString("\nFor simple questions about team composition, answer directly from the member list above.\n")
 	} else {
 		if selfRole == store.TeamRoleReviewer {
-			sb.WriteString("You are a **reviewer**. You may be used as an evaluator in `evaluate_loop`.\n")
-			sb.WriteString("When evaluating, respond with **APPROVED** or **REJECTED: <feedback>**.\n\n")
+			sb.WriteString("You are a **reviewer**. When evaluating, respond with **APPROVED** or **REJECTED: <feedback>**.\n\n")
 		}
-		sb.WriteString("As a member, when you receive a delegated task, just do the work.\n")
-		sb.WriteString("Task completion is handled automatically by the system.\n\n")
-		sb.WriteString("For long-running tasks, send progress updates to your lead:\n")
-		sb.WriteString("`team_message` action=send, to=<lead_key>, text=<progress update>\n\n")
-		sb.WriteString("`team_tasks` actions:\n")
-		sb.WriteString("- action=list → check team task board (active tasks)\n")
-		sb.WriteString("- action=get, task_id=<id> → read a completed task's full result\n")
-		sb.WriteString("- action=search, query=<text> → search tasks\n\n")
-		sb.WriteString("Use `team_message` to send progress updates to your team lead (one-way, no response expected).\n\n")
-		sb.WriteString("For simple questions about team composition, answer directly from the member list above.\n")
+		sb.WriteString("As a member, just do the delegated work. Task completion is automatic.\n")
+		sb.WriteString("For long-running tasks, send progress updates via `team_message` action=send.\n")
 	}
 
 	return sb.String()
@@ -239,5 +209,23 @@ func agentToolPolicyWithMCP(policy *config.ToolPolicySpec, hasMCP bool) *config.
 		return policy
 	}
 	policy.AlsoAllow = append(policy.AlsoAllow, "group:mcp")
+	return policy
+}
+
+// agentToolPolicyWithWorkspace injects workspace_write and workspace_read into
+// alsoAllow when the agent belongs to a team, ensuring the PolicyEngine doesn't
+// block them even if the agent has a restrictive allow list.
+func agentToolPolicyWithWorkspace(policy *config.ToolPolicySpec, hasTeam bool) *config.ToolPolicySpec {
+	if !hasTeam {
+		return policy
+	}
+	if policy == nil {
+		policy = &config.ToolPolicySpec{}
+	}
+	for _, tool := range []string{"workspace_write", "workspace_read"} {
+		if !slices.Contains(policy.AlsoAllow, tool) {
+			policy.AlsoAllow = append(policy.AlsoAllow, tool)
+		}
+	}
 	return policy
 }

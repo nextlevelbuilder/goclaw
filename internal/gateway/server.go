@@ -300,15 +300,21 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 		peerKind := r.Header.Get("X-Peer-Kind")
 
 		if agentIDStr != "" || userID != "" {
-			// Verify HMAC signature over all context fields when gateway token is configured
-			if gatewayToken != "" {
-				sig := r.Header.Get("X-Bridge-Sig")
-				if !providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, sig) {
-					slog.Warn("security.mcp_bridge: invalid bridge context signature",
-						"agent_id", agentIDStr, "user_id", userID)
-					http.Error(w, `{"error":"invalid bridge context signature"}`, http.StatusForbidden)
-					return
-				}
+			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
+			if gatewayToken == "" {
+				slog.Warn("security.mcp_bridge: no gateway token, ignoring context headers",
+					"agent_id", agentIDStr, "user_id", userID)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Verify HMAC signature over all context fields.
+			sig := r.Header.Get("X-Bridge-Sig")
+			if !providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, sig) {
+				slog.Warn("security.mcp_bridge: invalid bridge context signature",
+					"agent_id", agentIDStr, "user_id", userID)
+				http.Error(w, `{"error":"invalid bridge context signature"}`, http.StatusForbidden)
+				return
 			}
 
 			if agentIDStr != "" {

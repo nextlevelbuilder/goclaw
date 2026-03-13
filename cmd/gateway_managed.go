@@ -406,6 +406,8 @@ func wireExtras(
 				TeamID:            req.TeamID,
 				TeamTaskID:        req.TeamTaskID,
 				ParentAgentID:     req.ParentAgentID,
+				WorkspaceChannel:  req.WorkspaceChannel,
+				WorkspaceChatID:   req.WorkspaceChatID,
 			})
 			if err != nil {
 				return nil, err
@@ -450,7 +452,7 @@ func wireExtras(
 		toolsReg.Register(tools.NewEvaluateLoopTool(delegateMgr))
 
 		// Handoff tool (agent-to-agent conversation transfer)
-		toolsReg.Register(tools.NewHandoffTool(delegateMgr, stores.Teams, stores.Sessions, msgBus))
+		toolsReg.Register(tools.NewHandoffTool(delegateMgr, stores.Teams, stores.Sessions, msgBus, workspace))
 
 		// Inject delegation capability into existing SpawnTool
 		if st, ok := toolsReg.Get("spawn"); ok {
@@ -484,7 +486,7 @@ func wireExtras(
 		slog.Info("delegate + delegate_search tools registered")
 	}
 
-	// Register team tools (team_tasks + team_message) if team store is available.
+	// Register team tools (team_tasks + team_message + workspace) if team store is available.
 	if stores.Teams != nil && stores.Agents != nil {
 		teamMgr := tools.NewTeamToolManager(stores.Teams, stores.Agents, msgBus)
 		if delegateMgr != nil {
@@ -492,6 +494,9 @@ func wireExtras(
 		}
 		toolsReg.Register(tools.NewTeamTasksTool(teamMgr))
 		toolsReg.Register(tools.NewTeamMessageTool(teamMgr))
+		toolsReg.Register(tools.NewWorkspaceWriteTool(teamMgr, workspace))
+		toolsReg.Register(tools.NewWorkspaceReadTool(teamMgr, workspace))
+		slog.Info("team + workspace tools registered", "workspace", workspace)
 
 		// Team cache invalidation via pub/sub
 		msgBus.Subscribe(bus.TopicCacheTeam, func(event bus.Event) {

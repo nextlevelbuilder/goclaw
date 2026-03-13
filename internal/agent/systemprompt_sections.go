@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -376,4 +377,29 @@ func hasBootstrapFile(files []bootstrap.ContextFile) bool {
 		}
 	}
 	return false
+}
+
+// hasTeamWorkspace checks if workspace_write is in the tool list.
+func hasTeamWorkspace(toolNames []string) bool {
+	return slices.Contains(toolNames, "workspace_write")
+}
+
+// buildTeamWorkspaceSection generates guidance for team workspace tools.
+func buildTeamWorkspaceSection() []string {
+	return []string{
+		"## Team Shared Workspace",
+		"",
+		"You are part of a team. Use the shared workspace to collaborate with teammates:",
+		"",
+		"- **workspace_write**: Write files to share with the team (reports, data, code, notes).",
+		"  Use this instead of write_file when the output needs to be shared with teammates.",
+		"- **workspace_read**: List, read, delete, pin, or tag shared files.",
+		"",
+		"Guidelines:",
+		"- When producing deliverables or intermediate results for the team, ALWAYS use workspace_write (not write_file).",
+		"- write_file is for your private workspace only. workspace_write is for team-shared files.",
+		"- Use workspace_read action=list to see what files teammates have shared.",
+		"- Before starting work, check the workspace for relevant files from other team members.",
+		"",
+	}
 }

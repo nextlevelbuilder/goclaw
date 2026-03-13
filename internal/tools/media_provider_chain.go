@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -19,9 +20,9 @@ type MediaProviderEntry struct {
 	Provider   string         `json:"provider"`              // name for registry.Get()
 	Model      string         `json:"model"`
 	Enabled    bool           `json:"enabled"`
-	Timeout    int            `json:"timeout"`               // seconds, default 120
-	MaxRetries int            `json:"max_retries"`           // default 2
-	Params     map[string]any `json:"params,omitempty"`      // provider-specific config
+	Timeout    int            `json:"timeout"`          // seconds, default 120
+	MaxRetries int            `json:"max_retries"`      // default 2
+	Params     map[string]any `json:"params,omitempty"` // provider-specific config
 }
 
 // mediaProviderChain is the settings JSON structure for media tools.
@@ -178,9 +179,7 @@ func ExecuteWithChain(
 		// Clone params to avoid mutating the original entry config.
 		resolvedType := ResolveProviderType(p)
 		callParams := make(map[string]any, len(entry.Params)+1)
-		for k, v := range entry.Params {
-			callParams[k] = v
-		}
+		maps.Copy(callParams, entry.Params)
 		callParams["_provider_type"] = resolvedType
 
 		// Retry loop for this provider

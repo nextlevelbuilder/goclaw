@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
-import type { TeamData, TeamMemberData, TeamTaskData, TeamAccessSettings } from "@/types/team";
+import type { TeamData, TeamMemberData, TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment, TeamAccessSettings, ScopeEntry } from "@/types/team";
 
 export function useTeams() {
   const ws = useWs();
@@ -58,26 +58,97 @@ export function useTeams() {
   );
 
   const getTeamTasks = useCallback(
-    async (teamId: string, statusFilter?: string, userId?: string) => {
+    async (teamId: string, status?: string, channel?: string, chatId?: string) => {
       const res = await ws.call<{ tasks: TeamTaskData[]; count: number }>(
         Methods.TEAMS_TASK_LIST,
-        { teamId, statusFilter, userId },
+        { teamId, status, channel: channel ?? "", chatId: chatId ?? "" },
       );
       return res;
     },
     [ws],
   );
 
+  const getTeamScopes = useCallback(
+    async (teamId: string) => {
+      const res = await ws.call<{ scopes: ScopeEntry[] }>(
+        Methods.TEAMS_SCOPES,
+        { teamId },
+      );
+      return res.scopes ?? [];
+    },
+    [ws],
+  );
+
+  const getTaskDetail = useCallback(
+    async (teamId: string, taskId: string) => {
+      const res = await ws.call<{
+        task: TeamTaskData;
+        comments: TeamTaskComment[];
+        events: TeamTaskEvent[];
+        attachments: TeamTaskAttachment[];
+      }>(Methods.TEAMS_TASK_GET, { teamId, taskId });
+      return res;
+    },
+    [ws],
+  );
+
   const approveTask = useCallback(
-    async (taskId: string) => {
-      await ws.call(Methods.TEAMS_TASK_APPROVE, { task_id: taskId });
+    async (teamId: string, taskId: string, comment?: string) => {
+      await ws.call(Methods.TEAMS_TASK_APPROVE, { teamId, taskId, comment });
     },
     [ws],
   );
 
   const rejectTask = useCallback(
-    async (taskId: string, reason?: string) => {
-      await ws.call(Methods.TEAMS_TASK_REJECT, { task_id: taskId, reason });
+    async (teamId: string, taskId: string, reason?: string) => {
+      await ws.call(Methods.TEAMS_TASK_REJECT, { teamId, taskId, reason });
+    },
+    [ws],
+  );
+
+  const addTaskComment = useCallback(
+    async (taskId: string, content: string, teamId?: string) => {
+      await ws.call(Methods.TEAMS_TASK_COMMENT, { teamId, taskId, content });
+    },
+    [ws],
+  );
+
+  const getTaskComments = useCallback(
+    async (teamId: string, taskId: string) => {
+      const res = await ws.call<{ comments: TeamTaskComment[] }>(
+        Methods.TEAMS_TASK_COMMENTS,
+        { teamId, taskId },
+      );
+      return res.comments ?? [];
+    },
+    [ws],
+  );
+
+  const getTaskEvents = useCallback(
+    async (teamId: string, taskId: string) => {
+      const res = await ws.call<{ events: TeamTaskEvent[] }>(
+        Methods.TEAMS_TASK_EVENTS,
+        { teamId, taskId },
+      );
+      return res.events ?? [];
+    },
+    [ws],
+  );
+
+  const createTask = useCallback(
+    async (teamId: string, params: { subject: string; description?: string; priority?: number; taskType?: string; assignTo?: string; channel?: string; chatId?: string }) => {
+      const res = await ws.call<{ task: TeamTaskData }>(
+        Methods.TEAMS_TASK_CREATE,
+        { teamId, ...params },
+      );
+      return res.task;
+    },
+    [ws],
+  );
+
+  const assignTask = useCallback(
+    async (teamId: string, taskId: string, agentId: string) => {
+      await ws.call(Methods.TEAMS_TASK_ASSIGN, { teamId, taskId, agentId });
     },
     [ws],
   );
@@ -114,5 +185,10 @@ export function useTeams() {
     [ws],
   );
 
-  return { teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, approveTask, rejectTask, addMember, removeMember, updateTeamSettings, getKnownUsers };
+  return {
+    teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, getTeamScopes,
+    getTaskDetail, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
+    createTask, assignTask,
+    addMember, removeMember, updateTeamSettings, getKnownUsers,
+  };
 }

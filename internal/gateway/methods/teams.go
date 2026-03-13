@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
@@ -50,6 +51,13 @@ func (m *TeamsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsMembersRemove, m.handleRemoveMember)
 	router.Register(protocol.MethodTeamsUpdate, m.handleUpdate)
 	router.Register(protocol.MethodTeamsKnownUsers, m.handleKnownUsers)
+	router.Register(protocol.MethodTeamsScopes, m.handleScopes)
+
+	// Workspace handlers
+	m.RegisterWorkspace(router)
+
+	// Task detail handlers
+	m.RegisterTasks(router)
 }
 
 // --- List ---
@@ -109,6 +117,13 @@ func (m *TeamsMethods) handleCreate(ctx context.Context, client *gateway.Client,
 	leadAgent, err := resolveAgentInfo(m.agentStore, params.Lead)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "lead agent: "+err.Error()))
+		return
+	}
+
+	// Enforce single-team leadership: an agent can only lead one team.
+	if existingTeam, _ := m.teamStore.GetTeamForAgent(ctx, leadAgent.ID); existingTeam != nil && existingTeam.LeadAgentID == leadAgent.ID {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+			fmt.Sprintf("agent %q already leads team %q — each agent can only lead one team", params.Lead, existingTeam.Name)))
 		return
 	}
 

@@ -17,7 +17,7 @@ import (
 
 // BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
 // Excluded: spawn (agent loop), create_forum_topic (channels),
-// handoff/delegate_search/evaluate_loop/team_* (require database stores).
+// handoff/delegate_search/evaluate_loop (require agent loop context).
 var BridgeToolNames = map[string]bool{
 	// Filesystem
 	"read_file":  true,
@@ -47,6 +47,11 @@ var BridgeToolNames = map[string]bool{
 	"session_status":   true,
 	"sessions_history": true,
 	"sessions_send":    true,
+	// Team tools (context from X-Agent-ID/X-Channel/X-Chat-ID headers)
+	"team_tasks":      true,
+	"team_message":    true,
+	"workspace_write": true,
+	"workspace_read":  true,
 }
 
 // NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.

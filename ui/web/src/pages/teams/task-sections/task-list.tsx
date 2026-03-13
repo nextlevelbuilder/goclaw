@@ -1,20 +1,34 @@
 import { useState } from "react";
-import { ClipboardList, Check, X, Trash2 } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import type { TeamTaskData } from "@/types/team";
-import { taskStatusBadgeVariant, isTaskActionable } from "./task-utils";
+import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
+import type { TeamMemberData } from "@/types/team";
+import { taskStatusBadgeVariant } from "./task-utils";
 import { TaskDetailDialog } from "./task-detail-dialog";
 
 interface TaskListProps {
   tasks: TeamTaskData[];
   loading: boolean;
-  onApprove: (taskId: string) => Promise<void>;
-  onReject: (taskId: string, reason?: string) => Promise<void>;
+  teamId: string;
+  members: TeamMemberData[];
+  isTeamV2?: boolean;
+  getTaskDetail: (teamId: string, taskId: string) => Promise<{
+    task: TeamTaskData;
+    comments: TeamTaskComment[];
+    events: TeamTaskEvent[];
+    attachments: TeamTaskAttachment[];
+  }>;
+  approveTask: (teamId: string, taskId: string, comment?: string) => Promise<void>;
+  rejectTask: (teamId: string, taskId: string, reason?: string) => Promise<void>;
+  addTaskComment: (taskId: string, content: string, teamId?: string) => Promise<void>;
+  assignTask: (teamId: string, taskId: string, agentId: string) => Promise<void>;
 }
 
-export function TaskList({ tasks, loading, onApprove, onReject }: TaskListProps) {
+export function TaskList({
+  tasks, loading, teamId, members, isTeamV2,
+  getTaskDetail, approveTask, rejectTask, addTaskComment, assignTask,
+}: TaskListProps) {
   const { t } = useTranslation("teams");
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null);
 
@@ -41,19 +55,22 @@ export function TaskList({ tasks, loading, onApprove, onReject }: TaskListProps)
   return (
     <>
       <div className="overflow-x-auto rounded-lg border">
-        <div className="grid min-w-[500px] grid-cols-[1fr_110px_100px_60px_80px] items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-xs font-medium text-muted-foreground">
+        <div className="grid min-w-[500px] grid-cols-[70px_1fr_90px_100px_60px] items-center gap-2 border-b bg-muted/50 px-4 py-2.5 text-xs font-medium text-muted-foreground">
+          <span>{t("tasks.columns.id")}</span>
           <span>{t("tasks.columns.subject")}</span>
           <span>{t("tasks.columns.status")}</span>
           <span>{t("tasks.columns.owner")}</span>
           <span>{t("tasks.columns.priority")}</span>
-          <span className="text-right">{t("tasks.columns.actions")}</span>
         </div>
         {tasks.map((task) => (
           <div
             key={task.id}
-            className="grid min-w-[500px] cursor-pointer grid-cols-[1fr_110px_100px_60px_80px] items-center gap-2 border-b px-4 py-3 last:border-0 hover:bg-muted/30"
+            className="grid min-w-[500px] cursor-pointer grid-cols-[70px_1fr_90px_100px_60px] items-center gap-2 border-b px-4 py-3 last:border-0 hover:bg-muted/30"
             onClick={() => setSelectedTask(task)}
           >
+            <span className="font-mono text-xs text-muted-foreground">
+              {task.identifier || "—"}
+            </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{task.subject}</p>
               {task.description && (
@@ -61,56 +78,28 @@ export function TaskList({ tasks, loading, onApprove, onReject }: TaskListProps)
                   {task.description}
                 </p>
               )}
-              {task.result && (
-                <p className="mt-0.5 line-clamp-1 text-xs text-emerald-600 dark:text-emerald-400">
-                  {task.result}
-                </p>
+              {task.task_type && task.task_type !== "general" && (
+                <Badge variant="outline" className="mt-0.5 text-[10px]">
+                  {task.task_type}
+                </Badge>
               )}
             </div>
-            <Badge variant={taskStatusBadgeVariant(task.status)}>
-              {t(`tasks.status.${task.status}`, task.status.replace("_", " "))}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-1">
+              <Badge variant={taskStatusBadgeVariant(task.status)}>
+                {task.status.replace(/_/g, " ")}
+              </Badge>
+              {isTeamV2 && task.followup_at && task.status === "in_progress" && (
+                <Badge variant="outline" className="border-amber-500/50 bg-amber-500/10 text-[10px] text-amber-700 dark:text-amber-400">
+                  {t("tasks.badges.awaitingReply")}
+                </Badge>
+              )}
+            </div>
             <span className="truncate text-sm text-muted-foreground">
               {task.owner_agent_key || "—"}
             </span>
             <span className="text-sm text-muted-foreground">
               {task.priority}
             </span>
-            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-              {task.status === "pending_approval" && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-emerald-600 hover:text-emerald-700"
-                    title={t("tasks.actions.approve")}
-                    onClick={() => onApprove(task.id)}
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive/80"
-                    title={t("tasks.actions.reject")}
-                    onClick={() => onReject(task.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </>
-              )}
-              {isTaskActionable(task.status) && task.status !== "pending_approval" && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive hover:text-destructive/80"
-                  title={t("tasks.actions.cancel")}
-                  onClick={() => onReject(task.id, "Cancelled by user")}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
           </div>
         ))}
       </div>
@@ -118,9 +107,15 @@ export function TaskList({ tasks, loading, onApprove, onReject }: TaskListProps)
       {selectedTask && (
         <TaskDetailDialog
           task={selectedTask}
+          teamId={teamId}
+          members={members}
+          isTeamV2={isTeamV2}
           onClose={() => setSelectedTask(null)}
-          onApprove={onApprove}
-          onReject={onReject}
+          getTaskDetail={getTaskDetail}
+          approveTask={approveTask}
+          rejectTask={rejectTask}
+          addTaskComment={addTaskComment}
+          assignTask={assignTask}
         />
       )}
     </>

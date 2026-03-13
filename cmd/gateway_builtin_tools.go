@@ -124,6 +124,12 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "team_message", DisplayName: "Team Message", Description: "Send a direct message or broadcast to teammates in the agent team", Category: "teams", Enabled: true,
 			Requires: []string{"managed_mode", "teams"},
 		},
+		{Name: "workspace_write", DisplayName: "Workspace Write", Description: "Write files to the team shared workspace visible to all team members", Category: "teams", Enabled: true,
+			Requires: []string{"managed_mode", "teams"},
+		},
+		{Name: "workspace_read", DisplayName: "Workspace Read", Description: "Read, list, delete, pin, and tag files in the team shared workspace", Category: "teams", Enabled: true,
+			Requires: []string{"managed_mode", "teams"},
+		},
 	}
 }
 

@@ -54,17 +54,28 @@ export function Combobox({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Resolve the actual portal target: explicit prop > closest dialog content > document.body
+  const resolvedPortal = React.useMemo(() => {
+    if (portalContainer?.current) return portalContainer.current;
+    // Auto-detect if inside a Radix Dialog (which sets pointer-events:none on body)
+    const el = containerRef.current?.closest<HTMLElement>('[data-slot="dialog-content"]');
+    return el ?? null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portalContainer, open]);
+
   // Compute dropdown position — always use fixed positioning for portal rendering
   React.useLayoutEffect(() => {
     if (!open || !containerRef.current) return;
     const inputRect = containerRef.current.getBoundingClientRect();
-    if (portalContainer?.current) {
-      const portalRect = portalContainer.current.getBoundingClientRect();
-      const left = inputRect.left - portalRect.left;
-      const maxWidth = portalRect.width - left;
+    if (resolvedPortal) {
+      const portalRect = resolvedPortal.getBoundingClientRect();
+      const scrollTop = resolvedPortal.scrollTop || 0;
+      const scrollLeft = resolvedPortal.scrollLeft || 0;
+      const left = inputRect.left - portalRect.left + scrollLeft;
+      const maxWidth = portalRect.width - (inputRect.left - portalRect.left);
       setDropdownStyle({
         position: "absolute",
-        top: inputRect.bottom - portalRect.top + 4,
+        top: inputRect.bottom - portalRect.top + scrollTop + 4,
         left,
         width: inputRect.width,
         maxWidth,
@@ -79,7 +90,7 @@ export function Combobox({
         zIndex: 9999,
       });
     }
-  }, [open, search, portalContainer]);
+  }, [open, search, resolvedPortal]);
 
   const filtered = React.useMemo(() => {
     if (!search) return options;
@@ -148,7 +159,7 @@ export function Combobox({
       )}
       {dropdownContent && createPortal(
         dropdownContent,
-        portalContainer?.current ?? document.body,
+        resolvedPortal ?? document.body,
       )}
     </div>
   );

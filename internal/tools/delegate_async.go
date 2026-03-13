@@ -31,6 +31,7 @@ func (dm *DelegateManager) DelegateAsync(ctx context.Context, opts DelegateOpts)
 	}
 
 	dm.injectDependencyResults(ctx, &opts)
+	dm.injectWorkspaceContext(ctx, task, &opts)
 	message := buildDelegateMessage(opts)
 	dm.emitDelegationEvent(protocol.EventDelegationStarted, task)
 	slog.Info("delegation started (async)", "id", task.ID, "target", opts.TargetAgentKey)

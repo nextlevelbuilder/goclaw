@@ -113,6 +113,10 @@ type DelegateRunRequest struct {
 	TeamID        string
 	TeamTaskID    string
 	ParentAgentID string
+
+	// Workspace scope propagation (set by delegation, read by workspace tools)
+	WorkspaceChannel string
+	WorkspaceChatID  string
 }
 
 // DelegateRunResult is the result from AgentRunFunc.

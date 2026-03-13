@@ -244,6 +244,45 @@ func (l *Loop) enrichVideoIDs(messages []providers.Message, refs []providers.Med
 	messages[lastIdx].Content = content
 }
 
+// enrichImageIDs updates the last user message to embed persisted media IDs
+// in <media:image> tags so the LLM knows images were received and stored.
+// Without this, the LLM sees plain <media:image> and cannot confirm image availability.
+// Iterates refs in reverse order so that when multiple images are present,
+// each ref maps to the correct positional tag (last ref → last tag, etc.).
+func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.MediaRef) {
+	if len(messages) == 0 {
+		return
+	}
+	lastIdx := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastIdx = i
+			break
+		}
+	}
+	if lastIdx < 0 {
+		return
+	}
+
+	content := messages[lastIdx].Content
+	// Iterate in reverse so first ref matches first tag when using LastIndex replacements.
+	for i := len(refs) - 1; i >= 0; i-- {
+		ref := refs[i]
+		if ref.Kind != "image" {
+			continue
+		}
+		idAttr := fmt.Sprintf(" id=%q", ref.ID)
+
+		// Replace the LAST bare <media:image> with <media:image id="uuid">
+		bare := "<media:image>"
+		if idx := strings.LastIndex(content, bare); idx >= 0 {
+			content = content[:idx] + "<media:image" + idAttr + ">" + content[idx+len(bare):]
+			continue
+		}
+	}
+	messages[lastIdx].Content = content
+}
+
 // mediaKindFromMime returns the media kind ("image", "video", "audio", "document")
 // based on MIME type prefix.
 func mediaKindFromMime(mime string) string {

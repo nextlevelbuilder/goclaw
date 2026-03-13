@@ -344,6 +344,10 @@ type RunRequest struct {
 	TeamID        string // team ID (if delegation is team-scoped)
 	TeamTaskID    string // team task ID (if delegation has an associated task)
 	ParentAgentID string // parent agent key that initiated the delegation
+
+	// Workspace scope propagation (set by delegation, read by workspace tools)
+	WorkspaceChannel string
+	WorkspaceChatID  string
 }
 
 // RunResult is the output of a completed agent run.

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +12,8 @@ import { TeamMembersTab } from "./team-members-tab";
 import { TeamTasksTab } from "./team-tasks-tab";
 import { TeamDelegationsTab } from "./team-delegations-tab";
 import { TeamSettingsTab } from "./team-settings-tab";
-import type { TeamData, TeamMemberData } from "@/types/team";
+import { TeamWorkspaceTab } from "./team-workspace-tab";
+import type { TeamData, TeamMemberData, TeamAccessSettings, ScopeEntry } from "@/types/team";
 
 interface TeamDetailPageProps {
   teamId: string;
@@ -20,12 +22,29 @@ interface TeamDetailPageProps {
 
 export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const { t } = useTranslation("teams");
-  const { getTeam, getTeamTasks, approveTask, rejectTask, getKnownUsers, addMember, removeMember, deleteTeam } = useTeams();
+  const {
+    getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
+    getTaskDetail, approveTask, rejectTask, addTaskComment,
+    createTask, assignTask,
+  } = useTeams();
   const [team, setTeam] = useState<TeamData | null>(null);
   const [members, setMembers] = useState<TeamMemberData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("members");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "members";
+  const setActiveTab = useCallback((tab: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "members") {
+        next.delete("tab");
+      } else {
+        next.set("tab", tab);
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [scopes, setScopes] = useState<ScopeEntry[]>([]);
 
   const reload = useCallback(async () => {
     try {
@@ -42,10 +61,14 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
     (async () => {
       setLoading(true);
       try {
-        const res = await getTeam(teamId);
+        const [res, scopeList] = await Promise.all([
+          getTeam(teamId),
+          getTeamScopes(teamId).catch(() => [] as ScopeEntry[]),
+        ]);
         if (!cancelled) {
           setTeam(res.team);
           setMembers(res.members ?? []);
+          setScopes(scopeList);
         }
       } catch {
         // ignore
@@ -54,7 +77,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [teamId, getTeam]);
+  }, [teamId, getTeam, getTeamScopes]);
 
   const handleAddMember = useCallback(async (agentId: string, role?: string) => {
     await addMember(teamId, agentId, role);
@@ -67,7 +90,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   }, [teamId, removeMember, reload]);
 
   if (loading || !team) {
-    return <DetailPageSkeleton tabs={4} />;
+    return <DetailPageSkeleton tabs={5} />;
   }
 
   return (
@@ -86,11 +109,15 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
             <Badge variant={team.status === "active" ? "success" : "secondary"}>
               {team.status}
             </Badge>
+            {((team.settings ?? {}) as TeamAccessSettings).version != null &&
+              ((team.settings ?? {}) as TeamAccessSettings).version! >= 2 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">V2 Beta</Badge>
+            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             {team.lead_agent_key && (
               <>
-                <span>{t("detail.lead")}: {team.lead_agent_key}</span>
+                <span>{t("detail.lead")}: {team.lead_display_name || team.lead_agent_key}</span>
                 <span className="text-border">|</span>
               </>
             )}
@@ -121,6 +148,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
             <TabsTrigger value="members">{t("detail.tabs.members")}</TabsTrigger>
             <TabsTrigger value="tasks">{t("detail.tabs.tasks")}</TabsTrigger>
             <TabsTrigger value="delegations">{t("detail.tabs.delegations")}</TabsTrigger>
+            <TabsTrigger value="workspace">{t("detail.tabs.workspace")}</TabsTrigger>
             <TabsTrigger value="settings">{t("detail.tabs.settings")}</TabsTrigger>
           </TabsList>
 
@@ -136,15 +164,25 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
           <TabsContent value="tasks" className="mt-4">
             <TeamTasksTab
               teamId={teamId}
+              members={members}
+              scopes={scopes}
+              isTeamV2={((team.settings ?? {}) as TeamAccessSettings).version != null && ((team.settings ?? {}) as TeamAccessSettings).version! >= 2}
               getTeamTasks={getTeamTasks}
-              getKnownUsers={getKnownUsers}
-              onApprove={approveTask}
-              onReject={rejectTask}
+              getTaskDetail={getTaskDetail}
+              approveTask={approveTask}
+              rejectTask={rejectTask}
+              addTaskComment={addTaskComment}
+              createTask={createTask}
+              assignTask={assignTask}
             />
           </TabsContent>
 
           <TabsContent value="delegations" className="mt-4">
             <TeamDelegationsTab teamId={teamId} />
+          </TabsContent>
+
+          <TabsContent value="workspace" className="mt-4">
+            <TeamWorkspaceTab teamId={teamId} scopes={scopes} />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-4">

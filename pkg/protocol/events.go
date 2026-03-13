@@ -43,8 +43,12 @@ const (
 	// Team task lifecycle events.
 	EventTeamTaskClaimed   = "team.task.claimed"
 	EventTeamTaskCancelled = "team.task.cancelled"
+	EventTeamTaskReviewed  = "team.task.reviewed"
 	EventTeamTaskApproved  = "team.task.approved"
 	EventTeamTaskRejected  = "team.task.rejected"
+	EventTeamTaskProgress  = "team.task.progress"
+	EventTeamTaskCommented = "team.task.commented"
+	EventTeamTaskAssigned  = "team.task.assigned"
 
 	// Team CRUD events (admin operations).
 	EventTeamCreated       = "team.created"
@@ -52,6 +56,9 @@ const (
 	EventTeamDeleted       = "team.deleted"
 	EventTeamMemberAdded   = "team.member.added"
 	EventTeamMemberRemoved = "team.member.removed"
+
+	// Workspace events (team file changes).
+	EventWorkspaceFileChanged = "workspace.file.changed"
 
 	// Agent link events (admin operations).
 	EventAgentLinkCreated = "agent_link.created"

@@ -27,6 +27,13 @@ const (
 	ctxSessionKey  toolContextKey = "tool_session_key" // origin session key for announce routing
 )
 
+// Well-known channel names used for routing and access control.
+const (
+	ChannelSystem    = "system"
+	ChannelDashboard = "dashboard"
+	ChannelDelegate  = "delegate"
+)
+
 func WithToolChannel(ctx context.Context, channel string) context.Context {
 	return context.WithValue(ctx, ctxChannel, channel)
 }
@@ -186,6 +193,31 @@ func WithMemoryConfig(ctx context.Context, cfg *config.MemoryConfig) context.Con
 
 func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
 	v, _ := ctx.Value(ctxMemoryCfg).(*config.MemoryConfig)
+	return v
+}
+
+// --- Workspace scope propagation (delegation origin) ---
+
+const (
+	ctxWsChannel toolContextKey = "tool_workspace_channel"
+	ctxWsChatID  toolContextKey = "tool_workspace_chat_id"
+)
+
+func WithWorkspaceChannel(ctx context.Context, channel string) context.Context {
+	return context.WithValue(ctx, ctxWsChannel, channel)
+}
+
+func WorkspaceChannelFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxWsChannel).(string)
+	return v
+}
+
+func WithWorkspaceChatID(ctx context.Context, chatID string) context.Context {
+	return context.WithValue(ctx, ctxWsChatID, chatID)
+}
+
+func WorkspaceChatIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxWsChatID).(string)
 	return v
 }
 

@@ -39,7 +39,9 @@ export function ConfirmDeleteDialog({
     if (!open) setInputValue("");
   }, [open]);
 
-  const isMatch = inputValue.toLowerCase() === confirmValue.toLowerCase();
+  const isMatch = confirmValue
+    ? inputValue.toLowerCase() === confirmValue.toLowerCase()
+    : inputValue.length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

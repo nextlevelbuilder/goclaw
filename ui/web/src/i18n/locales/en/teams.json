@@ -7,6 +7,10 @@
   "emptyDescription": "Create your first team to get started.",
   "noMatchTitle": "No matching teams",
   "noMatchDescription": "Try a different search term.",
+  "scope": {
+    "all": "All scopes",
+    "label": "Scope"
+  },
   "delete": {
     "title": "Delete Team",
     "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
@@ -21,6 +25,7 @@
       "tasks": "Tasks",
       "members": "Members",
       "delegations": "Delegations",
+      "workspace": "Workspace",
       "settings": "Settings"
     }
   },
@@ -49,7 +54,22 @@
     "noTasks": "No tasks yet",
     "noTasksDescription": "Tasks are created by team agents during collaboration.",
     "refresh": "Refresh",
+    "createTask": "Create Task",
+    "createTaskTitle": "Create Task",
+    "subjectPlaceholder": "Task subject...",
+    "descriptionPlaceholder": "Optional description...",
+    "priorityLabel": "Priority",
+    "assign": "Assign",
+    "assignTo": "Assign to...",
+    "unassigned": "Unassigned",
+    "filters": {
+      "active": "Active",
+      "inReview": "In Review",
+      "completed": "Completed",
+      "all": "All"
+    },
     "columns": {
+      "id": "ID",
       "subject": "Subject",
       "status": "Status",
       "owner": "Owner",
@@ -64,6 +84,7 @@
       "status": "Status:",
       "priority": "Priority:",
       "owner": "Owner:",
+      "type": "Type:",
       "blockedBy": "Blocked by:",
       "description": "Description",
       "result": "Result",
@@ -71,29 +92,25 @@
       "updated": "Updated:",
       "taskId": "Task ID:",
       "noDescription": "No description",
-      "noResult": "No result yet"
-    },
-    "actions": {
+      "noResult": "No result yet",
+      "progress": "Progress",
       "approve": "Approve",
       "reject": "Reject",
-      "cancel": "Cancel",
-      "reasonPlaceholder": "Reason (optional)...",
-      "confirmCancel": "Cancel this task?",
-      "confirmReject": "Reject this task?"
+      "comments": "Comments",
+      "noComments": "No comments yet",
+      "commentPlaceholder": "Add a comment...",
+      "addComment": "Comment",
+      "timeline": "Timeline",
+      "attachments": "Attachments",
+      "followupStatus": "Awaiting Reply",
+      "followupMessage": "Reminder message:",
+      "followupCount": "Reminders sent: {{count}}",
+      "followupCountMax": "Reminders sent: {{count}}/{{max}}",
+      "followupNext": "Next reminder:",
+      "followupDone": "All reminders sent"
     },
-    "filter": {
-      "all": "All",
-      "active": "Active",
-      "completed": "Completed",
-      "allUsers": "All users"
-    },
-    "status": {
-      "pending": "pending",
-      "pending_approval": "pending approval",
-      "in_progress": "in progress",
-      "completed": "completed",
-      "blocked": "blocked",
-      "failed": "failed"
+    "badges": {
+      "awaitingReply": "awaiting reply"
     }
   },
   "delegations": {
@@ -106,6 +123,25 @@
       "status": "Status",
       "duration": "Duration",
       "time": "Time"
+    }
+  },
+  "workspace": {
+    "title": "Workspace",
+    "noFiles": "No workspace files yet",
+    "noFilesDescription": "Files are created by team agents during collaboration.",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "confirmDelete": "Delete this file?",
+    "columns": {
+      "fileName": "File Name",
+      "size": "Size",
+      "uploadedBy": "Uploaded By",
+      "scope": "Scope",
+      "updated": "Updated"
+    },
+    "detail": {
+      "title": "File Content",
+      "empty": "File is empty or binary"
     }
   },
   "settings": {
@@ -135,7 +171,56 @@
     "progressNotifications": "Progress notifications",
     "progressNotificationsHint": "Send periodic \"Your team is working on it...\" messages to chat during async delegations.",
     "searchUsers": "Search users...",
-    "selectChannel": "Select channel..."
+    "selectChannel": "Select channel...",
+    "escalationPolicy": "Escalation Policy",
+    "escalationMode": "Escalation Mode",
+    "escalationModeHint": "Controls how privileged workspace actions (pin, tag, delete others' files, set_template) are handled when requested by agents.",
+    "escalationModeAuto": "Auto (default)",
+    "escalationModeAutoDesc": "LLM lead evaluates the request — either rejects or creates a review task. Never executes directly.",
+    "escalationModeReview": "Review",
+    "escalationModeReviewDesc": "Always creates a pending task for human approval. No auto-reject.",
+    "escalationModeReject": "Reject",
+    "escalationModeRejectDesc": "Rejects all privileged action requests outright. Lockdown mode.",
+    "escalationModeNone": "None",
+    "escalationModeNoneDesc": "No escalation policy. Lead agent executes actions directly.",
+    "escalationActions": "Escalation Actions",
+    "escalationActionsHint": "Select which workspace actions require escalation. If none selected, all privileged actions are subject to escalation.",
+    "followupReminders": "Follow-up Reminders",
+    "followupInterval": "Reminder interval (minutes)",
+    "followupIntervalHint": "How long to wait before sending each follow-up reminder to the user.",
+    "followupMaxReminders": "Max reminders",
+    "followupMaxRemindersHint": "Maximum number of reminders per task. 0 = unlimited (remind until user replies).",
+    "teamVersion": "Team Version",
+    "versionBasic": "Basic",
+    "versionAdvanced": "Advanced",
+    "versionBasicDesc": "Task management and shared workspace.",
+    "versionAdvancedDesc": "All V1 features plus execution locking, follow-up reminders, review workflow, progress tracking, comments, audit trail, and auto-recovery.",
+    "whatsNew": "What's different?",
+    "versionModal": {
+      "title": "Team Versions",
+      "feature": "Feature",
+      "taskManagement": "Task Management",
+      "taskManagementDesc": "Create, assign, complete, cancel tasks",
+      "sharedWorkspace": "Shared Workspace",
+      "sharedWorkspaceDesc": "Files, versions, team collaboration",
+      "executionLocking": "Execution Locking",
+      "executionLockingDesc": "Prevents task conflicts with auto-recovery",
+      "followupReminders": "Follow-up Reminders",
+      "followupRemindersDesc": "Auto-remind when waiting for user reply",
+      "reviewWorkflow": "Review Workflow",
+      "reviewWorkflowDesc": "Submit for human review before completing",
+      "progressTracking": "Progress Tracking",
+      "progressTrackingDesc": "Real-time percentage and step updates",
+      "commentsAudit": "Comments & Audit",
+      "commentsAuditDesc": "Task comments and full event history",
+      "autoRecovery": "Auto-Recovery",
+      "autoRecoveryDesc": "Stuck tasks auto-reset after timeout",
+      "escalationPolicy": "Escalation Policy",
+      "escalationPolicyDesc": "Control what agents can do autonomously",
+      "downgradeNote": "Downgrade is safe — V2 data is preserved but hidden.",
+      "betaNote": "V2 is currently in Beta.",
+      "gotIt": "Got it"
+    }
   },
   "create": {
     "title": "Create Team",
@@ -168,11 +253,9 @@
     "failedUpdate": "Failed to update team",
     "failedAddMember": "Failed to add member",
     "failedRemoveMember": "Failed to remove member",
-    "taskApproved": "Task approved",
-    "taskRejected": "Task rejected",
-    "taskCancelled": "Task cancelled",
-    "failedApproveTask": "Failed to approve task",
-    "failedRejectTask": "Failed to reject task",
-    "failedCancelTask": "Failed to cancel task"
+    "taskCreated": "Task created",
+    "taskAssigned": "Task assigned",
+    "failedCreateTask": "Failed to create task",
+    "failedAssignTask": "Failed to assign task"
   }
 }

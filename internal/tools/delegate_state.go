@@ -188,12 +188,20 @@ func (dm *DelegateManager) flushCompletedSessions() {
 	}
 }
 
-// autoCompleteTeamTask attempts to claim+complete the associated team task.
+// autoCompleteTeamTask attempts to claim+complete the associated team task (v2 only).
 // Called after a delegation finishes successfully. Errors are logged but not fatal.
 // On success, flushes all tracked delegate sessions (task done = context no longer needed).
 // Also persists a team message record for audit trail / visualization.
 func (dm *DelegateManager) autoCompleteTeamTask(task *DelegationTask, resultContent string, deliverables []string) {
 	if dm.teamStore == nil || task.TeamTaskID == uuid.Nil {
+		return
+	}
+	// Use a bounded context so this work doesn't run indefinitely on shutdown.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Only auto-complete for v2 teams.
+	if team, _ := dm.teamStore.GetTeam(ctx, task.TeamID); team == nil || !IsTeamV2(team) {
 		return
 	}
 
@@ -207,13 +215,22 @@ func (dm *DelegateManager) autoCompleteTeamTask(task *DelegationTask, resultCont
 		}
 	}
 
-	_ = dm.teamStore.ClaimTask(context.Background(), task.TeamTaskID, task.TargetAgentID, task.TeamID)
-	if err := dm.teamStore.CompleteTask(context.Background(), task.TeamTaskID, task.TeamID, taskResult); err != nil {
+	_ = dm.teamStore.ClaimTask(ctx, task.TeamTaskID, task.TargetAgentID, task.TeamID)
+	if err := dm.teamStore.CompleteTask(ctx, task.TeamTaskID, task.TeamID, taskResult); err != nil {
 		slog.Warn("delegate: failed to auto-complete team task",
 			"task_id", task.TeamTaskID, "delegation_id", task.ID, "error", err)
 	} else {
 		slog.Info("delegate: auto-completed team task",
 			"task_id", task.TeamTaskID, "delegation_id", task.ID)
+		// Record audit event.
+		_ = dm.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
+			TaskID:    task.TeamTaskID,
+			EventType: "completed",
+			ActorType: "agent",
+			ActorID:   task.TargetAgentID.String(),
+		})
+		// Archive workspace files linked to this completed task (pinned files are immune).
+		_ = dm.teamStore.ArchiveWorkspaceFilesByTask(ctx, task.TeamTaskID)
 		// Task done — flush delegate sessions
 		dm.flushCompletedSessions()
 
@@ -224,7 +241,7 @@ func (dm *DelegateManager) autoCompleteTeamTask(task *DelegationTask, resultCont
 				summary = summary[:500] + "..."
 			}
 			taskID := task.TeamTaskID
-			_ = dm.teamStore.SendMessage(context.Background(), &store.TeamMessageData{
+			_ = dm.teamStore.SendMessage(ctx, &store.TeamMessageData{
 				TeamID:      task.TeamID,
 				FromAgentID: task.TargetAgentID,
 				ToAgentID:   &task.SourceAgentID,
@@ -236,10 +253,18 @@ func (dm *DelegateManager) autoCompleteTeamTask(task *DelegationTask, resultCont
 	}
 }
 
-// autoFailTeamTask marks the associated team task as failed.
+// autoFailTeamTask marks the associated team task as failed (v2 only).
 // Called after a delegation fails. Errors are logged but not fatal.
 func (dm *DelegateManager) autoFailTeamTask(task *DelegationTask, errMsg string) {
 	if dm.teamStore == nil || task.TeamTaskID == uuid.Nil {
+		return
+	}
+	// Use a bounded context so this work doesn't run indefinitely on shutdown.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Only auto-fail for v2 teams.
+	if team, _ := dm.teamStore.GetTeam(ctx, task.TeamID); team == nil || !IsTeamV2(team) {
 		return
 	}
 
@@ -248,13 +273,20 @@ func (dm *DelegateManager) autoFailTeamTask(task *DelegationTask, errMsg string)
 		errMsg = errMsg[:2000] + "..."
 	}
 
-	_ = dm.teamStore.ClaimTask(context.Background(), task.TeamTaskID, task.TargetAgentID, task.TeamID)
-	if err := dm.teamStore.FailTask(context.Background(), task.TeamTaskID, task.TeamID, errMsg); err != nil {
+	_ = dm.teamStore.ClaimTask(ctx, task.TeamTaskID, task.TargetAgentID, task.TeamID)
+	if err := dm.teamStore.FailTask(ctx, task.TeamTaskID, task.TeamID, errMsg); err != nil {
 		slog.Warn("delegate: failed to auto-fail team task",
 			"task_id", task.TeamTaskID, "delegation_id", task.ID, "error", err)
 	} else {
 		slog.Info("delegate: auto-failed team task",
 			"task_id", task.TeamTaskID, "delegation_id", task.ID)
+		// Record audit event.
+		_ = dm.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
+			TaskID:    task.TeamTaskID,
+			EventType: "failed",
+			ActorType: "agent",
+			ActorID:   task.TargetAgentID.String(),
+		})
 
 		// Persist delegation failure as team message for audit trail
 		if task.TeamID != uuid.Nil {
@@ -263,7 +295,7 @@ func (dm *DelegateManager) autoFailTeamTask(task *DelegationTask, errMsg string)
 				summary = summary[:500] + "..."
 			}
 			taskID := task.TeamTaskID
-			_ = dm.teamStore.SendMessage(context.Background(), &store.TeamMessageData{
+			_ = dm.teamStore.SendMessage(ctx, &store.TeamMessageData{
 				TeamID:      task.TeamID,
 				FromAgentID: task.TargetAgentID,
 				ToAgentID:   &task.SourceAgentID,

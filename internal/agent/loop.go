@@ -78,6 +78,14 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		ctx = tools.WithSandboxConfig(ctx, l.sandboxCfg)
 	}
 
+	// Workspace scope propagation (delegation origin → workspace tools).
+	if req.WorkspaceChannel != "" {
+		ctx = tools.WithWorkspaceChannel(ctx, req.WorkspaceChannel)
+	}
+	if req.WorkspaceChatID != "" {
+		ctx = tools.WithWorkspaceChatID(ctx, req.WorkspaceChatID)
+	}
+
 	// Per-user workspace isolation.
 	// Workspace path comes from user_agent_profiles (includes channel segment
 	// for cross-channel isolation). Cached in userWorkspaces to avoid repeated DB queries.
@@ -289,13 +297,21 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		l.enrichVideoIDs(messages, mediaRefs)
 	}
 
-	// 2e. Cross-session recovery: notify team leads about orphaned pending tasks
+	// 2e. Enrich <media:image> tags with persisted media IDs so the LLM
+	// knows images were received and stored (consistent with audio/video enrichment).
+	l.enrichImageIDs(messages, mediaRefs)
+
+	// 2f. Cross-session recovery: notify team leads about orphaned pending tasks
 	// and in-progress tasks being handled by delegates.
 	// Safe because Bước 1 (early ClaimTask) ensures running tasks are in_progress,
 	// so only truly un-spawned tasks remain pending.
 	if l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil && team.LeadAgentID == l.agentUUID {
-			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "", req.UserID); err == nil {
+			// Recover tasks with expired locks (stale in_progress → pending)
+			if recovered, err := l.teamStore.RecoverStaleTasks(ctx, team.ID); err == nil && recovered > 0 {
+				slog.Info("recovered stale tasks", "team", team.ID, "count", recovered)
+			}
+			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "", req.UserID, "", ""); err == nil {
 				var stale []string
 				var inProgress []string
 				for _, t := range tasks {
@@ -551,13 +567,13 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 		// No tool calls → done
 		if len(resp.ToolCalls) == 0 {
-			// Guard: detect orphaned team_tasks create (created but not spawned).
+			// Guard: detect orphaned team_tasks create (created but not spawned) — v2 only.
 			// Query DB for actual pending tasks instead of just counting tool calls,
 			// because auto-created tasks (from spawn without team_task_id) bypass the counter.
 			if teamTaskCreates > teamTaskSpawns && !teamTaskRetried {
 				if l.teamStore != nil && l.agentUUID != uuid.Nil {
-					if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
-						if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "", req.UserID); err == nil {
+					if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil && tools.IsTeamV2(team) {
+						if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "", req.UserID, "", ""); err == nil {
 							var pendingIDs []string
 							for _, t := range tasks {
 								if t.Status == store.TeamTaskStatusPending {

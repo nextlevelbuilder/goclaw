@@ -29,10 +29,7 @@ func (s *PGSnapshotStore) UpsertSnapshots(ctx context.Context, snapshots []store
 		return nil
 	}
 	for start := 0; start < len(snapshots); start += maxBatchRows {
-		end := start + maxBatchRows
-		if end > len(snapshots) {
-			end = len(snapshots)
-		}
+		end := min(start+maxBatchRows, len(snapshots))
 		if err := s.upsertBatch(ctx, snapshots[start:end]); err != nil {
 			return err
 		}

@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -23,7 +27,7 @@ func NewTeamMessageTool(manager *TeamToolManager) *TeamMessageTool {
 func (t *TeamMessageTool) Name() string { return "team_message" }
 
 func (t *TeamMessageTool) Description() string {
-	return "Send and receive messages within your team. Actions: send (direct message to a teammate), broadcast (message all teammates), read (check unread messages). See TEAM.md for your teammates."
+	return "Send and receive messages within your team. Actions: send, broadcast, read. See TEAM.md for your teammates."
 }
 
 func (t *TeamMessageTool) Parameters() map[string]any {
@@ -41,6 +45,13 @@ func (t *TeamMessageTool) Parameters() map[string]any {
 			"text": map[string]any{
 				"type":        "string",
 				"description": "Message content (required for action=send and action=broadcast)",
+			},
+			"media": map[string]any{
+				"type":        "array",
+				"description": "Optional file paths to attach as media (for action=send)",
+				"items": map[string]any{
+					"type": "string",
+				},
 			},
 		},
 		"required": []string{"action"},
@@ -98,6 +109,18 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]any) 
 		return ErrorResult(fmt.Sprintf("agent %q is not a member of your team", toKey))
 	}
 
+	// Parse optional media paths
+	var mediaFiles []bus.MediaFile
+	if rawMedia, ok := args["media"]; ok {
+		if mediaArr, ok := rawMedia.([]any); ok {
+			for _, item := range mediaArr {
+				if path, ok := item.(string); ok && path != "" {
+					mediaFiles = append(mediaFiles, bus.MediaFile{Path: path})
+				}
+			}
+		}
+	}
+
 	// Persist to DB
 	msg := &store.TeamMessageData{
 		TeamID:      team.ID,
@@ -110,9 +133,70 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]any) 
 		return ErrorResult("failed to send message: " + err.Error())
 	}
 
+	// Auto-create a "message" task so team messages appear in the Tasks tab.
+	subject := text
+	if len(subject) > 100 {
+		subject = subject[:100] + "..."
+	}
+	now := time.Now()
+	lockExpires := now.Add(30 * time.Minute)
+	taskData := &store.TeamTaskData{
+		TeamID:           team.ID,
+		Subject:          subject,
+		Description:      text,
+		Status:           store.TeamTaskStatusInProgress,
+		TaskType:         "message",
+		CreatedByAgentID: &agentID,
+		OwnerAgentID:     &toAgentID,
+		UserID:           store.UserIDFromContext(ctx),
+		Channel:          ToolChannelFromCtx(ctx),
+		ChatID:           ToolChatIDFromCtx(ctx),
+		LockedAt:         &now,
+		LockExpiresAt:    &lockExpires,
+	}
+	var teamTaskID uuid.UUID
+	slog.Info("team_message: creating auto-task",
+		"team_id", team.ID,
+		"from_agent", agentID,
+		"to_agent", toAgentID,
+		"status", taskData.Status,
+		"task_type", taskData.TaskType,
+		"user_id", taskData.UserID,
+		"channel", taskData.Channel,
+		"chat_id", taskData.ChatID,
+	)
+	if err := t.manager.teamStore.CreateTask(ctx, taskData); err != nil {
+		slog.Warn("team_message: failed to auto-create task",
+			"error", err,
+			"team_id", team.ID,
+			"from_agent", agentID,
+			"to_agent", toAgentID,
+		)
+	} else {
+		teamTaskID = taskData.ID
+		_ = t.manager.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
+			TaskID:    teamTaskID,
+			EventType: "created",
+			ActorType: "agent",
+			ActorID:   t.manager.agentKeyFromID(ctx, agentID),
+		})
+		t.manager.broadcastTeamEvent(protocol.EventTeamTaskCreated, protocol.TeamTaskEventPayload{
+			TeamID:           team.ID.String(),
+			TaskID:           teamTaskID.String(),
+			Subject:          subject,
+			Status:           store.TeamTaskStatusInProgress,
+			OwnerAgentKey:    toKey,
+			OwnerDisplayName: t.manager.agentDisplayName(ctx, toKey),
+			UserID:           store.UserIDFromContext(ctx),
+			Channel:          ToolChannelFromCtx(ctx),
+			ChatID:           ToolChatIDFromCtx(ctx),
+			Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		})
+	}
+
 	// Real-time delivery via message bus
 	fromKey := t.manager.agentKeyFromID(ctx, agentID)
-	t.publishTeammateMessage(fromKey, toKey, text, ctx)
+	t.publishTeammateMessage(fromKey, toKey, text, mediaFiles, teamTaskID, team.ID, ctx)
 
 	preview := text
 	if len(preview) > 100 {
@@ -168,7 +252,7 @@ func (t *TeamMessageTool) executeBroadcast(ctx context.Context, args map[string]
 			if m.AgentID == agentID {
 				continue // don't send to self
 			}
-			t.publishTeammateMessage(fromKey, m.AgentKey, text, ctx)
+			t.publishTeammateMessage(fromKey, m.AgentKey, text, nil, uuid.Nil, team.ID, ctx)
 		}
 	}
 
@@ -216,7 +300,7 @@ func (t *TeamMessageTool) executeRead(ctx context.Context) *Result {
 
 // publishTeammateMessage sends a real-time notification via the message bus.
 // Uses "teammate:{fromKey}" sender prefix so the consumer can route it.
-func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, ctx context.Context) {
+func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, media []bus.MediaFile, teamTaskID uuid.UUID, teamID uuid.UUID, ctx context.Context) {
 	if t.manager.msgBus == nil {
 		return
 	}
@@ -225,6 +309,15 @@ func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, ct
 	chatID := ToolChatIDFromCtx(ctx)
 	originChannel := ToolChannelFromCtx(ctx)
 	originPeerKind := ToolPeerKindFromCtx(ctx)
+
+	slog.Info("team_message: publishTeammateMessage",
+		"from", fromKey, "to", toKey,
+		"origin_channel", originChannel,
+		"chat_id", chatID,
+		"origin_peer_kind", originPeerKind,
+		"user_id", userID,
+		"team_task_id", teamTaskID,
+	)
 
 	teamMeta := map[string]string{
 		"origin_channel":   originChannel,
@@ -235,11 +328,16 @@ func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, ct
 	if localKey := ToolLocalKeyFromCtx(ctx); localKey != "" {
 		teamMeta["origin_local_key"] = localKey
 	}
+	if teamTaskID != uuid.Nil {
+		teamMeta["team_task_id"] = teamTaskID.String()
+		teamMeta["team_id"] = teamID.String()
+	}
 	t.manager.msgBus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",
 		SenderID: fmt.Sprintf("teammate:%s", fromKey),
 		ChatID:   chatID,
 		Content:  fmt.Sprintf("[Team message from %s]: %s", fromKey, text),
+		Media:    media,
 		UserID:   userID,
 		AgentID:  toKey,
 		Metadata: teamMeta,

@@ -7,6 +7,10 @@
   "emptyDescription": "Tạo Team đầu tiên để bắt đầu.",
   "noMatchTitle": "Không tìm thấy Team phù hợp",
   "noMatchDescription": "Thử từ khóa tìm kiếm khác.",
+  "scope": {
+    "all": "Tất cả phạm vi",
+    "label": "Phạm vi"
+  },
   "delete": {
     "title": "Xóa Team",
     "description": "Bạn có chắc chắn muốn xóa \"{{name}}\"? Hành động này không thể hoàn tác.",
@@ -21,6 +25,7 @@
       "tasks": "Nhiệm vụ",
       "members": "Thành viên",
       "delegations": "Ủy quyền",
+      "workspace": "Không gian làm việc",
       "settings": "Cài đặt"
     }
   },
@@ -49,7 +54,22 @@
     "noTasks": "Chưa có nhiệm vụ",
     "noTasksDescription": "Nhiệm vụ được tạo bởi agent nhóm trong quá trình cộng tác.",
     "refresh": "Làm mới",
+    "createTask": "Tạo nhiệm vụ",
+    "createTaskTitle": "Tạo nhiệm vụ",
+    "subjectPlaceholder": "Tiêu đề nhiệm vụ...",
+    "descriptionPlaceholder": "Mô tả tùy chọn...",
+    "priorityLabel": "Độ ưu tiên",
+    "assign": "Gán",
+    "assignTo": "Gán cho...",
+    "unassigned": "Chưa gán",
+    "filters": {
+      "active": "Đang hoạt động",
+      "inReview": "Chờ duyệt",
+      "completed": "Đã hoàn thành",
+      "all": "Tất cả"
+    },
     "columns": {
+      "id": "ID",
       "subject": "Tiêu đề",
       "status": "Trạng thái",
       "owner": "Người phụ trách",
@@ -64,6 +84,7 @@
       "status": "Trạng thái:",
       "priority": "Độ ưu tiên:",
       "owner": "Người phụ trách:",
+      "type": "Loại:",
       "blockedBy": "Bị chặn bởi:",
       "description": "Mô tả",
       "result": "Kết quả",
@@ -71,29 +92,25 @@
       "updated": "Đã cập nhật:",
       "taskId": "ID nhiệm vụ:",
       "noDescription": "Không có mô tả",
-      "noResult": "Chưa có kết quả"
-    },
-    "actions": {
-      "approve": "Duyệt",
+      "noResult": "Chưa có kết quả",
+      "progress": "Tiến trình",
+      "approve": "Phê duyệt",
       "reject": "Từ chối",
-      "cancel": "Huỷ",
-      "reasonPlaceholder": "Lý do (tùy chọn)...",
-      "confirmCancel": "Huỷ nhiệm vụ này?",
-      "confirmReject": "Từ chối nhiệm vụ này?"
+      "comments": "Bình luận",
+      "noComments": "Chưa có bình luận",
+      "commentPlaceholder": "Thêm bình luận...",
+      "addComment": "Bình luận",
+      "timeline": "Lịch sử",
+      "attachments": "Tệp đính kèm",
+      "followupStatus": "Chờ phản hồi",
+      "followupMessage": "Nội dung nhắc:",
+      "followupCount": "Đã nhắc: {{count}} lần",
+      "followupCountMax": "Đã nhắc: {{count}}/{{max}} lần",
+      "followupNext": "Nhắc tiếp:",
+      "followupDone": "Đã nhắc hết"
     },
-    "filter": {
-      "all": "Tất cả",
-      "active": "Đang hoạt động",
-      "completed": "Đã hoàn thành",
-      "allUsers": "Tất cả người dùng"
-    },
-    "status": {
-      "pending": "chờ xử lý",
-      "pending_approval": "chờ duyệt",
-      "in_progress": "đang thực hiện",
-      "completed": "hoàn thành",
-      "blocked": "bị chặn",
-      "failed": "thất bại"
+    "badges": {
+      "awaitingReply": "chờ trả lời"
     }
   },
   "delegations": {
@@ -106,6 +123,25 @@
       "status": "Trạng thái",
       "duration": "Thời lượng",
       "time": "Thời gian"
+    }
+  },
+  "workspace": {
+    "title": "Không gian làm việc",
+    "noFiles": "Chưa có file trong workspace",
+    "noFilesDescription": "File được tạo bởi agent nhóm trong quá trình cộng tác.",
+    "refresh": "Làm mới",
+    "delete": "Xóa",
+    "confirmDelete": "Xóa file này?",
+    "columns": {
+      "fileName": "Tên file",
+      "size": "Kích thước",
+      "uploadedBy": "Người tải lên",
+      "scope": "Phạm vi",
+      "updated": "Cập nhật"
+    },
+    "detail": {
+      "title": "Nội dung file",
+      "empty": "File trống hoặc là file nhị phân"
     }
   },
   "settings": {
@@ -135,7 +171,56 @@
     "progressNotifications": "Thông báo tiến trình",
     "progressNotificationsHint": "Gửi định kỳ thông báo \"Team của bạn đang xử lý...\" trong quá trình ủy quyền bất đồng bộ.",
     "searchUsers": "Tìm kiếm người dùng...",
-    "selectChannel": "Chọn channel..."
+    "selectChannel": "Chọn channel...",
+    "escalationPolicy": "Chính sách Leo thang",
+    "escalationMode": "Chế độ Leo thang",
+    "escalationModeHint": "Kiểm soát cách xử lý action workspace nhạy cảm (pin, tag, xóa file người khác, set_template) khi agent yêu cầu.",
+    "escalationModeAuto": "Tự động (mặc định)",
+    "escalationModeAutoDesc": "LLM lead đánh giá yêu cầu — từ chối hoặc tạo task review. Không bao giờ thực thi trực tiếp.",
+    "escalationModeReview": "Review",
+    "escalationModeReviewDesc": "Luôn tạo task chờ duyệt. Không tự động từ chối.",
+    "escalationModeReject": "Từ chối",
+    "escalationModeRejectDesc": "Từ chối mọi yêu cầu action nhạy cảm. Chế độ khóa.",
+    "escalationModeNone": "Không",
+    "escalationModeNoneDesc": "Không có chính sách leo thang. Lead agent thực thi trực tiếp.",
+    "escalationActions": "Action leo thang",
+    "escalationActionsHint": "Chọn action workspace nào cần leo thang. Nếu không chọn, tất cả action nhạy cảm đều phải leo thang.",
+    "followupReminders": "Nhắc nhở theo dõi",
+    "followupInterval": "Khoảng cách nhắc (phút)",
+    "followupIntervalHint": "Thời gian chờ trước khi gửi mỗi lần nhắc nhở cho người dùng.",
+    "followupMaxReminders": "Số lần nhắc tối đa",
+    "followupMaxRemindersHint": "Số lần nhắc tối đa cho mỗi nhiệm vụ. 0 = không giới hạn (nhắc cho đến khi người dùng trả lời).",
+    "teamVersion": "Phiên bản Team",
+    "versionBasic": "Cơ bản",
+    "versionAdvanced": "Nâng cao",
+    "versionBasicDesc": "Quản lý nhiệm vụ và workspace chung.",
+    "versionAdvancedDesc": "Tất cả tính năng V1 cùng khóa thực thi, nhắc nhở theo dõi, quy trình duyệt, theo dõi tiến độ, bình luận, nhật ký hoạt động và tự phục hồi.",
+    "whatsNew": "Có gì mới?",
+    "versionModal": {
+      "title": "Phiên bản Team",
+      "feature": "Tính năng",
+      "taskManagement": "Quản lý nhiệm vụ",
+      "taskManagementDesc": "Tạo, phân công, hoàn thành, hủy nhiệm vụ",
+      "sharedWorkspace": "Workspace chung",
+      "sharedWorkspaceDesc": "Tệp, phiên bản, cộng tác nhóm",
+      "executionLocking": "Khóa thực thi",
+      "executionLockingDesc": "Ngăn xung đột nhiệm vụ với tự phục hồi",
+      "followupReminders": "Nhắc nhở theo dõi",
+      "followupRemindersDesc": "Tự nhắc khi đợi người dùng trả lời",
+      "reviewWorkflow": "Quy trình duyệt",
+      "reviewWorkflowDesc": "Gửi để người duyệt trước khi hoàn thành",
+      "progressTracking": "Theo dõi tiến độ",
+      "progressTrackingDesc": "Cập nhật phần trăm và bước theo thời gian thực",
+      "commentsAudit": "Bình luận & Nhật ký",
+      "commentsAuditDesc": "Bình luận nhiệm vụ và lịch sử sự kiện đầy đủ",
+      "autoRecovery": "Tự phục hồi",
+      "autoRecoveryDesc": "Nhiệm vụ bị treo tự đặt lại sau thời gian chờ",
+      "escalationPolicy": "Chính sách leo thang",
+      "escalationPolicyDesc": "Kiểm soát những gì agent có thể tự thực hiện",
+      "downgradeNote": "Hạ cấp an toàn — dữ liệu V2 được giữ lại nhưng ẩn đi.",
+      "betaNote": "V2 hiện đang ở giai đoạn Beta.",
+      "gotIt": "Đã hiểu"
+    }
   },
   "create": {
     "title": "Tạo Team",
@@ -168,11 +253,9 @@
     "failedUpdate": "Không thể cập nhật nhóm",
     "failedAddMember": "Không thể thêm thành viên",
     "failedRemoveMember": "Không thể xóa thành viên",
-    "taskApproved": "Đã duyệt nhiệm vụ",
-    "taskRejected": "Đã từ chối nhiệm vụ",
-    "taskCancelled": "Đã huỷ nhiệm vụ",
-    "failedApproveTask": "Không thể duyệt nhiệm vụ",
-    "failedRejectTask": "Không thể từ chối nhiệm vụ",
-    "failedCancelTask": "Không thể huỷ nhiệm vụ"
+    "taskCreated": "Đã tạo nhiệm vụ",
+    "taskAssigned": "Đã gán nhiệm vụ",
+    "failedCreateTask": "Không thể tạo nhiệm vụ",
+    "failedAssignTask": "Không thể gán nhiệm vụ"
   }
 }

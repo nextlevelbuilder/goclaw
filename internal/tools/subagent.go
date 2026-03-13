@@ -153,6 +153,8 @@ var SubagentDenyAlways = []string{
 	"memory_search",
 	"memory_get",
 	"sessions_send",
+	"workspace_write",
+	"workspace_read",
 }
 
 // SubagentDenyLeaf is the additional deny list for subagents at max depth.

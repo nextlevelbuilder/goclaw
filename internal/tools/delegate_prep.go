@@ -50,11 +50,11 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 		team, _ = dm.teamStore.GetTeamForAgent(ctx, sourceAgentID)
 	}
 
-	// Auto-create team task when team_task_id is omitted.
+	// Auto-create team task when team_task_id is omitted (v2 teams only).
 	// This eliminates the two-step create→spawn dance that caused LLM hallucination
 	// (LLM would call create+spawn in parallel, hallucinating the task_id).
 	// Only the team lead can create tasks — members must ask the lead.
-	if team != nil && opts.TeamTaskID == uuid.Nil {
+	if team != nil && opts.TeamTaskID == uuid.Nil && IsTeamV2(team) {
 		if sourceAgentID != team.LeadAgentID {
 			return nil, nil, fmt.Errorf("only the team lead can create team tasks — ask your lead to assign this task")
 		}
@@ -66,12 +66,15 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 			}
 		}
 		taskData := &store.TeamTaskData{
-			TeamID:      team.ID,
-			Subject:     subject,
-			Description: opts.Task,
-			Status:      store.TeamTaskStatusPending,
-			UserID:      store.UserIDFromContext(ctx),
-			Channel:     ToolChannelFromCtx(ctx),
+			TeamID:           team.ID,
+			Subject:          subject,
+			Description:      opts.Task,
+			Status:           store.TeamTaskStatusPending,
+			UserID:           store.UserIDFromContext(ctx),
+			Channel:          ToolChannelFromCtx(ctx),
+			TaskType:         "delegation",
+			CreatedByAgentID: &sourceAgentID,
+			ChatID:           ToolChatIDFromCtx(ctx),
 		}
 		if err := dm.teamStore.CreateTask(ctx, taskData); err != nil {
 			return nil, nil, fmt.Errorf("failed to auto-create team task: %w", err)
@@ -95,7 +98,7 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 		// Delegate/system channels skip this check — they operate cross-context by design.
 		currentUserID := store.UserIDFromContext(ctx)
 		channel := ToolChannelFromCtx(ctx)
-		if channel != "delegate" && channel != "system" &&
+		if channel != ChannelDelegate && channel != ChannelSystem &&
 			teamTask.UserID != "" && currentUserID != "" && teamTask.UserID != currentUserID {
 			return nil, nil, fmt.Errorf(
 				"team_task_id %s belongs to a different context. Omit team_task_id to auto-create a new task.",
@@ -103,7 +106,7 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 		}
 
 		// Guard: reject completed/cancelled tasks — enforce "one task per delegation".
-		if teamTask.Status == store.TeamTaskStatusCompleted || teamTask.Status == "cancelled" {
+		if teamTask.Status == store.TeamTaskStatusCompleted || teamTask.Status == store.TeamTaskStatusCancelled {
 			ownerLabel := "another agent"
 			if teamTask.OwnerAgentKey != "" {
 				ownerLabel = teamTask.OwnerAgentKey
@@ -133,11 +136,13 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 			})
 		}
 
-		// Claim task early so status moves to in_progress immediately.
+		// Claim task early so status moves to in_progress immediately (v2 only).
 		// This prevents the pending reminder from re-triggering spawns for
 		// tasks that are already running. The ClaimTask in autoCompleteTeamTask()
 		// will harmlessly fail (WHERE status='pending' won't match).
-		_ = dm.teamStore.ClaimTask(ctx, opts.TeamTaskID, targetAgent.ID, teamTask.TeamID)
+		if team != nil && IsTeamV2(team) {
+			_ = dm.teamStore.ClaimTask(ctx, opts.TeamTaskID, targetAgent.ID, teamTask.TeamID)
+		}
 	}
 
 	linkCount := dm.ActiveCountForLink(sourceAgentID, targetAgent.ID)
@@ -239,6 +244,45 @@ func (dm *DelegateManager) injectDependencyResults(ctx context.Context, opts *De
 	}
 }
 
+// injectWorkspaceContext lists workspace files and prepends metadata to opts.Context.
+// Uses task.UserID as workspace scope (stable across WS reconnects).
+func (dm *DelegateManager) injectWorkspaceContext(ctx context.Context, task *DelegationTask, opts *DelegateOpts) {
+	if dm.teamStore == nil || task.TeamID == uuid.Nil {
+		return
+	}
+	channel := ""
+	chatID := task.UserID
+	if chatID == "" {
+		chatID = store.UserIDFromContext(ctx)
+	}
+
+	files, err := dm.teamStore.ListWorkspaceFiles(ctx, task.TeamID, channel, chatID)
+	if err != nil || len(files) == 0 {
+		return
+	}
+
+	var lines []string
+	for _, f := range files {
+		tag := ""
+		if f.Pinned {
+			tag = " [pinned]"
+		}
+		for _, t := range f.Tags {
+			tag += " [" + t + "]"
+		}
+		lines = append(lines, fmt.Sprintf("- %s (%s, %d bytes, by %s)%s",
+			f.FileName, f.MimeType, f.SizeBytes, f.UploadedByKey, tag))
+	}
+	wsCtx := "--- Team workspace files (use workspace_read to access) ---\n" +
+		strings.Join(lines, "\n")
+
+	if opts.Context != "" {
+		opts.Context = wsCtx + "\n\n" + opts.Context
+	} else {
+		opts.Context = wsCtx
+	}
+}
+
 // sendProgressNotification sends a grouped "still working" message listing all
 // active delegations from the same source agent. Uses progressSent to dedup —
 // concurrent tickers only send one notification per cycle, then release for next tick.
@@ -248,7 +292,7 @@ func (dm *DelegateManager) sendProgressNotification(task *DelegationTask) {
 	}
 	// Skip internal/delegate channels — only notify on real user-facing channels.
 	if dm.msgBus == nil || task.OriginChannel == "" || task.OriginChatID == "" ||
-		task.OriginChannel == "delegate" || task.OriginChannel == "system" {
+		task.OriginChannel == ChannelDelegate || task.OriginChannel == ChannelSystem {
 		return
 	}
 
@@ -337,7 +381,7 @@ func (dm *DelegateManager) buildRunRequest(task *DelegationTask, message string)
 		SessionKey: task.SessionKey,
 		Message:    message,
 		UserID:     task.UserID,
-		Channel:    "delegate",
+		Channel:    ChannelDelegate,
 		ChatID:     task.OriginChatID,
 		PeerKind:   task.OriginPeerKind,
 		RunID:      fmt.Sprintf("delegate-%s", task.ID),
@@ -354,6 +398,11 @@ func (dm *DelegateManager) buildRunRequest(task *DelegationTask, message string)
 		TeamTaskID:    func() string { if task.TeamTaskID != uuid.Nil { return task.TeamTaskID.String() }; return "" }(),
 		ParentAgentID: task.SourceAgentKey,
 	}
+
+	// Propagate workspace scope to delegate so workspace tools write to the
+	// origin user's workspace, not the "delegate" channel. Scope = userID.
+	req.WorkspaceChannel = ""
+	req.WorkspaceChatID = task.UserID
 
 	// Propagate parent's recent image media to delegate for vision context.
 	if dm.mediaLoader != nil && dm.sessionStore != nil && task.OriginSessionKey != "" {

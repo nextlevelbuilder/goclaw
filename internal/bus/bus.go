@@ -22,16 +22,28 @@ type MessageBus struct {
 
 func New() *MessageBus {
 	return &MessageBus{
-		inbound:     make(chan InboundMessage, 100),
-		outbound:    make(chan OutboundMessage, 100),
+		inbound:     make(chan InboundMessage, 500),
+		outbound:    make(chan OutboundMessage, 500),
 		handlers:    make(map[string]MessageHandler),
 		subscribers: make(map[string]EventHandler),
 	}
 }
 
 // PublishInbound queues an inbound message from a channel.
+// Blocks if the inbound buffer is full.
 func (mb *MessageBus) PublishInbound(msg InboundMessage) {
 	mb.inbound <- msg
+}
+
+// TryPublishInbound attempts to queue an inbound message without blocking.
+// Returns false if the inbound buffer is full (message dropped).
+func (mb *MessageBus) TryPublishInbound(msg InboundMessage) bool {
+	select {
+	case mb.inbound <- msg:
+		return true
+	default:
+		return false
+	}
 }
 
 // ConsumeInbound blocks until an inbound message is available or ctx is cancelled.
@@ -45,8 +57,20 @@ func (mb *MessageBus) ConsumeInbound(ctx context.Context) (InboundMessage, bool)
 }
 
 // PublishOutbound queues an outbound message to a channel.
+// Blocks if the outbound buffer is full.
 func (mb *MessageBus) PublishOutbound(msg OutboundMessage) {
 	mb.outbound <- msg
+}
+
+// TryPublishOutbound attempts to queue an outbound message without blocking.
+// Returns false if the outbound buffer is full (message dropped).
+func (mb *MessageBus) TryPublishOutbound(msg OutboundMessage) bool {
+	select {
+	case mb.outbound <- msg:
+		return true
+	default:
+		return false
+	}
 }
 
 // SubscribeOutbound blocks until an outbound message is available or ctx is cancelled.

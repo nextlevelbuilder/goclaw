@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -125,9 +126,10 @@ func (m *TeamsMethods) handleDelete(ctx context.Context, client *gateway.Client,
 // --- Task List (admin view) ---
 
 type teamsTaskListParams struct {
-	TeamID       string `json:"teamId"`
-	StatusFilter string `json:"statusFilter,omitempty"`
-	UserID       string `json:"userId,omitempty"`
+	TeamID  string `json:"teamId"`
+	Status  string `json:"status"`  // "" = active, "completed", "all"
+	Channel string `json:"channel"` // scope filter
+	ChatID  string `json:"chatId"`  // scope filter
 }
 
 func (m *TeamsMethods) handleTaskList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -154,13 +156,9 @@ func (m *TeamsMethods) handleTaskList(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	statusFilter := params.StatusFilter
-	if statusFilter == "" {
-		statusFilter = store.TeamTaskFilterAll
-	}
-
-	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", statusFilter, params.UserID)
+	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID)
 	if err != nil {
+		slog.Warn("teams.tasks.list failed", "team_id", teamID, "status_filter", params.Status, "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
 	}
@@ -209,13 +207,21 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 		return
 	}
 
-	// Validate settings against teamAccessSettings schema (strip unknown fields)
+	// Validate settings against teamAccessSettings schema (strip unknown fields).
+	// CRITICAL: version field MUST be here — otherwise it gets stripped on save.
 	type teamAccessSettings struct {
+		Version               *int     `json:"version,omitempty"`
 		AllowUserIDs          []string `json:"allow_user_ids"`
 		DenyUserIDs           []string `json:"deny_user_ids"`
 		AllowChannels         []string `json:"allow_channels"`
 		DenyChannels          []string `json:"deny_channels"`
 		ProgressNotifications *bool    `json:"progress_notifications,omitempty"`
+		FollowupIntervalMins  *int     `json:"followup_interval_minutes,omitempty"`
+		FollowupMaxReminders  *int     `json:"followup_max_reminders,omitempty"`
+		EscalationMode        string   `json:"escalation_mode,omitempty"`
+		EscalationActions     []string `json:"escalation_actions,omitempty"`
+		WorkspaceScope        string   `json:"workspace_scope,omitempty"`
+		WorkspaceQuotaMB      *int     `json:"workspace_quota_mb,omitempty"`
 	}
 	raw, _ := json.Marshal(params.Settings)
 	var access teamAccessSettings
@@ -291,6 +297,48 @@ func (m *TeamsMethods) handleKnownUsers(ctx context.Context, client *gateway.Cli
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"users": users,
+	}))
+}
+
+// --- Scopes ---
+
+type teamsScopesParams struct {
+	TeamID string `json:"teamId"`
+}
+
+func (m *TeamsMethods) handleScopes(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	if m.teamStore == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgTeamsNotConfigured)))
+		return
+	}
+
+	var params teamsScopesParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+		return
+	}
+
+	if params.TeamID == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "teamId")))
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "teamId")))
+		return
+	}
+
+	scopes, err := m.teamStore.ListTaskScopes(ctx, teamID)
+	if err != nil {
+		slog.Warn("teams.scopes failed", "team_id", teamID, "error", err)
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
+		return
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"scopes": scopes,
 	}))
 }
 

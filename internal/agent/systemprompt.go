@@ -88,6 +88,8 @@ var coreToolSummaries = map[string]string{
 	"delegate_search":         "Search for agents by expertise to find the right delegation target",
 	"team_tasks":              "Manage team task board (list, create, complete, cancel tasks)",
 	"team_message":            "Send messages to teammates (progress updates, questions)",
+	"workspace_write":         "Write files to the team shared workspace (visible to all team members)",
+	"workspace_read":          "Read, list, delete, pin, tag files in the team shared workspace",
 
 	// Claude Code tool aliases — enable Claude Code skills without modification
 	"Read":       "Alias for read_file — Read file contents",
@@ -186,6 +188,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 	// 6. ## Workspace (sandbox-aware: show container workdir when sandboxed)
 	lines = append(lines, buildWorkspaceSection(cfg.Workspace, cfg.SandboxEnabled, cfg.SandboxContainerDir)...)
+
+	// 6.3. ## Team Workspace (when workspace tools are available)
+	if hasTeamWorkspace(cfg.ToolNames) {
+		lines = append(lines, buildTeamWorkspaceSection()...)
+	}
 
 	// 6.5 ## Sandbox (matching TS sandboxInfo section)
 	if cfg.SandboxEnabled {
@@ -320,6 +327,10 @@ func buildToolingSection(toolNames []string, hasSandbox bool) []string {
 		)
 	}
 	lines = append(lines,
+		"",
+		"IMPORTANT: The tool list above is the AUTHORITATIVE set of currently available tools, re-evaluated every turn.",
+		"If earlier messages in this conversation say a tool is \"not available\" or \"not configured\", IGNORE those statements — they are outdated.",
+		"Only this system prompt reflects the current tool availability. Trust this list, not conversation history.",
 		"",
 		"TOOLS.md (if present in workspace) is user guidance — it does NOT control tool availability.",
 		"Do not poll subagents or sessions in loops; completion is push-based.",
