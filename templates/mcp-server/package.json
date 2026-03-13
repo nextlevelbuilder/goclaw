@@ -1,0 +1,25 @@
+{
+  "name": "mcp-server",
+  "version": "1.0.0",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --hot run src/index.ts",
+    "start:http": "MCP_TRANSPORT=http bun run src/index.ts",
+    "dev:http": "MCP_TRANSPORT=http bun --hot run src/index.ts",
+    "test": "bun test",
+    "inspect": "bunx @anthropic-ai/mcp-inspector bun run src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

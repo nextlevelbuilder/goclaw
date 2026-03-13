@@ -16,7 +16,8 @@
   "subtitle": "Đăng nhập vào bảng điều khiển gateway",
   "tabs": {
     "pairing": "Ghép nối",
-    "token": "Token"
+    "token": "Token",
+    "keycloak": "Keycloak"
   },
   "token": {
     "connect": "Kết nối",
@@ -28,5 +29,10 @@
     "tokenPlaceholder": "Bearer token",
     "userId": "User ID",
     "userIdPlaceholder": "your-user-id"
+  },
+  "keycloak": {
+    "loginButton": "Đăng nhập với Keycloak",
+    "loggingIn": "Đang đăng nhập...",
+    "error": "Xác thực Keycloak thất bại. Vui lòng thử lại."
   }
 }

@@ -1,0 +1,31 @@
+# Keycloak overlay — SSO authentication for the web dashboard.
+#
+# Usage (with Web Dashboard):
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.keycloak.yml -f docker-compose.selfservice.yml up -d --build
+#
+# Keycloak Admin: http://localhost:8080 (admin/admin)
+# After first launch, create realm "goclaw" and client "goclaw-web" (public, redirect: http://localhost:3000/*)
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    networks:
+      - default
+      - shared
+    restart: unless-stopped
+
+  goclaw:
+    depends_on:
+      keycloak:
+        condition: service_started
+    environment:
+      - GOCLAW_KEYCLOAK_URL=http://keycloak:8080
+      - GOCLAW_KEYCLOAK_EXTERNAL_URL=http://localhost:${KEYCLOAK_PORT:-8080}
+      - GOCLAW_KEYCLOAK_REALM=${GOCLAW_KEYCLOAK_REALM:-goclaw}
+      - GOCLAW_KEYCLOAK_CLIENT_ID=${GOCLAW_KEYCLOAK_CLIENT_ID:-goclaw-web}

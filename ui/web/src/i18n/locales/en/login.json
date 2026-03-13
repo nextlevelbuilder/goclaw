@@ -2,7 +2,8 @@
   "subtitle": "Sign in to the gateway dashboard",
   "tabs": {
     "token": "Token",
-    "pairing": "Pairing"
+    "pairing": "Pairing",
+    "keycloak": "Keycloak"
   },
   "token": {
     "userId": "User ID",
@@ -28,5 +29,10 @@
     "waitingForApproval": "Waiting for approval...",
     "cancel": "Cancel",
     "approved": "Access approved! Redirecting..."
+  },
+  "keycloak": {
+    "loginButton": "Login with Keycloak",
+    "loggingIn": "Logging in...",
+    "error": "Keycloak authentication failed. Please try again."
   }
 }

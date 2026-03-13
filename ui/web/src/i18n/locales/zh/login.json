@@ -16,7 +16,8 @@
   "subtitle": "登录网关控制面板",
   "tabs": {
     "pairing": "配对",
-    "token": "令牌"
+    "token": "令牌",
+    "keycloak": "Keycloak"
   },
   "token": {
     "connect": "连接",
@@ -28,5 +29,10 @@
     "tokenPlaceholder": "Bearer token",
     "userId": "用户 ID",
     "userIdPlaceholder": "您的用户 ID"
+  },
+  "keycloak": {
+    "loginButton": "使用 Keycloak 登录",
+    "loggingIn": "登录中...",
+    "error": "Keycloak 认证失败，请重试。"
   }
 }

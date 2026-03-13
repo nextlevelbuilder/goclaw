@@ -108,6 +108,23 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		return
 	}
 
+	// Path 1b: Valid Keycloak JWT → operator
+	if configToken != "" && params.Token != "" && r.server.keycloakHandler != nil {
+		if claims, err := r.server.keycloakHandler.ValidateToken(ctx, params.Token); err == nil {
+			sub, _ := claims["sub"].(string)
+			if sub != "" {
+				client.role = permissions.RoleOperator
+				client.authenticated = true
+				client.userID = sub
+				if params.UserID != "" {
+					client.userID = params.UserID
+				}
+				r.sendConnectResponse(client, req.ID)
+				return
+			}
+		}
+	}
+
 	// Path 2: No token configured → operator (backward compat)
 	if configToken == "" {
 		client.role = permissions.RoleOperator

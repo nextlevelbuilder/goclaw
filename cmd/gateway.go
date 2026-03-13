@@ -657,6 +657,26 @@ func runGateway() {
 	server.SetMessageBus(msgBus)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(cfg.Gateway.Token, pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
+	// Keycloak SSO handler (enabled when GOCLAW_KEYCLOAK_URL is set)
+	if kcURL := os.Getenv("GOCLAW_KEYCLOAK_URL"); kcURL != "" {
+		kcRealm := os.Getenv("GOCLAW_KEYCLOAK_REALM")
+		if kcRealm == "" {
+			kcRealm = "goclaw"
+		}
+		kcClientID := os.Getenv("GOCLAW_KEYCLOAK_CLIENT_ID")
+		if kcClientID == "" {
+			kcClientID = "goclaw-web"
+		}
+		kcCfg := httpapi.KeycloakConfig{
+			URL:         kcURL,
+			ExternalURL: os.Getenv("GOCLAW_KEYCLOAK_EXTERNAL_URL"),
+			Realm:       kcRealm,
+			ClientID:    kcClientID,
+		}
+		server.SetKeycloakHandler(httpapi.NewKeycloakHandler(kcCfg, pgStores.Users))
+		slog.Info("keycloak SSO enabled", "url", kcURL, "realm", kcRealm, "client_id", kcClientID)
+	}
+
 	// contextFileInterceptor is created inside wireExtras.
 	// Declared here so it can be passed to registerAllMethods → AgentsMethods
 	// for immediate cache invalidation on agents.files.set.

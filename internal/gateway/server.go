@@ -35,13 +35,13 @@ type Server struct {
 	tools    *tools.Registry
 	router   *MethodRouter
 
-	policyEngine   *permissions.PolicyEngine
-	pairingService store.PairingStore
-	agentsHandler  *httpapi.AgentsHandler // agent CRUD API
-	skillsHandler  *httpapi.SkillsHandler // skill management API
-	tracesHandler  *httpapi.TracesHandler // LLM trace listing API
-	wakeHandler    *httpapi.WakeHandler  // external wake/trigger API
-	mcpHandler         *httpapi.MCPHandler         // MCP server management API
+	policyEngine            *permissions.PolicyEngine
+	pairingService          store.PairingStore
+	agentsHandler           *httpapi.AgentsHandler           // agent CRUD API
+	skillsHandler           *httpapi.SkillsHandler           // skill management API
+	tracesHandler           *httpapi.TracesHandler           // LLM trace listing API
+	wakeHandler             *httpapi.WakeHandler             // external wake/trigger API
+	mcpHandler              *httpapi.MCPHandler              // MCP server management API
 	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
@@ -57,8 +57,9 @@ type Server struct {
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
 	activityHandler         *httpapi.ActivityHandler         // activity audit log API
 	usageHandler            *httpapi.UsageHandler            // usage analytics API
-	agentStore         store.AgentStore             // for context injection in tools_invoke
-	msgBus             *bus.MessageBus              // for MCP bridge media delivery
+	keycloakHandler         *httpapi.KeycloakHandler         // Keycloak SSO auth API
+	agentStore              store.AgentStore                 // for context injection in tools_invoke
+	msgBus                  *bus.MessageBus                  // for MCP bridge media delivery
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -261,6 +262,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.oauthHandler.RegisterRoutes(mux)
 	}
 
+	// Keycloak SSO endpoints (available when GOCLAW_KEYCLOAK_URL is set)
+	if s.keycloakHandler != nil {
+		s.keycloakHandler.RegisterRoutes(mux)
+	}
+
 	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http.
 	// Only listens on localhost (CLI runs on the same machine).
 	// Protected by gateway token when configured.
@@ -346,10 +352,17 @@ func tokenAuthMiddleware(token string, next http.Handler) http.Handler {
 func (s *Server) Start(ctx context.Context) error {
 	mux := s.BuildMux()
 
+	// Wrap with Keycloak auth middleware: if the Bearer token is a valid Keycloak JWT,
+	// rewrite the Authorization header to the gateway token so per-handler auth checks pass.
+	var handler http.Handler = mux
+	if s.keycloakHandler != nil && s.cfg.Gateway.Token != "" {
+		handler = keycloakAuthMiddleware(s.keycloakHandler, s.cfg.Gateway.Token, mux)
+	}
+
 	addr := fmt.Sprintf("%s:%d", s.cfg.Gateway.Host, s.cfg.Gateway.Port)
 	s.httpServer = &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: handler,
 	}
 
 	slog.Info("gateway starting", "addr", addr)
@@ -365,6 +378,33 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("gateway server: %w", err)
 	}
 	return nil
+}
+
+// keycloakAuthMiddleware validates Keycloak JWTs on incoming HTTP requests.
+// If the Bearer token is a valid Keycloak JWT, it rewrites the Authorization header
+// to use the gateway token, so existing per-handler auth checks pass transparently.
+// This does NOT affect WebSocket (WS has its own connect handler).
+func keycloakAuthMiddleware(kc *httpapi.KeycloakHandler, gatewayToken string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip Keycloak-specific endpoints — they handle KC JWTs directly
+		if strings.HasPrefix(r.URL.Path, "/v1/auth/keycloak/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			token := strings.TrimPrefix(auth, "Bearer ")
+			// Skip if it's already the gateway token
+			if token != gatewayToken {
+				// Try to validate as Keycloak JWT
+				if _, err := kc.ValidateToken(r.Context(), token); err == nil {
+					// Valid KC JWT → rewrite to gateway token
+					r.Header.Set("Authorization", "Bearer "+gatewayToken)
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleWebSocket upgrades HTTP to WebSocket and manages the connection.
@@ -482,6 +522,9 @@ func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) { s.activityHand
 
 // SetUsageHandler sets the usage analytics handler.
 func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.usageHandler = h }
+
+// SetKeycloakHandler sets the Keycloak SSO auth handler.
+func (s *Server) SetKeycloakHandler(h *httpapi.KeycloakHandler) { s.keycloakHandler = h }
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }
