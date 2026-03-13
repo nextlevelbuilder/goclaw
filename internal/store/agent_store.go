@@ -161,6 +161,7 @@ type WorkspaceSharingConfig struct {
 	SharedDM    bool     `json:"shared_dm"`
 	SharedGroup bool     `json:"shared_group"`
 	SharedUsers []string `json:"shared_users,omitempty"`
+	ShareMemory bool     `json:"share_memory"`
 }
 
 // ParseWorkspaceSharing extracts workspace_sharing from other_config JSONB.
@@ -175,7 +176,7 @@ func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
 	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.WS == nil {
 		return nil
 	}
-	if !cfg.WS.SharedDM && !cfg.WS.SharedGroup && len(cfg.WS.SharedUsers) == 0 {
+	if !cfg.WS.SharedDM && !cfg.WS.SharedGroup && len(cfg.WS.SharedUsers) == 0 && !cfg.WS.ShareMemory {
 		return nil
 	}
 	return cfg.WS

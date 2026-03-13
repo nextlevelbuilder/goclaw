@@ -3,8 +3,8 @@
 ## Directory Structure
 
 ```
-.claude/skills/
-└── skill-name/
+~/.goclaw/skills-store/
+└── skill-name/           ← directory name IS the slug (unique DB identifier)
     ├── SKILL.md          (required, <300 lines)
     │   ├── YAML frontmatter (name, description required)
     │   └── Markdown instructions
@@ -26,24 +26,31 @@
 
 ## SKILL.md Frontmatter
 
+Per [Agent Skills specification](https://agentskills.io/specification.md):
+
 ```yaml
 ---
-name: kebab-case-name  # optional namespace: ck:kebab-case-name
-description: Under 200 chars, specific triggers and use cases
-license: Optional
-version: Optional
+name: skill-name          # required — must be kebab-case, match directory name
+description: Under 1024 chars, specific triggers and use cases  # required
+license: Optional         # optional
+compatibility: Optional   # optional, environment requirements
+metadata:                 # optional, arbitrary key-value pairs
+  author: Author Name
+  version: "1.0"
+allowed-tools: "Bash(python3:*) Bash(node:*)"  # optional, experimental
 ---
 ```
+
+**Key:** `name` must be lowercase, kebab-case, and **match the directory name exactly** — GoClaw uses the directory name as the slug (DB key). Changing directory name = new skill.
 
 **Metadata quality** determines auto-activation. See `references/metadata-quality-criteria.md`.
 
 ## Scripts (`scripts/`)
 
 - Deterministic code for repeated tasks
-- **Prefer:** Python or Node.js (Windows-compatible)
-- **Avoid:** Bash scripts
-- **Required:** Tests that pass, `.env.example`, `requirements.txt`/`package.json`
-- **Env hierarchy:** `process.env` > skill `.env` > shared `.env` > global `.env`
+- **Prefer:** Python or Node.js (available in GoClaw runtime)
+- **Avoid:** Bash scripts for complex logic
+- Runtime packages: use `pip3 install <pkg>` or `npm install -g <pkg>` (no sudo needed, persists in `/app/data/.runtime/`)
 - Token-efficient: executed without loading into context
 
 See `references/script-quality-criteria.md` for full criteria.

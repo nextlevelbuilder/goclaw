@@ -90,7 +90,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	// Group writer restrictions: filter context files + inject prompt
-	if l.groupWriterCache != nil && strings.HasPrefix(userID, "group:") {
+	if l.groupWriterCache != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
 		senderID := store.SenderIDFromContext(ctx)
 		writerPrompt, filtered := l.buildGroupWriterPrompt(ctx, userID, senderID, contextFiles)
 		contextFiles = filtered

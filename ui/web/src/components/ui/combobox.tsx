@@ -109,7 +109,7 @@ export function Combobox({
     <div
       ref={dropdownRef}
       style={dropdownStyle}
-      className="bg-popover text-popover-foreground max-h-60 overflow-y-auto rounded-md border p-1 shadow-md"
+      className="bg-popover text-popover-foreground pointer-events-auto max-h-60 overflow-y-auto rounded-md border p-1 shadow-md"
     >
       {filtered.map((o) => (
         <button

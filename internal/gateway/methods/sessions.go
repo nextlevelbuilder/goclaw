@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -13,10 +14,11 @@ import (
 // SessionsMethods handles sessions.list, sessions.preview, sessions.patch, sessions.delete, sessions.reset.
 type SessionsMethods struct {
 	sessions store.SessionStore
+	eventBus bus.EventPublisher
 }
 
-func NewSessionsMethods(sess store.SessionStore) *SessionsMethods {
-	return &SessionsMethods{sessions: sess}
+func NewSessionsMethods(sess store.SessionStore, eventBus bus.EventPublisher) *SessionsMethods {
+	return &SessionsMethods{sessions: sess, eventBus: eventBus}
 }
 
 func (m *SessionsMethods) Register(router *gateway.MethodRouter) {
@@ -120,6 +122,7 @@ func (m *SessionsMethods) handlePatch(ctx context.Context, client *gateway.Clien
 		"ok":  true,
 		"key": params.Key,
 	}))
+	emitAudit(m.eventBus, client, "session.patched", "session", params.Key)
 }
 
 func (m *SessionsMethods) handleDelete(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -138,6 +141,7 @@ func (m *SessionsMethods) handleDelete(ctx context.Context, client *gateway.Clie
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok": true,
 	}))
+	emitAudit(m.eventBus, client, "session.deleted", "session", params.Key)
 }
 
 func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -153,4 +157,5 @@ func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Clien
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok": true,
 	}))
+	emitAudit(m.eventBus, client, "session.reset", "session", params.Key)
 }

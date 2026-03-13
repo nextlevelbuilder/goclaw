@@ -92,6 +92,7 @@ func (m *ConfigMethods) handleApply(ctx context.Context, client *gateway.Client,
 	}
 	m.cfg.ApplyEnvOverrides()
 	m.broadcastChanged()
+	emitAudit(m.eventBus, client, "config.applied", "config", "gateway")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":      true,
@@ -164,6 +165,7 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 	}
 	m.cfg.ApplyEnvOverrides()
 	m.broadcastChanged()
+	emitAudit(m.eventBus, client, "config.patched", "config", "gateway")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":      true,

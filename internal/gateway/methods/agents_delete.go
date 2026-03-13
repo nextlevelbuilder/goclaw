@@ -97,4 +97,5 @@ func (m *AgentsMethods) handleDelete(ctx context.Context, client *gateway.Client
 		"agentId":         params.AgentID,
 		"removedBindings": removedBindings,
 	}))
+	emitAudit(m.eventBus, client, "agent.deleted", "agent", params.AgentID)
 }

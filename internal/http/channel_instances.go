@@ -181,6 +181,7 @@ func (h *ChannelInstancesHandler) handleCreate(w http.ResponseWriter, r *http.Re
 	}
 
 	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "channel_instance.created", "channel_instance", inst.ID.String())
 	writeJSON(w, http.StatusCreated, maskInstanceHTTP(*inst))
 }
 
@@ -222,6 +223,7 @@ func (h *ChannelInstancesHandler) handleUpdate(w http.ResponseWriter, r *http.Re
 	}
 
 	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "channel_instance.updated", "channel_instance", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -251,6 +253,7 @@ func (h *ChannelInstancesHandler) handleDelete(w http.ResponseWriter, r *http.Re
 	}
 
 	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "channel_instance.deleted", "channel_instance", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 

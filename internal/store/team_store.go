@@ -23,16 +23,17 @@ const (
 
 // Team task status constants.
 const (
-	TeamTaskStatusPending    = "pending"
-	TeamTaskStatusInProgress = "in_progress"
-	TeamTaskStatusCompleted  = "completed"
-	TeamTaskStatusBlocked    = "blocked"
-	TeamTaskStatusFailed     = "failed"
+	TeamTaskStatusPending         = "pending"
+	TeamTaskStatusPendingApproval = "pending_approval"
+	TeamTaskStatusInProgress      = "in_progress"
+	TeamTaskStatusCompleted       = "completed"
+	TeamTaskStatusBlocked         = "blocked"
+	TeamTaskStatusFailed          = "failed"
 )
 
 // Team task list filter constants (for ListTasks statusFilter parameter).
 const (
-	TeamTaskFilterActive    = ""          // default: pending + in_progress + blocked
+	TeamTaskFilterActive    = ""          // default: pending + pending_approval + in_progress + blocked
 	TeamTaskFilterCompleted = "completed" // only completed tasks
 	TeamTaskFilterAll       = "all"       // all statuses
 )
@@ -198,6 +199,10 @@ type TeamStore interface {
 	// CompleteTask marks a task as completed and unblocks dependent tasks.
 	// teamID is validated in the WHERE clause to prevent cross-team task completion.
 	CompleteTask(ctx context.Context, taskID, teamID uuid.UUID, result string) error
+
+	// ApproveTask atomically transitions a task from pending_approval to pending.
+	// Returns error if the task is not in pending_approval status or not found.
+	ApproveTask(ctx context.Context, taskID, teamID uuid.UUID) error
 
 	// CancelTask marks a non-completed task as cancelled (status=completed, result="CANCELLED: ..."),
 	// unblocks dependent tasks, and transitions blocked→pending when all blockers are resolved.

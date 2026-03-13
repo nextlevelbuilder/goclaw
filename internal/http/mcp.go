@@ -147,6 +147,7 @@ func (h *MCPHandler) handleCreateServer(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "mcp_server.created", "mcp_server", srv.ID.String())
 	writeJSON(w, http.StatusCreated, srv)
 }
 
@@ -195,6 +196,7 @@ func (h *MCPHandler) handleUpdateServer(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "mcp_server.updated", "mcp_server", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -213,5 +215,6 @@ func (h *MCPHandler) handleDeleteServer(w http.ResponseWriter, r *http.Request) 
 	}
 
 	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "mcp_server.deleted", "mcp_server", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

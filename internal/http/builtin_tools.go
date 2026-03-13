@@ -116,6 +116,7 @@ func (h *BuiltinToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	emitAudit(h.msgBus, r, "builtin_tool.updated", "builtin_tool", name)
 	h.emitCacheInvalidate(name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

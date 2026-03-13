@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { formatTokens, formatCost } from "@/lib/format";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useUsage } from "./hooks/use-usage";
@@ -173,7 +174,9 @@ function AnalyticsDashboard() {
 export function UsagePage() {
   return (
     <UsageFilterProvider>
-      <AnalyticsDashboard />
+      <ErrorBoundary>
+        <AnalyticsDashboard />
+      </ErrorBoundary>
     </UsageFilterProvider>
   );
 }

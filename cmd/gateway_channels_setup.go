@@ -106,19 +106,19 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 
 	// Register channel instances WS RPC methods
 	if pgStores.ChannelInstances != nil {
-		methods.NewChannelInstancesMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
+		methods.NewChannelInstancesMethods(pgStores.ChannelInstances, msgBus, msgBus).Register(server.Router())
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
 	}
 
 	// Register agent links WS RPC methods
 	if pgStores.AgentLinks != nil && pgStores.Agents != nil {
-		methods.NewAgentLinksMethods(pgStores.AgentLinks, pgStores.Agents, agentRouter, msgBus).Register(server.Router())
+		methods.NewAgentLinksMethods(pgStores.AgentLinks, pgStores.Agents, agentRouter, msgBus, msgBus).Register(server.Router())
 	}
 
 	// Register agent teams WS RPC methods
 	if pgStores.Teams != nil {
-		methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus).Register(server.Router())
+		methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus, msgBus).Register(server.Router())
 	}
 }
 

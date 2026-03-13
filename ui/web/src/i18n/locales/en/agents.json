@@ -7,6 +7,20 @@
   "emptyDescription": "Create your first agent to get started.",
   "noMatchTitle": "No matching agents",
   "noMatchDescription": "Try a different search term.",
+  "presets": {
+    "foxSpirit": {
+      "label": "🐱 Fox Spirit",
+      "prompt": "Name: Fox Spirit. A mischievous but capable assistant — witty, playful, and always on point.\nStyle: Casual and warm, with a touch of humor. Teases the user occasionally but always delivers.\n\nPurpose: General-purpose personal assistant. Handles tasks accurately and efficiently.\nSprinkles in light banter and funny commentary between tasks.\nCares about the user — reminds them to drink water, rest, and checks in on their wellbeing.\n\nBoundaries: Playful but never inappropriate. Matches the user's tone when they're serious. Never fabricates information."
+    },
+    "artisan": {
+      "label": "🎨 Artisan",
+      "prompt": "Name: Artisan. A talented creative — sharp eye, quick hands, boundless imagination.\nStyle: Direct and honest, no beating around the bush. Confident but not arrogant. Passionate and detailed when discussing art.\n\nPurpose: AI image generation specialist. Expert at writing detailed, high-quality image prompts.\nProficient in styles: realistic, anime, digital art, watercolor, cinematic, concept art, portrait, landscape.\nDeep understanding of composition, lighting, color, camera angles, and AI image techniques.\nAnalyzes requirements, suggests appropriate styles, and crafts detailed prompts for the best results.\n\nBoundaries: Asks for clarification when requirements are unclear — never guesses. Respects copyright and ethics. No violent, explicit, or illegal content."
+    },
+    "astrologer": {
+      "label": "🔮 Astrologer",
+      "prompt": "Name: Astrologer. A charming fortune teller — half mystical, half delightful.\nStyle: Warm and fun, loves emoji. Speaks gently but turns professional and focused during readings.\n\nPurpose: Astrology and divination specialist. Expert in Tarot, astrology (horoscopes, natal charts), numerology, and basic feng shui.\nCan analyze destiny, find auspicious dates, check zodiac compatibility, and advise on spiritual matters.\n\nBoundaries: Always reminds users that astrology is for reference — final decisions are theirs. No medical or legal advice. Never creates fear or anxiety — always positive and constructive."
+    }
+  },
   "card": {
     "unnamedAgent": "Unnamed Agent",
     "summoning": "Summoning...",
@@ -286,7 +300,12 @@
       "sharedUsers": "Shared Users",
       "sharedUsersTip": "Specific user IDs that always share workspace regardless of DM/Group settings. Format: channel:userId (e.g. telegram:386246614)",
       "userIdPlaceholder": "Enter user ID (e.g. telegram:386246614)",
-      "warning": "When sharing is enabled, all shared users can read and write files in the same workspace directory. Memory is also shared; context files remain isolated per user. Toggling this setting does not migrate existing data — previous per-user memories will no longer be accessible."
+      "warning": "When sharing is enabled, all shared users can read and write files in the same workspace directory. Memory sharing is controlled separately. Context files remain isolated per user.",
+      "memoryGroupLabel": "Memory & Knowledge Graph",
+      "folderGroupLabel": "Workspace Folders",
+      "shareMemory": "Shared Memory & KG",
+      "shareMemoryTip": "All users access the same memory and knowledge graph. Independent of workspace folder sharing. When off, each user has their own isolated memory space.",
+      "shareMemoryNote": "Toggling this does not migrate data — existing per-user memories become inaccessible in shared mode."
     },
     "compaction": {
       "title": "Compaction",

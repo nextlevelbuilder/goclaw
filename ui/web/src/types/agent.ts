@@ -81,6 +81,7 @@ export interface WorkspaceSharingConfig {
   shared_dm?: boolean;
   shared_group?: boolean;
   shared_users?: string[];
+  share_memory?: boolean;
 }
 
 export interface AgentData {

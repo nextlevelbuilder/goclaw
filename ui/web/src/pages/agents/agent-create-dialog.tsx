@@ -25,7 +25,7 @@ import { slugify, isValidSlug } from "@/lib/slug";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { useProviderVerify } from "@/pages/providers/hooks/use-provider-verify";
-import { AGENT_PRESETS } from "./agent-presets";
+import { useAgentPresets } from "./agent-presets";
 
 interface AgentCreateDialogProps {
   open: boolean;
@@ -35,6 +35,7 @@ interface AgentCreateDialogProps {
 
 export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateDialogProps) {
   const { t } = useTranslation("agents");
+  const agentPresets = useAgentPresets();
   const { providers } = useProviders();
   const [agentKey, setAgentKey] = useState("");
   const [keyTouched, setKeyTouched] = useState(false);
@@ -239,7 +240,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
             <div className="space-y-3">
               <Label>{t("create.describeAgent")}</Label>
               <div className="flex flex-wrap gap-1.5">
-                {AGENT_PRESETS.map((preset) => (
+                {agentPresets.map((preset) => (
                   <button
                     key={preset.label}
                     type="button"

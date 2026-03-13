@@ -60,6 +60,12 @@ func (l *Loop) shouldShareWorkspace(userID, peerKind string) bool {
 	return false
 }
 
+// shouldShareMemory returns true if memory/KG should be shared across all users.
+// Independent of workspace folder sharing.
+func (l *Loop) shouldShareMemory() bool {
+	return l.workspaceSharing != nil && l.workspaceSharing.ShareMemory
+}
+
 // InvalidateUserWorkspace clears the cached workspace for a user,
 // forcing the next request to re-read from user_agent_profiles.
 func (l *Loop) InvalidateUserWorkspace(userID string) {

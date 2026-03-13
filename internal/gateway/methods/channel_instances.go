@@ -16,13 +16,14 @@ import (
 
 // ChannelInstancesMethods handles channel instance CRUD via WebSocket RPC.
 type ChannelInstancesMethods struct {
-	store  store.ChannelInstanceStore
-	msgBus *bus.MessageBus
+	store    store.ChannelInstanceStore
+	msgBus   *bus.MessageBus
+	eventBus bus.EventPublisher
 }
 
 // NewChannelInstancesMethods creates a new handler for channel instance management.
-func NewChannelInstancesMethods(s store.ChannelInstanceStore, msgBus *bus.MessageBus) *ChannelInstancesMethods {
-	return &ChannelInstancesMethods{store: s, msgBus: msgBus}
+func NewChannelInstancesMethods(s store.ChannelInstanceStore, msgBus *bus.MessageBus, eventBus bus.EventPublisher) *ChannelInstancesMethods {
+	return &ChannelInstancesMethods{store: s, msgBus: msgBus, eventBus: eventBus}
 }
 
 // Register registers all channel instance RPC methods.
@@ -141,6 +142,7 @@ func (m *ChannelInstancesMethods) handleCreate(ctx context.Context, client *gate
 	}
 
 	m.emitCacheInvalidate()
+	emitAudit(m.eventBus, client, "channel_instance.created", "channel_instance", inst.ID.String())
 	client.SendResponse(protocol.NewOKResponse(req.ID, maskInstance(*inst)))
 }
 
@@ -173,6 +175,7 @@ func (m *ChannelInstancesMethods) handleUpdate(ctx context.Context, client *gate
 	}
 
 	m.emitCacheInvalidate()
+	emitAudit(m.eventBus, client, "channel_instance.updated", "channel_instance", id.String())
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"status": "updated"}))
 }
 
@@ -209,6 +212,7 @@ func (m *ChannelInstancesMethods) handleDelete(ctx context.Context, client *gate
 	}
 
 	m.emitCacheInvalidate()
+	emitAudit(m.eventBus, client, "channel_instance.deleted", "channel_instance", id.String())
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"status": "deleted"}))
 }
 

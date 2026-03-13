@@ -152,6 +152,7 @@ func (h *CustomToolsHandler) handleCreate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	emitAudit(h.msgBus, r, "custom_tool.created", "custom_tool", def.ID.String())
 	h.emitCacheInvalidate(def.ID.String())
 	writeJSON(w, http.StatusCreated, def)
 }
@@ -200,6 +201,7 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	emitAudit(h.msgBus, r, "custom_tool.updated", "custom_tool", id.String())
 	h.emitCacheInvalidate(id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
@@ -218,6 +220,7 @@ func (h *CustomToolsHandler) handleDelete(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	emitAudit(h.msgBus, r, "custom_tool.deleted", "custom_tool", id.String())
 	h.emitCacheInvalidate(id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

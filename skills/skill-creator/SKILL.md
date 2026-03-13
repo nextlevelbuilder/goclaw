@@ -1,10 +1,9 @@
 ---
 name: skill-creator
-description: Create or update Claude skills with eval-driven iteration. Use for new skills, skill scripts, references, benchmark optimization, description optimization, eval testing, extending Claude's capabilities.
+description: Create or update GoClaw agent skills with eval-driven iteration. Use for new skills, skill scripts, references, benchmark optimization, description optimization, eval testing, extending agent capabilities.
 license: Complete terms in LICENSE.txt
-argument-hint: "[skill-name or description]"
 metadata:
-  author: claudekit
+  author: GoClaw
   version: "4.0.0"
 ---
 
@@ -30,7 +29,8 @@ Create effective, eval-driven Claude skills using progressive disclosure and hum
 
 ## Skill Structure
 
-New skills **MUST** be created in CWD: `skills/` directory (workspace root)
+New skills **MUST** be created directly in `~/.goclaw/skills-store/<skill-name>/`.
+After writing SKILL.md and resources, use `publish_skill` to register in the system DB.
 
 ```
 skill-name/
@@ -54,7 +54,7 @@ Follow the process in `references/skill-creation-workflow.md`:
 5. **Write** — Implement resources, write SKILL.md, optimize for benchmarks
 6. **Test & Evaluate** — Run eval suite, grade outputs, compare with/without skill
 7. **Optimize Description** — AI-powered trigger accuracy optimization
-8. **Publish** — `publish_skill(path: "skills/<name>")` to register in system database
+8. **Publish** — `publish_skill(path: "~/.goclaw/skills-store/<name>")` to register in system database
 9. **Package** (optional) — `scripts/package_skill.py <path>` for external distribution
 10. **Iterate** — Generalize from feedback, keep prompts lean
 
@@ -66,7 +66,7 @@ Eval infrastructure for quantitative skill validation:
 3. Draft assertions while runs execute
 4. Grade outputs with grader agent template
 5. Aggregate results: `scripts/aggregate_benchmark.py`
-6. Launch viewer: `scripts/generate_review.py` → interactive HTML review
+6. Launch viewer: `eval-viewer/generate_review.py` → interactive HTML review
 7. Collect human feedback via viewer → `feedback.json`
 
 Details: `references/eval-infrastructure-guide.md`
@@ -132,27 +132,26 @@ Optimization patterns: `references/benchmark-optimization-guide.md`
 | `scripts/aggregate_benchmark.py` | Consolidate runs into summary stats |
 | `scripts/improve_description.py` | AI-powered description optimization |
 | `scripts/run_loop.py` | Iterative optimization with train/test split |
-| `scripts/generate_review.py` | Generate interactive HTML eval viewer |
+| `eval-viewer/generate_review.py` | Generate interactive HTML eval viewer |
 
 ## Publishing to System
 
-After creating and validating a skill, register it in the system database:
+After creating and validating a skill, register it in the GoClaw database:
 
 ```
-publish_skill(path: "skills/my-skill")
+publish_skill(path: "~/.goclaw/skills-store/my-skill")
 ```
 
 This tool:
-- Copies skill files to the managed skills store
-- Registers metadata (name, description, slug) in the database
-- Auto-grants the skill to the creating agent
+- Copies skill files to `~/.goclaw/skills-store/<slug>/<version>/` (Docker: `/app/.goclaw/skills-store/`)
+- Registers metadata (name, slug, description) in the database
 - Scans dependencies and reports any missing ones
-- Generates search embeddings for skill discovery
+- Generates BM25/embedding index for skill discovery
 
-If dependencies are missing, try installing them via `exec` (e.g. `pip install <pkg>`, `npm install <pkg>`).
-If system binaries are missing and you cannot install them, inform the user.
+If dependencies are missing, try installing via `exec` (e.g. `pip3 install <pkg>`, `npm install -g <pkg>`).
+If system binaries are missing and cannot be installed, inform the user.
 
-Re-publishing the same slug updates the existing skill (upsert behavior, increments version).
+Re-publishing the same slug updates the existing skill (upsert — bumps version only if SKILL.md content changes).
 
 ## Validation & Distribution
 
@@ -162,10 +161,4 @@ Re-publishing the same slug updates the existing skill (upsert behavior, increme
 - **Scripts**: `references/script-quality-criteria.md`
 - **Structure**: `references/structure-organization-criteria.md`
 - **Design patterns**: `references/skill-design-patterns.md`
-- **Plugin Marketplaces**: `references/plugin-marketplace-overview.md`
-
-## External References
-
-- [Agent Skills Docs](https://docs.claude.com/en/docs/claude-code/skills.md)
-- [Best Practices](https://docs.claude.com/en/docs/agents-and-tools/agent-skills/best-practices.md)
-- [Plugin Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces.md)
+- **Distribution**: `references/distribution-guide.md`

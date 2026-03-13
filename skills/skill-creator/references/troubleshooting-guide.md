@@ -52,7 +52,7 @@
 
 **Symptom:** Skill loads but MCP calls fail.
 
-1. Verify MCP server is connected (Settings > Extensions)
+1. Verify MCP server is configured in the agent's tool config (Admin UI → Agents → Tools)
 2. Check API keys valid and not expired
 3. Test MCP independently: "Use [Service] MCP to fetch my projects"
 4. Verify skill references correct MCP tool names (case-sensitive)

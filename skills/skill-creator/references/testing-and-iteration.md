@@ -3,9 +3,9 @@
 ## Testing Approaches
 
 Choose rigor based on skill visibility:
-- **Manual testing** — Run queries in Claude.ai, observe behavior. Fast iteration.
-- **Scripted testing** — Automate test cases in Claude Code for repeatable validation.
-- **Programmatic testing** — Build eval suites via skills API for systematic testing.
+- **Manual testing** — Run queries in GoClaw chat, observe behavior. Fast iteration.
+- **Scripted testing** — Automate test cases via eval suite scripts for repeatable validation.
+- **Programmatic testing** — Build eval suites with `evals/evals.json` for systematic grading.
 
 **Pro tip:** Iterate on a single challenging task until Claude succeeds, then extract the winning approach into the skill. Expand to multiple test cases after.
 

@@ -115,7 +115,7 @@ func (m *mockSecretsStore) GetAll(_ context.Context) (map[string]string, error) 
 // --- helper ---
 
 func newTestOAuthHandler(token string) *OAuthHandler {
-	return NewOAuthHandler(token, newMockProviderStore(), newMockSecretsStore(), nil)
+	return NewOAuthHandler(token, newMockProviderStore(), newMockSecretsStore(), nil, nil)
 }
 
 // --- tests ---

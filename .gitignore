@@ -42,3 +42,4 @@ k8s-*/*
 
 # Test credentials (never commit)
 tests/**/creds.json
+ui/simple-saas

@@ -51,7 +51,7 @@ func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy s
 		orderClause = "t.created_at DESC"
 	}
 
-	statusWhere := "AND t.status != 'completed'" // default: active only
+	statusWhere := "AND t.status IN ('pending', 'pending_approval', 'in_progress', 'blocked')" // default: active only
 	switch statusFilter {
 	case store.TeamTaskFilterAll:
 		statusWhere = ""
@@ -173,6 +173,30 @@ func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID
 	}
 
 	return tx.Commit()
+}
+
+func (s *PGTeamStore) ApproveTask(ctx context.Context, taskID, teamID uuid.UUID) error {
+	// Transition pending_approval → pending or blocked (if blockers exist).
+	// Single atomic UPDATE: check blocked_by array to decide target status.
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE team_tasks SET
+		   status = CASE WHEN array_length(blocked_by, 1) > 0 THEN $1 ELSE $2 END,
+		   updated_at = $3
+		 WHERE id = $4 AND status = $5 AND team_id = $6`,
+		store.TeamTaskStatusBlocked, store.TeamTaskStatusPending, time.Now(),
+		taskID, store.TeamTaskStatusPendingApproval, teamID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("task not found, not pending approval, or wrong team")
+	}
+	return nil
 }
 
 func (s *PGTeamStore) CancelTask(ctx context.Context, taskID, teamID uuid.UUID, reason string) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -13,11 +14,12 @@ import (
 
 // ExecApprovalMethods handles exec.approval.list, exec.approval.approve, exec.approval.deny.
 type ExecApprovalMethods struct {
-	manager *tools.ExecApprovalManager
+	manager  *tools.ExecApprovalManager
+	eventBus bus.EventPublisher
 }
 
-func NewExecApprovalMethods(manager *tools.ExecApprovalManager) *ExecApprovalMethods {
-	return &ExecApprovalMethods{manager: manager}
+func NewExecApprovalMethods(manager *tools.ExecApprovalManager, eventBus bus.EventPublisher) *ExecApprovalMethods {
+	return &ExecApprovalMethods{manager: manager, eventBus: eventBus}
 }
 
 func (m *ExecApprovalMethods) Register(router *gateway.MethodRouter) {
@@ -91,6 +93,7 @@ func (m *ExecApprovalMethods) handleApprove(ctx context.Context, client *gateway
 		"resolved": true,
 		"decision": string(decision),
 	}))
+	emitAudit(m.eventBus, client, "exec.approved", "exec", params.ID)
 }
 
 func (m *ExecApprovalMethods) handleDeny(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -121,4 +124,5 @@ func (m *ExecApprovalMethods) handleDeny(ctx context.Context, client *gateway.Cl
 		"resolved": true,
 		"decision": "deny",
 	}))
+	emitAudit(m.eventBus, client, "exec.denied", "exec", params.ID)
 }

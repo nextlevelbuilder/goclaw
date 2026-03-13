@@ -28,7 +28,7 @@ func buildEnsureUserFiles(as store.AgentStore, msgBus *bus.MessageBus) agent.Ens
 		}
 
 		// Auto-add first group member as a file writer (bootstrap the allowlist).
-		if strings.HasPrefix(userID, "group:") {
+		if strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:") {
 			senderID := store.SenderIDFromContext(ctx)
 			if senderID != "" {
 				parts := strings.SplitN(senderID, "|", 2)

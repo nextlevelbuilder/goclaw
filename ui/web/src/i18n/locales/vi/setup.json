@@ -98,5 +98,8 @@
       "requiredFields": "Bắt buộc: {{fields}}",
       "failedCreate": "Không thể tạo channel"
     }
+  },
+  "common": {
+    "back": "Quay lại"
   }
 }

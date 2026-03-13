@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"regexp"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -16,11 +17,12 @@ var cronSlugRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 // CronMethods handles cron.list, cron.create, cron.update, cron.delete, cron.toggle.
 type CronMethods struct {
-	service store.CronStore
+	service  store.CronStore
+	eventBus bus.EventPublisher
 }
 
-func NewCronMethods(service store.CronStore) *CronMethods {
-	return &CronMethods{service: service}
+func NewCronMethods(service store.CronStore, eventBus bus.EventPublisher) *CronMethods {
+	return &CronMethods{service: service, eventBus: eventBus}
 }
 
 func (m *CronMethods) Register(router *gateway.MethodRouter) {
@@ -87,6 +89,7 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"job": job,
 	}))
+	emitAudit(m.eventBus, client, "cron.created", "cron", job.ID)
 }
 
 func (m *CronMethods) handleDelete(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -111,6 +114,7 @@ func (m *CronMethods) handleDelete(ctx context.Context, client *gateway.Client, 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"deleted": true,
 	}))
+	emitAudit(m.eventBus, client, "cron.deleted", "cron", params.JobID)
 }
 
 func (m *CronMethods) handleToggle(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -137,6 +141,7 @@ func (m *CronMethods) handleToggle(ctx context.Context, client *gateway.Client, 
 		"jobId":   params.JobID,
 		"enabled": params.Enabled,
 	}))
+	emitAudit(m.eventBus, client, "cron.toggled", "cron", params.JobID)
 }
 
 func (m *CronMethods) handleStatus(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -172,6 +177,7 @@ func (m *CronMethods) handleUpdate(ctx context.Context, client *gateway.Client, 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"job": job,
 	}))
+	emitAudit(m.eventBus, client, "cron.updated", "cron", jobID)
 }
 
 func (m *CronMethods) handleRun(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -208,6 +214,7 @@ func (m *CronMethods) handleRun(ctx context.Context, client *gateway.Client, req
 		"ok":  true,
 		"ran": true,
 	}))
+	emitAudit(m.eventBus, client, "cron.run", "cron", jobID)
 
 	go func() {
 		if _, _, err := m.service.RunJob(jobID, force); err != nil {

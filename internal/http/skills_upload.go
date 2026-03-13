@@ -185,6 +185,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.skills.BumpVersion()
+	emitAudit(h.msgBus, r, "skill.uploaded", "skill", slug)
 	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size)
 
 	// Scan and check dependencies

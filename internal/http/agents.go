@@ -23,11 +23,7 @@ type AgentsHandler struct {
 	msgBus   *bus.MessageBus  // for cache invalidation events (nil = no events)
 	summoner *AgentSummoner   // LLM-based agent setup (nil = disabled)
 	isOwner  func(string) bool // checks if user ID is a system owner (nil = no owners configured)
-	activity store.ActivityStore // optional audit logging (nil = disabled)
 }
-
-// SetActivityStore sets the optional activity audit store.
-func (h *AgentsHandler) SetActivityStore(a store.ActivityStore) { h.activity = a }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
 // isOwner is a function that checks if a user ID is in GOCLAW_OWNER_IDS (nil = disabled).
@@ -48,21 +44,6 @@ func (h *AgentsHandler) emitCacheInvalidate(kind, key string) {
 	h.msgBus.Broadcast(bus.Event{
 		Name:    protocol.EventCacheInvalidate,
 		Payload: bus.CacheInvalidatePayload{Kind: kind, Key: key},
-	})
-}
-
-// logActivity records an audit log entry if the activity store is set.
-func (h *AgentsHandler) logActivity(r *http.Request, actorID, action, entityType, entityID string) {
-	if h.activity == nil {
-		return
-	}
-	h.activity.Log(r.Context(), &store.ActivityLog{
-		ActorType:  "user",
-		ActorID:    actorID,
-		Action:     action,
-		EntityType: entityType,
-		EntityID:   entityID,
-		IPAddress:  r.RemoteAddr,
 	})
 }
 
@@ -203,7 +184,7 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		go h.summoner.SummonAgent(req.ID, req.Provider, req.Model, description)
 	}
 
-	h.logActivity(r, userID, "agent.created", "agent", req.ID.String())
+	emitAudit(h.msgBus, r, "agent.created", "agent", req.ID.String())
 	writeJSON(w, http.StatusCreated, req)
 }
 
@@ -299,7 +280,7 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.logActivity(r, userID, "agent.updated", "agent", id.String())
+	emitAudit(h.msgBus, r, "agent.updated", "agent", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -332,6 +313,6 @@ func (h *AgentsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	h.emitCacheInvalidate(bus.CacheKindAgent, ag.AgentKey)
 	h.emitCacheInvalidate(bus.CacheKindBootstrap, id.String())
 
-	h.logActivity(r, userID, "agent.deleted", "agent", id.String())
+	emitAudit(h.msgBus, r, "agent.deleted", "agent", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }

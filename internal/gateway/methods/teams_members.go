@@ -93,6 +93,7 @@ func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Clie
 
 	// Invalidate caches for all team members
 	m.invalidateTeamCaches(ctx, teamID)
+	emitAudit(m.eventBus, client, "team.member_added", "team", teamID.String())
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
@@ -183,6 +184,7 @@ func (m *TeamsMethods) handleRemoveMember(ctx context.Context, client *gateway.C
 		}
 	}
 
+	emitAudit(m.eventBus, client, "team.member_removed", "team", teamID.String())
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	// Emit team.member.removed event

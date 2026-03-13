@@ -20,10 +20,11 @@ type AgentLinksMethods struct {
 	agentStore  store.AgentStore
 	agentRouter *agent.Router   // for cache invalidation when links change
 	msgBus      *bus.MessageBus // for pub/sub cache invalidation
+	eventBus    bus.EventPublisher
 }
 
-func NewAgentLinksMethods(linkStore store.AgentLinkStore, agentStore store.AgentStore, agentRouter *agent.Router, msgBus *bus.MessageBus) *AgentLinksMethods {
-	return &AgentLinksMethods{linkStore: linkStore, agentStore: agentStore, agentRouter: agentRouter, msgBus: msgBus}
+func NewAgentLinksMethods(linkStore store.AgentLinkStore, agentStore store.AgentStore, agentRouter *agent.Router, msgBus *bus.MessageBus, eventBus bus.EventPublisher) *AgentLinksMethods {
+	return &AgentLinksMethods{linkStore: linkStore, agentStore: agentStore, agentRouter: agentRouter, msgBus: msgBus, eventBus: eventBus}
 }
 
 func (m *AgentLinksMethods) Register(router *gateway.MethodRouter) {
@@ -181,6 +182,7 @@ func (m *AgentLinksMethods) handleCreate(ctx context.Context, client *gateway.Cl
 		m.agentRouter.InvalidateAgent(targetAgent.AgentKey)
 	}
 	m.emitTeamCacheInvalidate()
+	emitAudit(m.eventBus, client, "agent_link.created", "agent_link", link.ID.String())
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"link": link,
@@ -280,6 +282,7 @@ func (m *AgentLinksMethods) handleUpdate(ctx context.Context, client *gateway.Cl
 	// Invalidate affected agents so AGENTS.md gets regenerated
 	m.invalidateLinkAgents(ctx, linkID)
 	m.emitTeamCacheInvalidate()
+	emitAudit(m.eventBus, client, "agent_link.updated", "agent_link", linkID.String())
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
@@ -349,6 +352,7 @@ func (m *AgentLinksMethods) handleDelete(ctx context.Context, client *gateway.Cl
 		m.invalidateLinkAgentsByID(ctx, link.SourceAgentID, link.TargetAgentID)
 	}
 	m.emitTeamCacheInvalidate()
+	emitAudit(m.eventBus, client, "agent_link.deleted", "agent_link", linkID.String())
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 

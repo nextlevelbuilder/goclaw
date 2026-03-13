@@ -104,11 +104,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			cachedWs = ws
 		}
 		effectiveWorkspace := cachedWs.(string)
-		shared := l.shouldShareWorkspace(req.UserID, req.PeerKind)
-		if !shared {
+		if !l.shouldShareWorkspace(req.UserID, req.PeerKind) {
 			effectiveWorkspace = filepath.Join(effectiveWorkspace, sanitizePathSegment(req.UserID))
-		} else {
-			// Shared workspace → share memory across users too.
+		}
+		if l.shouldShareMemory() {
 			ctx = store.WithSharedMemory(ctx)
 		}
 		if err := os.MkdirAll(effectiveWorkspace, 0755); err != nil {

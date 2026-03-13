@@ -159,4 +159,5 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		"ok":      true,
 		"agentId": params.AgentID,
 	}))
+	emitAudit(m.eventBus, client, "agent.updated", "agent", params.AgentID)
 }

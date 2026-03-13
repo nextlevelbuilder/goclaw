@@ -92,10 +92,12 @@ export function StepModel({ provider, onComplete, onBack, initialModel }: StepMo
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            {onBack ? (
-              <Button variant="ghost" onClick={onBack}>{t("common:back")}</Button>
-            ) : <span />}
+          <div className={`flex ${onBack ? "justify-between" : "justify-end"} gap-2`}>
+            {onBack && (
+              <Button variant="secondary" onClick={onBack}>
+                ← {t("common.back")}
+              </Button>
+            )}
             <div className="flex gap-2">
               <Button
                 variant="outline"

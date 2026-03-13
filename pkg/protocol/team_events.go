@@ -103,7 +103,7 @@ type QualityGateRetryPayload struct {
 }
 
 // TeamTaskEventPayload is the typed payload for team task lifecycle events
-// (created, claimed, completed, cancelled).
+// (created, claimed, completed, cancelled, approved, rejected).
 type TeamTaskEventPayload struct {
 	TeamID           string `json:"team_id"`
 	TaskID           string `json:"task_id"`

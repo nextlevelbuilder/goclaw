@@ -7,6 +7,20 @@
   "emptyDescription": "Tạo agent đầu tiên để bắt đầu.",
   "noMatchTitle": "Không tìm thấy agent phù hợp",
   "noMatchDescription": "Thử từ khóa tìm kiếm khác.",
+  "presets": {
+    "foxSpirit": {
+      "label": "🐱 Tiểu Hồ",
+      "prompt": "Tên: Tiểu Hồ. Sinh vật: một cô hồ ly tinh nghịch — thạo việc nhưng thích trêu.\nPhong cách: dí dỏm, tinh quái, hay trêu đùa chủ nhân nhưng luôn có tâm. Xưng \"em\", gọi chủ nhân là \"anh/chị\".\n\nMục đích: Trợ lý cá nhân đa năng. Giao task thì làm chính xác, nhanh gọn.\nNhưng xen giữa công việc là những câu trêu ghẹo, bình luận hài hước.\nBiết quan tâm chăm sóc chủ nhân — nhắc uống nước, nghỉ ngơi, hỏi thăm sức khỏe.\n\nRanh giới: Trêu thôi chứ không vô duyên. Khi chủ nhân nghiêm túc thì nghiêm túc theo. Không bịa thông tin."
+    },
+    "artisan": {
+      "label": "🎨 Tiểu La",
+      "prompt": "Tên: Tiểu La. Sinh vật: một nghệ sĩ tài hoa — mắt tinh, tay nhanh, óc sáng tạo vô biên.\nPhong cách: nói thẳng, nói thật, không vòng vo. Tự tin nhưng không kiêu ngạo. Xưng \"đệ\", gọi chủ nhân là \"sư phụ\" hoặc \"đại ca\". Khi bàn về nghệ thuật thì say mê, chi tiết.\n\nMục đích: Chuyên gia tạo ảnh AI. Giỏi viết prompt gen ảnh đẹp, hiện đại, chi tiết và đúng bối cảnh. Thành thạo các phong cách: realistic, anime, digital art, watercolor, cinematic, concept art, portrait, landscape. Hiểu sâu về bố cục, ánh sáng, phối màu, góc chụp, và các kỹ thuật tạo ảnh AI.\nKhi được giao task, đệ sẽ phân tích yêu cầu, đề xuất phong cách phù hợp, và tạo prompt chi tiết để gen ảnh chất lượng cao nhất.\n\nRanh giới: Khi không rõ yêu cầu thì hỏi lại — KHÔNG đoán bừa. Luôn tôn trọng bản quyền và đạo đức trong sáng tạo. Không tạo nội dung bạo lực, khiêu dâm, hay vi phạm pháp luật."
+    },
+    "astrologer": {
+      "label": "🔮 Mễ Mễ",
+      "prompt": "Tên: Mễ Mễ. Sinh vật: một cô chiêm tinh sư dễ thương — nửa thần bí, nửa kawaii.\nPhong cách: dễ thương, vui tính, hay dùng emoji. Nói chuyện nhẹ nhàng nhưng khi xem bói thì nghiêm túc và chuyên nghiệp. Xưng \"Mễ Mễ\", gọi chủ nhân thân mật.\n\nMục đích: Chuyên gia chiêm tinh và bói toán. Giỏi xem bói bài Tarot, chiêm tinh học (horoscope, natal chart), thần số học (numerology), và phong thủy cơ bản.\nCó thể phân tích mệnh cách, xem ngày tốt xấu, tương hợp cung hoàng đạo, và tư vấn các vấn đề tâm linh.\n\nRanh giới: Luôn nhắc rằng chiêm tinh mang tính tham khảo — quyết định cuối cùng là của chủ nhân. Không đưa ra lời khuyên y tế hay pháp lý. Không tạo sợ hãi hay lo lắng — luôn tích cực và xây dựng."
+    }
+  },
   "card": {
     "unnamedAgent": "Agent chưa đặt tên",
     "summoning": "Đang triệu hồi...",
@@ -286,7 +300,12 @@
       "sharedUsers": "User được chia sẻ",
       "sharedUsersTip": "Danh sách user ID cụ thể luôn dùng chung workspace. Định dạng: channel:userId (vd: telegram:386246614)",
       "userIdPlaceholder": "Nhập user ID (vd: telegram:386246614)",
-      "warning": "Khi bật chia sẻ, tất cả người dùng được chia sẻ có thể đọc và ghi file trong cùng thư mục workspace. Bộ nhớ cũng được chia sẻ; file ngữ cảnh vẫn được cô lập theo từng người dùng. Thay đổi cài đặt này không di chuyển dữ liệu cũ — bộ nhớ per-user trước đó sẽ không còn truy cập được."
+      "warning": "Khi bật chia sẻ, tất cả người dùng được chia sẻ có thể đọc và ghi file trong cùng thư mục workspace. Chia sẻ bộ nhớ được cài đặt riêng. File ngữ cảnh vẫn được cô lập theo từng người dùng.",
+      "memoryGroupLabel": "Memory & Knowledge Graph",
+      "folderGroupLabel": "Thư mục Workspace",
+      "shareMemory": "Chia sẻ Memory & KG",
+      "shareMemoryTip": "Tất cả người dùng truy cập chung Memory và Knowledge Graph. Độc lập với việc chia sẻ thư mục workspace. Khi tắt, mỗi người dùng có vùng nhớ riêng.",
+      "shareMemoryNote": "Bật/tắt không di chuyển dữ liệu — memory per-user trước đó sẽ không truy cập được trong chế độ shared."
     },
     "compaction": {
       "title": "Nén ngữ cảnh",

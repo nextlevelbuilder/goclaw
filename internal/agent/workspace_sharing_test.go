@@ -78,6 +78,49 @@ func TestShouldShareWorkspace_UnknownPeerKind(t *testing.T) {
 	}
 }
 
+// shouldShareMemory tests — independent of workspace sharing
+
+func TestShouldShareMemory_NilConfig(t *testing.T) {
+	l := &Loop{workspaceSharing: nil}
+	if l.shouldShareMemory() {
+		t.Error("nil config should not share memory")
+	}
+}
+
+func TestShouldShareMemory_Enabled(t *testing.T) {
+	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{ShareMemory: true}}
+	if !l.shouldShareMemory() {
+		t.Error("share_memory=true should share memory")
+	}
+}
+
+func TestShouldShareMemory_DisabledByDefault(t *testing.T) {
+	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{SharedDM: true}}
+	if l.shouldShareMemory() {
+		t.Error("SharedDM without ShareMemory should not share memory")
+	}
+}
+
+func TestShouldShareMemory_IndependentOfWorkspace(t *testing.T) {
+	// share_memory=true but no workspace sharing → memory shared, workspace per-user
+	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{ShareMemory: true}}
+	if !l.shouldShareMemory() {
+		t.Error("share_memory should work without workspace sharing")
+	}
+	if l.shouldShareWorkspace("user1", "direct") {
+		t.Error("workspace should NOT be shared when only share_memory is set")
+	}
+
+	// workspace shared but share_memory=false → workspace shared, memory per-user
+	l2 := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{SharedDM: true, ShareMemory: false}}
+	if l2.shouldShareMemory() {
+		t.Error("memory should NOT be shared when share_memory=false")
+	}
+	if !l2.shouldShareWorkspace("user1", "direct") {
+		t.Error("workspace should be shared when SharedDM=true")
+	}
+}
+
 func TestShouldShareWorkspace_BothEnabled(t *testing.T) {
 	l := &Loop{workspaceSharing: &store.WorkspaceSharingConfig{
 		SharedDM:    true,

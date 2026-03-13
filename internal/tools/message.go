@@ -14,11 +14,15 @@ import (
 
 // MessageTool allows the agent to proactively send messages to channels.
 type MessageTool struct {
-	sender ChannelSender
-	msgBus *bus.MessageBus
+	workspace string
+	restrict  bool
+	sender    ChannelSender
+	msgBus    *bus.MessageBus
 }
 
-func NewMessageTool() *MessageTool { return &MessageTool{} }
+func NewMessageTool(workspace string, restrict bool) *MessageTool {
+	return &MessageTool{workspace: workspace, restrict: restrict}
+}
 
 func (t *MessageTool) SetChannelSender(s ChannelSender) { t.sender = s }
 func (t *MessageTool) SetMessageBus(b *bus.MessageBus)  { t.msgBus = b }
@@ -47,7 +51,7 @@ func (t *MessageTool) Parameters() map[string]any {
 			},
 			"message": map[string]any{
 				"type":        "string",
-				"description": "Message content to send",
+				"description": "Message content to send. To send a file as attachment, use the prefix MEDIA: followed by the file path, e.g. 'MEDIA:docs/report.pdf' or 'MEDIA:/tmp/image.png'. The file will be uploaded as a document/photo/audio depending on its type.",
 			},
 		},
 		"required": []string{"action", "message"},
@@ -82,7 +86,7 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	}
 
 	// Handle MEDIA: prefix — send file as attachment instead of text.
-	if filePath, ok := parseMediaPath(message); ok {
+	if filePath, ok := t.resolveMediaPath(ctx, message); ok {
 		return t.sendMedia(ctx, channel, target, filePath)
 	}
 
@@ -154,28 +158,53 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 
 // isGroupContext returns true if the current context indicates a group conversation.
 func isGroupContext(ctx context.Context) bool {
+	userID := store.UserIDFromContext(ctx)
 	return ToolPeerKindFromCtx(ctx) == "group" ||
-		strings.HasPrefix(store.UserIDFromContext(ctx), "group:")
+		strings.HasPrefix(userID, "group:") ||
+		strings.HasPrefix(userID, "guild:")
 }
 
-// parseMediaPath extracts a file path from a "MEDIA:/path/to/file" string.
-// Only allows absolute paths within os.TempDir() to prevent path traversal.
-func parseMediaPath(s string) (string, bool) {
+// resolveMediaPath extracts and validates a file path from a "MEDIA:path" string.
+// Uses the same workspace-aware path resolution as other filesystem tools:
+//   - When restrict_to_workspace is true: allows workspace dir + /tmp/
+//   - When restrict_to_workspace is false: allows any valid path
+//
+// Relative paths are resolved against the agent's workspace.
+func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, bool) {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "MEDIA:") {
 		return "", false
 	}
-	path := filepath.Clean(strings.TrimSpace(s[len("MEDIA:"):]))
-	if path == "" || path == "." {
+	raw := strings.TrimSpace(s[len("MEDIA:"):])
+	if raw == "" || raw == "." {
 		return "", false
 	}
-	if !filepath.IsAbs(path) {
+
+	workspace := ToolWorkspaceFromCtx(ctx)
+	if workspace == "" {
+		workspace = t.workspace
+	}
+	restrict := effectiveRestrict(ctx, t.restrict)
+
+	// resolvePath handles relative→absolute, symlink, hardlink, boundary checks.
+	resolved, err := resolvePath(raw, workspace, restrict)
+	if err != nil {
+		// When restricted, also allow /tmp/ (used by create_image, create_audio, etc.)
+		if restrict && isInTempDir(raw) {
+			return filepath.Clean(raw), true
+		}
 		return "", false
 	}
-	// Restrict to temp directory to prevent path traversal.
+
+	return resolved, true
+}
+
+// isInTempDir checks whether an absolute path is inside os.TempDir().
+func isInTempDir(path string) bool {
+	cleaned := filepath.Clean(path)
+	if !filepath.IsAbs(cleaned) {
+		return false
+	}
 	tmpDir := filepath.Clean(os.TempDir())
-	if !strings.HasPrefix(path, tmpDir+string(filepath.Separator)) && path != tmpDir {
-		return "", false
-	}
-	return path, true
+	return strings.HasPrefix(cleaned, tmpDir+string(filepath.Separator))
 }

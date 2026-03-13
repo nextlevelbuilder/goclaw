@@ -1,6 +1,9 @@
 package bus
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // MediaFile represents an inbound media file with its MIME type.
 // Used throughout the media pipeline to preserve content type from channel download to storage.
@@ -77,6 +80,7 @@ const (
 	TopicCacheGroupFileWriters = "cache:group_file_writers"
 	TopicCacheSkillGrants      = "cache:skill_grants"
 	TopicCacheMCP              = "cache:mcp"
+	TopicAudit                 = "audit"
 	TopicChannelStreaming      = "channel-streaming"
 	TopicConfigChanged         = "config:changed"
 	TopicPairingRevoked        = "pairing:revoked"
@@ -100,6 +104,18 @@ type AgentStatusChangedPayload struct {
 	AgentID   string `json:"agent_id"`
 	OldStatus string `json:"old_status"`
 	NewStatus string `json:"new_status"`
+}
+
+// AuditEventPayload carries audit log data emitted by handlers.
+// A single subscriber persists these to the activity_logs table.
+type AuditEventPayload struct {
+	ActorType  string          `json:"actor_type"`
+	ActorID    string          `json:"actor_id"`
+	Action     string          `json:"action"`
+	EntityType string          `json:"entity_type"`
+	EntityID   string          `json:"entity_id"`
+	IPAddress  string          `json:"ip_address,omitempty"`
+	Details    json.RawMessage `json:"details,omitempty"`
 }
 
 // CacheInvalidatePayload signals cache layers to evict stale entries.

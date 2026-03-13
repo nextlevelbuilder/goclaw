@@ -100,7 +100,7 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
       if (thinkingLevel && thinkingLevel !== "off") {
         otherBase.thinking_level = thinkingLevel;
       }
-      if (wsSharing.shared_dm || wsSharing.shared_group || (wsSharing.shared_users?.length ?? 0) > 0) {
+      if (wsSharing.shared_dm || wsSharing.shared_group || (wsSharing.shared_users?.length ?? 0) > 0 || wsSharing.share_memory) {
         otherBase.workspace_sharing = wsSharing;
       }
       updates.other_config = Object.keys(otherBase).length > 0 ? otherBase : {};

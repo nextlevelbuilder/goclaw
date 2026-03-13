@@ -4,7 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Combobox } from "@/components/ui/combobox";
-import { Shield, X, AlertTriangle, Plus } from "lucide-react";
+import { Shield, X, AlertTriangle, Plus, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { WorkspaceSharingConfig } from "@/types/agent";
 import { useContacts } from "@/pages/contacts/hooks/use-contacts";
@@ -57,7 +57,7 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
 
   return (
     <section className="space-y-3">
-      {/* Header — prominent with shield icon */}
+      {/* Header */}
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
           <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -68,8 +68,8 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
         </div>
       </div>
 
-      {/* Content card with accent border when active */}
-      <div className={`rounded-lg border p-3 space-y-4 sm:p-4 ${isActive ? "border-amber-400/60 bg-amber-50/30 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}>
+      {/* Content card */}
+      <div className={`rounded-lg border p-3 space-y-4 sm:p-4 ${isActive || value.share_memory ? "border-amber-400/60 bg-amber-50/30 dark:border-amber-500/30 dark:bg-amber-950/10" : ""}`}>
         {/* Security warning */}
         <Alert variant="destructive" className="border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400 [&>svg]:text-amber-600">
           <AlertTriangle className="h-4 w-4" />
@@ -78,21 +78,44 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
           </AlertDescription>
         </Alert>
 
-        {/* DM / Group sharing toggles */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="flex items-center justify-between rounded-md border bg-background p-3">
-            <InfoLabel tip={t(`${s}.sharedDmTip`)}>{t(`${s}.sharedDm`)}</InfoLabel>
+        {/* Memory & Knowledge Graph — independent section */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-violet-700 dark:text-violet-400">
+            <Brain className="h-3.5 w-3.5" />
+            {t(`${s}.memoryGroupLabel`)}
+          </div>
+          <div className="flex items-center justify-between rounded-md border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-800/40 dark:bg-violet-950/20">
+            <InfoLabel tip={t(`${s}.shareMemoryTip`)}>{t(`${s}.shareMemory`)}</InfoLabel>
             <Switch
-              checked={value.shared_dm ?? false}
-              onCheckedChange={(v) => onChange({ ...value, shared_dm: v })}
+              checked={value.share_memory ?? false}
+              onCheckedChange={(v) => onChange({ ...value, share_memory: v })}
             />
           </div>
-          <div className="flex items-center justify-between rounded-md border bg-background p-3">
-            <InfoLabel tip={t(`${s}.sharedGroupTip`)}>{t(`${s}.sharedGroup`)}</InfoLabel>
-            <Switch
-              checked={value.shared_group ?? false}
-              onCheckedChange={(v) => onChange({ ...value, shared_group: v })}
-            />
+          {value.share_memory && (
+            <p className="text-xs text-violet-600 dark:text-violet-400">
+              {t(`${s}.shareMemoryNote`)}
+            </p>
+          )}
+        </div>
+
+        {/* Workspace Folders — DM / Group sharing toggles */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">{t(`${s}.folderGroupLabel`)}</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-md border bg-background p-3">
+              <InfoLabel tip={t(`${s}.sharedDmTip`)}>{t(`${s}.sharedDm`)}</InfoLabel>
+              <Switch
+                checked={value.shared_dm ?? false}
+                onCheckedChange={(v) => onChange({ ...value, shared_dm: v })}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border bg-background p-3">
+              <InfoLabel tip={t(`${s}.sharedGroupTip`)}>{t(`${s}.sharedGroup`)}</InfoLabel>
+              <Switch
+                checked={value.shared_group ?? false}
+                onCheckedChange={(v) => onChange({ ...value, shared_group: v })}
+              />
+            </div>
           </div>
         </div>
 

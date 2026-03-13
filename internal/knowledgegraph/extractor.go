@@ -35,7 +35,7 @@ func NewExtractor(provider providers.Provider, model string, minConfidence float
 // Extract calls the LLM to extract entities and relations from text.
 func (e *Extractor) Extract(ctx context.Context, text string) (*ExtractionResult, error) {
 	// Truncate very long texts to avoid overwhelming the LLM
-	const maxInputChars = 6000
+	const maxInputChars = 12000
 	if len(text) > maxInputChars {
 		text = text[:maxInputChars] + "\n\n[...truncated]"
 	}
@@ -47,7 +47,7 @@ func (e *Extractor) Extract(ctx context.Context, text string) (*ExtractionResult
 		},
 		Model: e.model,
 		Options: map[string]any{
-			"max_tokens":  8192,
+			"max_tokens":  4096,
 			"temperature": 0.0,
 		},
 	}

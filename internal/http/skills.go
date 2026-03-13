@@ -124,6 +124,7 @@ func (h *SkillsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.skills.BumpVersion()
+	emitAudit(h.msgBus, r, "skill.updated", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -146,6 +147,7 @@ func (h *SkillsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.skills.BumpVersion()
+	emitAudit(h.msgBus, r, "skill.deleted", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -371,5 +373,6 @@ func (h *SkillsHandler) handleToggle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.skills.BumpVersion()
+	emitAudit(h.msgBus, r, "skill.toggled", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "enabled": body.Enabled, "status": newStatus})
 }

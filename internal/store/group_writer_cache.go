@@ -80,7 +80,7 @@ func (c *GroupWriterCache) InvalidateAll() {
 // Fail-open: returns nil on DB errors or missing context (cron, subagent).
 func CheckGroupWritePermission(ctx context.Context, cache *GroupWriterCache) error {
 	userID := UserIDFromContext(ctx)
-	if !strings.HasPrefix(userID, "group:") {
+	if !strings.HasPrefix(userID, "group:") && !strings.HasPrefix(userID, "guild:") {
 		return nil // not a group context
 	}
 	agentID := AgentIDFromContext(ctx)

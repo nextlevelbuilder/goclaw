@@ -54,8 +54,8 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				p.path || e.id::text,
 				r.relation_type
 			FROM paths p
-			JOIN kg_relations r ON p.id = r.source_entity_id
-			JOIN kg_entities  e ON r.target_entity_id = e.id
+			JOIN kg_relations r ON p.id = r.source_entity_id AND r.user_id = $3
+			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.user_id = $3
 			WHERE p.depth < $4
 			  AND NOT e.id::text = ANY(p.path)
 		)

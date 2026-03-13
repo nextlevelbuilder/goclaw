@@ -134,6 +134,7 @@ func (h *AgentsHandler) handleSetInstanceFile(w http.ResponseWriter, r *http.Req
 	// Invalidate caches so the agent picks up the change immediately
 	h.emitCacheInvalidate(bus.CacheKindBootstrap, id.String())
 
+	emitAudit(h.msgBus, r, "agent_instance.file_set", "agent_instance", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -184,5 +185,6 @@ func (h *AgentsHandler) handleUpdateInstanceMetadata(w http.ResponseWriter, r *h
 		return
 	}
 
+	emitAudit(h.msgBus, r, "agent_instance.metadata_updated", "agent_instance", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

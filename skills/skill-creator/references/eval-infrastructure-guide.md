@@ -112,18 +112,12 @@ Read `feedback.json`, generalize from patterns:
 - Data processing: +50-80% pass rate, -30-50% time
 - Analysis: +30-50% pass rate
 
-## Environment Adaptations
+## GoClaw Eval Context
 
-### Claude Code (Full)
-- Spawn parallel with+without runs
-- Full benchmarking + viewer
-- Description optimization available
+GoClaw agents run via WebSocket RPC. Eval runs execute within the agent loop (think→act→observe).
 
-### Claude.ai (No subagents)
-- Run tests sequentially
-- Skip baseline runs
-- Skip quantitative benchmarking
-
-### Cowork (No browser)
-- Use `--static <output_path>` for standalone HTML
-- Download feedback.json from viewer
+- Spawn parallel eval runs as subagent tasks (each in its own session)
+- Baseline run: same prompt, skill disabled (`enabled=false` via Admin UI or toggle API)
+- With-skill run: skill enabled (`enabled=true`)
+- Compare outputs via grader agent template
+- Use `eval-viewer/generate_review.py` to generate HTML review locally

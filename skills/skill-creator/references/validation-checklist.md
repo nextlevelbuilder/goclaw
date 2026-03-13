@@ -22,9 +22,9 @@ Quick validation before packaging. Run `scripts/package_skill.py` for automated 
 
 - [ ] Tests exist and pass
 - [ ] Cross-platform (Node.js/Python preferred)
-- [ ] Env vars: respects hierarchy `process.env` > `$HOME/.claude/skills/${SKILL}/.env` (global) > `$HOME/.claude/skills/.env` (global) > `$HOME/.claude/.env` (global) > `./.claude/skills/${SKILL}/.env` (cwd) > `./.claude/skills/.env` (cwd) > `./.claude/.env` (cwd)
-- [ ] Dependencies documented (requirements.txt, .env.example)
-- [ ] Manually tested with real use cases
+- [ ] Runtime packages installed via `pip3 install <pkg>` or `npm install -g <pkg>` (no sudo, persists in `/app/data/.runtime/`)
+- [ ] Dependencies listed in `references/` or SKILL.md so users know what to install
+- [ ] Manually tested with real use cases inside GoClaw exec tool
 
 ## Quality
 

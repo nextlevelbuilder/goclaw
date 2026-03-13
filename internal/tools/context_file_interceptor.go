@@ -247,7 +247,7 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 	// Permission check: protected files in group context require allowlist membership.
 	// Exception: during bootstrap onboarding (BOOTSTRAP.md still exists for this user),
 	// USER.md writes are allowed so the bot can complete the first-run ritual.
-	if strings.HasPrefix(userID, "group:") && protectedFileSet[fileName] {
+	if (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) && protectedFileSet[fileName] {
 		skipCheck := false
 		if fileName == bootstrap.UserFile && b.hasBootstrapFile(ctx, agentID, userID) {
 			skipCheck = true // onboarding in progress — allow USER.md write

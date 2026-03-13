@@ -37,6 +37,7 @@ func (h *MCPHandler) handleCreateRequest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	emitAudit(h.msgBus, r, "mcp_request.created", "mcp_request", req.ID.String())
 	writeJSON(w, http.StatusCreated, req)
 }
 
@@ -80,6 +81,7 @@ func (h *MCPHandler) handleReviewRequest(w http.ResponseWriter, r *http.Request)
 		h.emitCacheInvalidate()
 	}
 
+	emitAudit(h.msgBus, r, "mcp_request.reviewed", "mcp_request", requestID.String())
 	status := "rejected"
 	if req.Approved {
 		status = "approved"

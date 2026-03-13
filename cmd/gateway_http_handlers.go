@@ -28,9 +28,6 @@ func wireHTTP(stores *store.Stores, token string, msgBus *bus.MessageBus, toolsR
 			summoner = httpapi.NewAgentSummoner(stores.Agents, providerReg, msgBus)
 		}
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, token, msgBus, summoner, isOwner)
-		if stores.Activity != nil {
-			agentsH.SetActivityStore(stores.Activity)
-		}
 	}
 
 	if stores != nil && stores.Skills != nil {
@@ -60,6 +57,7 @@ func wireHTTP(stores *store.Stores, token string, msgBus *bus.MessageBus, toolsR
 
 	if stores != nil && stores.Providers != nil {
 		providersH = httpapi.NewProvidersHandler(stores.Providers, stores.ConfigSecrets, token, providerReg, gatewayAddr)
+		providersH.SetMessageBus(msgBus)
 		if stores.MCP != nil {
 			providersH.SetMCPServerLookup(buildMCPServerLookup(stores.MCP))
 		}

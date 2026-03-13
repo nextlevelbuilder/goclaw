@@ -17,15 +17,15 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 
 	// Phase 1: Core methods
 	methods.NewChatMethods(agents, sessStore, server.RateLimiter()).Register(router)
-	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor).Register(router)
-	methods.NewSessionsMethods(sessStore).Register(router)
+	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
+	methods.NewSessionsMethods(sessStore, msgBus).Register(router)
 	methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus).Register(router)
 
 	// Phase 2: Skills (uses SkillStore interface — PG or File)
 	methods.NewSkillsMethods(skillStore).Register(router)
 
 	// Phase 2: Cron (store created externally, shared with gateway)
-	methods.NewCronMethods(cronStore).Register(router)
+	methods.NewCronMethods(cronStore, msgBus).Register(router)
 
 	// Phase 2: Pairing (store created externally, shared with channel manager).
 	// OnApprove callback is set later by the caller after channel manager is created.
@@ -36,7 +36,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	methods.NewUsageMethods(sessStore).Register(router)
 
 	// Phase 2: Exec approval (always registered — returns empty when manager is nil)
-	methods.NewExecApprovalMethods(execApprovalMgr).Register(router)
+	methods.NewExecApprovalMethods(execApprovalMgr, msgBus).Register(router)
 
 	// Phase 2: Send (outbound message routing)
 	methods.NewSendMethods(msgBus).Register(router)

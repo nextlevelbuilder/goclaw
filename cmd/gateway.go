@@ -580,7 +580,7 @@ func runGateway() {
 	toolsReg.Register(tools.NewSessionsSendTool())
 
 	// Message tool (send to channels)
-	toolsReg.Register(tools.NewMessageTool())
+	toolsReg.Register(tools.NewMessageTool(workspace, agentCfg.RestrictToWorkspace))
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
@@ -655,7 +655,7 @@ func runGateway() {
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
-	server.SetOAuthHandler(httpapi.NewOAuthHandler(cfg.Gateway.Token, pgStores.Providers, pgStores.ConfigSecrets, providerRegistry))
+	server.SetOAuthHandler(httpapi.NewOAuthHandler(cfg.Gateway.Token, pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
 	// contextFileInterceptor is created inside wireExtras.
 	// Declared here so it can be passed to registerAllMethods → AgentsMethods
@@ -820,6 +820,43 @@ func runGateway() {
 
 	// Wire channel event subscribers (cache invalidation, pairing, cascade disable)
 	wireChannelEventSubscribers(msgBus, server, pgStores, channelMgr, instanceLoader, pairingMethods, cfg)
+
+	// Audit log subscriber — persists audit events to activity_logs table.
+	// Uses a buffered channel with a single worker to avoid unbounded goroutines.
+	var auditCh chan bus.AuditEventPayload
+	if pgStores.Activity != nil {
+		auditCh = make(chan bus.AuditEventPayload, 256)
+		msgBus.Subscribe(bus.TopicAudit, func(evt bus.Event) {
+			if evt.Name != protocol.EventAuditLog {
+				return
+			}
+			payload, ok := evt.Payload.(bus.AuditEventPayload)
+			if !ok {
+				return
+			}
+			select {
+			case auditCh <- payload:
+			default:
+				slog.Warn("audit.queue_full", "action", payload.Action)
+			}
+		})
+		go func() {
+			for payload := range auditCh {
+				if err := pgStores.Activity.Log(context.Background(), &store.ActivityLog{
+					ActorType:  payload.ActorType,
+					ActorID:    payload.ActorID,
+					Action:     payload.Action,
+					EntityType: payload.EntityType,
+					EntityID:   payload.EntityID,
+					IPAddress:  payload.IPAddress,
+					Details:    payload.Details,
+				}); err != nil {
+					slog.Warn("audit.log_failed", "action", payload.Action, "error", err)
+				}
+			}
+		}()
+		slog.Info("audit subscriber registered")
+	}
 
 	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1000,6 +1037,11 @@ func runGateway() {
 		// Stop channels and cron
 		channelMgr.StopAll(context.Background())
 		pgStores.Cron.Stop()
+
+		// Drain audit log queue before closing DB
+		if auditCh != nil {
+			close(auditCh)
+		}
 
 		// Close provider resources (e.g. Claude CLI temp files)
 		providerRegistry.Close()

@@ -98,5 +98,8 @@
       "requiredFields": "必填项：{{fields}}",
       "failedCreate": "创建Channel失败"
     }
+  },
+  "common": {
+    "back": "返回"
   }
 }

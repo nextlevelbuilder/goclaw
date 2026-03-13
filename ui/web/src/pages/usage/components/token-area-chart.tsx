@@ -38,7 +38,7 @@ export function TokenAreaChart({ data, loading, granularity }: TokenAreaChartPro
       emptyText={t("analytics.noData")}
     >
       <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+        <AreaChart key={chartData.length} data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="inputGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />

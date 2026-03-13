@@ -107,6 +107,8 @@ const (
 	MethodTeamsGet      = "teams.get"
 	MethodTeamsDelete   = "teams.delete"
 	MethodTeamsTaskList      = "teams.tasks.list"
+	MethodTeamsTaskApprove   = "teams.tasks.approve"
+	MethodTeamsTaskReject    = "teams.tasks.reject"
 	MethodTeamsMembersAdd    = "teams.members.add"
 	MethodTeamsMembersRemove = "teams.members.remove"
 	MethodTeamsUpdate        = "teams.update"

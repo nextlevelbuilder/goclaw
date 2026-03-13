@@ -22,8 +22,11 @@ configure_utf8_console()
 
 
 SKILL_TEMPLATE = """---
-name: {skill_name}
+name: {skill_slug}
 description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+metadata:
+  author: GoClaw
+  version: "1.0"
 ---
 
 # {skill_title}
@@ -275,15 +278,16 @@ def init_skill(skill_name, path):
         return None
 
     # Create SKILL.md from template
-    skill_title = title_case_skill_name(skill_slug)
-    skill_content = SKILL_TEMPLATE.format(
-        skill_name=full_name,
-        skill_title=skill_title
-    )
+    skill_content = SKILL_TEMPLATE
 
     skill_md_path = skill_dir / 'SKILL.md'
     try:
-        write_text_utf8(skill_md_path, skill_content)
+        skill_title = title_case_skill_name(skill_slug)
+        skill_content_rendered = skill_content.format(
+            skill_slug=skill_slug,
+            skill_title=skill_title,
+        )
+        write_text_utf8(skill_md_path, skill_content_rendered)
         print("✅ Created SKILL.md")
     except Exception as e:
         print(f"❌ Error creating SKILL.md: {e}")
@@ -317,11 +321,11 @@ def init_skill(skill_name, path):
         return None
 
     # Print next steps
-    print(f"\n✅ Skill '{full_name}' initialized successfully at {skill_dir}")
+    print(f"\n✅ Skill '{full_name}' initialized at {skill_dir}")
     print("\nNext steps:")
-    print("1. Edit SKILL.md to complete the TODO items and update the description")
-    print("2. Customize or delete the example files in scripts/, references/, and assets/")
-    print("3. Run the validator when ready to check the skill structure")
+    print("1. Edit SKILL.md — fill in description, update metadata.author/version")
+    print("2. Customize or delete example files in scripts/, references/, assets/")
+    print("3. Publish: publish_skill(path: \"skills/" + skill_slug + "\")")
 
     return skill_dir
 

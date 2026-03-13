@@ -29,33 +29,24 @@ npm test
 
 Tests must pass. No skipping failed tests.
 
-## Environment Variables
+## Runtime Environment (GoClaw)
 
-Respect hierarchy (first found wins):
+Scripts run inside the GoClaw container via the `exec` tool. Environment is set by the entrypoint:
 
-1. `process.env` (runtime)
-2. `$HOME/.claude/skills/<skill-name>/.env` (skill-specific)
-3. `$HOME/.claude/skills/.env` (shared skills)
-4. `$HOME/.claude/.env` (global)
-5. `./.claude/skills/${SKILL}/.env` (cwd)
-6. `./.claude/skills/.env` (cwd)
-7. `./.claude/.env` (cwd)
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `PYTHONPATH` | `/app/.goclaw/data/.runtime/pip` | Python runtime packages |
+| `PIP_TARGET` | `/app/.goclaw/data/.runtime/pip` | pip install target |
+| `NPM_CONFIG_PREFIX` | `/app/.goclaw/data/.runtime/npm-global` | npm global install dir |
+| `NODE_PATH` | `/usr/local/lib/node_modules:...` | Node module resolution |
 
-**Implementation pattern (Python):**
-
-```python
-from dotenv import load_dotenv
-import os
-
-# Load in reverse order (last loaded wins if not set)
-load_dotenv('$HOME/.claude/.env')
-load_dotenv('$HOME/.claude/skills/.env')
-load_dotenv('$HOME/.claude/skills/my-skill/.env')
-load_dotenv('./.claude/skills/my-skill/.env')
-load_dotenv('./.claude/skills/.env')
-load_dotenv('./.claude/.env')
-# process.env already takes precedence
+**Installing packages at runtime (no sudo needed):**
+```bash
+pip3 install <package>        # installs to PIP_TARGET, persists in volume
+npm install -g <package>      # installs to NPM_CONFIG_PREFIX, persists in volume
 ```
+
+Packages installed persist across tool calls within the same container lifecycle.
 
 ## Documentation Requirements
 

@@ -113,6 +113,7 @@ func (m *PairingMethods) handleApprove(ctx context.Context, client *gateway.Clie
 		m.broadcaster(*protocol.NewEvent(protocol.EventDevicePairRes, map[string]any{"action": "approved"}))
 	}
 
+	emitAudit(m.msgBus, client, "pairing.approved", "pairing", params.Code)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"paired": paired,
 	}))
@@ -141,6 +142,7 @@ func (m *PairingMethods) handleDeny(ctx context.Context, client *gateway.Client,
 		m.broadcaster(*protocol.NewEvent(protocol.EventDevicePairRes, map[string]any{"action": "denied"}))
 	}
 
+	emitAudit(m.msgBus, client, "pairing.denied", "pairing", params.Code)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"denied": true,
 	}))
@@ -191,6 +193,7 @@ func (m *PairingMethods) handleRevoke(ctx context.Context, client *gateway.Clien
 		})
 	}
 
+	emitAudit(m.msgBus, client, "pairing.revoked", "pairing", params.SenderID)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"revoked": true,
 	}))

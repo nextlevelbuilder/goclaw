@@ -163,4 +163,5 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 		"name":      params.Name,
 		"workspace": ws,
 	}))
+	emitAudit(m.eventBus, client, "agent.created", "agent", agentID)
 }
