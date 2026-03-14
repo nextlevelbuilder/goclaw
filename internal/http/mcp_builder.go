@@ -120,7 +120,7 @@ func (h *MCPBuilderHandler) handleCreateProject(w http.ResponseWriter, r *http.R
 
 	// Check if project already exists
 	if _, err := os.Stat(projectDir); err == nil {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": i18n.T(locale, i18n.MsgAlreadyExists, "project", req.Name)})
+		writeJSON(w, http.StatusConflict, map[string]any{"code": "ALREADY_EXISTS", "error": i18n.T(locale, i18n.MsgAlreadyExists, "project", req.Name)})
 		return
 	}
 

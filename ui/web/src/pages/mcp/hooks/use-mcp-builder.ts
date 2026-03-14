@@ -28,7 +28,8 @@ export function useMCPBuilder() {
         return res.id;
       } catch (err: unknown) {
         // 409 = project already exists, treat as success
-        if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 409) {
+        const code = err && typeof err === "object" && "code" in err ? (err as { code: string }).code : "";
+        if (code === "ALREADY_EXISTS") {
           setProjectId(name);
           return name;
         }
