@@ -20,7 +20,8 @@ import (
 // read-only rootfs, no-new-privileges, pids-limit, memory limit).
 // Sources: OWASP Agentic AI Top 10, Claude Code CVE-2025-66032, MITRE ATT&CK,
 // PayloadsAllTheThings, Trail of Bits prompt-injection-to-RCE research.
-var defaultDenyPatterns = []*regexp.Regexp{
+// DefaultDenyPatterns contains dangerous command patterns to deny by default.
+var DefaultDenyPatterns = []*regexp.Regexp{
 	// ── Destructive file operations ──
 	regexp.MustCompile(`\brm\s+-[rf]{1,2}\b`),
 	regexp.MustCompile(`\brm\s+.*--recursive`),
@@ -145,7 +146,7 @@ func NewExecTool(workingDir string, restrict bool) *ExecTool {
 	return &ExecTool{
 		workingDir:   workingDir,
 		timeout:      60 * time.Second,
-		denyPatterns: defaultDenyPatterns,
+		denyPatterns: DefaultDenyPatterns,
 		restrict:     restrict,
 	}
 }
@@ -155,7 +156,7 @@ func NewSandboxedExecTool(workingDir string, restrict bool, mgr sandbox.Manager)
 	return &ExecTool{
 		workingDir:   workingDir,
 		timeout:      300 * time.Second, // sandbox allows longer timeout
-		denyPatterns: defaultDenyPatterns,
+		denyPatterns: DefaultDenyPatterns,
 		restrict:     restrict,
 		sandboxMgr:   mgr,
 	}

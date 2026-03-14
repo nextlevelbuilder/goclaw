@@ -98,12 +98,27 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 	var result ExtractionResult
 	content := strings.TrimSpace(resp.Content)
 	content = stripCodeBlock(content)
+
+	originalContent := content
+	content = sanitizeJSON(content)
+	if content != originalContent {
+		slog.Debug("kg extraction: sanitized JSON output",
+			"original_len", len(originalContent),
+			"sanitized_len", len(content),
+		)
+	}
+
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		preview := content
+		preview := originalContent
 		if len(preview) > 300 {
 			preview = preview[:300] + "..."
 		}
-		slog.Warn("kg extraction: failed to parse LLM response", "error", err, "content_len", len(content), "finish_reason", resp.FinishReason, "preview", preview)
+		slog.Warn("kg extraction: failed to parse LLM response",
+			"error", err,
+			"content_len", len(originalContent),
+			"finish_reason", resp.FinishReason,
+			"preview", preview,
+		)
 		return nil, fmt.Errorf("parse extraction result: %w", err)
 	}
 
@@ -126,6 +141,73 @@ func (e *Extractor) extractChunk(ctx context.Context, text string) (*ExtractionR
 		}
 	}
 	return filtered, nil
+}
+
+// sanitizeJSON fixes common LLM JSON issues while preserving string values.
+// It walks the JSON character-by-character, only applying fixes outside quoted strings:
+//   - Malformed decimals: "0. 85" → "0.85"
+//   - Trailing commas: [1, 2,] → [1, 2]
+func sanitizeJSON(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+
+		if escaped {
+			b.WriteByte(ch)
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' && inString {
+			b.WriteByte(ch)
+			escaped = true
+			continue
+		}
+
+		if ch == '"' {
+			inString = !inString
+			b.WriteByte(ch)
+			continue
+		}
+
+		if inString {
+			b.WriteByte(ch)
+			continue
+		}
+
+		// Fix malformed decimals: "0. 85" → "0.85"
+		if ch == '.' && i > 0 && isDigit(s[i-1]) {
+			b.WriteByte('.')
+			for i+1 < len(s) && s[i+1] == ' ' {
+				i++
+			}
+			continue
+		}
+
+		// Fix trailing commas: skip comma if next non-whitespace is } or ]
+		if ch == ',' {
+			j := i + 1
+			for j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n' || s[j] == '\r') {
+				j++
+			}
+			if j < len(s) && (s[j] == '}' || s[j] == ']') {
+				continue
+			}
+		}
+
+		b.WriteByte(ch)
+	}
+
+	return b.String()
+}
+
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
 }
 
 // splitChunks splits text into chunks at paragraph boundaries (\n\n).
@@ -204,3 +286,4 @@ func stripCodeBlock(s string) string {
 	}
 	return strings.TrimSpace(s)
 }
+

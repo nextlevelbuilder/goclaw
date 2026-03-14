@@ -120,8 +120,8 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
       </nav>
 
       {/* Footer: connection status */}
-      <div className="border-t px-4 py-3">
-        <ConnectionStatus />
+      <div className={cn("border-t py-3", collapsed ? "px-2 flex justify-center" : "px-4")}>
+        <ConnectionStatus collapsed={collapsed} />
       </div>
     </aside>
   );

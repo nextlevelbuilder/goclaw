@@ -64,7 +64,27 @@
     "cohere": "Cohere",
     "perplexity": "Perplexity",
     "chatgpt_oauth": "ChatGPT (OAuth)",
-    "yescale": "YesScale"
+    "yescale": "YesScale",
+    "acp": "ACP"
+  },
+  "acp": {
+    "description": "Điều phối các agent lập trình tương thích ACP dưới dạng tiến trình con. Không cần API key.",
+    "binary": "Tệp nhị phân",
+    "binaryPlaceholder": "claude",
+    "binaryHint": "Đường dẫn hoặc tên tệp nhị phân agent ACP (vd: claude, codex, gemini)",
+    "args": "Tham số",
+    "argsPlaceholder": "--profile goclaw",
+    "argsHint": "Các tham số cách nhau bởi dấu cách truyền vào tệp nhị phân",
+    "idleTTL": "Thời gian chờ",
+    "idleTTLPlaceholder": "5m",
+    "idleTTLHint": "Dừng tiến trình nhàn rỗi sau khoảng thời gian này (vd: 5m, 1h)",
+    "permMode": "Chế độ quyền",
+    "permModeApproveAll": "Chấp nhận tất cả",
+    "permModeApproveReads": "Chỉ chấp nhận đọc",
+    "permModeDenyAll": "Từ chối tất cả",
+    "workDir": "Thư mục làm việc",
+    "workDirPlaceholder": "/tmp/workspace",
+    "workDirHint": "Thư mục làm việc cho tiến trình con agent (tùy chọn)"
   },
   "oauth": {
     "checkingStatus": "Đang kiểm tra trạng thái xác thực...",

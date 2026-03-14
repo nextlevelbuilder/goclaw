@@ -10,7 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ToolNameSelect } from "@/components/shared/tool-name-select";
+import { SkillNameSelect } from "@/components/shared/skill-name-select";
 import type { FieldDef } from "./channel-schemas";
+
+const INHERIT = "__inherit__";
 
 interface ChannelFieldsProps {
   fields: FieldDef[];
@@ -127,6 +131,115 @@ function FieldRenderer({
         </div>
       );
 
+    case "tristate": {
+      // Tri-state: undefined = inherit, value = override.
+      // With options: select with Inherit + custom options (string value).
+      // Without options: select with Inherit/Yes/No (boolean value).
+      const inheritLabel = t("groupOverrides.fields.inherit", { defaultValue: "Inherit" });
+
+      if (field.options) {
+        // String tri-state (e.g. group_policy)
+        const allOptions = [{ value: INHERIT, label: inheritLabel }, ...field.options];
+        const selectValue = (value as string) || INHERIT;
+        return (
+          <div className="grid gap-1.5">
+            <Label>{label}</Label>
+            <Select
+              value={selectValue}
+              onValueChange={(v) => onChange(v === INHERIT ? undefined : v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {allOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.value === INHERIT ? inheritLabel : t(`fieldOptions.${field.key}.${opt.value}`, { defaultValue: opt.label })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {help && <p className="text-xs text-muted-foreground">{help}</p>}
+          </div>
+        );
+      }
+
+      // Boolean tri-state (e.g. require_mention, enabled)
+      const yesLabel = t("groupOverrides.fields.yes", { defaultValue: "Yes" });
+      const noLabel = t("groupOverrides.fields.no", { defaultValue: "No" });
+      const triOptions = [
+        { value: INHERIT, label: inheritLabel },
+        { value: "true", label: yesLabel },
+        { value: "false", label: noLabel },
+      ];
+      const boolToStr = (v: unknown): string => {
+        if (v === undefined || v === null) return INHERIT;
+        return v ? "true" : "false";
+      };
+      const strToBool = (v: string): boolean | undefined => {
+        if (v === INHERIT) return undefined;
+        return v === "true";
+      };
+
+      return (
+        <div className="grid gap-1.5">
+          <Label>{label}</Label>
+          <Select value={boolToStr(value)} onValueChange={(v) => onChange(strToBool(v))}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {triOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
+        </div>
+      );
+    }
+
+    case "textarea":
+      return (
+        <div className="grid gap-1.5">
+          <Label htmlFor={id}>{label}</Label>
+          <Textarea
+            id={id}
+            value={(value as string) ?? ""}
+            onChange={(e) => onChange(e.target.value || undefined)}
+            placeholder={field.placeholder}
+            rows={3}
+          />
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
+        </div>
+      );
+
+    case "tool-select":
+      return (
+        <div className="grid gap-1.5">
+          <Label>{label}</Label>
+          <ToolNameSelect
+            value={(value as string[]) ?? []}
+            onChange={(v) => onChange(v.length > 0 ? v : undefined)}
+            placeholder={field.placeholder}
+          />
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
+        </div>
+      );
+
+    case "skill-select":
+      return (
+        <div className="grid gap-1.5">
+          <Label>{label}</Label>
+          <SkillNameSelect
+            value={(value as string[]) ?? []}
+            onChange={(v) => onChange(v.length > 0 ? v : undefined)}
+            placeholder={field.placeholder}
+          />
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
+        </div>
+      );
+
     case "tags":
       return (
         <div className="grid gap-1.5">
@@ -138,7 +251,7 @@ function FieldRenderer({
               const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean);
               onChange(lines.length > 0 ? lines : undefined);
             }}
-            placeholder={t("groupOverrides.fields.allowedUsersPlaceholder")}
+            placeholder={field.placeholder ?? t("groupOverrides.fields.allowedUsersPlaceholder")}
             rows={3}
             className="font-mono text-sm"
           />

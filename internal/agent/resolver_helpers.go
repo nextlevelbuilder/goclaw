@@ -142,18 +142,24 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		}
 	}
 
-	// Workflow guidance
+	// Workflow guidance — version-aware to match backend behavior.
+	// V2: spawn auto-creates tasks, leads should NOT manually create.
+	// V1: leads must create tasks first, then spawn with team_task_id.
 	sb.WriteString("\n## Workflow\n\n")
 	if selfRole == store.TeamRoleLead {
-		sb.WriteString("**ONE delegation = ONE spawn call.** System auto-creates a tracking task per delegation.\n")
-		sb.WriteString("The `label` parameter sets the task title (keep it short). Tasks auto-complete when delegation finishes.\n\n")
-		sb.WriteString("Rules:\n")
-		sb.WriteString("- Call all spawns first, then briefly tell the user what you delegated\n")
-		sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
-		sb.WriteString("- Parallel results arrive in a single combined notification — do NOT present partial results\n")
-		sb.WriteString("- For dependency chains: `team_tasks` create with blocked_by, then `spawn` with team_task_id\n")
-
 		if isV2 {
+			sb.WriteString("**NEVER use `team_tasks create` before spawning.** The system handles task creation automatically.\n\n")
+			sb.WriteString("WRONG: `team_tasks(action=\"create\", ...)` → `spawn(team_task_id=...)`\n")
+			sb.WriteString("CORRECT: `spawn(agent=\"...\", task=\"...\", label=\"short title\")`\n\n")
+			sb.WriteString("Just call `spawn` — the system auto-creates one tracking task per delegation.\n")
+			sb.WriteString("The `label` parameter sets the auto-created task title. Tasks auto-complete when delegation finishes.\n\n")
+			sb.WriteString("Rules:\n")
+			sb.WriteString("- Each spawn call creates its own task — never pass the same `team_task_id` to multiple spawns\n")
+			sb.WriteString("- Call all spawns first, then briefly tell the user what you delegated\n")
+			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
+			sb.WriteString("- Parallel results arrive in a single combined notification — do NOT present partial results\n")
+			sb.WriteString("- `team_tasks create` is ONLY for dependency chains (tasks with `blocked_by`), then `spawn` with that `team_task_id`\n")
+
 			sb.WriteString("\n## Orchestration Patterns\n\n")
 			sb.WriteString("- **Sequential**: A finishes → review → delegate to B with A's output\n")
 			sb.WriteString("- **Iterative**: A drafts → B reviews → A revises with feedback\n")
@@ -164,6 +170,14 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("\n## Follow-up Reminders\n\n")
 			sb.WriteString("When waiting for user reply: create+claim task, then `await_reply` with text=<reminder>.\n")
 			sb.WriteString("System auto-sends reminders. Call `clear_followup` when user replies.\n")
+		} else {
+			sb.WriteString("Create a task with `team_tasks` first, then `spawn` with that `team_task_id`.\n")
+			sb.WriteString("Tasks auto-complete when delegation finishes.\n\n")
+			sb.WriteString("Rules:\n")
+			sb.WriteString("- Each task should have exactly one spawn (1:1 mapping)\n")
+			sb.WriteString("- Call all spawns first, then briefly tell the user what you delegated\n")
+			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
+			sb.WriteString("- Parallel results arrive in a single combined notification — do NOT present partial results\n")
 		}
 
 		sb.WriteString("\nFor simple questions about team composition, answer directly from the member list above.\n")

@@ -52,7 +52,7 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
   };
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       {/* Read-only fields */}
       <div className="grid gap-1.5">
         <Label>{t("detail.general.name")}</Label>

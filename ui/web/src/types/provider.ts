@@ -6,6 +6,7 @@ export interface ProviderData {
   api_base: string;
   api_key: string; // masked "***" from server
   enabled: boolean;
+  settings?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -17,6 +18,7 @@ export interface ProviderInput {
   api_base?: string;
   api_key?: string;
   enabled?: boolean;
+  settings?: Record<string, unknown>;
 }
 
 export interface ModelInfo {

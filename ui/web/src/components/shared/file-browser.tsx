@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { formatSize, type TreeNode } from "@/lib/file-helpers";
+import { Download } from "lucide-react";
+import { formatSize, sizeBadgeVariant, type TreeNode } from "@/lib/file-helpers";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { FileTreePanel } from "@/components/shared/file-tree";
 import { FileContentPanel } from "@/components/shared/file-viewers";
 
@@ -14,6 +17,28 @@ function useIsMobile(breakpoint = 640) {
   return mobile;
 }
 
+/** File size badge + download button row. */
+function FileActions({
+  size,
+  onDownload,
+}: {
+  size: number;
+  onDownload?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+      <Badge variant={sizeBadgeVariant(size)} className="text-[10px] px-1.5 py-0">
+        {formatSize(size)}
+      </Badge>
+      {onDownload && (
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDownload} title="Download">
+          <Download className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function FileBrowser({
   tree,
   filesLoading,
@@ -22,6 +47,9 @@ export function FileBrowser({
   contentLoading,
   fileContent,
   onDelete,
+  onLoadMore,
+  onDownload,
+  fetchBlob,
   showSize,
 }: {
   tree: TreeNode[];
@@ -31,6 +59,9 @@ export function FileBrowser({
   contentLoading: boolean;
   fileContent: { content: string; path: string; size: number } | null;
   onDelete?: (path: string, isDir: boolean) => void;
+  onLoadMore?: (path: string) => void;
+  onDownload?: (path: string) => void;
+  fetchBlob?: (path: string) => Promise<Blob>;
   showSize?: boolean;
 }) {
   const isMobile = useIsMobile();
@@ -74,7 +105,7 @@ export function FileBrowser({
       <div className="flex-1 flex flex-col border rounded-md overflow-hidden min-h-0">
         {mobileShowTree ? (
           <div className="flex-1 overflow-y-auto bg-muted/20 py-1">
-            <FileTreePanel tree={tree} filesLoading={filesLoading} activePath={activePath} onSelect={handleSelect} onDelete={onDelete} showSize={showSize} />
+            <FileTreePanel tree={tree} filesLoading={filesLoading} activePath={activePath} onSelect={handleSelect} onDelete={onDelete} onLoadMore={onLoadMore} showSize={showSize} />
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -89,12 +120,12 @@ export function FileBrowser({
               {fileContent && (
                 <>
                   <span className="font-mono truncate">{fileContent.path}</span>
-                  <span className="shrink-0 ml-auto">{formatSize(fileContent.size)}</span>
+                  <FileActions size={fileContent.size} onDownload={onDownload ? () => onDownload(fileContent.path) : undefined} />
                 </>
               )}
             </div>
             <div className="flex-1 overflow-auto p-3 min-h-0">
-              <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} />
+              <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} fetchBlob={fetchBlob} onDownload={onDownload} />
             </div>
           </div>
         )}
@@ -106,7 +137,7 @@ export function FileBrowser({
   return (
     <div ref={containerRef} className="flex-1 flex border rounded-md overflow-hidden min-h-0">
       <div className="overflow-y-auto bg-muted/20 py-1 shrink-0" style={{ width: treeWidth }}>
-        <FileTreePanel tree={tree} filesLoading={filesLoading} activePath={activePath} onSelect={handleSelect} onDelete={onDelete} showSize={showSize} />
+        <FileTreePanel tree={tree} filesLoading={filesLoading} activePath={activePath} onSelect={handleSelect} onDelete={onDelete} onLoadMore={onLoadMore} showSize={showSize} />
       </div>
 
       <div
@@ -118,11 +149,11 @@ export function FileBrowser({
         {fileContent && (
           <div className="flex items-center justify-between text-xs text-muted-foreground border-b px-3 py-2 shrink-0">
             <span className="font-mono truncate">{fileContent.path}</span>
-            <span className="shrink-0 ml-2">{formatSize(fileContent.size)}</span>
+            <FileActions size={fileContent.size} onDownload={onDownload ? () => onDownload(fileContent.path) : undefined} />
           </div>
         )}
         <div className="flex-1 overflow-auto p-3 min-h-0">
-          <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} />
+          <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} fetchBlob={fetchBlob} onDownload={onDownload} />
         </div>
       </div>
     </div>

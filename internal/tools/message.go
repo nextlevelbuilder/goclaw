@@ -189,9 +189,13 @@ func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, b
 	// resolvePath handles relative→absolute, symlink, hardlink, boundary checks.
 	resolved, err := resolvePath(raw, workspace, restrict)
 	if err != nil {
-		// When restricted, also allow /tmp/ (used by create_image, create_audio, etc.)
-		if restrict && isInTempDir(raw) {
-			return filepath.Clean(raw), true
+		// When restricted, also allow /tmp/ paths (used by create_image, create_audio, etc.)
+		// But reject paths that are siblings of the workspace — these are likely traversal
+		// attacks where workspace/../X resolves inside /tmp/ because workspace itself is in /tmp/.
+		cleaned := filepath.Clean(raw)
+		wsParent := filepath.Dir(filepath.Clean(workspace))
+		if restrict && isInTempDir(cleaned) && !isPathInside(cleaned, wsParent) {
+			return cleaned, true
 		}
 		return "", false
 	}

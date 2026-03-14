@@ -90,7 +90,7 @@ func (t *SpawnTool) Parameters() map[string]any {
 		}
 		props["team_task_id"] = map[string]any{
 			"type":        "string",
-			"description": "Team task ID to auto-complete when task finishes (for team workflows)",
+			"description": "Omit to auto-create a task (recommended). Only set for dependency chains with blocked_by tasks.",
 		}
 		props["estimated_duration"] = map[string]any{
 			"type":        "number",

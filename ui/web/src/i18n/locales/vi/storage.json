@@ -2,6 +2,9 @@
   "title": "Lưu trữ",
   "description": "Trình duyệt tệp workspace",
   "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "Dung lượng lưu trữ được cache trong 60 phút",
+  "unsupportedFile": "Loại tệp này chưa được hỗ trợ xem trước",
+  "download": "Tải về",
   "delete": {
     "fileTitle": "Xóa tệp",
     "folderTitle": "Xóa thư mục",

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
-import { X, Save, Check, Bell, ShieldAlert, Clock, Info } from "lucide-react";
+import { X, Save, Check, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import type { TeamData, TeamAccessSettings, EscalationMode, EscalationAction } from "@/types/team";
@@ -77,6 +77,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [escalationActions, setEscalationActions] = useState<EscalationAction[]>(initial.escalation_actions ?? []);
   const [followupInterval, setFollowupInterval] = useState<number>(initial.followup_interval_minutes ?? 30);
   const [followupMaxReminders, setFollowupMaxReminders] = useState<number>(initial.followup_max_reminders ?? 0);
+  const [workspaceScope, setWorkspaceScope] = useState<string>(initial.workspace_scope ?? "isolated");
   const isTeamV2 = version >= 2;
 
   const [saving, setSaving] = useState(false);
@@ -102,6 +103,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setEscalationActions(s.escalation_actions ?? []);
     setFollowupInterval(s.followup_interval_minutes ?? 30);
     setFollowupMaxReminders(s.followup_max_reminders ?? 0);
+    setWorkspaceScope(s.workspace_scope ?? "isolated");
     setSaved(false);
     setError(null);
   }, [team]);
@@ -123,6 +125,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       }
       if (followupInterval !== 30) settings.followup_interval_minutes = followupInterval;
       if (followupMaxReminders !== 0) settings.followup_max_reminders = followupMaxReminders;
+      if (workspaceScope === "shared") settings.workspace_scope = "shared";
       if (version >= 2) settings.version = version;
       await updateTeamSettings(teamId, settings);
       setSaved(true);
@@ -133,7 +136,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     } finally {
       setSaving(false);
     }
-  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, progressNotifications, escalationMode, escalationActions, followupInterval, followupMaxReminders, updateTeamSettings, onSaved, t]);
+  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, progressNotifications, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
@@ -271,6 +274,52 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {t("settings.progressNotificationsHint")}
               </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Workspace Scope */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">{t("settings.workspace")}</h3>
+        <div className="rounded-lg border bg-gradient-to-r from-emerald-500/5 to-teal-500/5 p-4">
+          <div className="flex items-start gap-4">
+            <div className="rounded-lg bg-emerald-500/10 p-2.5 text-emerald-600 dark:text-emerald-400">
+              <FolderSync className="h-5 w-5" />
+            </div>
+            <div className="flex-1 space-y-3">
+              <div className="space-y-1">
+                <span className="text-sm font-semibold">{t("settings.workspaceScope")}</span>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {t("settings.workspaceScopeHint")}
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {([
+                  { value: "isolated", Icon: FolderLock, labelKey: "workspaceScopeIsolated", descKey: "workspaceScopeIsolatedDesc" },
+                  { value: "shared", Icon: FolderSync, labelKey: "workspaceScopeShared", descKey: "workspaceScopeSharedDesc" },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setWorkspaceScope(opt.value)}
+                    className={
+                      "flex items-start gap-3 rounded-lg border p-3 text-left transition-colors " +
+                      (workspaceScope === opt.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50")
+                    }
+                  >
+                    <opt.Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div>
+                      <div className="text-sm font-medium">{t(`settings.${opt.labelKey}`)}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {t(`settings.${opt.descKey}`)}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

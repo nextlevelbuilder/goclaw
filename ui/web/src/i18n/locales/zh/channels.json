@@ -240,6 +240,7 @@
     "groupWildcard": "* (通配符)",
     "addGroupPlaceholder": "聊天 ID（例如 -100123456）或 *",
     "addGroup": "添加群组",
+    "knownGroups": "已知群组",
     "topicOverrides": "话题覆盖",
     "topicLabel": "话题: {{id}}",
     "addTopicPlaceholder": "话题线程 ID",

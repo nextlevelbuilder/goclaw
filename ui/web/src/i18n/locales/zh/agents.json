@@ -193,7 +193,7 @@
     "revoke": "撤销"
   },
   "links": {
-    "teamsHint": "对于具有任务跟踪和质量控制的多Agent协作，请考虑使用Agent Team。Agent链接最适合两个Agent之间的简单一对一委派。",
+    "teamsHint": "Agent Links 即将移除。请使用 Agent Teams 进行多代理协作——它提供任务跟踪、共享工作区和质量控制，且设置更简单。",
     "createLink": "创建链接",
     "targetAgent": "目标Agent",
     "selectAgent": "选择或搜索Agent...",

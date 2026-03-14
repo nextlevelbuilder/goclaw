@@ -2,11 +2,15 @@ package tools
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -14,7 +18,7 @@ import (
 
 // Matching TS src/agents/tools/web-fetch.ts constants.
 const (
-	defaultFetchMaxChars    = 50000
+	defaultFetchMaxChars    = 60000
 	defaultFetchMaxRedirect = 3
 	defaultErrorMaxChars    = 4000
 	fetchTimeoutSeconds     = 30
@@ -114,7 +118,7 @@ func (t *WebFetchTool) isDomainBlocked(hostname string) bool {
 func (t *WebFetchTool) Name() string { return "web_fetch" }
 
 func (t *WebFetchTool) Description() string {
-	return "Fetch a URL and extract its content. Supports HTML (converted to markdown/text), JSON, and plain text. Includes SSRF protection."
+	return "Fetch a URL and extract its content. Supports HTML (converted to markdown/text), JSON, and plain text. If content exceeds the character limit, full content is saved to a temp file — use shell or read_file to access it. Includes SSRF protection."
 }
 
 func (t *WebFetchTool) Parameters() map[string]any {
@@ -297,14 +301,7 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 		extractor = "raw"
 	}
 
-	// Truncate
-	truncated := false
-	if len(text) > maxChars {
-		text = text[:maxChars]
-		truncated = true
-	}
-
-	// Format response metadata + content (boundary wrapping handled by wrapExternalContent in Execute)
+	// Format response metadata
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("URL: %s\n", finalURL))
 	if finalURL != rawURL {
@@ -312,12 +309,60 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 	}
 	sb.WriteString(fmt.Sprintf("Status: %d\n", resp.StatusCode))
 	sb.WriteString(fmt.Sprintf("Extractor: %s\n", extractor))
-	if truncated {
-		sb.WriteString(fmt.Sprintf("Truncated: true (limit: %d chars)\n", maxChars))
+
+	// If content exceeds maxChars, save full content to a temp file
+	if len(text) > maxChars {
+		tmpPath, writeErr := writeWebFetchTempFile(text, finalURL)
+		if writeErr != nil {
+			// Fallback: truncate inline if temp file write fails
+			slog.Warn("web_fetch: failed to write temp file, falling back to truncation", "error", writeErr)
+			text = text[:maxChars]
+			sb.WriteString(fmt.Sprintf("Truncated: true (limit: %d chars)\n", maxChars))
+			sb.WriteString(fmt.Sprintf("Length: %d\n", len(text)))
+			sb.WriteString("\n")
+			sb.WriteString(text)
+		} else {
+			sb.WriteString(fmt.Sprintf("Content-Length: %d chars (exceeds %d char limit)\n", len(text), maxChars))
+			sb.WriteString(fmt.Sprintf("Full-Content-File: %s\n", tmpPath))
+			sb.WriteString(fmt.Sprintf("Length: %d\n", maxChars))
+			sb.WriteString("\n")
+			sb.WriteString(text[:maxChars])
+			sb.WriteString(fmt.Sprintf("\n\n[Content truncated at %d chars. Full content (%d chars) saved to: %s — use shell/read_file to access the rest.]",
+				maxChars, len(text), tmpPath))
+		}
+	} else {
+		sb.WriteString(fmt.Sprintf("Length: %d\n", len(text)))
+		sb.WriteString("\n")
+		sb.WriteString(text)
 	}
-	sb.WriteString(fmt.Sprintf("Length: %d\n", len(text)))
-	sb.WriteString("\n")
-	sb.WriteString(text)
 
 	return sb.String(), nil
+}
+
+// writeWebFetchTempFile saves fetched content to a temp file with security sanitization.
+// Returns the file path. The file is created in os.TempDir() with a random name
+// to prevent path prediction attacks.
+func writeWebFetchTempFile(content, sourceURL string) (string, error) {
+	// Generate cryptographically random filename to prevent path prediction
+	var randBytes [8]byte
+	if _, err := rand.Read(randBytes[:]); err != nil {
+		return "", fmt.Errorf("generate random name: %w", err)
+	}
+	filename := fmt.Sprintf("web-fetch-%s.txt", hex.EncodeToString(randBytes[:]))
+	tmpPath := filepath.Join(os.TempDir(), filename)
+
+	// Sanitize content: strip any potential prompt injection markers
+	sanitized := sanitizeMarkers(content)
+
+	// Write with restrictive permissions (owner read/write only)
+	if err := os.WriteFile(tmpPath, []byte(sanitized), 0600); err != nil {
+		return "", fmt.Errorf("write temp file: %w", err)
+	}
+
+	slog.Info("web_fetch: content saved to temp file",
+		"path", tmpPath,
+		"chars", len(sanitized),
+		"source_url", sourceURL,
+	)
+	return tmpPath, nil
 }

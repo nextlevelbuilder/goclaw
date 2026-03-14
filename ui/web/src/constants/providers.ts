@@ -26,4 +26,5 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: "ollama", label: "Ollama (Local)", apiBase: "http://localhost:11434/v1", placeholder: "" },
   { value: "ollama_cloud", label: "Ollama Cloud", apiBase: "https://ollama.com/v1", placeholder: "" },
   { value: "claude_cli", label: "Claude CLI (Local)", apiBase: "", placeholder: "" },
+  { value: "acp", label: "ACP Agent (Subprocess)", apiBase: "", placeholder: "claude" },
 ];

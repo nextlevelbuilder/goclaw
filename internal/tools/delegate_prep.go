@@ -116,6 +116,18 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 				opts.TeamTaskID, teamTask.Status, ownerLabel)
 		}
 
+		// Guard: reject in-progress tasks — prevent multiple delegations on the same task.
+		// This catches the pattern where an LLM reuses a team_task_id across parallel spawns.
+		if teamTask.Status == store.TeamTaskStatusInProgress {
+			ownerLabel := "another delegation"
+			if teamTask.OwnerAgentKey != "" {
+				ownerLabel = teamTask.OwnerAgentKey
+			}
+			return nil, nil, fmt.Errorf(
+				"team_task_id %s is already in progress (claimed by %q). Each spawn needs its own task — omit team_task_id to auto-create.",
+				opts.TeamTaskID, ownerLabel)
+		}
+
 		if team != nil {
 			if teamTask.TeamID != team.ID {
 				return nil, nil, fmt.Errorf("team_task_id does not belong to your team")
@@ -141,7 +153,10 @@ func (dm *DelegateManager) prepareDelegation(ctx context.Context, opts DelegateO
 		// tasks that are already running. The ClaimTask in autoCompleteTeamTask()
 		// will harmlessly fail (WHERE status='pending' won't match).
 		if team != nil && IsTeamV2(team) {
-			_ = dm.teamStore.ClaimTask(ctx, opts.TeamTaskID, targetAgent.ID, teamTask.TeamID)
+			if err := dm.teamStore.ClaimTask(ctx, opts.TeamTaskID, targetAgent.ID, teamTask.TeamID); err != nil {
+				slog.Warn("delegate: task claim race — another delegation may have claimed this task",
+					"task_id", opts.TeamTaskID, "target", opts.TargetAgentKey, "error", err)
+			}
 		}
 	}
 

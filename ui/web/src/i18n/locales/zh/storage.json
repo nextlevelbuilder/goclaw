@@ -2,6 +2,9 @@
   "title": "存储",
   "description": "工作区文件浏览器",
   "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "存储大小缓存60分钟",
+  "unsupportedFile": "此文件类型不支持预览",
+  "download": "下载",
   "delete": {
     "fileTitle": "删除文件",
     "folderTitle": "删除文件夹",

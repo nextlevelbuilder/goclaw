@@ -193,7 +193,7 @@
     "revoke": "Thu hồi"
   },
   "links": {
-    "teamsHint": "Để cộng tác đa agent với theo dõi nhiệm vụ và kiểm soát chất lượng, hãy cân nhắc sử dụng Nhóm agent thay thế. Liên kết agent phù hợp nhất cho ủy quyền đơn giản 1-1 giữa hai agent.",
+    "teamsHint": "Agent Links sẽ sớm bị gỡ bỏ. Vui lòng sử dụng Agent Teams để cộng tác đa agent — hỗ trợ quản lý nhiệm vụ, workspace chung và kiểm soát chất lượng trong một hệ thống đơn giản hơn.",
     "createLink": "Tạo liên kết",
     "targetAgent": "Agent đích",
     "selectAgent": "Chọn hoặc tìm kiếm agent...",

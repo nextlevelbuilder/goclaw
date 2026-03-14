@@ -30,6 +30,7 @@ const (
 	ProviderZaiCoding       = "zai_coding"
 	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
 	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
+	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
 )
 
 // ValidProviderTypes lists all accepted provider_type values.
@@ -55,6 +56,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderZaiCoding:       true,
 	ProviderOllama:          true,
 	ProviderOllamaCloud:     true,
+	ProviderACP:             true,
 }
 
 // LLMProviderData represents an LLM provider configuration.

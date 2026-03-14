@@ -45,6 +45,12 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// ACP agents don't need an API key — return hardcoded models
+	if p.ProviderType == store.ProviderACP {
+		writeJSON(w, http.StatusOK, map[string]any{"models": acpModels()})
+		return
+	}
+
 	if p.APIKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "API key")})
 		return
@@ -236,6 +242,15 @@ func claudeCLIModels() []ModelInfo {
 		{ID: "sonnet", Name: "Sonnet"},
 		{ID: "opus", Name: "Opus"},
 		{ID: "haiku", Name: "Haiku"},
+	}
+}
+
+// acpModels returns the model aliases for ACP-compatible coding agents.
+func acpModels() []ModelInfo {
+	return []ModelInfo{
+		{ID: "claude", Name: "Claude"},
+		{ID: "codex", Name: "Codex"},
+		{ID: "gemini", Name: "Gemini"},
 	}
 }
 

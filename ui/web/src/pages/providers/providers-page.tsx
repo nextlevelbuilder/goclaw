@@ -29,6 +29,7 @@ const typeBadge: Record<string, { label: string; variant: "default" | "secondary
   perplexity: { label: "Perplexity", variant: "secondary" },
   chatgpt_oauth: { label: "ChatGPT (OAuth)", variant: "default" },
   yescale: { label: "YesScale", variant: "secondary" },
+  acp: { label: "ACP", variant: "outline" },
 };
 
 export function ProvidersPage() {

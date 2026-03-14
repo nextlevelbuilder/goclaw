@@ -126,6 +126,7 @@ export function ChannelDetailPage({ instanceId, onBack }: ChannelDetailPageProps
               <ChannelGroupsTab
                 instance={instance}
                 onUpdate={updateInstance}
+                listManagerGroups={listManagerGroups}
               />
             </TabsContent>
           )}

@@ -2,6 +2,9 @@
   "title": "Storage",
   "description": "Workspace file browser",
   "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "Storage size is cached for 60 minutes",
+  "unsupportedFile": "This file type is not supported for preview",
+  "download": "Download",
   "delete": {
     "fileTitle": "Delete file",
     "folderTitle": "Delete folder",

@@ -262,7 +262,7 @@ export function ChannelManagersTab({
   };
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="space-y-5">
       <p className="text-sm text-muted-foreground">
         {t("detail.managers.description")}
       </p>

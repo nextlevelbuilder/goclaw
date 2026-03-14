@@ -240,6 +240,7 @@
     "groupWildcard": "* (ký tự đại diện)",
     "addGroupPlaceholder": "ID cuộc trò chuyện (vd: -100123456) hoặc *",
     "addGroup": "Thêm nhóm",
+    "knownGroups": "Nhóm đã biết",
     "topicOverrides": "Ghi đè chủ đề",
     "topicLabel": "Chủ đề: {{id}}",
     "addTopicPlaceholder": "ID luồng chủ đề",

@@ -49,7 +49,7 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
 
   if (fields.length === 0) {
     return (
-      <div className="max-w-2xl">
+      <div className="">
         <p className="text-sm text-muted-foreground">
           {t("detail.credentials.noSchema")}
         </p>
@@ -58,7 +58,7 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
         {t("detail.credentials.hint")}
       </p>

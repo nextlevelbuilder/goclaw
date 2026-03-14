@@ -102,5 +102,6 @@
   "builtinTools": "Built-in",
   "customTools": "Custom",
   "selectOrTypeTools": "Select or type tool names...",
+  "selectOrTypeSkills": "Select or type skill names...",
   "typeAndPressEnter": "Type and press Enter..."
 }

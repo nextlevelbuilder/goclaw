@@ -85,7 +85,7 @@ var coreToolSummaries = map[string]string{
 	"handoff":                "Transfer conversation to another agent (ONLY when user explicitly asks to switch agents — NOT for task delegation)",
 	"evaluate_loop":          "Run a generate→evaluate→revise loop between two agents for quality-critical tasks",
 	"delegate_search":        "Search for agents by expertise to find the right delegation target",
-	"team_tasks":             "Manage team task board (list, create, complete, cancel tasks)",
+	"team_tasks":             "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
 	"team_message":           "Send messages to teammates (progress updates, questions)",
 	"workspace_write":        "Write files to the team shared workspace (visible to all team members)",
 	"workspace_read":         "Read, list, delete, pin, tag files in the team shared workspace",

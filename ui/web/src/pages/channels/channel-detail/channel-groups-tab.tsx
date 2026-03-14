@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Save, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import type { ChannelInstanceData } from "@/types/channel";
 import { TelegramGroupOverrides } from "../telegram-group-overrides";
 import type { TelegramGroupConfigValues } from "../telegram-group-fields";
 import type { TelegramTopicConfigValues } from "../telegram-topic-overrides";
+import type { GroupManagerGroupInfo } from "../hooks/use-channel-detail";
 
 interface GroupConfigWithTopics extends TelegramGroupConfigValues {
   topics?: Record<string, TelegramTopicConfigValues>;
@@ -14,9 +15,10 @@ interface GroupConfigWithTopics extends TelegramGroupConfigValues {
 interface ChannelGroupsTabProps {
   instance: ChannelInstanceData;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
+  listManagerGroups: () => Promise<GroupManagerGroupInfo[]>;
 }
 
-export function ChannelGroupsTab({ instance, onUpdate }: ChannelGroupsTabProps) {
+export function ChannelGroupsTab({ instance, onUpdate, listManagerGroups }: ChannelGroupsTabProps) {
   const { t } = useTranslation("channels");
   const config = (instance.config ?? {}) as Record<string, unknown>;
   const [groups, setGroups] = useState<Record<string, GroupConfigWithTopics>>(
@@ -25,6 +27,16 @@ export function ChannelGroupsTab({ instance, onUpdate }: ChannelGroupsTabProps) 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [knownGroups, setKnownGroups] = useState<GroupManagerGroupInfo[]>([]);
+
+  const loadKnownGroups = useCallback(async () => {
+    try {
+      const g = await listManagerGroups();
+      setKnownGroups(g);
+    } catch { /* handled by http hook */ }
+  }, [listManagerGroups]);
+
+  useEffect(() => { loadKnownGroups(); }, [loadKnownGroups]);
 
   const handleSave = async () => {
     const hasGroups = Object.keys(groups).length > 0;
@@ -49,8 +61,8 @@ export function ChannelGroupsTab({ instance, onUpdate }: ChannelGroupsTabProps) 
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
-      <TelegramGroupOverrides groups={groups} onChange={(g) => setGroups(g)} />
+    <div className="space-y-6">
+      <TelegramGroupOverrides groups={groups} onChange={(g) => setGroups(g)} knownGroups={knownGroups} />
 
       {saveError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">

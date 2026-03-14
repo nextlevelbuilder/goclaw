@@ -4,7 +4,7 @@
 export interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "password" | "number" | "boolean" | "select" | "tags";
+  type: "text" | "password" | "number" | "boolean" | "select" | "tags" | "tristate" | "textarea" | "tool-select" | "skill-select";
   placeholder?: string;
   required?: boolean;
   defaultValue?: string | number | boolean | string[];
@@ -145,6 +145,21 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
 };
+
+// --- Group override schema (Telegram per-group/topic overrides) ---
+// Uses tristate fields: undefined = inherit from parent, value = override.
+// tristate without options → Inherit/Yes/No (boolean).
+// tristate with options → Inherit + custom options (string).
+
+export const groupOverrideSchema: FieldDef[] = [
+  { key: "group_policy", label: "Group Policy", type: "tristate", options: groupPolicyOptions },
+  { key: "require_mention", label: "Require @mention", type: "tristate" },
+  { key: "enabled", label: "Enabled", type: "tristate" },
+  { key: "allow_from", label: "Allowed Users", type: "tags", placeholder: "User IDs, one per line", help: "Restrict which users can interact in this group" },
+  { key: "skills", label: "Skills Filter", type: "skill-select", help: "Limit available skills for this group" },
+  { key: "tools", label: "Tool Allowlist", type: "tool-select", help: "Restrict which tools the agent can use in this group" },
+  { key: "system_prompt", label: "System Prompt", type: "textarea", placeholder: "Additional system prompt for this group..." },
+];
 
 // --- Post-create wizard configuration ---
 // Channels with multi-step create flows (e.g. auth then config).

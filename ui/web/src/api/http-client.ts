@@ -43,6 +43,30 @@ export class HttpClient {
     return res.blob();
   }
 
+  /** Fetch a streaming response (SSE). Returns the raw Response for manual reading. */
+  async streamFetch(path: string, signal?: AbortSignal): Promise<Response> {
+    const res = await fetch(this.buildUrl(path), {
+      method: "GET",
+      headers: this.authHeaders(),
+      signal,
+    });
+    if (!res.ok) throw new ApiError("HTTP_ERROR", res.statusText);
+    return res;
+  }
+
+  /** Build a full URL with auth token as query param (for <img> src, download links). */
+  rawUrl(path: string, params?: Record<string, string>): string {
+    return this.buildUrl(path, params);
+  }
+
+  /** Fetch raw blob with auth headers (for images, binary files). */
+  async fetchBlob(path: string, params?: Record<string, string>): Promise<Blob> {
+    const url = this.buildUrl(path, params);
+    const res = await fetch(url, { method: "GET", headers: this.authHeaders() });
+    if (!res.ok) throw new ApiError("HTTP_ERROR", res.statusText);
+    return res.blob();
+  }
+
   async upload<T>(path: string, formData: FormData): Promise<T> {
     const headers: Record<string, string> = {};
     const token = this.getToken();
@@ -77,15 +101,18 @@ export class HttpClient {
     return url.toString();
   }
 
-  private headers(): Record<string, string> {
-    const h: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+  /** Auth-only headers (no Content-Type), for SSE / blob requests. */
+  private authHeaders(): Record<string, string> {
+    const h: Record<string, string> = {};
     const token = this.getToken();
     if (token) h["Authorization"] = `Bearer ${token}`;
     const userId = this.getUserId();
     if (userId) h["X-GoClaw-User-Id"] = userId;
     return h;
+  }
+
+  private headers(): Record<string, string> {
+    return { "Content-Type": "application/json", ...this.authHeaders() };
   }
 
   private async request<T>(url: string, init: RequestInit): Promise<T> {

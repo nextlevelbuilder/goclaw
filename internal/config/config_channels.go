@@ -202,6 +202,7 @@ type ProvidersConfig struct {
 	Ollama      OllamaConfig    `json:"ollama"`       // local Ollama instance (no API key needed)
 	OllamaCloud ProviderConfig  `json:"ollama_cloud"` // Ollama Cloud (API key required)
 	ClaudeCLI   ClaudeCLIConfig `json:"claude_cli"`
+	ACP         ACPConfig       `json:"acp"`
 }
 
 // OllamaConfig configures a local (or self-hosted) Ollama instance.
@@ -216,6 +217,17 @@ type ClaudeCLIConfig struct {
 	Model       string `json:"model" yaml:"model"`                 // default model alias (default: "sonnet")
 	BaseWorkDir string `json:"base_work_dir" yaml:"base_work_dir"` // base dir for agent workspaces
 	PermMode    string `json:"perm_mode" yaml:"perm_mode"`         // permission mode (default: "bypassPermissions")
+}
+
+// ACPConfig configures the ACP (Agent Client Protocol) provider.
+// Orchestrates any ACP-compatible coding agent (Claude Code, Codex CLI, Gemini CLI) as a subprocess.
+type ACPConfig struct {
+	Binary   string   `json:"binary"`    // agent binary name or path (e.g. "claude", "codex")
+	Args     []string `json:"args"`      // extra spawn args
+	Model    string   `json:"model"`     // default model/agent name
+	WorkDir  string   `json:"work_dir"`  // base workspace dir
+	IdleTTL  string   `json:"idle_ttl"`  // process idle TTL (e.g. "5m")
+	PermMode string   `json:"perm_mode"` // "approve-all" (default), "approve-reads", "deny-all"
 }
 
 type ProviderConfig struct {
@@ -243,7 +255,8 @@ func (c *Config) HasAnyProvider() bool {
 		p.ZaiCoding.APIKey != "" ||
 		p.Ollama.Host != "" ||
 		p.OllamaCloud.APIKey != "" ||
-		p.ClaudeCLI.CLIPath != ""
+		p.ClaudeCLI.CLIPath != "" ||
+		p.ACP.Binary != ""
 }
 
 // QuotaWindow defines request limits per time window. Zero means unlimited.

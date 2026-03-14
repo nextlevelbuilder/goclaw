@@ -73,6 +73,7 @@
   "selectAgent": "选择Agent",
   "selectFileToView": "选择文件以查看其内容",
   "selectOrTypeTools": "选择或输入工具名称...",
+  "selectOrTypeSkills": "选择或输入技能名称...",
   "selectProvider": "选择Provider",
   "sendMessage": "发送消息... (Shift+Enter 换行)",
   "sendMessageTitle": "发送消息",

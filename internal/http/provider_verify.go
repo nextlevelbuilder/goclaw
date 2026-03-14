@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleVerifyProvider tests a provider+model combination with a minimal LLM call.
@@ -41,6 +44,25 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 	p, err := h.store.GetProvider(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "provider", id.String())})
+		return
+	}
+
+	// ACP: verify binary exists on the server (no LLM call needed)
+	if p.ProviderType == store.ProviderACP {
+		binary := p.APIBase
+		if binary == "" {
+			binary = "claude"
+		}
+		// Validate binary against known allowlist (same check as registerACPFromDB)
+		if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "invalid binary path"})
+			return
+		}
+		if _, err := exec.LookPath(binary); err != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "binary not found: " + binary})
+		} else {
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+		}
 		return
 	}
 

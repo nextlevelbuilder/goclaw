@@ -240,6 +240,7 @@
     "groupWildcard": "* (wildcard)",
     "addGroupPlaceholder": "Chat ID (e.g. -100123456) or *",
     "addGroup": "Add Group",
+    "knownGroups": "Known groups",
     "topicOverrides": "Topic Overrides",
     "topicLabel": "Topic: {{id}}",
     "addTopicPlaceholder": "Topic thread ID",

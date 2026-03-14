@@ -182,7 +182,7 @@ func resolveWorkspaceScopeFromArgs(ctx context.Context, args map[string]any, ws 
 	channel, chatID = resolveWorkspaceScope(ctx)
 	if scope == "team" {
 		if !ws.isShared() {
-			return "", "", "team workspace_scope is 'isolated' — set to 'shared' in team settings to use scope=team"
+			return "", "", "team workspace_scope is 'isolated' — retry with scope='channel' (or omit scope) to use your per-user workspace. To enable shared team workspace, ask an admin to set workspace_scope='shared' in team settings."
 		}
 		chatID = ""
 	}

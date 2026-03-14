@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router";
-import { Info } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useAgentLinks } from "../hooks/use-agent-links";
@@ -47,11 +47,11 @@ export function AgentLinksTab({ agentId }: AgentLinksTabProps) {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 dark:border-blue-900 dark:bg-blue-950/30">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-        <p className="text-sm text-blue-800 dark:text-blue-300">
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/30">
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <p className="text-sm text-amber-800 dark:text-amber-300">
           {t("links.teamsHint").split("Agent Teams")[0]}
-          <Link to={ROUTES.TEAMS} className="font-medium underline underline-offset-2 hover:text-blue-900 dark:hover:text-blue-200">
+          <Link to={ROUTES.TEAMS} className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-200">
             Agent Teams
           </Link>
           {t("links.teamsHint").split("Agent Teams")[1]}

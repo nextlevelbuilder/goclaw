@@ -544,6 +544,34 @@ func wireExtras(
 		})
 	}
 
+	// Provider cache: re-register ACP providers on create/update/delete
+	msgBus.Subscribe(bus.TopicCacheProvider, func(event bus.Event) {
+		if event.Name != protocol.EventCacheInvalidate {
+			return
+		}
+		payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+		if !ok || payload.Kind != bus.CacheKindProvider {
+			return
+		}
+		if payload.Key == "" {
+			return
+		}
+		// Re-register from DB if provider still exists and is ACP type
+		p, err := stores.Providers.GetProviderByName(context.Background(), payload.Key)
+		if err != nil {
+			// Provider was deleted or not found — already unregistered by handler
+			return
+		}
+		if p.ProviderType != store.ProviderACP {
+			return
+		}
+		// Unregister old instance (closes ProcessPool) then re-register
+		providerReg.Unregister(p.Name)
+		if p.Enabled {
+			registerACPFromDB(providerReg, *p)
+		}
+	})
+
 	slog.Info("resolver + interceptors + cache subscribers wired")
 	return contextFileInterceptor, delegateMgr, mcpPool, mediaStore
 }

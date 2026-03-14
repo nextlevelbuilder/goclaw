@@ -835,8 +835,10 @@ func runGateway() {
 	// Supports media from any agent workspace (each agent has its own workspace from DB).
 	server.SetFilesHandler(httpapi.NewFilesHandler(cfg.Gateway.Token))
 
-	// Storage file management — browse/delete files under ~/<HomeDirName>/ (excluding skills dirs).
-	server.SetStorageHandler(httpapi.NewStorageHandler(config.ExpandHome("~/"+config.HomeDirName()), cfg.Gateway.Token))
+	// Storage file management — browse/delete files under the resolved workspace directory.
+	// Uses GOCLAW_WORKSPACE (or default ~/.goclaw/workspace) so it works correctly
+	// in Docker deployments where volumes are mounted outside ~/.goclaw/.
+	server.SetStorageHandler(httpapi.NewStorageHandler(workspace, cfg.Gateway.Token))
 
 	// Media upload endpoint — accepts multipart file uploads, returns temp path + MIME type.
 	server.SetMediaUploadHandler(httpapi.NewMediaUploadHandler(cfg.Gateway.Token))

@@ -30,7 +30,7 @@ The Anthropic provider uses `x-api-key` header authentication and the `anthropic
 
 ## 2. Supported Providers
 
-| Provider | Type | API Base | Default Model |
+| Provider | Type | API Base / Binary | Default Model |
 |----------|------|----------|---------------|
 | anthropic | Native HTTP + SSE | `https://api.anthropic.com/v1` | `claude-sonnet-4-5-20250929` |
 | openai | OpenAI-compatible | `https://api.openai.com/v1` | `gpt-4o` |
@@ -47,6 +47,7 @@ The Anthropic provider uses `x-api-key` header authentication and the `anthropic
 | bailian | OpenAI-compatible | `https://coding-intl.dashscope.aliyuncs.com/v1` | `qwen3.5-plus` |
 | zai | OpenAI-compatible | `https://api.z.ai/api/paas/v4` | `glm-5` |
 | zai_coding | OpenAI-compatible | `https://api.z.ai/api/coding/paas/v4` | `glm-5` |
+| acp | ACP (JSON-RPC 2.0 stdio) | `claude`, `codex`, `gemini` (binary name) | `claude` |
 
 ---
 
@@ -291,7 +292,167 @@ Standard OpenAI-compatible provider targeting the Alibaba Coding API.
 
 ---
 
-## 10. Agent Evaluators (Hook System)
+## 10. ACP Provider (Agent Client Protocol)
+
+The ACP provider enables GoClaw to orchestrate external coding agents (Claude Code, Codex CLI, Gemini CLI, or any ACP-compatible agent) as subprocesses via JSON-RPC 2.0 over stdio. This allows delegating complex code generation tasks to specialized agents while maintaining GoClaw's unified interface.
+
+### Architecture Overview
+
+```mermaid
+flowchart TD
+    AL["Agent Loop"] -->|Chat / ChatStream| ACP["ACPProvider"]
+    ACP --> PP["ProcessPool"]
+    PP -->|spawn| PROC["Subprocess<br/>json-rpc 2.0 stdio"]
+    PROC -->|initialize| AGT["Agent<br/>(Claude Code, Codex, etc.)"]
+
+    AGT -->|fs/readTextFile| TB["ToolBridge"]
+    AGT -->|fs/writeTextFile| TB
+    AGT -->|terminal/*| TB
+    AGT -->|permission/request| TB
+
+    TB -->|enforce| SB["Workspace Sandbox"]
+    TB -->|check| DEN["Deny Patterns"]
+    TB -->|handle| PERM["Permission Mode"]
+```
+
+### Configuration
+
+ACPConfig struct fields:
+
+```go
+type ACPConfig struct {
+	Binary   string   // agent binary name or path (e.g. "claude", "codex")
+	Args     []string // extra spawn args
+	Model    string   // default model/agent name (e.g. "claude")
+	WorkDir  string   // base workspace dir
+	IdleTTL  string   // process idle TTL (e.g. "5m")
+	PermMode string   // "approve-all" (default), "approve-reads", "deny-all"
+}
+```
+
+Example config.json:
+
+```json5
+{
+  "providers": {
+    "acp": {
+      "binary": "claude",
+      "args": ["--profile", "goclaw"],
+      "model": "claude",
+      "work_dir": "/tmp/workspace",
+      "idle_ttl": "5m",
+      "perm_mode": "approve-all"
+    }
+  }
+}
+```
+
+Database-based provider registration:
+
+- `provider_type = "acp"`
+- `api_base = "claude"` (binary name)
+- `settings = { "args": [...], "idle_ttl": "5m", "perm_mode": "approve-all", "work_dir": "..." }`
+
+### Session Management
+
+#### ProcessPool
+
+Manages subprocess lifecycle with idle TTL reaping and crash recovery:
+
+1. **GetOrSpawn** — Retrieve existing session or spawn new subprocess
+2. **Idle TTL** — Reap idle processes after configured duration (default 5m)
+3. **Crash Recovery** — Restart failed subprocesses transparently
+
+#### ToolBridge
+
+Handles agent → client requests for filesystem and terminal operations:
+
+- **fs/readTextFile** — Read file within workspace sandbox
+- **fs/writeTextFile** — Write file within workspace sandbox
+- **terminal/createTerminal** — Spawn terminal subprocess
+- **terminal/terminalOutput** — Fetch terminal output + exit status
+- **terminal/waitForTerminalExit** — Block until terminal exit
+- **terminal/releaseTerminal** — Clean up terminal resources
+- **terminal/killTerminal** — Force-terminate terminal
+- **permission/request** — Request user approval (approve-all, approve-reads, deny-all)
+
+### Content Handling
+
+ACP messages use `ContentBlock` with three types:
+
+```go
+type ContentBlock struct {
+	Type     string // "text", "image", "audio"
+	Text     string // text content
+	Data     string // base64 for image/audio
+	MimeType string // e.g., "image/png", "audio/wav"
+}
+```
+
+Request extraction:
+
+1. Extract system prompt + user message from GoClaw `ChatRequest.Messages`
+2. Prepend system prompt to first user message (ACP agents lack separate system API)
+3. Attach images as separate blocks
+
+Response collection:
+
+1. Accumulate `SessionUpdate` notifications during prompt execution
+2. Collect text blocks into response content
+3. Return finish reason mapped from `stopReason` ("maxContextLength" → "length", others → "stop")
+
+### Security & Sandboxing
+
+#### Workspace Isolation
+
+All file operations are scoped to `WorkDir`. Attempts to escape (e.g., `../../../etc/passwd`) are rejected.
+
+#### Deny Patterns
+
+Regex patterns (from config or tools policy) prevent access to sensitive paths:
+
+```
+[
+  "^/etc/",
+  "^\\.env",
+  "^secret",
+  "^[Cc]redentials"
+]
+```
+
+Each agent request is validated against deny patterns before execution.
+
+#### Permission Modes
+
+| Mode | Behavior |
+|------|----------|
+| `approve-all` | All requests approved (default) |
+| `approve-reads` | Read-only; filesystem writes denied |
+| `deny-all` | All requests denied |
+
+### Session Sequencing
+
+Per-session requests are serialized via `sessionMu` mutex to prevent concurrent tool access that could corrupt file state:
+
+```go
+unlock := p.lockSession(sessionKey)
+defer unlock()
+// ... execute Chat or ChatStream with guaranteed serial access
+```
+
+### Streaming vs Non-Streaming
+
+#### Chat (Non-Streaming)
+
+Returns complete response after agent execution finishes. Collects all text blocks and returns single `ChatResponse`.
+
+#### ChatStream
+
+Emits `StreamChunk` for each text delta via callback. Supports context cancellation by sending `session/cancel` notification. Returns combined response when complete.
+
+---
+
+## 11. Agent Evaluators (Hook System)
 
 Agent evaluators in the quality gate / hook system (see [03-tools-system.md](./03-tools-system.md)) use the same provider resolution as normal agent runs. When a quality gate is configured with `"type": "agent"`, the hook engine delegates to the specified reviewer agent, which resolves its own provider through the standard provider registry. No separate provider configuration is needed for evaluator agents.
 
@@ -307,6 +468,13 @@ Agent evaluators in the quality gate / hook system (see [03-tools-system.md](./0
 | `internal/providers/retry.go` | RetryDo[T] generic function, RetryConfig, IsRetryableError, backoff computation |
 | `internal/providers/schema_cleaner.go` | CleanSchemaForProvider, CleanToolSchemas, recursive schema field removal |
 | `internal/providers/dashscope.go` | DashScope provider: thinking budget, tools+streaming fallback |
+| `internal/providers/acp_provider.go` | ACPProvider implementation: orchestrates ACP agents as subprocesses |
+| `internal/providers/acp/types.go` | ACP protocol types: InitializeRequest, SessionUpdate, ContentBlock, etc. |
+| `internal/providers/acp/process.go` | ProcessPool: subprocess lifecycle, idle TTL reaping, crash recovery |
+| `internal/providers/acp/jsonrpc.go` | JSON-RPC 2.0 request/response marshaling over stdio |
+| `internal/providers/acp/tool_bridge.go` | ToolBridge: handles fs and terminal requests, workspace sandboxing |
+| `internal/providers/acp/terminal.go` | Terminal lifecycle: create, output, exit, release, kill |
+| `internal/providers/acp/session.go` | Session state tracking per ACP agent |
 | `cmd/gateway_providers.go` | Provider registration from config and database during gateway startup |
 
 ---

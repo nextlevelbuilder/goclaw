@@ -64,7 +64,27 @@
     "cohere": "Cohere",
     "perplexity": "Perplexity",
     "chatgpt_oauth": "ChatGPT (OAuth)",
-    "yescale": "YesScale"
+    "yescale": "YesScale",
+    "acp": "ACP"
+  },
+  "acp": {
+    "description": "Orchestrate ACP-compatible coding agents as subprocesses. No API key needed.",
+    "binary": "Binary",
+    "binaryPlaceholder": "claude",
+    "binaryHint": "Path or name of the ACP agent binary (e.g. claude, codex, gemini)",
+    "args": "Arguments",
+    "argsPlaceholder": "--profile goclaw",
+    "argsHint": "Space-separated arguments passed to the binary",
+    "idleTTL": "Idle TTL",
+    "idleTTLPlaceholder": "5m",
+    "idleTTLHint": "Kill idle processes after this duration (e.g. 5m, 1h)",
+    "permMode": "Permission Mode",
+    "permModeApproveAll": "Approve All",
+    "permModeApproveReads": "Approve Reads Only",
+    "permModeDenyAll": "Deny All",
+    "workDir": "Work Directory",
+    "workDirPlaceholder": "/tmp/workspace",
+    "workDirHint": "Working directory for agent subprocesses (optional)"
   },
   "oauth": {
     "checkingStatus": "Checking authentication status...",

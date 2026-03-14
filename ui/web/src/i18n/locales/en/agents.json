@@ -193,7 +193,7 @@
     "revoke": "Revoke"
   },
   "links": {
-    "teamsHint": "For multi-agent collaboration with task tracking and quality control, consider using Agent Teams instead. Agent Links are best for simple 1-to-1 delegation between two agents.",
+    "teamsHint": "Agent Links will be removed soon. Please use Agent Teams for multi-agent collaboration — it provides task tracking, shared workspace, and quality control in a simpler setup.",
     "createLink": "Create Link",
     "targetAgent": "Target Agent",
     "selectAgent": "Select or search agent...",
