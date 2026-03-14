@@ -104,6 +104,7 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 // mimeFromDocExt returns MIME type for document file extensions.
 func mimeFromDocExt(ext string) string {
 	switch strings.ToLower(ext) {
+	// Documents
 	case ".pdf":
 		return "application/pdf"
 	case ".doc", ".docx":
@@ -112,8 +113,33 @@ func mimeFromDocExt(ext string) string {
 		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	case ".ppt", ".pptx":
 		return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+	// Text / code
+	case ".txt", ".text", ".log":
+		return "text/plain"
 	case ".csv":
 		return "text/csv"
+	case ".md", ".markdown":
+		return "text/markdown"
+	case ".html", ".htm":
+		return "text/html"
+	case ".css":
+		return "text/css"
+	case ".xml", ".svg":
+		return "text/xml"
+	case ".json":
+		return "application/json"
+	case ".js", ".mjs", ".cjs":
+		return "application/javascript"
+	case ".ts", ".tsx", ".jsx":
+		return "text/plain"
+	case ".yaml", ".yml":
+		return "application/yaml"
+	case ".py":
+		return "text/plain"
+	case ".go", ".rs", ".java", ".c", ".cpp", ".h", ".rb", ".php", ".sh", ".bash", ".zsh",
+		".sql", ".r", ".swift", ".kt", ".scala", ".lua", ".pl", ".dart", ".zig",
+		".toml", ".ini", ".cfg", ".conf", ".env", ".gitignore", ".dockerfile":
+		return "text/plain"
 	default:
 		return "application/octet-stream"
 	}

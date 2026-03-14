@@ -18,7 +18,7 @@ func Default() *Config {
 	return &Config{
 		Agents: AgentsConfig{
 			Defaults: AgentDefaults{
-				Workspace:           "~/.goclaw/workspace",
+				Workspace:           "~/" + HomeDirName() + "/workspace",
 				RestrictToWorkspace: true,
 				Provider:            "anthropic",
 				Model:               "claude-sonnet-4-5-20250929",
@@ -59,7 +59,7 @@ func Default() *Config {
 			RateLimitPerHour: 150,
 		},
 		Sessions: SessionsConfig{
-			Storage: "~/.goclaw/sessions",
+			Storage: "~/" + HomeDirName() + "/sessions",
 		},
 	}
 }
@@ -407,6 +407,24 @@ func (c *Config) ResolveDisplayName(agentID string) string {
 func (c *Config) ApplyEnvOverrides() {
 	c.applyEnvOverrides()
 	c.applyContextPruningDefaults()
+}
+
+// DefaultHomeDirName is the default directory name for goclaw data (e.g. ".goclaw").
+const DefaultHomeDirName = ".goclaw"
+
+// HomeDirName returns the configurable home directory name.
+// Controlled by GOCLAW_HOME_DIR_NAME env var (default: DefaultHomeDirName).
+// Example: set GOCLAW_HOME_DIR_NAME=.studio to use ~/.studio/ instead of the default.
+func HomeDirName() string {
+	if v := os.Getenv("GOCLAW_HOME_DIR_NAME"); v != "" {
+		return v
+	}
+	return DefaultHomeDirName
+}
+
+// HomeDirPath returns the full expanded path to the home directory (e.g. /home/user/<HomeDirName>).
+func HomeDirPath() string {
+	return ExpandHome("~/" + HomeDirName())
 }
 
 // ExpandHome replaces leading ~ with the user home directory.

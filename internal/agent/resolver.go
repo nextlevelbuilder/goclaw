@@ -252,9 +252,15 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			sandboxCfgOverride = &resolved
 		}
 
-		// Expand ~ in workspace path and ensure directory exists
+		// Expand ~ in workspace path and ensure directory exists.
+		// DB may store paths with the default home dir prefix — rewrite to
+		// the configured HomeDirName so overrides like ".studio" work correctly.
 		workspace := ag.Workspace
 		if workspace != "" {
+			homeDirName := config.HomeDirName()
+			if homeDirName != config.DefaultHomeDirName {
+				workspace = strings.Replace(workspace, "~/"+config.DefaultHomeDirName+"/", "~/"+homeDirName+"/", 1)
+			}
 			workspace = config.ExpandHome(workspace)
 			if !filepath.IsAbs(workspace) {
 				workspace, _ = filepath.Abs(workspace)
@@ -287,11 +293,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				toolsReg = deps.Tools.Clone()
 			}
 			var mcpOpts []mcpbridge.ManagerOption
-		mcpOpts = append(mcpOpts, mcpbridge.WithStore(deps.MCPStore))
-		if deps.MCPPool != nil {
-			mcpOpts = append(mcpOpts, mcpbridge.WithPool(deps.MCPPool))
-		}
-		mcpMgr := mcpbridge.NewManager(toolsReg, mcpOpts...)
+			mcpOpts = append(mcpOpts, mcpbridge.WithStore(deps.MCPStore))
+			if deps.MCPPool != nil {
+				mcpOpts = append(mcpOpts, mcpbridge.WithPool(deps.MCPPool))
+			}
+			mcpMgr := mcpbridge.NewManager(toolsReg, mcpOpts...)
 			if err := mcpMgr.LoadForAgent(ctx, ag.ID, ""); err != nil {
 				slog.Warn("failed to load MCP servers for agent", "agent", agentKey, "error", err)
 			} else if mcpMgr.IsSearchMode() {
@@ -424,4 +430,3 @@ func derefInt(p *int) int {
 	}
 	return *p
 }
-

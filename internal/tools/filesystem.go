@@ -27,7 +27,7 @@ type ReadFileTool struct {
 	workspace        string
 	restrict         bool
 	allowedPrefixes  []string                // extra allowed path prefixes (e.g. skills dirs)
-	deniedPrefixes   []string                // path prefixes to deny access to (e.g. .goclaw)
+	deniedPrefixes   []string                // path prefixes to deny access to (e.g. home dir)
 	sandboxMgr       sandbox.Manager         // nil = direct host access
 	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
 	memIntc          *MemoryInterceptor      // nil = no memory routing
@@ -219,7 +219,7 @@ func resolvePathWithAllowed(path, workspace string, restrict bool, allowedPrefix
 }
 
 // checkDeniedPath returns an error if the resolved path falls under any denied prefix.
-// Denied prefixes are relative to the workspace (e.g. ".goclaw" denies workspace/.goclaw/).
+// Denied prefixes are relative to the workspace (e.g. "<HomeDirName>" denies workspace/<HomeDirName>/).
 // The resolved path should already be canonical (from resolvePath with restrict=true).
 func checkDeniedPath(resolved, workspace string, deniedPrefixes []string) error {
 	if len(deniedPrefixes) == 0 {

@@ -11,6 +11,16 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# Brand metadata (baked into Vite build)
+ARG VITE_BRAND_APP_NAME=GoClaw
+ARG VITE_BRAND_APP_KEY=goclaw
+ARG VITE_BRAND_TAGLINE=
+ARG VITE_BRAND_LOGO_URL=
+ENV VITE_BRAND_APP_NAME=$VITE_BRAND_APP_NAME \
+    VITE_BRAND_APP_KEY=$VITE_BRAND_APP_KEY \
+    VITE_BRAND_TAGLINE=$VITE_BRAND_TAGLINE \
+    VITE_BRAND_LOGO_URL=$VITE_BRAND_LOGO_URL
+
 # Copy source and build
 COPY . .
 RUN pnpm build

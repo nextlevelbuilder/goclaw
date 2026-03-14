@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useWs } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods, Events } from "@/api/protocol";
 import type { Message } from "@/types/session";
 import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/chat";
@@ -15,6 +16,7 @@ import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/ch
 export function useChatMessages(sessionKey: string, agentId: string) {
   const ws = useWs();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [summary, setSummary] = useState<string | null>(null);
   const [streamText, setStreamText] = useState<string | null>(null);
   const [thinkingText, setThinkingText] = useState<string | null>(null);
   const [toolStream, setToolStream] = useState<ToolStreamEntry[]>([]);
@@ -27,6 +29,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   const streamRef = useRef("");
   const thinkingRef = useRef("");
   const toolStreamRef = useRef<ToolStreamEntry[]>([]);
+  const hadToolsSinceLastChunkRef = useRef(false);
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
 
@@ -36,6 +39,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   if (sessionKey !== prevKey) {
     setPrevKey(sessionKey);
     setMessages([]);
+    setSummary(null);
     setStreamText(null);
     setThinkingText(null);
     setToolStream([]);
@@ -55,11 +59,12 @@ export function useChatMessages(sessionKey: string, agentId: string) {
       return;
     }
     try {
-      const res = await ws.call<{ messages: Message[] }>(Methods.CHAT_HISTORY, {
+      const res = await ws.call<{ messages: Message[]; summary?: string }>(Methods.CHAT_HISTORY, {
         agentId,
         sessionKey,
       });
       const allMsgs = res.messages ?? [];
+      setSummary(res.summary ?? null);
       // Build a map of tool_call_id -> tool message for result lookup
       const toolResultMap = new Map<string, Message>();
       for (const m of allMsgs) {
@@ -105,6 +110,34 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     }
   }, [sessionKey, loadHistory]);
 
+  // Recover active run on WebSocket reconnect.
+  // When client reconnects after an idle timeout or network hiccup while a run
+  // was in progress, reload history to see if the run completed server-side.
+  const connected = useAuthStore((s) => s.connected);
+  const prevConnectedRef = useRef(connected);
+  useEffect(() => {
+    const wasDisconnected = !prevConnectedRef.current;
+    prevConnectedRef.current = connected;
+
+    // Only act when transitioning disconnected → connected
+    if (!wasDisconnected || !connected) return;
+
+    // If we were tracking an active run, recover by reloading history
+    if (runIdRef.current) {
+      runIdRef.current = null;
+      expectingRunRef.current = false;
+      streamRef.current = "";
+      thinkingRef.current = "";
+      toolStreamRef.current = [];
+      hadToolsSinceLastChunkRef.current = false;
+      setStreamText(null);
+      setThinkingText(null);
+      setToolStream([]);
+      setIsRunning(false);
+      loadHistory();
+    }
+  }, [connected, loadHistory]);
+
   // Called before sending a message so the event handler knows to capture run.started
   const expectRun = useCallback(() => {
     expectingRunRef.current = true;
@@ -135,6 +168,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           streamRef.current = "";
           thinkingRef.current = "";
           toolStreamRef.current = [];
+          hadToolsSinceLastChunkRef.current = false;
         }
         return;
       }
@@ -151,11 +185,17 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         }
         case "chunk": {
           const content = event.payload?.content ?? "";
+          // Add paragraph break between text from different tool iterations
+          if (hadToolsSinceLastChunkRef.current && streamRef.current) {
+            streamRef.current += "\n\n";
+          }
+          hadToolsSinceLastChunkRef.current = false;
           streamRef.current += content;
           setStreamText(streamRef.current);
           break;
         }
         case "tool.call": {
+          hadToolsSinceLastChunkRef.current = true;
           const entry: ToolStreamEntry = {
             toolCallId: event.payload?.id ?? "",
             runId: event.runId,
@@ -177,12 +217,12 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           toolStreamRef.current = toolStreamRef.current.map((t) =>
             t.toolCallId === resultId
               ? {
-                  ...t,
-                  phase: isError ? ("error" as const) : ("completed" as const),
-                  errorContent: isError ? event.payload?.content : undefined,
-                  result: event.payload?.result,
-                  updatedAt: now,
-                }
+                ...t,
+                phase: isError ? ("error" as const) : ("completed" as const),
+                errorContent: isError ? event.payload?.content : undefined,
+                result: event.payload?.result,
+                updatedAt: now,
+              }
               : t,
           );
           setToolStream(toolStreamRef.current);
@@ -247,6 +287,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
 
   return {
     messages,
+    summary,
     streamText,
     thinkingText,
     toolStream,

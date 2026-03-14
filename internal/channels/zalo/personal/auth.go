@@ -67,7 +67,7 @@ func (c *Channel) resolveCredentialsPath() string {
 	}
 	dataDir := os.Getenv("GOCLAW_DATA_DIR")
 	if dataDir == "" {
-		dataDir = config.ExpandHome("~/.goclaw/data")
+		dataDir = config.ExpandHome("~/" + config.HomeDirName() + "/data")
 	}
 	return filepath.Join(dataDir, "zalo-personal-credentials.json")
 }

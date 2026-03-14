@@ -76,14 +76,14 @@ func BuildCLIMCPConfigData(servers map[string]*config.MCPServerConfig, gatewayAd
 	}
 }
 
-// mcpConfigBaseDir returns ~/.goclaw/mcp-configs, separate from workDir
+// mcpConfigBaseDir returns ~/<HomeDirName>/mcp-configs, separate from workDir
 // so agent cannot read tokens from the MCP config files.
 func mcpConfigBaseDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(os.TempDir(), "goclaw-mcp-configs")
 	}
-	return filepath.Join(home, ".goclaw", "mcp-configs")
+	return filepath.Join(home, config.HomeDirName(), "mcp-configs")
 }
 
 // BridgeContext holds per-call context for MCP bridge headers.
@@ -96,7 +96,7 @@ type BridgeContext struct {
 }
 
 // WriteMCPConfig writes a per-session MCP config file with agent context headers.
-// Files are stored at ~/.goclaw/mcp-configs/<safe-session-key>/mcp-config.json,
+// Files are stored at ~/<HomeDirName>/mcp-configs/<safe-session-key>/mcp-config.json,
 // outside the agent's workDir so tokens are not exposed.
 // Skips write if content is unchanged. Returns the file path.
 func (d *MCPConfigData) WriteMCPConfig(ctx context.Context, sessionKey string, bc BridgeContext) string {

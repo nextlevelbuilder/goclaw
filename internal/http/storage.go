@@ -13,10 +13,10 @@ import (
 )
 
 // StorageHandler provides HTTP endpoints for browsing and managing
-// files inside the ~/.goclaw/ data directory.
+// files inside the ~/<HomeDirName>/ data directory.
 // Skills directories are browsable (read-only) but deletion is blocked.
 type StorageHandler struct {
-	baseDir string // resolved absolute path to ~/.goclaw/
+	baseDir string // resolved absolute path to ~/<HomeDirName>/
 	token   string
 }
 
@@ -70,7 +70,7 @@ func isProtectedPath(rel string) bool {
 	return false
 }
 
-// handleList lists all files and directories under ~/.goclaw/.
+// handleList lists all files and directories under ~/<HomeDirName>/.
 // Optional query param ?path= scopes the listing to a subtree.
 func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)

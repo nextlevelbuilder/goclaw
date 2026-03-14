@@ -15,6 +15,7 @@
   },
   "newChat": "新建对话",
   "openSessions": "打开Session",
+  "conversationSummary": "早期对话摘要",
   "readOnly": "只读 — 此Session属于其他用户",
   "replyingTo": "回复"
 }

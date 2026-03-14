@@ -33,7 +33,7 @@ services:
       - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
     volumes:
       - goclaw-skills:/app/skills
-      - goclaw-workspace:/app/.goclaw
+      - goclaw-workspace:/app/${GOCLAW_HOME_DIR_NAME:-.goclaw}
 
 volumes:
   postgres-data:

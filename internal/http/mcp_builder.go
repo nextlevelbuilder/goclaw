@@ -273,7 +273,13 @@ func (h *MCPBuilderHandler) handleBuildProject(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, buildResult{Image: imageTag, Status: "success", Log: output})
 }
 
-// --- Register (Docker build + MCP server entry) ---
+// --- Register (Docker build or Bun native + MCP server entry) ---
+
+// isDockerAvailable checks if the Docker CLI is present and the daemon is reachable.
+func isDockerAvailable() bool {
+	cmd := exec.Command("docker", "info")
+	return cmd.Run() == nil
+}
 
 func (h *MCPBuilderHandler) handleRegisterProject(w http.ResponseWriter, r *http.Request) {
 	locale := store.LocaleFromContext(r.Context())
@@ -308,31 +314,60 @@ func (h *MCPBuilderHandler) handleRegisterProject(w http.ResponseWriter, r *http
 		pkg.Name = projectID
 	}
 
-	// Docker build
-	imageTag := fmt.Sprintf("mcp-%s:latest", projectID)
-	output, err := dockerBuild(r.Context(), cleanDir, imageTag)
-	if err != nil {
-		status := http.StatusUnprocessableEntity
-		if r.Context().Err() == context.DeadlineExceeded {
-			status = http.StatusGatewayTimeout
-		}
-		slog.Warn("mcp_builder.register_build", "project", projectID, "error", err)
-		writeJSON(w, status, map[string]any{
-			"status": "build_failed",
-			"log":    output,
-		})
-		return
-	}
+	var command string
+	var argsJSON []byte
+	var imageTag string
 
-	// Build MCP server args JSON
-	args, _ := json.Marshal([]string{"run", "--rm", "-i", imageTag})
+	if isDockerAvailable() {
+		// Docker mode: build image and register with docker run
+		imageTag = fmt.Sprintf("mcp-%s:latest", projectID)
+		output, err := dockerBuild(r.Context(), cleanDir, imageTag)
+		if err != nil {
+			status := http.StatusUnprocessableEntity
+			if r.Context().Err() == context.DeadlineExceeded {
+				status = http.StatusGatewayTimeout
+			}
+			slog.Warn("mcp_builder.register_build", "project", projectID, "error", err)
+			writeJSON(w, status, map[string]any{
+				"status": "build_failed",
+				"log":    output,
+			})
+			return
+		}
+		command = "docker"
+		argsJSON, _ = json.Marshal([]string{"run", "--rm", "-i", imageTag})
+	} else {
+		// Bun native mode: install deps and register with bun run directly
+		slog.Info("mcp_builder.register: docker not available, using bun native mode", "project", projectID)
+
+		// Install dependencies if node_modules doesn't exist
+		nodeModules := filepath.Join(cleanDir, "node_modules")
+		if _, err := os.Stat(nodeModules); os.IsNotExist(err) {
+			installCtx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+			defer cancel()
+			cmd := exec.CommandContext(installCtx, "bun", "install")
+			cmd.Dir = cleanDir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				slog.Warn("mcp_builder.register_bun_install", "project", projectID, "error", err)
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+					"status": "install_failed",
+					"log":    string(out),
+				})
+				return
+			}
+		}
+
+		entryPoint := filepath.Join(cleanDir, "src", "index.ts")
+		command = "bun"
+		argsJSON, _ = json.Marshal([]string{"run", entryPoint})
+	}
 
 	srv := &store.MCPServerData{
 		Name:        pkg.Name,
 		DisplayName: pkg.Description,
 		Transport:   "stdio",
-		Command:     "docker",
-		Args:        args,
+		Command:     command,
+		Args:        argsJSON,
 		Enabled:     false,
 		CreatedBy:   userID,
 	}
@@ -343,8 +378,8 @@ func (h *MCPBuilderHandler) handleRegisterProject(w http.ResponseWriter, r *http
 		updates := map[string]any{
 			"display_name": pkg.Description,
 			"transport":    "stdio",
-			"command":      "docker",
-			"args":         json.RawMessage(args),
+			"command":      command,
+			"args":         json.RawMessage(argsJSON),
 			"enabled":      false,
 		}
 		if err := h.mcpStore.UpdateServer(r.Context(), existing.ID, updates); err != nil {
@@ -352,12 +387,16 @@ func (h *MCPBuilderHandler) handleRegisterProject(w http.ResponseWriter, r *http
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError)})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		resp := map[string]any{
 			"server_id": existing.ID,
 			"name":      pkg.Name,
-			"image":     imageTag,
 			"status":    "registered",
-		})
+			"mode":      command,
+		}
+		if imageTag != "" {
+			resp["image"] = imageTag
+		}
+		writeJSON(w, http.StatusOK, resp)
 		return
 	}
 
@@ -368,12 +407,16 @@ func (h *MCPBuilderHandler) handleRegisterProject(w http.ResponseWriter, r *http
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"server_id": srv.ID,
 		"name":      pkg.Name,
-		"image":     imageTag,
 		"status":    "registered",
-	})
+		"mode":      command,
+	}
+	if imageTag != "" {
+		resp["image"] = imageTag
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // --- Helpers ---

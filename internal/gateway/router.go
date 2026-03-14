@@ -50,7 +50,7 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 	}
 
 	// Permission check: skip for connect, health, and browser pairing status (used by unauthenticated clients)
-	if req.Method != protocol.MethodConnect && req.Method != protocol.MethodHealth && req.Method != protocol.MethodBrowserPairingStatus {
+	if req.Method != protocol.MethodConnect && req.Method != protocol.MethodHealth && req.Method != protocol.MethodBrowserPairingStatus && req.Method != protocol.MethodPing {
 		if pe := r.server.policyEngine; pe != nil {
 			if !pe.CanAccess(client.role, req.Method) {
 				slog.Warn("permission denied", "method", req.Method, "role", client.role, "client", client.id)
@@ -79,6 +79,7 @@ func (r *MethodRouter) registerDefaults() {
 	r.Register(protocol.MethodConnect, r.handleConnect)
 	r.Register(protocol.MethodHealth, r.handleHealth)
 	r.Register(protocol.MethodStatus, r.handleStatus)
+	r.Register(protocol.MethodPing, r.handlePing)
 }
 
 // --- Built-in handlers ---
@@ -281,4 +282,8 @@ func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *pr
 		"clients":    len(r.server.clients),
 		"sessions":   sessionCount,
 	}))
+}
+
+func (r *MethodRouter) handlePing(_ context.Context, client *Client, req *protocol.RequestFrame) {
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"pong": true}))
 }

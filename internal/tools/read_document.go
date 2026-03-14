@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -27,6 +28,22 @@ var textReadableMIMEs = map[string]bool{
 
 // documentMaxTextBytes is the max size for direct text return (500KB).
 const documentMaxTextBytes = 500 * 1024
+
+// containsBinaryBytes checks if data contains control bytes typical of binary files
+// (NUL bytes, etc.), ignoring common text control chars (tab, newline, carriage return).
+func containsBinaryBytes(data []byte) bool {
+	// Sample first 8KB for performance
+	sample := data
+	if len(sample) > 8192 {
+		sample = sample[:8192]
+	}
+	for _, b := range sample {
+		if b == 0 {
+			return true
+		}
+	}
+	return false
+}
 
 // --- Context helpers for media documents ---
 
@@ -119,6 +136,12 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 	slog.Info("read_document: file loaded", "size_bytes", len(data))
 	if len(data) > documentMaxBytes {
 		return ErrorResult(fmt.Sprintf("Document too large: %d bytes (max %d)", len(data), documentMaxBytes))
+	}
+
+	// Fallback: if MIME is still octet-stream, check if content is valid UTF-8 text.
+	if docMime == "application/octet-stream" && len(data) > 0 && utf8.Valid(data) && !containsBinaryBytes(data) {
+		docMime = "text/plain"
+		slog.Info("read_document: detected text content via UTF-8 heuristic", "path", docPath)
 	}
 
 	// Fast path: text-readable files — return content directly without LLM.

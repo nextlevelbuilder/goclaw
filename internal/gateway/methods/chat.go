@@ -238,10 +238,15 @@ func (m *ChatMethods) handleHistory(ctx context.Context, client *gateway.Client,
 	}
 
 	history := m.sessions.GetHistory(sessionKey)
+	summary := m.sessions.GetSummary(sessionKey)
 
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+	resp := map[string]any{
 		"messages": history,
-	}))
+	}
+	if summary != "" {
+		resp["summary"] = summary
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, resp))
 }
 
 // handleInject injects a message into a session transcript without running the agent.

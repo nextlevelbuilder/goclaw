@@ -1,6 +1,41 @@
+import { useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { X, FileCode2 } from "lucide-react";
 import { extOf, langFor } from "@/lib/file-helpers";
+import { EditorView } from "@codemirror/view";
+import { EditorState } from "@codemirror/state";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { python } from "@codemirror/lang-python";
+import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { oneDark } from "@codemirror/theme-one-dark";
+import type { Extension } from "@codemirror/state";
+
+function getLangExtension(ext: string): Extension | null {
+  switch (ext) {
+    case "ts":
+    case "tsx":
+      return javascript({ jsx: ext === "tsx", typescript: true });
+    case "js":
+    case "jsx":
+      return javascript({ jsx: ext === "jsx" });
+    case "json":
+      return json();
+    case "md":
+      return markdown();
+    case "css":
+      return css();
+    case "html":
+      return html();
+    case "py":
+      return python();
+    default:
+      return null;
+  }
+}
 
 interface MCPBuilderFileViewerProps {
   content: string | null;
@@ -16,14 +51,53 @@ export function MCPBuilderFileViewer({
   onClose,
 }: MCPBuilderFileViewerProps) {
   const { t } = useTranslation("mcp");
+  const editorRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
 
-  if (!path) {
-    return null;
-  }
+  const ext = path ? extOf(path) : "";
+  const lang = path ? langFor(ext) : "";
+  const fileName = path?.includes("/") ? path.slice(path.lastIndexOf("/") + 1) : path;
 
-  const ext = extOf(path);
-  const lang = langFor(ext);
-  const fileName = path.includes("/") ? path.slice(path.lastIndexOf("/") + 1) : path;
+  const isDark = useMemo(() => {
+    return document.documentElement.classList.contains("dark");
+  }, [content, path]);
+
+  useEffect(() => {
+    if (!editorRef.current || content === null) return;
+
+    const langExt = getLangExtension(ext);
+
+    const extensions: Extension[] = [
+      EditorView.editable.of(false),
+      EditorState.readOnly.of(true),
+      EditorView.lineWrapping,
+      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      EditorView.theme({
+        "&": { fontSize: "13px", maxHeight: "100%", backgroundColor: "transparent" },
+        ".cm-gutters": { backgroundColor: "transparent", border: "none" },
+        ".cm-scroller": { overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" },
+        ".cm-content": { padding: "8px 0" },
+      }),
+    ];
+
+    if (isDark) extensions.push(oneDark);
+    if (langExt) extensions.push(langExt);
+
+    const state = EditorState.create({ doc: content, extensions });
+
+    if (viewRef.current) {
+      viewRef.current.destroy();
+    }
+
+    viewRef.current = new EditorView({ state, parent: editorRef.current });
+
+    return () => {
+      viewRef.current?.destroy();
+      viewRef.current = null;
+    };
+  }, [content, ext, isDark]);
+
+  if (!path) return null;
 
   return (
     <div className="flex flex-col border-t bg-muted/30 max-h-[40%]">
@@ -56,9 +130,7 @@ export function MCPBuilderFileViewer({
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
           </div>
         ) : content !== null ? (
-          <pre className="p-3 text-sm font-mono leading-relaxed whitespace-pre-wrap break-words">
-            {content}
-          </pre>
+          <div ref={editorRef} className="min-h-0" />
         ) : (
           <div className="flex flex-col items-center justify-center gap-1 py-8 text-sm text-muted-foreground">
             <FileCode2 className="h-6 w-6" />

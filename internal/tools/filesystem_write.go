@@ -15,7 +15,7 @@ import (
 type WriteFileTool struct {
 	workspace        string
 	restrict         bool
-	deniedPrefixes   []string // path prefixes to deny access to (e.g. .goclaw)
+	deniedPrefixes   []string // path prefixes to deny access to (e.g. home dir)
 	sandboxMgr       sandbox.Manager
 	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
 	memIntc          *MemoryInterceptor      // nil = no memory routing

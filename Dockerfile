@@ -39,7 +39,9 @@ FROM alpine:3.22
 ARG ENABLE_SANDBOX=false
 ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
+ARG ENABLE_BUN=false
 ARG ENABLE_FULL_SKILLS=false
+ARG GOCLAW_HOME_DIR_NAME=.goclaw
 
 # Install ca-certificates + wget (healthcheck) + optional runtimes.
 # ENABLE_FULL_SKILLS=true pre-installs all skill deps (larger image, no on-demand install needed).
@@ -50,7 +52,8 @@ RUN set -eux; \
         apk add --no-cache docker-cli; \
     fi; \
     if [ "$ENABLE_FULL_SKILLS" = "true" ]; then \
-        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli doas; \
+        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli doas curl unzip bash; \
+        curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash; \
         echo "permit nopass goclaw as root cmd apk" > /etc/doas.d/goclaw.conf; \
         pip3 install --no-cache-dir --break-system-packages \
             pypdf openpyxl pandas python-pptx markitdown defusedxml lxml; \
@@ -63,6 +66,11 @@ RUN set -eux; \
         fi; \
         if [ "$ENABLE_NODE" = "true" ]; then \
             apk add --no-cache nodejs npm; \
+        fi; \
+        if [ "$ENABLE_BUN" = "true" ]; then \
+            apk add --no-cache curl unzip bash; \
+            curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash; \
+            rm -rf /root/.bun; \
         fi; \
     fi
 
@@ -79,7 +87,7 @@ COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Create data directories (owned by goclaw user)
-RUN mkdir -p /app/workspace /app/data /app/sessions /app/skills /app/tsnet-state /app/.goclaw \
+RUN mkdir -p /app/workspace /app/data /app/sessions /app/skills /app/tsnet-state /app/${GOCLAW_HOME_DIR_NAME} \
     && chown -R goclaw:goclaw /app
 
 # Default environment

@@ -14,12 +14,11 @@ import { useChatMessages } from "@/pages/chat/hooks/use-chat-messages";
 import { useChatSend } from "@/pages/chat/hooks/use-chat-send";
 import { useMCPBuilder } from "./hooks/use-mcp-builder";
 import { useMCPBuilderSessions } from "./hooks/use-mcp-builder-sessions";
+import { useDefaultAgentKey } from "@/hooks/use-default-agent";
 import { MCPBuilderSidebar } from "./mcp-builder-sidebar";
 import { MCPBuilderFileViewer } from "./mcp-builder-file-viewer";
 import type { ChatMessage } from "@/types/chat";
 import { toast } from "@/stores/use-toast-store";
-
-const BUILDER_AGENT_ID = "default";
 
 function deriveProjectName(key: string): string {
   const parts = key.split(":");
@@ -41,20 +40,23 @@ export function MCPBuilderPage() {
   const isMobile = useIsMobile();
   useVirtualKeyboard();
 
+  // Resolve actual default agent key from API
+  const { agentKey: builderAgentId, loading: agentLoading } = useDefaultAgentKey();
+
   // Session management
   const {
     sessions,
     loading: sessionsLoading,
     refresh: refreshSessions,
     buildNewBuilderSessionKey,
-  } = useMCPBuilderSessions();
+  } = useMCPBuilderSessions(builderAgentId);
 
   const [sessionKey, setSessionKey] = useState(() => urlSessionKey ?? "");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Auto-select latest session or create new one when no URL param
   useEffect(() => {
-    if (urlSessionKey || !userId || sessionsLoading) return;
+    if (urlSessionKey || !userId || sessionsLoading || agentLoading) return;
     if (sessions.length > 0) {
       // Select the most recent session
       const latestKey = sessions[0]!.key;
@@ -66,7 +68,7 @@ export function MCPBuilderPage() {
       setSessionKey(newKey);
       navigate(`/mcp/builder/${encodeURIComponent(newKey)}`, { replace: true });
     }
-  }, [urlSessionKey, userId, sessionsLoading, sessions, buildNewBuilderSessionKey, navigate]);
+  }, [urlSessionKey, userId, sessionsLoading, agentLoading, sessions, buildNewBuilderSessionKey, navigate]);
 
   // Sync URL param changes
   useEffect(() => {
@@ -80,6 +82,7 @@ export function MCPBuilderPage() {
   // Chat hooks
   const {
     messages,
+    summary,
     streamText,
     thinkingText,
     toolStream,
@@ -87,7 +90,7 @@ export function MCPBuilderPage() {
     loading: messagesLoading,
     expectRun,
     addLocalMessage,
-  } = useChatMessages(sessionKey, BUILDER_AGENT_ID);
+  } = useChatMessages(sessionKey, builderAgentId);
 
   const handleMessageAdded = useCallback(
     (msg: ChatMessage) => {
@@ -97,7 +100,7 @@ export function MCPBuilderPage() {
   );
 
   const { send, abort, error: sendError } = useChatSend({
-    agentId: BUILDER_AGENT_ID,
+    agentId: builderAgentId,
     onMessageAdded: handleMessageAdded,
     onExpectRun: expectRun,
   });
@@ -124,32 +127,36 @@ export function MCPBuilderPage() {
   const [hasCompleted, setHasCompleted] = useState(false);
   const [registering, setRegistering] = useState(false);
 
-  // Auto-init: create project + send /mcp-builder on new session
-  const hasAutoInitRef = useRef(false);
-  const prevSessionKeyRef = useRef(sessionKey);
+  // Auto-init: create project + send /mcp-builder on new session.
+  // Single effect handles both reset (on session change) and init.
+  // Uses initedKeyRef to track which sessionKey has been initialized,
+  // preventing double-fire from separate reset/init effects.
+  const initedKeyRef = useRef<string>("");
 
-  // Reset auto-init when session changes
   useEffect(() => {
-    if (prevSessionKeyRef.current !== sessionKey) {
-      hasAutoInitRef.current = false;
-      prevSessionKeyRef.current = sessionKey;
+    // Reset UI state when session changes
+    if (initedKeyRef.current && initedKeyRef.current !== sessionKey) {
       setHasCompleted(false);
       setActivePath(null);
     }
-  }, [sessionKey]);
 
-  useEffect(() => {
-    if (messagesLoading || !sessionKey || hasAutoInitRef.current) return;
+    // Guard: wait for loading to finish, agent to resolve, and session key to exist
+    if (messagesLoading || agentLoading || !sessionKey) return;
+    // Guard: already initialized this exact session
+    if (initedKeyRef.current === sessionKey) return;
+
+    // Mark as initialized for this session key immediately (before async work)
+    initedKeyRef.current = sessionKey;
+
     if (messages.length > 0) {
       // Existing session: derive project name and fetch tree
       const name = deriveProjectName(sessionKey);
       setProjectId(name);
       fetchFileTree(name);
-      hasAutoInitRef.current = true;
       return;
     }
-    hasAutoInitRef.current = true;
 
+    // New session: create project + send /mcp-builder
     (async () => {
       const name = deriveProjectName(sessionKey);
       try {
@@ -161,7 +168,7 @@ export function MCPBuilderPage() {
         toast.error(t("builder.projectError"));
       }
     })();
-  }, [messagesLoading, messages.length, sessionKey, createProject, fetchFileTree, send, setProjectId, t]);
+  }, [messagesLoading, agentLoading, messages.length, sessionKey, createProject, fetchFileTree, send, setProjectId, t]);
 
   // File tree refresh + session refresh on run.completed
   const prevIsRunningRef = useRef(false);
@@ -175,6 +182,31 @@ export function MCPBuilderPage() {
     }
     prevIsRunningRef.current = isRunning;
   }, [isRunning, projectId, fetchFileTree, refreshSessions]);
+
+  // Refresh file tree on tool.result (debounced) — so new/modified files appear in realtime
+  const toolRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevCompletedCountRef = useRef(0);
+  useEffect(() => {
+    if (!projectId) return;
+    const completedCount = toolStream.filter((t) => t.phase === "completed").length;
+    if (completedCount <= prevCompletedCountRef.current) {
+      prevCompletedCountRef.current = completedCount;
+      return;
+    }
+    prevCompletedCountRef.current = completedCount;
+
+    // Debounce: wait 800ms after the last tool.result before refreshing
+    if (toolRefreshTimerRef.current) clearTimeout(toolRefreshTimerRef.current);
+    toolRefreshTimerRef.current = setTimeout(() => {
+      fetchFileTree(projectId);
+      // Also refresh the active file content if one is open
+      if (activePath) fetchFileContent(projectId, activePath);
+    }, 800);
+
+    return () => {
+      if (toolRefreshTimerRef.current) clearTimeout(toolRefreshTimerRef.current);
+    };
+  }, [toolStream, projectId, fetchFileTree, fetchFileContent, activePath]);
 
   // Session handlers
   const handleNewBuild = useCallback(() => {
@@ -291,70 +323,7 @@ export function MCPBuilderPage() {
         />
       )}
 
-      {/* Center: File tree (desktop only) */}
-      {!isMobile && (
-        <aside className="hidden w-64 shrink-0 flex-col border-r md:flex">
-          <div className="flex items-center justify-between border-b px-3 py-2">
-            <span className="text-sm font-medium">{t("builder.projectFiles")}</span>
-            <button
-              onClick={handleRefreshTree}
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              title={t("builder.refreshFiles")}
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", filesLoading && "animate-spin")} />
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto overscroll-contain p-1">
-            <FileTreePanel
-              tree={tree}
-              filesLoading={filesLoading}
-              activePath={activePath}
-              onSelect={handleFileSelect}
-            />
-          </div>
-        </aside>
-      )}
-
-      {/* Mobile: File tree drawer */}
-      {isMobile && (
-        <>
-          {treeSidebarOpen && (
-            <div
-              className="fixed inset-0 z-40 bg-black/50"
-              onClick={() => setTreeSidebarOpen(false)}
-            />
-          )}
-          <div
-            className={cn(
-              "fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out",
-              treeSidebarOpen ? "translate-x-0" : "-translate-x-full",
-            )}
-          >
-            <div className="flex h-full w-72 max-w-[85vw] flex-col border-r bg-background">
-              <div className="flex items-center justify-between border-b px-3 py-2">
-                <span className="text-sm font-medium">{t("builder.projectFiles")}</span>
-                <button
-                  onClick={handleRefreshTree}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  title={t("builder.refreshFiles")}
-                >
-                  <RefreshCw className={cn("h-3.5 w-3.5", filesLoading && "animate-spin")} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto overscroll-contain p-1">
-                <FileTreePanel
-                  tree={tree}
-                  filesLoading={filesLoading}
-                  activePath={activePath}
-                  onSelect={handleFileSelect}
-                />
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Right: chat + optional file viewer */}
+      {/* Center: chat + optional file viewer */}
       <div className="flex flex-1 flex-col min-w-0">
         {/* Mobile top bar + Build & Register button */}
         {(isMobile || hasCompleted) && (
@@ -403,6 +372,7 @@ export function MCPBuilderPage() {
 
         <ChatThread
           messages={messages}
+          summary={summary}
           streamText={streamText}
           thinkingText={thinkingText}
           toolStream={toolStream}
@@ -427,6 +397,69 @@ export function MCPBuilderPage() {
           disabled={!connected}
         />
       </div>
+
+      {/* Right: File tree (desktop only) */}
+      {!isMobile && (
+        <aside className="hidden w-64 shrink-0 flex-col border-l md:flex">
+          <div className="flex items-center justify-between border-b px-3 py-2">
+            <span className="text-sm font-medium">{t("builder.projectFiles")}</span>
+            <button
+              onClick={handleRefreshTree}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              title={t("builder.refreshFiles")}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", filesLoading && "animate-spin")} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto overscroll-contain p-1">
+            <FileTreePanel
+              tree={tree}
+              filesLoading={filesLoading}
+              activePath={activePath}
+              onSelect={handleFileSelect}
+            />
+          </div>
+        </aside>
+      )}
+
+      {/* Mobile: File tree drawer (slides from right) */}
+      {isMobile && (
+        <>
+          {treeSidebarOpen && (
+            <div
+              className="fixed inset-0 z-40 bg-black/50"
+              onClick={() => setTreeSidebarOpen(false)}
+            />
+          )}
+          <div
+            className={cn(
+              "fixed inset-y-0 right-0 z-50 transition-transform duration-200 ease-in-out",
+              treeSidebarOpen ? "translate-x-0" : "translate-x-full",
+            )}
+          >
+            <div className="flex h-full w-72 max-w-[85vw] flex-col border-l bg-background">
+              <div className="flex items-center justify-between border-b px-3 py-2">
+                <span className="text-sm font-medium">{t("builder.projectFiles")}</span>
+                <button
+                  onClick={handleRefreshTree}
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  title={t("builder.refreshFiles")}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", filesLoading && "animate-spin")} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto overscroll-contain p-1">
+                <FileTreePanel
+                  tree={tree}
+                  filesLoading={filesLoading}
+                  activePath={activePath}
+                  onSelect={handleFileSelect}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -125,7 +125,7 @@ Scaffold from `templates/mcp-server/`:
 - `"module": "src/index.ts"` — entry point is TypeScript (no dist/)
 - No build script — Bun runs TypeScript directly
 - No axios — use native `fetch()`
-- No express — use `Bun.serve()` for HTTP or SDK's built-in HTTP handler
+- No express — use `node:http` for HTTP transport (required by SDK's `StreamableHTTPServerTransport`)
 - No dotenv — Bun loads `.env` automatically
 
 ### tsconfig.json
@@ -164,6 +164,7 @@ The entry point creates the server and selects transport based on `MCP_TRANSPORT
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createServer as createHttpServer } from "node:http";
 import { log } from "./logging.ts";
 import { registerTools } from "./tools/index.ts";
 import { registerResources } from "./resources/index.ts";
@@ -196,20 +197,29 @@ async function startHttp() {
   });
   await server.connect(httpTransport);
 
-  Bun.serve({
-    port,
-    routes: {
-      "/mcp": {
-        POST: async (req) => httpTransport.handleRequest(req),
-      },
-      "/health": {
-        GET: () =>
-          Response.json({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION }),
-      },
-    },
+  // IMPORTANT: StreamableHTTPServerTransport expects Node.js IncomingMessage/ServerResponse,
+  // NOT Bun's Web API Request/Response. Use node:http (Bun-compatible) instead of Bun.serve().
+  const httpServer = createHttpServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
+
+    if (url.pathname === "/mcp") {
+      await httpTransport.handleRequest(req, res);
+      return;
+    }
+
+    if (url.pathname === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION }));
+      return;
+    }
+
+    res.writeHead(404);
+    res.end("Not Found");
   });
 
-  log("info", `${SERVER_NAME} running on http://localhost:${port}/mcp`);
+  httpServer.listen(port, () => {
+    log("info", `${SERVER_NAME} running on http://localhost:${port}/mcp`);
+  });
 }
 
 async function main() {
@@ -226,6 +236,9 @@ main().catch((error) => {
   process.exit(1);
 });
 ```
+
+> **⚠️ Why `node:http` instead of `Bun.serve()`?**
+> `StreamableHTTPServerTransport.handleRequest()` requires Node.js `IncomingMessage`/`ServerResponse` objects. `Bun.serve()` uses Web API `Request`/`Response` which are incompatible. Bun fully supports `node:http`, so this works without issues.
 
 **Transport selection:**
 | Transport | Env Var | Use Case |
@@ -783,7 +796,7 @@ Prefer Bun-native APIs over Node.js equivalents:
 | Instead of | Use |
 |------------|-----|
 | `axios` / `node-fetch` | `fetch()` (built-in) |
-| `express` | `Bun.serve()` |
+| `express` | `node:http` for MCP HTTP transport, `Bun.serve()` for other HTTP servers |
 | `dotenv` | Automatic `.env` loading |
 | `jest` / `vitest` | `bun:test` |
 | `fs.readFile()` | `Bun.file(path).text()` |

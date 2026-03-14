@@ -12,6 +12,7 @@ Default to using Bun instead of Node.js.
 ## APIs
 
 - `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
+- **IMPORTANT for MCP HTTP transport:** Use `node:http` (Bun-compatible), NOT `Bun.serve()`. `StreamableHTTPServerTransport.handleRequest()` requires Node.js `IncomingMessage`/`ServerResponse`, which are incompatible with Bun's Web API `Request`/`Response`.
 - `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
 - `Bun.redis` for Redis. Don't use `ioredis`.
 - `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.

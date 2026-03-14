@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createServer as createHttpServer } from "node:http";
 import { registerTools } from "./tools/index.ts";
 import { registerResources } from "./resources/index.ts";
 import { registerPrompts } from "./prompts/index.ts";
@@ -37,24 +38,29 @@ async function startHttp(server: McpServer) {
 
   await server.connect(transport);
 
-  Bun.serve({
-    port,
-    async fetch(req) {
-      const url = new URL(req.url);
+  // StreamableHTTPServerTransport expects Node.js IncomingMessage/ServerResponse,
+  // not Bun's Web API Request/Response. Use node:http (Bun-compatible) for HTTP transport.
+  const httpServer = createHttpServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
 
-      if (url.pathname === "/mcp") {
-        return transport.handleRequest(req);
-      }
+    if (url.pathname === "/mcp") {
+      await transport.handleRequest(req, res);
+      return;
+    }
 
-      if (url.pathname === "/health") {
-        return Response.json({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION });
-      }
+    if (url.pathname === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION }));
+      return;
+    }
 
-      return new Response("Not Found", { status: 404 });
-    },
+    res.writeHead(404);
+    res.end("Not Found");
   });
 
-  log("info", `MCP server running on http://localhost:${port}/mcp`);
+  httpServer.listen(port, () => {
+    log("info", `MCP server running on http://localhost:${port}/mcp`);
+  });
 }
 
 async function main() {

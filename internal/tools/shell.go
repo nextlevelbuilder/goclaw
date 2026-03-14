@@ -133,7 +133,7 @@ type ExecTool struct {
 	workingDir     string
 	timeout        time.Duration
 	denyPatterns   []*regexp.Regexp
-	denyExemptions []string // substrings that exempt a command from deny (e.g. ".goclaw/skills-store/")
+	denyExemptions []string // substrings that exempt a command from deny (e.g. "<HomeDirName>/skills-store/")
 	restrict       bool
 	sandboxMgr     sandbox.Manager      // nil = no sandbox, execute on host
 	approvalMgr    *ExecApprovalManager // nil = no approval needed
@@ -165,7 +165,7 @@ func NewSandboxedExecTool(workingDir string, restrict bool, mgr sandbox.Manager)
 func (t *ExecTool) SetSandboxKey(key string) {}
 
 // DenyPaths adds dynamic deny patterns that block commands referencing the given paths.
-// Used to prevent exec from reading/copying files from sensitive directories (e.g. data dir, .goclaw).
+// Used to prevent exec from reading/copying files from sensitive directories (e.g. data dir, home dir).
 func (t *ExecTool) DenyPaths(paths ...string) {
 	for _, p := range paths {
 		escaped := regexp.QuoteMeta(p)
@@ -174,8 +174,8 @@ func (t *ExecTool) DenyPaths(paths ...string) {
 }
 
 // AllowPathExemptions adds substrings that exempt a command from deny pattern matches.
-// E.g. AllowPathExemptions(".goclaw/skills-store/") lets commands referencing
-// skills-store pass even though ".goclaw/" is denied.
+// E.g. AllowPathExemptions("<HomeDirName>/skills-store/") lets commands referencing
+// skills-store pass even though "<HomeDirName>/" is denied.
 func (t *ExecTool) AllowPathExemptions(substrings ...string) {
 	t.denyExemptions = append(t.denyExemptions, substrings...)
 }
@@ -214,7 +214,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Check for dangerous commands (applies to both host and sandbox)
 	for _, pattern := range t.denyPatterns {
 		if pattern.MatchString(command) {
-			// Check if any exemption applies (e.g. skills-store within .goclaw)
+			// Check if any exemption applies (e.g. skills-store within home dir)
 			exempt := false
 			for _, ex := range t.denyExemptions {
 				if strings.Contains(command, ex) {
@@ -251,7 +251,8 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 	if wd, _ := args["working_dir"].(string); wd != "" {
 		if effectiveRestrict(ctx, t.restrict) {
-			resolved, err := resolvePath(wd, t.workingDir, true)
+			// Validate working_dir against the effective workspace (per-user or global)
+			resolved, err := resolvePath(wd, cwd, true)
 			if err != nil {
 				return ErrorResult(err.Error())
 			}

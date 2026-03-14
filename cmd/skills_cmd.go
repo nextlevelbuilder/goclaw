@@ -90,7 +90,7 @@ func loadSkillsLoader() *skills.Loader {
 	cfgPath := resolveConfigPath()
 	cfg, _ := config.Load(cfgPath)
 	workspace := config.ExpandHome(cfg.Agents.Defaults.Workspace)
-	globalSkillsDir := filepath.Join(config.ExpandHome("~/.goclaw"), "skills")
+	globalSkillsDir := filepath.Join(config.ExpandHome("~/"+config.HomeDirName()), "skills")
 	builtinSkillsDir := os.Getenv("GOCLAW_BUILTIN_SKILLS_DIR")
 	if builtinSkillsDir == "" {
 		builtinSkillsDir = "/app/bundled-skills"

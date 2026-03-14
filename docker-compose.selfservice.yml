@@ -10,6 +10,11 @@ services:
     build:
       context: ./ui/web
       dockerfile: Dockerfile
+      args:
+        VITE_BRAND_APP_NAME: "${VITE_BRAND_APP_NAME:-GoClaw}"
+        VITE_BRAND_APP_KEY: "${VITE_BRAND_APP_KEY:-goclaw}"
+        VITE_BRAND_TAGLINE: "${VITE_BRAND_TAGLINE:-}"
+        VITE_BRAND_LOGO_URL: "${VITE_BRAND_LOGO_URL:-}"
     ports:
       - "${GOCLAW_UI_PORT:-3000}:80"
     networks:

@@ -52,7 +52,7 @@ Key pages to review:
 - **Runtime**: Bun (built-in TypeScript, native test runner, fast startup)
 - **MCP SDK**: `@modelcontextprotocol/sdk` (official TypeScript SDK)
 - **Validation**: Zod for schema validation with `.describe()` for LLM understanding
-- **Transport**: stdio (default, local clients) or streamable HTTP (remote/multi-client)
+- **Transport**: stdio (default, local clients) or streamable HTTP via `node:http` (remote/multi-client). **Note:** `StreamableHTTPServerTransport` requires Node.js `IncomingMessage`/`ServerResponse` — use `node:http` (Bun-compatible), NOT `Bun.serve()` which uses incompatible Web API `Request`/`Response`
 
 **Load framework documentation:**
 

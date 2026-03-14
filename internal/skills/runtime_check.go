@@ -32,6 +32,7 @@ func CheckRuntimes() *RuntimeStatus {
 		{"pip3", "pip3", "--version", true},
 		{"node", "node", "--version", false},
 		{"npm", "npm", "--version", false},
+		{"bun", "bun", "--version", false},
 		{"doas", "doas", "", false},
 	}
 

@@ -18,7 +18,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 
 	skillsDir := cfg.SkillsStorageDir
 	if skillsDir == "" {
-		skillsDir = "~/.goclaw/skills-store"
+		skillsDir = "~/" + config.HomeDirName() + "/skills-store"
 	}
 	skillsDir = config.ExpandHome(skillsDir)
 

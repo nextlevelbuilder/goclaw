@@ -41,6 +41,7 @@ export function ChatPage() {
 
   const {
     messages,
+    summary,
     streamText,
     thinkingText,
     toolStream,
@@ -208,6 +209,7 @@ export function ChatPage() {
 
         <ChatThread
           messages={messages}
+          summary={summary}
           streamText={streamText}
           thinkingText={thinkingText}
           toolStream={toolStream}

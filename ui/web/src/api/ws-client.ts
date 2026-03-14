@@ -19,6 +19,7 @@ export class WsClient {
   private pending = new Map<string, PendingRequest>();
   private eventListeners = new Map<string, Set<EventListener>>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempts = 0;
   private authenticated = false;
   private intentionalClose = false;
@@ -27,6 +28,7 @@ export class WsClient {
   private readonly maxReconnectDelay = 30_000;
   private readonly baseReconnectDelay = 1_000;
   private readonly defaultTimeout = 30_000;
+  private readonly heartbeatInterval = 25_000; // ping every 25s to keep connection alive
 
   onAuthFailure: (() => void) | null = null;
 
@@ -40,7 +42,7 @@ export class WsClient {
     private getUserId: () => string,
     private getSenderID: () => string,
     private onStateChange: (state: ConnectionState) => void,
-  ) {}
+  ) { }
 
   connect(): void {
     if (this.ws) return;
@@ -68,6 +70,7 @@ export class WsClient {
 
       this.ws = null;
       this.authenticated = false;
+      this.stopHeartbeat();
       this.onStateChange("disconnected");
       this.rejectAllPending("Connection closed");
 
@@ -93,6 +96,7 @@ export class WsClient {
       socket.close();
     }
     this.authenticated = false;
+    this.stopHeartbeat();
     this.rejectAllPending("Disconnected");
     this.onStateChange("disconnected");
   }
@@ -222,6 +226,7 @@ export class WsClient {
       }
 
       this.authenticated = true;
+      this.startHeartbeat();
       const uiTheme = res?.ui_theme;
       this.onLockedTheme?.(
         uiTheme === "light" || uiTheme === "dark" ? uiTheme : null,
@@ -314,5 +319,22 @@ export class WsClient {
       this.reconnectTimer = null;
       this.connect();
     }, delay);
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        // Send a lightweight ping RPC; ignore response.
+        this.call("ping").catch(() => { });
+      }
+    }, this.heartbeatInterval);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 }

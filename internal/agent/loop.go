@@ -103,6 +103,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					ws = l.workspace
 				}
 			}
+			// DB may store paths with the default home dir prefix — rewrite to
+			// the configured HomeDirName so overrides like ".studio" work correctly.
+			homeDirName := config.HomeDirName()
+			if homeDirName != config.DefaultHomeDirName {
+				ws = strings.Replace(ws, "~/"+config.DefaultHomeDirName+"/", "~/"+homeDirName+"/", 1)
+			}
 			// Expand ~ and convert to absolute for filesystem operations.
 			ws = config.ExpandHome(ws)
 			if !filepath.IsAbs(ws) {

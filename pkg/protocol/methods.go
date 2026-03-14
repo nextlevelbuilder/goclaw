@@ -42,12 +42,13 @@ const (
 	MethodConnect = "connect"
 	MethodHealth  = "health"
 	MethodStatus  = "status"
+	MethodPing    = "ping"
 )
 
 // Phase 2 - NEEDED methods
 const (
-	MethodSkillsList  = "skills.list"
-	MethodSkillsGet   = "skills.get"
+	MethodSkillsList   = "skills.list"
+	MethodSkillsGet    = "skills.get"
 	MethodSkillsUpdate = "skills.update"
 
 	MethodCronList   = "cron.list"
@@ -102,10 +103,10 @@ const (
 
 // Agent teams
 const (
-	MethodTeamsList     = "teams.list"
-	MethodTeamsCreate   = "teams.create"
-	MethodTeamsGet      = "teams.get"
-	MethodTeamsDelete   = "teams.delete"
+	MethodTeamsList          = "teams.list"
+	MethodTeamsCreate        = "teams.create"
+	MethodTeamsGet           = "teams.get"
+	MethodTeamsDelete        = "teams.delete"
 	MethodTeamsTaskList      = "teams.tasks.list"
 	MethodTeamsTaskGet       = "teams.tasks.get"
 	MethodTeamsTaskApprove   = "teams.tasks.approve"
@@ -151,6 +152,6 @@ const (
 	MethodBrowserScreenshot = "browser.screenshot"
 
 	// Zalo Personal
-	MethodZaloPersonalQRStart   = "zalo.personal.qr.start"
-	MethodZaloPersonalContacts  = "zalo.personal.contacts"
+	MethodZaloPersonalQRStart  = "zalo.personal.qr.start"
+	MethodZaloPersonalContacts = "zalo.personal.contacts"
 )

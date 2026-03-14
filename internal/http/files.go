@@ -64,7 +64,7 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// URL path is the absolute path with leading "/" stripped (e.g. "app/.goclaw/workspace/file.png")
+	// URL path is the absolute path with leading "/" stripped (e.g. "app/<HomeDirName>/workspace/file.png")
 	absPath := filepath.Clean("/" + urlPath)
 
 	info, err := os.Stat(absPath)

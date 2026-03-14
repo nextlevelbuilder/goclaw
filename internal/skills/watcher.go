@@ -124,7 +124,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event) {
 	path := event.Name
 
 	// New directory created inside a skill root → start watching it
-	// (e.g. user creates ~/.goclaw/skills/new-skill/)
+	// (e.g. user creates ~/<HomeDirName>/skills/new-skill/)
 	if event.Has(fsnotify.Create) {
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
 			_ = w.fsw.Add(path)

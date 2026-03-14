@@ -23,27 +23,27 @@ type SystemPromptConfig struct {
 	AgentID       string
 	Model         string
 	Workspace     string
-	Channel       string                 // runtime channel instance name (e.g. "my-telegram-bot")
-	ChannelType   string                 // platform type (e.g. "zalo_personal", "telegram")
-	PeerKind      string                 // "direct" or "group"
-	OwnerIDs      []string               // owner sender IDs
-	Mode          PromptMode             // full or minimal
-	ToolNames     []string               // registered tool names
-	SkillsSummary string                 // XML from skills.Loader.BuildSummary()
-	HasMemory     bool                   // memory_search/memory_get available?
-	HasSpawn      bool                   // spawn tool available?
+	Channel       string                  // runtime channel instance name (e.g. "my-telegram-bot")
+	ChannelType   string                  // platform type (e.g. "zalo_personal", "telegram")
+	PeerKind      string                  // "direct" or "group"
+	OwnerIDs      []string                // owner sender IDs
+	Mode          PromptMode              // full or minimal
+	ToolNames     []string                // registered tool names
+	SkillsSummary string                  // XML from skills.Loader.BuildSummary()
+	HasMemory     bool                    // memory_search/memory_get available?
+	HasSpawn      bool                    // spawn tool available?
 	ContextFiles  []bootstrap.ContextFile // bootstrap files for # Project Context
-	ExtraPrompt   string                 // extra system prompt (subagent context, etc.)
-	AgentType     string                 // "open" or "predefined" — affects context file framing
+	ExtraPrompt   string                  // extra system prompt (subagent context, etc.)
+	AgentType     string                  // "open" or "predefined" — affects context file framing
 
-	HasSkillSearch     bool              // skill_search tool registered? (for search-mode prompt)
-	HasMCPToolSearch   bool              // mcp_tool_search tool registered? (MCP search mode)
-	HasKnowledgeGraph  bool              // knowledge_graph_search tool registered?
-	MCPToolDescs       map[string]string // MCP tool name → description (inline mode only)
+	HasSkillSearch    bool              // skill_search tool registered? (for search-mode prompt)
+	HasMCPToolSearch  bool              // mcp_tool_search tool registered? (MCP search mode)
+	HasKnowledgeGraph bool              // knowledge_graph_search tool registered?
+	MCPToolDescs      map[string]string // MCP tool name → description (inline mode only)
 
 	// Sandbox info — matching TS sandboxInfo in system-prompt.ts
-	SandboxEnabled       bool   // exec tool runs inside Docker sandbox?
-	SandboxContainerDir  string // container-side workdir (e.g. "/workspace")
+	SandboxEnabled         bool   // exec tool runs inside Docker sandbox?
+	SandboxContainerDir    string // container-side workdir (e.g. "/workspace")
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
 
 	// Self-evolution: predefined agents can update SOUL.md (style/tone)
@@ -53,42 +53,42 @@ type SystemPromptConfig struct {
 // coreToolSummaries maps tool names to one-line descriptions.
 // Shown in the ## Tooling section of the system prompt.
 var coreToolSummaries = map[string]string{
-	"read_file":     "Read file contents",
-	"write_file":    "Create or overwrite files",
-	"list_files":    "List directory contents",
-	"exec":          "Run shell commands",
-	"memory_search": "Search indexed memory files (MEMORY.md + memory/*.md)",
-	"memory_get":    "Read specific sections of memory files",
-	"spawn":         "Spawn a subagent or delegate to another agent",
-	"web_search":    "Search the web",
-	"web_fetch":     "Fetch and extract content from a URL",
-	"cron":          "Manage scheduled jobs and reminders",
-	"skill_search":     "Search available skills by keyword (weather, translate, github, etc.)",
-	"use_skill":        "Invoke a skill by name and follow its instructions",
-	"mcp_tool_search":  "Search for available MCP external integration tools by keyword",
-	"browser":          "Browse web pages interactively",
-	"tts":              "Convert text to speech audio",
-	"edit":             "Edit a file by replacing exact text matches",
-	"message":          "Send a PROACTIVE message to another channel/chat — do NOT use this to reply to the user, just respond directly",
-	"sessions_list":    "List sessions for this agent",
-	"session_status":   "Show session status (model, tokens, compaction count)",
-	"sessions_history": "Fetch message history for a session",
-	"sessions_send":    "Send a message into another session",
-	"read_image":       "Analyze images attached to the conversation. Call this when you see <media:image> tags",
-	"read_audio":       "Analyze audio files attached to the conversation. Call this when you see <media:audio> tags",
-	"read_video":       "Analyze video files attached to the conversation. Call this when you see <media:video> tags",
-	"create_video":     "Generate videos from text descriptions using AI",
-	"read_document":    "Analyze documents (PDF, DOCX, etc.) attached to the conversation. Call this when you see <media:document> tags. If this tool fails, use a relevant skill instead (e.g. pdf skill with exec tool). The path attribute in <media:document path=\"...\"> is a directly accessible file in your workspace — use it directly, no need to copy",
-	"create_image":            "Generate images from text descriptions using AI",
-	"create_audio":            "Generate music or sound effects from text descriptions using AI",
-	"knowledge_graph_search":  "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
-	"handoff":                 "Transfer conversation to another agent (ONLY when user explicitly asks to switch agents — NOT for task delegation)",
-	"evaluate_loop":           "Run a generate→evaluate→revise loop between two agents for quality-critical tasks",
-	"delegate_search":         "Search for agents by expertise to find the right delegation target",
-	"team_tasks":              "Manage team task board (list, create, complete, cancel tasks)",
-	"team_message":            "Send messages to teammates (progress updates, questions)",
-	"workspace_write":         "Write files to the team shared workspace (visible to all team members)",
-	"workspace_read":          "Read, list, delete, pin, tag files in the team shared workspace",
+	"read_file":              "Read file contents",
+	"write_file":             "Create or overwrite files",
+	"list_files":             "List directory contents",
+	"exec":                   "Run shell commands",
+	"memory_search":          "Search indexed memory files (MEMORY.md + memory/*.md)",
+	"memory_get":             "Read specific sections of memory files",
+	"spawn":                  "Spawn a subagent or delegate to another agent",
+	"web_search":             "Search the web",
+	"web_fetch":              "Fetch and extract content from a URL",
+	"cron":                   "Manage scheduled jobs and reminders",
+	"skill_search":           "Search available skills by keyword (weather, translate, github, etc.)",
+	"use_skill":              "Invoke a skill by name and follow its instructions",
+	"mcp_tool_search":        "Search for available MCP external integration tools by keyword",
+	"browser":                "Browse web pages interactively",
+	"tts":                    "Convert text to speech audio",
+	"edit":                   "Edit a file by replacing exact text matches",
+	"message":                "Send a PROACTIVE message to another channel/chat — do NOT use this to reply to the user, just respond directly",
+	"sessions_list":          "List sessions for this agent",
+	"session_status":         "Show session status (model, tokens, compaction count)",
+	"sessions_history":       "Fetch message history for a session",
+	"sessions_send":          "Send a message into another session",
+	"read_image":             "Analyze images attached to the conversation. Call this when you see <media:image> tags",
+	"read_audio":             "Analyze audio files attached to the conversation. Call this when you see <media:audio> tags",
+	"read_video":             "Analyze video files attached to the conversation. Call this when you see <media:video> tags",
+	"create_video":           "Generate videos from text descriptions using AI",
+	"read_document":          "Analyze documents (PDF, DOCX, etc.) attached to the conversation. Call this when you see <media:document> tags. If this tool fails, use a relevant skill instead (e.g. pdf skill with exec tool). The path attribute in <media:document path=\"...\"> is a directly accessible file in your workspace — use it directly, no need to copy",
+	"create_image":           "Generate images from text descriptions using AI",
+	"create_audio":           "Generate music or sound effects from text descriptions using AI",
+	"knowledge_graph_search": "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
+	"handoff":                "Transfer conversation to another agent (ONLY when user explicitly asks to switch agents — NOT for task delegation)",
+	"evaluate_loop":          "Run a generate→evaluate→revise loop between two agents for quality-critical tasks",
+	"delegate_search":        "Search for agents by expertise to find the right delegation target",
+	"team_tasks":             "Manage team task board (list, create, complete, cancel tasks)",
+	"team_message":           "Send messages to teammates (progress updates, questions)",
+	"workspace_write":        "Write files to the team shared workspace (visible to all team members)",
+	"workspace_read":         "Read, list, delete, pin, tag files in the team shared workspace",
 
 	// Claude Code tool aliases — enable Claude Code skills without modification
 	"Read":       "Alias for read_file — Read file contents",
@@ -360,7 +360,10 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch bool) []string {
 			"## Skills (mandatory)",
 			"",
 			"Before replying, scan `<available_skills>` below.",
-			"If a skill clearly applies, read its SKILL.md at the `<location>` path with `read_file`, then follow it.",
+			"If a skill clearly applies:",
+			"1. FIRST call `use_skill` with the skill name — this is REQUIRED for activation tracing.",
+			"2. THEN call `read_file` with the skill's `<location>` path to read SKILL.md.",
+			"3. Follow the skill instructions.",
 			"If multiple could apply, choose the most specific one. Never read more than one skill up front.",
 			"If none apply, proceed normally.",
 			"",
@@ -377,11 +380,13 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch bool) []string {
 			"Before replying, check if a skill applies:",
 			"1. Run `skill_search` with **English keywords** describing the domain (e.g. \"weather\", \"translate\", \"github\").",
 			"   Even if the user writes in another language, always search in English.",
-			"2. If a match is found, read its SKILL.md at the returned `location` with `read_file`, then follow it.",
-			"3. If multiple skills match, choose the most specific one. Never read more than one skill up front.",
-			"4. If no match, proceed normally.",
+			"2. If a match is found, FIRST call `use_skill` with the skill name — this is REQUIRED for activation tracing.",
+			"3. THEN call `read_file` with the skill's `location` path to read SKILL.md, and follow it.",
+			"4. If multiple skills match, choose the most specific one. Never read more than one skill up front.",
+			"5. If no match, proceed normally.",
 			"",
 			"Constraints:",
+			"- ALWAYS call `use_skill` before `read_file` when activating a skill — never skip this step.",
 			"- Prefer `skill_search` over `browser` or `web_search` when the domain might have a skill.",
 			"- If skill_search returns no results, fall back to other tools freely.",
 			"",
@@ -435,5 +440,3 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 		"",
 	}
 }
-
-

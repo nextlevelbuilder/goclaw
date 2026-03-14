@@ -238,17 +238,22 @@ func runGateway() {
 	// Data directory for Phase 2 services
 	dataDir := os.Getenv("GOCLAW_DATA_DIR")
 	if dataDir == "" {
-		dataDir = config.ExpandHome("~/.goclaw/data")
+		dataDir = config.ExpandHome("~/" + config.HomeDirName() + "/data")
 	}
 	os.MkdirAll(dataDir, 0755)
 
-	// Block exec from accessing sensitive directories (data dir, .goclaw, config file).
+	// Block exec from accessing sensitive directories (data dir, home dir, config file).
 	// Prevents `cp /app/data/config.json workspace/` and similar exfiltration.
-	// Exception: .goclaw/skills-store/ is allowed (skills may contain executable scripts).
+	// Exceptions:
+	//   - <HomeDirName>/skills-store/ — skills may contain executable scripts.
+	//   - <HomeDirName>/*-workspace/ — agent workspaces live under the home dir.
 	if execTool, ok := toolsReg.Get("exec"); ok {
 		if et, ok := execTool.(*tools.ExecTool); ok {
-			et.DenyPaths(dataDir, ".goclaw/")
-			et.AllowPathExemptions(".goclaw/skills-store/")
+			et.DenyPaths(dataDir, config.HomeDirName()+"/")
+			et.AllowPathExemptions(
+				config.HomeDirName()+"/skills-store/",
+				"-workspace/", // partial match for any agent workspace (e.g. .studio/fox-spirit-workspace/)
+			)
 			if cfgPath := os.Getenv("GOCLAW_CONFIG"); cfgPath != "" {
 				et.DenyPaths(cfgPath)
 			}
@@ -484,10 +489,10 @@ func runGateway() {
 	}
 
 	// Skills loader + search tool
-	// Global skills live under ~/.goclaw/skills/ (user-managed), not data/skills/.
+	// Global skills live under ~/<HomeDirName>/skills/ (user-managed), not data/skills/.
 	globalSkillsDir := os.Getenv("GOCLAW_SKILLS_DIR")
 	if globalSkillsDir == "" {
-		globalSkillsDir = filepath.Join(config.ExpandHome("~/.goclaw"), "skills")
+		globalSkillsDir = filepath.Join(config.ExpandHome("~/"+config.HomeDirName()), "skills")
 	}
 	// Bundled skills: shipped with the Docker image at /app/bundled-skills/.
 	// Lowest priority — managed (skills-store) and user-uploaded skills override these.
@@ -614,19 +619,21 @@ func runGateway() {
 	slog.Info("tool aliases registered", "count", len(toolsReg.Aliases()))
 
 	// Allow read_file to access skills directories and CLI workspaces (outside workspace).
-	// Skills can live in ~/.goclaw/skills/, ~/.agents/skills/, ~/.goclaw/skills-store/, etc.
-	// CLI workspaces live in ~/.goclaw/cli-workspaces/ (agent working files).
+	// Skills can live in ~/<HomeDirName>/skills/, ~/.agents/skills/, ~/<HomeDirName>/skills-store/, etc.
+	// CLI workspaces live in ~/<HomeDirName>/cli-workspaces/ (agent working files).
 	homeDir, _ := os.UserHomeDir()
-	if readTool, ok := toolsReg.Get("read_file"); ok {
-		if pa, ok := readTool.(tools.PathAllowable); ok {
-			pa.AllowPaths(globalSkillsDir)
-			if homeDir != "" {
-				pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
-				pa.AllowPaths(filepath.Join(homeDir, ".goclaw", "cli-workspaces"))
-			}
-			// Also allow the skills store directory (uploaded skill content).
-			if pgStores.Skills != nil {
-				pa.AllowPaths(pgStores.Skills.Dirs()...)
+	for _, toolName := range []string{"read_file", "list_files"} {
+		if t, ok := toolsReg.Get(toolName); ok {
+			if pa, ok := t.(tools.PathAllowable); ok {
+				pa.AllowPaths(globalSkillsDir)
+				if homeDir != "" {
+					pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
+					pa.AllowPaths(filepath.Join(homeDir, config.HomeDirName(), "cli-workspaces"))
+				}
+				// Also allow the skills store directory (uploaded skill content).
+				if pgStores.Skills != nil {
+					pa.AllowPaths(pgStores.Skills.Dirs()...)
+				}
 			}
 		}
 	}
@@ -785,8 +792,8 @@ func runGateway() {
 	// Supports media from any agent workspace (each agent has its own workspace from DB).
 	server.SetFilesHandler(httpapi.NewFilesHandler(cfg.Gateway.Token))
 
-	// Storage file management — browse/delete files under ~/.goclaw/ (excluding skills dirs).
-	server.SetStorageHandler(httpapi.NewStorageHandler(config.ExpandHome("~/.goclaw"), cfg.Gateway.Token))
+	// Storage file management — browse/delete files under ~/<HomeDirName>/ (excluding skills dirs).
+	server.SetStorageHandler(httpapi.NewStorageHandler(config.ExpandHome("~/"+config.HomeDirName()), cfg.Gateway.Token))
 
 	// Media upload endpoint — accepts multipart file uploads, returns temp path + MIME type.
 	server.SetMediaUploadHandler(httpapi.NewMediaUploadHandler(cfg.Gateway.Token))

@@ -25,13 +25,13 @@ type StoreConfig struct {
 	// PostgresDSN is the Postgres connection string (required).
 	PostgresDSN string
 
-	// SkillsStorageDir is the directory for skill file content (default: ~/.goclaw/skills-store/).
+	// SkillsStorageDir is the directory for skill file content (default: ~/<HomeDirName>/skills-store/).
 	SkillsStorageDir string
 
 	// Workspace is the default agent workspace path.
 	Workspace string
 
-	// GlobalSkillsDir is the global skills directory (e.g. ~/.goclaw/skills).
+	// GlobalSkillsDir is the global skills directory (e.g. ~/<HomeDirName>/skills).
 	GlobalSkillsDir string
 
 	// BuiltinSkillsDir is the builtin skills directory (bundled with binary).
