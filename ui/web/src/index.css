@@ -173,6 +173,148 @@
 /* highlight.js: transparent bg, container handles it */
 .hljs { background: transparent !important; }
 
+/* ── Markdown renderer — VS Code / GitHub-inspired typography ── */
+
+.md-render {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  font-size: 14px;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+/* Headings */
+.md-render :where(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--foreground);
+}
+.md-render :where(h1):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-size: 2em;
+  margin: 24px 0 16px;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+.md-render :where(h2):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-size: 1.5em;
+  margin: 24px 0 16px;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+.md-render :where(h3):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-size: 1.25em;
+  margin: 24px 0 16px;
+}
+.md-render :where(h4):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-size: 1em;
+  margin: 24px 0 16px;
+}
+
+/* First heading: no top margin */
+.md-render :where(> :first-child) {
+  margin-top: 0 !important;
+}
+
+/* Paragraphs */
+.md-render :where(p):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  margin: 0 0 16px;
+}
+
+/* Blockquotes */
+.md-render :where(blockquote):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  border-left: 4px solid var(--muted-foreground);
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  background: var(--muted);
+  border-radius: 0 6px 6px 0;
+  color: var(--muted-foreground);
+  font-style: normal;
+}
+
+/* Horizontal rule */
+.md-render :where(hr):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  border: none;
+  height: 2px;
+  background: var(--border);
+  margin: 24px 0;
+}
+
+/* Lists */
+.md-render :where(ul, ol):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  margin: 0 0 16px;
+  padding-left: 2em;
+}
+.md-render :where(ul):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  list-style-type: disc;
+}
+.md-render :where(ul ul):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  list-style-type: circle;
+}
+.md-render :where(li):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  margin: 4px 0;
+}
+.md-render li::marker {
+  color: var(--foreground) !important;
+}
+.md-render :where(li > p):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  margin: 0;
+}
+
+/* Inline code */
+.md-render :where(code):not(:where(pre code, [class~="not-prose"],[class~="not-prose"] *)) {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85em;
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 0.2em 0.4em;
+  color: var(--primary);
+  font-weight: 500;
+}
+.md-render :where(code):not(:where(pre code, [class~="not-prose"],[class~="not-prose"] *))::before,
+.md-render :where(code):not(:where(pre code, [class~="not-prose"],[class~="not-prose"] *))::after {
+  content: none;
+}
+
+/* Links */
+.md-render :where(a):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  color: var(--primary);
+  text-decoration: none;
+}
+.md-render :where(a):not(:where([class~="not-prose"],[class~="not-prose"] *)):hover {
+  text-decoration: underline;
+}
+
+/* Strong & emphasis */
+.md-render :where(strong):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-weight: 600;
+}
+
+/* Images */
+.md-render :where(img):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  max-width: 100%;
+}
+
+/* Table (fallback for non-custom-component tables) */
+.md-render :where(table):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+.md-render :where(th):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  font-weight: 600;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  padding: 6px 13px;
+  text-align: left;
+}
+.md-render :where(td):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  border: 1px solid var(--border);
+  padding: 6px 13px;
+}
+.md-render :where(tr:nth-child(even) td):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  background: color-mix(in oklch, var(--muted) 40%, transparent);
+}
+
 /* Dark mode syntax colors (github-dark palette) */
 .dark .hljs { color: #e6edf3; }
 .dark .hljs-comment,

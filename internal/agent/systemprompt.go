@@ -3,7 +3,6 @@ package agent
 import (
 	"fmt"
 	"log/slog"
-	"os/exec"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -301,31 +300,10 @@ func buildToolingSection(toolNames []string, hasSandbox bool) []string {
 		)
 	}
 
-	// Runtime package installation hints — only show when runtimes are available
-	hasPython := hasBinary("python3")
-	hasNode := hasBinary("node")
-	if hasPython || hasNode {
-		var pkgs []string
-		if hasPython {
-			pkgs = append(pkgs, "python3", "pypdf", "openpyxl", "pandas", "python-pptx", "markitdown")
-		}
-		if hasNode {
-			pkgs = append(pkgs, "node", "docx (npm)", "pptxgenjs (npm)")
-		}
-		if hasBinary("gh") {
-			pkgs = append(pkgs, "gh (GitHub CLI)")
-		}
-		if hasBinary("pandoc") {
-			pkgs = append(pkgs, "pandoc")
-		}
-		lines = append(lines,
-			"",
-			"## Package installation",
-			"Pre-installed: "+strings.Join(pkgs, ", ")+".",
-			"To install additional packages at runtime: `pip3 install <package>` or `npm install -g <package>` — both work without sudo.",
-			"Installed packages persist across tool calls within the same session.",
-		)
-	}
+	lines = append(lines,
+		"",
+		"You can install packages at runtime with `pip3 install <pkg>` or `npm install -g <pkg>` — no sudo needed.",
+	)
 	lines = append(lines,
 		"",
 		"IMPORTANT: The tool list above is the AUTHORITATIVE set of currently available tools, re-evaluated every turn.",
@@ -458,8 +436,4 @@ func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir s
 	}
 }
 
-func hasBinary(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
-}
 

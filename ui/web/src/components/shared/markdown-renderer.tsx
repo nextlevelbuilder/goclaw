@@ -18,8 +18,8 @@ function CodeBlock({
   const lang = className?.replace("language-", "") ?? "";
 
   return (
-    <div className="not-prose group relative my-4 overflow-hidden rounded-md border">
-      <div className="flex items-center justify-between bg-muted px-3 py-1 text-xs text-muted-foreground">
+    <div className="not-prose group relative my-6 overflow-hidden rounded-lg border border-border/60">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         <span>{lang || "code"}</span>
         <button
           type="button"
@@ -30,8 +30,8 @@ function CodeBlock({
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-muted/50 p-4 text-sm text-foreground">
-        <code className={className}>{children}</code>
+      <pre className="overflow-x-auto bg-muted/30 p-4 text-[13px] leading-relaxed text-foreground whitespace-pre">
+        <code className={className} style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace", wordWrap: "normal", overflowWrap: "normal" }}>{children}</code>
       </pre>
     </div>
   );
@@ -47,7 +47,7 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), []);
 
   return (
-    <div className={`prose prose-sm dark:prose-invert max-w-none break-words ${className ?? ""}`}>
+    <div className={`md-render prose dark:prose-invert max-w-none break-words ${className ?? ""}`}>
       {lightbox && (
         <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       )}
@@ -59,16 +59,17 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             // Strip the outer <pre> from ReactMarkdown — CodeBlock renders its own
             return <>{children}</>;
           },
-          code({ className, children, ...props }) {
-            const isInline = !className;
-            if (isInline) {
-              return (
-                <code className="rounded bg-muted px-1.5 py-0.5 text-sm" {...props}>
-                  {children}
-                </code>
-              );
+          code({ className, children, node, ...props }) {
+            // Block code: has className OR parent is <pre>
+            const isBlock = !!className || node?.position?.start.line !== node?.position?.end.line || String(children).includes("\n");
+            if (isBlock) {
+              return <CodeBlock className={className}>{children}</CodeBlock>;
             }
-            return <CodeBlock className={className}>{children}</CodeBlock>;
+            return (
+              <code className="rounded bg-muted px-1.5 py-0.5 text-[0.85em] font-medium text-primary" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }} {...props}>
+                {children}
+              </code>
+            );
           },
           a({ href, children, ...props }) {
             return (
@@ -94,19 +95,32 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           table({ children, ...props }) {
             return (
-              <div className="my-2 overflow-x-auto">
-                <table className="w-full border-collapse text-sm" {...props}>{children}</table>
+              <div className="not-prose my-4 overflow-x-auto">
+                <table className="w-full border-collapse text-[13px]" {...props}>{children}</table>
               </div>
             );
           },
           thead({ children, ...props }) {
-            return <thead className="border-b bg-muted/50" {...props}>{children}</thead>;
+            return <thead {...props}>{children}</thead>;
           },
           th({ children, ...props }) {
-            return <th className="px-3 py-2 text-left font-medium" {...props}>{children}</th>;
+            return <th className="border border-border bg-muted px-3 py-1.5 text-left text-[13px] font-semibold" {...props}>{children}</th>;
           },
           td({ children, ...props }) {
-            return <td className="border-t px-3 py-2" {...props}>{children}</td>;
+            return <td className="border border-border px-3 py-1.5" {...props}>{children}</td>;
+          },
+          tr({ children, ...props }) {
+            return <tr className="even:bg-muted/30" {...props}>{children}</tr>;
+          },
+          blockquote({ children, ...props }) {
+            return (
+              <blockquote className="my-4 border-l-4 border-muted-foreground rounded-r-md bg-muted px-4 py-3 text-muted-foreground not-italic" {...props}>
+                {children}
+              </blockquote>
+            );
+          },
+          hr({ ...props }) {
+            return <hr className="my-6 border-none h-0.5 bg-border" {...props} />;
           },
           input({ type, checked, ...props }) {
             if (type === "checkbox") {

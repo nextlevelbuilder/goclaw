@@ -56,8 +56,8 @@ function CodeViewer({ content, language }: { content: string; language: string }
   }, [content, language]);
 
   return (
-    <div className="group relative overflow-hidden rounded-md border">
-      <div className="flex items-center justify-between bg-muted px-3 py-1 text-xs text-muted-foreground">
+    <div className="group relative overflow-hidden rounded-lg border border-border/60">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         <span>{language || "text"}</span>
         <button
           type="button"
@@ -68,11 +68,11 @@ function CodeViewer({ content, language }: { content: string; language: string }
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <pre className="overflow-auto p-4 text-sm hljs">
+      <pre className="overflow-auto bg-muted/30 p-4 text-[13px] leading-relaxed hljs">
         {highlighted ? (
-          <code ref={codeRef} dangerouslySetInnerHTML={{ __html: highlighted }} />
+          <code ref={codeRef} style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }} dangerouslySetInnerHTML={{ __html: highlighted }} />
         ) : (
-          <code>{content}</code>
+          <code style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace" }}>{content}</code>
         )}
       </pre>
     </div>
@@ -102,8 +102,8 @@ function CsvViewer({ content }: { content: string }) {
   const body = rows.slice(1);
 
   return (
-    <div className="group relative rounded-md border flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between bg-muted px-3 py-1 text-xs text-muted-foreground shrink-0">
+    <div className="group relative rounded-lg border border-border/60 flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase shrink-0">
         <span>csv ({body.length} rows)</span>
         <button
           type="button"
@@ -115,11 +115,11 @@ function CsvViewer({ content }: { content: string }) {
         </button>
       </div>
       <div className="overflow-auto flex-1 min-h-0">
-        <table className="w-full text-xs border-collapse">
+        <table className="w-full text-[13px] border-collapse">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-muted">
+            <tr className="bg-muted/70">
               {header.map((col, i) => (
-                <th key={i} className="px-3 py-2 text-left font-medium border-b whitespace-nowrap">
+                <th key={i} className="px-3 py-2 text-left text-xs font-semibold tracking-wide border-b border-border/60 whitespace-nowrap">
                   {col}
                 </th>
               ))}
@@ -127,9 +127,9 @@ function CsvViewer({ content }: { content: string }) {
           </thead>
           <tbody>
             {body.map((row, i) => (
-              <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+              <tr key={i} className="border-b border-border/40 last:border-0 even:bg-muted/30 hover:bg-muted/50">
                 {header.map((_, j) => (
-                  <td key={j} className="px-3 py-1.5 border-r last:border-r-0">
+                  <td key={j} className="px-3 py-1.5 border-r border-border/30 last:border-r-0">
                     {row[j] ?? ""}
                   </td>
                 ))}
