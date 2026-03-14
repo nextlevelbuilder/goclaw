@@ -29,7 +29,6 @@ type Channel struct {
 	placeholders     sync.Map         // localKey string → messageID int
 	stopThinking     sync.Map         // localKey string → *thinkingCancel
 	typingCtrls      sync.Map         // localKey string → *typing.Controller
-	streams          sync.Map         // localKey string → *DraftStream (streaming preview)
 	reactions        sync.Map         // localKey string → *StatusReactionController
 	pairingReplySent sync.Map         // userID string → time.Time (debounce pairing replies)
 	threadIDs        sync.Map         // localKey string → messageThreadID int (for forum topic routing)
@@ -193,18 +192,33 @@ func (c *Channel) Start(ctx context.Context) error {
 // StreamEnabled reports whether streaming is active for the given chat type.
 // Controlled by separate dm_stream / group_stream config flags (both default false).
 //
-// DM streaming: edits "Thinking..." placeholder progressively via editMessageText.
+// DM streaming: uses sendMessageDraft (stealth preview) by default, falls back to
+// sendMessage+editMessageText if draft API is unavailable. Controlled by draft_transport config.
 // Group streaming: sends a new message, edits progressively, hands off to Send().
-//
-// Both are disabled by default. sendMessageDraft (draft transport) code exists in the
-// codebase but is not used pending Telegram client-side fixes:
-//   - tdesktop#10315, bugs.telegram.org/c/561 — "reply to deleted message" artifacts
-//   - openclaw/openclaw#7803, openclaw/openclaw#32180 — community tracking
 func (c *Channel) StreamEnabled(isGroup bool) bool {
 	if isGroup {
 		return c.config.GroupStream != nil && *c.config.GroupStream
 	}
 	return c.config.DMStream != nil && *c.config.DMStream
+}
+
+// draftTransportEnabled returns whether sendMessageDraft should be used for DM streaming.
+// Default: true (enabled). Uses stealth preview with no per-edit notifications.
+// Note: may cause "reply to deleted message" artifacts on some Telegram clients (tdesktop#10315).
+func (c *Channel) draftTransportEnabled() bool {
+	if c.config.DraftTransport == nil {
+		return true
+	}
+	return *c.config.DraftTransport
+}
+
+// ReasoningStreamEnabled returns whether reasoning should be shown as a separate message.
+// Default: true. Set "reasoning_stream": false to hide reasoning (only show answer).
+func (c *Channel) ReasoningStreamEnabled() bool {
+	if c.config.ReasoningStream == nil {
+		return true
+	}
+	return *c.config.ReasoningStream
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).

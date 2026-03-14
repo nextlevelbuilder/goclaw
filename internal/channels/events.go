@@ -33,19 +33,63 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	if sc, ok := ch.(StreamingChannel); ok {
 		switch eventType {
 		case protocol.AgentEventRunStarted:
-			if err := sc.OnStreamStart(ctx, rc.ChatID); err != nil {
+			stream, err := sc.CreateStream(ctx, rc.ChatID, true)
+			if err != nil {
 				slog.Debug("stream start failed", "channel", rc.ChannelName, "error", err)
+			} else {
+				rc.mu.Lock()
+				rc.stream = stream
+				rc.mu.Unlock()
+			}
+		case protocol.ChatEventThinking:
+			// Accumulate thinking/reasoning content and route to the current stream.
+			// The stream created on run.started becomes the "reasoning lane":
+			//  - DMs: edits the "Thinking..." placeholder with reasoning text
+			//  - Groups: edits a fresh message with reasoning text
+			// When the first chunk arrives, this stream is stopped (reasoning message stays
+			// visible) and a new stream is created for the answer lane.
+			// Gated by ReasoningStreamEnabled() — channels can opt out (e.g. Slack).
+			if !sc.ReasoningStreamEnabled() {
+				break
+			}
+			content := extractPayloadString(payload, "content")
+			if content != "" {
+				rc.mu.Lock()
+				rc.thinkingBuffer += content
+				rc.hasThinking = true
+				thinkText := rc.thinkingBuffer
+				currentStream := rc.stream
+				rc.mu.Unlock()
+				if currentStream != nil {
+					currentStream.Update(ctx, formatReasoningPreview(thinkText))
+				}
 			}
 		case protocol.AgentEventToolCall:
 			// Agent is executing a tool — mark tool phase so the next chunk
 			// (new LLM iteration) resets the stream buffer.
-			// Also clear the current DraftStream so the next iteration starts
-			// a fresh streaming message (matching TS onAssistantMessageStart pattern).
+			// Stop the current stream (reasoning or answer) and finalize only
+			// the answer stream (reasoning messages stay visible).
 			rc.mu.Lock()
+			// Capture current state before resetting for next iteration.
+			wasReasoningStream := rc.hasThinking && !rc.thinkingDone
+			currentStream := rc.stream
+			rc.stream = nil
 			rc.inToolPhase = true
+			rc.thinkingDone = false    // allow new thinking in next iteration
+			rc.thinkingBuffer = ""     // reset thinking buffer for new iteration
+			rc.hasThinking = false     // new iteration starts fresh
+			rc.tagParseSkipped = false // re-enable tag parsing for next iteration
 			rc.mu.Unlock()
-			if err := sc.OnStreamEnd(ctx, rc.ChatID, ""); err != nil {
-				slog.Debug("stream tool-phase end failed", "channel", rc.ChannelName, "error", err)
+			if currentStream != nil {
+				if err := currentStream.Stop(ctx); err != nil {
+					slog.Debug("stream tool-phase stop failed", "channel", rc.ChannelName, "error", err)
+				}
+				// Only finalize answer streams (hand off messageID to Send()).
+				// Reasoning streams stay as visible messages — don't put their
+				// messageID into placeholders or it would confuse Send().
+				if !wasReasoningStream {
+					sc.FinalizeStream(ctx, rc.ChatID, currentStream)
+				}
 			}
 
 			// Show tool status in streaming preview (edit placeholder with tool name).
@@ -63,39 +107,130 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 			}
 		case protocol.ChatEventChunk:
 			// Accumulate chunk deltas into full text.
-			// When entering a new LLM iteration (first chunk after tool.call),
-			// reset the buffer so we don't concatenate text from previous iterations.
 			content := extractPayloadString(payload, "content")
 			if content != "" {
 				rc.mu.Lock()
-				if rc.inToolPhase {
-					// New LLM iteration — reset buffer and start fresh stream
+				needNewStream := rc.inToolPhase
+				if needNewStream {
 					rc.streamBuffer = ""
 					rc.inToolPhase = false
-					rc.mu.Unlock()
-					// Create new DraftStream for this iteration
-					if err := sc.OnStreamStart(ctx, rc.ChatID); err != nil {
-						slog.Debug("stream restart failed", "channel", rc.ChannelName, "error", err)
-					}
-					rc.mu.Lock()
 				}
+
+				// Fallback <think> tag parsing: for providers that embed thinking
+				// in the content stream (DeepSeek-via-OpenRouter, Qwen, some Ollama models).
+				// Only activates when no native ChatEventThinking was received.
+				if !rc.hasThinking && !rc.thinkingDone && !rc.tagParseSkipped {
+					candidate := rc.streamBuffer + content
+					split := SplitThinkTags(candidate)
+					if split.Thinking != "" {
+						// Found think tags — commit to buffer and route to reasoning lane
+						rc.streamBuffer = candidate
+						rc.hasThinking = true
+						rc.thinkingBuffer = split.Thinking
+						thinkText := rc.thinkingBuffer
+						currentStream := rc.stream
+						if split.Partial {
+							// Still inside <think> — update reasoning stream, wait for close
+							rc.mu.Unlock()
+							if currentStream != nil {
+								currentStream.Update(ctx, formatReasoningPreview(thinkText))
+							}
+							break
+						}
+						// Tag closed — transition to answer
+						rc.thinkingDone = true
+						rc.streamBuffer = split.Answer
+						reasoningStream := currentStream
+						rc.mu.Unlock()
+
+						// Stop reasoning stream
+						if reasoningStream != nil {
+							_ = reasoningStream.Stop(ctx)
+						}
+						// Create answer stream
+						stream, err := sc.CreateStream(ctx, rc.ChatID, false)
+						if err != nil {
+							slog.Debug("stream restart after think-tag failed", "channel", rc.ChannelName, "error", err)
+						} else {
+							rc.mu.Lock()
+							rc.stream = stream
+							rc.mu.Unlock()
+						}
+						// Update answer stream with extracted answer content
+						if split.Answer != "" {
+							rc.mu.Lock()
+							currentStream = rc.stream
+							rc.mu.Unlock()
+							if currentStream != nil {
+								currentStream.Update(ctx, split.Answer)
+							}
+						}
+						break
+					}
+					// No think tags found — mark as skipped so we don't re-parse.
+					// Don't commit to streamBuffer here — the normal flow below appends content.
+					rc.tagParseSkipped = true
+				}
+
+				// Reasoning→answer transition: first chunk after native thinking events.
+				// Stop the reasoning stream (keep message visible) and create a
+				// new stream for the answer lane.
+				needTransition := rc.hasThinking && !rc.thinkingDone
+				if needTransition {
+					rc.thinkingDone = true
+					rc.streamBuffer = "" // fresh answer buffer
+				}
+				reasoningStream := rc.stream
+				rc.mu.Unlock()
+
+				// Finalize reasoning stream (stop editing, keep message)
+				if needTransition && reasoningStream != nil {
+					_ = reasoningStream.Stop(ctx)
+					// Don't call FinalizeStream — reasoning messageID should NOT
+					// go into placeholders. Send() must edit the answer message.
+				}
+
+				// Create fresh stream for answer (or new tool iteration)
+				if needNewStream || needTransition {
+					stream, err := sc.CreateStream(ctx, rc.ChatID, false)
+					if err != nil {
+						slog.Debug("stream restart failed", "channel", rc.ChannelName, "error", err)
+					} else {
+						rc.mu.Lock()
+						rc.stream = stream
+						rc.mu.Unlock()
+					}
+				}
+
+				rc.mu.Lock()
 				rc.streamBuffer += content
 				fullText := rc.streamBuffer
+				currentStream := rc.stream
 				rc.mu.Unlock()
-				if err := sc.OnChunkEvent(ctx, rc.ChatID, fullText); err != nil {
-					slog.Debug("stream chunk failed", "channel", rc.ChannelName, "error", err)
+				if currentStream != nil {
+					currentStream.Update(ctx, fullText)
 				}
 			}
 		case protocol.AgentEventRunCompleted:
 			rc.mu.Lock()
-			finalText := rc.streamBuffer
+			currentStream := rc.stream
+			rc.stream = nil
 			rc.mu.Unlock()
-			if err := sc.OnStreamEnd(ctx, rc.ChatID, finalText); err != nil {
-				slog.Debug("stream end failed", "channel", rc.ChannelName, "error", err)
+			if currentStream != nil {
+				if err := currentStream.Stop(ctx); err != nil {
+					slog.Debug("stream end failed", "channel", rc.ChannelName, "error", err)
+				}
+				sc.FinalizeStream(ctx, rc.ChatID, currentStream)
 			}
 		case protocol.AgentEventRunFailed:
-			// Clean up streaming state
-			_ = sc.OnStreamEnd(ctx, rc.ChatID, "")
+			// Clean up streaming state on failure
+			rc.mu.Lock()
+			currentStream := rc.stream
+			rc.stream = nil
+			rc.mu.Unlock()
+			if currentStream != nil {
+				_ = currentStream.Stop(ctx)
+			}
 		}
 	}
 
@@ -277,6 +412,23 @@ func formatToolStatus(toolName string) string {
 		}
 	}
 	return "🔧 Running " + toolName + "..."
+}
+
+// formatReasoningPreview formats accumulated thinking text for display as a
+// streaming reasoning message. Uses markdown italic prefix so channels that
+// convert markdown (Telegram, Slack) show "Reasoning:" in italics.
+// Truncated to 4096 runes (Telegram limit, rune-safe for CJK/emoji).
+func formatReasoningPreview(thinking string) string {
+	if thinking == "" {
+		return ""
+	}
+	const maxRunes = 4096
+	text := "_Reasoning:_\n" + thinking
+	runes := []rune(text)
+	if len(runes) > maxRunes {
+		text = string(runes[:maxRunes-3]) + "..."
+	}
+	return text
 }
 
 // resolveToolReactionStatus maps a tool name to a reaction status string.

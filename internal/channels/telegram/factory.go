@@ -19,20 +19,22 @@ type telegramCreds struct {
 
 // telegramInstanceConfig maps the non-secret config JSONB from the channel_instances table.
 type telegramInstanceConfig struct {
-	APIServer      string   `json:"api_server,omitempty"`
-	Proxy          string   `json:"proxy,omitempty"`
-	DMPolicy       string   `json:"dm_policy,omitempty"`
-	GroupPolicy    string   `json:"group_policy,omitempty"`
-	RequireMention *bool    `json:"require_mention,omitempty"`
-	HistoryLimit   int      `json:"history_limit,omitempty"`
-	DMStream       *bool    `json:"dm_stream,omitempty"`
-	GroupStream    *bool    `json:"group_stream,omitempty"`
-	ReactionLevel  string   `json:"reaction_level,omitempty"`
-	MediaMaxMB     int64    `json:"media_max_mb,omitempty"`
-	MediaMaxBytes  int64    `json:"media_max_bytes,omitempty"` // deprecated: use media_max_mb
-	LinkPreview    *bool    `json:"link_preview,omitempty"`
-	BlockReply     *bool    `json:"block_reply,omitempty"`
-	AllowFrom      []string `json:"allow_from,omitempty"`
+	APIServer       string   `json:"api_server,omitempty"`
+	Proxy           string   `json:"proxy,omitempty"`
+	DMPolicy        string   `json:"dm_policy,omitempty"`
+	GroupPolicy     string   `json:"group_policy,omitempty"`
+	RequireMention  *bool    `json:"require_mention,omitempty"`
+	HistoryLimit    int      `json:"history_limit,omitempty"`
+	DMStream        *bool    `json:"dm_stream,omitempty"`
+	GroupStream     *bool    `json:"group_stream,omitempty"`
+	DraftTransport  *bool    `json:"draft_transport,omitempty"`   // sendMessageDraft for DM streaming (default true)
+	ReasoningStream *bool    `json:"reasoning_stream,omitempty"` // show reasoning as separate message (default true)
+	ReactionLevel   string   `json:"reaction_level,omitempty"`
+	MediaMaxMB      int64    `json:"media_max_mb,omitempty"`
+	MediaMaxBytes   int64    `json:"media_max_bytes,omitempty"` // deprecated: use media_max_mb
+	LinkPreview     *bool    `json:"link_preview,omitempty"`
+	BlockReply      *bool    `json:"block_reply,omitempty"`
+	AllowFrom       []string `json:"allow_from,omitempty"`
 }
 
 // Factory creates a Telegram channel from DB instance data (no extra stores).
@@ -89,9 +91,11 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		GroupPolicy:    ic.GroupPolicy,
 		RequireMention: ic.RequireMention,
 		HistoryLimit:   ic.HistoryLimit,
-		DMStream:       ic.DMStream,
-		GroupStream:    ic.GroupStream,
-		ReactionLevel:  ic.ReactionLevel,
+		DMStream:        ic.DMStream,
+		GroupStream:     ic.GroupStream,
+		DraftTransport:  ic.DraftTransport,
+		ReasoningStream: ic.ReasoningStream,
+		ReactionLevel:   ic.ReactionLevel,
 		MediaMaxBytes:  resolveMediaMaxBytes(ic),
 		LinkPreview:    ic.LinkPreview,
 		BlockReply:     ic.BlockReply,

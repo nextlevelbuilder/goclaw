@@ -77,7 +77,7 @@ export function ChannelConfigTab({ instance, onUpdate }: ChannelConfigTabProps) 
   }, [webhookPath]);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="space-y-6">
       <ChannelFields
         fields={fields}
         values={values}

@@ -33,9 +33,11 @@ type TelegramConfig struct {
 	GroupPolicy    string              `json:"group_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
 	RequireMention *bool               `json:"require_mention,omitempty"` // require @bot mention in groups (default true)
 	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
-	DMStream       *bool               `json:"dm_stream,omitempty"`       // enable streaming for DMs (default false) — edits placeholder progressively; disabled pending Telegram draft API fixes (tdesktop#10315)
-	GroupStream    *bool               `json:"group_stream,omitempty"`    // enable streaming for groups (default false) — sends new message, edits progressively
-	ReactionLevel  string              `json:"reaction_level,omitempty"`  // "off" (default), "minimal", "full" — status emoji reactions
+	DMStream         *bool               `json:"dm_stream,omitempty"`          // enable streaming for DMs (default false) — edits placeholder progressively
+	GroupStream      *bool               `json:"group_stream,omitempty"`      // enable streaming for groups (default false) — sends new message, edits progressively
+	DraftTransport   *bool               `json:"draft_transport,omitempty"`   // use sendMessageDraft for DM streaming (default true) — stealth preview, no notifications per edit
+	ReasoningStream  *bool               `json:"reasoning_stream,omitempty"`  // show reasoning as separate message when provider emits thinking events (default true)
+	ReactionLevel    string              `json:"reaction_level,omitempty"`    // "off" (default), "minimal", "full" — status emoji reactions
 	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max media download size in bytes (default 20MB)
 	LinkPreview    *bool               `json:"link_preview,omitempty"`    // enable URL previews in messages (default true)
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)

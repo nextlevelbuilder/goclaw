@@ -282,7 +282,14 @@
   "channels.allowFrom": "Cho phép từ",
   "channels.allowFromPlaceholder": "user_id_1, user_id_2, ...",
   "channels.dmStreaming": "Streaming tin nhắn riêng",
+  "channels.dmStreamingHint": "Cập nhật tin nhắn liên tục trong DM",
   "channels.groupStreaming": "Streaming nhóm",
+  "channels.groupStreamingHint": "Cập nhật tin nhắn liên tục trong nhóm",
+  "channels.streaming": "Streaming",
+  "channels.draftTransport": "Xem trước nháp",
+  "channels.draftTransportHint": "Xem trước streaming trong DM (không thông báo mỗi lần chỉnh sửa)",
+  "channels.reasoningStream": "Hiện suy luận",
+  "channels.reasoningStreamHint": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng",
   "channels.reactionLevel": "Mức phản ứng",
   "channels.connectionMode": "Chế độ kết nối"
 }

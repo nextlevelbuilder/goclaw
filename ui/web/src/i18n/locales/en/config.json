@@ -278,7 +278,14 @@
   "channels.allowFrom": "Allow From",
   "channels.allowFromPlaceholder": "user_id_1, user_id_2, ...",
   "channels.dmStreaming": "DM Streaming",
+  "channels.dmStreamingHint": "Progressive message updates in DMs",
   "channels.groupStreaming": "Group Streaming",
+  "channels.groupStreamingHint": "Progressive message updates in groups",
+  "channels.streaming": "Streaming",
+  "channels.draftTransport": "Draft Preview",
+  "channels.draftTransportHint": "Stealth streaming preview in DMs (no notifications per edit)",
+  "channels.reasoningStream": "Show Reasoning",
+  "channels.reasoningStreamHint": "Display AI thinking process as a separate message",
   "channels.reactionLevel": "Reaction Level",
   "channels.connectionMode": "Connection Mode"
 }

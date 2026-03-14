@@ -51,6 +51,9 @@ function FieldRenderer({
   isEdit?: boolean;
 }) {
   const { t } = useTranslation("channels");
+  // i18n: try "fieldConfig.<key>.label" / "fieldConfig.<key>.help", fall back to hardcoded schema string
+  const label = t(`fieldConfig.${field.key}.label`, { defaultValue: field.label });
+  const help = field.help ? t(`fieldConfig.${field.key}.help`, { defaultValue: field.help }) : "";
   const labelSuffix = field.required && !isEdit ? " *" : "";
   const editHint = isEdit && field.type === "password" ? ` ${t("form.credentialsHint")}` : "";
 
@@ -60,7 +63,7 @@ function FieldRenderer({
       return (
         <div className="grid gap-1.5">
           <Label htmlFor={id}>
-            {field.label}{labelSuffix}{editHint}
+            {label}{labelSuffix}{editHint}
           </Label>
           <Input
             id={id}
@@ -69,14 +72,14 @@ function FieldRenderer({
             onChange={(e) => onChange(e.target.value)}
             placeholder={field.placeholder}
           />
-          {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
         </div>
       );
 
     case "number":
       return (
         <div className="grid gap-1.5">
-          <Label htmlFor={id}>{field.label}{labelSuffix}</Label>
+          <Label htmlFor={id}>{label}{labelSuffix}</Label>
           <Input
             id={id}
             type="number"
@@ -84,7 +87,7 @@ function FieldRenderer({
             onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
             placeholder={field.defaultValue !== undefined ? String(field.defaultValue) : undefined}
           />
-          {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
         </div>
       );
 
@@ -96,15 +99,15 @@ function FieldRenderer({
             checked={(value as boolean) ?? (field.defaultValue as boolean) ?? false}
             onCheckedChange={(v) => onChange(v)}
           />
-          <Label htmlFor={id}>{field.label}</Label>
-          {field.help && <span className="text-xs text-muted-foreground ml-1">— {field.help}</span>}
+          <Label htmlFor={id}>{label}</Label>
+          {help && <span className="text-xs text-muted-foreground ml-1">— {help}</span>}
         </div>
       );
 
     case "select":
       return (
         <div className="grid gap-1.5">
-          <Label>{field.label}{labelSuffix}</Label>
+          <Label>{label}{labelSuffix}</Label>
           <Select
             value={(value as string) ?? (field.defaultValue as string) ?? ""}
             onValueChange={(v) => onChange(v)}
@@ -115,19 +118,19 @@ function FieldRenderer({
             <SelectContent>
               {field.options?.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {t(`fieldOptions.${field.key}.${opt.value}`, { defaultValue: opt.label })}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
         </div>
       );
 
     case "tags":
       return (
         <div className="grid gap-1.5">
-          <Label htmlFor={id}>{field.label}</Label>
+          <Label htmlFor={id}>{label}</Label>
           <Textarea
             id={id}
             value={Array.isArray(value) ? (value as string[]).join("\n") : ""}
@@ -139,7 +142,7 @@ function FieldRenderer({
             rows={3}
             className="font-mono text-sm"
           />
-          {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
         </div>
       );
 

@@ -282,7 +282,14 @@
   "channels.allowFrom": "允许来自",
   "channels.allowFromPlaceholder": "user_id_1, user_id_2, ...",
   "channels.dmStreaming": "私信流式传输",
+  "channels.dmStreamingHint": "私聊中逐步更新消息",
   "channels.groupStreaming": "群组流式传输",
+  "channels.groupStreamingHint": "群聊中逐步更新消息",
+  "channels.streaming": "流式传输",
+  "channels.draftTransport": "草稿预览",
+  "channels.draftTransportHint": "私聊中静默流式预览（每次编辑无通知）",
+  "channels.reasoningStream": "显示推理",
+  "channels.reasoningStreamHint": "将AI思考过程显示为单独的消息",
   "channels.reactionLevel": "反应级别",
   "channels.connectionMode": "连接模式"
 }

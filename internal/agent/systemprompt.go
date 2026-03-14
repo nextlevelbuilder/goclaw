@@ -180,11 +180,6 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		}
 	}
 
-	// 5. ## Memory Recall (full only)
-	if !isMinimal && cfg.HasMemory {
-		lines = append(lines, buildMemoryRecallSection(cfg.HasKnowledgeGraph)...)
-	}
-
 	// 6. ## Workspace (sandbox-aware: show container workdir when sandboxed)
 	lines = append(lines, buildWorkspaceSection(cfg.Workspace, cfg.SandboxEnabled, cfg.SandboxContainerDir)...)
 
@@ -206,11 +201,6 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 8. Time
 	lines = append(lines, buildTimeSection()...)
 
-	// 9. ## Messaging (full only)
-	if !isMinimal {
-		lines = append(lines, buildMessagingSection()...)
-	}
-
 	// 9.5. Channel formatting hints (e.g. Zalo → plain text)
 	if hint := buildChannelFormattingHint(cfg.ChannelType); hint != nil {
 		lines = append(lines, hint...)
@@ -230,11 +220,6 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildProjectContextSection(otherFiles, cfg.AgentType)...)
 	}
 
-	// 12. ## Silent Replies (full only)
-	if !isMinimal {
-		lines = append(lines, buildSilentRepliesSection()...)
-	}
-
 	// 13. ## Sub-Agent Spawning
 	if cfg.HasSpawn {
 		lines = append(lines, buildSpawnSection()...)
@@ -246,6 +231,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 16. Recency reinforcements — combats "lost in the middle" in long conversations
 	if len(personaFiles) > 0 {
 		lines = append(lines, buildPersonaReminder(personaFiles, cfg.AgentType)...)
+	}
+	if !isMinimal {
+		lines = append(lines, "Reminder: Follow AGENTS.md rules — memory recall before answering, NO_REPLY when silent, match the user's language.", "")
 	}
 	if !isMinimal && cfg.HasMemory {
 		memReminder := "Reminder: Before answering questions about prior work, decisions, or preferences, always run memory_search first."
@@ -394,29 +382,6 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch bool) []string {
 	}
 
 	return nil
-}
-
-func buildMemoryRecallSection(hasKG bool) []string {
-	lines := []string{
-		"## Memory Recall",
-		"",
-		"Before answering anything about prior work, decisions, dates, people, preferences, or todos:",
-		"run memory_search on MEMORY.md + memory/*.md; then use memory_get to pull only the needed lines.",
-		"If low confidence after search, say you checked.",
-		"",
-	}
-	if hasKG {
-		lines = append(lines,
-			"Also run `knowledge_graph_search` alongside memory_search when the question involves people, teams, projects, or connections between things. KG search is faster for relationship questions (e.g. \"who works with Minh?\", \"what projects is team X involved in?\", \"what depends on GoClaw?\") — it finds multi-hop connections that memory_search alone may miss.",
-			"",
-		)
-	}
-	lines = append(lines,
-		"When asked to save or remember something, you MUST call a write tool (write_file or edit) in THIS turn.",
-		"Never claim \"already saved\" without a tool call — a previous turn's save does not count as fulfilling a new request.",
-		"",
-	)
-	return lines
 }
 
 func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir string) []string {

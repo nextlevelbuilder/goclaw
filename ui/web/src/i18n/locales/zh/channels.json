@@ -153,6 +153,86 @@
       }
     }
   },
+  "fieldConfig": {
+    "token": { "label": "Bot Token" },
+    "bot_token": { "label": "Bot Token" },
+    "app_token": { "label": "应用级Token", "help": "具有 connections:write 权限的应用级Token（Socket Mode 必需）" },
+    "user_token": { "label": "用户Token（可选）", "help": "可选：用于自定义Bot身份的用户OAuth Token。留空使用默认Bot身份。" },
+    "app_id": { "label": "App ID" },
+    "app_secret": { "label": "App Secret" },
+    "encrypt_key": { "label": "加密密钥", "help": "用于Webhook模式" },
+    "verification_token": { "label": "验证Token", "help": "用于Webhook模式" },
+    "webhook_secret": { "label": "Webhook Secret" },
+    "bridge_url": { "label": "Bridge URL" },
+    "api_server": { "label": "API 服务器 URL", "help": "自定义 Telegram Bot API 服务器用于大文件上传（最大 2GB）。留空使用默认服务器。" },
+    "proxy": { "label": "HTTP 代理", "help": "通过 HTTP 代理路由Bot流量" },
+    "dm_policy": { "label": "私聊策略" },
+    "group_policy": { "label": "群组策略" },
+    "require_mention": { "label": "群组中需要 @提及" },
+    "history_limit": { "label": "群组历史限制", "help": "上下文中最大待处理群组消息数（0 = 禁用）" },
+    "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
+    "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
+    "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
+    "reasoning_stream": { "label": "显示推理", "help": "将AI思考过程显示为单独的消息（需启用流式传输）" },
+    "reaction_level": { "label": "表情回应级别" },
+    "media_max_mb": { "label": "最大媒体大小 (MB)" },
+    "link_preview": { "label": "链接预览" },
+    "allow_from": { "label": "允许的用户" },
+    "block_reply": { "label": "分块回复", "help": "在工具迭代期间发送中间文本" },
+    "domain": { "label": "域名" },
+    "connection_mode": { "label": "连接模式", "help": "Lark 国际版仅支持 Webhook" },
+    "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
+    "webhook_path": { "label": "Webhook 路径", "help": "主服务器上 Lark 事件的路径" },
+    "webhook_url": { "label": "Webhook URL" },
+    "topic_session_mode": { "label": "话题会话模式", "help": "使用线程 root_id 进行会话隔离" },
+    "render_mode": { "label": "渲染模式" },
+    "text_chunk_limit": { "label": "文本分段限制", "help": "每条消息最大字符数" },
+    "group_allow_from": { "label": "群组允许的用户", "help": "群组发送者的单独白名单" },
+    "native_stream": { "label": "原生流式传输 (Agents & AI Apps)", "help": "使用 Slack 的 ChatStreamer API 进行原生流式传输。不可用时回退到原地编辑。" },
+    "debounce_delay": { "label": "防抖延迟 (ms)", "help": "发送快速消息前等待的毫秒数。设为 0 禁用。" },
+    "thread_ttl": { "label": "线程参与 TTL（小时）", "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。" }
+  },
+  "fieldOptions": {
+    "block_reply": {
+      "inherit": "继承网关设置",
+      "true": "启用",
+      "false": "禁用"
+    },
+    "dm_policy": {
+      "pairing": "配对（需要验证码）",
+      "open": "开放（接受所有）",
+      "allowlist": "仅白名单",
+      "disabled": "禁用"
+    },
+    "group_policy": {
+      "open": "开放（接受所有）",
+      "pairing": "配对（需要审批）",
+      "allowlist": "仅白名单",
+      "disabled": "禁用"
+    },
+    "reaction_level": {
+      "off": "关闭",
+      "minimal": "最小",
+      "full": "全部"
+    },
+    "domain": {
+      "lark": "Lark（国际版）— 仅 Webhook",
+      "feishu": "飞书（中国版）"
+    },
+    "connection_mode": {
+      "webhook": "Webhook",
+      "websocket": "WebSocket（仅飞书）"
+    },
+    "topic_session_mode": {
+      "disabled": "禁用",
+      "enabled": "启用"
+    },
+    "render_mode": {
+      "auto": "自动",
+      "raw": "原始",
+      "card": "卡片"
+    }
+  },
   "groupOverrides": {
     "title": "群组和话题覆盖",
     "hint": "按群组聊天或论坛话题覆盖Channel默认值。使用 「*」 作为群组 ID 表示通配符默认值。",
@@ -164,6 +244,12 @@
     "topicLabel": "话题: {{id}}",
     "addTopicPlaceholder": "话题线程 ID",
     "addTopic": "添加话题",
+    "fieldConfig": {
+      "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
+      "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
+      "draft_transport": { "label": "草稿预览", "help": "在私聊中使用隐形草稿预览回答流 — 每次编辑无通知（需启用私聊流式传输）" },
+      "reasoning_stream": { "label": "显示推理", "help": "将AI思考过程显示为单独的消息（需启用流式传输）" }
+    },
     "fields": {
       "groupPolicy": "群组策略",
       "requireMention": "需要 @提及",

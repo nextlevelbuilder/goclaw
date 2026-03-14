@@ -38,7 +38,6 @@ type Channel struct {
 	placeholders    sync.Map // localKey -> placeholderTS
 	dedup           sync.Map // channel+ts -> time.Time
 	threadParticip  sync.Map // channelID+threadTS -> time.Time (auto-reply without @mention)
-	streams         sync.Map // localKey -> *streamState
 	reactions       sync.Map // chatID:messageID -> *reactionState
 	pairingDebounce sync.Map // senderID -> time.Time
 	approvedGroups  sync.Map // channelID -> true
@@ -240,17 +239,6 @@ func (c *Channel) sweepMaps() {
 	c.pairingDebounce.Range(func(k, v any) bool {
 		if now.Sub(v.(time.Time)) > pairingDebounceTime*10 {
 			c.pairingDebounce.Delete(k)
-		}
-		return true
-	})
-
-	c.streams.Range(func(k, v any) bool {
-		st := v.(*streamState)
-		st.mu.Lock()
-		stale := now.Sub(st.lastUpdate) > 10*time.Minute
-		st.mu.Unlock()
-		if stale {
-			c.streams.Delete(k)
 		}
 		return true
 	})

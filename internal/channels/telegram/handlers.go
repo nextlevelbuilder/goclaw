@@ -410,20 +410,10 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	_, thinkCancel := context.WithCancel(ctx)
 	c.stopThinking.Store(localKey, &thinkingCancel{fn: thinkCancel})
 
-	// Send "Thinking..." placeholder for DMs.
-	// The streaming system will edit this message progressively (editMessageText),
-	// giving a smooth transition: "Thinking..." → streaming chunks → final formatted response.
-	// Groups: no placeholder; response replies to the sender's message.
-	if !isGroup {
-		thinkMsg := tu.Message(chatIDObj, "Thinking...")
-		if dmThreadID > 0 {
-			thinkMsg.MessageThreadID = dmThreadID
-		}
-		pMsg, err := c.bot.SendMessage(ctx, thinkMsg)
-		if err == nil {
-			c.placeholders.Store(localKey, pMsg.MessageID)
-		}
-	}
+	// No "Thinking..." placeholder — the DraftStream creates its own message
+	// on the first streaming chunk (sendMessage on first flush).
+	// This avoids "reply to deleted message" artifacts and is cleaner UX:
+	// user sees typing indicator → first content appears directly.
 
 	metadata := map[string]string{
 		"message_id": fmt.Sprintf("%d", message.MessageID),

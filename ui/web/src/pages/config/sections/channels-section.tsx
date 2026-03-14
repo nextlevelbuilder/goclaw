@@ -191,16 +191,53 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
 
                     {/* Telegram-specific */}
                     {ch === "telegram" && (
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div className="flex items-center gap-4">
-                          <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={!!chData.dm_stream} onChange={(e) => updateChannel(ch, { dm_stream: e.target.checked })} />
-                            {t("channels.dmStreaming")}
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={!!chData.group_stream} onChange={(e) => updateChannel(ch, { group_stream: e.target.checked })} />
-                            {t("channels.groupStreaming")}
-                          </label>
+                      <div className="space-y-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("channels.streaming")}</p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div className="rounded-md border px-3 py-2 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium">{t("channels.dmStreaming")}</p>
+                              <p className="text-xs text-muted-foreground">{t("channels.dmStreamingHint")}</p>
+                            </div>
+                            <Switch
+                              checked={!!chData.dm_stream}
+                              onCheckedChange={(v) => updateChannel(ch, { dm_stream: v })}
+                            />
+                          </div>
+                          <div className="rounded-md border px-3 py-2 flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium">{t("channels.groupStreaming")}</p>
+                              <p className="text-xs text-muted-foreground">{t("channels.groupStreamingHint")}</p>
+                            </div>
+                            <Switch
+                              checked={!!chData.group_stream}
+                              onCheckedChange={(v) => updateChannel(ch, { group_stream: v })}
+                            />
+                          </div>
+                          {!!chData.dm_stream && (
+                            <div className="rounded-md border px-3 py-2 flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium">{t("channels.draftTransport")}</p>
+                                <p className="text-xs text-muted-foreground">{t("channels.draftTransportHint")}</p>
+                              </div>
+                              <Switch
+                                checked={chData.draft_transport !== false}
+                                onCheckedChange={(v) => updateChannel(ch, { draft_transport: v })}
+                              />
+                            </div>
+                          )}
+                          {(!!chData.dm_stream || !!chData.group_stream) && (
+                            <div className="rounded-md border px-3 py-2 flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium">{t("channels.reasoningStream")}</p>
+                                <p className="text-xs text-muted-foreground">{t("channels.reasoningStreamHint")}</p>
+                              </div>
+                              <Switch
+                                checked={chData.reasoning_stream !== false}
+                                onCheckedChange={(v) => updateChannel(ch, { reasoning_stream: v })}
+                              />
+                            </div>
+                          )}
                         </div>
                         {chData.reaction_level !== undefined && (
                           <div className="grid gap-1.5">

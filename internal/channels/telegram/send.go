@@ -164,30 +164,29 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	// Text-only message
 	htmlContent := markdownToTelegramHTML(msg.Content)
+	chunks := chunkHTML(htmlContent, telegramMaxMessageLen)
 
-	// Try to edit the placeholder message (either "Thinking..." or a DraftStream message).
-	// If edit succeeds, we're done. If content is too long or edit fails, delete the
-	// placeholder and fall through to send new chunked messages.
+	// If a stream message exists (stored by FinalizeStream), edit the first chunk
+	// into it instead of deleting. This prevents the message from vanishing
+	// when HTML conversion makes content exceed the size limit.
+	startChunk := 0
 	if pID, ok := c.placeholders.Load(localKey); ok {
 		c.placeholders.Delete(localKey)
-		if len(htmlContent) <= telegramMaxMessageLen {
-			if err := c.editMessage(ctx, chatID, pID.(int), htmlContent); err == nil {
-				return nil
-			}
+		if err := c.editMessage(ctx, chatID, pID.(int), chunks[0]); err == nil {
+			startChunk = 1 // first chunk edited into stream message
+		} else {
+			// Edit failed (message deleted externally, etc.) — delete and send all fresh
+			_ = c.deleteMessage(ctx, chatID, pID.(int))
 		}
-		// Delete the placeholder since we'll send new message(s) instead
-		_ = c.deleteMessage(ctx, chatID, pID.(int))
 	}
 
-	// Chunk long messages to respect Telegram's limit.
-	// TS ref: only reply to the first chunk (src/channels/plugins/outbound/telegram.ts).
-	chunks := chunkHTML(htmlContent, telegramMaxMessageLen)
-	for i, chunk := range chunks {
+	// Send remaining chunks (or all chunks if no stream message was edited).
+	for i := startChunk; i < len(chunks); i++ {
 		replyTo := 0
 		if i == 0 {
 			replyTo = replyToMsgID // only first chunk replies to user's message
 		}
-		if err := c.sendHTML(ctx, chatID, chunk, replyTo, threadID); err != nil {
+		if err := c.sendHTML(ctx, chatID, chunks[i], replyTo, threadID); err != nil {
 			return err
 		}
 	}
@@ -279,7 +278,10 @@ func (c *Channel) sendHTML(ctx context.Context, chatID int64, html string, reply
 		tgMsg.MessageThreadID = sendThreadID
 	}
 	if replyTo > 0 {
-		tgMsg.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo}
+		tgMsg.ReplyParameters = &telego.ReplyParameters{
+			MessageID:                replyTo,
+			AllowSendingWithoutReply: true, // don't fail if replied-to message was deleted
+		}
 	}
 
 	err := retrySend(ctx, "sendMessage", nil, func() error {
@@ -321,7 +323,7 @@ func (c *Channel) sendPhoto(ctx context.Context, chatID telego.ChatID, filePath,
 		params.MessageThreadID = sendThreadID
 	}
 	if replyTo > 0 {
-		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo}
+		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
 	err = retrySend(ctx, "sendPhoto", func() { file.Seek(0, 0) }, func() error {
@@ -364,7 +366,7 @@ func (c *Channel) sendVideo(ctx context.Context, chatID telego.ChatID, filePath,
 		params.MessageThreadID = sendThreadID
 	}
 	if replyTo > 0 {
-		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo}
+		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
 	err = retrySend(ctx, "sendVideo", func() { file.Seek(0, 0) }, func() error {
@@ -407,7 +409,7 @@ func (c *Channel) sendAudio(ctx context.Context, chatID telego.ChatID, filePath,
 		params.MessageThreadID = sendThreadID
 	}
 	if replyTo > 0 {
-		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo}
+		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
 	err = retrySend(ctx, "sendAudio", func() { file.Seek(0, 0) }, func() error {
@@ -450,7 +452,7 @@ func (c *Channel) sendDocument(ctx context.Context, chatID telego.ChatID, filePa
 		params.MessageThreadID = sendThreadID
 	}
 	if replyTo > 0 {
-		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo}
+		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
 	err = retrySend(ctx, "sendDocument", func() { file.Seek(0, 0) }, func() error {

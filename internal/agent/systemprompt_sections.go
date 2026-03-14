@@ -91,20 +91,6 @@ func buildTimeSection() []string {
 	}
 }
 
-func buildMessagingSection() []string {
-	return []string{
-		"## Messaging",
-		"",
-		"- Reply in current session → automatically routes to the source channel (Telegram, Discord, etc.)",
-		"- Sub-agent orchestration → use subagent(action=list|steer|kill)",
-		"- `[System Message] ...` blocks are internal context and are not user-visible by default.",
-		"- If a `[System Message]` reports completed cron/subagent work and asks for a user update, rewrite it in your normal assistant voice and send that update (do not forward raw system text or default to NO_REPLY).",
-		"- Never use exec/curl for provider messaging; GoClaw handles all routing internally.",
-		"- **Language**: Always match the user's language. If the user writes in Vietnamese, respond in Vietnamese. If in English, respond in English. Detect from the user's first message and stay consistent.",
-		"",
-	}
-}
-
 func buildProjectContextSection(files []bootstrap.ContextFile, agentType string) []string {
 	// Check if SOUL.md / BOOTSTRAP.md are present
 	hasSoul := false
@@ -221,24 +207,6 @@ func buildProjectContextSection(files []bootstrap.ContextFile, agentType string)
 	}
 
 	return lines
-}
-
-func buildSilentRepliesSection() []string {
-	return []string{
-		"## Silent Replies",
-		"",
-		"When you have nothing to say, respond with ONLY: NO_REPLY",
-		"",
-		"Rules:",
-		"- It must be your ENTIRE message — nothing else",
-		"- Never append it to an actual response (never include \"NO_REPLY\" in real replies)",
-		"- Never wrap it in markdown or code blocks",
-		"",
-		"Wrong: \"Here's help... NO_REPLY\"",
-		"Wrong: \"NO_REPLY\"  (with quotes)",
-		"Right: NO_REPLY",
-		"",
-	}
 }
 
 func buildSpawnSection() []string {

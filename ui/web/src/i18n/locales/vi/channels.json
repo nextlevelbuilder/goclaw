@@ -153,6 +153,86 @@
       }
     }
   },
+  "fieldConfig": {
+    "token": { "label": "Bot Token" },
+    "bot_token": { "label": "Bot Token" },
+    "app_token": { "label": "Token cấp ứng dụng", "help": "Token cấp ứng dụng với scope connections:write (bắt buộc cho Socket Mode)" },
+    "user_token": { "label": "Token người dùng (Tùy chọn)", "help": "Tùy chọn: Token OAuth người dùng cho danh tính bot tùy chỉnh. Để trống để dùng danh tính bot mặc định." },
+    "app_id": { "label": "App ID" },
+    "app_secret": { "label": "App Secret" },
+    "encrypt_key": { "label": "Khóa mã hóa", "help": "Cho chế độ webhook" },
+    "verification_token": { "label": "Token xác minh", "help": "Cho chế độ webhook" },
+    "webhook_secret": { "label": "Webhook Secret" },
+    "bridge_url": { "label": "URL Bridge" },
+    "api_server": { "label": "URL máy chủ API", "help": "Máy chủ API Bot Telegram tùy chỉnh cho tải file lớn (lên đến 2GB). Để trống cho mặc định." },
+    "proxy": { "label": "Proxy HTTP", "help": "Định tuyến lưu lượng bot qua proxy HTTP" },
+    "dm_policy": { "label": "Chính sách DM" },
+    "group_policy": { "label": "Chính sách nhóm" },
+    "require_mention": { "label": "Yêu cầu @đề cập trong nhóm" },
+    "history_limit": { "label": "Giới hạn lịch sử nhóm", "help": "Số tin nhắn nhóm chờ tối đa cho ngữ cảnh (0 = tắt)" },
+    "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },
+    "group_stream": { "label": "Stream nhóm", "help": "Truyền phản hồi liên tục trong nhóm" },
+    "draft_transport": { "label": "Xem trước nháp", "help": "Dùng bản nháp ẩn cho stream trả lời trong DM — không thông báo mỗi lần chỉnh sửa (cần bật Stream DM)" },
+    "reasoning_stream": { "label": "Hiện suy luận", "help": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng trước câu trả lời (cần bật streaming)" },
+    "reaction_level": { "label": "Mức độ reaction" },
+    "media_max_mb": { "label": "Kích thước media tối đa (MB)" },
+    "link_preview": { "label": "Xem trước liên kết" },
+    "allow_from": { "label": "Người dùng được phép" },
+    "block_reply": { "label": "Phản hồi khối", "help": "Gửi văn bản trung gian trong quá trình lặp công cụ" },
+    "domain": { "label": "Tên miền" },
+    "connection_mode": { "label": "Chế độ kết nối", "help": "Lark Global chỉ hỗ trợ Webhook" },
+    "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
+    "webhook_path": { "label": "Đường dẫn webhook", "help": "Đường dẫn trên máy chủ chính cho sự kiện Lark" },
+    "webhook_url": { "label": "URL Webhook" },
+    "topic_session_mode": { "label": "Chế độ phiên chủ đề", "help": "Dùng root_id của luồng để cách ly phiên" },
+    "render_mode": { "label": "Chế độ hiển thị" },
+    "text_chunk_limit": { "label": "Giới hạn ký tự", "help": "Số ký tự tối đa mỗi tin nhắn" },
+    "group_allow_from": { "label": "Người dùng nhóm được phép", "help": "Danh sách cho phép riêng cho người gửi nhóm" },
+    "native_stream": { "label": "Stream gốc (Agents & AI Apps)", "help": "Dùng API ChatStreamer của Slack cho stream gốc. Quay về chỉnh sửa tại chỗ nếu không khả dụng." },
+    "debounce_delay": { "label": "Độ trễ debounce (ms)", "help": "Mili giây chờ trước khi gửi tin nhắn nhanh. Đặt 0 để tắt." },
+    "thread_ttl": { "label": "TTL tham gia luồng (giờ)", "help": "Số giờ trước khi bot ngừng tự động trả lời trong các luồng đã tham gia. 0 = luôn yêu cầu @đề cập." }
+  },
+  "fieldOptions": {
+    "block_reply": {
+      "inherit": "Kế thừa từ gateway",
+      "true": "Bật",
+      "false": "Tắt"
+    },
+    "dm_policy": {
+      "pairing": "Ghép nối (yêu cầu mã)",
+      "open": "Mở (chấp nhận tất cả)",
+      "allowlist": "Chỉ danh sách cho phép",
+      "disabled": "Tắt"
+    },
+    "group_policy": {
+      "open": "Mở (chấp nhận tất cả)",
+      "pairing": "Ghép nối (yêu cầu phê duyệt)",
+      "allowlist": "Chỉ danh sách cho phép",
+      "disabled": "Tắt"
+    },
+    "reaction_level": {
+      "off": "Tắt",
+      "minimal": "Tối thiểu",
+      "full": "Đầy đủ"
+    },
+    "domain": {
+      "lark": "Lark (quốc tế) — chỉ webhook",
+      "feishu": "Feishu (Trung Quốc)"
+    },
+    "connection_mode": {
+      "webhook": "Webhook",
+      "websocket": "WebSocket (chỉ Feishu)"
+    },
+    "topic_session_mode": {
+      "disabled": "Tắt",
+      "enabled": "Bật"
+    },
+    "render_mode": {
+      "auto": "Tự động",
+      "raw": "Thô",
+      "card": "Thẻ"
+    }
+  },
   "groupOverrides": {
     "title": "Ghi đè nhóm & chủ đề",
     "hint": "Ghi đè mặc định channel theo cuộc trò chuyện nhóm hoặc chủ đề diễn đàn. Dùng \"*\" làm ID nhóm cho mặc định ký tự đại diện.",
@@ -164,6 +244,12 @@
     "topicLabel": "Chủ đề: {{id}}",
     "addTopicPlaceholder": "ID luồng chủ đề",
     "addTopic": "Thêm chủ đề",
+    "fieldConfig": {
+      "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },
+      "group_stream": { "label": "Stream Nhóm", "help": "Truyền phản hồi liên tục trong nhóm" },
+      "draft_transport": { "label": "Xem trước nháp", "help": "Dùng bản nháp ẩn cho stream trả lời trong DM — không thông báo mỗi lần chỉnh sửa (cần bật Stream DM)" },
+      "reasoning_stream": { "label": "Hiện suy luận", "help": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng trước câu trả lời (cần bật streaming)" }
+    },
     "fields": {
       "groupPolicy": "Chính sách nhóm",
       "requireMention": "Yêu cầu @đề cập",

@@ -100,9 +100,21 @@ type StreamingChannel interface {
 	// Channels may choose to always stream for DMs while gating group streaming
 	// behind config (e.g. Telegram uses sendMessageDraft for DMs).
 	StreamEnabled(isGroup bool) bool
-	OnStreamStart(ctx context.Context, chatID string) error
-	OnChunkEvent(ctx context.Context, chatID string, fullText string) error
-	OnStreamEnd(ctx context.Context, chatID string, finalText string) error
+	// CreateStream creates a new per-run streaming handle for the given chatID.
+	// The returned ChannelStream is stored on RunContext so each concurrent run
+	// gets its own stream — eliminates the chatID-keyed sync.Map collision bug.
+	// firstStream: true for the first stream in a run (may become reasoning lane —
+	// must use message transport so it persists as a real message). false for
+	// subsequent streams (answer lane — may use draft transport for stealth preview).
+	CreateStream(ctx context.Context, chatID string, firstStream bool) (ChannelStream, error)
+	// FinalizeStream is called after the stream has been stopped to hand off
+	// the stream's messageID (if any) back to the channel's placeholder map
+	// so that Send() can edit it with the final formatted response.
+	FinalizeStream(ctx context.Context, chatID string, stream ChannelStream)
+	// ReasoningStreamEnabled returns whether reasoning should be shown as a
+	// separate message. Default: true. Channels that don't support lanes can
+	// return false to skip reasoning routing.
+	ReasoningStreamEnabled() bool
 }
 
 // BlockReplyChannel is optionally implemented by channels that override
