@@ -114,7 +114,9 @@
     "registerSuccess": "MCP server \"{{name}}\" đã đăng ký (image: {{image}})",
     "registerError": "Không thể đăng ký server",
     "viewServers": "Xem trong MCP Servers",
-    "fixAndRetry": "Sửa lỗi và thử lại"
+    "fixAndRetry": "Sửa lỗi và thử lại",
+    "newBuild": "Build mới",
+    "sessions": "Phiên"
   },
   "toast": {
     "created": "Đã tạo MCP server",

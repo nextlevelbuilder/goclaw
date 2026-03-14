@@ -114,7 +114,9 @@
     "registerSuccess": "MCP 服务器「{{name}}」已注册（镜像：{{image}}）",
     "registerError": "注册服务器失败",
     "viewServers": "在 MCP 服务器中查看",
-    "fixAndRetry": "修复错误后重试"
+    "fixAndRetry": "修复错误后重试",
+    "newBuild": "新建构建",
+    "sessions": "会话"
   },
   "toast": {
     "created": "MCP 服务器已创建",

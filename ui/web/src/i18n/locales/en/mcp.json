@@ -114,7 +114,9 @@
     "registerSuccess": "MCP server \"{{name}}\" registered (image: {{image}})",
     "registerError": "Failed to register server",
     "viewServers": "View in MCP Servers",
-    "fixAndRetry": "Fix the errors and try again"
+    "fixAndRetry": "Fix the errors and try again",
+    "newBuild": "New Build",
+    "sessions": "Sessions"
   },
   "toast": {
     "created": "MCP server created",
