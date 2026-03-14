@@ -35,7 +35,7 @@ func (h *SkillsHandler) handleListVersions(w http.ResponseWriter, r *http.Reques
 	slugDir := filepath.Join(h.baseDir, slug)
 	entries, err := os.ReadDir(slugDir)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"versions": []int{currentVersion},
 			"current":  currentVersion,
 		})
@@ -58,7 +58,7 @@ func (h *SkillsHandler) handleListVersions(w http.ResponseWriter, r *http.Reques
 		versions = []int{currentVersion}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"versions": versions,
 		"current":  currentVersion,
 	})
@@ -139,7 +139,7 @@ func (h *SkillsHandler) handleListFiles(w http.ResponseWriter, r *http.Request) 
 	if files == nil {
 		files = []fileEntry{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"files": files})
+	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
 // handleReadFile reads a single file from a skill version directory.
@@ -212,7 +212,7 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"content": string(data),
 		"path":    relPath,
 		"size":    info.Size(),

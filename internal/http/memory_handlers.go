@@ -189,7 +189,7 @@ func (h *MemoryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if results == nil {
 		results = []store.MemorySearchResult{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"results": results,
 		"count":   len(results),
 	})

@@ -115,7 +115,7 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 			{Role: "user", Content: prompt},
 		},
 		Model: model,
-		Options: map[string]interface{}{
+		Options: map[string]any{
 			"max_tokens":              8192,
 			"temperature":             0.7,
 			providers.OptSessionKey:   summonSessionKey,
@@ -201,7 +201,7 @@ func (s *AgentSummoner) emitEvent(agentID uuid.UUID, eventType, fileName, errMsg
 	if s.msgBus == nil {
 		return
 	}
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"type":     eventType,
 		"agent_id": agentID.String(),
 	}

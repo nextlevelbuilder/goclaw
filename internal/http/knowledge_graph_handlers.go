@@ -73,7 +73,7 @@ func (h *KnowledgeGraphHandler) handleGetEntity(w http.ResponseWriter, r *http.R
 		relations = []store.Relation{}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"entity":    entity,
 		"relations": relations,
 	})
@@ -208,7 +208,7 @@ func (h *KnowledgeGraphHandler) handleExtract(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"entities":  len(result.Entities),
 		"relations": len(result.Relations),
 	})
@@ -257,7 +257,7 @@ func (h *KnowledgeGraphHandler) handleGraph(w http.ResponseWriter, r *http.Reque
 		relations = []store.Relation{}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"entities":  entities,
 		"relations": relations,
 	})

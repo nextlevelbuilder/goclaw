@@ -146,5 +146,5 @@ func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey string) (*sa
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+	return sandbox.NewFsBridge(sb, "/workspace"), nil
 }

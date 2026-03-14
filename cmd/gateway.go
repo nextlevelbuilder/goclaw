@@ -87,18 +87,25 @@ func runGateway() {
 	toolsReg := tools.NewRegistry()
 	agentCfg := cfg.ResolveAgent("default")
 
-	// Sandbox manager (optional — routes tools through Docker containers)
+	// Sandbox manager (optional — routes tools through Docker/K8s containers)
 	var sandboxMgr sandbox.Manager
 	if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
-		if err := sandbox.CheckDockerAvailable(context.Background()); err != nil {
-			slog.Warn("sandbox disabled: Docker not available",
+		resolved := sbCfg.ToSandboxConfig()
+		mgr, err := sandbox.NewManager(context.Background(), resolved)
+		if err != nil {
+			slog.Warn("sandbox disabled: runtime not available",
+				"runtime", string(resolved.Runtime),
 				"configured_mode", sbCfg.Mode,
 				"error", err,
 			)
 		} else {
-			resolved := sbCfg.ToSandboxConfig()
-			sandboxMgr = sandbox.NewDockerManager(resolved)
-			slog.Info("sandbox enabled", "mode", string(resolved.Mode), "image", resolved.Image, "scope", string(resolved.Scope))
+			sandboxMgr = mgr
+			slog.Info("sandbox enabled",
+				"runtime", string(resolved.Runtime),
+				"mode", string(resolved.Mode),
+				"image", resolved.Image,
+				"scope", string(resolved.Scope),
+			)
 		}
 	}
 
@@ -658,26 +665,6 @@ func runGateway() {
 	server.SetMessageBus(msgBus)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(cfg.Gateway.Token, pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
-	// Keycloak SSO handler (enabled when GOCLAW_KEYCLOAK_URL is set)
-	if kcURL := os.Getenv("GOCLAW_KEYCLOAK_URL"); kcURL != "" {
-		kcRealm := os.Getenv("GOCLAW_KEYCLOAK_REALM")
-		if kcRealm == "" {
-			kcRealm = "goclaw"
-		}
-		kcClientID := os.Getenv("GOCLAW_KEYCLOAK_CLIENT_ID")
-		if kcClientID == "" {
-			kcClientID = "goclaw-web"
-		}
-		kcCfg := httpapi.KeycloakConfig{
-			URL:         kcURL,
-			ExternalURL: os.Getenv("GOCLAW_KEYCLOAK_EXTERNAL_URL"),
-			Realm:       kcRealm,
-			ClientID:    kcClientID,
-		}
-		server.SetKeycloakHandler(httpapi.NewKeycloakHandler(kcCfg, pgStores.Users))
-		slog.Info("keycloak SSO enabled", "url", kcURL, "realm", kcRealm, "client_id", kcClientID)
-	}
-
 	// contextFileInterceptor is created inside wireExtras.
 	// Declared here so it can be passed to registerAllMethods → AgentsMethods
 	// for immediate cache invalidation on agents.files.set.
@@ -725,34 +712,6 @@ func runGateway() {
 	if mcpH != nil {
 		server.SetMCPHandler(mcpH)
 	}
-
-	// MCP Builder project API (filesystem-based, no DB required)
-	{
-		projectsRoot := filepath.Join(workspace, "mcp-projects")
-		templateDir := filepath.Join(workspace, "..", "templates", "mcp-server")
-		// Check common template locations
-		for _, candidate := range []string{
-			templateDir,
-			"templates/mcp-server",
-			"/app/templates/mcp-server",
-		} {
-			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-				templateDir = candidate
-				break
-			}
-		}
-		if info, err := os.Stat(templateDir); err == nil && info.IsDir() {
-			mcpBuilderH := httpapi.NewMCPBuilderHandler(cfg.Gateway.Token, projectsRoot, templateDir)
-			if pgStores != nil && pgStores.MCP != nil {
-				mcpBuilderH.SetMCPStore(pgStores.MCP)
-			}
-			server.SetMCPBuilderHandler(mcpBuilderH)
-			slog.Info("mcp_builder handler registered", "projectsRoot", projectsRoot, "templateDir", templateDir)
-		} else {
-			slog.Warn("mcp_builder handler not registered: template dir not found", "templateDir", templateDir)
-		}
-	}
-
 	if customToolsH != nil {
 		server.SetCustomToolsHandler(customToolsH)
 	}

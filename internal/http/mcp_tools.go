@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
-	"github.com/nextlevelbuilder/goclaw/internal/store"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleTestConnection tests an MCP server connection without saving it.
@@ -34,14 +34,14 @@ func (h *MCPHandler) handleTestConnection(w http.ResponseWriter, r *http.Request
 
 	tools, err := mcpbridge.DiscoverTools(r.Context(), req.Transport, req.Command, req.Args, req.Env, req.URL, req.Headers)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"success": false,
 			"error":   err.Error(),
 		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"success":    true,
 		"tool_count": len(tools),
 	})
@@ -92,5 +92,5 @@ func (h *MCPHandler) handleListServerTools(w http.ResponseWriter, r *http.Reques
 	if tools == nil {
 		tools = []mcpbridge.ToolInfo{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"tools": tools})
+	writeJSON(w, http.StatusOK, map[string]any{"tools": tools})
 }

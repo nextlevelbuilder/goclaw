@@ -313,7 +313,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	return SilentResult(result)
 }
 
-// executeInSandbox routes a command through a Docker sandbox container.
+// executeInSandbox routes a command through a sandbox container (Docker or K8s).
 func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKey string) *Result {
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workingDir, SandboxConfigFromCtx(ctx))
 	if err != nil {

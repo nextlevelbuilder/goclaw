@@ -48,28 +48,28 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 	if p.ProviderType == "claude_cli" {
 		validModels := map[string]bool{"sonnet": true, "opus": true, "haiku": true}
 		if validModels[req.Model] {
-			writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true})
+			writeJSON(w, http.StatusOK, map[string]any{"valid": true})
 		} else {
-			writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "error": "Invalid model. Use: sonnet, opus, or haiku"})
+			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "Invalid model. Use: sonnet, opus, or haiku"})
 		}
 		return
 	}
 
 	if h.providerReg == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "error": "no provider registry available"})
+		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "no provider registry available"})
 		return
 	}
 
 	provider, err := h.providerReg.Get(p.Name)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "error": "provider not registered: " + p.Name})
+		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "provider not registered: " + p.Name})
 		return
 	}
 
 	// Non-chat models (image/video generation) can't be verified via Chat API.
 	// Accept them if the provider is reachable (already validated above).
 	if isNonChatModel(req.Model) {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true, "note": "generation model accepted (not verifiable via chat)"})
+		writeJSON(w, http.StatusOK, map[string]any{"valid": true, "note": "generation model accepted (not verifiable via chat)"})
 		return
 	}
 
@@ -81,16 +81,16 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 			{Role: "user", Content: "hi"},
 		},
 		Model: req.Model,
-		Options: map[string]interface{}{
+		Options: map[string]any{
 			"max_tokens": 1,
 		},
 	})
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"valid": false, "error": friendlyVerifyError(err)})
+		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": friendlyVerifyError(err)})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"valid": true})
+	writeJSON(w, http.StatusOK, map[string]any{"valid": true})
 }
 
 // handleClaudeCLIAuthStatus checks whether the Claude CLI is authenticated on the server.
@@ -115,14 +115,14 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 
 	status, err := providers.CheckClaudeAuthStatus(ctx, cliPath)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"logged_in": false,
 			"error":     err.Error(),
 		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"logged_in":         status.LoggedIn,
 		"email":             status.Email,
 		"subscription_type": status.SubscriptionType,
@@ -161,8 +161,8 @@ func friendlyVerifyError(err error) string {
 			rest = strings.TrimLeft(rest[start+1:], " ")
 			if len(rest) > 0 && rest[0] == '"' {
 				rest = rest[1:]
-				if end := strings.Index(rest, `"`); end >= 0 {
-					extracted := rest[:end]
+				if before, _, ok := strings.Cut(rest, `"`); ok {
+					extracted := before
 					if extracted != "" {
 						return extracted
 					}

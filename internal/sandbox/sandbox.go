@@ -1,7 +1,7 @@
-// Package sandbox provides Docker-based code execution isolation.
+// Package sandbox provides container-based code execution isolation.
 //
-// Agents can run tool commands (exec, shell) inside Docker containers
-// instead of the host system. Sandbox modes:
+// Agents can run tool commands (exec, shell) inside containers
+// (Docker or Kubernetes Pods) instead of the host system. Sandbox modes:
 //   - off: no sandboxing, execute directly on host
 //   - non-main: all agents except "main" run in sandbox
 //   - all: every agent runs in sandbox
@@ -41,6 +41,14 @@ const (
 	AccessRW   Access = "rw"   // read-write
 )
 
+// Runtime determines the container runtime backend.
+type Runtime string
+
+const (
+	RuntimeDocker Runtime = "docker" // Docker containers (default)
+	RuntimeK8s    Runtime = "k8s"    // Kubernetes pods
+)
+
 // Scope determines container reuse granularity.
 type Scope string
 
@@ -54,6 +62,7 @@ const (
 // Matches TS SandboxDockerSettings + SandboxConfig.
 type Config struct {
 	Mode              Mode              `json:"mode"`
+	Runtime           Runtime           `json:"runtime"`
 	Image             string            `json:"image"`
 	WorkspaceAccess   Access            `json:"workspace_access"`
 	Scope             Scope             `json:"scope"`
@@ -76,6 +85,13 @@ type Config struct {
 	ContainerPrefix string   `json:"container_prefix,omitempty"`
 	Workdir         string   `json:"workdir,omitempty"` // container workdir (default "/workspace")
 
+	// Kubernetes-specific settings (used when Runtime == RuntimeK8s)
+	KubeconfigPath  string            `json:"kubeconfig_path,omitempty"`  // path to kubeconfig file (empty = in-cluster config)
+	Namespace       string            `json:"namespace,omitempty"`        // K8s namespace for sandbox pods (default "goclaw-sandbox")
+	ServiceAccount  string            `json:"service_account,omitempty"`  // K8s service account for sandbox pods
+	NodeSelector    map[string]string `json:"node_selector,omitempty"`    // K8s node selector labels
+	ImagePullPolicy string            `json:"image_pull_policy,omitempty"` // K8s image pull policy ("Always", "IfNotPresent", "Never")
+
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
 	MaxAgeDays       int `json:"max_age_days,omitempty"`       // prune containers older than N days (default 7)
@@ -86,7 +102,9 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Mode:             ModeOff,
+		Runtime:          RuntimeDocker,
 		Image:            "goclaw-sandbox:bookworm-slim",
+		Namespace:        "goclaw-sandbox",
 		WorkspaceAccess:  AccessRW,
 		Scope:            ScopeSession,
 		MemoryMB:         512,
@@ -157,6 +175,9 @@ type ExecResult struct {
 type Sandbox interface {
 	// Exec runs a command inside the sandbox and returns the result.
 	Exec(ctx context.Context, command []string, workDir string) (*ExecResult, error)
+
+	// ExecWithStdin runs a command inside the sandbox with stdin data piped in.
+	ExecWithStdin(ctx context.Context, command []string, workDir string, stdin []byte) (*ExecResult, error)
 
 	// Destroy removes the sandbox container and cleans up resources.
 	Destroy(ctx context.Context) error

@@ -49,7 +49,7 @@ func (h *MCPHandler) handleListPendingRequests(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"requests": requests})
+	writeJSON(w, http.StatusOK, map[string]any{"requests": requests})
 }
 
 func (h *MCPHandler) handleReviewRequest(w http.ResponseWriter, r *http.Request) {

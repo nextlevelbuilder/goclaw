@@ -30,7 +30,7 @@ func (h *SkillsHandler) handleListAgentSkills(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"skills": skills})
+	writeJSON(w, http.StatusOK, map[string]any{"skills": skills})
 }
 
 func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request) {

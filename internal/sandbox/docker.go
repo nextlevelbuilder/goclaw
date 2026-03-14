@@ -195,6 +195,67 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 	return result, nil
 }
 
+// ExecWithStdin runs a command inside the container with stdin data piped in.
+func (s *DockerSandbox) ExecWithStdin(ctx context.Context, command []string, workDir string, stdin []byte) (*ExecResult, error) {
+	s.mu.Lock()
+	s.lastUsed = time.Now()
+	s.mu.Unlock()
+
+	timeout := time.Duration(s.config.TimeoutSec) * time.Second
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+
+	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	args := []string{"exec", "-i"}
+	if workDir != "" {
+		args = append(args, "-w", workDir)
+	}
+	args = append(args, s.containerID)
+	args = append(args, command...)
+
+	cmd := exec.CommandContext(execCtx, "docker", args...)
+
+	// Limit output capture to prevent OOM from large command output
+	maxOut := s.config.MaxOutputBytes
+	if maxOut <= 0 {
+		maxOut = 1 << 20 // 1MB default
+	}
+	stdout := &limitedBuffer{max: maxOut}
+	stderr := &limitedBuffer{max: maxOut}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
+
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			return nil, fmt.Errorf("docker exec: %w", err)
+		}
+	}
+
+	result := &ExecResult{
+		ExitCode: exitCode,
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+	}
+	if stdout.truncated {
+		result.Stdout += "\n...[output truncated]"
+	}
+	if stderr.truncated {
+		result.Stderr += "\n...[output truncated]"
+	}
+	return result, nil
+}
+
 // Destroy removes the container.
 func (s *DockerSandbox) Destroy(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", s.containerID)

@@ -50,11 +50,11 @@ func extractUserID(r *http.Request) string {
 // Checks model field, headers, and falls back to "default".
 func extractAgentID(r *http.Request, model string) string {
 	// From model field: "goclaw:<agentId>" or "agent:<agentId>"
-	if strings.HasPrefix(model, "goclaw:") {
-		return strings.TrimPrefix(model, "goclaw:")
+	if after, ok := strings.CutPrefix(model, "goclaw:"); ok {
+		return after
 	}
-	if strings.HasPrefix(model, "agent:") {
-		return strings.TrimPrefix(model, "agent:")
+	if after, ok := strings.CutPrefix(model, "agent:"); ok {
+		return after
 	}
 
 	// From headers
@@ -76,7 +76,7 @@ func extractLocale(r *http.Request) string {
 		return i18n.DefaultLocale
 	}
 	// Simple parser: take the first language tag before comma or semicolon
-	for _, part := range strings.Split(accept, ",") {
+	for part := range strings.SplitSeq(accept, ",") {
 		tag := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
 		locale := i18n.Normalize(tag)
 		if locale != i18n.DefaultLocale || strings.HasPrefix(tag, "en") {

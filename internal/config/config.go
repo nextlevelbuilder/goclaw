@@ -185,11 +185,12 @@ type MemoryConfig struct {
 	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)
 }
 
-// SandboxConfig configures Docker-based sandbox execution.
+// SandboxConfig configures Docker/K8s-based sandbox execution.
 // Matching TS agents.defaults.sandbox.
 type SandboxConfig struct {
 	Mode            string            `json:"mode,omitempty"`             // "off" (default), "non-main", "all"
-	Image           string            `json:"image,omitempty"`            // Docker image (default: "goclaw-sandbox:bookworm-slim")
+	Runtime         string            `json:"runtime,omitempty"`          // "docker" (default), "k8s"
+	Image           string            `json:"image,omitempty"`            // container image (default: "goclaw-sandbox:bookworm-slim")
 	WorkspaceAccess string            `json:"workspace_access,omitempty"` // "none", "ro", "rw" (default)
 	Scope           string            `json:"scope,omitempty"`            // "session" (default), "agent", "shared"
 	MemoryMB        int               `json:"memory_mb,omitempty"`        // memory limit in MB (default 512)
@@ -204,6 +205,13 @@ type SandboxConfig struct {
 	User           string `json:"user,omitempty"`             // container user (e.g. "1000:1000", "nobody")
 	TmpfsSizeMB    int    `json:"tmpfs_size_mb,omitempty"`    // default tmpfs size in MB (0 = Docker default)
 	MaxOutputBytes int    `json:"max_output_bytes,omitempty"` // limit exec output capture (default 1MB)
+
+	// Kubernetes-specific settings (used when Runtime == "k8s")
+	KubeconfigPath  string            `json:"kubeconfig_path,omitempty"`   // path to kubeconfig file (empty = in-cluster config)
+	Namespace       string            `json:"namespace,omitempty"`         // K8s namespace for sandbox pods (default "goclaw-sandbox")
+	ServiceAccount  string            `json:"service_account,omitempty"`   // K8s service account for sandbox pods
+	NodeSelector    map[string]string `json:"node_selector,omitempty"`     // K8s node selector labels
+	ImagePullPolicy string            `json:"image_pull_policy,omitempty"` // K8s image pull policy ("Always", "IfNotPresent", "Never")
 
 	// Pruning (matching TS SandboxPruneSettings)
 	IdleHours        int `json:"idle_hours,omitempty"`         // prune containers idle > N hours (default 24)
@@ -226,6 +234,13 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 		cfg.Mode = sandbox.ModeNonMain
 	default:
 		cfg.Mode = sandbox.ModeOff
+	}
+
+	switch sc.Runtime {
+	case "k8s":
+		cfg.Runtime = sandbox.RuntimeK8s
+	case "docker":
+		cfg.Runtime = sandbox.RuntimeDocker
 	}
 
 	if sc.Image != "" {
@@ -276,6 +291,23 @@ func (sc *SandboxConfig) ToSandboxConfig() sandbox.Config {
 	}
 	if sc.MaxOutputBytes > 0 {
 		cfg.MaxOutputBytes = sc.MaxOutputBytes
+	}
+
+	// Kubernetes-specific
+	if sc.KubeconfigPath != "" {
+		cfg.KubeconfigPath = sc.KubeconfigPath
+	}
+	if sc.Namespace != "" {
+		cfg.Namespace = sc.Namespace
+	}
+	if sc.ServiceAccount != "" {
+		cfg.ServiceAccount = sc.ServiceAccount
+	}
+	if len(sc.NodeSelector) > 0 {
+		cfg.NodeSelector = sc.NodeSelector
+	}
+	if sc.ImagePullPolicy != "" {
+		cfg.ImagePullPolicy = sc.ImagePullPolicy
 	}
 
 	// Pruning

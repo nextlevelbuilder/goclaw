@@ -36,7 +36,7 @@ func (h *AgentsHandler) handleListShares(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"shares": shares})
+	writeJSON(w, http.StatusOK, map[string]any{"shares": shares})
 }
 
 func (h *AgentsHandler) handleShare(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +225,7 @@ func extractDescription(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
 	}
-	var cfg map[string]interface{}
+	var cfg map[string]any
 	if json.Unmarshal(raw, &cfg) != nil {
 		return ""
 	}
@@ -233,7 +233,7 @@ func extractDescription(raw json.RawMessage) string {
 	return desc
 }
 
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)

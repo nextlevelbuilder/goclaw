@@ -95,7 +95,7 @@ func (h *MCPHandler) handleListAgentGrants(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"grants": grants})
+	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
 }
 
 func (h *MCPHandler) handleListServerGrants(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +113,7 @@ func (h *MCPHandler) handleListServerGrants(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"grants": grants})
+	writeJSON(w, http.StatusOK, map[string]any{"grants": grants})
 }
 
 func (h *MCPHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) {

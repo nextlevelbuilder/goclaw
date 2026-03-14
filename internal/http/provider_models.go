@@ -41,7 +41,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 
 	// Claude CLI doesn't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderClaudeCLI {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"models": claudeCLIModels()})
+		writeJSON(w, http.StatusOK, map[string]any{"models": claudeCLIModels()})
 		return
 	}
 
@@ -80,11 +80,11 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	if err != nil {
 		slog.Warn("providers.models", "provider", p.Name, "error", err)
 		// Return empty list instead of error — provider may not support /models
-		writeJSON(w, http.StatusOK, map[string]interface{}{"models": []ModelInfo{}})
+		writeJSON(w, http.StatusOK, map[string]any{"models": []ModelInfo{}})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"models": models})
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
 }
 
 // fetchAnthropicModels calls the Anthropic models API.
@@ -274,4 +274,3 @@ func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo
 	}
 	return models, nil
 }
-

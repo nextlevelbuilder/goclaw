@@ -189,7 +189,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size)
 
 	// Scan and check dependencies
-	response := map[string]interface{}{
+	response := map[string]any{
 		"id":      id,
 		"slug":    slug,
 		"version": version,

@@ -38,7 +38,7 @@ func (h *AgentsHandler) handleListInstances(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"instances": instances})
+	writeJSON(w, http.StatusOK, map[string]any{"instances": instances})
 }
 
 // handleGetInstanceFiles returns user context files for a specific instance.
@@ -72,7 +72,7 @@ func (h *AgentsHandler) handleGetInstanceFiles(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"files": files})
+	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
 // handleSetInstanceFile updates a user context file for a specific instance.
