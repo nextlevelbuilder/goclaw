@@ -31,6 +31,9 @@ const (
 	MethodConfigPatch  = "config.patch"
 	MethodConfigSchema = "config.schema"
 
+	// Features
+	MethodFeaturesGet = "features.get"
+
 	// Sessions
 	MethodSessionsList    = "sessions.list"
 	MethodSessionsPreview = "sessions.preview"

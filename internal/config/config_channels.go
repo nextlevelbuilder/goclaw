@@ -282,6 +282,8 @@ type GatewayConfig struct {
 	ToolStatus              *bool        `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
 	TaskRecoveryIntervalSec int          `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
 	UITheme                 string       `json:"-"`                                    // from env GOCLAW_UI_THEME only ("light", "dark", or "")
+	UILanguage              string       `json:"-"`                                    // from env GOCLAW_UI_LANGUAGE only ("en", "vi", "zh", or "")
+	UITimezone              string       `json:"-"`                                    // from env GOCLAW_UI_TIMEZONE only (IANA tz, or "")
 }
 
 // ToolsConfig controls tool availability, policy, and web search.

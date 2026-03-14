@@ -14,8 +14,10 @@ export function Topbar() {
   const lockedTheme = useUiStore((s) => s.lockedTheme);
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
+  const lockedLanguage = useUiStore((s) => s.lockedLanguage);
   const timezone = useUiStore((s) => s.timezone);
   const setTimezone = useUiStore((s) => s.setTimezone);
+  const lockedTimezone = useUiStore((s) => s.lockedTimezone);
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
@@ -65,31 +67,35 @@ export function Topbar() {
           )}
         </button>
 
-        <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("language")}>
-          <Globe className="h-4 w-4 shrink-0" />
-          <select
-            value={language}
-            onChange={handleLanguageChange}
-            className="cursor-pointer bg-transparent text-xs outline-none"
-          >
-            {SUPPORTED_LANGUAGES.map((lang) => (
-              <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>
-            ))}
-          </select>
-        </div>
+        {lockedLanguage === null && (
+          <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("language")}>
+            <Globe className="h-4 w-4 shrink-0" />
+            <select
+              value={language}
+              onChange={handleLanguageChange}
+              className="cursor-pointer bg-transparent text-xs outline-none"
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("timezone")}>
-          <Clock className="h-4 w-4 shrink-0" />
-          <select
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            className="cursor-pointer bg-transparent text-xs outline-none"
-          >
-            {TIMEZONE_OPTIONS.map((tz) => (
-              <option key={tz.value} value={tz.value}>{tz.label}</option>
-            ))}
-          </select>
-        </div>
+        {lockedTimezone === null && (
+          <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("timezone")}>
+            <Clock className="h-4 w-4 shrink-0" />
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="cursor-pointer bg-transparent text-xs outline-none"
+            >
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {lockedTheme === null && (
           <button

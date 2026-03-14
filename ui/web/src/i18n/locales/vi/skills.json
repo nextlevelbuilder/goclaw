@@ -102,5 +102,22 @@
     "version": "Phiên bản:",
     "current": "(hiện tại)",
     "noContent": "Không có nội dung."
+  },
+  "creator": {
+    "button": "Tạo mới"
+  },
+  "builder": {
+    "sessions": "Phiên",
+    "newSkill": "Kỹ năng mới",
+    "projectFiles": "Tệp kỹ năng",
+    "refreshFiles": "Làm mới",
+    "openFiles": "Tệp",
+    "closeFile": "Đóng",
+    "publish": "Xuất bản",
+    "publishing": "Đang xuất bản...",
+    "published": "Xuất bản kỹ năng thành công",
+    "publishFailed": "Xuất bản thất bại",
+    "projectError": "Không thể tạo dự án kỹ năng",
+    "fileLoadError": "Không thể tải {{name}}"
   }
 }

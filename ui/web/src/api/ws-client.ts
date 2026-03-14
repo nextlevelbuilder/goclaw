@@ -34,9 +34,15 @@ export class WsClient {
 
   onLockedTheme: ((theme: "light" | "dark" | null) => void) | null = null;
 
+  onDefaultLanguage: ((language: string | null) => void) | null = null;
+
+  onDefaultTimezone: ((timezone: string | null) => void) | null = null;
+
   onPairingRequired: ((code: string, senderID: string) => void) | null = null;
 
   onBrand: ((brand: { app_name?: string; app_key?: string; tagline?: string; logo_url?: string }) => void) | null = null;
+
+  onFeatures: ((features: Record<string, boolean | null>, role: string) => void) | null = null;
 
   constructor(
     private url: string,
@@ -203,7 +209,10 @@ export class WsClient {
         pairing_code?: string;
         sender_id?: string;
         ui_theme?: string;
+        ui_language?: string;
+        ui_timezone?: string;
         brand?: { app_name?: string; app_key?: string; tagline?: string; logo_url?: string };
+        features?: Record<string, boolean | null>;
       }>("connect", {
         token: this.getToken(),
         user_id: this.getUserId(),
@@ -234,9 +243,12 @@ export class WsClient {
       this.onLockedTheme?.(
         uiTheme === "light" || uiTheme === "dark" ? uiTheme : null,
       );
+      this.onDefaultLanguage?.(res?.ui_language || null);
+      this.onDefaultTimezone?.(res?.ui_timezone || null);
       if (res?.brand) {
         this.onBrand?.(res.brand);
       }
+      this.onFeatures?.(res?.features ?? {}, res?.role ?? "");
       this.onStateChange("connected");
     } catch {
       if (this.connectGeneration === generation) {

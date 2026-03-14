@@ -33,6 +33,8 @@ export const ROUTES = {
   MCP: "/mcp",
   MCP_BUILDER: "/mcp/builder",
   MCP_BUILDER_SESSION: "/mcp/builder/:sessionKey",
+  SKILL_BUILDER: "/skills/builder",
+  SKILL_BUILDER_SESSION: "/skills/builder/:sessionKey",
   TTS: "/tts",
   STORAGE: "/storage",
   PENDING_MESSAGES: "/pending-messages",

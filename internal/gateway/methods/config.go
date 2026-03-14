@@ -33,6 +33,7 @@ func (m *ConfigMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodConfigApply, m.handleApply)
 	router.Register(protocol.MethodConfigPatch, m.handlePatch)
 	router.Register(protocol.MethodConfigSchema, m.handleSchema)
+	router.Register(protocol.MethodFeaturesGet, m.handleFeaturesGet)
 }
 
 func (m *ConfigMethods) handleGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -234,4 +235,12 @@ func (m *ConfigMethods) saveSecretsToStore(ctx context.Context, cfg *config.Conf
 			slog.Warn("failed to save config secret", "key", key, "error", err)
 		}
 	}
+}
+
+// handleFeaturesGet returns the features config for the client.
+// All roles can read this — viewers/operators use it to determine sidebar visibility.
+func (m *ConfigMethods) handleFeaturesGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"features": m.cfg.Features,
+	}))
 }

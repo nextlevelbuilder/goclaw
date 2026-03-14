@@ -57,6 +57,9 @@ const MCPPage = lazy(() =>
 const MCPBuilderPage = lazy(() =>
   import("@/pages/mcp/mcp-builder-page").then((m) => ({ default: m.MCPBuilderPage })),
 );
+const SkillBuilderPage = lazy(() =>
+  import("@/pages/skills/skill-builder-page").then((m) => ({ default: m.SkillBuilderPage })),
+);
 const TeamsPage = lazy(() =>
   import("@/pages/teams/teams-page").then((m) => ({ default: m.TeamsPage })),
 );
@@ -161,6 +164,8 @@ export function AppRoutes() {
           <Route path={ROUTES.MCP} element={<MCPPage />} />
           <Route path={ROUTES.MCP_BUILDER} element={<MCPBuilderPage />} />
           <Route path={ROUTES.MCP_BUILDER_SESSION} element={<MCPBuilderPage />} />
+          <Route path={ROUTES.SKILL_BUILDER} element={<SkillBuilderPage />} />
+          <Route path={ROUTES.SKILL_BUILDER_SESSION} element={<SkillBuilderPage />} />
           <Route path={ROUTES.TTS} element={<TtsPage />} />
           <Route path={ROUTES.STORAGE} element={<StoragePage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />

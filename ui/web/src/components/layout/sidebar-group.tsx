@@ -1,12 +1,22 @@
 import { cn } from "@/lib/utils";
+import { useFeaturesStore, type FeatureName } from "@/stores/use-features-store";
 
 interface SidebarGroupProps {
   label: string;
   collapsed?: boolean;
   children: React.ReactNode;
+  /** Feature keys for this group's children. Group hides when none are enabled. */
+  features?: FeatureName[];
 }
 
-export function SidebarGroup({ label, collapsed, children }: SidebarGroupProps) {
+export function SidebarGroup({ label, collapsed, children, features }: SidebarGroupProps) {
+  const fe = useFeaturesStore((s) => s.isFeatureEnabled);
+
+  // Hide the entire group if a features list is provided and none are enabled
+  if (features && features.length > 0 && !features.some((f) => fe(f))) {
+    return null;
+  }
+
   return (
     <div className="space-y-1">
       {!collapsed && (

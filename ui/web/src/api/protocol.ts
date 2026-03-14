@@ -155,6 +155,9 @@ export const Methods = {
 
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
+
+  // Features
+  FEATURES_GET: "features.get",
 } as const;
 
 // --- Event names (from pkg/protocol/events.go) ---

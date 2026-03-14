@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useFeaturesStore } from "@/stores/use-features-store";
 import { useWsCall } from "@/hooks/use-ws-call";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -62,13 +63,15 @@ export function OverviewPage() {
     providers.length > 0 &&
     !providers.some((p) => p.enabled);
 
+  const fe = useFeaturesStore((s) => s.isFeatureEnabled);
+
   const fetchAll = useCallback(() => {
     fetchHealth();
     fetchStatus();
     fetchQuota();
-    fetchCron({ includeDisabled: true });
-    fetchChannels();
-  }, [fetchHealth, fetchStatus, fetchQuota, fetchCron, fetchChannels]);
+    if (fe("cron")) fetchCron({ includeDisabled: true });
+    if (fe("channels")) fetchChannels();
+  }, [fetchHealth, fetchStatus, fetchQuota, fetchCron, fetchChannels, fe]);
 
   useEffect(() => {
     if (!connected) return;
@@ -95,6 +98,10 @@ export function OverviewPage() {
   const channelsOnline = channelEntries.filter(([, c]) => c.running).length;
   const enabledProviders = providers.filter((p) => p.enabled);
   const clientList = health?.clients ?? [];
+
+  // Dynamic grid columns for stat cards based on visible cards
+  const statCardCount = 3 + (fe("agents") ? 1 : 0) + (fe("channels") ? 1 : 0);
+  const statColsClass = statCardCount <= 3 ? "lg:grid-cols-3" : statCardCount === 4 ? "lg:grid-cols-4" : "lg:grid-cols-5";
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -125,7 +132,7 @@ export function OverviewPage() {
 
         <TabsContent value="overview" className="space-y-6">
           {/* Provider warning */}
-          {(hasNoProviders || hasNoEnabledProviders) && (
+          {fe("providers") && (hasNoProviders || hasNoEnabledProviders) && (
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>
@@ -148,7 +155,7 @@ export function OverviewPage() {
           )}
 
           {/* Summary cards */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className={`grid gap-4 sm:grid-cols-2 ${statColsClass}`}>
             <StatCard
               icon={Activity}
               label={t("statCards.requestsToday")}
@@ -182,26 +189,30 @@ export function OverviewPage() {
               sparkline={sparklines?.costSparkline}
               trend={sparklines?.trends.cost}
             />
-            <StatCard
-              icon={Bot}
-              label={t("statCards.agents")}
-              value={
-                agentTotal > 0
-                  ? `${runningAgents} / ${agentTotal}`
-                  : "0"
-              }
-              sub={agentTotal > 0 ? t("statCards.running") : undefined}
-            />
-            <StatCard
-              icon={Radio}
-              label={t("statCards.channels")}
-              value={
-                channelEntries.length > 0
-                  ? `${channelsOnline} / ${channelEntries.length}`
-                  : "0"
-              }
-              sub={channelEntries.length > 0 ? t("statCards.online") : undefined}
-            />
+            {fe("agents") && (
+              <StatCard
+                icon={Bot}
+                label={t("statCards.agents")}
+                value={
+                  agentTotal > 0
+                    ? `${runningAgents} / ${agentTotal}`
+                    : "0"
+                }
+                sub={agentTotal > 0 ? t("statCards.running") : undefined}
+              />
+            )}
+            {fe("channels") && (
+              <StatCard
+                icon={Radio}
+                label={t("statCards.channels")}
+                value={
+                  channelEntries.length > 0
+                    ? `${channelsOnline} / ${channelEntries.length}`
+                    : "0"
+                }
+                sub={channelEntries.length > 0 ? t("statCards.online") : undefined}
+              />
+            )}
           </div>
 
           {/* System Health */}
@@ -211,21 +222,21 @@ export function OverviewPage() {
             enabledProviderCount={enabledProviders.length}
             sessions={status?.sessions ?? 0}
             clientCount={clientList.length}
-            channelEntries={channelEntries}
+            channelEntries={fe("channels") ? channelEntries : []}
             runtimeEntries={runtimes?.runtimes}
           />
 
           {/* Connected Clients + Cron Jobs */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className={`grid gap-4 ${fe("cron") ? "lg:grid-cols-2" : ""}`}>
             <ConnectedClientsCard
               clients={clientList}
               currentId={health?.currentId}
             />
-            <CronJobsCard jobs={cronData?.jobs ?? []} />
+            {fe("cron") && <CronJobsCard jobs={cronData?.jobs ?? []} />}
           </div>
 
           {/* Recent Requests */}
-          <RecentRequestsCard traces={traces} />
+          {fe("traces") && <RecentRequestsCard traces={traces} />}
 
           {/* Quota Usage */}
           {quota?.enabled && quota.entries.length > 0 && (

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/proxyserver"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -43,6 +45,7 @@ type Server struct {
 	wakeHandler             *httpapi.WakeHandler             // external wake/trigger API
 	mcpHandler              *httpapi.MCPHandler              // MCP server management API
 	mcpBuilderHandler       *httpapi.MCPBuilderHandler       // MCP builder project API
+	skillBuilderHandler     *httpapi.SkillBuilderHandler     // Skill builder project API
 	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
@@ -61,6 +64,7 @@ type Server struct {
 	keycloakHandler         *httpapi.KeycloakHandler         // Keycloak SSO auth API
 	agentStore              store.AgentStore                 // for context injection in tools_invoke
 	msgBus                  *bus.MessageBus                  // for MCP bridge media delivery
+	proxyHandler            *proxyserver.Server              // AI model proxy server
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -146,6 +150,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	// HTTP API endpoints
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("GET /v1/settings/public", s.handlePublicSettings)
 
 	// OpenAI-compatible chat completions
 	isManaged := s.agentStore != nil
@@ -193,6 +198,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// MCP builder project API
 	if s.mcpBuilderHandler != nil {
 		s.mcpBuilderHandler.RegisterRoutes(mux)
+	}
+
+	// Skill builder project API
+	if s.skillBuilderHandler != nil {
+		s.skillBuilderHandler.RegisterRoutes(mux)
 	}
 
 	// Custom tool CRUD API
@@ -286,6 +296,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 			slog.Warn("security.mcp_bridge: no gateway token configured, MCP bridge tools are unauthenticated")
 		}
 		mux.Handle("/mcp/bridge", handler)
+	}
+
+	// AI model proxy server
+	if s.proxyHandler != nil {
+		s.proxyHandler.RegisterRoutes(mux, "/proxy")
 	}
 
 	s.mux = mux
@@ -449,6 +464,33 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"status":"ok","protocol":%d}`, protocol.ProtocolVersion)
 }
 
+// handlePublicSettings returns non-sensitive settings (theme, brand) for the login page.
+// This endpoint is public — no token required.
+func (s *Server) handlePublicSettings(w http.ResponseWriter, _ *http.Request) {
+	resp := map[string]any{}
+	if t := s.cfg.Gateway.UITheme; t != "" {
+		resp["ui_theme"] = t
+	}
+	if l := s.cfg.Gateway.UILanguage; l != "" {
+		resp["ui_language"] = l
+	}
+	if tz := s.cfg.Gateway.UITimezone; tz != "" {
+		resp["ui_timezone"] = tz
+	}
+	brand := s.cfg.Brand
+	if brand.AppName != "" || brand.AppKey != "" || brand.Tagline != "" || brand.LogoURL != "" {
+		resp["brand"] = map[string]any{
+			"app_name": brand.AppName,
+			"app_key":  brand.AppKey,
+			"tagline":  brand.Tagline,
+			"logo_url": brand.LogoURL,
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
 // clientIP extracts the real client IP from the request, checking proxy headers first.
 func clientIP(r *http.Request) string {
 	if ip := r.Header.Get("X-Real-IP"); ip != "" {
@@ -490,6 +532,9 @@ func (s *Server) SetMCPHandler(h *httpapi.MCPHandler) { s.mcpHandler = h }
 
 // SetMCPBuilderHandler sets the MCP builder project handler.
 func (s *Server) SetMCPBuilderHandler(h *httpapi.MCPBuilderHandler) { s.mcpBuilderHandler = h }
+
+// SetSkillBuilderHandler sets the skill builder project handler.
+func (s *Server) SetSkillBuilderHandler(h *httpapi.SkillBuilderHandler) { s.skillBuilderHandler = h }
 
 // SetCustomToolsHandler sets the custom tool CRUD handler.
 func (s *Server) SetCustomToolsHandler(h *httpapi.CustomToolsHandler) { s.customToolsHandler = h }
@@ -544,6 +589,9 @@ func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.usageHandler = h }
 
 // SetKeycloakHandler sets the Keycloak SSO auth handler.
 func (s *Server) SetKeycloakHandler(h *httpapi.KeycloakHandler) { s.keycloakHandler = h }
+
+// SetProxyHandler sets the AI model proxy server handler.
+func (s *Server) SetProxyHandler(h *proxyserver.Server) { s.proxyHandler = h }
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }

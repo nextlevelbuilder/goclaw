@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -31,6 +32,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/proxyserver"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -744,6 +746,17 @@ func runGateway() {
 			slog.Warn("mcp_builder: template dir not found, handler not registered")
 		}
 	}
+	// Skill Builder project API
+	if pgStores.Skills != nil {
+		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
+			storeDirs := pgStores.Skills.Dirs()
+			if len(storeDirs) > 0 {
+				skillBuilderH := httpapi.NewSkillBuilderHandler(cfg.Gateway.Token, storeDirs[0], pgSkills, skillsLoader)
+				server.SetSkillBuilderHandler(skillBuilderH)
+				slog.Info("skill_builder: handler registered", "skillsDir", storeDirs[0])
+			}
+		}
+	}
 	if customToolsH != nil {
 		server.SetCustomToolsHandler(customToolsH)
 	}
@@ -776,6 +789,36 @@ func runGateway() {
 	// Usage analytics API
 	if pgStores.Snapshots != nil {
 		server.SetUsageHandler(httpapi.NewUsageHandler(pgStores.Snapshots, pgStores.DB, cfg.Gateway.Token))
+	}
+
+	// Keycloak SSO auth endpoints (available when GOCLAW_KEYCLOAK_URL is set)
+	if kcURL := os.Getenv("GOCLAW_KEYCLOAK_URL"); kcURL != "" {
+		kcCfg := httpapi.KeycloakConfig{
+			URL:         kcURL,
+			ExternalURL: os.Getenv("GOCLAW_KEYCLOAK_EXTERNAL_URL"),
+			Realm:       os.Getenv("GOCLAW_KEYCLOAK_REALM"),
+			ClientID:    os.Getenv("GOCLAW_KEYCLOAK_CLIENT_ID"),
+		}
+		kcHandler := httpapi.NewKeycloakHandler(kcCfg, pgStores.Users)
+		server.SetKeycloakHandler(kcHandler)
+		slog.Info("keycloak SSO enabled", "url", kcURL, "realm", kcCfg.Realm, "client_id", kcCfg.ClientID)
+	}
+
+	// AI model proxy server (enabled via GOCLAW_PROXY_ENABLED)
+	if os.Getenv("GOCLAW_PROXY_ENABLED") == "true" {
+		proxyCfg := proxyserver.DefaultConfig()
+		// Load models from JSON env var: GOCLAW_PROXY_MODELS='[{"model_name":"...","pod_url":"..."}]'
+		if modelsJSON := os.Getenv("GOCLAW_PROXY_MODELS"); modelsJSON != "" {
+			var models []proxyserver.ModelConfig
+			if err := json.Unmarshal([]byte(modelsJSON), &models); err != nil {
+				slog.Error("failed to parse GOCLAW_PROXY_MODELS", "error", err)
+			} else {
+				proxyCfg.Models = models
+			}
+		}
+		proxyServer := proxyserver.NewServer(proxyCfg, slog.Default())
+		server.SetProxyHandler(proxyServer)
+		slog.Info("proxy server enabled", "models", len(proxyCfg.Models), "prefix", "/proxy")
 	}
 
 	// Memory management API (wired directly, only needs MemoryStore + token)

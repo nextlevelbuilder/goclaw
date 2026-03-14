@@ -63,6 +63,22 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 				return
 			}
 		}
+
+		// Feature gate: non-admin users cannot access disabled features
+		if client.role != permissions.RoleAdmin {
+			if feature := MethodFeature(req.Method); feature != "" {
+				if !r.server.cfg.Features.IsFeatureEnabled(feature) {
+					slog.Info("feature disabled", "method", req.Method, "feature", feature, "role", client.role, "client", client.id)
+					locale := i18n.Normalize(client.locale)
+					client.SendResponse(protocol.NewErrorResponse(
+						req.ID,
+						protocol.ErrUnauthorized,
+						i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+					))
+					return
+				}
+			}
+		}
 	}
 
 	// Inject locale and role into context for i18n and ownership filtering
@@ -196,7 +212,10 @@ func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
 		"protocol": protocol.ProtocolVersion,
 		"role":     string(client.role),
 		"user_id":  client.userID,
-		"ui_theme": r.server.cfg.Gateway.UITheme, // "" when not locked
+		"ui_theme":    r.server.cfg.Gateway.UITheme,    // "" when not locked
+		"ui_language": r.server.cfg.Gateway.UILanguage, // "" when not set
+		"ui_timezone": r.server.cfg.Gateway.UITimezone, // "" when not set
+		"features": r.server.cfg.Features,
 		"server": map[string]any{
 			"name":    "goclaw",
 			"version": "0.2.0",

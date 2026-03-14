@@ -186,6 +186,21 @@ func (c *Config) applyEnvOverrides() {
 		}
 	}
 
+	// UI language default
+	if v := os.Getenv("GOCLAW_UI_LANGUAGE"); v != "" {
+		switch v {
+		case "en", "vi", "zh":
+			c.Gateway.UILanguage = v
+		default:
+			slog.Warn("security.invalid_ui_language", "value", v, "hint", "valid values: en, vi, zh")
+		}
+	}
+
+	// UI timezone default
+	if v := os.Getenv("GOCLAW_UI_TIMEZONE"); v != "" {
+		c.Gateway.UITimezone = v
+	}
+
 	// Gateway host/port
 	envStr("GOCLAW_HOST", &c.Gateway.Host)
 	if v := os.Getenv("GOCLAW_PORT"); v != "" {

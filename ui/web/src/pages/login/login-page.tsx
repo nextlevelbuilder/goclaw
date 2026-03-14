@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useUiStore } from "@/stores/use-ui-store";
+import { brand, updateBrand } from "@/lib/brand";
 import { ROUTES } from "@/lib/constants";
 import { LoginLayout } from "./login-layout";
 import { LoginTabs, type LoginMode } from "./login-tabs";
@@ -11,7 +13,7 @@ import { KeycloakForm } from "./keycloak-form";
 
 export function LoginPage() {
   const { t } = useTranslation("login");
-  const [mode, setMode] = useState<LoginMode>("token");
+  const [mode, setMode] = useState<LoginMode>("keycloak");
 
   const setCredentials = useAuthStore((s) => s.setCredentials);
   const setPairing = useAuthStore((s) => s.setPairing);
@@ -22,6 +24,29 @@ export function LoginPage() {
   const from =
     (location.state as { from?: { pathname: string } })?.from?.pathname ??
     ROUTES.OVERVIEW;
+
+  // Fetch public settings (theme, brand) before authentication
+  useEffect(() => {
+    fetch("/v1/settings/public")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (!data) return;
+        const uiTheme = data.ui_theme;
+        if (uiTheme === "light" || uiTheme === "dark") {
+          useUiStore.getState().setLockedTheme(uiTheme);
+        }
+        if (data.brand) {
+          updateBrand({
+            appName: data.brand.app_name,
+            appKey: data.brand.app_key,
+            tagline: data.brand.tagline,
+            logoUrl: data.brand.logo_url,
+          });
+          document.title = `${brand.appName} Dashboard`;
+        }
+      })
+      .catch(() => { }); // Silently ignore if endpoint unavailable
+  }, []);
 
   // Detect Keycloak OAuth callback on mount (code + state in URL params)
   useEffect(() => {

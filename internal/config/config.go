@@ -53,6 +53,7 @@ type Config struct {
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Brand     BrandConfig     `json:"brand,omitempty"`
+	Features  FeaturesConfig  `json:"features,omitempty"`
 	mu        sync.RWMutex
 }
 
@@ -420,6 +421,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Tailscale = src.Tailscale
 	c.Bindings = src.Bindings
 	c.Brand = src.Brand
+	c.Features = src.Features
 }
 
 // IdentityConfig defines agent persona / display identity.
@@ -436,4 +438,103 @@ type BrandConfig struct {
 	AppKey  string `json:"app_key,omitempty"`  // slug for localStorage keys (default "goclaw")
 	Tagline string `json:"tagline,omitempty"`  // short description / tagline
 	LogoURL string `json:"logo_url,omitempty"` // URL or path to logo image
+}
+
+// FeaturesConfig controls feature visibility for non-admin users.
+// All fields are *bool — nil means enabled (default). Only explicitly
+// setting false disables a feature. Admin users always have full access.
+type FeaturesConfig struct {
+	// Core
+	Overview   *bool `json:"overview,omitempty"`
+	Chat       *bool `json:"chat,omitempty"`
+	Agents     *bool `json:"agents,omitempty"`
+	AgentTeams *bool `json:"agent_teams,omitempty"`
+	// Conversations
+	Sessions        *bool `json:"sessions,omitempty"`
+	PendingMessages *bool `json:"pending_messages,omitempty"`
+	Contacts        *bool `json:"contacts,omitempty"`
+	// Connectivity
+	Channels *bool `json:"channels,omitempty"`
+	Nodes    *bool `json:"nodes,omitempty"`
+	// Capabilities
+	Skills       *bool `json:"skills,omitempty"`
+	BuiltinTools *bool `json:"builtin_tools,omitempty"`
+	McpServers   *bool `json:"mcp_servers,omitempty"`
+	Tts          *bool `json:"tts,omitempty"`
+	Cron         *bool `json:"cron,omitempty"`
+	// Data
+	Memory         *bool `json:"memory,omitempty"`
+	KnowledgeGraph *bool `json:"knowledge_graph,omitempty"`
+	Storage        *bool `json:"storage,omitempty"`
+	// Monitoring
+	Traces      *bool `json:"traces,omitempty"`
+	Events      *bool `json:"events,omitempty"`
+	Delegations *bool `json:"delegations,omitempty"`
+	Activity    *bool `json:"activity,omitempty"`
+	Logs        *bool `json:"logs,omitempty"`
+	// System
+	Providers *bool `json:"providers,omitempty"`
+	Config    *bool `json:"config,omitempty"`
+	Approvals *bool `json:"approvals,omitempty"`
+}
+
+// IsFeatureEnabled returns true if the named feature is enabled.
+// nil (unset) is treated as enabled. Only explicit false disables.
+func (f *FeaturesConfig) IsFeatureEnabled(feature string) bool {
+	var ptr *bool
+	switch feature {
+	case "overview":
+		ptr = f.Overview
+	case "chat":
+		ptr = f.Chat
+	case "agents":
+		ptr = f.Agents
+	case "agent_teams":
+		ptr = f.AgentTeams
+	case "sessions":
+		ptr = f.Sessions
+	case "pending_messages":
+		ptr = f.PendingMessages
+	case "contacts":
+		ptr = f.Contacts
+	case "channels":
+		ptr = f.Channels
+	case "nodes":
+		ptr = f.Nodes
+	case "skills":
+		ptr = f.Skills
+	case "builtin_tools":
+		ptr = f.BuiltinTools
+	case "mcp_servers":
+		ptr = f.McpServers
+	case "tts":
+		ptr = f.Tts
+	case "cron":
+		ptr = f.Cron
+	case "memory":
+		ptr = f.Memory
+	case "knowledge_graph":
+		ptr = f.KnowledgeGraph
+	case "storage":
+		ptr = f.Storage
+	case "traces":
+		ptr = f.Traces
+	case "events":
+		ptr = f.Events
+	case "delegations":
+		ptr = f.Delegations
+	case "activity":
+		ptr = f.Activity
+	case "logs":
+		ptr = f.Logs
+	case "providers":
+		ptr = f.Providers
+	case "config":
+		ptr = f.Config
+	case "approvals":
+		ptr = f.Approvals
+	default:
+		return true // unknown features are enabled by default
+	}
+	return ptr == nil || *ptr
 }

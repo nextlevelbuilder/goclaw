@@ -22,6 +22,7 @@ import { CronSection } from "./sections/cron-section";
 import { TelemetrySection } from "./sections/telemetry-section";
 import { BindingsSection } from "./sections/bindings-section";
 import { BrandSection } from "./sections/brand-section";
+import { FeaturesSection } from "./sections/features-section";
 
 export function ConfigPage() {
   const { t } = useTranslation("config");
@@ -100,6 +101,7 @@ export function ConfigPage() {
           <TabsTrigger value="tools">{t("tabs.tools")}</TabsTrigger>
           <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>
           <TabsTrigger value="brand">{t("tabs.brand")}</TabsTrigger>
+          <TabsTrigger value="features">{t("tabs.features")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="server" className="space-y-4">
@@ -175,6 +177,14 @@ export function ConfigPage() {
           <BrandSection
             data={config.brand as any}
             onSave={(v) => patch({ brand: v })}
+            saving={saving}
+          />
+        </TabsContent>
+
+        <TabsContent value="features" className="space-y-4">
+          <FeaturesSection
+            data={config.features as any}
+            onSave={(v) => patch({ features: v })}
             saving={saving}
           />
         </TabsContent>

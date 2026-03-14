@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Zap, Pencil, RefreshCw, Upload, Trash2, ScanSearch } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Zap, Pencil, RefreshCw, Upload, Trash2, ScanSearch, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -35,6 +36,7 @@ export function SkillsPage() {
     skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installSingleDep, toggleSkill,
   } = useSkills();
+  const navigate = useNavigate();
   const { runtimes } = useRuntimes();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && skills.length === 0);
@@ -121,9 +123,14 @@ export function SkillsPage() {
         actions={
           <div className="flex gap-2">
             {tab === "custom" && (
-              <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
-                <Upload className="h-3.5 w-3.5" /> {t("upload.button")}
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={() => navigate("/skills/builder")} className="gap-1">
+                  <Wand2 className="h-3.5 w-3.5" /> {t("creator.button")}
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
+                  <Upload className="h-3.5 w-3.5" /> {t("upload.button")}
+                </Button>
+              </>
             )}
             <Button variant="outline" size="sm" onClick={handleRescanDeps} disabled={rescanning} className="gap-1">
               <ScanSearch className="h-3.5 w-3.5" /> {t("deps.rescan")}

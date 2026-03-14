@@ -9,6 +9,7 @@ import { useWsEvent } from "@/hooks/use-ws-event";
 import { TEAM_RELATED_EVENTS } from "@/api/protocol";
 import { useTeamEventStore } from "@/stores/use-team-event-store";
 import { brand, updateBrand } from "@/lib/brand";
+import { useFeaturesStore } from "@/stores/use-features-store";
 
 // In dev mode, connect directly to backend WS (bypass Vite proxy).
 // In production, use relative "/ws" path.
@@ -38,6 +39,12 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     wsRef.current.onLockedTheme = (theme) => {
       useUiStore.getState().setLockedTheme(theme);
     };
+    wsRef.current.onDefaultLanguage = (language) => {
+      useUiStore.getState().setLockedLanguage(language as import("@/lib/constants").Language | null);
+    };
+    wsRef.current.onDefaultTimezone = (timezone) => {
+      useUiStore.getState().setLockedTimezone(timezone);
+    };
     wsRef.current.onBrand = (b) => {
       updateBrand({
         appName: b.app_name,
@@ -46,6 +53,10 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         logoUrl: b.logo_url,
       });
       document.title = `${brand.appName} Dashboard`;
+    };
+    wsRef.current.onFeatures = (features, role) => {
+      useFeaturesStore.getState().setFeatures(features);
+      useFeaturesStore.getState().setRole(role);
     };
   }
   const ws = wsRef.current;

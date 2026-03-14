@@ -102,5 +102,22 @@
     "version": "Version:",
     "current": "(current)",
     "noContent": "No content available."
+  },
+  "creator": {
+    "button": "Creator"
+  },
+  "builder": {
+    "sessions": "Sessions",
+    "newSkill": "New Skill",
+    "projectFiles": "Skill Files",
+    "refreshFiles": "Refresh",
+    "openFiles": "Files",
+    "closeFile": "Close",
+    "publish": "Publish Skill",
+    "publishing": "Publishing...",
+    "published": "Skill published successfully",
+    "publishFailed": "Failed to publish skill",
+    "projectError": "Failed to create skill project",
+    "fileLoadError": "Cannot load {{name}}"
   }
 }

@@ -102,5 +102,22 @@
     "version": "版本：",
     "current": "（当前）",
     "noContent": "无可用内容。"
+  },
+  "creator": {
+    "button": "创建"
+  },
+  "builder": {
+    "sessions": "会话",
+    "newSkill": "新技能",
+    "projectFiles": "技能文件",
+    "refreshFiles": "刷新",
+    "openFiles": "文件",
+    "closeFile": "关闭",
+    "publish": "发布技能",
+    "publishing": "发布中...",
+    "published": "技能发布成功",
+    "publishFailed": "发布失败",
+    "projectError": "无法创建技能项目",
+    "fileLoadError": "无法加载 {{name}}"
   }
 }

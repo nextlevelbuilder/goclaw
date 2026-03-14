@@ -31,9 +31,8 @@ export function StatCard({
             <p className="text-2xl font-semibold">{value}</p>
             {hasTrend && (
               <span
-                className={`flex items-center gap-0.5 text-xs font-medium ${
-                  trend > 0 ? "text-green-600" : "text-red-600"
-                }`}
+                className={`flex items-center gap-0.5 text-xs font-medium ${trend > 0 ? "text-green-600" : "text-red-600"
+                  }`}
               >
                 {trend > 0 ? (
                   <TrendingUp className="h-3 w-3" />
@@ -49,7 +48,7 @@ export function StatCard({
       </div>
       {sparkData && sparkData.length > 1 && (
         <div className="mt-3 h-[40px]">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
             <AreaChart data={sparkData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
