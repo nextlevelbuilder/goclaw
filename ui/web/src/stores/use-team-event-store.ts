@@ -1,7 +1,8 @@
 import { create } from "zustand";
+import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
 
 const MAX_EVENTS = 500;
-const PERSIST_KEY = "goclaw:recentEvents";
+const PERSIST_KEY = LOCAL_STORAGE_KEYS.RECENT_EVENTS;
 const PERSIST_MAX = 20;
 
 /** A single captured WS event entry */

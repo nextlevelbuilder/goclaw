@@ -1,5 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
+import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
 
 // --- EN namespaces ---
 import enCommon from "./locales/en/common.json";
@@ -97,10 +98,8 @@ import zhPendingMessages from "./locales/zh/pending-messages.json";
 import zhContacts from "./locales/zh/contacts.json";
 import zhActivity from "./locales/zh/activity.json";
 
-const STORAGE_KEY = "goclaw:language";
-
 function getInitialLanguage(): string {
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LANGUAGE);
   if (stored === "en" || stored === "vi" || stored === "zh") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
@@ -163,7 +162,7 @@ i18n.use(initReactI18next).init({
 });
 
 i18n.on("languageChanged", (lng) => {
-  localStorage.setItem(STORAGE_KEY, lng);
+  localStorage.setItem(LOCAL_STORAGE_KEYS.LANGUAGE, lng);
   document.documentElement.lang = lng;
 });
 

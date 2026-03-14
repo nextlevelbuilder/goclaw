@@ -30,6 +30,7 @@ import { SidebarGroup } from "./sidebar-group";
 import { SidebarItem } from "./sidebar-item";
 import { ConnectionStatus } from "./connection-status";
 import { ROUTES } from "@/lib/constants";
+import { brand } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { usePendingPairingsCount } from "@/hooks/use-pending-pairings-count";
 
@@ -59,11 +60,11 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
       <div className="flex h-14 items-center border-b px-4">
         {!collapsed && (
           <span className="text-base font-semibold tracking-tight">
-            GoClaw
+            {brand.appName}
           </span>
         )}
         {collapsed && (
-          <span className="mx-auto text-lg font-bold">OC</span>
+          <span className="mx-auto text-lg font-bold">{brand.appKey.slice(0, 2).toUpperCase()}</span>
         )}
       </div>
 

@@ -1,4 +1,5 @@
 import { generateId } from "@/lib/utils";
+import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
 import type { ErrorShape, EventFrame, ResponseFrame } from "./protocol";
 import { PROTOCOL_VERSION } from "./protocol";
 import { ApiError } from "./errors";
@@ -197,7 +198,7 @@ export class WsClient {
         token: this.getToken(),
         user_id: this.getUserId(),
         sender_id: this.getSenderID(),
-        locale: localStorage.getItem("goclaw:language") || "en",
+        locale: localStorage.getItem(LOCAL_STORAGE_KEYS.LANGUAGE) || "en",
         protocolVersion: PROTOCOL_VERSION,
       });
       if (this.connectGeneration !== generation) return;

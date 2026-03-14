@@ -21,8 +21,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem(LOCAL_STORAGE_KEYS.TOKEN) ?? "",
   userId: localStorage.getItem(LOCAL_STORAGE_KEYS.USER_ID) ?? "",
   senderID: localStorage.getItem(LOCAL_STORAGE_KEYS.SENDER_ID) ?? "",
-  keycloakToken: localStorage.getItem("goclaw:keycloakToken") ?? "",
-  displayName: localStorage.getItem("goclaw:displayName") ?? "",
+  keycloakToken: localStorage.getItem(LOCAL_STORAGE_KEYS.KEYCLOAK_TOKEN) ?? "",
+  displayName: localStorage.getItem(LOCAL_STORAGE_KEYS.DISPLAY_NAME) ?? "",
   connected: false,
   serverInfo: null,
 
@@ -39,12 +39,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setKeycloakAuth: (keycloakToken, userId, displayName) => {
-    localStorage.setItem("goclaw:keycloakToken", keycloakToken);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.KEYCLOAK_TOKEN, keycloakToken);
     localStorage.setItem(LOCAL_STORAGE_KEYS.USER_ID, userId);
     // Also set as the gateway token so WS connect works
     localStorage.setItem(LOCAL_STORAGE_KEYS.TOKEN, keycloakToken);
     if (displayName) {
-      localStorage.setItem("goclaw:displayName", displayName);
+      localStorage.setItem(LOCAL_STORAGE_KEYS.DISPLAY_NAME, displayName);
     }
     set({ keycloakToken, userId, token: keycloakToken, displayName: displayName ?? "" });
   },
@@ -57,8 +57,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem(LOCAL_STORAGE_KEYS.TOKEN);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.USER_ID);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.SENDER_ID);
-    localStorage.removeItem("goclaw:keycloakToken");
-    localStorage.removeItem("goclaw:displayName");
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.KEYCLOAK_TOKEN);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.DISPLAY_NAME);
     set({ token: "", userId: "", senderID: "", keycloakToken: "", displayName: "", connected: false, serverInfo: null });
   },
 }));

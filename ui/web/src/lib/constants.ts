@@ -1,3 +1,5 @@
+import { brand } from "./brand";
+
 export const ROUTES = {
   LOGIN: "/login",
   OVERVIEW: "/overview",
@@ -39,13 +41,16 @@ export const ROUTES = {
 } as const;
 
 export const LOCAL_STORAGE_KEYS = {
-  TOKEN: "goclaw:token",
-  USER_ID: "goclaw:userId",
-  SENDER_ID: "goclaw:senderID",
-  THEME: "goclaw:theme",
-  SIDEBAR_COLLAPSED: "goclaw:sidebarCollapsed",
-  LANGUAGE: "goclaw:language",
-  TIMEZONE: "goclaw:timezone",
+  TOKEN: `${brand.appKey}:token`,
+  USER_ID: `${brand.appKey}:userId`,
+  SENDER_ID: `${brand.appKey}:senderID`,
+  THEME: `${brand.appKey}:theme`,
+  SIDEBAR_COLLAPSED: `${brand.appKey}:sidebarCollapsed`,
+  LANGUAGE: `${brand.appKey}:language`,
+  TIMEZONE: `${brand.appKey}:timezone`,
+  KEYCLOAK_TOKEN: `${brand.appKey}:keycloakToken`,
+  DISPLAY_NAME: `${brand.appKey}:displayName`,
+  RECENT_EVENTS: `${brand.appKey}:recentEvents`,
 } as const;
 
 export const SUPPORTED_LANGUAGES = ["en", "vi", "zh"] as const;
