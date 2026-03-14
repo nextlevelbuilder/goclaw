@@ -8,6 +8,7 @@ import { useWsQueryInvalidation } from "@/hooks/use-query-invalidation";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { TEAM_RELATED_EVENTS } from "@/api/protocol";
 import { useTeamEventStore } from "@/stores/use-team-event-store";
+import { brand, updateBrand } from "@/lib/brand";
 
 // In dev mode, connect directly to backend WS (bypass Vite proxy).
 // In production, use relative "/ws" path.
@@ -36,6 +37,15 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     };
     wsRef.current.onLockedTheme = (theme) => {
       useUiStore.getState().setLockedTheme(theme);
+    };
+    wsRef.current.onBrand = (b) => {
+      updateBrand({
+        appName: b.app_name,
+        appKey: b.app_key,
+        tagline: b.tagline,
+        logoUrl: b.logo_url,
+      });
+      document.title = `${brand.appName} Dashboard`;
     };
   }
   const ws = wsRef.current;

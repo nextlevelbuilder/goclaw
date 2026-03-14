@@ -11,17 +11,29 @@
   "failedToSave": "Failed to save configuration",
   "saveConfig": "Save Config",
   "usingGlobalDefaults": "Using global defaults",
-
   "tabs.server": "Server",
   "tabs.behavior": "Behavior",
   "tabs.aiDefaults": "AI Defaults",
   "tabs.quota": "Quota",
   "tabs.tools": "Tools",
   "tabs.integrations": "Integrations",
-
+  "tabs.brand": "Branding",
+  "brand.title": "Brand Identity",
+  "brand.description": "Customize the application name, slug, tagline, and logo used across the UI",
+  "brand.appName": "App Name",
+  "brand.appNameTip": "Display name shown in the sidebar, browser title, and login page.",
+  "brand.appNamePlaceholder": "e.g. Agent Studio",
+  "brand.appKey": "App Key",
+  "brand.appKeyTip": "Lowercase slug used for localStorage key prefixes and CLI commands. Must be a-z, 0-9, hyphens only.",
+  "brand.appKeyPlaceholder": "e.g. agent-studio",
+  "brand.tagline": "Tagline",
+  "brand.taglineTip": "Short description or tagline displayed on the login page.",
+  "brand.taglinePlaceholder": "Build your own AI agent",
+  "brand.logoUrl": "Logo URL",
+  "brand.logoUrlTip": "URL or path to the logo image. Leave empty to use the default icon.",
+  "brand.logoUrlPlaceholder": "https://example.com/logo.png",
   "server.title": "Gateway Server",
   "server.description": "Network binding, authentication token, and access control",
-
   "gateway.host": "Host",
   "gateway.hostTip": "The network interface the gateway listens on. Use 0.0.0.0 to listen on all interfaces.",
   "gateway.port": "Port",
@@ -44,7 +56,6 @@
   "gateway.inboundDebounceMs": "Inbound Debounce (ms)",
   "gateway.inboundDebounceMsTip": "Delay in milliseconds before processing a new message, to coalesce rapid follow-ups. Set to -1 to disable.",
   "gateway.injectionAction": "Injection Detection Action",
-
   "agents.title": "Agent Defaults",
   "agents.description": "Default LLM provider, model, and runtime settings applied to all agents unless overridden",
   "agents.providerTip": "Default LLM provider used when an agent does not specify one.",
@@ -63,7 +74,6 @@
   "agents.restrictToWorkspaceTip": "Prevent agents from reading or writing files outside the workspace path.",
   "agents.intentClassify": "Intent Classification",
   "agents.saveError": "Failed to save agent defaults",
-
   "agents.subagents.title": "Subagents",
   "agents.subagents.desc": "Sub-agent spawning limits",
   "agents.subagents.maxConcurrent": "Max Concurrent",
@@ -77,7 +87,6 @@
   "agents.subagents.modelOverride": "Model Override",
   "agents.subagents.modelOverrideTip": "Force all sub-agents to use a specific model. Leave empty to inherit from the parent agent.",
   "agents.subagents.modelOverridePlaceholder": "(inherit from agent)",
-
   "agents.memory.title": "Memory",
   "agents.memory.desc": "Semantic memory search and embeddings",
   "agents.memory.enabled": "Enabled",
@@ -89,20 +98,17 @@
   "agents.memory.maxResultsTip": "Maximum number of memory entries returned per recall query.",
   "agents.memory.minScore": "Min Score",
   "agents.memory.minScoreTip": "Minimum similarity score (0-1) for a memory entry to be included in results.",
-
   "agents.compaction.title": "Compaction",
   "agents.compaction.desc": "Context window compaction settings",
   "agents.compaction.reserveTokensFloor": "Reserve Tokens Floor",
   "agents.compaction.reserveTokensFloorTip": "Minimum token buffer to reserve for new responses before compacting.",
   "agents.compaction.maxHistoryShare": "Max History Share (0-1)",
   "agents.compaction.maxHistoryShareTip": "Fraction of the context window that conversation history can occupy.",
-
   "agents.pruning.title": "Context Pruning",
   "agents.pruning.desc": "Trim old tool results to free context space",
   "agents.pruning.mode": "Mode",
   "agents.pruning.keepLastAssistants": "Keep Last Assistants",
   "agents.pruning.keepLastAssistantsTip": "Number of recent assistant turns to always preserve during pruning.",
-
   "agents.sandbox.title": "Sandbox",
   "agents.sandbox.desc": "Docker sandbox for code execution",
   "agents.sandbox.mode": "Mode",
@@ -115,7 +121,6 @@
   "agents.sandbox.timeoutSec": "Timeout (sec)",
   "agents.sandbox.timeoutSecTip": "Maximum execution time in seconds before the sandbox is killed.",
   "agents.sandbox.networkEnabled": "Network Enabled",
-
   "behavior.uxTitle": "UX Behavior",
   "behavior.uxDescription": "High-impact toggles that change how the gateway interacts with users",
   "behavior.toolStatusHint": "Show real-time tool execution status messages to users during agent runs.",
@@ -151,12 +156,10 @@
   "behavior.scrubCredentialsHint": "Automatically redact API keys, tokens, and passwords found in tool output before returning to the agent.",
   "behavior.scrubCredentialsInfo": "Credential patterns in tool responses are masked before the agent sees them.",
   "behavior.scrubCredentialsOffInfo": "Credential scrubbing is disabled. Secrets in tool output may be exposed to the agent.",
-
   "sessions.scope": "Session Scope",
   "sessions.scopeTip": "Determines how sessions are partitioned. 'Per Sender' gives each user a separate session; 'Global' shares one session across all users.",
   "sessions.dmScope": "DM Scope",
   "sessions.dmScopeTip": "How direct-message sessions are keyed. 'Per Channel Peer' is the recommended default.",
-
   "quota.title": "Usage Quota",
   "quota.description": "Per-user message quota limits with optional per-provider, channel, and group overrides",
   "quota.enabled": "Enable Quotas",
@@ -181,7 +184,6 @@
   "quota.selectProvider": "Select provider",
   "quota.selectChannel": "Select channel",
   "quota.selectGroup": "Select group",
-
   "tools.title": "Tool Profile",
   "tools.description": "Default tool availability and per-hour call rate limit for all agents",
   "tools.profile": "Profile",
@@ -216,14 +218,12 @@
   "tools.browserEnabled": "Enabled",
   "tools.browserHeadless": "Headless",
   "tools.scrubCredentials": "Scrub Credentials",
-
   "tts.title": "Text-to-Speech",
   "tts.configured": "Configured",
   "tts.disabled": "Disabled",
   "tts.providerInfo": "Provider: {{provider}} — Auto: {{auto}}",
   "tts.noProvider": "No TTS provider configured.",
   "tts.manageLink": "Manage TTS settings",
-
   "cron.title": "Cron Scheduler",
   "cron.description": "Retry behaviour for failed scheduled tasks",
   "cron.maxRetries": "Max Retries",
@@ -235,7 +235,6 @@
   "cron.defaultTimezone": "Default Timezone",
   "cron.defaultTimezoneTip": "IANA timezone for cron expressions when not set per-job (e.g. Asia/Ho_Chi_Minh). Leave empty to use server system timezone.",
   "cron.defaultTimezonePlaceholder": "System timezone",
-
   "telemetry.title": "Telemetry (OpenTelemetry)",
   "telemetry.description": "Export traces and metrics to an OpenTelemetry-compatible backend",
   "telemetry.enabled": "Enabled",
@@ -253,7 +252,6 @@
   "telemetry.headerKeyPlaceholder": "Header name",
   "telemetry.headerValuePlaceholder": "Header value",
   "telemetry.addHeader": "Add Header",
-
   "bindings.title": "Agent Bindings",
   "bindings.description": "Route specific channels, peers, or accounts to a designated agent",
   "bindings.add": "Add Binding",
@@ -262,7 +260,6 @@
   "bindings.channel": "Channel",
   "bindings.peerKind": "Peer Kind",
   "bindings.peerId": "Peer ID",
-
   "providers.title": "Provider API Keys",
   "providers.description": "Override API keys and base URLs for configured LLM providers",
   "providers.noProviders": "No providers found in the configuration file.",
@@ -270,7 +267,6 @@
   "providers.apiBaseUrl": "Base URL",
   "providers.apiBaseUrlPlaceholder": "https://api.example.com/v1",
   "providers.managedVia": "Managed via {{envKey}} environment variable.",
-
   "channels.title": "Channel Settings",
   "channels.description": "Configure built-in channel integrations (tokens, policies, streaming)",
   "channels.noChannels": "No channels found in the configuration file.",

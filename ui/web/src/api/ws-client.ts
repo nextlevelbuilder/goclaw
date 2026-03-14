@@ -36,6 +36,8 @@ export class WsClient {
 
   onPairingRequired: ((code: string, senderID: string) => void) | null = null;
 
+  onBrand: ((brand: { app_name?: string; app_key?: string; tagline?: string; logo_url?: string }) => void) | null = null;
+
   constructor(
     private url: string,
     private getToken: () => string,
@@ -201,6 +203,7 @@ export class WsClient {
         pairing_code?: string;
         sender_id?: string;
         ui_theme?: string;
+        brand?: { app_name?: string; app_key?: string; tagline?: string; logo_url?: string };
       }>("connect", {
         token: this.getToken(),
         user_id: this.getUserId(),
@@ -231,6 +234,9 @@ export class WsClient {
       this.onLockedTheme?.(
         uiTheme === "light" || uiTheme === "dark" ? uiTheme : null,
       );
+      if (res?.brand) {
+        this.onBrand?.(res.brand);
+      }
       this.onStateChange("connected");
     } catch {
       if (this.connectGeneration === generation) {

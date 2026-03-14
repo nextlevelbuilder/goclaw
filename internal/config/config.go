@@ -52,6 +52,7 @@ type Config struct {
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
+	Brand     BrandConfig     `json:"brand,omitempty"`
 	mu        sync.RWMutex
 }
 
@@ -418,10 +419,21 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Telemetry = src.Telemetry
 	c.Tailscale = src.Tailscale
 	c.Bindings = src.Bindings
+	c.Brand = src.Brand
 }
 
 // IdentityConfig defines agent persona / display identity.
 type IdentityConfig struct {
 	Name  string `json:"name,omitempty"`
 	Emoji string `json:"emoji,omitempty"`
+}
+
+// BrandConfig defines the application brand identity.
+// These values are served to the UI at connect time and used for
+// document title, sidebar name, localStorage key prefixes, etc.
+type BrandConfig struct {
+	AppName string `json:"app_name,omitempty"` // display name (default "GoClaw")
+	AppKey  string `json:"app_key,omitempty"`  // slug for localStorage keys (default "goclaw")
+	Tagline string `json:"tagline,omitempty"`  // short description / tagline
+	LogoURL string `json:"logo_url,omitempty"` // URL or path to logo image
 }

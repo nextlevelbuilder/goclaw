@@ -191,7 +191,8 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 }
 
 func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
-	client.SendResponse(protocol.NewOKResponse(reqID, map[string]any{
+	brand := r.server.cfg.Brand
+	resp := map[string]any{
 		"protocol": protocol.ProtocolVersion,
 		"role":     string(client.role),
 		"user_id":  client.userID,
@@ -200,7 +201,17 @@ func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
 			"name":    "goclaw",
 			"version": "0.2.0",
 		},
-	}))
+	}
+	// Include brand metadata if any field is set
+	if brand.AppName != "" || brand.AppKey != "" || brand.Tagline != "" || brand.LogoURL != "" {
+		resp["brand"] = map[string]any{
+			"app_name": brand.AppName,
+			"app_key":  brand.AppKey,
+			"tagline":  brand.Tagline,
+			"logo_url": brand.LogoURL,
+		}
+	}
+	client.SendResponse(protocol.NewOKResponse(reqID, resp))
 }
 
 func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *protocol.RequestFrame) {
