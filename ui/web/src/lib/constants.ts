@@ -31,6 +31,8 @@ export const ROUTES = {
   CUSTOM_TOOLS: "/custom-tools",
   BUILTIN_TOOLS: "/builtin-tools",
   MCP: "/mcp",
+  MCP_BUILDER: "/mcp/builder",
+  MCP_BUILDER_SESSION: "/mcp/builder/:sessionKey",
   TTS: "/tts",
   STORAGE: "/storage",
   PENDING_MESSAGES: "/pending-messages",

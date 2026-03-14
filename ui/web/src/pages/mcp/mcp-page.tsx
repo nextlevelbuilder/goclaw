@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Plug, Plus, RefreshCw, Pencil, Trash2, Users, Wrench } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Plug, Plus, RefreshCw, Pencil, Trash2, Users, Wrench, Hammer } from "lucide-react";
+import { ROUTES } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -26,6 +28,7 @@ const transportBadge: Record<string, string> = {
 export function MCPPage() {
   const { t } = useTranslation("mcp");
   const { t: tc } = useTranslation("common");
+  const navigate = useNavigate();
   const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, listServerTools } = useMCP();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
@@ -76,6 +79,9 @@ export function MCPPage() {
           <div className="flex gap-2">
             <Button size="sm" onClick={() => { setEditServer(null); setFormOpen(true); }} className="gap-1">
               <Plus className="h-3.5 w-3.5" /> {t("addServer")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(ROUTES.MCP_BUILDER)} className="gap-1">
+              <Hammer className="h-3.5 w-3.5" /> {t("builder.button")}
             </Button>
             <Button variant="outline" size="sm" onClick={refresh} disabled={spinning} className="gap-1">
               <RefreshCw className={"h-3.5 w-3.5" + (spinning ? " animate-spin" : "")} /> {tc("refresh")}

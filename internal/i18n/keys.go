@@ -141,6 +141,12 @@ const (
 	MsgProviderModelRequired      = "error.provider_model_required"       // "provider and model are required"
 	MsgInvalidProviderOrModel     = "error.invalid_provider_or_model"     // "invalid provider or model"
 
+	// --- MCP Builder ---
+	MsgProjectAlreadyExists = "error.project_already_exists" // "project already exists: %s"
+	MsgTemplateDirMissing   = "error.template_dir_missing"   // "template directory not configured"
+	MsgDockerBuildFailed    = "error.docker_build_failed"    // "Docker build failed"
+	MsgDockerBuildTimeout   = "error.docker_build_timeout"   // "Docker build timed out"
+
 	// --- Builtin tool descriptions (i18n key = core.tool.<name>) ---
 	MsgToolReadFile          = "core.tool.read_file"
 	MsgToolWriteFile         = "core.tool.write_file"

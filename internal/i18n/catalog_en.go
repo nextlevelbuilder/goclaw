@@ -140,6 +140,12 @@ func init() {
 		MsgProviderModelRequired:  "provider and model are required",
 		MsgInvalidProviderOrModel: "invalid provider or model",
 
+		// MCP Builder
+		MsgProjectAlreadyExists: "project already exists: %s",
+		MsgTemplateDirMissing:   "template directory not configured",
+		MsgDockerBuildFailed:    "Docker build failed",
+		MsgDockerBuildTimeout:   "Docker build timed out",
+
 		// Builtin tool descriptions
 		MsgToolReadFile:        "Read the contents of a file from the agent's workspace by path",
 		MsgToolWriteFile:       "Write content to a file in the workspace, creating directories as needed",

@@ -725,6 +725,34 @@ func runGateway() {
 	if mcpH != nil {
 		server.SetMCPHandler(mcpH)
 	}
+
+	// MCP Builder project API (filesystem-based, no DB required)
+	{
+		projectsRoot := filepath.Join(workspace, "mcp-projects")
+		templateDir := filepath.Join(workspace, "..", "templates", "mcp-server")
+		// Check common template locations
+		for _, candidate := range []string{
+			templateDir,
+			"templates/mcp-server",
+			"/app/templates/mcp-server",
+		} {
+			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+				templateDir = candidate
+				break
+			}
+		}
+		if info, err := os.Stat(templateDir); err == nil && info.IsDir() {
+			mcpBuilderH := httpapi.NewMCPBuilderHandler(cfg.Gateway.Token, projectsRoot, templateDir)
+			if pgStores != nil && pgStores.MCP != nil {
+				mcpBuilderH.SetMCPStore(pgStores.MCP)
+			}
+			server.SetMCPBuilderHandler(mcpBuilderH)
+			slog.Info("mcp_builder handler registered", "projectsRoot", projectsRoot, "templateDir", templateDir)
+		} else {
+			slog.Warn("mcp_builder handler not registered: template dir not found", "templateDir", templateDir)
+		}
+	}
+
 	if customToolsH != nil {
 		server.SetCustomToolsHandler(customToolsH)
 	}

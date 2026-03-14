@@ -213,6 +213,28 @@ docker run -p 3000:3000 -e MCP_TRANSPORT=http {service}-mcp-server
 
 See [⚡ Bun/TypeScript Guide](./reference/bun_mcp_server.md) for quality checklist.
 
+### 3.4 Docker Build Verification (MANDATORY)
+
+After completing the MCP server source code, you MUST verify the build succeeds:
+
+```bash
+docker build -t mcp-{project-name}:latest .
+```
+
+**This step is non-negotiable.** The Docker build serves as the final verification that:
+1. All source files are syntactically correct
+2. All dependencies install correctly (`bun install --frozen-lockfile`)
+3. The project structure matches the Dockerfile expectations
+4. The final image is production-ready and can be used immediately
+
+If the Docker build fails:
+- Read the error log carefully
+- Fix the source code issues
+- Re-run `docker build` until it succeeds
+- Do NOT consider the MCP server complete until Docker build passes
+
+The Docker image tag `mcp-{project-name}:latest` will be used directly when registering the server — ensuring zero gap between what was built and what runs in production.
+
 ---
 
 ## Phase 4: Create Evaluations

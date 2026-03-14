@@ -54,6 +54,9 @@ const CustomToolsPage = lazy(() =>
 const MCPPage = lazy(() =>
   import("@/pages/mcp/mcp-page").then((m) => ({ default: m.MCPPage })),
 );
+const MCPBuilderPage = lazy(() =>
+  import("@/pages/mcp/mcp-builder-page").then((m) => ({ default: m.MCPBuilderPage })),
+);
 const TeamsPage = lazy(() =>
   import("@/pages/teams/teams-page").then((m) => ({ default: m.TeamsPage })),
 );
@@ -156,6 +159,8 @@ export function AppRoutes() {
           <Route path={ROUTES.CUSTOM_TOOLS} element={<CustomToolsPage />} />
           <Route path={ROUTES.BUILTIN_TOOLS} element={<BuiltinToolsPage />} />
           <Route path={ROUTES.MCP} element={<MCPPage />} />
+          <Route path={ROUTES.MCP_BUILDER} element={<MCPBuilderPage />} />
+          <Route path={ROUTES.MCP_BUILDER_SESSION} element={<MCPBuilderPage />} />
           <Route path={ROUTES.TTS} element={<TtsPage />} />
           <Route path={ROUTES.STORAGE} element={<StoragePage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />

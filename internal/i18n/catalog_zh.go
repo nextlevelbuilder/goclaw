@@ -140,6 +140,12 @@ func init() {
 		MsgProviderModelRequired:  "provider 和 model 是必填项",
 		MsgInvalidProviderOrModel: "provider 或 model 无效",
 
+		// MCP Builder
+		MsgProjectAlreadyExists: "项目已存在：%s",
+		MsgTemplateDirMissing:   "模板目录未配置",
+		MsgDockerBuildFailed:    "Docker 构建失败",
+		MsgDockerBuildTimeout:   "Docker 构建超时",
+
 		// 内置工具描述
 		MsgToolReadFile:        "按路径读取代理工作区中的文件内容",
 		MsgToolWriteFile:       "将内容写入工作区中的文件，自动创建所需目录",

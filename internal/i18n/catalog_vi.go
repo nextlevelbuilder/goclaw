@@ -140,6 +140,12 @@ func init() {
 		MsgProviderModelRequired:  "provider và model là bắt buộc",
 		MsgInvalidProviderOrModel: "provider hoặc model không hợp lệ",
 
+		// MCP Builder
+		MsgProjectAlreadyExists: "dự án đã tồn tại: %s",
+		MsgTemplateDirMissing:   "thư mục mẫu chưa được cấu hình",
+		MsgDockerBuildFailed:    "build Docker thất bại",
+		MsgDockerBuildTimeout:   "build Docker đã hết thời gian chờ",
+
 		// Mô tả công cụ tích hợp
 		MsgToolReadFile:        "Đọc nội dung tệp từ không gian làm việc của agent theo đường dẫn",
 		MsgToolWriteFile:       "Ghi nội dung vào tệp trong không gian làm việc, tự động tạo thư mục nếu cần",
