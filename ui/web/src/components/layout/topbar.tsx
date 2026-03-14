@@ -11,6 +11,7 @@ export function Topbar() {
   const { t } = useTranslation("topbar");
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
+  const lockedTheme = useUiStore((s) => s.lockedTheme);
   const language = useUiStore((s) => s.language);
   const setLanguage = useUiStore((s) => s.setLanguage);
   const timezone = useUiStore((s) => s.timezone);
@@ -90,13 +91,15 @@ export function Topbar() {
           </select>
         </div>
 
-        <button
-          onClick={() => setTheme(isDark ? "light" : "dark")}
-          className="cursor-pointer rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          title={t("toggleTheme")}
-        >
-          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
+        {lockedTheme === null && (
+          <button
+            onClick={() => setTheme(isDark ? "light" : "dark")}
+            className="cursor-pointer rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            title={t("toggleTheme")}
+          >
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+        )}
 
         {displayName && (
           <div className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground">

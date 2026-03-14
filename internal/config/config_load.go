@@ -176,6 +176,16 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_WORKSPACE", &c.Agents.Defaults.Workspace)
 	envStr("GOCLAW_SESSIONS_STORAGE", &c.Sessions.Storage)
 
+	// UI theme lock
+	if v := os.Getenv("GOCLAW_UI_THEME"); v != "" {
+		switch v {
+		case "light", "dark":
+			c.Gateway.UITheme = v
+		default:
+			slog.Warn("security.invalid_ui_theme", "value", v, "hint", "valid values: light, dark")
+		}
+	}
+
 	// Gateway host/port
 	envStr("GOCLAW_HOST", &c.Gateway.Host)
 	if v := os.Getenv("GOCLAW_PORT"); v != "" {

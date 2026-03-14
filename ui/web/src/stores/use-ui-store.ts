@@ -6,12 +6,14 @@ export type Theme = "light" | "dark" | "system";
 
 interface UiState {
   theme: Theme;
+  lockedTheme: "light" | "dark" | null;
   language: Language;
   timezone: string; // IANA timezone or "auto"
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
 
   setTheme: (theme: Theme) => void;
+  setLockedTheme: (theme: "light" | "dark" | null) => void;
   setLanguage: (language: Language) => void;
   setTimezone: (tz: string) => void;
   toggleSidebar: () => void;
@@ -21,6 +23,7 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   theme: (localStorage.getItem(LOCAL_STORAGE_KEYS.THEME) as Theme) ?? "dark",
+  lockedTheme: null,
   language: (i18n.language as Language) ?? "en",
   timezone: localStorage.getItem(LOCAL_STORAGE_KEYS.TIMEZONE) ?? "auto",
   sidebarCollapsed:
@@ -31,6 +34,8 @@ export const useUiStore = create<UiState>((set) => ({
     localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, theme);
     set({ theme });
   },
+
+  setLockedTheme: (theme) => set({ lockedTheme: theme }),
 
   setLanguage: (language) => {
     i18n.changeLanguage(language);

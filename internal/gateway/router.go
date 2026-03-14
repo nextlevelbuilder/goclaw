@@ -194,6 +194,7 @@ func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
 		"protocol": protocol.ProtocolVersion,
 		"role":     string(client.role),
 		"user_id":  client.userID,
+		"ui_theme": r.server.cfg.Gateway.UITheme, // "" when not locked
 		"server": map[string]any{
 			"name":    "goclaw",
 			"version": "0.2.0",

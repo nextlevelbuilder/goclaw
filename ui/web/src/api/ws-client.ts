@@ -30,6 +30,8 @@ export class WsClient {
 
   onAuthFailure: (() => void) | null = null;
 
+  onLockedTheme: ((theme: "light" | "dark" | null) => void) | null = null;
+
   onPairingRequired: ((code: string, senderID: string) => void) | null = null;
 
   constructor(
@@ -194,6 +196,7 @@ export class WsClient {
         status?: string;
         pairing_code?: string;
         sender_id?: string;
+        ui_theme?: string;
       }>("connect", {
         token: this.getToken(),
         user_id: this.getUserId(),
@@ -219,6 +222,10 @@ export class WsClient {
       }
 
       this.authenticated = true;
+      const uiTheme = res?.ui_theme;
+      this.onLockedTheme?.(
+        uiTheme === "light" || uiTheme === "dark" ? uiTheme : null,
+      );
       this.onStateChange("connected");
     } catch {
       if (this.connectGeneration === generation) {

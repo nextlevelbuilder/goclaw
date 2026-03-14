@@ -3,6 +3,7 @@ import { WsClient, type ConnectionState } from "@/api/ws-client";
 import { HttpClient } from "@/api/http-client";
 import { WsContext } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useUiStore } from "@/stores/use-ui-store";
 import { useWsQueryInvalidation } from "@/hooks/use-query-invalidation";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { TEAM_RELATED_EVENTS } from "@/api/protocol";
@@ -32,6 +33,9 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     );
     wsRef.current.onAuthFailure = () => {
       useAuthStore.getState().logout();
+    };
+    wsRef.current.onLockedTheme = (theme) => {
+      useUiStore.getState().setLockedTheme(theme);
     };
   }
   const ws = wsRef.current;

@@ -15,19 +15,22 @@ function applyTheme(theme: Theme) {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useUiStore((s) => s.theme);
+  const lockedTheme = useUiStore((s) => s.lockedTheme);
+
+  const effectiveTheme = lockedTheme ?? theme;
 
   useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
+    applyTheme(effectiveTheme);
+  }, [effectiveTheme]);
 
-  // Listen for system theme changes when in "system" mode
+  // Listen for system theme changes only when unlocked and in "system" mode
   useEffect(() => {
-    if (theme !== "system") return;
+    if (lockedTheme !== null || theme !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => applyTheme("system");
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [theme]);
+  }, [theme, lockedTheme]);
 
   return <>{children}</>;
 }
