@@ -108,11 +108,12 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgUserCtxRequired)))
 			return
 		}
+		ctx = store.WithUserID(ctx, userID)
 
 		var agents []store.AgentData
 		var err error
-		if m.isOwnerUser(userID) {
-			agents, err = m.agentStore.List(ctx, "")
+		if store.IsAdminContext(ctx) {
+			agents, err = m.agentStore.List(ctx, "") // admin sees all
 		} else {
 			agents, err = m.agentStore.ListAccessible(ctx, userID)
 		}

@@ -33,6 +33,11 @@ func (s *PGProviderStore) CreateProvider(ctx context.Context, p *store.LLMProvid
 		p.ID = store.GenNewID()
 	}
 
+	// Set created_by from context if not provided by caller
+	if p.CreatedBy == "" {
+		p.CreatedBy = store.UserIDFromContext(ctx)
+	}
+
 	apiKey := p.APIKey
 	if s.encKey != "" && apiKey != "" {
 		encrypted, err := crypto.Encrypt(apiKey, s.encKey)
@@ -51,9 +56,10 @@ func (s *PGProviderStore) CreateProvider(ctx context.Context, p *store.LLMProvid
 	p.CreatedAt = now
 	p.UpdatedAt = now
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO llm_providers (id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		p.ID, p.Name, p.DisplayName, p.ProviderType, p.APIBase, apiKey, p.Enabled, settings, now, now,
+		`INSERT INTO llm_providers (id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_by, updated_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		p.ID, p.Name, p.DisplayName, p.ProviderType, p.APIBase, apiKey, p.Enabled, settings,
+		nilStr(p.CreatedBy), nilStr(p.CreatedBy), now, now,
 	)
 	return err
 }
@@ -61,35 +67,55 @@ func (s *PGProviderStore) CreateProvider(ctx context.Context, p *store.LLMProvid
 func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store.LLMProviderData, error) {
 	var p store.LLMProviderData
 	var apiKey string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at
-		 FROM llm_providers WHERE id = $1`, id,
-	).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt)
+	var createdBy, updatedBy *string
+	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_by, updated_by, created_at, updated_at
+		 FROM llm_providers WHERE id = $1`
+	args := []any{id}
+	if clause, arg, active := ownerFilter(ctx, "created_by", 2); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	err := s.db.QueryRowContext(ctx, q, args...).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &createdBy, &updatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("provider not found: %s", id)
 	}
 	p.APIKey = s.decryptKey(apiKey, p.Name)
+	p.CreatedBy = derefStr(createdBy)
+	p.UpdatedBy = derefStr(updatedBy)
 	return &p, nil
 }
 
 func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*store.LLMProviderData, error) {
 	var p store.LLMProviderData
 	var apiKey string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at
-		 FROM llm_providers WHERE name = $1`, name,
-	).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt)
+	var createdBy, updatedBy *string
+	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_by, updated_by, created_at, updated_at
+		 FROM llm_providers WHERE name = $1`
+	args := []any{name}
+	if clause, arg, active := ownerFilter(ctx, "created_by", 2); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	err := s.db.QueryRowContext(ctx, q, args...).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &createdBy, &updatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("provider not found: %s", name)
 	}
 	p.APIKey = s.decryptKey(apiKey, p.Name)
+	p.CreatedBy = derefStr(createdBy)
+	p.UpdatedBy = derefStr(updatedBy)
 	return &p, nil
 }
 
 func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProviderData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at
-		 FROM llm_providers ORDER BY name`)
+	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_by, updated_by, created_at, updated_at
+		 FROM llm_providers WHERE 1=1`
+	var args []any
+	if clause, arg, active := ownerFilter(ctx, "created_by", 1); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	q += " ORDER BY name"
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +125,13 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 	for rows.Next() {
 		var p store.LLMProviderData
 		var apiKey string
-		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		var createdBy, updatedBy *string
+		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &createdBy, &updatedBy, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			continue
 		}
 		p.APIKey = s.decryptKey(apiKey, p.Name)
+		p.CreatedBy = derefStr(createdBy)
+		p.UpdatedBy = derefStr(updatedBy)
 		result = append(result, p)
 	}
 	return result, nil

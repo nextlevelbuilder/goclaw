@@ -25,6 +25,9 @@ const (
 	LocaleKey contextKey = "goclaw_locale"
 	// SharedMemoryKey indicates memory should be shared (no per-user scoping).
 	SharedMemoryKey contextKey = "goclaw_shared_memory"
+	// RoleKey is the context key for the caller's permission role.
+	// Value is a string ("admin", "operator", "viewer").
+	RoleKey contextKey = "goclaw_role"
 )
 
 // WithUserID returns a new context with the given user ID.
@@ -110,6 +113,25 @@ func MemoryUserID(ctx context.Context) string {
 		return ""
 	}
 	return UserIDFromContext(ctx)
+}
+
+// WithRole returns a new context with the given role.
+func WithRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, RoleKey, role)
+}
+
+// RoleFromContext extracts the role from context. Returns "operator" if not set
+// (safe default — operators can write but can't bypass ownership filters).
+func RoleFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(RoleKey).(string); ok && v != "" {
+		return v
+	}
+	return "operator"
+}
+
+// IsAdminContext returns true if the context role is admin.
+func IsAdminContext(ctx context.Context) bool {
+	return RoleFromContext(ctx) == "admin"
 }
 
 // WithLocale returns a new context with the given locale.

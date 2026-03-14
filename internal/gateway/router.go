@@ -65,8 +65,9 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 		}
 	}
 
-	// Inject locale into context for i18n support
+	// Inject locale and role into context for i18n and ownership filtering
 	ctx = store.WithLocale(ctx, i18n.Normalize(client.locale))
+	ctx = store.WithRole(ctx, string(client.role))
 
 	slog.Debug("handling method", "method", req.Method, "client", client.id, "req_id", req.ID)
 	handler(ctx, client, req)
@@ -261,7 +262,7 @@ func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *pr
 
 	sessionCount := 0
 	if r.server.sessions != nil {
-		sessionCount = len(r.server.sessions.List(""))
+		sessionCount = len(r.server.sessions.List(ctx, ""))
 	}
 
 	// Agents are lazily resolved — router only has loaded agents.

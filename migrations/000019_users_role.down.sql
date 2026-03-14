@@ -1,0 +1,6 @@
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users DROP COLUMN IF EXISTS display_name;
+ALTER TABLE users DROP COLUMN IF EXISTS role;
+DROP INDEX IF EXISTS idx_users_role;
+DROP INDEX IF EXISTS idx_users_last_login;
+DROP TABLE IF EXISTS users;

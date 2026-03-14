@@ -1,6 +1,9 @@
 package store
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // CronJob represents a scheduled job.
 type CronJob struct {
@@ -90,7 +93,7 @@ type CronEvent struct {
 type CronStore interface {
 	AddJob(name string, schedule CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*CronJob, error)
 	GetJob(jobID string) (*CronJob, bool)
-	ListJobs(includeDisabled bool, agentID, userID string) []CronJob
+	ListJobs(ctx context.Context, includeDisabled bool, agentID, userID string) []CronJob
 	RemoveJob(jobID string) error
 	UpdateJob(jobID string, patch CronJobPatch) (*CronJob, error)
 	EnableJob(jobID string, enabled bool) error

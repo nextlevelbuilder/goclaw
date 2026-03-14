@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // FilesHandler serves files over HTTP with Bearer token auth.
@@ -41,6 +42,9 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		role := resolveHTTPRole(r, h.token)
+		ctx := store.WithRole(r.Context(), role)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }

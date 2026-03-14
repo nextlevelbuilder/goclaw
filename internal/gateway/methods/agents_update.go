@@ -46,7 +46,6 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 
 	if m.agentStore != nil {
 		// --- DB-backed: update agent in store ---
-		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgAgentNotFound, params.AgentID)))

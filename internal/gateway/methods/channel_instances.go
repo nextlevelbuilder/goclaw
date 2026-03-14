@@ -47,6 +47,7 @@ func (m *ChannelInstancesMethods) emitCacheInvalidate() {
 
 func (m *ChannelInstancesMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
+	ctx = store.WithUserID(ctx, client.UserID())
 	instances, err := m.store.ListAll(ctx)
 	if err != nil {
 		slog.Error("channels.instances.list", "error", err)
@@ -67,6 +68,7 @@ func (m *ChannelInstancesMethods) handleList(ctx context.Context, client *gatewa
 
 func (m *ChannelInstancesMethods) handleGet(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
+	ctx = store.WithUserID(ctx, client.UserID())
 	var params struct {
 		ID string `json:"id"`
 	}
@@ -125,6 +127,8 @@ func (m *ChannelInstancesMethods) handleCreate(ctx context.Context, client *gate
 		enabled = *params.Enabled
 	}
 
+	ctx = store.WithUserID(ctx, client.UserID())
+
 	inst := &store.ChannelInstanceData{
 		Name:        params.Name,
 		DisplayName: params.DisplayName,
@@ -133,6 +137,7 @@ func (m *ChannelInstancesMethods) handleCreate(ctx context.Context, client *gate
 		Credentials: params.Credentials,
 		Config:      params.Config,
 		Enabled:     enabled,
+		CreatedBy:   client.UserID(),
 	}
 
 	if err := m.store.Create(ctx, inst); err != nil {
@@ -148,6 +153,7 @@ func (m *ChannelInstancesMethods) handleCreate(ctx context.Context, client *gate
 
 func (m *ChannelInstancesMethods) handleUpdate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
+	ctx = store.WithUserID(ctx, client.UserID())
 	var params struct {
 		ID      string          `json:"id"`
 		Updates json.RawMessage `json:"updates"`
@@ -181,6 +187,7 @@ func (m *ChannelInstancesMethods) handleUpdate(ctx context.Context, client *gate
 
 func (m *ChannelInstancesMethods) handleDelete(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
+	ctx = store.WithUserID(ctx, client.UserID())
 	var params struct {
 		ID string `json:"id"`
 	}

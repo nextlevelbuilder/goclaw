@@ -42,6 +42,7 @@ type Server struct {
 	tracesHandler           *httpapi.TracesHandler           // LLM trace listing API
 	wakeHandler             *httpapi.WakeHandler             // external wake/trigger API
 	mcpHandler              *httpapi.MCPHandler              // MCP server management API
+	mcpBuilderHandler       *httpapi.MCPBuilderHandler       // MCP builder project API
 	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
@@ -187,6 +188,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// MCP server management API
 	if s.mcpHandler != nil {
 		s.mcpHandler.RegisterRoutes(mux)
+	}
+
+	// MCP builder project API
+	if s.mcpBuilderHandler != nil {
+		s.mcpBuilderHandler.RegisterRoutes(mux)
 	}
 
 	// Custom tool CRUD API
@@ -398,12 +404,16 @@ func keycloakAuthMiddleware(kc *httpapi.KeycloakHandler, gatewayToken string, ne
 			return
 		}
 		auth := r.Header.Get("Authorization")
-		if strings.HasPrefix(auth, "Bearer ") {
-			token := strings.TrimPrefix(auth, "Bearer ")
+		if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
+			token := after
 			// Skip if it's already the gateway token
 			if token != gatewayToken {
 				// Try to validate as Keycloak JWT
-				if _, err := kc.ValidateToken(r.Context(), token); err == nil {
+				if claims, err := kc.ValidateToken(r.Context(), token); err == nil {
+					// Set user ID from JWT sub claim so downstream handlers can identify the user
+					if sub, _ := claims["sub"].(string); sub != "" {
+						r.Header.Set("X-GoClaw-User-Id", sub)
+					}
 					// Valid KC JWT → rewrite to gateway token
 					r.Header.Set("Authorization", "Bearer "+gatewayToken)
 				}
@@ -477,6 +487,9 @@ func (s *Server) SetWakeHandler(h *httpapi.WakeHandler) { s.wakeHandler = h }
 
 // SetMCPHandler sets the MCP server management handler.
 func (s *Server) SetMCPHandler(h *httpapi.MCPHandler) { s.mcpHandler = h }
+
+// SetMCPBuilderHandler sets the MCP builder project handler.
+func (s *Server) SetMCPBuilderHandler(h *httpapi.MCPBuilderHandler) { s.mcpBuilderHandler = h }
 
 // SetCustomToolsHandler sets the custom tool CRUD handler.
 func (s *Server) SetCustomToolsHandler(h *httpapi.CustomToolsHandler) { s.customToolsHandler = h }

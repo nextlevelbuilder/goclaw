@@ -9,6 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -27,8 +28,9 @@ func (m *SkillsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodSkillsUpdate, m.handleUpdate)
 }
 
-func (m *SkillsMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	allSkills := m.store.ListSkills()
+func (m *SkillsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	ctx = store.WithUserID(ctx, client.UserID())
+	allSkills := pg.FilterSkillsByOwner(ctx, m.store.ListSkills())
 
 	result := make([]map[string]any, 0, len(allSkills))
 	for _, s := range allSkills {

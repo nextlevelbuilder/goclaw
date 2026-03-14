@@ -59,7 +59,7 @@ func (t *SessionsListTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 
 	agentID := resolveAgentIDString(ctx)
-	sessions := t.sessions.List(agentID)
+	sessions := t.sessions.List(ctx, agentID)
 
 	// Filter by active_minutes
 	if activeMinutes > 0 {

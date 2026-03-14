@@ -82,7 +82,9 @@ func (h *MCPHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		userID := extractUserID(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), extractLocale(r))
+		ctx = store.WithRole(ctx, role)
 		if userID != "" {
 			ctx = store.WithUserID(ctx, userID)
 		}
@@ -115,7 +117,7 @@ func (h *MCPHandler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		result[i] = mcpServerWithCounts{MCPServerData: srv, AgentCount: counts[srv.ID]}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"servers": result})
+	writeJSON(w, http.StatusOK, map[string]any{"servers": result})
 }
 
 func (h *MCPHandler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +178,7 @@ func (h *MCPHandler) handleUpdateServer(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var updates map[string]interface{}
+	var updates map[string]any
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&updates); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
 		return

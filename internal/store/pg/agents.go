@@ -149,9 +149,14 @@ func (s *PGAgentStore) GetByKey(ctx context.Context, agentKey string) (*store.Ag
 }
 
 func (s *PGAgentStore) GetByID(ctx context.Context, id uuid.UUID) (*store.AgentData, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+agentSelectCols+`
-		 FROM agents WHERE id = $1 AND deleted_at IS NULL`, id)
+	q := `SELECT ` + agentSelectCols + `
+		 FROM agents WHERE id = $1 AND deleted_at IS NULL`
+	args := []any{id}
+	if clause, arg, active := ownerFilter(ctx, "owner_id", 2); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	row := s.db.QueryRowContext(ctx, q, args...)
 	d, err := scanAgentRow(row)
 	if err != nil {
 		return nil, fmt.Errorf("agent not found: %s", id)
@@ -189,17 +194,19 @@ func (s *PGAgentStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *PGAgentStore) List(ctx context.Context, ownerID string) ([]store.AgentData, error) {
-	var rows *sql.Rows
-	var err error
+	q := `SELECT ` + agentSelectCols + ` FROM agents WHERE deleted_at IS NULL`
+	var args []any
+
 	if ownerID != "" {
-		rows, err = s.db.QueryContext(ctx,
-			`SELECT `+agentSelectCols+`
-			 FROM agents WHERE deleted_at IS NULL AND owner_id = $1 ORDER BY created_at DESC`, ownerID)
-	} else {
-		rows, err = s.db.QueryContext(ctx,
-			`SELECT `+agentSelectCols+`
-			 FROM agents WHERE deleted_at IS NULL ORDER BY created_at DESC`)
+		q += " AND owner_id = $1"
+		args = append(args, ownerID)
+	} else if clause, arg, active := ownerFilter(ctx, "owner_id", 1); active {
+		q += " " + clause
+		args = append(args, arg)
 	}
+
+	q += " ORDER BY created_at DESC"
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -379,6 +386,12 @@ func scanAgentRows(rows *sql.Rows) ([]store.AgentData, error) {
 func execMapUpdateWhere(ctx context.Context, db *sql.DB, table string, updates map[string]any, whereClause string, id uuid.UUID) error {
 	if len(updates) == 0 {
 		return nil
+	}
+	// Auto-set updated_by from context (only if table supports it and not already set).
+	if _, ok := updates["updated_by"]; !ok && tableHasUpdatedBy(table) {
+		if uid := store.UserIDFromContext(ctx); uid != "" {
+			updates["updated_by"] = uid
+		}
 	}
 	var setClauses []string
 	var args []any

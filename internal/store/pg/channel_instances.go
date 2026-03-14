@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -177,9 +178,7 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 			if err != nil {
 				return fmt.Errorf("load existing credentials for merge: %w", err)
 			}
-			for k, v := range newCreds {
-				existing[k] = v
-			}
+			maps.Copy(existing, newCreds)
 			newCreds = existing
 		}
 
@@ -237,33 +236,40 @@ func (s *PGChannelInstanceStore) ListEnabled(ctx context.Context) ([]store.Chann
 }
 
 func (s *PGChannelInstanceStore) ListAll(ctx context.Context) ([]store.ChannelInstanceData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+channelInstanceSelectCols+` FROM channel_instances ORDER BY name`)
+	q := `SELECT ` + channelInstanceSelectCols + ` FROM channel_instances WHERE 1=1`
+	var args []any
+	if clause, arg, active := ownerFilter(ctx, "created_by", 1); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	q += " ORDER BY name"
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	return s.scanInstances(rows)
 }
 
-func buildChannelInstanceWhere(opts store.ChannelInstanceListOpts) (string, []any) {
-	var conditions []string
+func buildChannelInstanceWhere(ctx context.Context, opts store.ChannelInstanceListOpts) (string, []any) {
+	conditions := []string{"1=1"}
 	var args []any
 	argIdx := 1
 
 	if opts.Search != "" {
 		conditions = append(conditions, fmt.Sprintf("(name ILIKE $%d OR display_name ILIKE $%d OR channel_type ILIKE $%d)", argIdx, argIdx, argIdx))
 		args = append(args, "%"+opts.Search+"%")
+		argIdx++
+	}
+	if _, arg, active := ownerFilter(ctx, "created_by", argIdx); active {
+		conditions = append(conditions, fmt.Sprintf("created_by = $%d", argIdx))
+		args = append(args, arg)
 	}
 
-	where := ""
-	if len(conditions) > 0 {
-		where = " WHERE " + strings.Join(conditions, " AND ")
-	}
-	return where, args
+	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
 func (s *PGChannelInstanceStore) ListPaged(ctx context.Context, opts store.ChannelInstanceListOpts) ([]store.ChannelInstanceData, error) {
-	where, args := buildChannelInstanceWhere(opts)
+	where, args := buildChannelInstanceWhere(ctx, opts)
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 50
@@ -279,7 +285,7 @@ func (s *PGChannelInstanceStore) ListPaged(ctx context.Context, opts store.Chann
 }
 
 func (s *PGChannelInstanceStore) CountInstances(ctx context.Context, opts store.ChannelInstanceListOpts) (int, error) {
-	where, args := buildChannelInstanceWhere(opts)
+	where, args := buildChannelInstanceWhere(ctx, opts)
 	var count int
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM channel_instances"+where, args...).Scan(&count)
 	return count, err

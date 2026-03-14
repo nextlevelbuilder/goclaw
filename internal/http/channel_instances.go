@@ -62,7 +62,9 @@ func (h *ChannelInstancesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		userID := extractUserID(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), extractLocale(r))
+		ctx = store.WithRole(ctx, role)
 		if userID != "" {
 			ctx = store.WithUserID(ctx, userID)
 		}
@@ -111,12 +113,12 @@ func (h *ChannelInstancesHandler) handleList(w http.ResponseWriter, r *http.Requ
 
 	total, _ := h.store.CountInstances(r.Context(), opts)
 
-	result := make([]map[string]interface{}, 0, len(instances))
+	result := make([]map[string]any, 0, len(instances))
 	for _, inst := range instances {
 		result = append(result, maskInstanceHTTP(inst))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"instances": result,
 		"total":     total,
 		"limit":     opts.Limit,
@@ -210,7 +212,7 @@ func (h *ChannelInstancesHandler) handleUpdate(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var updates map[string]interface{}
+	var updates map[string]any
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&updates); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
 		return
@@ -258,8 +260,8 @@ func (h *ChannelInstancesHandler) handleDelete(w http.ResponseWriter, r *http.Re
 }
 
 // maskInstanceHTTP returns a map with credentials masked for HTTP responses.
-func maskInstanceHTTP(inst store.ChannelInstanceData) map[string]interface{} {
-	result := map[string]interface{}{
+func maskInstanceHTTP(inst store.ChannelInstanceData) map[string]any {
+	result := map[string]any{
 		"id":              inst.ID,
 		"name":            inst.Name,
 		"display_name":    inst.DisplayName,
@@ -275,9 +277,9 @@ func maskInstanceHTTP(inst store.ChannelInstanceData) map[string]interface{} {
 	}
 
 	if len(inst.Credentials) > 0 {
-		var raw map[string]interface{}
+		var raw map[string]any
 		if json.Unmarshal(inst.Credentials, &raw) == nil {
-			masked := make(map[string]interface{}, len(raw))
+			masked := make(map[string]any, len(raw))
 			for k := range raw {
 				masked[k] = "***"
 			}
@@ -325,7 +327,7 @@ func (h *ChannelInstancesHandler) handleWriterGroups(w http.ResponseWriter, r *h
 	if groups == nil {
 		groups = []store.GroupWriterGroupInfo{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"groups": groups})
+	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
 func (h *ChannelInstancesHandler) handleListWriters(w http.ResponseWriter, r *http.Request) {
@@ -348,7 +350,7 @@ func (h *ChannelInstancesHandler) handleListWriters(w http.ResponseWriter, r *ht
 	if writers == nil {
 		writers = []store.GroupFileWriterData{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"writers": writers})
+	writeJSON(w, http.StatusOK, map[string]any{"writers": writers})
 }
 
 func (h *ChannelInstancesHandler) handleAddWriter(w http.ResponseWriter, r *http.Request) {
@@ -443,7 +445,7 @@ func (h *ChannelInstancesHandler) handleListContacts(w http.ResponseWriter, r *h
 		slog.Warn("contacts.count", "error", countErr)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"contacts": contacts,
 		"total":    total,
 		"limit":    opts.Limit,
@@ -454,7 +456,7 @@ func (h *ChannelInstancesHandler) handleListContacts(w http.ResponseWriter, r *h
 func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r *http.Request) {
 	idsParam := r.URL.Query().Get("ids")
 	if idsParam == "" {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"contacts": map[string]any{}})
+		writeJSON(w, http.StatusOK, map[string]any{"contacts": map[string]any{}})
 		return
 	}
 
@@ -471,7 +473,7 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"contacts": result})
+	writeJSON(w, http.StatusOK, map[string]any{"contacts": result})
 }
 
 // isValidChannelType checks if the channel type is supported.

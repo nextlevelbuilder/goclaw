@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,9 +107,9 @@ type SessionStore interface {
 	SetHistory(key string, msgs []providers.Message)
 	Reset(key string)
 	Delete(key string) error
-	List(agentID string) []SessionInfo
-	ListPaged(opts SessionListOpts) SessionListResult
-	ListPagedRich(opts SessionListOpts) SessionListRichResult
+	List(ctx context.Context, agentID string) []SessionInfo
+	ListPaged(ctx context.Context, opts SessionListOpts) SessionListResult
+	ListPagedRich(ctx context.Context, opts SessionListOpts) SessionListRichResult
 	Save(key string) error
 	LastUsedChannel(agentID string) (channel, chatID string)
 }

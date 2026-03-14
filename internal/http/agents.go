@@ -20,8 +20,8 @@ import (
 type AgentsHandler struct {
 	agents   store.AgentStore
 	token    string
-	msgBus   *bus.MessageBus  // for cache invalidation events (nil = no events)
-	summoner *AgentSummoner   // LLM-based agent setup (nil = disabled)
+	msgBus   *bus.MessageBus   // for cache invalidation events (nil = no events)
+	summoner *AgentSummoner    // LLM-based agent setup (nil = disabled)
 	isOwner  func(string) bool // checks if user ID is a system owner (nil = no owners configured)
 }
 
@@ -74,9 +74,11 @@ func (h *AgentsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
-		// Inject user_id and locale into context
+		// Inject user_id, locale, and role into context
 		userID := extractUserID(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), extractLocale(r))
+		ctx = store.WithRole(ctx, role)
 		if userID != "" {
 			ctx = store.WithUserID(ctx, userID)
 		}
@@ -95,8 +97,8 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	var agents []store.AgentData
 	var err error
-	if h.isOwnerUser(userID) {
-		agents, err = h.agents.List(r.Context(), "") // owners see all agents
+	if store.IsAdminContext(r.Context()) {
+		agents, err = h.agents.List(r.Context(), "") // admin sees all agents
 	} else {
 		agents, err = h.agents.ListAccessible(r.Context(), userID)
 	}
@@ -105,7 +107,7 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"agents": agents})
+	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
 }
 
 func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +193,7 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	userID := store.UserIDFromContext(r.Context())
 	locale := store.LocaleFromContext(r.Context())
-	isOwner := h.isOwnerUser(userID)
+	isAdmin := store.IsAdminContext(r.Context())
 
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -201,7 +203,7 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "agent", r.PathValue("id"))})
 			return
 		}
-		if userID != "" && !isOwner {
+		if userID != "" && !isAdmin {
 			if ok, _, _ := h.agents.CanAccess(r.Context(), ag.ID, userID); !ok {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgNoAccess, "agent")})
 				return
@@ -217,7 +219,7 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if userID != "" && !isOwner {
+	if userID != "" && !isAdmin {
 		if ok, _, _ := h.agents.CanAccess(r.Context(), id, userID); !ok {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgNoAccess, "agent")})
 			return
@@ -242,7 +244,7 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "agent", id.String())})
 		return
 	}
-	if userID != "" && ag.OwnerID != userID && !h.isOwnerUser(userID) {
+	if userID != "" && ag.OwnerID != userID && !store.IsAdminContext(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgOwnerOnly, "update agent")})
 		return
 	}
@@ -299,7 +301,7 @@ func (h *AgentsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "agent", id.String())})
 		return
 	}
-	if userID != "" && ag.OwnerID != userID && !h.isOwnerUser(userID) {
+	if userID != "" && ag.OwnerID != userID && !store.IsAdminContext(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgOwnerOnly, "delete agent")})
 		return
 	}

@@ -67,7 +67,6 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 
 	if m.agentStore != nil {
 		// --- DB-backed: create agent in store ---
-		ctx := context.Background()
 
 		// Check if agent already exists in DB
 		if existing, _ := m.agentStore.GetByKey(ctx, agentID); existing != nil {

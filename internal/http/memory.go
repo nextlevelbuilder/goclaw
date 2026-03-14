@@ -40,6 +40,9 @@ func (h *MemoryHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		role := resolveHTTPRole(r, h.token)
+		ctx := store.WithRole(r.Context(), role)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }

@@ -44,7 +44,9 @@ func (h *TracesHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		locale := extractLocale(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), locale)
+		ctx = store.WithRole(ctx, role)
 		r = r.WithContext(ctx)
 		next(w, r)
 	}
@@ -93,7 +95,7 @@ func (h *TracesHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	total, _ := h.tracing.CountTraces(r.Context(), opts)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"traces": traces,
 		"total":  total,
 		"limit":  opts.Limit,
@@ -122,7 +124,7 @@ func (h *TracesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"trace": trace,
 		"spans": spans,
 	})
@@ -179,7 +181,7 @@ func (h *TracesHandler) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payload := struct {
-		ExportedAt time.Time        `json:"exported_at"`
+		ExportedAt time.Time `json:"exported_at"`
 		traceExportEntry
 	}{
 		ExportedAt:       time.Now().UTC(),

@@ -72,7 +72,7 @@ func (t *SessionsSendTool) Execute(ctx context.Context, args map[string]any) *Re
 
 	// Resolve by label if needed
 	if sessionKey == "" && label != "" {
-		sessions := t.sessions.List(agentID)
+		sessions := t.sessions.List(ctx, agentID)
 		for _, s := range sessions {
 			// Check if label matches by loading session data
 			data := t.sessions.GetOrCreate(s.Key)

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // --- Nullable helpers ---
@@ -123,6 +125,14 @@ func execMapUpdate(ctx context.Context, db *sql.DB, table string, id uuid.UUID, 
 		args = append(args, time.Now().UTC())
 		i++
 	}
+	// Auto-set updated_by from context (only if table supports it and not already set).
+	if _, ok := updates["updated_by"]; !ok && tableHasUpdatedBy(table) {
+		if uid := store.UserIDFromContext(ctx); uid != "" {
+			setClauses = append(setClauses, fmt.Sprintf("updated_by = $%d", i))
+			args = append(args, uid)
+			i++
+		}
+	}
 	args = append(args, id)
 	q := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", table, strings.Join(setClauses, ", "), i)
 	_, err := db.ExecContext(ctx, q, args...)
@@ -142,4 +152,52 @@ var tablesWithUpdatedAt = map[string]bool{
 
 func tableHasUpdatedAt(table string) bool {
 	return tablesWithUpdatedAt[table]
+}
+
+// tablesWithUpdatedBy lists tables that have an updated_by column.
+var tablesWithUpdatedBy = map[string]bool{
+	"agents": true, "llm_providers": true, "sessions": true,
+	"channel_instances": true, "cron_jobs": true, "custom_tools": true,
+	"skills": true, "mcp_servers": true,
+}
+
+func tableHasUpdatedBy(table string) bool {
+	return tablesWithUpdatedBy[table]
+}
+
+// --- Ownership filter helper ---
+
+// ownerFilter returns a SQL AND clause and arg for non-admin ownership filtering.
+// Returns active=false for admin contexts or when userID is empty.
+// ownerCol: the column to filter on (e.g. "created_by", "owner_id", "user_id").
+// startIdx: the $N positional param index for the argument.
+func ownerFilter(ctx context.Context, ownerCol string, startIdx int) (clause string, arg any, active bool) {
+	if store.IsAdminContext(ctx) {
+		return "", nil, false
+	}
+	uid := store.UserIDFromContext(ctx)
+	if uid == "" {
+		return "", nil, false
+	}
+	return fmt.Sprintf("AND %s = $%d", ownerCol, startIdx), uid, true
+}
+
+// FilterSkillsByOwner filters skills for non-admin users (handler layer, not store layer).
+// If ctx is admin, returns all. Otherwise, returns only skills owned by the context user,
+// system skills, or public skills.
+func FilterSkillsByOwner(ctx context.Context, skills []store.SkillInfo) []store.SkillInfo {
+	if store.IsAdminContext(ctx) {
+		return skills
+	}
+	uid := store.UserIDFromContext(ctx)
+	if uid == "" {
+		return skills // unauthenticated — return all (existing behavior)
+	}
+	var filtered []store.SkillInfo
+	for _, sk := range skills {
+		if sk.Author == uid || sk.IsSystem || sk.Visibility == "public" {
+			filtered = append(filtered, sk)
+		}
+	}
+	return filtered
 }

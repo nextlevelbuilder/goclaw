@@ -1,8 +1,9 @@
 package pg
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,17 +13,23 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGSessionStore) List(agentID string) []store.SessionInfo {
-	var rows *sql.Rows
-	var err error
+func (s *PGSessionStore) List(ctx context.Context, agentID string) []store.SessionInfo {
+	q := "SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions WHERE 1=1"
+	var args []any
+	argIdx := 1
+
 	if agentID != "" {
-		prefix := "agent:" + agentID + ":%"
-		rows, err = s.db.Query(
-			"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions WHERE session_key LIKE $1 ORDER BY updated_at DESC", prefix)
-	} else {
-		rows, err = s.db.Query(
-			"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions ORDER BY updated_at DESC")
+		q += fmt.Sprintf(" AND session_key LIKE $%d", argIdx)
+		args = append(args, "agent:"+agentID+":%")
+		argIdx++
 	}
+	if clause, arg, active := ownerFilter(ctx, "user_id", argIdx); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	q += " ORDER BY updated_at DESC"
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil
 	}
@@ -58,43 +65,45 @@ func (s *PGSessionStore) List(agentID string) []store.SessionInfo {
 	return result
 }
 
-func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionListResult {
+func (s *PGSessionStore) ListPaged(ctx context.Context, opts store.SessionListOpts) store.SessionListResult {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 20
 	}
 	offset := max(opts.Offset, 0)
 
-	var where string
+	// Build WHERE clause dynamically
+	conditions := []string{"1=1"}
 	var whereArgs []any
+	argIdx := 1
 
 	if opts.AgentID != "" {
-		where = " WHERE session_key LIKE $1"
+		conditions = append(conditions, fmt.Sprintf("session_key LIKE $%d", argIdx))
 		whereArgs = append(whereArgs, "agent:"+opts.AgentID+":%")
+		argIdx++
 	}
+	if clause, arg, active := ownerFilter(ctx, "user_id", argIdx); active {
+		conditions = append(conditions, fmt.Sprintf("user_id = $%d", argIdx))
+		whereArgs = append(whereArgs, arg)
+		argIdx++
+		_ = clause
+	}
+
+	where := " WHERE " + strings.Join(conditions, " AND ")
 
 	// Count total
 	var total int
 	countQ := "SELECT COUNT(*) FROM sessions" + where
-	if err := s.db.QueryRow(countQ, whereArgs...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, countQ, whereArgs...).Scan(&total); err != nil {
 		return store.SessionListResult{Sessions: []store.SessionInfo{}, Total: 0}
 	}
 
 	// Fetch page using jsonb_array_length to avoid loading full messages
-	var selectQ string
-	var selectArgs []any
+	selectQ := fmt.Sprintf(`SELECT session_key, jsonb_array_length(messages), created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}')
+		           FROM sessions%s ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+	selectArgs := append(whereArgs, limit, offset)
 
-	if opts.AgentID != "" {
-		selectQ = `SELECT session_key, jsonb_array_length(messages), created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}')
-		           FROM sessions WHERE session_key LIKE $1 ORDER BY updated_at DESC LIMIT $2 OFFSET $3`
-		selectArgs = []any{whereArgs[0], limit, offset}
-	} else {
-		selectQ = `SELECT session_key, jsonb_array_length(messages), created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}')
-		           FROM sessions ORDER BY updated_at DESC LIMIT $1 OFFSET $2`
-		selectArgs = []any{limit, offset}
-	}
-
-	rows, err := s.db.Query(selectQ, selectArgs...)
+	rows, err := s.db.QueryContext(ctx, selectQ, selectArgs...)
 	if err != nil {
 		return store.SessionListResult{Sessions: []store.SessionInfo{}, Total: total}
 	}
@@ -132,32 +141,40 @@ func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionList
 }
 
 // ListPagedRich returns enriched session info for API responses (includes model, tokens, agent name).
-func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.SessionListRichResult {
+func (s *PGSessionStore) ListPagedRich(ctx context.Context, opts store.SessionListOpts) store.SessionListRichResult {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 20
 	}
 	offset := max(opts.Offset, 0)
 
-	var where string
+	// Build WHERE clause dynamically
+	conditions := []string{"1=1"}
 	var whereArgs []any
+	argIdx := 1
 
 	if opts.AgentID != "" {
-		where = " WHERE s.session_key LIKE $1"
+		conditions = append(conditions, fmt.Sprintf("s.session_key LIKE $%d", argIdx))
 		whereArgs = append(whereArgs, "agent:"+opts.AgentID+":%")
+		argIdx++
 	}
+	if clause, arg, active := ownerFilter(ctx, "s.user_id", argIdx); active {
+		conditions = append(conditions, fmt.Sprintf("s.user_id = $%d", argIdx))
+		whereArgs = append(whereArgs, arg)
+		argIdx++
+		_ = clause
+	}
+
+	where := " WHERE " + strings.Join(conditions, " AND ")
 
 	// Count total
 	var total int
 	countQ := "SELECT COUNT(*) FROM sessions s" + where
-	if err := s.db.QueryRow(countQ, whereArgs...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, countQ, whereArgs...).Scan(&total); err != nil {
 		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: 0}
 	}
 
 	// Fetch page with agent name via LEFT JOIN
-	var selectQ string
-	var selectArgs []any
-
 	const richCols = `s.session_key, jsonb_array_length(s.messages), s.created_at, s.updated_at,
 		s.label, s.channel, s.user_id, COALESCE(s.metadata, '{}'),
 		s.model, s.provider, s.input_tokens, s.output_tokens,
@@ -166,19 +183,12 @@ func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.Session
 		COALESCE(a.context_window, 200000),
 		s.compaction_count`
 
-	if opts.AgentID != "" {
-		selectQ = `SELECT ` + richCols + `
+	selectQ := fmt.Sprintf(`SELECT `+richCols+`
 		           FROM sessions s LEFT JOIN agents a ON s.agent_id = a.id
-		           WHERE s.session_key LIKE $1 ORDER BY s.updated_at DESC LIMIT $2 OFFSET $3`
-		selectArgs = []any{whereArgs[0], limit, offset}
-	} else {
-		selectQ = `SELECT ` + richCols + `
-		           FROM sessions s LEFT JOIN agents a ON s.agent_id = a.id
-		           ORDER BY s.updated_at DESC LIMIT $1 OFFSET $2`
-		selectArgs = []any{limit, offset}
-	}
+		           %s ORDER BY s.updated_at DESC LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+	selectArgs := append(whereArgs, limit, offset)
 
-	rows, err := s.db.Query(selectQ, selectArgs...)
+	rows, err := s.db.QueryContext(ctx, selectQ, selectArgs...)
 	if err != nil {
 		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: total}
 	}

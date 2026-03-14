@@ -108,10 +108,16 @@ func (s *PGMCPServerStore) scanServer(row *sql.Row) (*store.MCPServerData, error
 }
 
 func (s *PGMCPServerStore) ListServers(ctx context.Context) ([]store.MCPServerData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, display_name, transport, command, args, url, headers, env,
+	q := `SELECT id, name, display_name, transport, command, args, url, headers, env,
 		 api_key, tool_prefix, timeout_sec, settings, enabled, created_by, created_at, updated_at
-		 FROM mcp_servers ORDER BY name`)
+		 FROM mcp_servers WHERE 1=1`
+	var qArgs []any
+	if clause, arg, active := ownerFilter(ctx, "created_by", 1); active {
+		q += " " + clause
+		qArgs = append(qArgs, arg)
+	}
+	q += " ORDER BY name"
+	rows, err := s.db.QueryContext(ctx, q, qArgs...)
 	if err != nil {
 		return nil, err
 	}

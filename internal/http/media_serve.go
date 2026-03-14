@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MediaServeHandler serves persisted media files by ID.
@@ -40,6 +41,9 @@ func (h *MediaServeHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		role := resolveHTTPRole(r, h.token)
+		ctx := store.WithRole(r.Context(), role)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }

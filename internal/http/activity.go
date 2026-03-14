@@ -34,7 +34,9 @@ func (h *ActivityHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc
 			}
 		}
 		locale := extractLocale(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), locale)
+		ctx = store.WithRole(ctx, role)
 		r = r.WithContext(ctx)
 		next(w, r)
 	}

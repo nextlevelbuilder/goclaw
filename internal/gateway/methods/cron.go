@@ -36,7 +36,8 @@ func (m *CronMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodCronRuns, m.handleRuns)
 }
 
-func (m *CronMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+func (m *CronMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	ctx = store.WithUserID(ctx, client.UserID())
 	var params struct {
 		IncludeDisabled bool `json:"includeDisabled"`
 	}
@@ -44,7 +45,7 @@ func (m *CronMethods) handleList(_ context.Context, client *gateway.Client, req 
 		json.Unmarshal(req.Params, &params)
 	}
 
-	jobs := m.service.ListJobs(params.IncludeDisabled, "", "")
+	jobs := m.service.ListJobs(ctx, params.IncludeDisabled, "", "")
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"jobs":   jobs,

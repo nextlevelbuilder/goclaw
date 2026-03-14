@@ -55,6 +55,9 @@ func (h *OAuthHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
 			return
 		}
+		role := resolveHTTPRole(r, h.token)
+		ctx := store.WithRole(r.Context(), role)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }

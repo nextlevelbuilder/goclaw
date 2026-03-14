@@ -167,8 +167,14 @@ func (s *PGCustomToolStore) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *PGCustomToolStore) ListGlobal(ctx context.Context) ([]store.CustomToolDef, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+customToolSelectCols+` FROM custom_tools WHERE agent_id IS NULL AND enabled = true ORDER BY name`)
+	q := `SELECT ` + customToolSelectCols + ` FROM custom_tools WHERE agent_id IS NULL AND enabled = true`
+	var args []any
+	if clause, arg, active := ownerFilter(ctx, "created_by", 1); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	q += " ORDER BY name"
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +182,14 @@ func (s *PGCustomToolStore) ListGlobal(ctx context.Context) ([]store.CustomToolD
 }
 
 func (s *PGCustomToolStore) ListByAgent(ctx context.Context, agentID uuid.UUID) ([]store.CustomToolDef, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+customToolSelectCols+` FROM custom_tools WHERE agent_id = $1 AND enabled = true ORDER BY name`, agentID)
+	q := `SELECT ` + customToolSelectCols + ` FROM custom_tools WHERE agent_id = $1 AND enabled = true`
+	args := []any{agentID}
+	if clause, arg, active := ownerFilter(ctx, "created_by", 2); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	q += " ORDER BY name"
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -185,15 +197,21 @@ func (s *PGCustomToolStore) ListByAgent(ctx context.Context, agentID uuid.UUID) 
 }
 
 func (s *PGCustomToolStore) ListAll(ctx context.Context) ([]store.CustomToolDef, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+customToolSelectCols+` FROM custom_tools WHERE enabled = true ORDER BY name`)
+	q := `SELECT ` + customToolSelectCols + ` FROM custom_tools WHERE enabled = true`
+	var args []any
+	if clause, arg, active := ownerFilter(ctx, "created_by", 1); active {
+		q += " " + clause
+		args = append(args, arg)
+	}
+	q += " ORDER BY name"
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
 	return s.scanTools(rows)
 }
 
-func buildCustomToolWhere(opts store.CustomToolListOpts) (string, []any) {
+func buildCustomToolWhere(ctx context.Context, opts store.CustomToolListOpts) (string, []any) {
 	conditions := []string{"enabled = true"}
 	var args []any
 	argIdx := 1
@@ -201,6 +219,11 @@ func buildCustomToolWhere(opts store.CustomToolListOpts) (string, []any) {
 	if opts.AgentID != nil {
 		conditions = append(conditions, fmt.Sprintf("agent_id = $%d", argIdx))
 		args = append(args, *opts.AgentID)
+		argIdx++
+	}
+	if _, arg, active := ownerFilter(ctx, "created_by", argIdx); active {
+		conditions = append(conditions, fmt.Sprintf("created_by = $%d", argIdx))
+		args = append(args, arg)
 		argIdx++
 	}
 	if opts.Search != "" {
@@ -212,7 +235,7 @@ func buildCustomToolWhere(opts store.CustomToolListOpts) (string, []any) {
 }
 
 func (s *PGCustomToolStore) ListPaged(ctx context.Context, opts store.CustomToolListOpts) ([]store.CustomToolDef, error) {
-	where, args := buildCustomToolWhere(opts)
+	where, args := buildCustomToolWhere(ctx, opts)
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 50
@@ -228,7 +251,7 @@ func (s *PGCustomToolStore) ListPaged(ctx context.Context, opts store.CustomTool
 }
 
 func (s *PGCustomToolStore) CountTools(ctx context.Context, opts store.CustomToolListOpts) (int, error) {
-	where, args := buildCustomToolWhere(opts)
+	where, args := buildCustomToolWhere(ctx, opts)
 	var count int
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM custom_tools"+where, args...).Scan(&count)
 	return count, err

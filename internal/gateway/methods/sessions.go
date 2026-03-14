@@ -35,7 +35,8 @@ type sessionsListParams struct {
 	Offset  int    `json:"offset"`
 }
 
-func (m *SessionsMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+func (m *SessionsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	ctx = store.WithUserID(ctx, client.UserID())
 	var params sessionsListParams
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -45,7 +46,7 @@ func (m *SessionsMethods) handleList(_ context.Context, client *gateway.Client, 
 		params.Limit = 20
 	}
 
-	result := m.sessions.ListPagedRich(store.SessionListOpts{
+	result := m.sessions.ListPagedRich(ctx, store.SessionListOpts{
 		AgentID: params.AgentID,
 		Limit:   params.Limit,
 		Offset:  params.Offset,

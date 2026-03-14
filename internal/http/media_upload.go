@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 const (
@@ -43,6 +44,9 @@ func (h *MediaUploadHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		role := resolveHTTPRole(r, h.token)
+		ctx := store.WithRole(r.Context(), role)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }
@@ -94,7 +98,7 @@ func (h *MediaUploadHandler) handleUpload(w http.ResponseWriter, r *http.Request
 
 	mimeType := media.DetectMIMEType(origName)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"path":      tmpPath,
 		"mime_type": mimeType,
 		"filename":  origName,

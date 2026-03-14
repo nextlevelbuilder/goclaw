@@ -72,7 +72,9 @@ func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		userID := extractUserID(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), extractLocale(r))
+		ctx = store.WithRole(ctx, role)
 		if userID != "" {
 			ctx = store.WithUserID(ctx, userID)
 		}
@@ -82,8 +84,8 @@ func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *SkillsHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	skills := h.skills.ListSkills()
-	writeJSON(w, http.StatusOK, map[string]interface{}{"skills": skills})
+	skills := pg.FilterSkillsByOwner(r.Context(), h.skills.ListSkills())
+	writeJSON(w, http.StatusOK, map[string]any{"skills": skills})
 }
 
 func (h *SkillsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -106,7 +108,7 @@ func (h *SkillsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var updates map[string]interface{}
+	var updates map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
 		return
@@ -168,7 +170,7 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 	if h.msgBus != nil {
 		h.msgBus.Broadcast(bus.Event{
 			Name:    protocol.EventSkillDepsInstalling,
-			Payload: map[string]interface{}{"count": len(missing)},
+			Payload: map[string]any{"count": len(missing)},
 		})
 	}
 
@@ -208,7 +210,7 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 		if h.msgBus != nil {
 			h.msgBus.Broadcast(bus.Event{
 				Name: protocol.EventSkillDepsChecked,
-				Payload: map[string]interface{}{
+				Payload: map[string]any{
 					"slug":    sk.Slug,
 					"status":  status,
 					"missing": miss,
@@ -241,14 +243,14 @@ func (h *SkillsHandler) handleInstallDep(w http.ResponseWriter, r *http.Request)
 	if h.msgBus != nil {
 		h.msgBus.Broadcast(bus.Event{
 			Name:    protocol.EventSkillDepItemInstalling,
-			Payload: map[string]interface{}{"dep": body.Dep},
+			Payload: map[string]any{"dep": body.Dep},
 		})
 	}
 
 	ok, errMsg := skills.InstallSingleDep(r.Context(), body.Dep)
 
 	if h.msgBus != nil {
-		payload := map[string]interface{}{"dep": body.Dep, "ok": ok}
+		payload := map[string]any{"dep": body.Dep, "ok": ok}
 		if errMsg != "" {
 			payload["error"] = errMsg
 		}
@@ -262,7 +264,7 @@ func (h *SkillsHandler) handleInstallDep(w http.ResponseWriter, r *http.Request)
 		h.rescanAndUpdate()
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": ok, "error": errMsg})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": ok, "error": errMsg})
 }
 
 type depResult struct {
@@ -315,7 +317,7 @@ func (h *SkillsHandler) rescanAndUpdate() (updated int, results []depResult) {
 // handleRescanDeps re-checks dependencies for all skills (including archived) and updates their status.
 func (h *SkillsHandler) handleRescanDeps(w http.ResponseWriter, r *http.Request) {
 	updated, results := h.rescanAndUpdate()
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"updated": updated,
 		"results": results,
 	})

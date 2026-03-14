@@ -47,7 +47,9 @@ func (h *CustomToolsHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		userID := extractUserID(r)
+		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), extractLocale(r))
+		ctx = store.WithRole(ctx, role)
 		if userID != "" {
 			ctx = store.WithUserID(ctx, userID)
 		}
@@ -104,7 +106,7 @@ func (h *CustomToolsHandler) handleList(w http.ResponseWriter, r *http.Request) 
 
 	total, _ := h.store.CountTools(r.Context(), opts)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"tools":  result,
 		"total":  total,
 		"limit":  opts.Limit,
@@ -182,7 +184,7 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var updates map[string]interface{}
+	var updates map[string]any
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&updates); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
 		return

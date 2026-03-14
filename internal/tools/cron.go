@@ -129,7 +129,7 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *Result {
 	case "status":
 		return t.handleStatus()
 	case "list":
-		return t.handleList(args, agentID, userID)
+		return t.handleList(ctx, args, agentID, userID)
 	case "add":
 		return t.handleAdd(ctx, args, agentID, userID)
 	case "update":
@@ -151,9 +151,9 @@ func (t *CronTool) handleStatus() *Result {
 	return NewResult(string(data))
 }
 
-func (t *CronTool) handleList(args map[string]any, agentID, userID string) *Result {
+func (t *CronTool) handleList(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	includeDisabled, _ := args["includeDisabled"].(bool)
-	jobs := t.cronStore.ListJobs(includeDisabled, agentID, userID)
+	jobs := t.cronStore.ListJobs(ctx, includeDisabled, agentID, userID)
 
 	result := map[string]any{
 		"jobs":  jobs,

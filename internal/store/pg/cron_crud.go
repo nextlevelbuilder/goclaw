@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -93,7 +94,7 @@ func (s *PGCronStore) GetJob(jobID string) (*store.CronJob, bool) {
 	return job, true
 }
 
-func (s *PGCronStore) ListJobs(includeDisabled bool, agentID, userID string) []store.CronJob {
+func (s *PGCronStore) ListJobs(ctx context.Context, includeDisabled bool, agentID, userID string) []store.CronJob {
 	q := `SELECT id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE 1=1`
@@ -117,11 +118,15 @@ func (s *PGCronStore) ListJobs(includeDisabled bool, agentID, userID string) []s
 		q += fmt.Sprintf(" AND user_id = $%d", argIdx)
 		args = append(args, userID)
 		argIdx++
+	} else if clause, arg, active := ownerFilter(ctx, "user_id", argIdx); active {
+		q += " " + clause
+		args = append(args, arg)
+		argIdx++
 	}
 
 	q += " ORDER BY created_at DESC"
 
-	rows, err := s.db.Query(q, args...)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil
 	}

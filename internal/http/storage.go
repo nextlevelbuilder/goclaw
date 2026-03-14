@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // StorageHandler provides HTTP endpoints for browsing and managing
@@ -41,6 +42,9 @@ func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		role := resolveHTTPRole(r, h.token)
+		ctx := store.WithRole(r.Context(), role)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }
@@ -51,8 +55,8 @@ var protectedDirs = []string{"skills", "skills-store"}
 
 func isProtectedPath(rel string) bool {
 	top := rel
-	if i := strings.IndexByte(rel, filepath.Separator); i >= 0 {
-		top = rel[:i]
+	if before, _, ok := strings.Cut(rel, "/"); ok {
+		top = before
 	}
 	// Also handle forward slash on all platforms
 	if i := strings.IndexByte(top, '/'); i >= 0 {
@@ -176,7 +180,7 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"files":     entries,
 		"totalSize": totalSize,
 		"baseDir":   h.baseDir,
@@ -221,7 +225,7 @@ func (h *StorageHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"content": string(data),
 		"path":    relPath,
 		"size":    info.Size(),
