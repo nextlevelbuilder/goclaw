@@ -712,6 +712,31 @@ func runGateway() {
 	if mcpH != nil {
 		server.SetMCPHandler(mcpH)
 	}
+	// MCP Builder project API
+	{
+		projectsRoot := filepath.Join(workspace, "mcp-projects")
+		templateDir := ""
+		for _, candidate := range []string{
+			filepath.Join(workspace, "templates/mcp-server"),
+			"templates/mcp-server",
+			"/app/templates/mcp-server",
+		} {
+			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+				templateDir = candidate
+				break
+			}
+		}
+		if templateDir != "" {
+			mcpBuilderH := httpapi.NewMCPBuilderHandler(cfg.Gateway.Token, projectsRoot, templateDir)
+			if pgStores != nil && pgStores.MCP != nil {
+				mcpBuilderH.SetMCPStore(pgStores.MCP)
+			}
+			server.SetMCPBuilderHandler(mcpBuilderH)
+			slog.Info("mcp_builder: handler registered", "projectsRoot", projectsRoot, "templateDir", templateDir)
+		} else {
+			slog.Warn("mcp_builder: template dir not found, handler not registered")
+		}
+	}
 	if customToolsH != nil {
 		server.SetCustomToolsHandler(customToolsH)
 	}

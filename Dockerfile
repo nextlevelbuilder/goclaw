@@ -74,6 +74,7 @@ WORKDIR /app
 COPY --from=builder /out/goclaw /app/goclaw
 COPY --from=builder /src/migrations/ /app/migrations/
 COPY --from=builder /src/skills/ /app/bundled-skills/
+COPY --from=builder /src/templates/ /app/templates/
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
