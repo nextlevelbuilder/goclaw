@@ -72,8 +72,8 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 					locale := i18n.Normalize(client.locale)
 					client.SendResponse(protocol.NewErrorResponse(
 						req.ID,
-						protocol.ErrUnauthorized,
-						i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+						protocol.ErrForbidden,
+						i18n.T(locale, i18n.MsgFeatureDisabled, feature),
 					))
 					return
 				}

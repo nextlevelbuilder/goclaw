@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -39,8 +40,12 @@ func (h *UsageHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		userID := extractUserID(r)
 		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithRole(r.Context(), role)
+		if userID != "" {
+			ctx = store.WithUserID(ctx, userID)
+		}
 		r = r.WithContext(ctx)
 		next(w, r)
 	}
@@ -120,21 +125,29 @@ func (h *UsageHandler) handleSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	baseQ := parseSnapshotFilters(r)
+	userID := store.UserIDFromContext(r.Context())
+	isAdmin := store.IsAdminContext(r.Context())
 
-	// Current period
-	currentQ := baseQ
-	currentQ.From = currentFrom
-	currentQ.To = now
-	currentQ.GroupBy = "hour"
+	var currentSummary, previousSummary usageSummary
+	if !isAdmin && userID != "" {
+		// Non-admin: query traces directly (usage_snapshots has no user_id column)
+		currentSummary = h.aggregateFromTraces(r.Context(), currentFrom, now, userID, baseQ)
+		previousSummary = h.aggregateFromTraces(r.Context(), previousFrom, currentFrom, userID, baseQ)
+	} else {
+		// Admin or no-auth mode: use pre-aggregated snapshots
+		currentQ := baseQ
+		currentQ.From = currentFrom
+		currentQ.To = now
+		currentQ.GroupBy = "hour"
 
-	// Previous period (same duration, shifted back)
-	previousQ := baseQ
-	previousQ.From = previousFrom
-	previousQ.To = currentFrom
-	previousQ.GroupBy = "hour"
+		previousQ := baseQ
+		previousQ.From = previousFrom
+		previousQ.To = currentFrom
+		previousQ.GroupBy = "hour"
 
-	currentSummary := h.aggregateTimeSeries(r, currentQ)
-	previousSummary := h.aggregateTimeSeries(r, previousQ)
+		currentSummary = h.aggregateTimeSeries(r, currentQ)
+		previousSummary = h.aggregateTimeSeries(r, previousQ)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"current":  currentSummary,
@@ -212,6 +225,14 @@ func (h *UsageHandler) queryLiveHour(r *http.Request, from, to time.Time, q stor
 	// does not have provider/model columns (those live on spans). The live gap-fill
 	// is a rough approximation for the current incomplete hour.
 
+	// User-scoping: for non-admin callers, restrict to their own traces.
+	userID := store.UserIDFromContext(r.Context())
+	if !store.IsAdminContext(r.Context()) && userID != "" {
+		query += fmt.Sprintf(" AND user_id = $%d", idx)
+		args = append(args, userID)
+		idx++
+	}
+
 	var p store.SnapshotTimeSeries
 	p.BucketTime = from
 	err := h.db.QueryRowContext(r.Context(), query, args...).Scan(
@@ -223,6 +244,50 @@ func (h *UsageHandler) queryLiveHour(r *http.Request, from, to time.Time, q stor
 		return nil
 	}
 	return &p
+}
+
+// aggregateFromTraces queries the traces table directly for a specific user.
+// Used for non-admin callers because usage_snapshots has no user_id column.
+func (h *UsageHandler) aggregateFromTraces(ctx context.Context, from, to time.Time, userID string, baseQ store.SnapshotQuery) usageSummary {
+	query := `SELECT
+		COUNT(*),
+		COUNT(*) FILTER (WHERE status = 'error'),
+		COALESCE(SUM(total_input_tokens), 0),
+		COALESCE(SUM(total_output_tokens), 0),
+		COALESCE(SUM(total_cost), 0),
+		COALESCE(SUM(llm_call_count), 0),
+		COALESCE(SUM(tool_call_count), 0),
+		COALESCE(AVG(duration_ms), 0)::INTEGER
+	FROM traces
+	WHERE start_time >= $1 AND start_time < $2
+	  AND parent_trace_id IS NULL
+	  AND user_id = $3`
+
+	args := []any{from, to, userID}
+	idx := 4
+	if baseQ.AgentID != nil {
+		query += fmt.Sprintf(" AND agent_id = $%d", idx)
+		args = append(args, *baseQ.AgentID)
+		idx++
+	}
+	if baseQ.Channel != "" {
+		query += fmt.Sprintf(" AND channel = $%d", idx)
+		args = append(args, baseQ.Channel)
+		idx++
+	}
+
+	var s usageSummary
+	err := h.db.QueryRowContext(ctx, query, args...).Scan(
+		&s.Requests, &s.Errors,
+		&s.InputTokens, &s.OutputTokens, &s.Cost,
+		&s.LLMCalls, &s.ToolCalls, &s.AvgDurationMS,
+	)
+	if err != nil {
+		slog.Error("usage.aggregateFromTraces query failed", "error", err)
+		return usageSummary{}
+	}
+	s.UniqueUsers = 1 // single user scope
+	return s
 }
 
 func parseSnapshotFilters(r *http.Request) store.SnapshotQuery {
@@ -248,4 +313,3 @@ func parseSnapshotFilters(r *http.Request) store.SnapshotQuery {
 	q.GroupBy = r.URL.Query().Get("group_by")
 	return q
 }
-

@@ -110,6 +110,7 @@ type CostSummaryOpts struct {
 	AgentID *uuid.UUID
 	From    *time.Time
 	To      *time.Time
+	UserID  string // non-empty → scope results to this user only
 }
 
 // CostSummaryRow is a single row of aggregated cost data.

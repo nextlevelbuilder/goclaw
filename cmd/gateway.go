@@ -624,7 +624,7 @@ func runGateway() {
 	// Skills can live in ~/<HomeDirName>/skills/, ~/.agents/skills/, ~/<HomeDirName>/skills-store/, etc.
 	// CLI workspaces live in ~/<HomeDirName>/cli-workspaces/ (agent working files).
 	homeDir, _ := os.UserHomeDir()
-	for _, toolName := range []string{"read_file", "list_files"} {
+	for _, toolName := range []string{"read_file", "list_files", "write_file"} {
 		if t, ok := toolsReg.Get(toolName); ok {
 			if pa, ok := t.(tools.PathAllowable); ok {
 				pa.AllowPaths(globalSkillsDir)

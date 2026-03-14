@@ -15,11 +15,18 @@ import (
 type WriteFileTool struct {
 	workspace        string
 	restrict         bool
+	allowedPrefixes  []string // extra path prefixes allowed even when restricted (e.g. skills-store)
 	deniedPrefixes   []string // path prefixes to deny access to (e.g. home dir)
 	sandboxMgr       sandbox.Manager
 	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
 	memIntc          *MemoryInterceptor      // nil = no memory routing
 	groupWriterCache *store.GroupWriterCache // nil = no group write restriction
+}
+
+// AllowPaths adds extra path prefixes that write_file is allowed to access
+// even when restrict_to_workspace is true (e.g. skills-store directory).
+func (t *WriteFileTool) AllowPaths(prefixes ...string) {
+	t.allowedPrefixes = append(t.allowedPrefixes, prefixes...)
 }
 
 // DenyPaths adds path prefixes that write_file must reject.
@@ -128,7 +135,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, t.restrict))
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), t.allowedPrefixes)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

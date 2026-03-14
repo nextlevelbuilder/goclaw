@@ -20,15 +20,11 @@ import { useDefaultAgentKey } from "@/hooks/use-default-agent";
 import type { ChatMessage } from "@/types/chat";
 import { toast } from "@/stores/use-toast-store";
 
-function deriveProjectName(key: string): string {
-  const parts = key.split(":");
-  const suffix = parts[parts.length - 1] || key;
-  return suffix
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
+async function deriveProjectName(key: string): Promise<string> {
+  const data = new TextEncoder().encode(key);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `skill-${hex.slice(0, 12)}`;
 }
 
 export function SkillBuilderPage() {
@@ -145,17 +141,16 @@ export function SkillBuilderPage() {
     // Mark as initialized for this session key immediately (before async work)
     initedKeyRef.current = sessionKey;
 
-    if (messages.length > 0) {
-      // Existing session: derive project name and fetch tree
-      const name = deriveProjectName(sessionKey);
-      setProjectId(name);
-      fetchFileTree(name);
-      return;
-    }
-
-    // New session: create project + send /skill-creator
+    // Both existing and new sessions need async project name derivation
     (async () => {
-      const name = deriveProjectName(sessionKey);
+      const name = await deriveProjectName(sessionKey);
+      if (messages.length > 0) {
+        // Existing session: fetch tree
+        setProjectId(name);
+        fetchFileTree(name);
+        return;
+      }
+      // New session: create project + send /skill-creator
       try {
         await createProject(name);
         await fetchFileTree(name);

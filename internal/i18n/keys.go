@@ -12,6 +12,7 @@ const (
 	MsgInvalidJSON       = "error.invalid_json"       // "invalid JSON"
 	MsgUnauthorized      = "error.unauthorized"       // "unauthorized"
 	MsgPermissionDenied  = "error.permission_denied"  // "permission denied: insufficient role for %s"
+	MsgFeatureDisabled   = "error.feature_disabled"   // "feature disabled: %s"
 	MsgInternalError     = "error.internal"           // "internal error: %s"
 	MsgInvalidSlug       = "error.invalid_slug"       // "%s must be a valid slug (lowercase letters, numbers, hyphens only)"
 	MsgFailedToList      = "error.failed_to_list"     // "failed to list %s"

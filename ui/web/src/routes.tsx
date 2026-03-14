@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router";
 import { AppLayout } from "@/components/layout/app-layout";
 import { RequireAuth } from "@/components/shared/require-auth";
 import { RequireSetup } from "@/components/shared/require-setup";
+import { RequireFeature } from "@/components/shared/require-feature";
 import { ROUTES } from "@/lib/constants";
 
 // Lazy-loaded pages
@@ -141,8 +142,8 @@ export function AppRoutes() {
           <Route path={ROUTES.TEAM_DETAIL} element={<TeamsPage key="detail" />} />
           <Route path={ROUTES.SESSIONS} element={<SessionsPage key="list" />} />
           <Route path={ROUTES.SESSION_DETAIL} element={<SessionsPage key="detail" />} />
-          <Route path={ROUTES.SKILLS} element={<SkillsPage key="list" />} />
-          <Route path={ROUTES.SKILL_DETAIL} element={<SkillsPage key="detail" />} />
+          <Route path={ROUTES.SKILLS} element={<RequireFeature feature="skills"><SkillsPage key="list" /></RequireFeature>} />
+          <Route path={ROUTES.SKILL_DETAIL} element={<RequireFeature feature="skills"><SkillsPage key="detail" /></RequireFeature>} />
           <Route path={ROUTES.CRON} element={<CronPage />} />
           <Route path={ROUTES.CRON_DETAIL} element={<CronPage />} />
           <Route path={ROUTES.CONFIG} element={<ConfigPage />} />
@@ -164,8 +165,8 @@ export function AppRoutes() {
           <Route path={ROUTES.MCP} element={<MCPPage />} />
           <Route path={ROUTES.MCP_BUILDER} element={<MCPBuilderPage />} />
           <Route path={ROUTES.MCP_BUILDER_SESSION} element={<MCPBuilderPage />} />
-          <Route path={ROUTES.SKILL_BUILDER} element={<SkillBuilderPage />} />
-          <Route path={ROUTES.SKILL_BUILDER_SESSION} element={<SkillBuilderPage />} />
+          <Route path={ROUTES.SKILL_BUILDER} element={<RequireFeature feature="skills"><SkillBuilderPage /></RequireFeature>} />
+          <Route path={ROUTES.SKILL_BUILDER_SESSION} element={<RequireFeature feature="skills"><SkillBuilderPage /></RequireFeature>} />
           <Route path={ROUTES.TTS} element={<TtsPage />} />
           <Route path={ROUTES.STORAGE} element={<StoragePage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />

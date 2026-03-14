@@ -53,6 +53,7 @@ export const LOCAL_STORAGE_KEYS = {
   LANGUAGE: `${brand.appKey}:language`,
   TIMEZONE: `${brand.appKey}:timezone`,
   KEYCLOAK_TOKEN: `${brand.appKey}:keycloakToken`,
+  KEYCLOAK_REFRESH_TOKEN: `${brand.appKey}:keycloakRefreshToken`,
   DISPLAY_NAME: `${brand.appKey}:displayName`,
   RECENT_EVENTS: `${brand.appKey}:recentEvents`,
 } as const;

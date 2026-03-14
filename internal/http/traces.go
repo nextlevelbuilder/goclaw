@@ -43,10 +43,14 @@ func (h *TracesHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 		}
+		userID := extractUserID(r)
 		locale := extractLocale(r)
 		role := resolveHTTPRole(r, h.token)
 		ctx := store.WithLocale(r.Context(), locale)
 		ctx = store.WithRole(ctx, role)
+		if userID != "" {
+			ctx = store.WithUserID(ctx, userID)
+		}
 		r = r.WithContext(ctx)
 		next(w, r)
 	}
@@ -132,6 +136,11 @@ func (h *TracesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 func (h *TracesHandler) handleCostSummary(w http.ResponseWriter, r *http.Request) {
 	opts := store.CostSummaryOpts{}
+
+	// Non-admin: scope to own traces only
+	if !store.IsAdminContext(r.Context()) {
+		opts.UserID = store.UserIDFromContext(r.Context())
+	}
 
 	if v := r.URL.Query().Get("agent_id"); v != "" {
 		id, err := uuid.Parse(v)

@@ -10,6 +10,7 @@ const (
 
 	// Additional codes for Go implementation
 	ErrUnauthorized       = "UNAUTHORIZED"
+	ErrForbidden          = "FORBIDDEN"
 	ErrNotFound           = "NOT_FOUND"
 	ErrAlreadyExists      = "ALREADY_EXISTS"
 	ErrResourceExhausted  = "RESOURCE_EXHAUSTED"

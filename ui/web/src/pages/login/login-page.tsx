@@ -95,13 +95,14 @@ export function LoginPage() {
 
       const tokens = await tokenRes.json();
       const accessToken = tokens.access_token;
+      const refreshToken = tokens.refresh_token || "";
 
       // Clean up PKCE state
       sessionStorage.removeItem("kc_state");
       sessionStorage.removeItem("kc_code_verifier");
 
       // Call /me and complete login
-      await handleKeycloakLogin(accessToken);
+      await handleKeycloakLogin(accessToken, refreshToken);
     } catch (err) {
       console.error("Keycloak callback failed:", err);
     }
@@ -117,7 +118,7 @@ export function LoginPage() {
     setTimeout(() => navigate(from, { replace: true }), 500);
   }
 
-  async function handleKeycloakLogin(accessToken: string) {
+  async function handleKeycloakLogin(accessToken: string, refreshToken?: string) {
     try {
       const res = await fetch("/v1/auth/keycloak/me", {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -125,7 +126,7 @@ export function LoginPage() {
       if (!res.ok) throw new Error(`/me returned ${res.status}`);
       const userInfo = await res.json();
 
-      setKeycloakAuth(accessToken, userInfo.id, userInfo.name || userInfo.username || userInfo.email || userInfo.id);
+      setKeycloakAuth(accessToken, userInfo.id, userInfo.name || userInfo.username || userInfo.email || userInfo.id, refreshToken);
       navigate(from, { replace: true });
     } catch (err) {
       console.error("Keycloak /me call failed:", err);

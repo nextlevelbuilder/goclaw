@@ -11,6 +11,7 @@ func init() {
 		MsgInvalidJSON:      "无效的 JSON",
 		MsgUnauthorized:     "未授权",
 		MsgPermissionDenied: "权限不足：无法访问 %s",
+		MsgFeatureDisabled:  "功能已禁用：%s",
 		MsgInternalError:    "内部错误：%s",
 		MsgInvalidSlug:      "%s 必须是有效的 slug（小写字母、数字、连字符）",
 		MsgFailedToList:     "获取 %s 列表失败",

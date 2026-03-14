@@ -15,10 +15,14 @@ import { useFeaturesStore } from "@/stores/use-features-store";
 // In production, use relative "/ws" path.
 const WS_URL = import.meta.env.VITE_WS_URL || "/ws";
 
+/** Refresh Keycloak access token 60s before it expires. */
+const REFRESH_MARGIN_MS = 60_000;
+
 export function WsProvider({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
   const userId = useAuthStore((s) => s.userId);
   const senderID = useAuthStore((s) => s.senderID);
+  const keycloakRefreshToken = useAuthStore((s) => s.keycloakRefreshToken);
 
   const wsRef = useRef<WsClient | null>(null);
 
@@ -82,6 +86,39 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token, userId, senderID, ws]);
 
+  // Keycloak token auto-refresh: schedule refresh before token expires.
+  useEffect(() => {
+    if (!keycloakRefreshToken || !token) return;
+
+    // Decode JWT to get expiration time
+    const expiresAt = getJwtExpiration(token);
+    if (!expiresAt) return;
+
+    const msUntilExpiry = expiresAt - Date.now();
+    const refreshIn = Math.max(msUntilExpiry - REFRESH_MARGIN_MS, 5_000);
+
+    const timer = setTimeout(async () => {
+      try {
+        const { keycloakRefreshToken: rt } = useAuthStore.getState();
+        if (!rt) return;
+        const newTokens = await refreshKeycloakToken(rt);
+        if (newTokens) {
+          const { userId: uid, displayName: dn } = useAuthStore.getState();
+          useAuthStore.getState().setKeycloakAuth(
+            newTokens.accessToken, uid, dn, newTokens.refreshToken,
+          );
+          // Reconnect WS with new token
+          ws.disconnect();
+          ws.connect();
+        }
+      } catch {
+        // Refresh failed — let normal auth failure handle logout
+      }
+    }, refreshIn);
+
+    return () => clearTimeout(timer);
+  }, [token, keycloakRefreshToken, ws]);
+
   const value = useMemo(() => ({ ws, http }), [ws, http]);
 
   return (
@@ -91,6 +128,43 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       {children}
     </WsContext.Provider>
   );
+}
+
+/** Extract expiration timestamp (ms) from a JWT without external dependencies. */
+function getJwtExpiration(token: string): number | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Refresh Keycloak access token using the refresh token. */
+async function refreshKeycloakToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {
+  const configRes = await fetch("/v1/auth/keycloak/config");
+  if (!configRes.ok) return null;
+  const cfg = await configRes.json();
+
+  const tokenUrl = `${cfg.url}/realms/${cfg.realm}/protocol/openid-connect/token`;
+  const res = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: cfg.client_id,
+      refresh_token: refreshToken,
+    }),
+  });
+  if (!res.ok) return null;
+
+  const tokens = await res.json();
+  return {
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token || refreshToken,
+  };
 }
 
 function WsQueryInvalidation() {

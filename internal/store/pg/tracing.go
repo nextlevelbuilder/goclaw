@@ -451,6 +451,11 @@ func (s *PGTracingStore) GetCostSummary(ctx context.Context, opts store.CostSumm
 		args = append(args, *opts.To)
 		argIdx++
 	}
+	if opts.UserID != "" {
+		conditions = append(conditions, fmt.Sprintf("user_id = $%d", argIdx))
+		args = append(args, opts.UserID)
+		argIdx++
+	}
 
 	where := " WHERE " + strings.Join(conditions, " AND ")
 

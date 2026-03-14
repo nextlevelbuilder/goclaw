@@ -11,6 +11,7 @@ func init() {
 		MsgInvalidJSON:      "JSON không hợp lệ",
 		MsgUnauthorized:     "chưa xác thực",
 		MsgPermissionDenied: "từ chối quyền truy cập: không đủ quyền cho %s",
+		MsgFeatureDisabled:  "tính năng đã bị tắt: %s",
 		MsgInternalError:    "lỗi nội bộ: %s",
 		MsgInvalidSlug:      "%s phải là slug hợp lệ (chữ thường, số, dấu gạch ngang)",
 		MsgFailedToList:     "không thể liệt kê %s",
