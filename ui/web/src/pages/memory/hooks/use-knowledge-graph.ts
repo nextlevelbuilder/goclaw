@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
 import type { KGEntity, KGRelation, KGStats, KGTraversalResult } from "@/types/knowledge-graph";
 
 export interface KGFilters {
@@ -57,9 +58,9 @@ export function useKnowledgeGraph(filters: KGFilters) {
       try {
         await http.post(`/v1/agents/${filters.agentId}/kg/entities`, entity);
         await invalidate();
-        toast.success("Entity saved", entity.name || "");
+        toast.success(i18n.t("memory:toast.entitySaved"), entity.name || "");
       } catch (err) {
-        toast.error("Failed to save entity", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.entitySaveFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -72,9 +73,9 @@ export function useKnowledgeGraph(filters: KGFilters) {
         const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
         await http.delete(`/v1/agents/${filters.agentId}/kg/entities/${entityId}${qs}`);
         await invalidate();
-        toast.success("Entity deleted");
+        toast.success(i18n.t("memory:toast.entityDeleted"));
       } catch (err) {
-        toast.error("Failed to delete entity", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.entityDeleteFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -89,10 +90,10 @@ export function useKnowledgeGraph(filters: KGFilters) {
           { text, provider, model, user_id: userId || "" },
         );
         await invalidate();
-        toast.success("Extraction complete", `${res.entities} entities, ${res.relations} relations`);
+        toast.success(i18n.t("memory:toast.extractionComplete"), `${res.entities} entities, ${res.relations} relations`);
         return res;
       } catch (err) {
-        toast.error("Extraction failed", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.extractionFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -173,7 +174,7 @@ export function useKGTraversal(agentId: string) {
         setResults(res ?? []);
         return res ?? [];
       } catch (err) {
-        toast.error("Traversal failed", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.traversalFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         setResults([]);
         return [];
       } finally {

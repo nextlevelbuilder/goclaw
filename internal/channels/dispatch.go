@@ -70,10 +70,11 @@ func (m *Manager) dispatchOutbound(ctx context.Context) {
 				}
 			}
 
-			// Clean up temporary media files after successful (or failed) send.
-			// Files are created by tools (create_image, tts) and only needed for the send.
+			// Clean up temp media files only. Workspace-generated files are preserved
+			// so they remain accessible via workspace/web UI after delivery.
+			tmpDir := os.TempDir()
 			for _, media := range msg.Media {
-				if media.URL != "" {
+				if media.URL != "" && strings.HasPrefix(media.URL, tmpDir) {
 					if err := os.Remove(media.URL); err != nil {
 						slog.Debug("failed to clean up media file", "path", media.URL, "error", err)
 					}

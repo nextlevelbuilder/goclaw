@@ -38,7 +38,6 @@ type MCPConfigData struct {
 	GatewayAddr    string
 	GatewayToken   string
 	AgentMCPLookup MCPServerLookup // optional: resolves per-agent MCP servers from DB
-	DataDir        string          // resolved data directory for MCP config base path
 }
 
 // BuildCLIMCPConfigData builds the base MCP server map from config.
@@ -77,13 +76,10 @@ func BuildCLIMCPConfigData(servers map[string]*config.MCPServerConfig, gatewayAd
 	}
 }
 
-// mcpConfigBaseDir returns the MCP configs directory, derived from dataDir or config.ResolveDataDir().
-// Separate from workDir so agent cannot read tokens from the MCP config files.
-func mcpConfigBaseDir(dataDir string) string {
-	if dataDir != "" {
-		return filepath.Join(dataDir, "mcp-configs")
-	}
-	return filepath.Join(config.ResolveDataDir(), "mcp-configs")
+// mcpConfigBaseDir returns dataDir/mcp-configs, separate from workDir
+// so agent cannot read tokens from the MCP config files.
+func mcpConfigBaseDir() string {
+	return filepath.Join(config.ResolvedDataDirFromEnv(), "mcp-configs")
 }
 
 // BridgeContext holds per-call context for MCP bridge headers.
@@ -174,7 +170,7 @@ func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, 
 
 	// Write to per-session dir outside workDir
 	safe := sanitizePathSegment(sessionKey)
-	dir := filepath.Join(mcpConfigBaseDir(d.DataDir), safe)
+	dir := filepath.Join(mcpConfigBaseDir(), safe)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		slog.Warn("claude-cli: failed to create mcp config dir", "error", err)
 		return ""

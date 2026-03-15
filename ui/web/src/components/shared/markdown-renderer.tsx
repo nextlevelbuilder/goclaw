@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -14,6 +15,7 @@ function CodeBlock({
   children?: React.ReactNode;
 }) {
   const { copied, copy } = useClipboard();
+  const { t } = useTranslation("common");
   const text = String(children).replace(/\n$/, "");
   const lang = className?.replace("language-", "") ?? "";
 
@@ -25,7 +27,7 @@ function CodeBlock({
           type="button"
           onClick={() => copy(text)}
           className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"
-          title="Copy code"
+          title={t("copyCode")}
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>

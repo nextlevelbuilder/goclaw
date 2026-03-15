@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -49,6 +50,7 @@ type Server struct {
 	teamEventsHandler       *httpapi.TeamEventsHandler       // team event history API
 	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
 	pendingMessagesHandler  *httpapi.PendingMessagesHandler  // pending messages API
+	secureCLIHandler       *httpapi.SecureCLIHandler        // secure CLI credential CRUD API
 	memoryHandler           *httpapi.MemoryHandler           // memory management API
 	kgHandler               *httpapi.KnowledgeGraphHandler   // knowledge graph API
 	oauthHandler            *httpapi.OAuthHandler            // OAuth endpoints
@@ -58,6 +60,9 @@ type Server struct {
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
 	activityHandler         *httpapi.ActivityHandler         // activity audit log API
 	usageHandler            *httpapi.UsageHandler            // usage analytics API
+	apiKeysHandler     *httpapi.APIKeysHandler      // API key management
+	apiKeyStore        store.APIKeyStore            // for API key auth lookup
+	docsHandler        *httpapi.DocsHandler         // OpenAPI spec + Swagger UI
 	agentStore         store.AgentStore             // for context injection in tools_invoke
 	msgBus             *bus.MessageBus              // for MCP bridge media delivery
 
@@ -195,6 +200,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.customToolsHandler.RegisterRoutes(mux)
 	}
 
+	// Secure CLI credential CRUD API
+	if s.secureCLIHandler != nil {
+		s.secureCLIHandler.RegisterRoutes(mux)
+	}
+
 	// Channel instance CRUD API
 	if s.channelInstancesHandler != nil {
 		s.channelInstancesHandler.RegisterRoutes(mux)
@@ -255,12 +265,21 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.mediaServeHandler.RegisterRoutes(mux)
 	}
 
+	if s.apiKeysHandler != nil {
+		s.apiKeysHandler.RegisterRoutes(mux)
+	}
+
 	if s.activityHandler != nil {
 		s.activityHandler.RegisterRoutes(mux)
 	}
 
 	if s.usageHandler != nil {
 		s.usageHandler.RegisterRoutes(mux)
+	}
+
+	// API documentation (OpenAPI spec + Swagger UI)
+	if s.docsHandler != nil {
+		s.docsHandler.RegisterRoutes(mux)
 	}
 
 	// OAuth endpoints (available in all modes)
@@ -356,7 +375,8 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 func tokenAuthMiddleware(token string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != token {
+		provided := strings.TrimPrefix(auth, "Bearer ")
+		if !strings.HasPrefix(auth, "Bearer ") || subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
 			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 			return
 		}
@@ -493,8 +513,17 @@ func (s *Server) SetBuiltinToolsHandler(h *httpapi.BuiltinToolsHandler) {
 	s.builtinToolsHandler = h
 }
 
+// SetSecureCLIHandler sets the secure CLI credential CRUD handler.
+func (s *Server) SetSecureCLIHandler(h *httpapi.SecureCLIHandler) { s.secureCLIHandler = h }
+
 // SetOAuthHandler sets the OAuth handler (available in all modes).
 func (s *Server) SetOAuthHandler(h *httpapi.OAuthHandler) { s.oauthHandler = h }
+
+// SetAPIKeysHandler sets the API key management handler.
+func (s *Server) SetAPIKeysHandler(h *httpapi.APIKeysHandler) { s.apiKeysHandler = h }
+
+// SetAPIKeyStore sets the API key store for token-based auth lookup.
+func (s *Server) SetAPIKeyStore(st store.APIKeyStore) { s.apiKeyStore = st }
 
 // SetFilesHandler sets the workspace file serving handler.
 func (s *Server) SetFilesHandler(h *httpapi.FilesHandler) { s.filesHandler = h }
@@ -519,6 +548,9 @@ func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) { s.activityHand
 
 // SetUsageHandler sets the usage analytics handler.
 func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.usageHandler = h }
+
+// SetDocsHandler sets the OpenAPI spec + Swagger UI handler.
+func (s *Server) SetDocsHandler(h *httpapi.DocsHandler) { s.docsHandler = h }
 
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }

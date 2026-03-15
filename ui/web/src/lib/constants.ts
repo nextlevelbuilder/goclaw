@@ -28,6 +28,7 @@ export const ROUTES = {
   TEAM_DETAIL: "/teams/:id",
   CUSTOM_TOOLS: "/custom-tools",
   BUILTIN_TOOLS: "/builtin-tools",
+  CLI_CREDENTIALS: "/cli-credentials",
   MCP: "/mcp",
   TTS: "/tts",
   STORAGE: "/storage",
@@ -35,6 +36,7 @@ export const ROUTES = {
   MEMORY: "/memory",
   KNOWLEDGE_GRAPH: "/knowledge-graph",
   ACTIVITY: "/activity",
+  API_KEYS: "/api-keys",
   SETUP: "/setup",
 } as const;
 

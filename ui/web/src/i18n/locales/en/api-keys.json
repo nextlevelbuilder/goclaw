@@ -1,0 +1,63 @@
+{
+  "title": "API Keys",
+  "description": "Manage gateway API keys with fine-grained permissions.",
+  "addKey": "Create API Key",
+  "searchPlaceholder": "Search keys...",
+  "emptyTitle": "No API keys",
+  "emptyDescription": "Create your first API key to authenticate with the gateway.",
+  "columns": {
+    "name": "Name",
+    "prefix": "Key",
+    "scopes": "Scopes",
+    "lastUsed": "Last Used",
+    "created": "Created",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "status": {
+    "active": "Active",
+    "revoked": "Revoked",
+    "expired": "Expired"
+  },
+  "form": {
+    "title": "Create API Key",
+    "name": "Name",
+    "namePlaceholder": "e.g. ci-deploy, dashboard-readonly",
+    "scopes": "Scopes",
+    "scopeDescriptions": {
+      "operator.admin": "Full admin access",
+      "operator.read": "Read-only access",
+      "operator.write": "Read + write access",
+      "operator.approvals": "Manage exec approvals",
+      "operator.pairing": "Manage device pairing"
+    },
+    "expiry": "Expiry",
+    "expiryOptions": {
+      "never": "Never",
+      "7d": "7 days",
+      "30d": "30 days",
+      "90d": "90 days"
+    },
+    "create": "Create",
+    "creating": "Creating..."
+  },
+  "created": {
+    "title": "API Key Created",
+    "description": "Copy this key now — it won't be shown again.",
+    "copied": "Copied!",
+    "copy": "Copy to clipboard",
+    "done": "Done"
+  },
+  "revoke": {
+    "title": "Revoke API Key",
+    "description": "Are you sure you want to revoke \"{{name}}\"? This cannot be undone.",
+    "confirmLabel": "Revoke"
+  },
+  "toast": {
+    "created": "API key created",
+    "revoked": "API key revoked",
+    "failedCreate": "Failed to create API key",
+    "failedRevoke": "Failed to revoke API key"
+  },
+  "never": "Never"
+}

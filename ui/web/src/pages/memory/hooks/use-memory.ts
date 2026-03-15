@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
 import type {
   MemoryDocument,
   MemoryDocumentDetail,
@@ -67,9 +68,9 @@ export function useMemoryDocuments(filters: MemoryDocFilters) {
           user_id: userId || "",
         });
         await invalidate();
-        toast.success("Document created", path);
+        toast.success(i18n.t("memory:toast.docCreated"), path);
       } catch (err) {
-        toast.error("Failed to create document", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.docCreateFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -84,9 +85,9 @@ export function useMemoryDocuments(filters: MemoryDocFilters) {
           user_id: userId || "",
         });
         await invalidate();
-        toast.success("Document updated", path);
+        toast.success(i18n.t("memory:toast.docUpdated"), path);
       } catch (err) {
-        toast.error("Failed to update document", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.docUpdateFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -99,9 +100,9 @@ export function useMemoryDocuments(filters: MemoryDocFilters) {
         const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
         await http.delete(`/v1/agents/${filters.agentId}/memory/documents/${path}${qs}`);
         await invalidate();
-        toast.success("Document deleted", path);
+        toast.success(i18n.t("memory:toast.docDeleted"), path);
       } catch (err) {
-        toast.error("Failed to delete document", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.docDeleteFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -127,9 +128,9 @@ export function useMemoryDocuments(filters: MemoryDocFilters) {
           path,
           user_id: userId || "",
         });
-        toast.success("Document indexed", path);
+        toast.success(i18n.t("memory:toast.docIndexed"), path);
       } catch (err) {
-        toast.error("Failed to index document", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.docIndexFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -142,9 +143,9 @@ export function useMemoryDocuments(filters: MemoryDocFilters) {
         await http.post(`/v1/agents/${filters.agentId}/memory/index-all`, {
           user_id: userId || "",
         });
-        toast.success("All documents indexed");
+        toast.success(i18n.t("memory:toast.allIndexed"));
       } catch (err) {
-        toast.error("Failed to index all", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.allIndexFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         throw err;
       }
     },
@@ -187,7 +188,7 @@ export function useMemorySearch(agentId: string) {
         setResults(res.results ?? []);
         return res.results ?? [];
       } catch (err) {
-        toast.error("Search failed", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("memory:toast.searchFailed"), err instanceof Error ? err.message : i18n.t("memory:toast.unknownError"));
         setResults([]);
         return [];
       } finally {

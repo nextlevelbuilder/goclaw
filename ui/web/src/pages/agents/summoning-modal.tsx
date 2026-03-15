@@ -22,9 +22,9 @@ interface SummoningModalProps {
 }
 
 const SUMMONING_FILES = [
-  { name: "SOUL.md", label: "Soul & Personality", required: true },
-  { name: "IDENTITY.md", label: "Identity Card", required: true },
-  { name: "USER_PREDEFINED.md", label: "Default User Context", required: false },
+  { name: "SOUL.md", required: true },
+  { name: "IDENTITY.md", required: true },
+  { name: "USER_PREDEFINED.md", required: false },
 ];
 
 export function SummoningModal({
@@ -194,7 +194,7 @@ export function SummoningModal({
                       <span className={`text-sm text-foreground ${done ? "font-medium" : ""}`}>
                         {file.name}
                       </span>
-                      <span className="ml-2 text-xs text-muted-foreground">{file.label}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{t(`summoning.fileLabel${file.name.replace(".md", "")}`)}</span>
                     </div>
                     {done && (
                       <motion.span

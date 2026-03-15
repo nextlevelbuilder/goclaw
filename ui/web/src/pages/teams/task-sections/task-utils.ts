@@ -16,3 +16,10 @@ export function taskStatusBadgeVariant(status: string) {
 export function isTaskActionable(status: string) {
   return status !== "completed" && status !== "failed";
 }
+
+const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
+/** Whether the task is in a terminal status and can be deleted */
+export function isTerminalStatus(status: string) {
+  return TERMINAL_STATUSES.has(status);
+}

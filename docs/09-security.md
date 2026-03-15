@@ -87,6 +87,28 @@ type PathDenyable interface {
 
 All four filesystem tools (`read_file`, `write_file`, `list_files`, `edit`) implement `PathDenyable`. The agent loop calls `DenyPaths(".goclaw")` at startup to prevent agents from accessing internal data directories. `list_files` additionally filters denied directories from output entirely -- the agent does not see denied paths in directory listings.
 
+#### Credentialed Exec Security
+
+**Direct Exec Mode** for credentialed CLI tools implements defense-in-depth with 4 independent layers:
+
+| Layer | Mechanism | Protects Against |
+|-------|-----------|------------------|
+| **No shell** | `exec.CommandContext(binary, args...)` (never `sh -c`) | Shell command injection, credential leakage via env var expansion |
+| **Path verify** | `exec.LookPath()` + config match check | Binary spoofing (e.g., `./gh` in workspace) |
+| **Deny patterns** | Per-binary regex deny lists on arguments + verbose flags | Sensitive operations per CLI (e.g., `auth`, `ssh-key`) |
+| **Output scrub** | Credential values registered for dynamic scrubbing | Credentials in stdout/stderr |
+
+**Edge case mitigations** (13 scenarios analyzed):
+- Shell operators in command string → Blocked by early regex scan
+- Argument injection via spaces → Protected by shell-word parsing (not shell evaluation)
+- Binary PATH manipulation → Absolute path required + config match
+- Symlink attacks → Verified by `exec.LookPath()` + config match
+- Env var exfiltration → Command runs without shell, env vars never expand
+- Output parsing tricks → Dynamic scrubbing catches all registered credential values
+- Timeout abuse → Configurable per-binary timeout with context deadline
+- Sandbox escape → Docker container isolation if sandbox enabled
+- Verbose flag leakage → Separate deny_verbose list blocks verbose/debug output
+
 ### Layer 4: Output Security
 
 | Mechanism | Detail |

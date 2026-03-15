@@ -29,6 +29,7 @@
     "name": "名称 *",
     "nameHint": "仅小写字母、数字和连字符",
     "displayName": "显示名称",
+    "displayNamePlaceholder": "我的 MCP 服务器",
     "transport": "传输协议 *",
     "command": "命令 *",
     "args": "参数（逗号分隔）",

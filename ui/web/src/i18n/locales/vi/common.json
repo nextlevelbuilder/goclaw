@@ -106,5 +106,14 @@
   "usingGlobalDefaults": "Đang dùng giá trị mặc định toàn cục từ config.json",
   "verificationFailed": "Xác minh thất bại",
   "view": "Xem",
-  "yes": "Có"
+  "yes": "Có",
+  "copyCode": "Sao chép mã",
+  "copy": "Sao chép",
+  "download": "Tải xuống",
+  "errorBoundary": "Đã xảy ra lỗi khi hiển thị phần này.",
+  "csvRows": "csv ({{count}} dòng)",
+  "failedToLoadImage": "Không thể tải hình ảnh",
+  "deleteFolder": "Xóa thư mục",
+  "deleteFile": "Xóa tệp",
+  "loadMore": "Tải thêm..."
 }

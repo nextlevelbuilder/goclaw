@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -53,9 +54,14 @@ type wakeUsage struct {
 func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 
-	// Auth check
-	if h.token != "" && !tokenMatch(extractBearerToken(r), h.token) {
+	// Auth + RBAC check (gateway token or API key, operator required for POST)
+	auth := resolveAuth(r, h.token)
+	if !auth.Authenticated {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
+		return
+	}
+	if !permissions.HasMinRole(auth.Role, permissions.RoleOperator) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path)})
 		return
 	}
 

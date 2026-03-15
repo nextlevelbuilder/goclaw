@@ -210,6 +210,39 @@ Filesystem and shell tools read their workspace from `ToolWorkspaceFromCtx(ctx)`
 
 The `exec` tool allows the LLM to run shell commands, with multiple defense layers.
 
+### Credentialed CLI Tools
+
+**Direct Exec Mode** allows secure credential injection for CLI tools without exposing credentials via shell. Credentials are auto-injected as environment variables directly into the child process (no shell involved).
+
+**How it works:**
+1. **Credential lookup** — Administrator configures binary → encrypted env vars in `secure_cli_binaries` table
+2. **Shell operator detection** — Blocks unsafe command chaining (`;`, `|`, `&&`, `||`, `>`, `<`, `$()`, backticks)
+3. **Path verification** — Binary is resolved to absolute path and matched against configured path
+4. **Per-binary deny check** — Optional regex patterns block specific arguments (e.g., `auth\s+`, `ssh-key`)
+5. **Direct exec** — Command runs as `exec.CommandContext(binary, args...)` with credentials in env
+
+**Available presets:** `gh`, `gcloud`, `aws`, `kubectl`, `terraform`
+
+**Security layers:**
+- **No shell** — Direct exec prevents shell command injection
+- **Path verification** — Binary spoofing (e.g., `./gh` in workspace) is blocked
+- **Per-binary deny** — Admins can block sensitive operations per CLI
+- **Output scrubbing** — Credential values registered for automatic redaction
+
+**Configuration (JSON in `secure_cli_binaries` table):**
+```json
+{
+  "binary_name": "gh",
+  "encrypted_env": {"GH_TOKEN": "ghp_..."},
+  "deny_args": ["auth\\s+", "ssh-key"],
+  "deny_verbose": ["--verbose", "-v"],
+  "timeout_seconds": 30,
+  "tips": "GitHub CLI. Available: gh api, gh repo, gh issue, etc."
+}
+```
+
+---
+
 ### Deny Patterns
 
 | Category | Blocked Patterns |

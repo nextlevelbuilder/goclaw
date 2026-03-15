@@ -65,6 +65,17 @@ export function buildMemberLookup(
   return map;
 }
 
+/** Build agent_id -> emoji lookup from members */
+export function buildEmojiLookup(
+  members: TeamMemberData[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const m of members) {
+    if (m.emoji) map.set(m.agent_id, m.emoji);
+  }
+  return map;
+}
+
 /** Check if agent is actively running on a task */
 export function isTaskLocked(task: TeamTaskData): boolean {
   if (!task.locked_at) return false;

@@ -84,6 +84,15 @@ func wireExtras(
 		slog.Info("media tools registered", "tools", "read_document,read_audio,read_video,create_video")
 	}
 
+	// 1e. Wire secure CLI store into exec tool for credentialed exec
+	if stores.SecureCLI != nil {
+		if execTool, ok := toolsReg.Get("exec"); ok {
+			if et, ok := execTool.(*tools.ExecTool); ok {
+				et.SetSecureCLIStore(stores.SecureCLI)
+			}
+		}
+	}
+
 	// 2. User seeding callback: seeds per-user context files on first chat
 	var ensureUserFiles agent.EnsureUserFilesFunc
 	if stores.Agents != nil {
@@ -145,6 +154,7 @@ func wireExtras(
 		DynamicLoader:          dynamicLoader,
 		AgentLinkStore:         stores.AgentLinks,
 		TeamStore:              stores.Teams,
+		SecureCLIStore:         stores.SecureCLI,
 		BuiltinToolStore:       stores.BuiltinTools,
 		MCPStore:               stores.MCP,
 		MCPPool:                mcpPool,
@@ -472,7 +482,7 @@ func wireExtras(
 		// Unregister old instance (closes ProcessPool) then re-register
 		providerReg.Unregister(p.Name)
 		if p.Enabled {
-			registerACPFromDB(providerReg, *p, config.ResolveDataDir(), loopbackAddr(appCfg.Gateway.Host, appCfg.Gateway.Port), appCfg.Gateway.Token)
+			registerACPFromDB(providerReg, *p)
 		}
 	})
 

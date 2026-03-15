@@ -116,6 +116,9 @@ type Loop struct {
 	// Team store for cross-session pending task detection
 	teamStore store.TeamStore
 
+	// Secure CLI store for credentialed exec context injection
+	secureCLIStore store.SecureCLIStore
+
 	// Persistent media storage for cross-turn image/document access
 	mediaStore *media.Store
 
@@ -222,6 +225,9 @@ type LoopConfig struct {
 	// Team store for cross-session pending task detection
 	TeamStore store.TeamStore
 
+	// Secure CLI store for credentialed exec context injection
+	SecureCLIStore store.SecureCLIStore
+
 	// Persistent media storage for cross-turn image/document access
 	MediaStore *media.Store
 
@@ -310,6 +316,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		selfEvolve:             cfg.SelfEvolve,
 		groupWriterCache:       cfg.GroupWriterCache,
 		teamStore:              cfg.TeamStore,
+		secureCLIStore:         cfg.SecureCLIStore,
 		mediaStore:             cfg.MediaStore,
 		modelPricing:           cfg.ModelPricing,
 		budgetMonthlyCents:     cfg.BudgetMonthlyCents,

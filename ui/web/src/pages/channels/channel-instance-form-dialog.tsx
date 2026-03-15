@@ -327,7 +327,7 @@ export function ChannelInstanceFormDialog({
               {/* Wizard info banner (create mode) */}
               {hasWizard && wizard?.formBanner && (
                 <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950 p-3">
-                  <p className="text-sm text-muted-foreground">{wizard.formBanner}</p>
+                  <p className="text-sm text-muted-foreground">{t(wizard.formBanner)}</p>
                 </div>
               )}
 
@@ -362,7 +362,7 @@ export function ChannelInstanceFormDialog({
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>{t("form.cancel")}</Button>
               <Button onClick={handleSubmit} disabled={loading}>
-                {loading ? t("form.saving") : instance ? t("form.update") : (wizard?.createLabel ?? t("form.create"))}
+                {loading ? t("form.saving") : instance ? t("form.update") : (wizard?.createLabel ? t(wizard.createLabel) : t("form.create"))}
               </Button>
             </DialogFooter>
           </>

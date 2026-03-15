@@ -4,7 +4,7 @@ import { useWsEvent } from "@/hooks/use-ws-event";
 import { Events } from "@/api/protocol";
 import { useBoardStore } from "../stores/use-board-store";
 import { toast } from "@/stores/use-toast-store";
-import { buildTaskLookup, buildMemberLookup } from "./board-utils";
+import { buildTaskLookup, buildMemberLookup, buildEmojiLookup } from "./board-utils";
 import { BoardToolbar } from "./board-toolbar";
 import { KanbanBoard } from "./kanban-board";
 import { TaskDetailDialog } from "../task-sections/task-detail-dialog";
@@ -23,11 +23,12 @@ interface BoardContainerProps {
   isTeamV2: boolean;
   getTeamTasks: (teamId: string, status?: string, channel?: string, chatId?: string) => Promise<{ tasks: TeamTaskData[]; count: number }>;
   getTaskDetail: (teamId: string, taskId: string) => Promise<{ task: TeamTaskData; comments: TeamTaskComment[]; events: TeamTaskEvent[]; attachments: TeamTaskAttachment[] }>;
+  deleteTask?: (teamId: string, taskId: string) => Promise<void>;
 }
 
 export const BoardContainer = memo(function BoardContainer({
   teamId, members, scopes, isTeamV2,
-  getTeamTasks, getTaskDetail,
+  getTeamTasks, getTaskDetail, deleteTask,
 }: BoardContainerProps) {
   const { t } = useTranslation("teams");
   const viewMode = useBoardStore((s) => s.viewMode);
@@ -43,6 +44,7 @@ export const BoardContainer = memo(function BoardContainer({
   // Lookups for name resolution
   const taskLookup = useMemo(() => buildTaskLookup(tasks), [tasks]);
   const memberLookup = useMemo(() => buildMemberLookup(members), [members]);
+  const emojiLookup = useMemo(() => buildEmojiLookup(members), [members]);
 
   // Stable refs for filter values — avoids recreating load callback
   const filtersRef = useRef({ statusFilter, selectedScope });
@@ -98,12 +100,27 @@ export const BoardContainer = memo(function BoardContainer({
   useWsEvent(Events.TEAM_TASK_PROGRESS, reloadOnEvent);
   useWsEvent(Events.TEAM_TASK_COMMENTED, reloadOnEvent);
   useWsEvent(Events.TEAM_TASK_ASSIGNED, reloadOnEvent);
+  useWsEvent(Events.TEAM_TASK_DELETED, reloadOnEvent);
 
   // Stable callbacks for children — never change identity
   const handleRefresh = useCallback(() => load(true), [load]);
   const handleCreateTask = useCallback(() => toast.info(t("board.createViaChat")), [t]);
   const handleTaskClick = useCallback((task: TeamTaskData) => setSelectedTask(task), []);
   const handleCloseDetail = useCallback(() => setSelectedTask(null), []);
+
+  // Delete handler for kanban cards (confirm + call API)
+  const deleteTaskRef = useRef(deleteTask);
+  deleteTaskRef.current = deleteTask;
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    if (!deleteTaskRef.current) return;
+    if (!window.confirm(t("tasks.deleteConfirm"))) return;
+    try {
+      await deleteTaskRef.current(teamId, taskId);
+      toast.success(t("toast.taskDeleted"));
+    } catch {
+      toast.error(t("toast.failedDeleteTask"));
+    }
+  }, [teamId, t]);
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 sm:p-4">
@@ -126,7 +143,9 @@ export const BoardContainer = memo(function BoardContainer({
             tasks={tasks}
             isTeamV2={isTeamV2}
             groupBy={groupBy}
+            emojiLookup={emojiLookup}
             onTaskClick={handleTaskClick}
+            onDeleteTask={deleteTask ? handleDeleteTask : undefined}
           />
         ) : (
           <TaskList
@@ -135,7 +154,9 @@ export const BoardContainer = memo(function BoardContainer({
             teamId={teamId}
             members={members}
             isTeamV2={isTeamV2}
+            emojiLookup={emojiLookup}
             getTaskDetail={getTaskDetail}
+            deleteTask={deleteTask}
           />
         )}
       </div>
@@ -147,8 +168,10 @@ export const BoardContainer = memo(function BoardContainer({
           isTeamV2={isTeamV2}
           onClose={handleCloseDetail}
           getTaskDetail={getTaskDetail}
+          deleteTask={deleteTask}
           taskLookup={taskLookup}
           memberLookup={memberLookup}
+          emojiLookup={emojiLookup}
         />
       )}
     </div>

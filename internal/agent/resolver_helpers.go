@@ -86,6 +86,8 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
 			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
 			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
+			sb.WriteString("- **Prefer delegation** — if the user asks to involve the team, delegate tasks immediately. Do NOT do the work yourself first then hand off to members\n")
+			sb.WriteString("- **Do NOT block on completed tasks** — if a dependency task is already done, pass its result in the new task's description instead of using blocked_by\n")
 			sb.WriteString("- For dependency chains: use `blocked_by` to sequence tasks\n")
 
 			sb.WriteString("\n## Task Decomposition (CRITICAL)\n\n")
@@ -102,9 +104,13 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("   Do NOT use placeholders like \"task_1\" — only real UUIDs work.\n\n")
 
 			sb.WriteString("## Orchestration Patterns\n\n")
-			sb.WriteString("- **Parallel**: Create multiple tasks with different assignees simultaneously\n")
-			sb.WriteString("- **Sequential**: Create task B with `blocked_by=[task_A_id]`\n")
-			sb.WriteString("- **Mixed**: A+B parallel → review both → C combines outputs\n\n")
+			sb.WriteString("For complex requests with multiple steps, plan the full task graph UPFRONT and create all tasks in one turn:\n\n")
+			sb.WriteString("- **Parallel**: Independent tasks → create all with different assignees\n")
+			sb.WriteString("- **Sequential**: Create Task A first → get its UUID → create Task B with `blocked_by=[A_id]`\n")
+			sb.WriteString("- **Mixed**: Create A+B (parallel) → create C with `blocked_by=[A_id, B_id]`\n\n")
+			sb.WriteString("Create tasks in order: independent tasks first, then dependent tasks using the returned UUIDs.\n")
+			sb.WriteString("The system auto-dispatches blocked tasks when their dependencies complete.\n")
+			sb.WriteString("Do NOT wait for results to create follow-up tasks — plan the full pipeline ahead.\n\n")
 			sb.WriteString("After results: present to user (if done) or continue orchestrating.\n")
 			sb.WriteString("Vary announcement phrasing between delegation rounds.\n")
 

@@ -51,6 +51,7 @@ const (
 	EventTeamTaskCommented = "team.task.commented"
 	EventTeamTaskAssigned  = "team.task.assigned"
 	EventTeamTaskUpdated   = "team.task.updated"
+	EventTeamTaskDeleted   = "team.task.deleted"
 	EventTeamTaskStale     = "team.task.stale"
 
 	// Team CRUD events (admin operations).

@@ -6,6 +6,7 @@ import { useBrandingStore } from "@/stores/use-branding-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
 
 interface ConfigData {
   config: Record<string, unknown>;
@@ -62,11 +63,11 @@ export function useConfig() {
         });
         hashRef.current = res.hash;
         await invalidate();
-        toast.success("Config saved");
+        toast.success(i18n.t("config:toast.saved"));
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to apply config";
+        const msg = err instanceof Error ? err.message : i18n.t("config:toast.saveFailed");
         setError(msg);
-        toast.error("Failed to save config", msg);
+        toast.error(i18n.t("config:toast.saveFailed"), msg);
         throw err;
       } finally {
         setSaving(false);
@@ -86,11 +87,11 @@ export function useConfig() {
         });
         hashRef.current = res.hash;
         await invalidate();
-        toast.success("Config saved");
+        toast.success(i18n.t("config:toast.saved"));
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to patch config";
+        const msg = err instanceof Error ? err.message : i18n.t("config:toast.saveFailed");
         setError(msg);
-        toast.error("Failed to save config", msg);
+        toast.error(i18n.t("config:toast.saveFailed"), msg);
         throw err;
       } finally {
         setSaving(false);

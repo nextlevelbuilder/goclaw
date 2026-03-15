@@ -166,6 +166,25 @@
     "indexed": "Đã lập chỉ mục tất cả tài liệu",
     "failedCreate": "Không thể tạo tài liệu",
     "failedDelete": "Không thể xóa tài liệu",
-    "failedIndex": "Không thể lập chỉ mục tài liệu"
+    "failedIndex": "Không thể lập chỉ mục tài liệu",
+    "entitySaved": "Đã lưu thực thể",
+    "entitySaveFailed": "Không thể lưu thực thể",
+    "entityDeleted": "Đã xóa thực thể",
+    "entityDeleteFailed": "Không thể xóa thực thể",
+    "extractionComplete": "Trích xuất hoàn tất",
+    "extractionFailed": "Trích xuất thất bại",
+    "traversalFailed": "Duyệt thất bại",
+    "unknownError": "Lỗi không xác định",
+    "docCreated": "Đã tạo tài liệu",
+    "docCreateFailed": "Không thể tạo tài liệu",
+    "docUpdated": "Đã cập nhật tài liệu",
+    "docUpdateFailed": "Không thể cập nhật tài liệu",
+    "docDeleted": "Đã xóa tài liệu",
+    "docDeleteFailed": "Không thể xóa tài liệu",
+    "docIndexed": "Đã lập chỉ mục tài liệu",
+    "docIndexFailed": "Không thể lập chỉ mục tài liệu",
+    "allIndexed": "Đã lập chỉ mục tất cả tài liệu",
+    "allIndexFailed": "Không thể lập chỉ mục tất cả",
+    "searchFailed": "Tìm kiếm thất bại"
   }
 }

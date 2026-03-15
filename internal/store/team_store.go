@@ -323,9 +323,14 @@ type TeamStore interface {
 	ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string) ([]TeamTaskData, error)
 	// GetTask returns a single task by ID with joined agent info.
 	GetTask(ctx context.Context, taskID uuid.UUID) (*TeamTaskData, error)
+	// GetTasksByIDs returns multiple tasks by IDs in a single query.
+	GetTasksByIDs(ctx context.Context, ids []uuid.UUID) ([]TeamTaskData, error)
 	// SearchTasks performs FTS search over task subject+description.
 	// userID: if non-empty, filter to tasks created by this user.
 	SearchTasks(ctx context.Context, teamID uuid.UUID, query string, limit int, userID string) ([]TeamTaskData, error)
+	// DeleteTask permanently removes a terminal-status task (completed/failed/cancelled).
+	// Returns ErrTaskNotFound if the task does not exist or is not in a terminal status.
+	DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) error
 
 	// ClaimTask atomically transitions a task from pending to in_progress.
 	// Only one agent can claim a given task (row-level lock, race-safe).

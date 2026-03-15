@@ -19,5 +19,15 @@
     "title": "拒绝执行",
     "description": "拒绝来自Agent 「{{agentId}}」 的 「{{command}}」 执行请求？",
     "confirmLabel": "拒绝"
+  },
+  "toast": {
+    "approved": "已批准",
+    "approvedAlways": "命令始终允许",
+    "approvedOnce": "命令已批准",
+    "approveFailed": "批准失败",
+    "denied": "已拒绝",
+    "deniedDesc": "命令已拒绝",
+    "denyFailed": "拒绝失败",
+    "unknownError": "未知错误"
   }
 }

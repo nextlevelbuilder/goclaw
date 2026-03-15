@@ -35,6 +35,9 @@
     "traces": "追踪",
     "tts": "TTS",
     "usage": "用量",
-    "activity": "活动日志"
+    "activity": "活动日志",
+    "cliCredentials": "CLI 凭证",
+    "apiKeys": "API 密钥",
+    "apiDocs": "API 文档"
   }
 }

@@ -114,6 +114,8 @@
       "followupNext": "Nhắc tiếp:",
       "followupDone": "Đã nhắc hết"
     },
+    "delete": "Xoá",
+    "deleteConfirm": "Xoá task này? Không thể hoàn tác.",
     "badges": {
       "awaitingReply": "chờ trả lời"
     }
@@ -267,8 +269,10 @@
     "failedAddMember": "Không thể thêm thành viên",
     "failedRemoveMember": "Không thể xóa thành viên",
     "taskCreated": "Đã tạo nhiệm vụ",
+    "taskDeleted": "Đã xoá task",
     "taskAssigned": "Đã gán nhiệm vụ",
     "failedCreateTask": "Không thể tạo nhiệm vụ",
+    "failedDeleteTask": "Xoá task thất bại",
     "failedAssignTask": "Không thể gán nhiệm vụ"
   },
   "board": {

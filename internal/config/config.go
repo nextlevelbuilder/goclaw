@@ -38,16 +38,16 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GeneralConfig holds application-level branding and directory settings.
+// GeneralConfig holds application-level branding settings.
 type GeneralConfig struct {
 	AppName        string `json:"app_name"`
 	AppDescription string `json:"app_description,omitempty"`
-	DataDir        string `json:"data_dir,omitempty"`
 }
 
 // Config is the root configuration for the GoClaw Gateway.
 type Config struct {
 	General   GeneralConfig   `json:"general"`
+	DataDir   string          `json:"data_dir,omitempty"` // persistent data directory (default: ~/.goclaw/data)
 	Agents    AgentsConfig    `json:"agents"`
 	Channels  ChannelsConfig  `json:"channels"`
 	Providers ProvidersConfig `json:"providers"`
@@ -82,7 +82,7 @@ type DatabaseConfig struct {
 
 // SkillsConfig configures the skills storage system.
 type SkillsConfig struct {
-	StorageDir string `json:"storage_dir,omitempty"` // directory for skill content (default: ~/.goclaw/skills-store/)
+	StorageDir string `json:"storage_dir,omitempty"` // directory for skill content (default: dataDir/skills-store/)
 }
 
 // AgentBinding maps a channel/peer pattern to a specific agent.
@@ -383,6 +383,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.General = src.General
+	c.DataDir = src.DataDir
 	c.Agents = src.Agents
 	c.Channels = src.Channels
 	c.Providers = src.Providers

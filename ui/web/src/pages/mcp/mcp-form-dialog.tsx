@@ -170,7 +170,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
 
           <div className="grid gap-1.5">
             <Label htmlFor="mcp-display">{t("form.displayName")}</Label>
-            <Input id="mcp-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="My MCP Server" />
+            <Input id="mcp-display" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={t("form.displayNamePlaceholder")} />
           </div>
 
           <div className="grid gap-1.5">

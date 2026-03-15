@@ -35,6 +35,9 @@
     "approvals": "Approvals",
     "nodes": "Nodes",
     "tts": "TTS",
-    "activity": "Activity"
+    "activity": "Activity",
+    "cliCredentials": "CLI Credentials",
+    "apiKeys": "API Keys",
+    "apiDocs": "API Docs"
   }
 }

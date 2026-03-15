@@ -71,6 +71,7 @@ export function TreeItem({
   onLoadMore?: (path: string) => void;
   showSize?: boolean;
 }) {
+  const { t } = useTranslation("common");
   const [expanded, setExpanded] = useState(depth === 0);
   const isActive = activePath === node.path;
 
@@ -87,7 +88,7 @@ export function TreeItem({
     <button
       type="button"
       className="ml-auto shrink-0 opacity-0 group-hover/tree-item:opacity-100 text-destructive hover:text-destructive/80 transition-opacity cursor-pointer p-0.5"
-      title={`Delete ${node.isDir ? "folder" : "file"}`}
+      title={node.isDir ? t("deleteFolder") : t("deleteFile")}
       onClick={(e) => { e.stopPropagation(); onDelete(node.path, node.isDir); }}
     >
       <Trash2 className="h-3.5 w-3.5" />
@@ -141,7 +142,7 @@ export function TreeItem({
             onClick={() => onLoadMore?.(node.path)}
           >
             <Loader2 className="h-3 w-3" />
-            <span>Load more...</span>
+            <span>{t("loadMore")}</span>
           </div>
         )}
       </div>

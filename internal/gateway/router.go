@@ -2,10 +2,12 @@ package gateway
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"time"
 
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -99,13 +101,29 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 
 	configToken := r.server.cfg.Gateway.Token
 
-	// Path 1: Valid token → admin
-	if configToken != "" && params.Token == configToken {
+	// Path 1: Valid gateway token → admin (constant-time comparison)
+	if configToken != "" && subtle.ConstantTimeCompare([]byte(params.Token), []byte(configToken)) == 1 {
 		client.role = permissions.RoleAdmin
 		client.authenticated = true
 		client.userID = params.UserID
 		r.sendConnectResponse(client, req.ID)
 		return
+	}
+
+	// Path 1b: API key → role derived from scopes (uses shared cache)
+	if params.Token != "" {
+		if keyData, role := httpapi.ResolveAPIKey(ctx, params.Token); keyData != nil {
+			scopes := make([]permissions.Scope, len(keyData.Scopes))
+			for i, s := range keyData.Scopes {
+				scopes[i] = permissions.Scope(s)
+			}
+			client.role = role
+			client.scopes = scopes
+			client.authenticated = true
+			client.userID = params.UserID
+			r.sendConnectResponse(client, req.ID)
+			return
+		}
 	}
 
 	// Path 2: No token configured → operator (backward compat)

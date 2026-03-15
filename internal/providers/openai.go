@@ -313,10 +313,18 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	// Merge options
 	if v, ok := req.Options[OptMaxTokens]; ok {
-		body["max_tokens"] = v
+		if strings.HasPrefix(model, "gpt-5") || strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") || strings.HasPrefix(model, "o4") {
+			body["max_completion_tokens"] = v
+		} else {
+			body["max_tokens"] = v
+		}
 	}
 	if v, ok := req.Options[OptTemperature]; ok {
-		body["temperature"] = v
+		// GPT-5 mini/nano and o-series models only support default temperature
+		skipTemp := strings.HasPrefix(model, "gpt-5-mini") || strings.HasPrefix(model, "gpt-5-nano") || strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") || strings.HasPrefix(model, "o4")
+		if !skipTemp {
+			body["temperature"] = v
+		}
 	}
 
 	// Inject reasoning_effort for o-series models (ignored by models that don't support it)

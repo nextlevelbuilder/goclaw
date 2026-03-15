@@ -47,17 +47,7 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			provided := extractBearerToken(r)
-			if !tokenMatch(provided, h.token) {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 // protectedDirs are top-level directories where deletion is blocked

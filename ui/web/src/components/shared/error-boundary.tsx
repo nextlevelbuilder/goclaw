@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import i18n from "@/i18n";
 
 interface Props {
   children: ReactNode;
@@ -34,10 +35,10 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border bg-card p-8 text-center">
         <AlertTriangle className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Something went wrong rendering this section.</p>
+        <p className="text-sm text-muted-foreground">{i18n.t("common:errorBoundary")}</p>
         <Button variant="outline" size="sm" className="gap-1.5" onClick={this.handleRetry}>
           <RefreshCw className="h-3.5 w-3.5" />
-          Retry
+          {i18n.t("common:retry")}
         </Button>
       </div>
     );

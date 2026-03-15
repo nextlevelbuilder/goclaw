@@ -20,7 +20,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const { t } = useTranslation("teams");
   const {
     getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
-    getTaskDetail,
+    getTaskDetail, deleteTask,
   } = useTeams();
 
   const [team, setTeam] = useState<TeamData | null>(null);
@@ -100,6 +100,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         isTeamV2={isTeamV2}
         getTeamTasks={getTeamTasks}
         getTaskDetail={getTaskDetail}
+        deleteTask={deleteTask}
       />
 
       {/* Team info + settings + members dialog */}

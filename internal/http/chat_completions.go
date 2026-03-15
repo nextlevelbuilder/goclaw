@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -82,9 +83,14 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Auth check (timing-safe comparison)
-	if !tokenMatch(extractBearerToken(r), h.token) {
+	// Auth + RBAC check (gateway token or API key, operator required for POST)
+	auth := resolveAuth(r, h.token)
+	if !auth.Authenticated {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s","type":"invalid_request_error"}}`, i18n.T(locale, i18n.MsgInvalidAuth)), http.StatusUnauthorized)
+		return
+	}
+	if !permissions.HasMinRole(auth.Role, permissions.RoleOperator) {
+		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s","type":"invalid_request_error"}}`, i18n.T(locale, i18n.MsgPermissionDenied, "/v1/chat/completions")), http.StatusForbidden)
 		return
 	}
 

@@ -1,0 +1,63 @@
+{
+  "title": "API 密钥",
+  "description": "管理网关 API 密钥及细粒度权限。",
+  "addKey": "创建 API 密钥",
+  "searchPlaceholder": "搜索密钥...",
+  "emptyTitle": "暂无 API 密钥",
+  "emptyDescription": "创建第一个 API 密钥以对网关进行身份验证。",
+  "columns": {
+    "name": "名称",
+    "prefix": "密钥",
+    "scopes": "权限范围",
+    "lastUsed": "最后使用",
+    "created": "创建时间",
+    "status": "状态",
+    "actions": "操作"
+  },
+  "status": {
+    "active": "活跃",
+    "revoked": "已撤销",
+    "expired": "已过期"
+  },
+  "form": {
+    "title": "创建 API 密钥",
+    "name": "名称",
+    "namePlaceholder": "例如 ci-deploy、dashboard-readonly",
+    "scopes": "权限范围",
+    "scopeDescriptions": {
+      "operator.admin": "完全管理员权限",
+      "operator.read": "只读权限",
+      "operator.write": "读写权限",
+      "operator.approvals": "管理执行审批",
+      "operator.pairing": "管理设备配对"
+    },
+    "expiry": "有效期",
+    "expiryOptions": {
+      "never": "永不过期",
+      "7d": "7 天",
+      "30d": "30 天",
+      "90d": "90 天"
+    },
+    "create": "创建",
+    "creating": "创建中..."
+  },
+  "created": {
+    "title": "API 密钥已创建",
+    "description": "请立即复制密钥 — 之后将不再显示。",
+    "copied": "已复制！",
+    "copy": "复制到剪贴板",
+    "done": "完成"
+  },
+  "revoke": {
+    "title": "撤销 API 密钥",
+    "description": "确定要撤销 \"{{name}}\" 吗？此操作不可撤销。",
+    "confirmLabel": "撤销"
+  },
+  "toast": {
+    "created": "API 密钥已创建",
+    "revoked": "API 密钥已撤销",
+    "failedCreate": "创建 API 密钥失败",
+    "failedRevoke": "撤销 API 密钥失败"
+  },
+  "never": "永不"
+}

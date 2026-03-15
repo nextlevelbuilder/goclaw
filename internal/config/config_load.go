@@ -18,8 +18,8 @@ func Default() *Config {
 	return &Config{
 		General: GeneralConfig{
 			AppName: "GoClaw",
-			DataDir: "~/.goclaw",
 		},
+		DataDir: "~/.goclaw/data",
 		Agents: AgentsConfig{
 			Defaults: AgentDefaults{
 				Workspace:           "~/.goclaw/workspace",
@@ -62,9 +62,7 @@ func Default() *Config {
 			},
 			RateLimitPerHour: 150,
 		},
-		Sessions: SessionsConfig{
-			Storage: "~/.goclaw/sessions",
-		},
+		Sessions: SessionsConfig{},
 	}
 }
 
@@ -176,9 +174,9 @@ func (c *Config) applyEnvOverrides() {
 	envFallback("GOCLAW_PROVIDER", &c.Agents.Defaults.Provider)
 	envFallback("GOCLAW_MODEL", &c.Agents.Defaults.Model)
 
-	// Workspace & sessions
+	// Data directory, workspace & sessions
+	envStr("GOCLAW_DATA_DIR", &c.DataDir)
 	envStr("GOCLAW_WORKSPACE", &c.Agents.Defaults.Workspace)
-	envStr("GOCLAW_SESSIONS_STORAGE", &c.Sessions.Storage)
 
 	// Gateway host/port
 	envStr("GOCLAW_HOST", &c.Gateway.Host)
@@ -321,6 +319,22 @@ func (c *Config) Hash() string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
+// ResolvedDataDir returns the expanded data directory path.
+func (c *Config) ResolvedDataDir() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return ExpandHome(c.DataDir)
+}
+
+// ResolvedDataDirFromEnv returns the data dir from GOCLAW_DATA_DIR env or default.
+// Use this in packages that don't have access to a Config instance.
+func ResolvedDataDirFromEnv() string {
+	if v := os.Getenv("GOCLAW_DATA_DIR"); v != "" {
+		return ExpandHome(v)
+	}
+	return ExpandHome("~/.goclaw/data")
+}
+
 // WorkspacePath returns the expanded workspace path.
 func (c *Config) WorkspacePath() string {
 	c.mu.RLock()
@@ -408,38 +422,6 @@ func (c *Config) AppName() string {
 		return c.General.AppName
 	}
 	return "GoClaw"
-}
-
-// ResolvedDataDir returns the resolved absolute path for the data directory.
-// Falls back to ~/.goclaw if not set. Env var GOCLAW_DATA_DIR takes precedence.
-func (c *Config) ResolvedDataDir() string {
-	if env := os.Getenv("GOCLAW_DATA_DIR"); env != "" {
-		return ExpandHome(env)
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.General.DataDir != "" {
-		return ExpandHome(c.General.DataDir)
-	}
-	return ExpandHome("~/.goclaw")
-}
-
-// ResolveDataDir returns the resolved data directory from env or default.
-// Use this in contexts where *Config is not available.
-func ResolveDataDir() string {
-	if env := os.Getenv("GOCLAW_DATA_DIR"); env != "" {
-		return ExpandHome(env)
-	}
-	return ExpandHome("~/.goclaw")
-}
-
-// ResolveUnexpandedDataDir returns the data directory in unexpanded form (e.g. "~/.goclaw")
-// for storing in config/DB fields. Use this when you need the tilde-prefixed path.
-func ResolveUnexpandedDataDir() string {
-	if env := os.Getenv("GOCLAW_DATA_DIR"); env != "" {
-		return env
-	}
-	return "~/.goclaw"
 }
 
 // ApplyEnvOverrides re-applies environment variable overrides onto the config.

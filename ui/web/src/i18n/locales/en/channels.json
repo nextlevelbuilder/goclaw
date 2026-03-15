@@ -154,7 +154,7 @@
     }
   },
   "fieldConfig": {
-    "token": { "label": "Bot Token" },
+    "token": { "label": "Bot Token", "help": "From @BotFather" },
     "bot_token": { "label": "Bot Token" },
     "app_token": { "label": "App-Level Token", "help": "App-Level Token with connections:write scope (required for Socket Mode)" },
     "user_token": { "label": "User Token (Optional)", "help": "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity." },
@@ -190,7 +190,10 @@
     "group_allow_from": { "label": "Group Allowed Users", "help": "Separate allowlist for group senders" },
     "native_stream": { "label": "Native Streaming (Agents & AI Apps)", "help": "Use Slack's ChatStreamer API for native streaming. Falls back to edit-in-place if unavailable." },
     "debounce_delay": { "label": "Debounce Delay (ms)", "help": "Milliseconds to wait before dispatching rapid messages. Set 0 to disable." },
-    "thread_ttl": { "label": "Thread Participation TTL (hours)", "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." }
+    "thread_ttl": { "label": "Thread Participation TTL (hours)", "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
+    "skills": { "label": "Skills Filter", "help": "Limit available skills for this group" },
+    "tools": { "label": "Tool Allowlist", "help": "Restrict which tools the agent can use in this group" },
+    "system_prompt": { "label": "System Prompt" }
   },
   "fieldOptions": {
     "block_reply": {
@@ -267,6 +270,12 @@
       "inherit": "Inherit (channel default)",
       "yes": "Yes",
       "no": "No"
+    }
+  },
+  "wizard": {
+    "zaloPersonal": {
+      "createLabel": "Create & Authenticate",
+      "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
     }
   },
   "toast": {

@@ -106,5 +106,14 @@
   "usingGlobalDefaults": "使用 config.json 中的全局默认值",
   "verificationFailed": "验证失败",
   "view": "查看",
-  "yes": "是"
+  "yes": "是",
+  "copyCode": "复制代码",
+  "copy": "复制",
+  "download": "下载",
+  "errorBoundary": "此部分渲染出错。",
+  "csvRows": "csv ({{count}} 行)",
+  "failedToLoadImage": "图片加载失败",
+  "deleteFolder": "删除文件夹",
+  "deleteFile": "删除文件",
+  "loadMore": "加载更多..."
 }

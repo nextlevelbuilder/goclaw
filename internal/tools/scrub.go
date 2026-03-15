@@ -45,6 +45,13 @@ var (
 	dynamicScrubValues []string
 )
 
+// credentialScrubValues holds credential values to scrub (replaced with [REDACTED]).
+// Separate from dynamicScrubValues which use [SERVER_IP] placeholder.
+var (
+	credentialScrubMu     sync.RWMutex
+	credentialScrubValues []string
+)
+
 // AddDynamicScrubValues adds exact string values to the dynamic scrub list.
 // Thread-safe. Deduplicates. Empty strings are ignored.
 func AddDynamicScrubValues(values ...string) {
@@ -77,10 +84,47 @@ func ResetDynamicScrubValues() {
 	dynamicScrubValues = nil
 }
 
+// ResetCredentialScrubValues clears all credential scrub values.
+// Called when credentials are updated to prevent stale values from accumulating.
+func ResetCredentialScrubValues() {
+	credentialScrubMu.Lock()
+	defer credentialScrubMu.Unlock()
+	credentialScrubValues = nil
+}
+
+// AddCredentialScrubValues adds credential values to the scrub list.
+// These are replaced with [REDACTED] (not [SERVER_IP]).
+// Thread-safe. Deduplicates. Empty/short strings ignored.
+func AddCredentialScrubValues(values ...string) {
+	credentialScrubMu.Lock()
+	defer credentialScrubMu.Unlock()
+
+	existing := make(map[string]bool, len(credentialScrubValues))
+	for _, v := range credentialScrubValues {
+		existing[v] = true
+	}
+	for _, v := range values {
+		// Skip short values to avoid false-positive scrubbing
+		if len(v) >= 6 && !existing[v] {
+			credentialScrubValues = append(credentialScrubValues, v)
+			existing[v] = true
+		}
+	}
+}
+
 // ScrubCredentials replaces known credential patterns and dynamic values in text.
 func ScrubCredentials(text string) string {
 	for _, pat := range credentialPatterns {
 		text = pat.ReplaceAllString(text, redactedPlaceholder)
+	}
+
+	// Credential values (from credentialed exec)
+	credentialScrubMu.RLock()
+	credVals := credentialScrubValues
+	credentialScrubMu.RUnlock()
+
+	for _, v := range credVals {
+		text = strings.ReplaceAll(text, v, redactedPlaceholder)
 	}
 
 	// Dynamic values (server IPs, etc.)

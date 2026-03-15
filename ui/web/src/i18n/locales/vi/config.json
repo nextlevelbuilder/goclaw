@@ -293,6 +293,11 @@
   "channels.reasoningStreamHint": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng",
   "channels.reactionLevel": "Mức phản ứng",
   "channels.connectionMode": "Chế độ kết nối",
+  "channels.reactionOff": "Tắt",
+  "channels.reactionMinimal": "Tối thiểu",
+  "channels.reactionFull": "Đầy đủ",
+  "channels.connectionWebsocket": "WebSocket",
+  "channels.connectionWebhook": "Webhook",
 
   "general.brandingTitle": "Thương hiệu",
   "general.brandingDescription": "Tên ứng dụng hiển thị trên giao diện, trang đăng nhập và tin nhắn kênh",
@@ -301,9 +306,14 @@
   "general.appDescription": "Mô tả",
   "general.appDescriptionTip": "Mô tả ngắn tùy chọn về phiên bản gateway này.",
   "general.appDescriptionPlaceholder": "VD: Gateway AI nội bộ cho nhóm kỹ thuật",
-  "general.dataDir": "Thư mục dữ liệu",
-  "general.dataDirTip": "Thư mục gốc cho tất cả đường dẫn phái sinh (workspace, sessions, skills, v.v.). Mặc định là ~/.goclaw. Cần khởi động lại để áp dụng.",
   "general.systemInfoTitle": "Thông tin hệ thống",
   "general.systemInfoDescription": "Thông tin chỉ đọc về phiên bản gateway này",
-  "general.configPath": "Đường dẫn tệp cấu hình"
+  "general.configPath": "Đường dẫn tệp cấu hình",
+
+  "bindings.any": "Bất kỳ",
+
+  "toast": {
+    "saved": "Đã lưu cấu hình",
+    "saveFailed": "Không thể lưu cấu hình"
+  }
 }

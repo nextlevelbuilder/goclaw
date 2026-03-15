@@ -1,35 +1,50 @@
 import { memo } from "react";
+import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { isTaskLocked } from "./board-utils";
+import { isTerminalStatus } from "../task-sections/task-utils";
 import type { TeamTaskData } from "@/types/team";
 
-const PRIORITY_COLORS: Record<number, string> = {
-  0: "bg-slate-400",
-  1: "bg-blue-500",
-  2: "bg-amber-500",
-  3: "bg-red-500",
+const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: "P-0", color: "text-slate-400" },
+  1: { label: "P-1", color: "text-blue-500" },
+  2: { label: "P-2", color: "text-amber-500" },
+  3: { label: "P-3", color: "text-red-500" },
+};
+
+const PRIORITY_TOOLTIPS: Record<number, string> = {
+  0: "Low",
+  1: "Medium",
+  2: "High",
+  3: "Critical",
 };
 
 interface KanbanCardProps {
   task: TeamTaskData;
   isTeamV2?: boolean;
+  emojiLookup?: Map<string, string>;
   onClick: () => void;
+  onDelete?: (taskId: string) => void;
 }
 
-export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, onClick }: KanbanCardProps) {
+export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup, onClick, onDelete }: KanbanCardProps) {
   const { t } = useTranslation("teams");
   const locked = isTaskLocked(task);
   const blocked = task.status === "blocked";
+  const ownerEmoji = task.owner_agent_id && emojiLookup?.get(task.owner_agent_id);
+  const canDelete = onDelete && isTerminalStatus(task.status);
+  const prio = PRIORITY_LABELS[task.priority] ?? PRIORITY_LABELS[0]!;
 
   return (
     <div
       className={
-        "cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-colors hover:bg-accent/50" +
+        "group relative cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-colors hover:bg-accent/50" +
         (locked ? " border-l-2 border-l-green-500" : blocked ? " border-l-2 border-l-amber-500" : "")
       }
       onClick={onClick}
     >
+      {/* Top row: identifier + running badge + delete button */}
       <div className="mb-1 flex items-center justify-between">
         <span className="font-mono text-[10px] text-muted-foreground">
           {task.identifier || `#${task.task_number ?? ""}`}
@@ -41,22 +56,35 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, onClick }: 
               {t("board.running")}
             </span>
           )}
-          <span
-            className={`h-2 w-2 rounded-full ${PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS[0]}`}
-            title={`Priority ${task.priority}`}
-          />
+          {canDelete && (
+            <button
+              className="hidden rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:inline-flex"
+              title={t("tasks.delete")}
+              onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          )}
         </div>
       </div>
 
       <p className="line-clamp-2 text-sm font-medium leading-snug">{task.subject}</p>
 
+      {/* Bottom row: owner + type badge + priority */}
       <div className="mt-2 flex items-center gap-1.5">
+        {ownerEmoji && <span className="text-sm leading-none">{ownerEmoji}</span>}
         <span className="truncate text-xs text-muted-foreground">
           {task.owner_agent_key || t("board.unassigned")}
         </span>
         {task.task_type && task.task_type !== "general" && (
           <Badge variant="outline" className="text-[10px] px-1 py-0">{task.task_type}</Badge>
         )}
+        <span
+          className={`ml-auto shrink-0 font-mono text-[10px] font-medium ${prio.color}`}
+          title={`${PRIORITY_TOOLTIPS[task.priority] ?? "Low"} priority`}
+        >
+          {prio.label}
+        </span>
       </div>
 
       {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && (

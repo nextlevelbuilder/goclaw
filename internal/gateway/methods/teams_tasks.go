@@ -52,6 +52,7 @@ func (m *TeamsMethods) RegisterTasks(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsTaskComments, m.handleTaskComments)
 	router.Register(protocol.MethodTeamsTaskEvents, m.handleTaskEvents)
 	router.Register(protocol.MethodTeamsTaskCreate, m.handleTaskCreate)
+	router.Register(protocol.MethodTeamsTaskDelete, m.handleTaskDelete)
 	router.Register(protocol.MethodTeamsTaskAssign, m.handleTaskAssign)
 }
 
@@ -580,6 +581,73 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 		// Dispatch task to the assigned agent via message bus so the consumer
 		// routes it through the agent loop (same pattern as team_message).
 		m.dispatchTaskToAgent(ctx, task, taskID, teamID, agentID, client.UserID())
+	}
+}
+
+// --- Task Delete (hard-delete terminal-status tasks) ---
+
+type taskDeleteParams struct {
+	TeamID string `json:"teamId"`
+	TaskID string `json:"taskId"`
+}
+
+func (m *TeamsMethods) handleTaskDelete(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params taskDeleteParams
+	locale, ok := m.parseTaskParams(ctx, client, req, &params)
+	if !ok {
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "teamId")))
+		return
+	}
+	taskID, err := uuid.Parse(params.TaskID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "taskId")))
+		return
+	}
+
+	// Validate task belongs to team (prevent IDOR).
+	task, err := m.teamStore.GetTask(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, store.ErrTaskNotFound) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		} else {
+			slog.Warn("teams.tasks.delete get failed", "task_id", taskID, "error", err)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		}
+		return
+	}
+	if task.TeamID != teamID {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		return
+	}
+
+	if err := m.teamStore.DeleteTask(ctx, taskID, teamID); err != nil {
+		if errors.Is(err, store.ErrTaskNotFound) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "task is not in a deletable state"))
+		} else {
+			slog.Warn("teams.tasks.delete failed", "task_id", taskID, "error", err)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		}
+		return
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
+
+	if m.msgBus != nil {
+		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskDeleted, protocol.TeamTaskEventPayload{
+			TeamID:    teamID.String(),
+			TaskID:    taskID.String(),
+			Status:    task.Status,
+			UserID:    client.UserID(),
+			Channel:   "dashboard",
+			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
+		}))
 	}
 }
 

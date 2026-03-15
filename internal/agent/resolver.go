@@ -59,6 +59,9 @@ type ResolverDeps struct {
 	// Agent teams
 	TeamStore store.TeamStore
 
+	// Secure CLI credential store for credentialed exec
+	SecureCLIStore store.SecureCLIStore
+
 	// Builtin tool settings
 	BuiltinToolStore store.BuiltinToolStore
 
@@ -341,6 +344,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			WorkspaceSharing:       ag.ParseWorkspaceSharing(),
 			GroupWriterCache:       deps.GroupWriterCache,
 			TeamStore:              deps.TeamStore,
+			SecureCLIStore:         deps.SecureCLIStore,
 			MediaStore:             deps.MediaStore,
 			ModelPricing:           deps.ModelPricing,
 			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),

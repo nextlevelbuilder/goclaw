@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
@@ -169,12 +168,9 @@ func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 	}
 }
 
-// defaultCLIWorkDir returns the CLI workspaces directory, derived from dataDir or config.ResolveDataDir().
-func defaultCLIWorkDir(dataDir string) string {
-	if dataDir != "" {
-		return filepath.Join(dataDir, "cli-workspaces")
-	}
-	return filepath.Join(config.ResolveDataDir(), "cli-workspaces")
+// defaultCLIWorkDir returns dataDir/cli-workspaces.
+func defaultCLIWorkDir() string {
+	return filepath.Join(config.ResolvedDataDirFromEnv(), "cli-workspaces")
 }
 
 // deriveSessionUUID creates a deterministic UUID v5 from a session key string.
@@ -247,7 +243,7 @@ func buildStreamJSONInput(text string, images []ImageContent) *bytes.Reader {
 // Safe to call even if CLI provider is not in use (no-op if files don't exist).
 func ResetCLISession(baseWorkDir, sessionKey string) {
 	if baseWorkDir == "" {
-		baseWorkDir = defaultCLIWorkDir("")
+		baseWorkDir = defaultCLIWorkDir()
 	}
 	safe := sanitizePathSegment(sessionKey)
 	workDir := filepath.Join(baseWorkDir, safe)

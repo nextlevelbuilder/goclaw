@@ -114,6 +114,8 @@
       "followupNext": "下次提醒：",
       "followupDone": "已全部提醒"
     },
+    "delete": "删除",
+    "deleteConfirm": "删除此任务？此操作无法撤消。",
     "badges": {
       "awaitingReply": "等待回复"
     }
@@ -267,8 +269,10 @@
     "failedAddMember": "添加成员失败",
     "failedRemoveMember": "移除成员失败",
     "taskCreated": "任务已创建",
+    "taskDeleted": "任务已删除",
     "taskAssigned": "任务已分配",
     "failedCreateTask": "创建任务失败",
+    "failedDeleteTask": "删除任务失败",
     "failedAssignTask": "分配任务失败"
   },
   "board": {

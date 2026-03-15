@@ -179,8 +179,8 @@ export interface WizardConfig {
 export const wizardConfig: Partial<Record<string, WizardConfig>> = {
   zalo_personal: {
     steps: ["auth", "config"],
-    createLabel: "Create & Authenticate",
-    formBanner: "After creating, you'll authenticate via QR code and configure allowed users.",
+    createLabel: "wizard.zaloPersonal.createLabel",
+    formBanner: "wizard.zaloPersonal.formBanner",
     excludeConfigFields: ["allow_from"],
   },
 };

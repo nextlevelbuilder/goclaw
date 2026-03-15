@@ -1,5 +1,6 @@
 import { Save, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 
 interface StickySaveBarProps {
   onSave: () => void;
@@ -17,10 +18,14 @@ export function StickySaveBar({
   saving,
   saved,
   error,
-  label = "Save",
-  savingLabel = "Saving...",
-  savedLabel = "Saved",
+  label,
+  savingLabel,
+  savedLabel,
 }: StickySaveBarProps) {
+  const { t } = useTranslation("common");
+  const resolvedLabel = label ?? t("save");
+  const resolvedSavingLabel = savingLabel ?? t("saving");
+  const resolvedSavedLabel = savedLabel ?? t("saved");
   return (
     <div className="sticky bottom-0 z-10 -mx-3 mt-6 border-t bg-background/80 px-3 py-3 backdrop-blur-sm sm:-mx-4 sm:px-4">
       {error && (
@@ -32,12 +37,12 @@ export function StickySaveBar({
       <div className="flex items-center justify-end gap-2">
         {saved && (
           <span className="flex items-center gap-1 text-sm text-success">
-            <Check className="h-3.5 w-3.5" /> {savedLabel}
+            <Check className="h-3.5 w-3.5" /> {resolvedSavedLabel}
           </span>
         )}
         <Button onClick={onSave} disabled={saving}>
           {!saving && <Save className="h-4 w-4" />}
-          {saving ? savingLabel : label}
+          {saving ? resolvedSavingLabel : resolvedLabel}
         </Button>
       </div>
     </div>

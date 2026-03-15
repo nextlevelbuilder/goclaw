@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { Methods, Events } from "@/api/protocol";
 import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
 
 export interface PendingApproval {
   id: string;
@@ -48,9 +49,9 @@ export function useApprovals() {
       try {
         await ws.call(Methods.APPROVALS_APPROVE, { id, always });
         setPending((prev) => prev.filter((a) => a.id !== id));
-        toast.success("Approved", always ? "Command always allowed" : "Command approved");
+        toast.success(i18n.t("approvals:toast.approved"), always ? i18n.t("approvals:toast.approvedAlways") : i18n.t("approvals:toast.approvedOnce"));
       } catch (err) {
-        toast.error("Failed to approve", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("approvals:toast.approveFailed"), err instanceof Error ? err.message : i18n.t("approvals:toast.unknownError"));
         throw err;
       }
     },
@@ -62,9 +63,9 @@ export function useApprovals() {
       try {
         await ws.call(Methods.APPROVALS_DENY, { id });
         setPending((prev) => prev.filter((a) => a.id !== id));
-        toast.success("Denied", "Command denied");
+        toast.success(i18n.t("approvals:toast.denied"), i18n.t("approvals:toast.deniedDesc"));
       } catch (err) {
-        toast.error("Failed to deny", err instanceof Error ? err.message : "Unknown error");
+        toast.error(i18n.t("approvals:toast.denyFailed"), err instanceof Error ? err.message : i18n.t("approvals:toast.unknownError"));
         throw err;
       }
     },

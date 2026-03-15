@@ -24,8 +24,8 @@ interface AgentSharesTabProps {
 }
 
 const ROLE_OPTIONS = [
-  { value: "user", label: "User", description: "Can use the agent and chat" },
-  { value: "viewer", label: "Viewer", description: "Read-only access" },
+  { value: "user" },
+  { value: "viewer" },
 ] as const;
 
 function roleBadgeVariant(role: string) {
@@ -101,7 +101,7 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
               <SelectContent>
                 {ROLE_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {t(`shares.role.${opt.value}`)}
                   </SelectItem>
                 ))}
               </SelectContent>

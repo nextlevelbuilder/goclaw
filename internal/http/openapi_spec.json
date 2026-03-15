@@ -1,0 +1,680 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "GoClaw Gateway API",
+    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no token is configured on the server, authentication is disabled (backward compatibility).\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
+    "version": "0.2.0",
+    "contact": {
+      "name": "GoClaw",
+      "url": "https://github.com/nextlevelbuilder/goclaw"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Current server"
+    }
+  ],
+  "tags": [
+    { "name": "Chat", "description": "OpenAI-compatible chat completions" },
+    { "name": "API Keys", "description": "Gateway API key management (admin only)" },
+    { "name": "Agents", "description": "Agent CRUD and configuration" },
+    { "name": "Sessions", "description": "Chat session management (via WebSocket RPC)" },
+    { "name": "Providers", "description": "LLM provider configuration" },
+    { "name": "Skills", "description": "Skill management and grants" },
+    { "name": "MCP Servers", "description": "MCP server configuration and grants" },
+    { "name": "Custom Tools", "description": "Custom tool definitions" },
+    { "name": "Built-in Tools", "description": "Built-in tool configuration" },
+    { "name": "Memory", "description": "Agent memory (pgvector) management" },
+    { "name": "Knowledge Graph", "description": "Entity knowledge graph" },
+    { "name": "Channels", "description": "Channel instance management" },
+    { "name": "Traces", "description": "LLM call tracing" },
+    { "name": "Usage", "description": "Usage analytics" },
+    { "name": "Activity", "description": "Audit activity log" },
+    { "name": "Storage", "description": "Workspace file management" },
+    { "name": "Media", "description": "Media upload and serving" },
+    { "name": "System", "description": "Health check and system info" }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health check",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Server health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "uptime_ms": { "type": "integer" },
+                    "mode": { "type": "string", "example": "managed" },
+                    "database": { "type": "string", "example": "ok" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "OpenAI-compatible chat completions",
+        "description": "Send messages to an agent and get a response. Compatible with OpenAI's chat completions API.\n\nUse the `model` field to target a specific agent: `goclaw:<agent-id>` or `agent:<agent-id>`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["messages"],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "Agent targeting: `goclaw:<id>` or `agent:<id>`. Defaults to `default`.",
+                    "example": "goclaw:default"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["role", "content"],
+                      "properties": {
+                        "role": { "type": "string", "enum": ["system", "user", "assistant"] },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  },
+                  "stream": { "type": "boolean", "default": false },
+                  "user": { "type": "string", "description": "External user ID" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Chat completion response (or SSE stream if stream=true)" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "description": "Rate limit exceeded" }
+        }
+      }
+    },
+    "/v1/api-keys": {
+      "get": {
+        "tags": ["API Keys"],
+        "summary": "List all API keys",
+        "description": "Returns all API keys (active and revoked). Key hashes are never included in responses. Requires admin access.",
+        "responses": {
+          "200": {
+            "description": "List of API keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ApiKey" }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["API Keys"],
+        "summary": "Create a new API key",
+        "description": "Creates a new API key with the specified scopes. The raw key is returned **only once** in the response — store it securely.\n\nAvailable scopes:\n- `operator.admin` — Full admin access\n- `operator.read` — Read-only access\n- `operator.write` — Read + write access\n- `operator.approvals` — Manage exec approvals\n- `operator.pairing` — Manage device pairing",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "scopes"],
+                "properties": {
+                  "name": { "type": "string", "example": "ci-deploy" },
+                  "scopes": {
+                    "type": "array",
+                    "items": { "type": "string", "enum": ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.pairing"] },
+                    "example": ["operator.read", "operator.write"]
+                  },
+                  "expires_in": {
+                    "type": "integer",
+                    "description": "Expiry in seconds. Omit or 0 for never.",
+                    "example": 2592000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "API key created. The `key` field is shown only once.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "format": "uuid" },
+                    "name": { "type": "string" },
+                    "prefix": { "type": "string", "example": "goclaw_a" },
+                    "key": { "type": "string", "description": "Raw API key (shown once)", "example": "goclaw_a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" },
+                    "scopes": { "type": "array", "items": { "type": "string" } },
+                    "expires_at": { "type": "string", "format": "date-time", "nullable": true },
+                    "created_at": { "type": "string", "format": "date-time" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/api-keys/{id}": {
+      "delete": {
+        "tags": ["API Keys"],
+        "summary": "Revoke an API key",
+        "description": "Revokes an API key. Revoked keys can no longer be used for authentication. This action cannot be undone.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Key revoked",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string", "example": "revoked" } } } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/v1/agents": {
+      "get": {
+        "tags": ["Agents"],
+        "summary": "List agents",
+        "description": "List all agents accessible to the current user. Owners see all agents.",
+        "parameters": [
+          { "name": "X-GoClaw-User-Id", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Agent list" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Agents"],
+        "summary": "Create agent",
+        "description": "Create a new agent with the specified configuration.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgentInput" } } } },
+        "responses": {
+          "201": { "description": "Agent created" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/v1/agents/{id}": {
+      "get": {
+        "tags": ["Agents"],
+        "summary": "Get agent",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Agent details" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "tags": ["Agents"],
+        "summary": "Update agent",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgentInput" } } } },
+        "responses": { "200": { "description": "Agent updated" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "tags": ["Agents"],
+        "summary": "Delete agent",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Agent deleted" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/v1/agents/{id}/wake": {
+      "post": {
+        "tags": ["Agents"],
+        "summary": "Wake/trigger agent externally",
+        "description": "Trigger an agent run from an external webhook or automation.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "message": { "type": "string" }, "user_id": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Agent triggered" } }
+      }
+    },
+    "/v1/providers": {
+      "get": {
+        "tags": ["Providers"],
+        "summary": "List LLM providers",
+        "responses": { "200": { "description": "Provider list (API keys masked)" } }
+      },
+      "post": {
+        "tags": ["Providers"],
+        "summary": "Create LLM provider",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProviderInput" } } } },
+        "responses": { "201": { "description": "Provider created" } }
+      }
+    },
+    "/v1/providers/{id}": {
+      "get": {
+        "tags": ["Providers"],
+        "summary": "Get provider",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Provider details (API key masked)" } }
+      },
+      "put": {
+        "tags": ["Providers"],
+        "summary": "Update provider",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Provider updated" } }
+      },
+      "delete": {
+        "tags": ["Providers"],
+        "summary": "Delete provider",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Provider deleted" } }
+      }
+    },
+    "/v1/providers/{id}/models": {
+      "get": {
+        "tags": ["Providers"],
+        "summary": "List available models",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Model list" } }
+      }
+    },
+    "/v1/providers/{id}/verify": {
+      "post": {
+        "tags": ["Providers"],
+        "summary": "Verify provider connection",
+        "description": "Test provider connectivity with a minimal LLM call.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "model": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Verification result", "content": { "application/json": { "schema": { "type": "object", "properties": { "valid": { "type": "boolean" }, "error": { "type": "string" } } } } } } }
+      }
+    },
+    "/v1/skills": {
+      "get": {
+        "tags": ["Skills"],
+        "summary": "List all skills",
+        "responses": { "200": { "description": "Skill list" } }
+      },
+      "post": {
+        "tags": ["Skills"],
+        "summary": "Upload skill",
+        "requestBody": { "content": { "multipart/form-data": {} } },
+        "responses": { "201": { "description": "Skill uploaded" } }
+      }
+    },
+    "/v1/skills/{id}": {
+      "get": {
+        "tags": ["Skills"],
+        "summary": "Get skill",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Skill details" } }
+      },
+      "put": {
+        "tags": ["Skills"],
+        "summary": "Update skill",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Skill updated" } }
+      },
+      "delete": {
+        "tags": ["Skills"],
+        "summary": "Delete skill",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Skill deleted" } }
+      }
+    },
+    "/v1/tools/custom": {
+      "get": {
+        "tags": ["Custom Tools"],
+        "summary": "List custom tools",
+        "responses": { "200": { "description": "Custom tool list" } }
+      },
+      "post": {
+        "tags": ["Custom Tools"],
+        "summary": "Create custom tool",
+        "responses": { "201": { "description": "Tool created" } }
+      }
+    },
+    "/v1/tools/custom/{id}": {
+      "get": {
+        "tags": ["Custom Tools"],
+        "summary": "Get custom tool",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Tool details" } }
+      },
+      "put": {
+        "tags": ["Custom Tools"],
+        "summary": "Update custom tool",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Tool updated" } }
+      },
+      "delete": {
+        "tags": ["Custom Tools"],
+        "summary": "Delete custom tool",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Tool deleted" } }
+      }
+    },
+    "/v1/tools/builtin": {
+      "get": {
+        "tags": ["Built-in Tools"],
+        "summary": "List built-in tools",
+        "responses": { "200": { "description": "Built-in tool list" } }
+      }
+    },
+    "/v1/tools/builtin/{name}": {
+      "get": {
+        "tags": ["Built-in Tools"],
+        "summary": "Get built-in tool",
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Tool details" } }
+      },
+      "put": {
+        "tags": ["Built-in Tools"],
+        "summary": "Update tool settings",
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Tool updated" } }
+      }
+    },
+    "/v1/mcp/servers": {
+      "get": {
+        "tags": ["MCP Servers"],
+        "summary": "List MCP servers",
+        "responses": { "200": { "description": "MCP server list" } }
+      },
+      "post": {
+        "tags": ["MCP Servers"],
+        "summary": "Create MCP server",
+        "responses": { "201": { "description": "Server created" } }
+      }
+    },
+    "/v1/mcp/servers/{id}": {
+      "get": {
+        "tags": ["MCP Servers"],
+        "summary": "Get MCP server",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Server details" } }
+      },
+      "put": {
+        "tags": ["MCP Servers"],
+        "summary": "Update MCP server",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Server updated" } }
+      },
+      "delete": {
+        "tags": ["MCP Servers"],
+        "summary": "Delete MCP server",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Server deleted" } }
+      }
+    },
+    "/v1/mcp/servers/{id}/tools": {
+      "get": {
+        "tags": ["MCP Servers"],
+        "summary": "List server tools",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Tool list" } }
+      }
+    },
+    "/v1/memory/documents": {
+      "get": {
+        "tags": ["Memory"],
+        "summary": "List all memory documents",
+        "responses": { "200": { "description": "Document list" } }
+      }
+    },
+    "/v1/agents/{agentID}/memory/search": {
+      "post": {
+        "tags": ["Memory"],
+        "summary": "Search agent memory",
+        "parameters": [{ "name": "agentID", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "query": { "type": "string" }, "limit": { "type": "integer", "default": 10 } } } } } },
+        "responses": { "200": { "description": "Search results" } }
+      }
+    },
+    "/v1/agents/{agentID}/kg/entities": {
+      "get": {
+        "tags": ["Knowledge Graph"],
+        "summary": "List KG entities",
+        "parameters": [{ "name": "agentID", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Entity list" } }
+      },
+      "post": {
+        "tags": ["Knowledge Graph"],
+        "summary": "Upsert KG entity",
+        "parameters": [{ "name": "agentID", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Entity upserted" } }
+      }
+    },
+    "/v1/agents/{agentID}/kg/traverse": {
+      "post": {
+        "tags": ["Knowledge Graph"],
+        "summary": "Traverse knowledge graph",
+        "parameters": [{ "name": "agentID", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Traversal results" } }
+      }
+    },
+    "/v1/channels/instances": {
+      "get": {
+        "tags": ["Channels"],
+        "summary": "List channel instances",
+        "responses": { "200": { "description": "Instance list" } }
+      },
+      "post": {
+        "tags": ["Channels"],
+        "summary": "Create channel instance",
+        "responses": { "201": { "description": "Instance created" } }
+      }
+    },
+    "/v1/channels/instances/{id}": {
+      "get": {
+        "tags": ["Channels"],
+        "summary": "Get channel instance",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Instance details" } }
+      },
+      "put": {
+        "tags": ["Channels"],
+        "summary": "Update channel instance",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Instance updated" } }
+      },
+      "delete": {
+        "tags": ["Channels"],
+        "summary": "Delete channel instance",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Instance deleted" } }
+      }
+    },
+    "/v1/contacts": {
+      "get": {
+        "tags": ["Channels"],
+        "summary": "List channel contacts",
+        "responses": { "200": { "description": "Contact list" } }
+      }
+    },
+    "/v1/traces": {
+      "get": {
+        "tags": ["Traces"],
+        "summary": "List LLM traces",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "agent_id", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Trace list" } }
+      }
+    },
+    "/v1/traces/{traceID}": {
+      "get": {
+        "tags": ["Traces"],
+        "summary": "Get trace detail",
+        "parameters": [{ "name": "traceID", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Trace detail with messages" } }
+      }
+    },
+    "/v1/costs/summary": {
+      "get": {
+        "tags": ["Traces"],
+        "summary": "Get cost summary",
+        "responses": { "200": { "description": "Cost summary" } }
+      }
+    },
+    "/v1/usage/timeseries": {
+      "get": {
+        "tags": ["Usage"],
+        "summary": "Usage timeseries analytics",
+        "parameters": [
+          { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["1h", "24h", "7d", "30d"] } }
+        ],
+        "responses": { "200": { "description": "Timeseries data" } }
+      }
+    },
+    "/v1/usage/summary": {
+      "get": {
+        "tags": ["Usage"],
+        "summary": "Usage summary",
+        "responses": { "200": { "description": "Usage summary" } }
+      }
+    },
+    "/v1/activity": {
+      "get": {
+        "tags": ["Activity"],
+        "summary": "List audit activity logs",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": { "200": { "description": "Activity log entries" } }
+      }
+    },
+    "/v1/delegations": {
+      "get": {
+        "tags": ["Activity"],
+        "summary": "List delegation history",
+        "responses": { "200": { "description": "Delegation list" } }
+      }
+    },
+    "/v1/storage/files": {
+      "get": {
+        "tags": ["Storage"],
+        "summary": "List workspace files",
+        "parameters": [
+          { "name": "path", "in": "query", "schema": { "type": "string" }, "description": "Subdirectory path" }
+        ],
+        "responses": { "200": { "description": "File listing" } }
+      }
+    },
+    "/v1/media/upload": {
+      "post": {
+        "tags": ["Media"],
+        "summary": "Upload media file",
+        "requestBody": { "content": { "multipart/form-data": { "schema": { "type": "object", "properties": { "file": { "type": "string", "format": "binary" } } } } } },
+        "responses": { "200": { "description": "Upload result with temp path and MIME type" } }
+      }
+    },
+    "/v1/media/{id}": {
+      "get": {
+        "tags": ["Media"],
+        "summary": "Serve media by ID",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Media file" } }
+      }
+    },
+    "/v1/pending-messages": {
+      "get": {
+        "tags": ["Channels"],
+        "summary": "List pending message groups",
+        "responses": { "200": { "description": "Message group list" } }
+      },
+      "delete": {
+        "tags": ["Channels"],
+        "summary": "Clear pending message group",
+        "responses": { "200": { "description": "Group cleared" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Gateway token or API key"
+      }
+    },
+    "schemas": {
+      "ApiKey": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "prefix": { "type": "string", "description": "First 8 chars for identification" },
+          "scopes": { "type": "array", "items": { "type": "string" } },
+          "expires_at": { "type": "string", "format": "date-time", "nullable": true },
+          "last_used_at": { "type": "string", "format": "date-time", "nullable": true },
+          "revoked": { "type": "boolean" },
+          "created_by": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AgentInput": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Unique agent slug" },
+          "display_name": { "type": "string" },
+          "agent_type": { "type": "string", "enum": ["open", "predefined"] },
+          "description": { "type": "string" },
+          "provider": { "type": "string", "description": "LLM provider name" },
+          "model": { "type": "string", "description": "Model ID" },
+          "system_prompt": { "type": "string" }
+        }
+      },
+      "ProviderInput": {
+        "type": "object",
+        "required": ["name", "provider_type"],
+        "properties": {
+          "name": { "type": "string", "description": "Unique provider slug" },
+          "display_name": { "type": "string" },
+          "provider_type": { "type": "string", "enum": ["anthropic_native", "openai_compat", "gemini_native", "groq", "deepseek", "mistral", "xai", "ollama"] },
+          "api_base": { "type": "string" },
+          "api_key": { "type": "string" },
+          "enabled": { "type": "boolean", "default": true }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Authentication required or invalid token",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "BadRequest": {
+        "description": "Invalid request parameters",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      }
+    }
+  }
+}

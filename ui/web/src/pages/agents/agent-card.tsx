@@ -18,7 +18,9 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
   const { t } = useTranslation("agents");
   const displayName = agent.display_name
     || (UUID_RE.test(agent.agent_key) ? t("card.unnamedAgent") : agent.agent_key);
-  const selfEvolve = agent.agent_type === "predefined" && Boolean((agent.other_config as Record<string, unknown> | null)?.self_evolve);
+  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
+  const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
+  const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
 
   // Show agent_key as subtitle only if there's a display_name and agent_key is meaningful
   const showSubtitle = agent.display_name && !UUID_RE.test(agent.agent_key);
@@ -32,7 +34,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
       {/* Top row: icon + name + status */}
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Bot className="h-4.5 w-4.5" />
+          {emoji ? <span className="text-lg leading-none">{emoji}</span> : <Bot className="h-4.5 w-4.5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

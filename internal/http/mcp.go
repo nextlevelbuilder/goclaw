@@ -73,22 +73,7 @@ func (h *MCPHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *MCPHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			if extractBearerToken(r) != h.token {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		userID := extractUserID(r)
-		ctx := store.WithLocale(r.Context(), extractLocale(r))
-		if userID != "" {
-			ctx = store.WithUserID(ctx, userID)
-		}
-		r = r.WithContext(ctx)
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 // --- Server CRUD ---

@@ -30,5 +30,8 @@
   "detail": {
     "copy": "Sao chép",
     "copied": "Đã sao chép"
-  }
+  },
+  "toolBadge": { "error": "lỗi", "activated": "đã kích hoạt", "ok": "ok" },
+  "moreArgs": "...{{count}} nữa",
+  "parentLabel": "cha:"
 }

@@ -3,10 +3,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatDate } from "@/lib/format";
+import { toast } from "@/stores/use-toast-store";
 import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
-import { taskStatusBadgeVariant } from "./task-utils";
+import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
 
 interface TaskDetailDialogProps {
   task: TeamTaskData;
@@ -17,13 +20,15 @@ interface TaskDetailDialogProps {
     task: TeamTaskData; comments: TeamTaskComment[];
     events: TeamTaskEvent[]; attachments: TeamTaskAttachment[];
   }>;
+  deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   taskLookup?: Map<string, string>;
   memberLookup?: Map<string, string>;
+  emojiLookup?: Map<string, string>;
 }
 
 export function TaskDetailDialog({
   task, teamId, isTeamV2, onClose,
-  getTaskDetail, taskLookup, memberLookup,
+  getTaskDetail, deleteTask, taskLookup, memberLookup, emojiLookup,
 }: TaskDetailDialogProps) {
   const { t } = useTranslation("teams");
   const [events, setEvents] = useState<TeamTaskEvent[]>([]);
@@ -42,16 +47,41 @@ export function TaskDetailDialog({
   const resolveMember = (id?: string) =>
     (id && memberLookup?.get(id)) || undefined;
 
+  const resolveEmoji = (id?: string) =>
+    (id && emojiLookup?.get(id)) || undefined;
+
+  const handleDelete = async () => {
+    if (!deleteTask) return;
+    if (!window.confirm(t("tasks.deleteConfirm"))) return;
+    try {
+      await deleteTask(teamId, task.id);
+      toast.success(t("toast.taskDeleted"));
+      onClose();
+    } catch {
+      toast.error(t("toast.failedDeleteTask"));
+    }
+  };
+
+  const ownerEmoji = resolveEmoji(task.owner_agent_id);
+  const canDelete = deleteTask && isTerminalStatus(task.status);
+
   return (
     <Dialog open onOpenChange={() => onClose()}>
       <DialogContent className="max-h-[85vh] w-[95vw] overflow-y-auto sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {task.identifier && (
-              <Badge variant="outline" className="font-mono text-xs">{task.identifier}</Badge>
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle className="flex items-center gap-2">
+              {task.identifier && (
+                <Badge variant="outline" className="font-mono text-xs">{task.identifier}</Badge>
+              )}
+              {t("tasks.detail.title")}
+            </DialogTitle>
+            {canDelete && (
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
             )}
-            {t("tasks.detail.title")}
-          </DialogTitle>
+          </div>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -116,7 +146,10 @@ export function TaskDetailDialog({
             </div>
             <div>
               <span className="text-muted-foreground">{t("tasks.detail.owner")}</span>{" "}
-              <span className="font-medium">{resolveMember(task.owner_agent_id) || task.owner_agent_key || "—"}</span>
+              <span className="font-medium">
+                {ownerEmoji && <span className="mr-1">{ownerEmoji}</span>}
+                {resolveMember(task.owner_agent_id) || task.owner_agent_key || "\u2014"}
+              </span>
             </div>
             {task.task_type && task.task_type !== "general" && (
               <div>

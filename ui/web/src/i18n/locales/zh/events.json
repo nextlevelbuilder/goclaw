@@ -30,5 +30,8 @@
   "detail": {
     "copy": "复制",
     "copied": "已复制"
-  }
+  },
+  "toolBadge": { "error": "错误", "activated": "已激活", "ok": "成功" },
+  "moreArgs": "...还有{{count}}个",
+  "parentLabel": "父级:"
 }

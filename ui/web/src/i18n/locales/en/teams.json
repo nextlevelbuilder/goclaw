@@ -114,6 +114,8 @@
       "followupNext": "Next reminder:",
       "followupDone": "All reminders sent"
     },
+    "delete": "Delete",
+    "deleteConfirm": "Delete this task? This cannot be undone.",
     "badges": {
       "awaitingReply": "awaiting reply"
     }
@@ -267,8 +269,10 @@
     "failedAddMember": "Failed to add member",
     "failedRemoveMember": "Failed to remove member",
     "taskCreated": "Task created",
+    "taskDeleted": "Task deleted",
     "taskAssigned": "Task assigned",
     "failedCreateTask": "Failed to create task",
+    "failedDeleteTask": "Failed to delete task",
     "failedAssignTask": "Failed to assign task"
   },
   "board": {

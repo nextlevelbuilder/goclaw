@@ -166,6 +166,25 @@
     "indexed": "All documents indexed",
     "failedCreate": "Failed to create document",
     "failedDelete": "Failed to delete document",
-    "failedIndex": "Failed to index documents"
+    "failedIndex": "Failed to index documents",
+    "entitySaved": "Entity saved",
+    "entitySaveFailed": "Failed to save entity",
+    "entityDeleted": "Entity deleted",
+    "entityDeleteFailed": "Failed to delete entity",
+    "extractionComplete": "Extraction complete",
+    "extractionFailed": "Extraction failed",
+    "traversalFailed": "Traversal failed",
+    "unknownError": "Unknown error",
+    "docCreated": "Document created",
+    "docCreateFailed": "Failed to create document",
+    "docUpdated": "Document updated",
+    "docUpdateFailed": "Failed to update document",
+    "docDeleted": "Document deleted",
+    "docDeleteFailed": "Failed to delete document",
+    "docIndexed": "Document indexed",
+    "docIndexFailed": "Failed to index document",
+    "allIndexed": "All documents indexed",
+    "allIndexFailed": "Failed to index all",
+    "searchFailed": "Search failed"
   }
 }

@@ -293,6 +293,11 @@
   "channels.reasoningStreamHint": "Display AI thinking process as a separate message",
   "channels.reactionLevel": "Reaction Level",
   "channels.connectionMode": "Connection Mode",
+  "channels.reactionOff": "Off",
+  "channels.reactionMinimal": "Minimal",
+  "channels.reactionFull": "Full",
+  "channels.connectionWebsocket": "WebSocket",
+  "channels.connectionWebhook": "Webhook",
 
   "general.brandingTitle": "Branding",
   "general.brandingDescription": "Application name shown in the UI, login page, and channel messages",
@@ -301,9 +306,14 @@
   "general.appDescription": "Description",
   "general.appDescriptionTip": "Optional short description of this gateway instance.",
   "general.appDescriptionPlaceholder": "e.g. Internal AI gateway for engineering team",
-  "general.dataDir": "Data Directory",
-  "general.dataDirTip": "Base directory for all derived paths (workspace, sessions, skills, etc.). Defaults to ~/.goclaw. Requires restart to take effect.",
   "general.systemInfoTitle": "System Info",
   "general.systemInfoDescription": "Read-only information about this gateway instance",
-  "general.configPath": "Config File Path"
+  "general.configPath": "Config File Path",
+
+  "bindings.any": "Any",
+
+  "toast": {
+    "saved": "Config saved",
+    "saveFailed": "Failed to save config"
+  }
 }

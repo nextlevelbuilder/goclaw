@@ -49,14 +49,7 @@ func (h *OAuthHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *OAuthHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !tokenMatch(extractBearerToken(r), h.token) {
-			locale := extractLocale(r)
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-			return
-		}
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 func (h *OAuthHandler) newTokenSource() *oauth.DBTokenSource {

@@ -108,14 +108,13 @@ COPY .claude-code/.claude/ /app/.claude-seed/
 COPY .claude-code/.claude.json /app/.claude.json
 
 # Create data directories (owned by goclaw user)
-RUN mkdir -p /app/workspace /app/data /app/data/acp-workspaces /app/sessions /app/skills /app/tsnet-state /app/.goclaw /app/.studio \
+RUN mkdir -p /app/workspace /app/data /app/skills /app/tsnet-state /app/.goclaw \
     && chown -R goclaw:goclaw /app
 
 # Default environment
 ENV GOCLAW_CONFIG=/app/config.json \
     GOCLAW_WORKSPACE=/app/workspace \
     GOCLAW_DATA_DIR=/app/data \
-    GOCLAW_SESSIONS_STORAGE=/app/sessions \
     GOCLAW_SKILLS_DIR=/app/skills \
     GOCLAW_MIGRATIONS_DIR=/app/migrations \
     GOCLAW_HOST=0.0.0.0 \

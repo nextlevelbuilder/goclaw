@@ -342,15 +342,16 @@ Quality gates validate agent output before it reaches users. Configured in agent
 
 ### Security
 - **Rate limiting** — Token bucket per user/IP, configurable RPM
+- **API key management** — Multi-key auth with RBAC scopes (`admin`, `read`, `write`, `approvals`, `pairing`), SHA-256 hashed storage, optional expiry, revocation
 - **Prompt injection detection** — 6-pattern regex scanner (detection-only, never blocks)
 - **Credential scrubbing** — Auto-redact API keys, tokens, passwords from tool outputs
 - **Shell deny patterns** — Blocks `curl|sh`, reverse shells, `eval $()`, `base64|sh`
 - **SSRF protection** — DNS pinning, blocked private IPs, blocked hosts
-- **AES-256-GCM** — Encrypted API keys in database
+- **AES-256-GCM** — Encrypted provider API keys in database
 - **Browser pairing** — Token-free browser auth with admin-approved pairing codes
 
 ### Web Dashboard
-- Agent management, traces & spans viewer, skills, teams, MCP servers, pairing approval, memory management (CRUD + search + chunking), knowledge graph (table + force-directed visualization), and pending messages dashboard
+- Agent management, traces & spans viewer, skills, teams, MCP servers, pairing approval, memory management (CRUD + search + chunking), knowledge graph (table + force-directed visualization), pending messages dashboard, API key management, and interactive API documentation (Swagger UI)
 
 ## Quick Start
 
@@ -695,9 +696,14 @@ goclaw pairing revoke     Revoke a pairing
 
 ## API
 
-See [API Reference](api-reference.md) for HTTP endpoints, Custom Tools, and MCP Integration.
+Interactive API documentation is available at `/docs` (Swagger UI) when the gateway is running. The OpenAPI 3.0 spec is served at `/v1/openapi.json`.
 
-See [WebSocket Protocol](websocket-protocol.md) for the real-time RPC protocol (v3).
+| Documentation | Description |
+|---------------|-------------|
+| [HTTP REST API](docs/18-http-api.md) | 130+ HTTP endpoints — chat completions, agents, skills, providers, MCP, memory, knowledge graph, channels, traces, usage, storage, API keys |
+| [WebSocket RPC](docs/19-websocket-rpc.md) | 64+ RPC methods — chat, agents, config, sessions, cron, teams, pairing, delegations, approvals |
+| [API Keys & Auth](docs/20-api-keys-auth.md) | Authentication model, RBAC scopes, API key management, security design |
+| [Gateway Protocol](docs/04-gateway-protocol.md) | WebSocket wire protocol (v3), frame format, connection lifecycle |
 
 ## Docker Compose
 
@@ -894,12 +900,13 @@ Requires `GOCLAW_TSNET_AUTH_KEY` in your `.env` file. Tailscale state is persist
 ## Security
 
 - **Transport**: WebSocket CORS validation, 512KB message limit, 1MB HTTP body limit, timing-safe token auth
+- **API key management**: Multi-key auth with 5 RBAC scopes, SHA-256 hashed storage, optional expiry, revocation, show-once pattern. See [API Keys & Auth](docs/20-api-keys-auth.md)
 - **Rate limiting**: Token bucket per user/IP, configurable RPM
 - **Prompt injection**: Input guard with 6 pattern detection (detection-only, never blocks)
 - **Shell security**: Deny patterns for `curl|sh`, `wget|sh`, reverse shells, `eval`, `base64|sh`
 - **Network**: SSRF protection with blocked hosts + private IP + DNS pinning
 - **File system**: Path traversal prevention, workspace restriction
-- **Encryption**: AES-256-GCM for API keys in database
+- **Encryption**: AES-256-GCM for provider API keys in database
 - **Browser pairing**: Token-free browser auth with admin approval (pairing codes, auto-reconnect)
 - **Tailscale**: Optional VPN mesh listener for secure remote access (build-tag gated)
 
@@ -943,7 +950,8 @@ GOCLAW_OPENROUTER_API_KEY=sk-or-xxx go test -v ./tests/integration/ -timeout 120
 - **Cron scheduling** — `at`, `every`, and cron expression scheduling. Tested in production.
 - **Docker sandbox** — Isolated code execution in containers. Tested in production.
 - **Text-to-Speech** — OpenAI, ElevenLabs, Edge, MiniMax providers. Tested in production.
-- **HTTP API** — `/v1/chat/completions`, `/v1/agents`, `/v1/skills`, etc. Tested in production.
+- **HTTP API** — `/v1/chat/completions`, `/v1/agents`, `/v1/skills`, etc. Tested in production. Interactive Swagger UI at `/docs`.
+- **API key management** — Multi-key auth with RBAC scopes, SHA-256 hashed storage, show-once pattern, optional expiry, revocation. HTTP + WebSocket CRUD. Web UI for management.
 - **Hooks system** — Event-driven hooks with command evaluators (shell exit code) and agent evaluators (delegate to reviewer). Blocking gates with auto-retry and recursion-safe evaluation.
 - **Media tools** — `create_image` (DashScope, MiniMax), `create_audio` (OpenAI, ElevenLabs, MiniMax, Suno), `create_video` (MiniMax, Veo), `read_document` (Gemini File API), `read_image`, `read_audio`, `read_video`. Persistent media storage with lazy-loaded MediaRef.
 - **Additional provider modes** — Claude CLI (Anthropic via stdio + MCP bridge), Codex (OpenAI gpt-5.3-codex via OAuth).

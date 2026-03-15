@@ -146,6 +146,13 @@ export function useTeams() {
     [ws],
   );
 
+  const deleteTask = useCallback(
+    async (teamId: string, taskId: string) => {
+      await ws.call(Methods.TEAMS_TASK_DELETE, { teamId, taskId });
+    },
+    [ws],
+  );
+
   const assignTask = useCallback(
     async (teamId: string, taskId: string, agentId: string) => {
       await ws.call(Methods.TEAMS_TASK_ASSIGN, { teamId, taskId, agentId });
@@ -188,7 +195,7 @@ export function useTeams() {
   return {
     teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, getTeamScopes,
     getTaskDetail, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
-    createTask, assignTask,
+    createTask, deleteTask, assignTask,
     addMember, removeMember, updateTeamSettings, getKnownUsers,
   };
 }
