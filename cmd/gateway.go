@@ -212,6 +212,15 @@ func runGateway() {
 				pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
 			}
 			pa.AllowPaths(filepath.Join(dataDir, "cli-workspaces"))
+			pa.AllowPaths(filepath.Join(dataDir, "acp-workspaces"))
+			// Allow bundled skills directory (Docker: /app/bundled-skills).
+			builtinSkillsDir := os.Getenv("GOCLAW_BUILTIN_SKILLS_DIR")
+			if builtinSkillsDir == "" {
+				builtinSkillsDir = "/app/bundled-skills"
+			}
+			if info, err := os.Stat(builtinSkillsDir); err == nil && info.IsDir() {
+				pa.AllowPaths(builtinSkillsDir)
+			}
 			// Also allow the skills store directory (uploaded skill content).
 			if pgStores.Skills != nil {
 				pa.AllowPaths(pgStores.Skills.Dirs()...)

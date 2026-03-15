@@ -32,7 +32,7 @@ func CheckRuntimes() *RuntimeStatus {
 		{"pip3", "pip3", "--version", true},
 		{"node", "node", "--version", false},
 		{"npm", "npm", "--version", false},
-		{"doas", "doas", "", false},
+		{"sudo", "sudo", "--version", false},
 		{"kubectl", "kubectl", "version --client", false},
 		{"helm", "helm", "version --short", false},
 		{"claude", "claude", "--version", false},
