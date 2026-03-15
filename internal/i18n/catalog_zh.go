@@ -174,5 +174,9 @@ func init() {
 		MsgToolHandoff:         "将对话转移给另一个代理——用户将直接与该代理交谈",
 		MsgToolTeamTasks:       "查看、创建、更新和完成团队任务板上的任务",
 		MsgToolTeamMessage:     "向代理团队中的队友发送直接消息或广播",
+		MsgToolRegisterMCPServer: "在 GoClaw 中注册本地或远程 MCP 服务器，使其工具可供代理使用",
+
+		// MCP 注册
+		MsgMCPServerNameConflict: "名为 %s 的 MCP 服务器已存在",
 	})
 }

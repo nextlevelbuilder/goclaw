@@ -174,5 +174,9 @@ func init() {
 		MsgToolHandoff:         "Chuyển cuộc hội thoại sang agent khác — người dùng sẽ nói chuyện trực tiếp với agent đó",
 		MsgToolTeamTasks:       "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm",
 		MsgToolTeamMessage:     "Gửi tin nhắn trực tiếp hoặc broadcast đến đồng đội trong nhóm agent",
+		MsgToolRegisterMCPServer: "Đăng ký máy chủ MCP local hoặc remote vào GoClaw, cung cấp công cụ cho agent sử dụng",
+
+		// Đăng ký MCP
+		MsgMCPServerNameConflict: "Máy chủ MCP với tên %s đã tồn tại",
 	})
 }

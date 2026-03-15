@@ -572,6 +572,12 @@ func runGateway() {
 		}
 	}
 
+	// Register MCP server tool — lets agents register built MCP servers in the database
+	if pgStores.MCP != nil {
+		toolsReg.Register(tools.NewRegisterMCPServerTool(pgStores.MCP, storeCfg.EncryptionKey))
+		slog.Info("register_mcp_server tool registered")
+	}
+
 	// Wire embedding-based skill search + per-agent access filtering
 	if pgStores.Skills != nil {
 		if sas, ok := pgStores.Skills.(store.SkillAccessStore); ok {
