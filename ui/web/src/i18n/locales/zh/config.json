@@ -306,6 +306,8 @@
   "general.appDescription": "描述",
   "general.appDescriptionTip": "此网关实例的可选简短描述。",
   "general.appDescriptionPlaceholder": "例如：工程团队内部 AI 网关",
+  "general.dataDir": "数据目录",
+  "general.dataDirTip": "持久化数据的根目录（会话、媒体、记忆）。默认 ~/.goclaw。",
   "general.systemInfoTitle": "系统信息",
   "general.systemInfoDescription": "此网关实例的只读信息",
   "general.configPath": "配置文件路径",

@@ -54,7 +54,7 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 			binary = "claude"
 		}
 		// Validate binary against known allowlist (same check as registerACPFromDB)
-		if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
+		if binary != "claude" && binary != "claude-agent-acp" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
 			writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "invalid binary path"})
 			return
 		}

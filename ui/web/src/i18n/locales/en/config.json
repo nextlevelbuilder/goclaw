@@ -306,6 +306,8 @@
   "general.appDescription": "Description",
   "general.appDescriptionTip": "Optional short description of this gateway instance.",
   "general.appDescriptionPlaceholder": "e.g. Internal AI gateway for engineering team",
+  "general.dataDir": "Data Directory",
+  "general.dataDirTip": "Base directory for persistent data (sessions, media, memory). Defaults to ~/.goclaw.",
   "general.systemInfoTitle": "System Info",
   "general.systemInfoDescription": "Read-only information about this gateway instance",
   "general.configPath": "Config File Path",

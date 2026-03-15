@@ -306,6 +306,8 @@
   "general.appDescription": "Mô tả",
   "general.appDescriptionTip": "Mô tả ngắn tùy chọn về phiên bản gateway này.",
   "general.appDescriptionPlaceholder": "VD: Gateway AI nội bộ cho nhóm kỹ thuật",
+  "general.dataDir": "Thư mục dữ liệu",
+  "general.dataDirTip": "Thư mục gốc cho dữ liệu lưu trữ (phiên, media, bộ nhớ). Mặc định ~/.goclaw.",
   "general.systemInfoTitle": "Thông tin hệ thống",
   "general.systemInfoDescription": "Thông tin chỉ đọc về phiên bản gateway này",
   "general.configPath": "Đường dẫn tệp cấu hình",

@@ -1,0 +1,12 @@
+{
+  "language": "vietnamese",
+  "skipDangerousModePermissionPrompt": true,
+  "model": "opus[1m]",
+  "permissions": {
+    "allow": ["Bash(*)", "Edit(*)", "Read(*)", "Write(*)", "Glob(*)", "Grep(*)", "WebFetch(*)", "WebSearch(*)", "mcp__goclaw-bridge__*"],
+    "deny": []
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
