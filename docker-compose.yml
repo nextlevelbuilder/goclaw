@@ -56,4 +56,4 @@ volumes:
 networks:
   shared:
     name: shared
-    driver: bridge
+    external: true
