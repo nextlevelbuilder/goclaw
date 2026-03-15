@@ -210,13 +210,14 @@ func (c *Channel) sendPairingReply(senderID, channelID string) {
 	// Security: do not expose pairing code in group channels (visible to all members).
 	// Instead, direct admin to CLI or web UI where pending codes are listed.
 	var msg string
+	appName := c.AppName()
 	if strings.HasPrefix(senderID, "group:") {
 		msg = fmt.Sprintf("This channel is not authorized to use this bot.\n\n"+
 			"An admin can approve via CLI:\n  goclaw pairing approve %s\n\n"+
-			"Or approve via the GoClaw web UI (Pairing section).", code)
+			"Or approve via the %s web UI (Pairing section).", code, appName)
 	} else {
-		msg = fmt.Sprintf("GoClaw: access not configured.\n\nYour Slack user ID: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-			senderID, code, code)
+		msg = fmt.Sprintf("%s: access not configured.\n\nYour Slack user ID: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
+			appName, senderID, code, code)
 	}
 	if _, _, err := c.api.PostMessage(channelID, slackapi.MsgOptionText(msg, false)); err != nil {
 		slog.Warn("slack: failed to send pairing reply",

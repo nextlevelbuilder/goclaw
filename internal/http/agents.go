@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -20,6 +21,7 @@ import (
 type AgentsHandler struct {
 	agents   store.AgentStore
 	token    string
+	dataDir  string            // unexpanded data dir for workspace paths (e.g. "~/.goclaw")
 	msgBus   *bus.MessageBus   // for cache invalidation events (nil = no events)
 	summoner *AgentSummoner    // LLM-based agent setup (nil = disabled)
 	isOwner  func(string) bool // checks if user ID is a system owner (nil = no owners configured)
@@ -27,8 +29,12 @@ type AgentsHandler struct {
 
 // NewAgentsHandler creates a handler for agent management endpoints.
 // isOwner is a function that checks if a user ID is in GOCLAW_OWNER_IDS (nil = disabled).
-func NewAgentsHandler(agents store.AgentStore, token string, msgBus *bus.MessageBus, summoner *AgentSummoner, isOwner func(string) bool) *AgentsHandler {
-	return &AgentsHandler{agents: agents, token: token, msgBus: msgBus, summoner: summoner, isOwner: isOwner}
+// dataDir is the unexpanded data dir for default workspace paths (e.g. "~/.goclaw").
+func NewAgentsHandler(agents store.AgentStore, token string, dataDir string, msgBus *bus.MessageBus, summoner *AgentSummoner, isOwner func(string) bool) *AgentsHandler {
+	if dataDir == "" {
+		dataDir = config.ResolveUnexpandedDataDir()
+	}
+	return &AgentsHandler{agents: agents, token: token, dataDir: dataDir, msgBus: msgBus, summoner: summoner, isOwner: isOwner}
 }
 
 // isOwnerUser checks if the given user ID is a system owner.
@@ -144,7 +150,7 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.MaxToolIterations = 20
 	}
 	if req.Workspace == "" {
-		req.Workspace = fmt.Sprintf("~/.goclaw/%s-workspace", req.AgentKey)
+		req.Workspace = fmt.Sprintf("%s/%s-workspace", h.dataDir, req.AgentKey)
 	}
 	req.RestrictToWorkspace = true
 

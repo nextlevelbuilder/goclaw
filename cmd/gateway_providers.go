@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -153,6 +152,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 		// Build per-session MCP config: external MCP servers + GoClaw bridge
 		gatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
 		mcpData := providers.BuildCLIMCPConfigData(cfg.Tools.McpServers, gatewayAddr, cfg.Gateway.Token)
+		mcpData.DataDir = cfg.ResolvedDataDir()
 		opts = append(opts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		// Enable GoClaw security hooks (shell deny patterns, path restrictions)
 		opts = append(opts, providers.WithClaudeCLISecurityHooks(
@@ -163,7 +163,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 
 	// ACP provider (config-based) — orchestrates any ACP-compatible agent binary
 	if cfg.Providers.ACP.Binary != "" {
-		registerACPFromConfig(registry, cfg.Providers.ACP)
+		registerACPFromConfig(registry, cfg.Providers.ACP, cfg.ResolvedDataDir())
 	}
 }
 
@@ -262,6 +262,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			cliOpts = append(cliOpts, providers.WithClaudeCLISecurityHooks("", true))
 			if gatewayAddr != "" {
 				mcpData := providers.BuildCLIMCPConfigData(nil, gatewayAddr, gatewayToken)
+				mcpData.DataDir = config.ResolveDataDir()
 				mcpData.AgentMCPLookup = buildMCPServerLookup(mcpStore)
 				cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 			}
@@ -271,7 +272,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		}
 		// ACP provider — no API key needed (agents manage their own auth).
 		if p.ProviderType == store.ProviderACP {
-			registerACPFromDB(registry, p)
+			registerACPFromDB(registry, p, config.ResolveDataDir())
 			continue
 		}
 		// Local Ollama requires no API key — handle before the key guard (same pattern as ClaudeCLI).
@@ -344,7 +345,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 }
 
 // registerACPFromConfig registers an ACP provider from config file settings.
-func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
+func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig, dataDir string) {
 	if _, err := exec.LookPath(cfg.Binary); err != nil {
 		slog.Warn("acp: binary not found, skipping", "binary", cfg.Binary, "error", err)
 		return
@@ -357,7 +358,7 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 	}
 	workDir := cfg.WorkDir
 	if workDir == "" {
-		workDir = defaultACPWorkDir()
+		workDir = defaultACPWorkDir(dataDir)
 	}
 	var opts []providers.ACPOption
 	if cfg.Model != "" {
@@ -373,7 +374,7 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 }
 
 // registerACPFromDB registers an ACP provider from a DB provider row.
-func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
+func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData, dataDir string) {
 	binary := p.APIBase // repurpose api_base as binary path
 	if binary == "" {
 		slog.Warn("acp: no binary specified in DB provider", "name", p.Name)
@@ -407,7 +408,7 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 	}
 	workDir := settings.WorkDir
 	if workDir == "" {
-		workDir = defaultACPWorkDir()
+		workDir = defaultACPWorkDir(dataDir)
 	}
 	registry.Register(providers.NewACPProvider(
 		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns,
@@ -417,10 +418,9 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 }
 
 // defaultACPWorkDir returns the default workspace directory for ACP agents.
-func defaultACPWorkDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(os.TempDir(), "goclaw-acp-workspaces")
+func defaultACPWorkDir(dataDir string) string {
+	if dataDir != "" {
+		return filepath.Join(dataDir, "acp-workspaces")
 	}
-	return filepath.Join(home, ".goclaw", "acp-workspaces")
+	return filepath.Join(config.ResolveDataDir(), "acp-workspaces")
 }

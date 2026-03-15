@@ -330,8 +330,8 @@ func (c *Channel) sendPairingReply(senderID, chatID string) {
 	}
 
 	replyText := fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour Zalo user id: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		senderID, code, code,
+		"%s: access not configured.\n\nYour Zalo user id: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
+		c.AppName(), senderID, code, code,
 	)
 
 	if err := c.sendMessage(chatID, replyText); err != nil {

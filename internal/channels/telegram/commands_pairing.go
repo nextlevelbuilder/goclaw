@@ -100,7 +100,7 @@ func (c *Channel) SendPairingApproved(ctx context.Context, chatID, botName strin
 		return fmt.Errorf("invalid chat ID: %w", err)
 	}
 	if botName == "" {
-		botName = "GoClaw"
+		botName = c.AppName()
 	}
 
 	msg := tu.Message(tu.ID(id), fmt.Sprintf("✅ %s access approved. Send a message to start chatting.", botName))

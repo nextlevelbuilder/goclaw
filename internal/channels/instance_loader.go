@@ -35,6 +35,7 @@ type InstanceLoader struct {
 	pairingSvc         store.PairingStore
 	mu                 sync.Mutex
 	loaded             map[string]struct{} // channel names managed by this loader
+	appName            string              // configurable display name for user-facing messages
 }
 
 // NewInstanceLoader creates a new InstanceLoader.
@@ -67,6 +68,9 @@ func (l *InstanceLoader) SetProviderRegistry(reg *providers.Registry) {
 func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactionConfig) {
 	l.pendingCompactCfg = cfg
 }
+
+// SetAppName sets the application display name propagated to channel instances.
+func (l *InstanceLoader) SetAppName(name string) { l.appName = name }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
 func (l *InstanceLoader) RegisterFactory(channelType string, factory ChannelFactory) {
@@ -233,6 +237,12 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	// Set the platform type on the channel so Manager.ChannelTypeForName can read it.
 	if base, ok := ch.(interface{ SetType(string) }); ok {
 		base.SetType(inst.ChannelType)
+	}
+	// Propagate configurable app name for user-facing messages.
+	if l.appName != "" {
+		if base, ok := ch.(interface{ SetAppName(string) }); ok {
+			base.SetAppName(l.appName)
+		}
 	}
 
 	// Wire pending message auto-compaction.

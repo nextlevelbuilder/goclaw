@@ -22,11 +22,6 @@ func onboardCmd() *cobra.Command {
 }
 
 func runOnboard() {
-	fmt.Println("╔══════════════════════════════════════════════╗")
-	fmt.Println("║        GoClaw — Quick Setup                 ║")
-	fmt.Println("╚══════════════════════════════════════════════╝")
-	fmt.Println()
-
 	cfgPath := resolveConfigPath()
 	cfg := config.Default()
 
@@ -36,6 +31,12 @@ func runOnboard() {
 			cfg = loaded
 		}
 	}
+
+	appName := cfg.AppName()
+	fmt.Println("╔══════════════════════════════════════════════╗")
+	fmt.Printf("║        %s — Quick Setup\n", appName)
+	fmt.Println("╚══════════════════════════════════════════════╝")
+	fmt.Println()
 
 	// ── Step 1: Postgres connection ──
 	postgresDSN := os.Getenv("GOCLAW_POSTGRES_DSN")

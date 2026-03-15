@@ -154,6 +154,7 @@ type BaseChannel struct {
 	allowList        []string
 	agentID          string                 // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
 	contactCollector *store.ContactCollector // optional: auto-collect contacts from channel messages
+	appName          string                 // configurable display name; falls back to "GoClaw"
 }
 
 // NewBaseChannel creates a new BaseChannel with the given parameters.
@@ -190,6 +191,17 @@ func (c *BaseChannel) SetAgentID(id string) { c.agentID = id }
 
 // SetContactCollector sets the contact collector for auto-collecting contacts from messages.
 func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contactCollector = cc }
+
+// AppName returns the configured application display name, falling back to "GoClaw".
+func (c *BaseChannel) AppName() string {
+	if c.appName != "" {
+		return c.appName
+	}
+	return "GoClaw"
+}
+
+// SetAppName sets the application display name for user-facing messages.
+func (c *BaseChannel) SetAppName(name string) { c.appName = name }
 
 // ContactCollector returns the contact collector (may be nil).
 func (c *BaseChannel) ContactCollector() *store.ContactCollector { return c.contactCollector }

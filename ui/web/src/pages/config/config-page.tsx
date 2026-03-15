@@ -10,6 +10,7 @@ import { useConfig } from "./hooks/use-config";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useIsMobile } from "@/hooks/use-media-query";
+import { GeneralSection } from "./sections/general-section";
 import { ServerSection } from "./sections/server-section";
 import { BehaviorSection } from "./sections/behavior-section";
 import { AiDefaultsSection } from "./sections/ai-defaults-section";
@@ -24,7 +25,7 @@ import { BindingsSection } from "./sections/bindings-section";
 
 export function ConfigPage() {
   const { t } = useTranslation("config");
-  const { config, hash, loading, saving, refresh, patch } = useConfig();
+  const { config, hash, configPath, loading, saving, refresh, patch } = useConfig();
   const isMobile = useIsMobile();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && !config);
@@ -84,7 +85,7 @@ export function ConfigPage() {
         <span>{t("warning")}</span>
       </div>
 
-      <Tabs orientation={isMobile ? "horizontal" : "vertical"} defaultValue="server" className="mt-4 items-start">
+      <Tabs orientation={isMobile ? "horizontal" : "vertical"} defaultValue="general" className="mt-4 items-start">
         <TabsList
           variant={isMobile ? "default" : "line"}
           className={isMobile
@@ -92,6 +93,7 @@ export function ConfigPage() {
             : "w-44 shrink-0 sticky top-6 rounded-lg border bg-card p-3 shadow-sm"
           }
         >
+          <TabsTrigger value="general">{t("tabs.general")}</TabsTrigger>
           <TabsTrigger value="server">{t("tabs.server")}</TabsTrigger>
           <TabsTrigger value="behavior">{t("tabs.behavior")}</TabsTrigger>
           <TabsTrigger value="aiDefaults">{t("tabs.aiDefaults")}</TabsTrigger>
@@ -99,6 +101,15 @@ export function ConfigPage() {
           <TabsTrigger value="tools">{t("tabs.tools")}</TabsTrigger>
           <TabsTrigger value="integrations">{t("tabs.integrations")}</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="general" className="space-y-4">
+          <GeneralSection
+            data={config.general as any}
+            configPath={configPath}
+            onSave={(v) => patch({ general: v })}
+            saving={saving}
+          />
+        </TabsContent>
 
         <TabsContent value="server" className="space-y-4">
           <ServerSection

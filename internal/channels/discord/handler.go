@@ -353,8 +353,8 @@ func (c *Channel) sendPairingReply(senderID, channelID string) {
 	}
 
 	replyText := fmt.Sprintf(
-		"GoClaw: access not configured.\n\nYour Discord user ID: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
-		senderID, code, code,
+		"%s: access not configured.\n\nYour Discord user ID: %s\n\nPairing code: %s\n\nAsk the bot owner to approve with:\n  goclaw pairing approve %s",
+		c.AppName(), senderID, code, code,
 	)
 
 	if _, err := c.session.ChannelMessageSend(channelID, replyText); err != nil {

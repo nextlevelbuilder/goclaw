@@ -179,6 +179,17 @@ func (m *Manager) SetContactCollector(cc *store.ContactCollector) {
 	}
 }
 
+// SetAppName updates the display name on all currently registered channels.
+func (m *Manager) SetAppName(name string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, ch := range m.channels {
+		if bc, ok := ch.(interface{ SetAppName(string) }); ok {
+			bc.SetAppName(name)
+		}
+	}
+}
+
 // ChannelTypeForName returns the platform type for a channel instance name.
 // Reads directly from the Channel.Type() method — no separate map needed.
 func (m *Manager) ChannelTypeForName(name string) string {

@@ -2,6 +2,7 @@ package pg
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -18,9 +19,10 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 
 	skillsDir := cfg.SkillsStorageDir
 	if skillsDir == "" {
-		skillsDir = "~/.goclaw/skills-store"
+		skillsDir = filepath.Join(config.ResolveDataDir(), "skills-store")
+	} else {
+		skillsDir = config.ExpandHome(skillsDir)
 	}
-	skillsDir = config.ExpandHome(skillsDir)
 
 	return &store.Stores{
 		DB:        db,
