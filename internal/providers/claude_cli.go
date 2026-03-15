@@ -105,7 +105,7 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 	p := &ClaudeCLIProvider{
 		cliPath:      cliPath,
 		defaultModel: "sonnet",
-		baseWorkDir:  defaultCLIWorkDir(),
+		baseWorkDir:  defaultCLIWorkDir(""),
 		permMode:     "bypassPermissions",
 		// sessionMu is zero-value ready (sync.Map)
 	}

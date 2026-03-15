@@ -14,10 +14,9 @@ import { SummoningModal } from "@/pages/agents/summoning-modal";
 import { useAgentPresets } from "@/pages/agents/agent-presets";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { slugify, isValidSlug } from "@/lib/slug";
+import { useBrandingStore } from "@/stores/use-branding-store";
 import type { ProviderData } from "@/types/provider";
 import type { AgentData } from "@/types/agent";
-
-const DEFAULT_PROMPT = `You are GoClaw, my helpful assistant. I am your boss, NextLevelBuilder.`;
 
 interface StepAgentProps {
   provider: ProviderData | null;
@@ -31,14 +30,17 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
   const { t } = useTranslation("setup");
   const { createAgent, updateAgent, deleteAgent, resummonAgent } = useAgents();
   const agentPresets = useAgentPresets();
+  const appName = useBrandingStore((s) => s.appName);
+
+  const defaultPrompt = `You are ${appName}, my helpful assistant. I am your boss, NextLevelBuilder.`;
 
   const isEditing = !!existingAgent;
 
-  const [displayName, setDisplayName] = useState(existingAgent?.display_name ?? "GoClaw");
+  const [displayName, setDisplayName] = useState(existingAgent?.display_name ?? appName);
   const [agentKey, setAgentKey] = useState(existingAgent?.agent_key ?? "goclaw");
   const [keyTouched, setKeyTouched] = useState(isEditing);
   const [description, setDescription] = useState(
-    existingAgent?.other_config?.description as string ?? DEFAULT_PROMPT,
+    existingAgent?.other_config?.description as string ?? defaultPrompt,
   );
   const [selfEvolve, setSelfEvolve] = useState(
     !!(existingAgent?.other_config?.self_evolve),
@@ -181,7 +183,7 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
                 <Input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder={t("agent.displayNamePlaceholder", "e.g. GoClaw")}
+                  placeholder={t("agent.displayNamePlaceholder", { defaultValue: `e.g. ${appName}` })}
                 />
               </div>
               <div className="space-y-2">

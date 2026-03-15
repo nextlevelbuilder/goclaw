@@ -12,6 +12,7 @@
   "saveConfig": "Save Config",
   "usingGlobalDefaults": "Using global defaults",
 
+  "tabs.general": "General",
   "tabs.server": "Server",
   "tabs.behavior": "Behavior",
   "tabs.aiDefaults": "AI Defaults",
@@ -291,5 +292,18 @@
   "channels.reasoningStream": "Show Reasoning",
   "channels.reasoningStreamHint": "Display AI thinking process as a separate message",
   "channels.reactionLevel": "Reaction Level",
-  "channels.connectionMode": "Connection Mode"
+  "channels.connectionMode": "Connection Mode",
+
+  "general.brandingTitle": "Branding",
+  "general.brandingDescription": "Application name shown in the UI, login page, and channel messages",
+  "general.appName": "App Name",
+  "general.appNameTip": "Display name shown in the sidebar, login page, and bot access messages. Defaults to GoClaw.",
+  "general.appDescription": "Description",
+  "general.appDescriptionTip": "Optional short description of this gateway instance.",
+  "general.appDescriptionPlaceholder": "e.g. Internal AI gateway for engineering team",
+  "general.dataDir": "Data Directory",
+  "general.dataDirTip": "Base directory for all derived paths (workspace, sessions, skills, etc.). Defaults to ~/.goclaw. Requires restart to take effect.",
+  "general.systemInfoTitle": "System Info",
+  "general.systemInfoDescription": "Read-only information about this gateway instance",
+  "general.configPath": "Config File Path"
 }

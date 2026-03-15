@@ -31,6 +31,7 @@ import { SidebarItem } from "./sidebar-item";
 import { ConnectionStatus } from "./connection-status";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useBrandingStore } from "@/stores/use-branding-store";
 import { usePendingPairingsCount } from "@/hooks/use-pending-pairings-count";
 
 interface SidebarProps {
@@ -40,6 +41,8 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
   const { t } = useTranslation("sidebar");
+  const appName = useBrandingStore((s) => s.appName);
+  const abbrev = appName.slice(0, 2).toUpperCase();
   const { pendingCount } = usePendingPairingsCount();
 
   return (
@@ -59,11 +62,11 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
       <div className="flex h-14 items-center border-b px-4">
         {!collapsed && (
           <span className="text-base font-semibold tracking-tight">
-            GoClaw
+            {appName}
           </span>
         )}
         {collapsed && (
-          <span className="mx-auto text-lg font-bold">OC</span>
+          <span className="mx-auto text-lg font-bold">{abbrev}</span>
         )}
       </div>
 

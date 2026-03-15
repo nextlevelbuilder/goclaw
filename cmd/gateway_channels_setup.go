@@ -28,11 +28,14 @@ import (
 
 // registerConfigChannels registers config-based channels as fallback when no DB instances are loaded.
 func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus, pgStores *store.Stores, instanceLoader *channels.InstanceLoader) {
+	appName := cfg.AppName()
+
 	if cfg.Channels.Telegram.Enabled && cfg.Channels.Telegram.Token != "" && instanceLoader == nil {
 		tg, err := telegram.New(cfg.Channels.Telegram, msgBus, pgStores.Pairing, nil, nil, nil)
 		if err != nil {
 			slog.Error("failed to initialize telegram channel", "error", err)
 		} else {
+			tg.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeTelegram, tg)
 			slog.Info("telegram channel enabled (config)")
 		}
@@ -43,6 +46,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if err != nil {
 			slog.Error("failed to initialize discord channel", "error", err)
 		} else {
+			dc.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeDiscord, dc)
 			slog.Info("discord channel enabled (config)")
 		}
@@ -53,6 +57,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if err != nil {
 			slog.Error("failed to initialize whatsapp channel", "error", err)
 		} else {
+			wa.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeWhatsApp, wa)
 			slog.Info("whatsapp channel enabled (config)")
 		}
@@ -63,6 +68,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if err != nil {
 			slog.Error("failed to initialize zalo channel", "error", err)
 		} else {
+			z.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeZaloOA, z)
 			slog.Info("zalo channel enabled (config)")
 		}
@@ -73,6 +79,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if err != nil {
 			slog.Error("failed to initialize zca channel", "error", err)
 		} else {
+			zp.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeZaloPersonal, zp)
 			slog.Info("zca (zalo personal) channel enabled (config)")
 		}
@@ -83,6 +90,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if err != nil {
 			slog.Error("failed to initialize slack channel", "error", err)
 		} else {
+			sl.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeSlack, sl)
 			slog.Info("slack channel enabled (config)")
 		}
@@ -93,6 +101,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		if err != nil {
 			slog.Error("failed to initialize feishu channel", "error", err)
 		} else {
+			f.SetAppName(appName)
 			channelMgr.RegisterChannel(channels.TypeFeishu, f)
 			slog.Info("feishu/lark channel enabled (config)")
 		}

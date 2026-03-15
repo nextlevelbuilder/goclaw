@@ -45,7 +45,7 @@ func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey stri
 	}
 
 	// Interactive REPL
-	fmt.Fprintf(os.Stderr, "\nGoClaw Interactive Chat (agent: %s, model: %s)\n", agentName, agentCfg.Model)
+	fmt.Fprintf(os.Stderr, "\n%s Interactive Chat (agent: %s, model: %s)\n", cfg.AppName(), agentName, agentCfg.Model)
 	fmt.Fprintf(os.Stderr, "Session: %s\n", sessionKey)
 	fmt.Fprintf(os.Stderr, "Type \"exit\" to quit, \"/new\" for new session\n\n")
 

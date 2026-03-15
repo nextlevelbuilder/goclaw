@@ -12,6 +12,7 @@
   "saveConfig": "Lưu cấu hình",
   "usingGlobalDefaults": "Đang dùng cài đặt mặc định",
 
+  "tabs.general": "Chung",
   "tabs.server": "Máy chủ",
   "tabs.behavior": "Hành vi",
   "tabs.aiDefaults": "Mặc định AI",
@@ -291,5 +292,18 @@
   "channels.reasoningStream": "Hiện suy luận",
   "channels.reasoningStreamHint": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng",
   "channels.reactionLevel": "Mức phản ứng",
-  "channels.connectionMode": "Chế độ kết nối"
+  "channels.connectionMode": "Chế độ kết nối",
+
+  "general.brandingTitle": "Thương hiệu",
+  "general.brandingDescription": "Tên ứng dụng hiển thị trên giao diện, trang đăng nhập và tin nhắn kênh",
+  "general.appName": "Tên ứng dụng",
+  "general.appNameTip": "Tên hiển thị trên thanh bên, trang đăng nhập và tin nhắn truy cập bot. Mặc định là GoClaw.",
+  "general.appDescription": "Mô tả",
+  "general.appDescriptionTip": "Mô tả ngắn tùy chọn về phiên bản gateway này.",
+  "general.appDescriptionPlaceholder": "VD: Gateway AI nội bộ cho nhóm kỹ thuật",
+  "general.dataDir": "Thư mục dữ liệu",
+  "general.dataDirTip": "Thư mục gốc cho tất cả đường dẫn phái sinh (workspace, sessions, skills, v.v.). Mặc định là ~/.goclaw. Cần khởi động lại để áp dụng.",
+  "general.systemInfoTitle": "Thông tin hệ thống",
+  "general.systemInfoDescription": "Thông tin chỉ đọc về phiên bản gateway này",
+  "general.configPath": "Đường dẫn tệp cấu hình"
 }

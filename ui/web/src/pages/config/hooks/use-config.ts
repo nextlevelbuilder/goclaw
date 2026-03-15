@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useBrandingStore } from "@/stores/use-branding-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
@@ -30,6 +31,16 @@ export function useConfig() {
     staleTime: 5 * 60_000,
     enabled: connected,
   });
+
+  const setBranding = useBrandingStore((s) => s.setBranding);
+
+  useEffect(() => {
+    if (!data?.config) return;
+    const general = data.config.general as { app_name?: string; app_description?: string } | undefined;
+    if (general?.app_name) {
+      setBranding(general.app_name, general.app_description ?? "");
+    }
+  }, [data, setBranding]);
 
   const config = data?.config ?? null;
   const hash = data?.hash ?? "";

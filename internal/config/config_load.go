@@ -16,6 +16,10 @@ import (
 // Default returns a Config with sensible defaults.
 func Default() *Config {
 	return &Config{
+		General: GeneralConfig{
+			AppName: "GoClaw",
+			DataDir: "~/.goclaw",
+		},
 		Agents: AgentsConfig{
 			Defaults: AgentDefaults{
 				Workspace:           "~/.goclaw/workspace",
@@ -382,14 +386,60 @@ func (c *Config) ResolveDefaultAgentID() string {
 }
 
 // ResolveDisplayName returns the display name for an agent.
-// Falls back to "GoClaw" if not configured.
+// Falls back to General.AppName, then "GoClaw" if not configured.
 func (c *Config) ResolveDisplayName(agentID string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if spec, ok := c.Agents.List[agentID]; ok && spec.DisplayName != "" {
 		return spec.DisplayName
 	}
+	if c.General.AppName != "" {
+		return c.General.AppName
+	}
 	return "GoClaw"
+}
+
+// AppName returns the configured application display name.
+// Falls back to "GoClaw" if not set.
+func (c *Config) AppName() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.General.AppName != "" {
+		return c.General.AppName
+	}
+	return "GoClaw"
+}
+
+// ResolvedDataDir returns the resolved absolute path for the data directory.
+// Falls back to ~/.goclaw if not set. Env var GOCLAW_DATA_DIR takes precedence.
+func (c *Config) ResolvedDataDir() string {
+	if env := os.Getenv("GOCLAW_DATA_DIR"); env != "" {
+		return ExpandHome(env)
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.General.DataDir != "" {
+		return ExpandHome(c.General.DataDir)
+	}
+	return ExpandHome("~/.goclaw")
+}
+
+// ResolveDataDir returns the resolved data directory from env or default.
+// Use this in contexts where *Config is not available.
+func ResolveDataDir() string {
+	if env := os.Getenv("GOCLAW_DATA_DIR"); env != "" {
+		return ExpandHome(env)
+	}
+	return ExpandHome("~/.goclaw")
+}
+
+// ResolveUnexpandedDataDir returns the data directory in unexpanded form (e.g. "~/.goclaw")
+// for storing in config/DB fields. Use this when you need the tilde-prefixed path.
+func ResolveUnexpandedDataDir() string {
+	if env := os.Getenv("GOCLAW_DATA_DIR"); env != "" {
+		return env
+	}
+	return "~/.goclaw"
 }
 
 // ApplyEnvOverrides re-applies environment variable overrides onto the config.

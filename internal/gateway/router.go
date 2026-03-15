@@ -156,8 +156,9 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				"pairing_code": code,
 				"sender_id":    client.id,
 				"server": map[string]any{
-					"name":    "goclaw",
-					"version": "0.2.0",
+					"name":         "goclaw",
+					"display_name": r.server.cfg.AppName(),
+					"version":      "0.2.0",
 				},
 			}))
 			return
@@ -177,8 +178,9 @@ func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
 		"role":     string(client.role),
 		"user_id":  client.userID,
 		"server": map[string]any{
-			"name":    "goclaw",
-			"version": "0.2.0",
+			"name":         "goclaw",
+			"display_name": r.server.cfg.AppName(),
+			"version":      "0.2.0",
 		},
 	}))
 }

@@ -38,8 +38,16 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GeneralConfig holds application-level branding and directory settings.
+type GeneralConfig struct {
+	AppName        string `json:"app_name"`
+	AppDescription string `json:"app_description,omitempty"`
+	DataDir        string `json:"data_dir,omitempty"`
+}
+
 // Config is the root configuration for the GoClaw Gateway.
 type Config struct {
+	General   GeneralConfig   `json:"general"`
 	Agents    AgentsConfig    `json:"agents"`
 	Channels  ChannelsConfig  `json:"channels"`
 	Providers ProvidersConfig `json:"providers"`
@@ -374,6 +382,7 @@ type AgentSpec struct {
 func (c *Config) ReplaceFrom(src *Config) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.General = src.General
 	c.Agents = src.Agents
 	c.Channels = src.Channels
 	c.Providers = src.Providers

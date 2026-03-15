@@ -143,8 +143,9 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// WebSocket endpoint
 	mux.HandleFunc("/ws", s.handleWebSocket)
 
-	// HTTP API endpoints
+	// HTTP API endpoints (public, no auth)
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/v1/configs", s.handlePublicConfigs)
 
 	// OpenAI-compatible chat completions
 	isManaged := s.agentStore != nil
@@ -405,6 +406,18 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"status":"ok","protocol":%d}`, protocol.ProtocolVersion)
 }
 
+// handlePublicConfigs returns public configuration (no auth required).
+// Currently exposes branding; extensible for future public config needs.
+func (s *Server) handlePublicConfigs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	appName := s.cfg.AppName()
+	desc := s.cfg.General.AppDescription
+
+	fmt.Fprintf(w, `{"app_name":%q,"app_description":%q}`, appName, desc)
+}
+
 // clientIP extracts the real client IP from the request, checking proxy headers first.
 func clientIP(r *http.Request) string {
 	if ip := r.Header.Get("X-Real-IP"); ip != "" {
@@ -593,6 +606,7 @@ func StartTestServer(s *Server, ctx context.Context) (addr string, start func())
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/v1/configs", s.handlePublicConfigs)
 
 	isManaged := s.agentStore != nil
 	chatHandler := httpapi.NewChatCompletionsHandler(s.agents, s.sessions, s.cfg.Gateway.Token, isManaged)

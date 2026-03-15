@@ -12,6 +12,7 @@
   "saveConfig": "保存配置",
   "usingGlobalDefaults": "使用全局默认值",
 
+  "tabs.general": "通用",
   "tabs.server": "服务器",
   "tabs.behavior": "行为",
   "tabs.aiDefaults": "AI 默认值",
@@ -291,5 +292,18 @@
   "channels.reasoningStream": "显示推理",
   "channels.reasoningStreamHint": "将AI思考过程显示为单独的消息",
   "channels.reactionLevel": "反应级别",
-  "channels.connectionMode": "连接模式"
+  "channels.connectionMode": "连接模式",
+
+  "general.brandingTitle": "品牌",
+  "general.brandingDescription": "显示在界面、登录页和频道消息中的应用名称",
+  "general.appName": "应用名称",
+  "general.appNameTip": "显示在侧边栏、登录页和机器人访问消息中的名称，默认为 GoClaw。",
+  "general.appDescription": "描述",
+  "general.appDescriptionTip": "此网关实例的可选简短描述。",
+  "general.appDescriptionPlaceholder": "例如：工程团队内部 AI 网关",
+  "general.dataDir": "数据目录",
+  "general.dataDirTip": "所有派生路径（工作区、会话、技能等）的基础目录。默认为 ~/.goclaw。更改后需要重启才能生效。",
+  "general.systemInfoTitle": "系统信息",
+  "general.systemInfoDescription": "此网关实例的只读信息",
+  "general.configPath": "配置文件路径"
 }

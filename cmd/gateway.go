@@ -229,10 +229,7 @@ func runGateway() {
 	toolPE := tools.NewPolicyEngine(&cfg.Tools)
 
 	// Data directory for Phase 2 services
-	dataDir := os.Getenv("GOCLAW_DATA_DIR")
-	if dataDir == "" {
-		dataDir = config.ExpandHome("~/.goclaw/data")
-	}
+	dataDir := filepath.Join(cfg.ResolvedDataDir(), "data")
 	os.MkdirAll(dataDir, 0755)
 
 	// Block exec from accessing sensitive directories (data dir, .goclaw, config file).
@@ -510,7 +507,7 @@ func runGateway() {
 	// Global skills live under ~/.goclaw/skills/ (user-managed), not data/skills/.
 	globalSkillsDir := os.Getenv("GOCLAW_SKILLS_DIR")
 	if globalSkillsDir == "" {
-		globalSkillsDir = filepath.Join(config.ExpandHome("~/.goclaw"), "skills")
+		globalSkillsDir = filepath.Join(cfg.ResolvedDataDir(), "skills")
 	}
 	// Bundled skills: shipped with the Docker image at /app/bundled-skills/.
 	// Lowest priority — managed (skills-store) and user-uploaded skills override these.
@@ -645,7 +642,7 @@ func runGateway() {
 			pa.AllowPaths(globalSkillsDir)
 			if homeDir != "" {
 				pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
-				pa.AllowPaths(filepath.Join(homeDir, ".goclaw", "cli-workspaces"))
+				pa.AllowPaths(filepath.Join(cfg.ResolvedDataDir(), "cli-workspaces"))
 			}
 			// Also allow the skills store directory (uploaded skill content).
 			if pgStores.Skills != nil {
@@ -720,7 +717,7 @@ func runGateway() {
 	if mcpMgr != nil {
 		mcpToolLister = mcpMgr
 	}
-	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH := wireHTTP(pgStores, cfg.Gateway.Token, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH := wireHTTP(pgStores, cfg.Gateway.Token, cfg.General.DataDir, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
 	if agentsH != nil {
 		server.SetAgentsHandler(agentsH)
 	}
@@ -837,6 +834,7 @@ func runGateway() {
 		instanceLoader = channels.NewInstanceLoader(pgStores.ChannelInstances, pgStores.Agents, channelMgr, msgBus, pgStores.Pairing)
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
+		instanceLoader.SetAppName(cfg.AppName())
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStores(pgStores.Agents, pgStores.Teams, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStore(pgStores.PendingMessages))
@@ -1078,6 +1076,23 @@ func runGateway() {
 			return
 		}
 		webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
+	})
+
+	// Reload app name on config changes — propagate to all running channels + instance loader.
+	msgBus.Subscribe("appname-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		newAppName := updatedCfg.AppName()
+		channelMgr.SetAppName(newAppName)
+		if instanceLoader != nil {
+			instanceLoader.SetAppName(newAppName)
+		}
+		slog.Debug("app name propagated to channels", "app_name", newAppName)
 	})
 
 	// Contact collector: auto-collect user info from channels with in-memory dedup cache.
