@@ -31,7 +31,7 @@ func (p *ACPProcess) NewSession(ctx context.Context, cwd string, mcpServers []MC
 		Cwd:        cwd,
 		McpServers: mcpServers,
 	}
-	slog.Info("acp: session/new", "cwd", cwd, "mcpServers", len(mcpServers))
+	slog.Debug("acp: session/new", "cwd", cwd, "mcpServers", len(mcpServers))
 	var resp NewSessionResponse
 	if err := p.conn.Call(ctx, "session/new", req, &resp); err != nil {
 		return fmt.Errorf("acp session/new: %w", err)

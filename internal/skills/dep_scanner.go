@@ -40,22 +40,45 @@ func scanScriptsDir(scriptsDir string) *SkillManifest {
 	pyImports := make(map[string]bool)
 	nodeImports := make(map[string]bool)
 	binaries := make(map[string]bool)
-	// Track subdirectory names — these are local modules and must never be reported as missing.
+	// Track local modules — both subdirectories and .py files in scripts/ dir.
+	// These must never be reported as missing pip packages.
 	localModules := make(map[string]bool)
+	// The scripts dir itself is a local package (e.g. "from scripts.utils import ...")
+	localModules[filepath.Base(scriptsDir)] = true
 
 	for _, e := range entries {
+		// .py files in scripts/ are local modules (e.g. connections.py → "connections")
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".py") {
+			localModules[strings.TrimSuffix(e.Name(), ".py")] = true
+		}
 		if e.IsDir() {
 			localModules[e.Name()] = true
-			// Recurse one level into subdirectories
-			subEntries, err := os.ReadDir(filepath.Join(scriptsDir, e.Name()))
+			// Recurse into subdirectories (up to 2 levels)
+			subDir := filepath.Join(scriptsDir, e.Name())
+			subEntries, err := os.ReadDir(subDir)
 			if err != nil {
 				continue
 			}
 			for _, se := range subEntries {
+				// Track nested dirs/files as local modules too (e.g. office/helpers/, office/validators/)
 				if se.IsDir() {
+					localModules[se.Name()] = true
+					// Scan files in second-level subdirs
+					sub2Entries, err := os.ReadDir(filepath.Join(subDir, se.Name()))
+					if err != nil {
+						continue
+					}
+					for _, se2 := range sub2Entries {
+						if !se2.IsDir() {
+							scanFile(filepath.Join(subDir, se.Name(), se2.Name()), pyImports, nodeImports, binaries)
+						}
+					}
 					continue
 				}
-				scanFile(filepath.Join(scriptsDir, e.Name(), se.Name()), pyImports, nodeImports, binaries)
+				if strings.HasSuffix(se.Name(), ".py") {
+					localModules[strings.TrimSuffix(se.Name(), ".py")] = true
+				}
+				scanFile(filepath.Join(subDir, se.Name()), pyImports, nodeImports, binaries)
 			}
 			continue
 		}

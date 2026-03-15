@@ -33,10 +33,20 @@ var BridgeToolNames = map[string]bool{
 	"memory_get":    true,
 	"skill_search":  true,
 	"use_skill":     true,
+	// Skills & MCP management
+	"publish_skill":       true,
+	"register_mcp_server": true,
 	// Media
-	"read_image":   true,
-	"create_image": true,
-	"tts":          true,
+	"read_image":    true,
+	"read_document": true,
+	"read_audio":    true,
+	"read_video":    true,
+	"create_image":  true,
+	"create_audio":  true,
+	"create_video":  true,
+	"tts":           true,
+	// Knowledge graph
+	"knowledge_graph_search": true,
 	// Browser automation
 	"browser": true,
 	// Scheduler

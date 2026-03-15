@@ -179,6 +179,10 @@ func (s *Seeder) CheckDepsAsync(skills []seededSkill, msgBus *bus.MessageBus) {
 				_ = s.store.UpdateSkill(sk.id, map[string]interface{}{"status": "archived"})
 				s.store.BumpVersion()
 				slog.Warn("seeder: skill deps missing", "slug", sk.slug, "missing", FormatMissing(missing))
+			} else {
+				// Deps now satisfied — restore from archived to active
+				_ = s.store.UpdateSkill(sk.id, map[string]interface{}{"status": "active"})
+				s.store.BumpVersion()
 			}
 
 			emitDepEvent(msgBus, sk.slug, status, missing)

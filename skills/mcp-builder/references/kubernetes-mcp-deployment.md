@@ -554,7 +554,23 @@ export LB_PORT=$(kubectl get svc <release-name>-mcp-server \
 
 **CRITICAL: This step connects the deployed K8s MCP server to GoClaw.**
 
-After confirming the service is healthy, register it:
+After confirming the service is healthy, register it.
+
+**WARNING: NEVER use `localhost` or `127.0.0.1` as the URL!**
+GoClaw runs inside a Docker container — `localhost` refers to the container itself, not the K8s cluster.
+You MUST use the real K8s node IP obtained from `kubectl get nodes` (InternalIP or ExternalIP).
+
+First, get the actual connection details:
+```bash
+export NODE_PORT=$(kubectl get svc <service-name> -n mcp-servers -o jsonpath='{.spec.ports[0].nodePort}')
+export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+echo "URL to use: http://$NODE_IP:$NODE_PORT"
+```
+
+Then verify connectivity from inside the GoClaw container:
+```bash
+exec({ "command": "wget -qO- http://<NODE_IP>:<NODE_PORT>/health" })
+```
 
 ### NodePort registration
 

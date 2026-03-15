@@ -194,7 +194,7 @@ func (pp *ProcessPool) spawn(ctx context.Context, sessionKey string) (*ACPProces
 	go func() {
 		_ = cmd.Wait()
 		if s := stderrWriter.String(); s != "" {
-			slog.Info("acp: process stderr", "session_key", sessionKey, "stderr", s)
+			slog.Debug("acp: process stderr", "session_key", sessionKey, "stderr", s)
 		}
 		close(proc.exited)
 	}()

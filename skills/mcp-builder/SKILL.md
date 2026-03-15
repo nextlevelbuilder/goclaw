@@ -230,7 +230,7 @@ kubectl config current-context
 kubectl cluster-info
 ```
 
-Deploy via Helm chart, then register with NodePort/IP:
+Deploy via Helm chart, then **get the real K8s node IP and NodePort** for registration:
 
 ```bash
 # Deploy
@@ -238,12 +238,16 @@ helm install my-mcp ./mcp-server-chart \
   --namespace mcp-servers \
   --set image.repository=<registry>/<name>-mcp-server
 
-# Get connection details
+# IMPORTANT: Get the REAL node IP and NodePort — NEVER use localhost!
+# GoClaw runs inside Docker, so localhost won't reach the K8s cluster.
 export NODE_PORT=$(kubectl get svc my-mcp-mcp-server -n mcp-servers -o jsonpath='{.spec.ports[0].nodePort}')
 export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+echo "MCP server URL: http://$NODE_IP:$NODE_PORT"
 ```
 
-Then register in GoClaw:
+**WARNING: Do NOT use `localhost` or `127.0.0.1` as the URL.** GoClaw runs in a Docker container — `localhost` refers to the container itself, not the K8s cluster. You MUST use the actual K8s node IP (InternalIP) obtained from `kubectl get nodes`.
+
+Then register in GoClaw using the **real node IP**:
 
 ```
 register_mcp_server({
@@ -254,6 +258,12 @@ register_mcp_server({
   "headers": {"Authorization": "Bearer <token>"},
   "timeout_sec": 30
 })
+```
+
+**Verify the URL is reachable from inside the GoClaw container** before registering:
+```bash
+# Test connectivity from GoClaw container
+exec({ "command": "wget -qO- http://<NODE_IP>:<NODE_PORT>/health || echo 'UNREACHABLE'" })
 ```
 
 Full guide with Helm chart templates, Dockerfile, HPA, probes, and best practices: [Kubernetes MCP Deployment](./references/kubernetes-mcp-deployment.md)

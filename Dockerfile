@@ -65,7 +65,7 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends python3 python3-pip sudo; \
     echo "goclaw ALL=(root) NOPASSWD: /usr/bin/apt-get" > /etc/sudoers.d/goclaw; \
     pip3 install --no-cache-dir --break-system-packages \
-        anthropic mcp pdf2image pdfplumber pypdf; \
+        anthropic mcp pdf2image pdfplumber pypdf openpyxl lxml defusedxml; \
     fi; \
     if [ "$ENABLE_NODE" = "true" ]; then \
     apt-get install -y --no-install-recommends nodejs npm; \
