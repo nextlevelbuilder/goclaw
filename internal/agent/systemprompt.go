@@ -383,7 +383,7 @@ func buildSkillsSection(skillsSummary string, hasSkillSearch bool) []string {
 func buildWorkspaceSection(workspace string, sandboxEnabled bool, containerDir string) []string {
 	// Matching TS: when sandboxed, display container workdir; add guidance about host paths for file tools.
 	displayDir := workspace
-	guidance := "All file tool paths resolve relative to this directory. Use relative paths (e.g. \"docs/notes.md\", \".\") — do not guess absolute paths."
+	guidance := "All file tool paths resolve relative to this directory. ALWAYS use relative paths (e.g. \"my-project/index.js\", \".\"). NEVER create files using absolute paths like /app/... — they will fail. Create project folders directly in your working directory."
 	if sandboxEnabled && containerDir != "" {
 		displayDir = containerDir
 		guidance = fmt.Sprintf(

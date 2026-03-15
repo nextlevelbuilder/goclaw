@@ -1,7 +1,11 @@
 ---
 name: mcp-builder
-description: Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).
+slug: mcp-builder
+description: Guide for building and registering MCP (Model Context Protocol) servers that enable agents to interact with external services. Use when creating MCP servers in Python (FastMCP) or TypeScript (MCP SDK), testing MCP connections, evaluating MCP server quality, or registering MCP servers into GoClaw for agent use.
 license: Complete terms in LICENSE.txt
+metadata:
+  author: GoClaw
+  version: "1.0.0"
 ---
 
 # MCP Server Development Guide
@@ -14,9 +18,9 @@ Create MCP (Model Context Protocol) servers that enable LLMs to interact with ex
 
 # Process
 
-## 🚀 High-Level Workflow
+## High-Level Workflow
 
-Creating a high-quality MCP server involves four main phases:
+Creating a high-quality MCP server involves five main phases:
 
 ### Phase 1: Deep Research and Planning
 
@@ -55,15 +59,15 @@ Key pages to review:
 
 **Load framework documentation:**
 
-- **MCP Best Practices**: [📋 View Best Practices](./reference/mcp_best_practices.md) - Core guidelines
+- **MCP Best Practices**: [View Best Practices](./references/mcp_best_practices.md) - Core guidelines
 
 **For TypeScript (recommended):**
 - **TypeScript SDK**: Use WebFetch to load `https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/main/README.md`
-- [⚡ TypeScript Guide](./reference/node_mcp_server.md) - TypeScript patterns and examples
+- [TypeScript Guide](./references/node_mcp_server.md) - TypeScript patterns and examples
 
 **For Python:**
 - **Python SDK**: Use WebFetch to load `https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/main/README.md`
-- [🐍 Python Guide](./reference/python_mcp_server.md) - Python patterns and examples
+- [Python Guide](./references/python_mcp_server.md) - Python patterns and examples
 
 #### 1.4 Plan Your Implementation
 
@@ -80,8 +84,8 @@ Prioritize comprehensive API coverage. List endpoints to implement, starting wit
 #### 2.1 Set Up Project Structure
 
 See language-specific guides for project setup:
-- [⚡ TypeScript Guide](./reference/node_mcp_server.md) - Project structure, package.json, tsconfig.json
-- [🐍 Python Guide](./reference/python_mcp_server.md) - Module organization, dependencies
+- [TypeScript Guide](./references/node_mcp_server.md) - Project structure, package.json, tsconfig.json
+- [Python Guide](./references/python_mcp_server.md) - Module organization, dependencies
 
 #### 2.2 Implement Core Infrastructure
 
@@ -152,7 +156,7 @@ See language-specific guides for detailed testing approaches and quality checkli
 
 After implementing your MCP server, create comprehensive evaluations to test its effectiveness.
 
-**Load [✅ Evaluation Guide](./reference/evaluation.md) for complete evaluation guidelines.**
+**Load [Evaluation Guide](./references/evaluation.md) for complete evaluation guidelines.**
 
 #### 4.1 Understand Evaluation Purpose
 
@@ -184,8 +188,8 @@ Create an XML file with this structure:
 ```xml
 <evaluation>
   <qa_pair>
-    <question>Find discussions about AI model launches with animal codenames. One model needed a specific safety designation that uses the format ASL-X. What number X was being determined for the model named after a spotted wild cat?</question>
-    <answer>3</answer>
+    <question>Your question here</question>
+    <answer>Expected answer</answer>
   </qa_pair>
 <!-- More qa_pairs... -->
 </evaluation>
@@ -193,44 +197,95 @@ Create an XML file with this structure:
 
 ---
 
-# Reference Files
+### Phase 5: Deploy and Register in GoClaw
 
-## 📚 Documentation Library
+After building and testing your MCP server, deploy it and register in GoClaw so agents can use its tools.
+
+#### 5.1 Choose Deployment Target
+
+| Target | Transport | When to Use |
+|--------|-----------|-------------|
+| Local process | `stdio` | Development, single-machine setups |
+| Remote server | `streamable-http` | Dedicated VM or bare-metal |
+| **Kubernetes** | `streamable-http` | Production, scaling, HA — see [K8s Deployment Guide](./references/kubernetes-mcp-deployment.md) |
+
+#### 5.2 Local Registration
+
+```
+register_mcp_server({
+  "name": "my-api-server",
+  "transport": "stdio",
+  "command": "node",
+  "args": ["dist/index.js"],
+  "display_name": "My API Server"
+})
+```
+
+#### 5.3 Kubernetes Deployment and Registration
+
+**CRITICAL: Verify kubeconfig before any kubectl/helm operation.**
+
+```bash
+kubectl config current-context
+kubectl cluster-info
+```
+
+Deploy via Helm chart, then register with NodePort/IP:
+
+```bash
+# Deploy
+helm install my-mcp ./mcp-server-chart \
+  --namespace mcp-servers \
+  --set image.repository=<registry>/<name>-mcp-server
+
+# Get connection details
+export NODE_PORT=$(kubectl get svc my-mcp-mcp-server -n mcp-servers -o jsonpath='{.spec.ports[0].nodePort}')
+export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+```
+
+Then register in GoClaw:
+
+```
+register_mcp_server({
+  "name": "my-mcp-k8s",
+  "transport": "streamable-http",
+  "url": "http://<NODE_IP>:<NODE_PORT>",
+  "display_name": "My MCP Server (K8s)",
+  "headers": {"Authorization": "Bearer <token>"},
+  "timeout_sec": 30
+})
+```
+
+Full guide with Helm chart templates, Dockerfile, HPA, probes, and best practices: [Kubernetes MCP Deployment](./references/kubernetes-mcp-deployment.md)
+
+#### 5.4 What Happens on Register
+
+1. Server config is validated and saved to `mcp_servers` table
+2. Sensitive fields (API keys, headers, env vars) are AES-256-GCM encrypted
+3. Server is auto-granted to the calling agent
+4. Server tools become available to the agent on next turn
+
+#### 5.5 Grant to Other Agents
+
+After registering, grant the MCP server to other agents via the web UI (MCP Servers page) or HTTP API:
+- `POST /v1/mcp/servers/{id}/grants/agent` with `{"agent_id": "...", "enabled": true}`
+
+See `references/goclaw-mcp-integration.md` for the full native integration guide.
+
+---
+
+# Reference Files
 
 Load these resources as needed during development:
 
-### Core MCP Documentation (Load First)
-- **MCP Protocol**: Start with sitemap at `https://modelcontextprotocol.io/sitemap.xml`, then fetch specific pages with `.md` suffix
-- [📋 MCP Best Practices](./reference/mcp_best_practices.md) - Universal MCP guidelines including:
-  - Server and tool naming conventions
-  - Response format guidelines (JSON vs Markdown)
-  - Pagination best practices
-  - Transport selection (streamable HTTP vs stdio)
-  - Security and error handling standards
-
-### SDK Documentation (Load During Phase 1/2)
-- **Python SDK**: Fetch from `https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/main/README.md`
-- **TypeScript SDK**: Fetch from `https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/main/README.md`
-
-### Language-Specific Implementation Guides (Load During Phase 2)
-- [🐍 Python Implementation Guide](./reference/python_mcp_server.md) - Complete Python/FastMCP guide with:
-  - Server initialization patterns
-  - Pydantic model examples
-  - Tool registration with `@mcp.tool`
-  - Complete working examples
-  - Quality checklist
-
-- [⚡ TypeScript Implementation Guide](./reference/node_mcp_server.md) - Complete TypeScript guide with:
-  - Project structure
-  - Zod schema patterns
-  - Tool registration with `server.registerTool`
-  - Complete working examples
-  - Quality checklist
-
-### Evaluation Guide (Load During Phase 4)
-- [✅ Evaluation Guide](./reference/evaluation.md) - Complete evaluation creation guide with:
-  - Question creation guidelines
-  - Answer verification strategies
-  - XML format specifications
-  - Example questions and answers
-  - Running an evaluation with the provided scripts
+| Phase | Resource | Description |
+|-------|----------|-------------|
+| 1 | **MCP Protocol** — `https://modelcontextprotocol.io/sitemap.xml` | Spec overview, transports, tool definitions |
+| 1 | [MCP Best Practices](./references/mcp_best_practices.md) | Naming, response formats, pagination, security |
+| 1-2 | **Python SDK** — fetch `https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/main/README.md` | Official Python SDK docs |
+| 1-2 | **TypeScript SDK** — fetch `https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/main/README.md` | Official TypeScript SDK docs |
+| 2 | [Python Guide](./references/python_mcp_server.md) | FastMCP patterns, Pydantic, working examples |
+| 2 | [TypeScript Guide](./references/node_mcp_server.md) | Zod schemas, project structure, working examples |
+| 4 | [Evaluation Guide](./references/evaluation.md) | QA creation, XML format, running evals |
+| 5 | [GoClaw Integration](./references/goclaw-mcp-integration.md) | `register_mcp_server` tool, transport config, grants |
+| 5 | [Kubernetes Deployment](./references/kubernetes-mcp-deployment.md) | Helm chart, kubectl, NodePort/IP, Dockerfile, HPA |

@@ -22,17 +22,38 @@ func (t *ReadDocumentTool) resolveDocumentFile(ctx context.Context, mediaID stri
 		return "", "", fmt.Errorf("no documents available in this conversation. The user may not have sent a document.")
 	}
 
+	// Sanitize media_id: LLM may pass the literal tag string instead of a UUID.
+	if strings.Contains(mediaID, "<") || strings.Contains(mediaID, "media:") {
+		slog.Debug("read_document: sanitizing tag-like media_id", "raw", mediaID)
+		mediaID = ""
+	}
+
 	// Find specific media_id or use most recent document.
 	var ref *providers.MediaRef
 	if mediaID != "" {
+		// 1. Try exact UUID match.
 		for i := range refs {
 			if refs[i].ID == mediaID {
 				ref = &refs[i]
 				break
 			}
 		}
+
+		// 2. LLM may pass a filename (e.g. "pokeapi-analysis.md") instead of UUID
+		//    when <media:document> tags lack an id attribute (historical messages or
+		//    pre-fix deployments). Try to match by filename in stored paths.
 		if ref == nil {
-			return "", "", fmt.Errorf("document with media_id %q not found in conversation", mediaID)
+			ref = t.matchByFilename(refs, mediaID)
+			if ref != nil {
+				slog.Info("read_document: matched by filename fallback", "media_id", mediaID, "matched_ref", ref.ID)
+			}
+		}
+
+		// 3. If still not found, fall back to most recent document instead of hard error.
+		//    This matches read_audio behavior and handles LLM hallucinations gracefully.
+		if ref == nil {
+			slog.Warn("read_document: media_id not found, falling back to most recent", "media_id", mediaID, "num_refs", len(refs))
+			ref = &refs[len(refs)-1]
 		}
 	} else {
 		// Use the last (most recent) document ref.
@@ -99,6 +120,31 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 		return nil, nil, fmt.Errorf("chat call: %w", err)
 	}
 	return []byte(resp.Content), resp.Usage, nil
+}
+
+// matchByFilename tries to find a MediaRef whose stored file path contains the given
+// filename. This handles the case where the LLM passes a filename (from <media:document name="...">)
+// instead of a UUID (when the id attribute is missing on the tag).
+func (t *ReadDocumentTool) matchByFilename(refs []providers.MediaRef, filename string) *providers.MediaRef {
+	if t.mediaLoader == nil || filename == "" {
+		return nil
+	}
+	// Normalize: strip leading/trailing whitespace, lowercase for comparison.
+	needle := strings.ToLower(strings.TrimSpace(filename))
+
+	// Search from most recent to oldest (refs are ordered historical-first, current-last).
+	for i := len(refs) - 1; i >= 0; i-- {
+		p, err := t.mediaLoader.LoadPath(refs[i].ID)
+		if err != nil {
+			continue
+		}
+		// Check if stored path's basename or the original filename in the path matches.
+		base := strings.ToLower(filepath.Base(p))
+		if strings.Contains(base, needle) || strings.Contains(needle, base) {
+			return &refs[i]
+		}
+	}
+	return nil
 }
 
 // mimeFromDocExt returns MIME type for document file extensions.

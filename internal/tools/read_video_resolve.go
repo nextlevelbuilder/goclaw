@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -22,6 +23,12 @@ func (t *ReadVideoTool) resolveVideoFile(ctx context.Context, mediaID string) (p
 		return "", "", fmt.Errorf("no video files available in this conversation. The user may not have sent a video file.")
 	}
 
+	// Sanitize media_id: LLM may pass the literal tag string instead of a UUID.
+	if strings.Contains(mediaID, "<") || strings.Contains(mediaID, "media:") {
+		slog.Debug("read_video: sanitizing tag-like media_id", "raw", mediaID)
+		mediaID = ""
+	}
+
 	var ref *providers.MediaRef
 	if mediaID != "" {
 		for i := range refs {
@@ -30,8 +37,10 @@ func (t *ReadVideoTool) resolveVideoFile(ctx context.Context, mediaID string) (p
 				break
 			}
 		}
+		// Fallback to most recent video instead of hard error.
 		if ref == nil {
-			return "", "", fmt.Errorf("video with media_id %q not found in conversation", mediaID)
+			slog.Warn("read_video: media_id not found, falling back to most recent", "media_id", mediaID)
+			ref = &refs[len(refs)-1]
 		}
 	} else {
 		ref = &refs[len(refs)-1]

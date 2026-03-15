@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -239,7 +240,9 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		slog.Warn("failed to load providers from DB", "error", err)
 		return
 	}
+	slog.Info("providers from DB", "count", len(dbProviders))
 	for _, p := range dbProviders {
+		slog.Debug("processing DB provider", "name", p.Name, "type", p.ProviderType, "enabled", p.Enabled)
 		// Claude CLI doesn't need API key
 		if !p.Enabled {
 			continue
@@ -272,7 +275,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		}
 		// ACP provider — no API key needed (agents manage their own auth).
 		if p.ProviderType == store.ProviderACP {
-			registerACPFromDB(registry, p, config.ResolveDataDir())
+			registerACPFromDB(registry, p, config.ResolveDataDir(), gatewayAddr, gatewayToken)
 			continue
 		}
 		// Local Ollama requires no API key — handle before the key guard (same pattern as ClaudeCLI).
@@ -374,13 +377,13 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig, d
 }
 
 // registerACPFromDB registers an ACP provider from a DB provider row.
-func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData, dataDir string) {
+func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData, dataDir, gatewayAddr, gatewayToken string) {
 	binary := p.APIBase // repurpose api_base as binary path
 	if binary == "" {
 		slog.Warn("acp: no binary specified in DB provider", "name", p.Name)
 		return
 	}
-	if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
+	if binary != "claude" && binary != "claude-agent-acp" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
 		slog.Warn("security.acp: invalid binary path from DB", "path", binary)
 		return
 	}
@@ -410,17 +413,27 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData, da
 	if workDir == "" {
 		workDir = defaultACPWorkDir(dataDir)
 	}
+	var opts []providers.ACPOption
+	opts = append(opts, providers.WithACPName(p.Name), providers.WithACPModel(p.Name))
+	if gatewayAddr != "" {
+		opts = append(opts, providers.WithACPMCPBridge(gatewayAddr, gatewayToken))
+	}
 	registry.Register(providers.NewACPProvider(
 		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns,
-		providers.WithACPModel(p.Name),
+		opts...,
 	))
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")
 }
 
 // defaultACPWorkDir returns the default workspace directory for ACP agents.
+// Creates the directory if it doesn't exist.
 func defaultACPWorkDir(dataDir string) string {
+	var dir string
 	if dataDir != "" {
-		return filepath.Join(dataDir, "acp-workspaces")
+		dir = filepath.Join(dataDir, "acp-workspaces")
+	} else {
+		dir = filepath.Join(config.ResolveDataDir(), "acp-workspaces")
 	}
-	return filepath.Join(config.ResolveDataDir(), "acp-workspaces")
+	_ = os.MkdirAll(dir, 0755)
+	return dir
 }

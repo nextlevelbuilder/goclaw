@@ -19,6 +19,13 @@ export NPM_CONFIG_PREFIX="$RUNTIME_DIR/npm-global"
 export NODE_PATH="/usr/local/lib/node_modules:$RUNTIME_DIR/npm-global/lib/node_modules:${NODE_PATH:-}"
 export PATH="$RUNTIME_DIR/npm-global/bin:$RUNTIME_DIR/pip/bin:$PATH"
 
+# Claude Code: seed credentials into writable volume if not present.
+# The volume mount overrides the image's /app/.claude, so we copy from a
+# bundled backup on first run.
+if [ -d /app/.claude-seed ] && [ ! -f /app/.claude/.credentials.json ]; then
+  cp -a /app/.claude-seed/. /app/.claude/
+fi
+
 case "${1:-serve}" in
   serve)
     # Auto-upgrade (schema migrations + data hooks) before starting.

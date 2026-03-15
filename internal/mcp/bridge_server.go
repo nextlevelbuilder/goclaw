@@ -32,6 +32,7 @@ var BridgeToolNames = map[string]bool{
 	"memory_search": true,
 	"memory_get":    true,
 	"skill_search":  true,
+	"use_skill":     true,
 	// Media
 	"read_image":   true,
 	"create_image": true,
@@ -54,12 +55,17 @@ var BridgeToolNames = map[string]bool{
 	"workspace_read":  true,
 }
 
-// NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.
-// It reads tools from the registry, filters to BridgeToolNames, and serves them
-// over streamable-http transport (stateless mode).
+// BridgeServers holds both streamable-http and SSE transport servers for the MCP bridge.
+type BridgeServers struct {
+	HTTP *mcpserver.StreamableHTTPServer
+	SSE  *mcpserver.SSEServer
+}
+
+// NewBridgeServer creates both StreamableHTTP and SSE servers that expose GoClaw tools as MCP tools.
+// Streamable-HTTP is used by Claude CLI (--mcp-config). SSE is used by ACP adapters (claude-agent-acp).
 // msgBus is optional; when non-nil, tools that produce media (deliver:true) will
 // publish file attachments directly to the outbound bus.
-func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus) *mcpserver.StreamableHTTPServer {
+func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus) *BridgeServers {
 	srv := mcpserver.NewMCPServer("goclaw-bridge", version,
 		mcpserver.WithToolCapabilities(false),
 	)
@@ -80,9 +86,14 @@ func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus
 
 	slog.Info("mcp.bridge: tools registered", "count", registered)
 
-	return mcpserver.NewStreamableHTTPServer(srv,
-		mcpserver.WithStateLess(true),
-	)
+	return &BridgeServers{
+		HTTP: mcpserver.NewStreamableHTTPServer(srv,
+			mcpserver.WithStateLess(true),
+		),
+		SSE: mcpserver.NewSSEServer(srv,
+			mcpserver.WithBasePath("/mcp/bridge"),
+		),
+	}
 }
 
 // convertToMCPTool converts a GoClaw tools.Tool into an mcp-go Tool.

@@ -268,19 +268,28 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.oauthHandler.RegisterRoutes(mux)
 	}
 
-	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http.
-	// Only listens on localhost (CLI runs on the same machine).
+	// MCP bridge: expose GoClaw tools via streamable-http + SSE transports.
+	// Streamable-HTTP (/mcp/bridge) is used by Claude CLI (--mcp-config).
+	// SSE (/mcp/bridge/sse) is used by ACP adapters (claude-agent-acp).
 	// Protected by gateway token when configured.
 	// Agent context (X-Agent-ID, X-User-ID) is injected from request headers.
 	if s.tools != nil {
-		bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
-		var handler http.Handler = bridgeContextMiddleware(s.cfg.Gateway.Token, bridgeHandler)
-		if s.cfg.Gateway.Token != "" {
-			handler = tokenAuthMiddleware(s.cfg.Gateway.Token, handler)
-		} else {
-			slog.Warn("security.mcp_bridge: no gateway token configured, MCP bridge tools are unauthenticated")
+		bridges := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
+
+		wrapAuth := func(h http.Handler) http.Handler {
+			h = bridgeContextMiddleware(s.cfg.Gateway.Token, h)
+			if s.cfg.Gateway.Token != "" {
+				h = tokenAuthMiddleware(s.cfg.Gateway.Token, h)
+			} else {
+				slog.Warn("security.mcp_bridge: no gateway token configured, MCP bridge tools are unauthenticated")
+			}
+			return h
 		}
-		mux.Handle("/mcp/bridge", handler)
+
+		// Streamable-HTTP transport (Claude CLI) — exact match
+		mux.Handle("/mcp/bridge", wrapAuth(bridges.HTTP))
+		// SSE transport (ACP adapters) — prefix match catches /mcp/bridge/sse and /mcp/bridge/message
+		mux.Handle("/mcp/bridge/", wrapAuth(bridges.SSE))
 	}
 
 	s.mux = mux

@@ -472,7 +472,7 @@ func wireExtras(
 		// Unregister old instance (closes ProcessPool) then re-register
 		providerReg.Unregister(p.Name)
 		if p.Enabled {
-			registerACPFromDB(providerReg, *p, config.ResolveDataDir())
+			registerACPFromDB(providerReg, *p, config.ResolveDataDir(), loopbackAddr(appCfg.Gateway.Host, appCfg.Gateway.Port), appCfg.Gateway.Token)
 		}
 	})
 

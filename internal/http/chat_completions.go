@@ -224,6 +224,7 @@ func (h *ChatCompletionsHandler) handleStream(w http.ResponseWriter, r *http.Req
 	// Send initial role chunk
 	writeSSEChunk(w, flusher, completionID, model, &chatMessage{Role: "assistant"}, "")
 
+	// Stream chunks to client in realtime as they arrive from the LLM.
 	result, err := loop.Run(r.Context(), agent.RunRequest{
 		SessionKey: sessionKey,
 		Message:    message,
@@ -232,13 +233,17 @@ func (h *ChatCompletionsHandler) handleStream(w http.ResponseWriter, r *http.Req
 		RunID:      runID,
 		UserID:     userID,
 		Stream:     true,
+		OnStreamChunk: func(text string) {
+			writeSSEChunk(w, flusher, completionID, model, &chatMessage{Content: text}, "")
+		},
 	})
 
 	if err != nil {
 		writeSSEChunk(w, flusher, completionID, model, &chatMessage{Content: "Error: " + err.Error()}, "stop")
 	} else {
-		// Send content chunk
-		writeSSEChunk(w, flusher, completionID, model, &chatMessage{Content: result.Content}, "stop")
+		// Send final empty chunk with finish_reason to signal completion.
+		writeSSEChunk(w, flusher, completionID, model, &chatMessage{}, "stop")
+		_ = result // content already streamed via OnStreamChunk
 	}
 
 	// Send [DONE]

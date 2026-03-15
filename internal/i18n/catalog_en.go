@@ -174,5 +174,9 @@ func init() {
 		MsgToolHandoff:         "Transfer the conversation to another agent — the user will talk directly to that agent",
 		MsgToolTeamTasks:       "View, create, update, and complete tasks on the team task board",
 		MsgToolTeamMessage:     "Send a direct message or broadcast to teammates in the agent team",
+		MsgToolRegisterMCPServer: "Register a locally-built or remote MCP server in GoClaw, making its tools available to agents",
+
+		// MCP registration
+		MsgMCPServerNameConflict: "MCP server with name %s already exists",
 	})
 }

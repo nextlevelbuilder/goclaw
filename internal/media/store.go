@@ -113,6 +113,22 @@ func extFromMime(mime string) string {
 		return ".docx"
 	case mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
 		return ".xlsx"
+	case mime == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return ".pptx"
+	case mime == "text/markdown":
+		return ".md"
+	case mime == "text/plain":
+		return ".txt"
+	case mime == "text/csv":
+		return ".csv"
+	case mime == "application/json":
+		return ".json"
+	case mime == "text/html":
+		return ".html"
+	case mime == "text/yaml", mime == "application/yaml":
+		return ".yaml"
+	case mime == "text/xml", mime == "application/xml":
+		return ".xml"
 	default:
 		return ""
 	}

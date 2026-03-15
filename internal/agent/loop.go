@@ -509,6 +509,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 						RunID:   req.RunID,
 						Payload: map[string]string{"content": chunk.Content},
 					})
+					if req.OnStreamChunk != nil {
+						req.OnStreamChunk(chunk.Content)
+					}
 				}
 			})
 		} else {

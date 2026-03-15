@@ -15,11 +15,14 @@ import (
 // ACPProvider implements Provider by orchestrating ACP-compatible agent subprocesses.
 // It delegates to a ProcessPool that manages agent lifecycle over JSON-RPC 2.0 stdio.
 type ACPProvider struct {
-	pool         *acp.ProcessPool
-	bridge       *acp.ToolBridge
-	defaultModel string
-	permMode     string // permission mode for tool bridge
-	sessionMu    sync.Map // sessionKey → *sync.Mutex
+	pool           *acp.ProcessPool
+	bridge         *acp.ToolBridge
+	name           string // provider name for registry lookup (default: "acp")
+	defaultModel   string
+	permMode       string // permission mode for tool bridge
+	mcpBridgeAddr  string // GoClaw MCP bridge address (e.g. "127.0.0.1:18790")
+	mcpBridgeToken string // GoClaw gateway token for bridge auth
+	sessionMu      sync.Map // sessionKey → *sync.Mutex
 }
 
 // ACPOption configures an ACPProvider.
@@ -34,6 +37,16 @@ func WithACPModel(model string) ACPOption {
 	}
 }
 
+// WithACPName sets the provider name for registry lookup.
+// Allows multiple ACP providers (e.g. "claude-code", "codex") to coexist.
+func WithACPName(name string) ACPOption {
+	return func(p *ACPProvider) {
+		if name != "" {
+			p.name = name
+		}
+	}
+}
+
 // WithACPPermMode sets the permission mode for the tool bridge.
 func WithACPPermMode(mode string) ACPOption {
 	return func(p *ACPProvider) {
@@ -43,9 +56,19 @@ func WithACPPermMode(mode string) ACPOption {
 	}
 }
 
+// WithACPMCPBridge injects a GoClaw MCP bridge server into ACP sessions.
+// This gives the ACP agent access to GoClaw tools (use_skill, exec, etc.) via MCP.
+func WithACPMCPBridge(gatewayAddr, gatewayToken string) ACPOption {
+	return func(p *ACPProvider) {
+		p.mcpBridgeAddr = gatewayAddr
+		p.mcpBridgeToken = gatewayToken
+	}
+}
+
 // NewACPProvider creates a provider that orchestrates ACP agents as subprocesses.
 func NewACPProvider(binary string, args []string, workDir string, idleTTL time.Duration, denyPatterns []*regexp.Regexp, opts ...ACPOption) *ACPProvider {
 	p := &ACPProvider{
+		name:         "acp",
 		defaultModel: "claude",
 	}
 	for _, opt := range opts {
@@ -66,10 +89,26 @@ func NewACPProvider(binary string, args []string, workDir string, idleTTL time.D
 	p.pool = acp.NewProcessPool(binary, args, workDir, idleTTL)
 	p.pool.SetToolHandler(p.bridge.Handle)
 
+	// Inject MCP bridge so ACP sessions can access GoClaw tools (use_skill, etc.)
+	// Uses SSE transport at /mcp/bridge/sse (ACP adapter requires SSE, not streamable-http).
+	if p.mcpBridgeAddr != "" {
+		headers := []acp.MCPHeader{
+			{Name: "Authorization", Value: "Bearer " + p.mcpBridgeToken},
+		}
+		p.pool.SetMCPServers([]acp.MCPServerEntry{
+			{
+				Name:    "goclaw-bridge",
+				Type:    "sse",
+				URL:     fmt.Sprintf("http://%s/mcp/bridge/sse", p.mcpBridgeAddr),
+				Headers: headers,
+			},
+		})
+	}
+
 	return p
 }
 
-func (p *ACPProvider) Name() string         { return "acp" }
+func (p *ACPProvider) Name() string         { return p.name }
 func (p *ACPProvider) DefaultModel() string { return p.defaultModel }
 
 // Chat sends a prompt and returns the complete response (non-streaming).
@@ -92,9 +131,16 @@ func (p *ACPProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 		return nil, fmt.Errorf("acp: no user message in request")
 	}
 
-	// Collect all text from session/update notifications
+	// Collect all text from session/update notifications.
+	// Supports both Zed adapter format (agent_message_chunk) and generic ACP format.
 	var buf strings.Builder
 	promptResp, err := proc.Prompt(ctx, content, func(update acp.SessionUpdate) {
+		// Zed adapter: sessionUpdate = "agent_message_chunk" with single content block
+		if update.SessionUpdateType == "agent_message_chunk" && update.Content != nil && update.Content.Type == "text" {
+			buf.WriteString(update.Content.Text)
+			return
+		}
+		// Generic ACP: message with content array
 		if update.Message != nil {
 			for _, block := range update.Message.Content {
 				if block.Type == "text" {
@@ -146,6 +192,13 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 
 	var buf strings.Builder
 	promptResp, err := proc.Prompt(ctx, content, func(update acp.SessionUpdate) {
+		// Zed adapter: sessionUpdate = "agent_message_chunk" with single content block
+		if update.SessionUpdateType == "agent_message_chunk" && update.Content != nil && update.Content.Type == "text" {
+			onChunk(StreamChunk{Content: update.Content.Text})
+			buf.WriteString(update.Content.Text)
+			return
+		}
+		// Generic ACP: message with content array
 		if update.Message != nil {
 			for _, block := range update.Message.Content {
 				if block.Type == "text" {

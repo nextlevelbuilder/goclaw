@@ -353,6 +353,11 @@ type RunRequest struct {
 	// user follow-up messages into the running conversation.
 	InjectCh <-chan InjectedMessage
 
+	// OnStreamChunk is called for each streaming text chunk from the LLM.
+	// Used by HTTP API to forward chunks to the client in realtime.
+	// Only called when Stream=true. Nil = chunks not forwarded inline.
+	OnStreamChunk func(text string)
+
 	// Delegation context (set when running as a delegate agent)
 	DelegationID  string // delegation ID for event correlation
 	TeamID        string // team ID (if delegation is team-scoped)

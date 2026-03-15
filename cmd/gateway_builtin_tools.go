@@ -106,6 +106,9 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
 		{Name: "publish_skill", DisplayName: "Publish Skill", Description: "Register a skill directory (created via skill-creator) in the system database, making it discoverable and grantable to agents", Category: "skills", Enabled: true},
 
+		// mcp
+		{Name: "register_mcp_server", DisplayName: "Register MCP Server", Description: "Register a locally-built or remote MCP server in GoClaw, making its tools available to agents. Use after building an MCP server with the mcp-builder skill.", Category: "mcp", Enabled: true},
+
 		// delegation (deprecated — team_tasks is the coordination mechanism now)
 		{Name: "delegate_search", DisplayName: "Delegate Search", Description: "Search for available delegation targets by keyword (deprecated)", Category: "delegation", Enabled: false,
 			Requires: []string{"managed_mode", "agent_links"},

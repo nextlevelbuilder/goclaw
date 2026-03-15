@@ -55,7 +55,8 @@ type ProcessPool struct {
 	agentArgs   []string
 	workDir     string
 	idleTTL     time.Duration
-	mu          sync.RWMutex   // protects toolHandler
+	mcpServers  []MCPServerEntry // MCP servers to inject into each session
+	mu          sync.RWMutex     // protects toolHandler
 	toolHandler RequestHandler
 	done        chan struct{}
 	closeOnce   sync.Once
@@ -80,6 +81,11 @@ func (pp *ProcessPool) SetToolHandler(h RequestHandler) {
 	pp.mu.Lock()
 	defer pp.mu.Unlock()
 	pp.toolHandler = h
+}
+
+// SetMCPServers sets MCP servers to inject into each ACP session.
+func (pp *ProcessPool) SetMCPServers(servers []MCPServerEntry) {
+	pp.mcpServers = servers
 }
 
 // getToolHandler returns the current tool handler (thread-safe).
@@ -146,9 +152,26 @@ func (pp *ProcessPool) spawn(ctx context.Context, sessionKey string) (*ACPProces
 		exited:     make(chan struct{}),
 	}
 
-	// Notification handler: route session/update to active prompt callback
+	// Notification handler: route session/update to active prompt callback.
+	// The adapter wraps the update under {"sessionId": "...", "update": {...}}.
 	notifyHandler := func(method string, params json.RawMessage) {
 		if method == "session/update" {
+			// Try unwrapping the nested "update" field first (adapter format).
+			var wrapper struct {
+				SessionID string          `json:"sessionId"`
+				Update    json.RawMessage `json:"update"`
+			}
+			if err := json.Unmarshal(params, &wrapper); err == nil && len(wrapper.Update) > 0 {
+				slog.Debug("acp: raw session/update", "update", string(wrapper.Update))
+				var update SessionUpdate
+				if err := json.Unmarshal(wrapper.Update, &update); err != nil {
+					slog.Debug("acp: failed to parse nested session/update", "error", err)
+				} else {
+					proc.dispatchUpdate(update)
+					return
+				}
+			}
+			// Fallback: try direct unmarshal (legacy format).
 			var update SessionUpdate
 			if err := json.Unmarshal(params, &update); err != nil {
 				slog.Warn("acp: failed to parse session/update", "error", err)
@@ -176,7 +199,7 @@ func (pp *ProcessPool) spawn(ctx context.Context, sessionKey string) (*ACPProces
 		cancel()
 		return nil, err
 	}
-	if err := proc.NewSession(ctx); err != nil {
+	if err := proc.NewSession(ctx, pp.workDir, pp.mcpServers); err != nil {
 		cancel()
 		return nil, err
 	}

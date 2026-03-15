@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -121,6 +123,17 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult(fmt.Sprintf("Document too large: %d bytes (max %d)", len(data), documentMaxBytes))
 	}
 
+	// Content-based MIME sniffing when stored MIME is unhelpful.
+	// Files with unrecognizable extensions (e.g. "config-k8s-100.86.165.193") get
+	// stored as application/octet-stream. Detect actual type from content before
+	// sending to provider (Gemini rejects application/octet-stream).
+	if docMime == "" || docMime == "application/octet-stream" {
+		if sniffed := sniffDocumentMIME(data); sniffed != "" {
+			slog.Info("read_document: sniffed MIME from content", "original", docMime, "sniffed", sniffed)
+			docMime = sniffed
+		}
+	}
+
 	// Fast path: text-readable files — return content directly without LLM.
 	if textReadableMIMEs[docMime] || strings.HasPrefix(docMime, "text/") {
 		content := string(data)
@@ -154,4 +167,51 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 	result.Provider = chainResult.Provider
 	result.Model = chainResult.Model
 	return result
+}
+
+// sniffDocumentMIME detects MIME type from file content when the stored MIME is
+// application/octet-stream. Checks for PDF magic bytes first, then falls back
+// to http.DetectContentType, and finally checks if the content is valid UTF-8 text.
+func sniffDocumentMIME(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	// PDF magic bytes.
+	if len(data) >= 5 && string(data[:5]) == "%PDF-" {
+		return "application/pdf"
+	}
+
+	// Use Go's built-in content sniffer.
+	sniffed := http.DetectContentType(data)
+	if sniffed != "" && sniffed != "application/octet-stream" {
+		return sniffed
+	}
+
+	// If content is mostly valid UTF-8, treat as text/plain.
+	// This catches config files, markdown, code, etc. with unrecognizable extensions.
+	if isLikelyText(data) {
+		return "text/plain"
+	}
+
+	return ""
+}
+
+// isLikelyText checks if data is likely a text file by validating UTF-8 encoding
+// and checking for absence of null bytes (common in binary files).
+func isLikelyText(data []byte) bool {
+	// Check a reasonable sample (first 8KB).
+	sample := data
+	if len(sample) > 8192 {
+		sample = sample[:8192]
+	}
+
+	// Null bytes are a strong signal of binary content.
+	for _, b := range sample {
+		if b == 0 {
+			return false
+		}
+	}
+
+	return utf8.Valid(sample)
 }

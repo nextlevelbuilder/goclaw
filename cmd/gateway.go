@@ -238,7 +238,7 @@ func runGateway() {
 	if execTool, ok := toolsReg.Get("exec"); ok {
 		if et, ok := execTool.(*tools.ExecTool); ok {
 			et.DenyPaths(dataDir, ".goclaw/")
-			et.AllowPathExemptions(".goclaw/skills-store/")
+			et.AllowPathExemptions(".goclaw/skills-store/", "-workspace/")
 			if cfgPath := os.Getenv("GOCLAW_CONFIG"); cfgPath != "" {
 				et.DenyPaths(cfgPath)
 			}
@@ -570,6 +570,12 @@ func runGateway() {
 				slog.Info("publish_skill tool registered")
 			}
 		}
+	}
+
+	// Register MCP server tool — lets agents register built MCP servers in the database
+	if pgStores.MCP != nil {
+		toolsReg.Register(tools.NewRegisterMCPServerTool(pgStores.MCP, storeCfg.EncryptionKey))
+		slog.Info("register_mcp_server tool registered")
 	}
 
 	// Wire embedding-based skill search + per-agent access filtering
