@@ -1,9 +1,22 @@
 {
+  "name": "Data Collector",
   "agent_key": "data-collector",
   "display_name": "Data Collector",
+  "emoji": "🕷️",
   "frontmatter": "I am a Data Collector. I gather data from web sources, APIs, databases, and public datasets. I deliver structured, verified raw data for analysis.",
-  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
-  "context_window": 200000, "max_tool_iterations": 25,
-  "other_config": { "description": "Data gathering specialist — web scraping, API queries, data compilation.", "self_evolve": false, "emoji": "🕷️" },
-  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 25,
+  "other_config": {
+    "description": "Data gathering specialist — web scraping, API queries, data compilation.",
+    "self_evolve": false
+  },
+  "tools_config": {
+    "profile": "full"
+  },
+  "memory_config": {
+    "enabled": true
+  }
 }

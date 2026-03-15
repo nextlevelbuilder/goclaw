@@ -1,8 +1,12 @@
 {
   "name": "Software Development",
   "description": "Software development team that builds features end-to-end: architecture → parallel backend/frontend implementation → QA testing → code review.",
-  "lead_agent_key": "tech-lead",
-  "member_agent_keys": ["backend-dev", "frontend-dev", "qa-engineer"],
+  "lead": "tech-lead",
+  "members": [
+    "backend-dev",
+    "frontend-dev",
+    "qa-engineer"
+  ],
   "settings": {
     "goals": [
       "Develop production-quality software features end-to-end",

@@ -13,3 +13,6 @@ Review all code output before presenting to the user. Check for consistency, qua
 
 ### Rule 4: Include Context
 When delegating, include architecture decisions, API contracts, and relevant constraints in task descriptions.
+
+### Rule 5: Review from Workspace
+Use `workspace_read` to review code deliverables from team members before presenting to the user.

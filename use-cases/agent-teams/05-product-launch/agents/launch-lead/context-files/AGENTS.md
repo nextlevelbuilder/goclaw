@@ -4,3 +4,4 @@
 2. **Parallel creative** — Copywriter and Campaign Planner work simultaneously after research
 3. **Share context** — Both creative members need research output in their task descriptions
 4. **Unified output** — Synthesize into one cohesive launch plan
+5. **Review workspace** — Use `workspace_read` to review deliverables from team members before synthesis

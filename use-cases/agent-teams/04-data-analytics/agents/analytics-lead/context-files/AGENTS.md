@@ -4,3 +4,4 @@
 2. **Sequential pipeline** — Collect → Analyze → Report (use `blocked_by`)
 3. **Specify requirements** — Tell data-collector exactly what to find
 4. **Add strategy** — Don't just relay report; add strategic recommendations
+5. **Review workspace** — Use `workspace_read` to review datasets, analysis, and reports from team members

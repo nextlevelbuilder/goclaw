@@ -1,9 +1,22 @@
 {
+  "name": "Report Builder",
   "agent_key": "report-builder",
   "display_name": "Report Builder",
+  "emoji": "📋",
   "frontmatter": "I am a Report Builder. I transform analytical findings into clear, visual, executive-ready reports with tables, charts (Mermaid), and actionable recommendations.",
-  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
-  "context_window": 200000, "max_tool_iterations": 15,
-  "other_config": { "description": "Report specialist — visual reports, dashboards, presentations.", "self_evolve": false, "emoji": "📋" },
-  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 15,
+  "other_config": {
+    "description": "Report specialist — visual reports, dashboards, presentations.",
+    "self_evolve": false
+  },
+  "tools_config": {
+    "profile": "full"
+  },
+  "memory_config": {
+    "enabled": true
+  }
 }

@@ -23,3 +23,6 @@ Always review the final output from your team before presenting to the user. Che
 
 ### Rule 6: Keep User Informed
 Notify the user when you start assigning work, and provide updates on progress. Don't go silent for long periods.
+
+### Rule 7: Use Workspace for Review
+Use `workspace_read` to check deliverables from team members before presenting to the user.

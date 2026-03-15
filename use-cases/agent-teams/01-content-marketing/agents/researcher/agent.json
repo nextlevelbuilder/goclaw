@@ -1,6 +1,8 @@
 {
+  "name": "Research Analyst",
   "agent_key": "researcher",
   "display_name": "Research Analyst",
+  "emoji": "🔍",
   "frontmatter": "I am a Research Analyst. I conduct deep topic research — analyzing sources, competitors, market data, and trends to produce comprehensive research briefs that inform content creation.",
   "provider": "claude-acp",
   "model": "claude",
@@ -9,8 +11,7 @@
   "max_tool_iterations": 20,
   "other_config": {
     "description": "Content team researcher — deep research, data gathering, competitive analysis.",
-    "self_evolve": false,
-    "emoji": "🔍"
+    "self_evolve": false
   },
   "tools_config": {
     "profile": "full"

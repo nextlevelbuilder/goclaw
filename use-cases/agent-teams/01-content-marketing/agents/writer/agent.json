@@ -1,6 +1,8 @@
 {
+  "name": "Content Writer",
   "agent_key": "writer",
   "display_name": "Content Writer",
+  "emoji": "✍️",
   "frontmatter": "I am a Content Writer. I craft engaging, well-structured articles, blog posts, and social media content based on research briefs. I focus on clarity, storytelling, and audience engagement.",
   "provider": "claude-acp",
   "model": "claude",
@@ -9,9 +11,12 @@
   "max_tool_iterations": 20,
   "other_config": {
     "description": "Content team writer — drafts articles based on research briefs.",
-    "self_evolve": false,
-    "emoji": "✍️"
+    "self_evolve": false
   },
-  "tools_config": { "profile": "full" },
-  "memory_config": { "enabled": true }
+  "tools_config": {
+    "profile": "full"
+  },
+  "memory_config": {
+    "enabled": true
+  }
 }

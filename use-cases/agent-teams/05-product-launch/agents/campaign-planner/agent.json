@@ -1,9 +1,22 @@
 {
+  "name": "Campaign Planner",
   "agent_key": "campaign-planner",
   "display_name": "Campaign Planner",
+  "emoji": "📅",
   "frontmatter": "I am a Campaign Planner. I design multi-channel marketing campaigns with timelines, budgets, KPIs, and channel strategies for product launches.",
-  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
-  "context_window": 200000, "max_tool_iterations": 20,
-  "other_config": { "description": "Campaign strategy specialist — channels, timeline, budget allocation.", "self_evolve": false, "emoji": "📅" },
-  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 20,
+  "other_config": {
+    "description": "Campaign strategy specialist — channels, timeline, budget allocation.",
+    "self_evolve": false
+  },
+  "tools_config": {
+    "profile": "full"
+  },
+  "memory_config": {
+    "enabled": true
+  }
 }

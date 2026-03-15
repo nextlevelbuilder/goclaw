@@ -1,9 +1,22 @@
 {
+  "name": "Copywriter",
   "agent_key": "copywriter",
   "display_name": "Copywriter",
+  "emoji": "✏️",
   "frontmatter": "I am a Copywriter. I create compelling product copy — taglines, descriptions, landing page copy, email sequences, and social media posts that drive action.",
-  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
-  "context_window": 200000, "max_tool_iterations": 20,
-  "other_config": { "description": "Copy specialist — taglines, product descriptions, launch messaging.", "self_evolve": false, "emoji": "✏️" },
-  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 20,
+  "other_config": {
+    "description": "Copy specialist — taglines, product descriptions, launch messaging.",
+    "self_evolve": false
+  },
+  "tools_config": {
+    "profile": "full"
+  },
+  "memory_config": {
+    "enabled": true
+  }
 }
