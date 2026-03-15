@@ -248,6 +248,36 @@ func runGateway() {
 		}
 	}
 
+	// Block filesystem tools from accessing internal system files within the workspace.
+	// Shared-workspace agents have workspace = dataDir root, exposing config.json,
+	// memory.db, .media/, delegate/ etc. via list_files/read_file.
+	// Non-shared agents are already isolated by resolvePath boundary check, but
+	// deny paths add defense-in-depth.
+	internalDenyPaths := []string{
+		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
+		"memory/", ".media/", "delegate/",
+	}
+	if rf, ok := toolsReg.Get("read_file"); ok {
+		if t, ok := rf.(*tools.ReadFileTool); ok {
+			t.DenyPaths(internalDenyPaths...)
+		}
+	}
+	if wf, ok := toolsReg.Get("write_file"); ok {
+		if t, ok := wf.(*tools.WriteFileTool); ok {
+			t.DenyPaths(internalDenyPaths...)
+		}
+	}
+	if lf, ok := toolsReg.Get("list_files"); ok {
+		if t, ok := lf.(*tools.ListFilesTool); ok {
+			t.DenyPaths(internalDenyPaths...)
+		}
+	}
+	if ed, ok := toolsReg.Get("edit"); ok {
+		if t, ok := ed.(*tools.EditTool); ok {
+			t.DenyPaths(internalDenyPaths...)
+		}
+	}
+
 	// --- Store creation (Postgres) ---
 	if cfg.Database.PostgresDSN == "" {
 		slog.Error("GOCLAW_POSTGRES_DSN is required. Set it in your environment or .env.local file.")
@@ -662,7 +692,7 @@ func runGateway() {
 	// Declared here so it can be passed to registerAllMethods → AgentsMethods
 	// for immediate cache invalidation on agents.files.set.
 	var contextFileInterceptor *tools.ContextFileInterceptor
-	var delegateMgr *tools.DelegateManager
+
 
 	// Set agent store for tools_invoke context injection + wire extras
 	if pgStores.Agents != nil {
@@ -680,7 +710,8 @@ func runGateway() {
 
 	var mcpPool *mcpbridge.Pool
 	var mediaStore *media.Store
-	contextFileInterceptor, delegateMgr, mcpPool, mediaStore = wireExtras(pgStores, agentRouter, providerRegistry, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, dynamicLoader, redisClient)
+	var postTurn tools.PostTurnProcessor
+	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, dynamicLoader, redisClient)
 	if mcpPool != nil {
 		defer mcpPool.Stop()
 	}
@@ -689,7 +720,7 @@ func runGateway() {
 	if mcpMgr != nil {
 		mcpToolLister = mcpMgr
 	}
-	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH := wireHTTP(pgStores, cfg.Gateway.Token, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH := wireHTTP(pgStores, cfg.Gateway.Token, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
 	if agentsH != nil {
 		server.SetAgentsHandler(agentsH)
 	}
@@ -716,6 +747,9 @@ func runGateway() {
 	}
 	if delegationsH != nil {
 		server.SetDelegationsHandler(delegationsH)
+	}
+	if teamEventsH != nil {
+		server.SetTeamEventsHandler(teamEventsH)
 	}
 	if builtinToolsH != nil {
 		server.SetBuiltinToolsHandler(builtinToolsH)
@@ -819,7 +853,7 @@ func runGateway() {
 	registerConfigChannels(cfg, channelMgr, msgBus, pgStores, instanceLoader)
 
 	// Register channels/instances/links/teams RPC methods
-	wireChannelRPCMethods(server, pgStores, channelMgr, agentRouter, msgBus)
+	wireChannelRPCMethods(server, pgStores, channelMgr, agentRouter, msgBus, dataDir)
 
 	// Wire channel event subscribers (cache invalidation, pairing, cascade disable)
 	wireChannelEventSubscribers(msgBus, server, pgStores, channelMgr, instanceLoader, pairingMethods, cfg)
@@ -859,6 +893,35 @@ func runGateway() {
 			}
 		}()
 		slog.Info("audit subscriber registered")
+	}
+
+	// Team task event subscriber — records task lifecycle events to team_task_events.
+	// Listens to bus events (team.task.*) so callers don't need direct RecordTaskEvent calls.
+	if pgStores.Teams != nil {
+		teamEventStore := pgStores.Teams
+		msgBus.Subscribe(bus.TopicTeamTaskAudit, func(evt bus.Event) {
+			eventType := teamTaskEventType(evt.Name)
+			if eventType == "" {
+				return
+			}
+			payload, ok := evt.Payload.(protocol.TeamTaskEventPayload)
+			if !ok {
+				return
+			}
+			taskID, err := uuid.Parse(payload.TaskID)
+			if err != nil {
+				return
+			}
+			if err := teamEventStore.RecordTaskEvent(context.Background(), &store.TeamTaskEventData{
+				TaskID:    taskID,
+				EventType: eventType,
+				ActorType: payload.ActorType,
+				ActorID:   payload.ActorID,
+			}); err != nil {
+				slog.Warn("team_task_audit.record_failed", "task_id", payload.TaskID, "event", eventType, "error", err)
+			}
+		})
+		slog.Info("team task event subscriber registered")
 	}
 
 	// Setup graceful shutdown
@@ -946,11 +1009,7 @@ func runGateway() {
 				agentRouter.UpdateActivity(sessionKey, agentEvent.RunID, phase, tool, iteration)
 			}
 
-			// Update DelegateManager activity tracking (for enriched progress notifications)
-			if delegateMgr != nil && agentEvent.DelegationID != "" {
-				delegateMgr.HandleActivityEvent(agentEvent.DelegationID, phase, tool)
 			}
-		}
 
 		// Clear activity on terminal events
 		if agentEvent.Type == protocol.AgentEventRunCompleted || agentEvent.Type == protocol.AgentEventRunFailed {
@@ -1028,7 +1087,7 @@ func runGateway() {
 		channelMgr.SetContactCollector(contactCollector) // propagate to all channel handlers
 	}
 
-	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker, delegateMgr, pgStores.Sessions, pgStores.Agents, contactCollector)
+	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker, pgStores.Sessions, pgStores.Agents, contactCollector, postTurn)
 
 	// Task recovery ticker: re-dispatches stale/pending team tasks on startup and periodically.
 	var taskTicker *tasks.TaskTicker
@@ -1102,5 +1161,32 @@ func runGateway() {
 	if err := server.Start(ctx); err != nil {
 		slog.Error("gateway error", "error", err)
 		os.Exit(1)
+	}
+}
+
+// teamTaskEventType maps bus event names to team_task_events.event_type values.
+// Returns empty string for non-task events (caller should skip).
+func teamTaskEventType(eventName string) string {
+	switch eventName {
+	case protocol.EventTeamTaskCreated:
+		return "created"
+	case protocol.EventTeamTaskClaimed:
+		return "claimed"
+	case protocol.EventTeamTaskAssigned:
+		return "assigned"
+	case protocol.EventTeamTaskCompleted:
+		return "completed"
+	case protocol.EventTeamTaskFailed:
+		return "failed"
+	case protocol.EventTeamTaskCancelled:
+		return "cancelled"
+	case protocol.EventTeamTaskReviewed:
+		return "reviewed"
+	case protocol.EventTeamTaskApproved:
+		return "approved"
+	case protocol.EventTeamTaskRejected:
+		return "rejected"
+	default:
+		return ""
 	}
 }

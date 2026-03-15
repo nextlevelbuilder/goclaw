@@ -44,7 +44,8 @@ func (s *PGTeamStore) GetUnread(ctx context.Context, teamID, agentID uuid.UUID) 
 		 LEFT JOIN agents fa ON fa.id = m.from_agent_id
 		 LEFT JOIN agents ta ON ta.id = m.to_agent_id
 		 WHERE m.team_id = $1 AND (m.to_agent_id = $2 OR m.to_agent_id IS NULL) AND m.read = false
-		 ORDER BY m.created_at`, teamID, agentID)
+		 ORDER BY m.created_at
+		 LIMIT 50`, teamID, agentID)
 	if err != nil {
 		return nil, err
 	}

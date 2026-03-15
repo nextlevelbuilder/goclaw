@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,12 +13,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 const (
 	defaultRecoveryInterval = 5 * time.Minute
-	dispatchCooldown        = 10 * time.Minute
-	leadNotifyCooldown      = 30 * time.Minute
 	followupCooldown        = 5 * time.Minute
 	defaultFollowupInterval = 30 * time.Minute
 )
@@ -38,8 +36,6 @@ type TaskTicker struct {
 	wg     sync.WaitGroup
 
 	mu               sync.Mutex
-	lastDispatched   map[uuid.UUID]time.Time // taskID → last dispatch time
-	lastLeadNotified map[uuid.UUID]time.Time // teamID → last lead notify time
 	lastFollowupSent map[uuid.UUID]time.Time // taskID → last followup sent time
 }
 
@@ -54,8 +50,6 @@ func NewTaskTicker(teams store.TeamStore, agents store.AgentStore, msgBus *bus.M
 		msgBus:           msgBus,
 		interval:         interval,
 		stopCh:           make(chan struct{}),
-		lastDispatched:   make(map[uuid.UUID]time.Time),
-		lastLeadNotified: make(map[uuid.UUID]time.Time),
 		lastFollowupSent: make(map[uuid.UUID]time.Time),
 	}
 }
@@ -142,63 +136,26 @@ func (t *TaskTicker) recoverTeam(ctx context.Context, team store.TeamData, force
 		slog.Info("task_ticker: recovered tasks", "team_id", team.ID, "count", recovered, "force", forceRecover)
 	}
 
-	// Step 2: List all recoverable tasks (pending + stale in_progress with expired locks).
-	tasks, err := t.teams.ListRecoverableTasks(ctx, team.ID)
+	// Step 2: Mark old pending tasks (>1 day) as stale.
+	// Recent pending tasks are handled by post-turn processing, not the ticker.
+	staleThreshold := time.Now().Add(-24 * time.Hour)
+	staleCount, err := t.teams.MarkStaleTasks(ctx, team.ID, staleThreshold)
 	if err != nil {
-		slog.Warn("task_ticker: list recoverable", "team_id", team.ID, "error", err)
-		return
-	}
-	if len(tasks) == 0 {
-		return
-	}
-
-	now := time.Now()
-	var unassigned []store.TeamTaskData
-
-	for i := range tasks {
-		task := &tasks[i]
-		if task.OwnerAgentID != nil {
-			// Pending task with an assigned owner — re-dispatch it.
-			t.mu.Lock()
-			last, exists := t.lastDispatched[task.ID]
-			t.mu.Unlock()
-			if exists && now.Sub(last) < dispatchCooldown {
-				continue
-			}
-
-			t.dispatchTask(ctx, task, team.ID)
-
-			t.mu.Lock()
-			t.lastDispatched[task.ID] = now
-			t.mu.Unlock()
-		} else {
-			unassigned = append(unassigned, *task)
+		slog.Warn("task_ticker: mark stale", "team_id", team.ID, "error", err)
+	} else if staleCount > 0 {
+		slog.Info("task_ticker: marked stale tasks", "team_id", team.ID, "count", staleCount)
+		if t.msgBus != nil {
+			t.msgBus.Broadcast(bus.Event{
+				Name: protocol.EventTeamTaskStale,
+				Payload: protocol.TeamTaskEventPayload{
+					TeamID:    team.ID.String(),
+					Status:    store.TeamTaskStatusStale,
+					Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+					ActorType: "system",
+					ActorID:   "task_ticker",
+				},
+			})
 		}
-	}
-
-	// Step 3: Unassigned tasks — only notify lead if there are idle agents available.
-	if len(unassigned) == 0 {
-		return
-	}
-
-	idleMembers, err := t.teams.ListIdleMembers(ctx, team.ID)
-	if err != nil {
-		slog.Warn("task_ticker: list idle members", "team_id", team.ID, "error", err)
-		return
-	}
-	if len(idleMembers) == 0 {
-		// All agents busy — skip, will retry next tick.
-		return
-	}
-
-	t.mu.Lock()
-	last, exists := t.lastLeadNotified[team.ID]
-	t.mu.Unlock()
-	if !exists || now.Sub(last) >= leadNotifyCooldown {
-		t.notifyLead(ctx, team, unassigned, idleMembers)
-		t.mu.Lock()
-		t.lastLeadNotified[team.ID] = now
-		t.mu.Unlock()
 	}
 }
 
@@ -272,93 +229,6 @@ func (t *TaskTicker) processFollowups(ctx context.Context, team store.TeamData) 
 	}
 }
 
-func (t *TaskTicker) dispatchTask(ctx context.Context, task *store.TeamTaskData, teamID uuid.UUID) {
-	ag, err := t.agents.GetByID(ctx, *task.OwnerAgentID)
-	if err != nil {
-		slog.Warn("task_ticker: resolve agent", "agent_id", task.OwnerAgentID, "error", err)
-		return
-	}
-
-	content := fmt.Sprintf("[Assigned task #%d]: %s", task.TaskNumber, task.Subject)
-	if task.Description != "" {
-		content += "\n\n" + task.Description
-	}
-
-	if !t.msgBus.TryPublishInbound(bus.InboundMessage{
-		Channel:  "system",
-		SenderID: "teammate:dashboard",
-		ChatID:   teamID.String(),
-		Content:  content,
-		UserID:   task.UserID,
-		AgentID:  ag.AgentKey,
-		Metadata: map[string]string{
-			"origin_channel":   "dashboard",
-			"origin_peer_kind": "direct",
-			"from_agent":       "dashboard",
-			"to_agent":         ag.AgentKey,
-			"team_task_id":     task.ID.String(),
-			"team_id":          teamID.String(),
-		},
-	}) {
-		slog.Warn("task_ticker: inbound buffer full, skipping dispatch", "task_id", task.ID)
-		return
-	}
-	slog.Info("task_ticker: re-dispatched task",
-		"task_id", task.ID,
-		"task_number", task.TaskNumber,
-		"agent_key", ag.AgentKey,
-		"team_id", teamID,
-	)
-}
-
-func (t *TaskTicker) notifyLead(ctx context.Context, team store.TeamData, tasks []store.TeamTaskData, idleMembers []store.TeamMemberData) {
-	ag, err := t.agents.GetByID(ctx, team.LeadAgentID)
-	if err != nil {
-		slog.Warn("task_ticker: resolve lead agent", "agent_id", team.LeadAgentID, "error", err)
-		return
-	}
-
-	var content strings.Builder
-	content.WriteString(fmt.Sprintf("[System] %d unassigned task(s) need attention. %d agent(s) available:", len(tasks), len(idleMembers)))
-	content.WriteString("\n\nAvailable agents:")
-	for _, m := range idleMembers {
-		name := m.DisplayName
-		if name == "" {
-			name = m.AgentKey
-		}
-		content.WriteString(fmt.Sprintf("\n- %s (%s)", name, m.AgentKey))
-	}
-	content.WriteString("\n\nUnassigned tasks:")
-	for _, task := range tasks {
-		content.WriteString(fmt.Sprintf("\n- #%d %s (created %s ago)", task.TaskNumber, task.Subject, time.Since(task.CreatedAt).Truncate(time.Minute)))
-	}
-	content.WriteString("\n\nPlease review and assign these tasks to the appropriate available agents using the team_tasks tool.")
-
-	if !t.msgBus.TryPublishInbound(bus.InboundMessage{
-		Channel:  "system",
-		SenderID: "teammate:system",
-		ChatID:   team.ID.String(),
-		Content:  content.String(),
-		UserID:   team.CreatedBy,
-		AgentID:  ag.AgentKey,
-		Metadata: map[string]string{
-			"origin_channel":   "system",
-			"origin_peer_kind": "direct",
-			"from_agent":       "system",
-			"to_agent":         ag.AgentKey,
-			"team_id":          team.ID.String(),
-		},
-	}) {
-		slog.Warn("task_ticker: inbound buffer full, skipping lead notify", "team_id", team.ID)
-		return
-	}
-	slog.Info("task_ticker: notified lead about unassigned tasks",
-		"team_id", team.ID,
-		"lead_agent_key", ag.AgentKey,
-		"count", len(tasks),
-	)
-}
-
 // followupInterval parses the team's followup_interval_minutes setting.
 func followupInterval(team store.TeamData) time.Duration {
 	if team.Settings != nil {
@@ -377,16 +247,6 @@ func (t *TaskTicker) pruneCooldowns() {
 	defer t.mu.Unlock()
 
 	now := time.Now()
-	for id, ts := range t.lastDispatched {
-		if now.Sub(ts) > 2*dispatchCooldown {
-			delete(t.lastDispatched, id)
-		}
-	}
-	for id, ts := range t.lastLeadNotified {
-		if now.Sub(ts) > 2*leadNotifyCooldown {
-			delete(t.lastLeadNotified, id)
-		}
-	}
 	for id, ts := range t.lastFollowupSent {
 		if now.Sub(ts) > 2*followupCooldown {
 			delete(t.lastFollowupSent, id)

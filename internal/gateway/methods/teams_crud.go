@@ -342,6 +342,52 @@ func (m *TeamsMethods) handleScopes(ctx context.Context, client *gateway.Client,
 	}))
 }
 
+// --- Events ---
+
+type teamsEventsListParams struct {
+	TeamID string `json:"team_id"`
+	Limit  int    `json:"limit"`
+	Offset int    `json:"offset"`
+}
+
+func (m *TeamsMethods) handleEventsList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	if m.teamStore == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgTeamsNotConfigured)))
+		return
+	}
+
+	var params teamsEventsListParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+		return
+	}
+	if params.TeamID == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "team_id")))
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid team_id"))
+		return
+	}
+
+	events, err := m.teamStore.ListTeamEvents(ctx, teamID, params.Limit, params.Offset)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
+		return
+	}
+	if events == nil {
+		events = []store.TeamTaskEventData{}
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"events": events,
+		"count":  len(events),
+	}))
+}
+
 // invalidateTeamCaches invalidates agent caches for all members of a team
 // and emits a pub/sub event for TeamToolManager cache invalidation.
 func (m *TeamsMethods) invalidateTeamCaches(ctx context.Context, teamID uuid.UUID) {

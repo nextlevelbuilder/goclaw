@@ -251,6 +251,25 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		)
 
 		if !wasMentioned {
+			// Guard: skip recording for unpaired groups — don't leak message data.
+			// Uses approvedGroups cache (same pattern as the pairing gate below).
+			if topicCfg.groupPolicy == "pairing" && c.pairingService != nil {
+				if _, cached := c.approvedGroups.Load(chatIDStr); !cached {
+					groupSenderID := fmt.Sprintf("group:%d", chatID)
+					paired, pairErr := c.pairingService.IsPaired(groupSenderID, c.Name())
+					if pairErr != nil {
+						slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+							"group_sender", groupSenderID, "channel", c.Name(), "error", pairErr)
+						paired = true
+					}
+					if paired {
+						c.approvedGroups.Store(chatIDStr, true)
+					} else {
+						return // silently skip — no pending history, no contact
+					}
+				}
+			}
+
 			c.groupHistory.Record(localKey, channels.HistoryEntry{
 				Sender:    senderLabel,
 				SenderID:  senderID,

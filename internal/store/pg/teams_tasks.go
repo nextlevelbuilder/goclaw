@@ -20,7 +20,7 @@ const taskLockDuration = 30 * time.Minute
 // taskSelectCols is the shared SELECT column list for task queries (must match scanTaskRowsJoined).
 const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
-		 COALESCE(t.chat_id,''), t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
+		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
 		 t.created_at, t.updated_at,
 		 COALESCE(a.agent_key, '') AS owner_agent_key,
@@ -32,7 +32,7 @@ const taskJoinClause = `FROM team_tasks t
 		 LEFT JOIN agents ca ON ca.id = t.created_by_agent_id`
 
 // maxListTasksRows caps ListTasks results to prevent unbounded queries.
-const maxListTasksRows = 200
+const maxListTasksRows = 50
 
 // ============================================================
 // Scopes
@@ -102,25 +102,22 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 	}
 	task.TaskNumber = taskNumber
 
-	// Generate identifier: UPPER(team_name[:3]) + "-" + task_number.
-	prefix := "TSK"
-	var teamName string
-	if err := tx.QueryRowContext(ctx,
-		`SELECT name FROM agent_teams WHERE id = $1`, task.TeamID,
-	).Scan(&teamName); err == nil && teamName != "" {
-		r := []rune(teamName)
-		if len(r) > 3 {
-			r = r[:3]
-		}
-		prefix = strings.ToUpper(string(r))
+	// Generate identifier: T-{taskNumber}-{last 4 hex of UUID}.
+	// Sequential via taskNumber, unique via UUID suffix. No extra DB query needed.
+	hex := strings.ReplaceAll(task.ID.String(), "-", "")
+	task.Identifier = fmt.Sprintf("T-%03d-%s", taskNumber, hex[len(hex)-4:])
+
+	// Serialize metadata to JSON (NULL when empty).
+	var metaJSON []byte
+	if len(task.Metadata) > 0 {
+		metaJSON, _ = json.Marshal(task.Metadata)
 	}
-	task.Identifier = fmt.Sprintf("%s-%d", prefix, taskNumber)
 
 	// INSERT with all fields in one statement.
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO team_tasks (id, team_id, subject, description, status, owner_agent_id, blocked_by, priority, result, user_id, channel,
-		 task_type, task_number, identifier, created_by_agent_id, parent_id, chat_id, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+		 task_type, task_number, identifier, created_by_agent_id, parent_id, chat_id, metadata, locked_at, lock_expires_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
 		task.ID, task.TeamID, task.Subject, task.Description,
 		task.Status, task.OwnerAgentID, pq.Array(task.BlockedBy),
 		task.Priority, task.Result,
@@ -129,6 +126,8 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 		task.TaskType, taskNumber, task.Identifier,
 		task.CreatedByAgentID, task.ParentID,
 		sql.NullString{String: task.ChatID, Valid: task.ChatID != ""},
+		metaJSON,
+		task.LockedAt, task.LockExpiresAt,
 		now, now,
 	)
 	if err != nil {
@@ -145,6 +144,7 @@ var allowedTaskUpdateCols = map[string]bool{
 	"priority":         true,
 	"assignee_user_id": true,
 	"metadata":         true,
+	"blocked_by":       true,
 	"updated_at":       true,
 }
 
@@ -157,6 +157,10 @@ func (s *PGTeamStore) UpdateTask(ctx context.Context, taskID uuid.UUID, updates 
 		if !allowedTaskUpdateCols[col] {
 			return fmt.Errorf("column %q is not allowed in task updates", col)
 		}
+	}
+	// Wrap blocked_by slice with pq.Array for PostgreSQL array column.
+	if v, ok := updates["blocked_by"]; ok {
+		updates["blocked_by"] = pq.Array(v)
 	}
 	updates["updated_at"] = time.Now()
 	return execMapUpdate(ctx, s.db, "team_tasks", taskID, updates)
@@ -372,6 +376,38 @@ func (s *PGTeamStore) FailTask(ctx context.Context, taskID, teamID uuid.UUID, er
 	return tx.Commit()
 }
 
+// FailPendingTask marks a pending or blocked task as failed (post-turn validation).
+func (s *PGTeamStore) FailPendingTask(ctx context.Context, taskID, teamID uuid.UUID, errMsg string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now := time.Now()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL, updated_at = $3
+		 WHERE id = $4 AND status IN ($5, $6) AND team_id = $7`,
+		store.TeamTaskStatusFailed, "FAILED: "+errMsg, now,
+		taskID, store.TeamTaskStatusPending, store.TeamTaskStatusBlocked, teamID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("task not pending/blocked or not found")
+	}
+
+	if err := unblockDependentTasks(ctx, tx, taskID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 	var tasks []store.TeamTaskData
 	for rows.Next() {
@@ -380,6 +416,7 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		var ownerID, createdByAgentID, parentID *uuid.UUID
 		var blockedBy []uuid.UUID
 		var assigneeUserID, chatID, progressStep, identifier string
+		var metadataJSON []byte
 		var lockedAt, lockExpiresAt, followupAt *time.Time
 		var followupCount, followupMax int
 		var followupMessage, followupChannel, followupChatID string
@@ -388,7 +425,7 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 			&ownerID, pq.Array(&blockedBy), &d.Priority, &result,
 			&userID, &channel,
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,
-			&chatID, &lockedAt, &lockExpiresAt, &d.ProgressPercent, &progressStep,
+			&chatID, &metadataJSON, &lockedAt, &lockExpiresAt, &d.ProgressPercent, &progressStep,
 			&followupAt, &followupCount, &followupMax, &followupMessage, &followupChannel, &followupChatID,
 			&d.CreatedAt, &d.UpdatedAt,
 			&d.OwnerAgentKey,
@@ -415,6 +452,9 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		d.AssigneeUserID = assigneeUserID
 		d.ParentID = parentID
 		d.ChatID = chatID
+		if len(metadataJSON) > 0 {
+			_ = json.Unmarshal(metadataJSON, &d.Metadata)
+		}
 		d.LockedAt = lockedAt
 		d.LockExpiresAt = lockExpiresAt
 		d.ProgressStep = progressStep
@@ -623,6 +663,36 @@ func (s *PGTeamStore) ListTaskEvents(ctx context.Context, taskID uuid.UUID) ([]s
 	return events, rows.Err()
 }
 
+func (s *PGTeamStore) ListTeamEvents(ctx context.Context, teamID uuid.UUID, limit, offset int) ([]store.TeamTaskEventData, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT e.id, e.task_id, e.event_type, e.actor_type, e.actor_id, e.data, e.created_at
+		 FROM team_task_events e
+		 JOIN team_tasks t ON t.id = e.task_id
+		 WHERE t.team_id = $1
+		 ORDER BY e.created_at DESC
+		 LIMIT $2 OFFSET $3`,
+		teamID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []store.TeamTaskEventData
+	for rows.Next() {
+		var e store.TeamTaskEventData
+		var data json.RawMessage
+		if err := rows.Scan(&e.ID, &e.TaskID, &e.EventType, &e.ActorType, &e.ActorID, &data, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		e.Data = data
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
 // ============================================================
 // Attachments
 // ============================================================
@@ -705,6 +775,28 @@ func (s *PGTeamStore) UpdateTaskProgress(ctx context.Context, taskID, teamID uui
 	return nil
 }
 
+// RenewTaskLock extends the lock expiration for an in-progress task.
+// Called periodically by the consumer as a heartbeat to prevent
+// the ticker from recovering a long-running task.
+func (s *PGTeamStore) RenewTaskLock(ctx context.Context, taskID, teamID uuid.UUID) error {
+	now := time.Now()
+	lockExpires := now.Add(taskLockDuration)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE team_tasks SET lock_expires_at = $1, updated_at = $2
+		 WHERE id = $3 AND team_id = $4 AND status = $5`,
+		lockExpires, now,
+		taskID, teamID, store.TeamTaskStatusInProgress,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("task not in progress or not found")
+	}
+	return nil
+}
+
 // ============================================================
 // Stale recovery
 // ============================================================
@@ -767,6 +859,45 @@ func (s *PGTeamStore) ListRecoverableTasks(ctx context.Context, teamID uuid.UUID
 	}
 	defer rows.Close()
 	return scanTaskRowsJoined(rows)
+}
+
+func (s *PGTeamStore) MarkStaleTasks(ctx context.Context, teamID uuid.UUID, olderThan time.Time) (int, error) {
+	now := time.Now()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE team_tasks SET status = $1, updated_at = $2
+		 WHERE team_id = $3 AND status = $4 AND updated_at < $5`,
+		store.TeamTaskStatusStale, now,
+		teamID, store.TeamTaskStatusPending, olderThan,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+func (s *PGTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uuid.UUID) error {
+	now := time.Now()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE team_tasks SET status = $1, locked_at = NULL, lock_expires_at = NULL, result = NULL, updated_at = $2
+		 WHERE id = $3 AND team_id = $4 AND status IN ($5, $6)`,
+		store.TeamTaskStatusPending, now,
+		taskID, teamID, store.TeamTaskStatusStale, store.TeamTaskStatusFailed,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("task not available for reset (not stale/failed or wrong team)")
+	}
+	return nil
 }
 
 // ============================================================
@@ -869,4 +1000,20 @@ func (s *PGTeamStore) SetFollowupForActiveTasks(ctx context.Context, teamID uuid
 	}
 	n, err := res.RowsAffected()
 	return int(n), err
+}
+
+func (s *PGTeamStore) HasActiveMemberTasks(ctx context.Context, teamID uuid.UUID, excludeAgentID uuid.UUID) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM team_tasks
+			WHERE team_id = $1
+			  AND owner_agent_id IS NOT NULL
+			  AND owner_agent_id != $2
+			  AND status IN ($3, $4, $5)
+		)`,
+		teamID, excludeAgentID,
+		store.TeamTaskStatusPending, store.TeamTaskStatusInProgress, store.TeamTaskStatusBlocked,
+	).Scan(&exists)
+	return exists, err
 }

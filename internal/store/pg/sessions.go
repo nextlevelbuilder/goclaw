@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"maps"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,13 +54,22 @@ func (s *PGSessionStore) GetOrCreate(key string) *store.SessionData {
 		Created:  now,
 		Updated:  now,
 	}
+
+	// Extract team_id from team session keys (agent:{agentId}:team:{teamId}:{chatId}).
+	var teamID *uuid.UUID
+	if parts := strings.SplitN(key, ":", 5); len(parts) >= 4 && parts[2] == "team" {
+		if tid, err := uuid.Parse(parts[3]); err == nil {
+			teamID = &tid
+			data.TeamID = teamID
+		}
+	}
 	s.cache[key] = data
 
 	msgsJSON, _ := json.Marshal([]providers.Message{})
 	s.db.Exec(
-		`INSERT INTO sessions (id, session_key, messages, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (session_key) DO NOTHING`,
-		uuid.Must(uuid.NewV7()), key, msgsJSON, now, now,
+		`INSERT INTO sessions (id, session_key, messages, created_at, updated_at, team_id)
+		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (session_key) DO NOTHING`,
+		uuid.Must(uuid.NewV7()), key, msgsJSON, now, now, teamID,
 	)
 
 	return data

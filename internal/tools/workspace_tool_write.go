@@ -9,17 +9,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 const (
-	maxFileSizeBytes   = 10 * 1024 * 1024 // 10MB
-	maxFilesPerScope   = 100
-	maxBatchSize       = 20
-	maxVersionsPerFile = 5
+	maxFileSizeBytes = 10 * 1024 * 1024 // 10MB
+	maxFilesPerScope = 100
+	maxBatchSize     = 20
+	// maxVersionsPerFile = 5 // [DB-DISABLED] versioning requires DB
 )
 
 // WorkspaceWriteTool allows agents to write files to the team shared workspace.
@@ -65,14 +63,11 @@ func (t *WorkspaceWriteTool) Parameters() map[string]any {
 					},
 				},
 			},
-			"scope": map[string]any{
-				"type":        "string",
-				"description": "'channel' (default, per-user) or 'team' (shared, requires workspace_scope=shared)",
-			},
-			"task_id": map[string]any{
-				"type":        "string",
-				"description": "Link file to a team task ID (optional)",
-			},
+			// [DB-DISABLED] task_id linkage requires DB
+			// "task_id": map[string]any{
+			// 	"type":        "string",
+			// 	"description": "Link file to a team task ID (optional)",
+			// },
 			"templates": map[string]any{
 				"type":        "array",
 				"description": "For action=set_template: array of {file_name, content}",
@@ -157,7 +152,7 @@ func (t *WorkspaceWriteTool) executeSetTemplate(ctx context.Context, args map[st
 		}
 	}
 
-	// Update team settings with templates.
+	// Update team settings with templates (stored in team settings JSON, not workspace DB).
 	var settings map[string]any
 	if team.Settings != nil {
 		_ = json.Unmarshal(team.Settings, &settings)
@@ -176,7 +171,7 @@ func (t *WorkspaceWriteTool) executeSetTemplate(ctx context.Context, args map[st
 	return NewResult(fmt.Sprintf("Set %d workspace template(s)", len(templates)))
 }
 
-func (t *WorkspaceWriteTool) executeWrite(ctx context.Context, args map[string]any, team *store.TeamData, agentID uuid.UUID, role string, ws workspaceSettings) *Result {
+func (t *WorkspaceWriteTool) executeWrite(ctx context.Context, args map[string]any, team *store.TeamData, _ /* agentID */ any, role string, ws workspaceSettings) *Result {
 	if role == store.TeamRoleReviewer {
 		return ErrorResult("reviewers cannot write to the workspace")
 	}
@@ -187,15 +182,19 @@ func (t *WorkspaceWriteTool) executeWrite(ctx context.Context, args map[string]a
 		return ErrorResult(scopeErr)
 	}
 
-	// Optional task linkage.
-	var taskID *uuid.UUID
-	if tid, ok := args["task_id"].(string); ok && tid != "" {
-		parsed, err := uuid.Parse(tid)
-		if err != nil {
-			return ErrorResult("invalid task_id: " + err.Error())
-		}
-		taskID = &parsed
-	}
+	// [DB-DISABLED] task linkage requires DB
+	// var taskID *uuid.UUID
+	// if tid, ok := args["task_id"].(string); ok && tid != "" {
+	// 	parsed, err := uuid.Parse(tid)
+	// 	if err != nil {
+	// 		return ErrorResult("invalid task_id: " + err.Error())
+	// 	}
+	// 	taskID = &parsed
+	// } else if ctxTID := TeamTaskIDFromCtx(ctx); ctxTID != "" {
+	// 	if parsed, err := uuid.Parse(ctxTID); err == nil {
+	// 		taskID = &parsed
+	// 	}
+	// }
 
 	// Normalize input to batch.
 	var entries []writeFileEntry
@@ -224,7 +223,6 @@ func (t *WorkspaceWriteTool) executeWrite(ctx context.Context, args map[string]a
 	}
 
 	// Validate all entries before writing.
-	totalNewBytes := int64(0)
 	for i, e := range entries {
 		name, err := sanitizeFileName(e.FileName)
 		if err != nil {
@@ -238,93 +236,47 @@ func (t *WorkspaceWriteTool) executeWrite(ctx context.Context, args map[string]a
 		if len(e.Content) > maxFileSizeBytes {
 			return ErrorResult(fmt.Sprintf("file %q exceeds max size (10MB)", name))
 		}
-		totalNewBytes += int64(len(e.Content))
 	}
 
-	// Check file count limit.
-	count, err := t.manager.teamStore.CountWorkspaceFiles(ctx, team.ID, channel, chatID)
-	if err != nil {
-		return ErrorResult("failed to count workspace files: " + err.Error())
-	}
-
-	// Auto-seed templates on first write to this scope.
-	if count == 0 {
-		t.seedTemplates(ctx, team, agentID, channel, chatID, ws)
-		// Recount after seeding.
-		count, _ = t.manager.teamStore.CountWorkspaceFiles(ctx, team.ID, channel, chatID)
-	}
-
-	if count+len(entries) > maxFilesPerScope {
-		return ErrorResult(fmt.Sprintf("workspace file limit reached (%d/%d)", count, maxFilesPerScope))
-	}
-
-	// Check quota.
-	quotaMB := ws.quotaMB(defaultQuotaMB)
-	if quotaMB > 0 {
-		totalSize, err := t.manager.teamStore.GetWorkspaceTotalSize(ctx, team.ID)
-		if err == nil && totalSize+totalNewBytes > int64(quotaMB)*1024*1024 {
-			usedMB := float64(totalSize) / (1024 * 1024)
-			return ErrorResult(fmt.Sprintf("team workspace quota exceeded (used %.1f MB / %d MB limit)", usedMB, quotaMB))
-		}
-	}
-
-	// Write files.
+	// Create workspace directory.
 	dir, err := workspaceDir(t.dataDir, team.ID, channel, chatID)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
+	// Check file count limit from filesystem.
+	existingFiles, _ := os.ReadDir(dir)
+	fileCount := 0
+	for _, f := range existingFiles {
+		if !f.IsDir() {
+			fileCount++
+		}
+	}
+
+	// Auto-seed templates on first write to this scope.
+	if fileCount == 0 {
+		t.seedTemplates(team, channel, chatID, ws)
+		// Recount after seeding.
+		existingFiles, _ = os.ReadDir(dir)
+		fileCount = 0
+		for _, f := range existingFiles {
+			if !f.IsDir() {
+				fileCount++
+			}
+		}
+	}
+
+	if fileCount+len(entries) > maxFilesPerScope {
+		return ErrorResult(fmt.Sprintf("workspace file limit reached (%d/%d)", fileCount, maxFilesPerScope))
+	}
+
+	// Write files directly to disk (no DB).
 	var results []string
 	var errors []string
 	for _, e := range entries {
-		mimeType, _ := inferMimeType(e.FileName)
 		diskPath := filepath.Join(dir, e.FileName)
 
-		// Upsert DB metadata with disk I/O inside advisory lock.
-		// diskWriteFn runs after lock is acquired — prevents concurrent writes to same file.
-		file := &store.TeamWorkspaceFileData{
-			TeamID:     team.ID,
-			Channel:    channel,
-			ChatID:     chatID,
-			FileName:   e.FileName,
-			MimeType:   mimeType,
-			FilePath:   diskPath,
-			SizeBytes:  int64(len(e.Content)),
-			UploadedBy: agentID,
-			TaskID:     taskID,
-		}
-		diskWriteFn := func(isNew bool) error {
-			// Version existing file before overwrite.
-			if !isNew {
-				existing, _ := t.manager.teamStore.GetWorkspaceFile(ctx, team.ID, channel, chatID, e.FileName)
-				if existing != nil {
-					versions, _ := t.manager.teamStore.ListFileVersions(ctx, existing.ID)
-					nextVersion := 1
-					if len(versions) > 0 {
-						nextVersion = versions[0].Version + 1
-					}
-					versionPath := fmt.Sprintf("%s.v%d", diskPath, nextVersion)
-					if _, statErr := os.Stat(diskPath); statErr == nil {
-						_ = os.Rename(diskPath, versionPath)
-						_ = t.manager.teamStore.CreateFileVersion(ctx, &store.TeamWorkspaceFileVersionData{
-							FileID:     existing.ID,
-							Version:    nextVersion,
-							FilePath:   versionPath,
-							SizeBytes:  existing.SizeBytes,
-							UploadedBy: existing.UploadedBy,
-						})
-						prunedPaths, _ := t.manager.teamStore.PruneOldVersions(ctx, existing.ID, maxVersionsPerFile)
-						for _, p := range prunedPaths {
-							_ = os.Remove(p)
-						}
-					}
-				}
-			}
-			return os.WriteFile(diskPath, []byte(e.Content), 0640)
-		}
-
-		_, err := t.manager.teamStore.UpsertWorkspaceFile(ctx, file, diskWriteFn)
-		if err != nil {
+		if err := os.WriteFile(diskPath, []byte(e.Content), 0640); err != nil {
 			errors = append(errors, fmt.Sprintf("%s: %s", e.FileName, err))
 			continue
 		}
@@ -352,44 +304,27 @@ func (t *WorkspaceWriteTool) executeWrite(ctx context.Context, args map[string]a
 	return NewResult(msg)
 }
 
-func (t *WorkspaceWriteTool) seedTemplates(ctx context.Context, team *store.TeamData, agentID uuid.UUID, channel, chatID string, ws workspaceSettings) {
+func (t *WorkspaceWriteTool) seedTemplates(team *store.TeamData, channel, chatID string, ws workspaceSettings) {
 	if len(ws.WorkspaceTemplates) == 0 {
 		return
 	}
-	templates := ws.WorkspaceTemplates
 
 	dir, err := workspaceDir(t.dataDir, team.ID, channel, chatID)
 	if err != nil {
 		return
 	}
 
-	for _, tmpl := range templates {
+	for _, tmpl := range ws.WorkspaceTemplates {
 		name, err := sanitizeFileName(tmpl.FileName)
 		if err != nil {
 			continue
 		}
-		mimeType, _ := inferMimeType(name)
 		diskPath := filepath.Join(dir, name)
-
-		file := &store.TeamWorkspaceFileData{
-			TeamID:     team.ID,
-			Channel:    channel,
-			ChatID:     chatID,
-			FileName:   name,
-			MimeType:   mimeType,
-			FilePath:   diskPath,
-			SizeBytes:  int64(len(tmpl.Content)),
-			UploadedBy: agentID,
-			Tags:       []string{"reference"},
-		}
-		content := tmpl.Content
-		if _, err := t.manager.teamStore.UpsertWorkspaceFile(ctx, file, func(_ bool) error {
-			return os.WriteFile(diskPath, []byte(content), 0640)
-		}); err != nil {
+		if err := os.WriteFile(diskPath, []byte(tmpl.Content), 0640); err != nil {
 			slog.Warn("workspace: template seed failed", "file", name, "error", err)
 		}
 	}
-	slog.Info("workspace: seeded templates", "count", len(templates), "team", team.ID, "channel", channel, "chat_id", chatID)
+	slog.Info("workspace: seeded templates", "count", len(ws.WorkspaceTemplates), "team", team.ID, "channel", channel, "chat_id", chatID)
 }
 
 func formatBytes(b int64) string {

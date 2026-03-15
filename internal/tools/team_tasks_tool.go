@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -33,12 +35,15 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
-				"type":        "string",
-				"description": "'list', 'get', 'create', 'claim', 'complete', 'cancel', 'approve', 'reject', 'search', 'review', 'comment', 'progress', 'attach', 'update', 'await_reply', or 'clear_followup'",
+				"type": "string",
+				"description": "'list', 'get', 'create', 'claim', 'complete', 'cancel', 'approve', 'reject', 'search', 'review', 'comment', 'progress', 'attach', 'update', 'ask_user', or 'clear_ask_user'. " +
+					"ask_user: set a periodic reminder that is sent to the USER (not the team) when you need the user's input/decision to continue (e.g. 'Which design do you prefer?'). ONLY use when you have a question for the user. Do NOT use for status updates, waiting for teammates, or notifications — use 'progress' instead. " +
+					"clear_ask_user: cancel a previously set ask_user reminder. " +
+					"retry: re-dispatch a stale or failed task.",
 			},
 			"task_id": map[string]any{
 				"type":        "string",
-				"description": "Task ID (required for most actions except list, create, search)",
+				"description": "Task UUID (required for most actions except list, create, search). When working on a dispatched task, this is auto-resolved from context — you can omit it for complete/progress/comment.",
 			},
 			"subject": map[string]any{
 				"type":        "string",
@@ -54,7 +59,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			},
 			"text": map[string]any{
 				"type":        "string",
-				"description": "Text content: comment text, cancel/reject reason, progress step, or followup reminder message",
+				"description": "Text content: comment text, cancel/reject reason, progress update, or ask_user reminder question (must be a question asking the user for input/decision)",
 			},
 			"status": map[string]any{
 				"type":        "string",
@@ -71,7 +76,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			"blocked_by": map[string]any{
 				"type":        "array",
 				"items":       map[string]any{"type": "string"},
-				"description": "Task IDs that must complete first (for create)",
+				"description": "Task IDs that must complete first (for create/update)",
 			},
 			"require_approval": map[string]any{
 				"type":        "boolean",
@@ -85,6 +90,10 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Workspace file ID (for attach)",
 			},
+			"assignee": map[string]any{
+				"type":        "string",
+				"description": "Agent key to assign task to (for create). Auto-dispatches to that team member.",
+			},
 		},
 		"required": []string{"action"},
 	}
@@ -94,7 +103,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 var v2Actions = map[string]bool{
 	"approve": true, "reject": true, "review": true, "comment": true,
 	"progress": true, "attach": true, "update": true,
-	"await_reply": true, "clear_followup": true,
+	"ask_user": true, "clear_ask_user": true, "retry": true,
 }
 
 func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Result {
@@ -140,12 +149,14 @@ func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return t.executeAttach(ctx, args)
 	case "update":
 		return t.executeUpdate(ctx, args)
-	case "await_reply":
-		return t.executeAwaitReply(ctx, args)
-	case "clear_followup":
-		return t.executeClearFollowup(ctx, args)
+	case "ask_user":
+		return t.executeAskUser(ctx, args)
+	case "clear_ask_user":
+		return t.executeClearAskUser(ctx, args)
+	case "retry":
+		return t.executeRetry(ctx, args)
 	default:
-		return ErrorResult(fmt.Sprintf("unknown action: %s (use list, get, create, claim, complete, cancel, search, review, comment, progress, attach, update, await_reply, or clear_followup)", action))
+		return ErrorResult(fmt.Sprintf("unknown action: %s (use list, get, create, claim, complete, cancel, search, review, comment, progress, attach, update, ask_user, clear_ask_user, or retry)", action))
 	}
 }
 
@@ -194,19 +205,41 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 	return SilentResult(string(out))
 }
 
+// resolveTaskID extracts and validates the task_id from tool arguments.
+// Falls back to the dispatched task ID from context when task_id is empty or
+// not a valid UUID (agents often pass task_number like "1" instead of the UUID).
+func resolveTaskID(ctx context.Context, args map[string]any) (uuid.UUID, error) {
+	taskIDStr, _ := args["task_id"].(string)
+
+	// Try parsing as UUID first.
+	if taskIDStr != "" {
+		if id, err := uuid.Parse(taskIDStr); err == nil {
+			return id, nil
+		}
+	}
+
+	// Fall back to the dispatched team task ID from context.
+	if ctxID := TeamTaskIDFromCtx(ctx); ctxID != "" {
+		if id, err := uuid.Parse(ctxID); err == nil {
+			return id, nil
+		}
+	}
+
+	if taskIDStr == "" {
+		return uuid.Nil, fmt.Errorf("task_id is required")
+	}
+	return uuid.Nil, fmt.Errorf("invalid task_id %q — use the UUID from task list, not the task number", taskIDStr)
+}
+
 func (t *TeamTasksTool) executeGet(ctx context.Context, args map[string]any) *Result {
 	team, _, err := t.manager.resolveTeam(ctx)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for get action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	task, err := t.manager.teamStore.GetTask(ctx, taskID)
@@ -315,9 +348,11 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if raw, ok := args["blocked_by"].([]any); ok {
 		for _, v := range raw {
 			if s, ok := v.(string); ok {
-				if id, err := uuid.Parse(s); err == nil {
-					blockedBy = append(blockedBy, id)
+				id, err := uuid.Parse(s)
+				if err != nil {
+					return ErrorResult(fmt.Sprintf("blocked_by contains invalid task ID %q — must be a real task UUID from a previous create call. Create dependency tasks first, then use their IDs.", s))
 				}
+				blockedBy = append(blockedBy, id)
 			}
 		}
 	}
@@ -333,6 +368,31 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		}
 	}
 
+	// Resolve optional assignee (agent key → UUID). Must be a team member.
+	var assigneeID uuid.UUID
+	if assigneeKey, _ := args["assignee"].(string); assigneeKey != "" {
+		aid, err := t.manager.resolveAgentByKey(assigneeKey)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("assignee %q not found: %v", assigneeKey, err))
+		}
+		// Verify assignee is a member of this team.
+		members, err := t.manager.cachedListMembers(ctx, team.ID, agentID)
+		if err != nil {
+			return ErrorResult("failed to verify team membership: " + err.Error())
+		}
+		isMember := false
+		for _, m := range members {
+			if m.AgentID == aid {
+				isMember = true
+				break
+			}
+		}
+		if !isMember {
+			return ErrorResult(fmt.Sprintf("agent %q is not a member of this team", assigneeKey))
+		}
+		assigneeID = aid
+	}
+
 	requireApproval, _ := args["require_approval"].(bool)
 	status := store.TeamTaskStatusPending
 	if requireApproval {
@@ -340,8 +400,33 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	} else if len(blockedBy) > 0 {
 		status = store.TeamTaskStatusBlocked
 	}
+	// Assigned tasks without blockers stay pending — dispatched after the turn
+	// ends via post-turn processing (avoids race with blocked_by setup).
 
 	chatID := ToolChatIDFromCtx(ctx)
+
+	// Compute the team workspace directory so member agents write files to the
+	// shared team folder (teams/{teamID}/{chatID}/) instead of their own personal workspace.
+	// This aligns write_file/create_image with workspace_read/workspace_write paths.
+	taskMeta := make(map[string]any)
+	if teamWsDir, err := workspaceDir(t.manager.dataDir, team.ID, "", chatID); err == nil {
+		taskMeta["team_workspace"] = teamWsDir
+	}
+	// Preserve original blocked_by list for blocker-result forwarding when task unblocks.
+	if len(blockedBy) > 0 {
+		ids := make([]string, len(blockedBy))
+		for i, id := range blockedBy {
+			ids[i] = id.String()
+		}
+		taskMeta["original_blocked_by"] = ids
+	}
+	// Store leader's trace context so unblocked dispatch links back to the leader's trace.
+	if traceID := tracing.TraceIDFromContext(ctx); traceID != uuid.Nil {
+		taskMeta["origin_trace_id"] = traceID.String()
+	}
+	if rootSpanID := tracing.ParentSpanIDFromContext(ctx); rootSpanID != uuid.Nil {
+		taskMeta["origin_root_span_id"] = rootSpanID.String()
+	}
 
 	task := &store.TeamTaskData{
 		TeamID:           team.ID,
@@ -355,12 +440,17 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		TaskType:         "general",
 		CreatedByAgentID: &agentID,
 		ChatID:           chatID,
+		Metadata: taskMeta,
+	}
+	if assigneeID != uuid.Nil {
+		task.OwnerAgentID = &assigneeID
 	}
 
 	if err := t.manager.teamStore.CreateTask(ctx, task); err != nil {
 		return ErrorResult("failed to create task: " + err.Error())
 	}
 
+	agentKey := t.manager.agentKeyFromID(ctx, agentID)
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCreated, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
 		TaskID:    task.ID.String(),
@@ -370,7 +460,46 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		Channel:   ToolChannelFromCtx(ctx),
 		ChatID:    chatID,
 		Timestamp: task.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType: "agent",
+		ActorID:   agentKey,
 	})
+	if assigneeID != uuid.Nil {
+		t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+			TeamID:        team.ID.String(),
+			TaskID:        task.ID.String(),
+			Status:        status,
+			OwnerAgentKey: t.manager.agentKeyFromID(ctx, assigneeID),
+			UserID:        store.UserIDFromContext(ctx),
+			Channel:       ToolChannelFromCtx(ctx),
+			ChatID:        chatID,
+			Timestamp:     task.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			ActorType:     "agent",
+			ActorID:       agentKey,
+		})
+	}
+
+	// Track for post-turn dispatch. If no post-turn hook (e.g. HTTP API), dispatch immediately.
+	if assigneeID != uuid.Nil && status == store.TeamTaskStatusPending {
+		if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil {
+			ptd.Add(team.ID, task.ID)
+		} else {
+			// Fallback: assign (pending → in_progress + lock) then dispatch.
+			if err := t.manager.teamStore.AssignTask(ctx, task.ID, assigneeID, team.ID); err != nil {
+				slog.Warn("executeCreate: fallback assign failed", "task_id", task.ID, "error", err)
+			} else {
+				t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+					TeamID:        team.ID.String(),
+					TaskID:        task.ID.String(),
+					Status:        store.TeamTaskStatusInProgress,
+					OwnerAgentKey: t.manager.agentKeyFromID(ctx, assigneeID),
+					Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+					ActorType:     "system",
+					ActorID:       "fallback_dispatch",
+				})
+				t.manager.dispatchTaskToAgent(ctx, task, team.ID, assigneeID)
+			}
+		}
+	}
 
 	return NewResult(fmt.Sprintf("Task created: %s (id=%s, identifier=%s, status=%s)", subject, task.ID, task.Identifier, status))
 }
@@ -381,13 +510,9 @@ func (t *TeamTasksTool) executeClaim(ctx context.Context, args map[string]any) *
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for claim action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	if err := t.manager.teamStore.ClaimTask(ctx, taskID, agentID, team.ID); err != nil {
@@ -397,7 +522,7 @@ func (t *TeamTasksTool) executeClaim(ctx context.Context, args map[string]any) *
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskClaimed, protocol.TeamTaskEventPayload{
 		TeamID:           team.ID.String(),
-		TaskID:           taskIDStr,
+		TaskID:           taskID.String(),
 		Status:           store.TeamTaskStatusInProgress,
 		OwnerAgentKey:    ownerKey,
 		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),
@@ -405,9 +530,11 @@ func (t *TeamTasksTool) executeClaim(ctx context.Context, args map[string]any) *
 		Channel:          ToolChannelFromCtx(ctx),
 		ChatID:           ToolChatIDFromCtx(ctx),
 		Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType:        "agent",
+		ActorID:          ownerKey,
 	})
 
-	return NewResult(fmt.Sprintf("Task %s claimed successfully. It is now in progress.", taskIDStr))
+	return NewResult(fmt.Sprintf("Task %s claimed successfully. It is now in progress.", taskID))
 }
 
 func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any) *Result {
@@ -421,13 +548,9 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for complete action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	result, _ := args["result"].(string)
@@ -447,7 +570,7 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCompleted, protocol.TeamTaskEventPayload{
 		TeamID:           team.ID.String(),
-		TaskID:           taskIDStr,
+		TaskID:           taskID.String(),
 		Status:           store.TeamTaskStatusCompleted,
 		OwnerAgentKey:    ownerKey,
 		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),
@@ -455,9 +578,14 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 		Channel:          ToolChannelFromCtx(ctx),
 		ChatID:           ToolChatIDFromCtx(ctx),
 		Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType:        "agent",
+		ActorID:          ownerKey,
 	})
 
-	return NewResult(fmt.Sprintf("Task %s completed. Dependent tasks have been unblocked.", taskIDStr))
+	// Immediately dispatch any newly-unblocked tasks.
+	t.manager.DispatchUnblockedTasks(ctx, team.ID)
+
+	return NewResult(fmt.Sprintf("Task %s completed. Dependent tasks have been unblocked.", taskID))
 }
 
 func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) *Result {
@@ -474,13 +602,9 @@ func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) 
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for cancel action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	reason, _ := args["text"].(string)
@@ -493,31 +617,23 @@ func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) 
 		return ErrorResult("failed to cancel task: " + err.Error())
 	}
 
-	// Cancel any running delegation for this task.
-	if t.manager.delegateMgr != nil {
-		t.manager.delegateMgr.CancelByTeamTaskID(taskID)
-	}
-
-	// Record audit event.
-	_ = t.manager.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "cancelled",
-		ActorType: "agent",
-		ActorID:   agentID.String(),
-	})
-
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCancelled, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
-		TaskID:    taskIDStr,
+		TaskID:    taskID.String(),
 		Status:    store.TeamTaskStatusCancelled,
 		Reason:    reason,
 		UserID:    store.UserIDFromContext(ctx),
 		Channel:   ToolChannelFromCtx(ctx),
 		ChatID:    ToolChatIDFromCtx(ctx),
 		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType: "agent",
+		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
 
-	return NewResult(fmt.Sprintf("Task %s cancelled. Any running delegation has been stopped and dependent tasks unblocked.", taskIDStr))
+	// Immediately dispatch any newly-unblocked tasks.
+	t.manager.DispatchUnblockedTasks(ctx, team.ID)
+
+	return NewResult(fmt.Sprintf("Task %s cancelled. Any running delegation has been stopped and dependent tasks unblocked.", taskID))
 }
 
 func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) *Result {
@@ -526,13 +642,9 @@ func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) 
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for review action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	// Verify the agent owns this task.
@@ -551,17 +663,10 @@ func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) 
 		return ErrorResult("failed to submit for review: " + err.Error())
 	}
 
-	_ = t.manager.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "reviewed",
-		ActorType: "agent",
-		ActorID:   agentID.String(),
-	})
-
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskReviewed, protocol.TeamTaskEventPayload{
 		TeamID:           team.ID.String(),
-		TaskID:           taskIDStr,
+		TaskID:           taskID.String(),
 		Status:           store.TeamTaskStatusInReview,
 		OwnerAgentKey:    ownerKey,
 		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),
@@ -569,9 +674,11 @@ func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) 
 		Channel:          ToolChannelFromCtx(ctx),
 		ChatID:           ToolChatIDFromCtx(ctx),
 		Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType:        "agent",
+		ActorID:          ownerKey,
 	})
 
-	return NewResult(fmt.Sprintf("Task %s submitted for review.", taskIDStr))
+	return NewResult(fmt.Sprintf("Task %s submitted for review.", taskID))
 }
 
 func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any) *Result {
@@ -594,13 +701,9 @@ func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any)
 		}
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for approve action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	// Fetch task for subject (used in lead message) and team ownership check
@@ -626,13 +729,15 @@ func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any)
 
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskApproved, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
-		TaskID:    taskIDStr,
+		TaskID:    taskID.String(),
 		Subject:   task.Subject,
 		Status:    newStatus,
 		UserID:    store.UserIDFromContext(ctx),
 		Channel:   ToolChannelFromCtx(ctx),
 		ChatID:    ToolChatIDFromCtx(ctx),
 		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType: "agent",
+		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
 
 	// Inject message to lead agent via mailbox
@@ -646,7 +751,7 @@ func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any)
 		TaskID:      &taskID,
 	})
 
-	return NewResult(fmt.Sprintf("Task %s approved (status: %s).", taskIDStr, newStatus))
+	return NewResult(fmt.Sprintf("Task %s approved (status: %s).", taskID, newStatus))
 }
 
 func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) *Result {
@@ -668,13 +773,9 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		}
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for reject action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	reason, _ := args["text"].(string)
@@ -698,7 +799,7 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskRejected, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
-		TaskID:    taskIDStr,
+		TaskID:    taskID.String(),
 		Subject:   task.Subject,
 		Status:    "cancelled",
 		Reason:    reason,
@@ -706,6 +807,8 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		Channel:   ToolChannelFromCtx(ctx),
 		ChatID:    ToolChatIDFromCtx(ctx),
 		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType: "agent",
+		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
 
 	// Inject message to lead agent via mailbox
@@ -719,7 +822,7 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		TaskID:      &taskID,
 	})
 
-	return NewResult(fmt.Sprintf("Task %s rejected. Dependent tasks have been unblocked.", taskIDStr))
+	return NewResult(fmt.Sprintf("Task %s rejected. Dependent tasks have been unblocked.", taskID))
 }
 
 func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any) *Result {
@@ -728,13 +831,9 @@ func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any)
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for comment action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	text, _ := args["text"].(string)
@@ -764,14 +863,14 @@ func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any)
 
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCommented, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
-		TaskID:    taskIDStr,
+		TaskID:    taskID.String(),
 		UserID:    store.UserIDFromContext(ctx),
 		Channel:   ToolChannelFromCtx(ctx),
 		ChatID:    ToolChatIDFromCtx(ctx),
 		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	})
 
-	return NewResult(fmt.Sprintf("Comment added to task %s.", taskIDStr))
+	return NewResult(fmt.Sprintf("Comment added to task %s.", taskID))
 }
 
 func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any) *Result {
@@ -780,13 +879,9 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for progress action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	percent := 0
@@ -816,7 +911,7 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskProgress, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
-		TaskID:    taskIDStr,
+		TaskID:    taskID.String(),
 		Status:    store.TeamTaskStatusInProgress,
 		UserID:    store.UserIDFromContext(ctx),
 		Channel:   ToolChannelFromCtx(ctx),
@@ -833,13 +928,9 @@ func (t *TeamTasksTool) executeAttach(ctx context.Context, args map[string]any) 
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for attach action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	fileIDStr, _ := args["file_id"].(string)
@@ -868,7 +959,7 @@ func (t *TeamTasksTool) executeAttach(ctx context.Context, args map[string]any) 
 		return ErrorResult("failed to attach file: " + err.Error())
 	}
 
-	return NewResult(fmt.Sprintf("File attached to task %s.", taskIDStr))
+	return NewResult(fmt.Sprintf("File attached to task %s.", taskID))
 }
 
 func (t *TeamTasksTool) executeUpdate(ctx context.Context, args map[string]any) *Result {
@@ -880,13 +971,9 @@ func (t *TeamTasksTool) executeUpdate(ctx context.Context, args map[string]any) 
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for update action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	// Verify task belongs to this team (prevent cross-team update).
@@ -905,35 +992,57 @@ func (t *TeamTasksTool) executeUpdate(ctx context.Context, args map[string]any) 
 	if subj, ok := args["subject"].(string); ok && subj != "" {
 		updates["subject"] = subj
 	}
+	if raw, ok := args["blocked_by"].([]any); ok {
+		var blockedBy []uuid.UUID
+		for _, v := range raw {
+			if s, ok := v.(string); ok {
+				id, err := uuid.Parse(s)
+				if err != nil {
+					return ErrorResult(fmt.Sprintf("blocked_by contains invalid task ID %q — must be a real task UUID.", s))
+				}
+				blockedBy = append(blockedBy, id)
+			}
+		}
+		updates["blocked_by"] = blockedBy
+	}
 	if len(updates) == 0 {
-		return ErrorResult("no updates provided (set description or subject)")
+		return ErrorResult("no updates provided (set description, subject, or blocked_by)")
 	}
 
 	if err := t.manager.teamStore.UpdateTask(ctx, taskID, updates); err != nil {
 		return ErrorResult("failed to update task: " + err.Error())
 	}
 
-	return NewResult(fmt.Sprintf("Task %s updated.", taskIDStr))
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskUpdated, protocol.TeamTaskEventPayload{
+		TeamID:    team.ID.String(),
+		TaskID:    taskID.String(),
+		Subject:   task.Subject,
+		Status:    task.Status,
+		UserID:    store.UserIDFromContext(ctx),
+		Channel:   ToolChannelFromCtx(ctx),
+		ChatID:    ToolChatIDFromCtx(ctx),
+		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType: "agent",
+		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
+	})
+
+	return NewResult(fmt.Sprintf("Task %s updated.", taskID))
 }
 
-func (t *TeamTasksTool) executeAwaitReply(ctx context.Context, args map[string]any) *Result {
+func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any) *Result {
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for await_reply action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	followupMessage, _ := args["text"].(string)
 	if followupMessage == "" {
-		return ErrorResult("text is required for await_reply action (the reminder message)")
+		return ErrorResult("text is required for ask_user action (the question for the user)")
 	}
 
 	// Verify ownership.
@@ -973,22 +1082,18 @@ func (t *TeamTasksTool) executeAwaitReply(ctx context.Context, args map[string]a
 	if maxReminders > 0 {
 		maxDesc = fmt.Sprintf("max %d", maxReminders)
 	}
-	return NewResult(fmt.Sprintf("Follow-up set for task %s. First reminder in %d minutes via %s (%s).", taskIDStr, delayMinutes, channel, maxDesc))
+	return NewResult(fmt.Sprintf("Follow-up set for task %s. First reminder in %d minutes via %s (%s).", taskID, delayMinutes, channel, maxDesc))
 }
 
-func (t *TeamTasksTool) executeClearFollowup(ctx context.Context, args map[string]any) *Result {
+func (t *TeamTasksTool) executeClearAskUser(ctx context.Context, args map[string]any) *Result {
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
-	taskIDStr, _ := args["task_id"].(string)
-	if taskIDStr == "" {
-		return ErrorResult("task_id is required for clear_followup action")
-	}
-	taskID, err := uuid.Parse(taskIDStr)
+	taskID, err := resolveTaskID(ctx, args)
 	if err != nil {
-		return ErrorResult("invalid task_id")
+		return ErrorResult(err.Error())
 	}
 
 	// Verify task belongs to team.
@@ -1008,5 +1113,61 @@ func (t *TeamTasksTool) executeClearFollowup(ctx context.Context, args map[strin
 		return ErrorResult("failed to clear follow-up: " + err.Error())
 	}
 
-	return NewResult(fmt.Sprintf("Follow-up reminders cleared for task %s.", taskIDStr))
+	return NewResult(fmt.Sprintf("Follow-up reminders cleared for task %s.", taskID))
+}
+
+func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *Result {
+	team, agentID, err := t.manager.resolveTeam(ctx)
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+	if err := t.manager.requireLead(ctx, team, agentID); err != nil {
+		return ErrorResult(err.Error())
+	}
+
+	taskID, err := resolveTaskID(ctx, args)
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+
+	task, err := t.manager.teamStore.GetTask(ctx, taskID)
+	if err != nil {
+		return ErrorResult("task not found: " + err.Error())
+	}
+	if task.TeamID != team.ID {
+		return ErrorResult("task does not belong to your team")
+	}
+	if task.Status != store.TeamTaskStatusStale && task.Status != store.TeamTaskStatusFailed {
+		return ErrorResult(fmt.Sprintf("retry only works on stale or failed tasks (current status: %s)", task.Status))
+	}
+	if task.OwnerAgentID == nil {
+		return ErrorResult("task has no assignee — assign it first via update")
+	}
+
+	// Reset status to pending first (AssignTask only transitions from pending).
+	if err := t.manager.teamStore.ResetTaskStatus(ctx, taskID, team.ID); err != nil {
+		return ErrorResult("failed to reset task: " + err.Error())
+	}
+	// Assign (pending → in_progress + lock).
+	if err := t.manager.teamStore.AssignTask(ctx, taskID, *task.OwnerAgentID, team.ID); err != nil {
+		return ErrorResult("failed to retry task: " + err.Error())
+	}
+
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+		TeamID:        team.ID.String(),
+		TaskID:        taskID.String(),
+		Status:        store.TeamTaskStatusInProgress,
+		OwnerAgentKey: t.manager.agentKeyFromID(ctx, *task.OwnerAgentID),
+		UserID:        store.UserIDFromContext(ctx),
+		Channel:       ToolChannelFromCtx(ctx),
+		ChatID:        ToolChatIDFromCtx(ctx),
+		Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType:     "agent",
+		ActorID:       t.manager.agentKeyFromID(ctx, agentID),
+	})
+
+	// Dispatch immediately (retry is an explicit action, not during a turn).
+	t.manager.dispatchTaskToAgent(ctx, task, team.ID, *task.OwnerAgentID)
+
+	return NewResult(fmt.Sprintf("Task %s retried and dispatched to %s.", taskID, t.manager.agentKeyFromID(ctx, *task.OwnerAgentID)))
 }

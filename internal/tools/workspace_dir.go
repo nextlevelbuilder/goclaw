@@ -32,6 +32,23 @@ func workspaceDir(dataDir string, teamID uuid.UUID, _, chatID string) (string, e
 	return dir, nil
 }
 
+// workspaceRelPath returns the relative path (relative to dataDir) for a workspace file.
+func workspaceRelPath(teamID uuid.UUID, chatID, fileName string) string {
+	if chatID == "" {
+		chatID = "_default"
+	}
+	return filepath.Join("teams", teamID.String(), chatID, fileName)
+}
+
+// ResolveWorkspacePath resolves a workspace file path to an absolute disk path.
+// Handles both legacy absolute paths and new relative paths.
+func ResolveWorkspacePath(dataDir, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dataDir, path)
+}
+
 // validFileName matches alphanumeric + "-_." only.
 var validFileName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,253}[a-zA-Z0-9._]$`)
 
@@ -172,18 +189,12 @@ func (ws workspaceSettings) quotaMB(defaultMB int) int {
 	return defaultMB
 }
 
-// resolveWorkspaceScopeFromArgs resolves scope (channel, chatID) from tool args + context.
-// Returns error result string if scope=team but team setting is isolated.
-func resolveWorkspaceScopeFromArgs(ctx context.Context, args map[string]any, ws workspaceSettings) (channel, chatID, errMsg string) {
-	scope, _ := args["scope"].(string)
-	if scope == "" {
-		scope = "channel"
-	}
+// resolveWorkspaceScopeFromArgs resolves scope (channel, chatID) from team settings + context.
+// Scope is determined by team config (workspace_scope=shared), not by agent args.
+// When shared is enabled, chatID is cleared so all members share the same directory.
+func resolveWorkspaceScopeFromArgs(ctx context.Context, _ map[string]any, ws workspaceSettings) (channel, chatID, errMsg string) {
 	channel, chatID = resolveWorkspaceScope(ctx)
-	if scope == "team" {
-		if !ws.isShared() {
-			return "", "", "team workspace_scope is 'isolated' — retry with scope='channel' (or omit scope) to use your per-user workspace. To enable shared team workspace, ask an admin to set workspace_scope='shared' in team settings."
-		}
+	if ws.isShared() {
 		chatID = ""
 	}
 	return "", chatID, ""

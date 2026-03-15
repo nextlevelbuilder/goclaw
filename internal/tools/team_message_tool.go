@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -94,7 +95,7 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]any) 
 	}
 
 	// Validate recipient is in the same team (prevent cross-team messaging).
-	members, err := t.manager.teamStore.ListMembers(ctx, team.ID)
+	members, err := t.manager.cachedListMembers(ctx, team.ID, agentID)
 	if err != nil {
 		return ErrorResult("failed to verify team membership: " + err.Error())
 	}
@@ -174,12 +175,6 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]any) 
 		)
 	} else {
 		teamTaskID = taskData.ID
-		_ = t.manager.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-			TaskID:    teamTaskID,
-			EventType: "created",
-			ActorType: "agent",
-			ActorID:   t.manager.agentKeyFromID(ctx, agentID),
-		})
 		t.manager.broadcastTeamEvent(protocol.EventTeamTaskCreated, protocol.TeamTaskEventPayload{
 			TeamID:           team.ID.String(),
 			TaskID:           teamTaskID.String(),
@@ -191,6 +186,8 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]any) 
 			Channel:          ToolChannelFromCtx(ctx),
 			ChatID:           ToolChatIDFromCtx(ctx),
 			Timestamp:        time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			ActorType:        "agent",
+			ActorID:          t.manager.agentKeyFromID(ctx, agentID),
 		})
 	}
 
@@ -246,7 +243,7 @@ func (t *TeamMessageTool) executeBroadcast(ctx context.Context, args map[string]
 
 	// Real-time delivery to all teammates via message bus
 	fromKey := t.manager.agentKeyFromID(ctx, agentID)
-	members, err := t.manager.teamStore.ListMembers(ctx, team.ID)
+	members, err := t.manager.cachedListMembers(ctx, team.ID, agentID)
 	if err == nil {
 		for _, m := range members {
 			if m.AgentID == agentID {
@@ -291,10 +288,15 @@ func (t *TeamMessageTool) executeRead(ctx context.Context) *Result {
 		_ = t.manager.teamStore.MarkRead(ctx, msg.ID)
 	}
 
-	out, _ := json.Marshal(map[string]any{
+	resp := map[string]any{
 		"messages": messages,
 		"count":    len(messages),
-	})
+	}
+	if len(messages) >= 50 {
+		resp["note"] = "Showing latest 50 unread messages. Read again after processing these to get more."
+		resp["has_more"] = true
+	}
+	out, _ := json.Marshal(resp)
 	return SilentResult(string(out))
 }
 
@@ -322,15 +324,28 @@ func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, me
 	teamMeta := map[string]string{
 		"origin_channel":   originChannel,
 		"origin_peer_kind": originPeerKind,
+		"origin_chat_id":   chatID,
+		"origin_user_id":   userID,
 		"from_agent":       fromKey,
 		"to_agent":         toKey,
+		"team_id":          teamID.String(),
 	}
 	if localKey := ToolLocalKeyFromCtx(ctx); localKey != "" {
 		teamMeta["origin_local_key"] = localKey
 	}
 	if teamTaskID != uuid.Nil {
 		teamMeta["team_task_id"] = teamTaskID.String()
-		teamMeta["team_id"] = teamID.String()
+	}
+	// Pass team workspace so the receiving agent can access shared files.
+	if ws, err := workspaceDir(t.manager.dataDir, teamID, "", chatID); err == nil {
+		teamMeta["team_workspace"] = ws
+	}
+	// Propagate trace context so the receiving agent's trace links back.
+	if traceID := tracing.TraceIDFromContext(ctx); traceID != uuid.Nil {
+		teamMeta["origin_trace_id"] = traceID.String()
+	}
+	if rootSpanID := tracing.ParentSpanIDFromContext(ctx); rootSpanID != uuid.Nil {
+		teamMeta["origin_root_span_id"] = rootSpanID.String()
 	}
 	t.manager.msgBus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",

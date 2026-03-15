@@ -9,12 +9,12 @@ export function useTeamWorkspace() {
   const [loading, setLoading] = useState(false);
 
   const listFiles = useCallback(
-    async (teamId: string, channel?: string, chatId?: string) => {
+    async (teamId: string, chatId?: string) => {
       setLoading(true);
       try {
         const res = await ws.call<{ files: TeamWorkspaceFile[]; count: number }>(
           Methods.TEAMS_WORKSPACE_LIST,
-          { team_id: teamId, channel: channel ?? "", chat_id: chatId ?? "" },
+          { team_id: teamId, chat_id: chatId ?? "" },
         );
         setFiles(res.files ?? []);
         return res.files ?? [];
@@ -28,10 +28,10 @@ export function useTeamWorkspace() {
   );
 
   const readFile = useCallback(
-    async (teamId: string, fileName: string, channel?: string, chatId?: string) => {
+    async (teamId: string, fileName: string, chatId?: string) => {
       const res = await ws.call<{ file: TeamWorkspaceFile; content: string }>(
         Methods.TEAMS_WORKSPACE_READ,
-        { team_id: teamId, file_name: fileName, channel: channel ?? "", chat_id: chatId ?? "" },
+        { team_id: teamId, file_name: fileName, chat_id: chatId ?? "" },
       );
       return res;
     },
@@ -39,11 +39,10 @@ export function useTeamWorkspace() {
   );
 
   const deleteFile = useCallback(
-    async (teamId: string, fileName: string, channel?: string, chatId?: string) => {
+    async (teamId: string, fileName: string, chatId?: string) => {
       await ws.call(Methods.TEAMS_WORKSPACE_DELETE, {
         team_id: teamId,
         file_name: fileName,
-        channel: channel ?? "",
         chat_id: chatId ?? "",
       });
     },

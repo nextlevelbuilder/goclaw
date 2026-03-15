@@ -146,16 +146,6 @@ func (m *TeamsMethods) handleTaskApprove(ctx context.Context, client *gateway.Cl
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "approved",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", taskID, "event", "approved", "error", err)
-	}
-
 	// Add optional comment.
 	if params.Comment != "" {
 		if err := m.teamStore.AddTaskComment(ctx, &store.TeamTaskCommentData{
@@ -177,6 +167,8 @@ func (m *TeamsMethods) handleTaskApprove(ctx context.Context, client *gateway.Cl
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 	}
 }
@@ -222,16 +214,6 @@ func (m *TeamsMethods) handleTaskReject(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "rejected",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", taskID, "event", "rejected", "error", err)
-	}
-
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
@@ -243,6 +225,8 @@ func (m *TeamsMethods) handleTaskReject(ctx context.Context, client *gateway.Cli
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 	}
 }
@@ -471,16 +455,6 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    task.ID,
-		EventType: "created",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", task.ID, "event", "created", "error", err)
-	}
-
 	// Auto-assign: use explicit assignTo, otherwise fall back to team lead.
 	assignTo := params.AssignTo
 	if assignTo == "" {
@@ -499,15 +473,6 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 				task.Status = store.TeamTaskStatusInProgress
 				task.OwnerAgentID = &agentID
 				autoAssignedAgentID = agentID
-				if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-					TaskID:    task.ID,
-					EventType: "assigned",
-					ActorType: "human",
-					ActorID:   client.UserID(),
-					Data:      json.RawMessage(`{"agent_id":"` + agentID.String() + `"}`),
-				}); err != nil {
-					slog.Warn("audit.record_failed", "task_id", task.ID, "event", "assigned", "error", err)
-				}
 			}
 		}
 	}
@@ -522,10 +487,24 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 
-		// Dispatch to assigned agent if auto-assigned during creation.
 		if autoAssignedAgentID != uuid.Nil {
+			m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+				TeamID:        teamID.String(),
+				TaskID:        task.ID.String(),
+				Status:        store.TeamTaskStatusInProgress,
+				OwnerAgentKey: autoAssignedAgentID.String(),
+				UserID:        client.UserID(),
+				Channel:       "dashboard",
+				Timestamp:     taskNowUTC(),
+				ActorType:     "human",
+				ActorID:       client.UserID(),
+			}))
+
+			// Dispatch to assigned agent.
 			m.dispatchTaskToAgent(ctx, task, task.ID, teamID, autoAssignedAgentID, client.UserID())
 		}
 	}
@@ -584,17 +563,6 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "assigned",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-		Data:      json.RawMessage(`{"agent_id":"` + agentID.String() + `"}`),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", taskID, "event", "assigned", "error", err)
-	}
-
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
@@ -605,6 +573,8 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 
 		// Dispatch task to the assigned agent via message bus so the consumer
@@ -624,26 +594,48 @@ func (m *TeamsMethods) dispatchTaskToAgent(ctx context.Context, task *store.Team
 	}
 
 	// Build task prompt for the agent.
-	content := fmt.Sprintf("[Assigned task #%d]: %s", task.TaskNumber, task.Subject)
+	content := fmt.Sprintf("[Assigned task #%d (id: %s)]: %s", task.TaskNumber, task.ID, task.Subject)
 	if task.Description != "" {
 		content += "\n\n" + task.Description
 	}
 
+	// Use the task's original channel/chat so completion announcements route
+	// back to the user's real channel (e.g. Telegram) instead of void "dashboard".
+	originChannel := task.Channel
+	if originChannel == "" {
+		originChannel = "dashboard"
+	}
+	fromAgent := "dashboard"
+	if team, err := m.teamStore.GetTeam(ctx, teamID); err == nil && team != nil {
+		if leadAg, err := m.agentStore.GetByID(ctx, team.LeadAgentID); err == nil {
+			fromAgent = leadAg.AgentKey
+		}
+	}
+
+	meta := map[string]string{
+		"origin_channel":   originChannel,
+		"origin_peer_kind": "direct",
+		"origin_chat_id":   task.ChatID,
+		"from_agent":       fromAgent,
+		"to_agent":         ag.AgentKey,
+		"team_task_id":     taskID.String(),
+		"team_id":          teamID.String(),
+	}
+	// Pass team workspace from task metadata so member uses the team's workspace.
+	if task.Metadata != nil {
+		if ws, _ := task.Metadata["team_workspace"].(string); ws != "" {
+			meta["team_workspace"] = ws
+		}
+	}
+
 	m.msgBus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",
-		SenderID: fmt.Sprintf("teammate:dashboard"),
+		SenderID: "teammate:dashboard",
 		ChatID:   teamID.String(),
 		Content:  content,
 		UserID:   userID,
 		AgentID:  ag.AgentKey,
-		Metadata: map[string]string{
-			"origin_channel":   "dashboard",
-			"origin_peer_kind": "direct",
-			"from_agent":       "dashboard",
-			"to_agent":         ag.AgentKey,
-			"team_task_id":     taskID.String(),
-			"team_id":          teamID.String(),
-		},
+		Metadata: meta,
 	})
 	slog.Info("teams.tasks.dispatch: sent task to agent",
 		"task_id", taskID,

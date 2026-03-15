@@ -106,8 +106,8 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	var sb strings.Builder
 	for _, entry := range entries {
-		// Filter out denied directories from listing
-		if entry.IsDir() && len(t.deniedPrefixes) > 0 {
+		// Filter out denied entries (both files and directories) from listing.
+		if len(t.deniedPrefixes) > 0 {
 			entryPath := filepath.Join(resolved, entry.Name())
 			if checkDeniedPath(entryPath, t.workspace, t.deniedPrefixes) != nil {
 				continue

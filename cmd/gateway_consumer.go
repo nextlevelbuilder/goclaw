@@ -22,13 +22,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // consumeInboundMessages reads inbound messages from channels (Telegram, Discord, etc.)
 // and routes them through the scheduler/agent loop, then publishes the response back.
 // Also handles subagent announcements: routes them through the parent agent's session
 // (matching TS subagent-announce.ts pattern) so the agent can reformulate for the user.
-func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents *agent.Router, cfg *config.Config, sched *scheduler.Scheduler, channelMgr *channels.Manager, teamStore store.TeamStore, quotaChecker *channels.QuotaChecker, delegateMgr *tools.DelegateManager, sessStore store.SessionStore, agentStore store.AgentStore, contactCollector *store.ContactCollector) {
+func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents *agent.Router, cfg *config.Config, sched *scheduler.Scheduler, channelMgr *channels.Manager, teamStore store.TeamStore, quotaChecker *channels.QuotaChecker, sessStore store.SessionStore, agentStore store.AgentStore, contactCollector *store.ContactCollector, postTurn tools.PostTurnProcessor) {
 	slog.Info("inbound message consumer started")
 
 	// Inbound message deduplication (matching TS src/infra/dedupe.ts + inbound-dedupe.ts).
@@ -45,6 +46,26 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 		v, _ := announceMu.LoadOrStore(key, &sync.Mutex{})
 		return v.(*sync.Mutex)
 	}
+
+	// Track running teammate tasks so they can be cancelled when the task is
+	// cancelled/failed externally (e.g. lead cancels via team_tasks tool).
+	var taskRunSessions sync.Map // taskID (string) → sessionKey (string)
+	msgBus.Subscribe("consumer.team-task-cancel", func(event bus.Event) {
+		if event.Name != protocol.EventTeamTaskCancelled && event.Name != protocol.EventTeamTaskFailed {
+			return
+		}
+		payload, ok := event.Payload.(protocol.TeamTaskEventPayload)
+		if !ok {
+			return
+		}
+		if sessKey, ok := taskRunSessions.Load(payload.TaskID); ok {
+			if cancelled := sched.CancelSession(sessKey.(string)); cancelled {
+				slog.Info("team task cancelled: stopped running agent",
+					"task_id", payload.TaskID, "session", sessKey)
+			}
+			taskRunSessions.Delete(payload.TaskID)
+		}
+	})
 
 	// processNormalMessage handles routing, scheduling, and response delivery for a single
 	// (possibly merged) inbound message. Called directly by the debouncer's flush callback.
@@ -314,8 +335,12 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			}
 		}
 
+		// Inject post-turn dispatch tracker so team task creates are deferred.
+		ptd := tools.NewPendingTeamDispatch()
+		schedCtx := tools.WithPendingTeamDispatch(ctx, ptd)
+
 		// Schedule through main lane (per-session concurrency controlled by maxConcurrent)
-		outCh := sched.ScheduleWithOpts(ctx, "main", agent.RunRequest{
+		outCh := sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
 			SessionKey:        sessionKey,
 			Message:           msg.Content,
 			Media:             reqMedia,
@@ -338,8 +363,17 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 		})
 
 		// Handle result asynchronously to not block the flush callback.
-		go func(agentKey, channel, chatID, session, rID string, meta map[string]string, blockReplyEnabled bool) {
+		go func(agentKey, channel, chatID, session, rID string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch) {
 			outcome := <-outCh
+
+			// Post-turn: dispatch pending team tasks created during this turn.
+			if postTurn != nil {
+				for teamID, taskIDs := range ptd.Drain() {
+					if err := postTurn.ProcessPendingTasks(ctx, teamID, taskIDs); err != nil {
+						slog.Warn("post_turn: failed", "team_id", teamID, "error", err)
+					}
+				}
+			}
 
 			// Clean up run tracking (in case HandleAgentEvent didn't fire for terminal events)
 			if channelMgr != nil {
@@ -417,7 +451,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			if teamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelDelegate && channel != tools.ChannelDashboard {
 				go autoSetFollowup(ctx, teamStore, agentStore, agentKey, channel, chatID, outcome.Result.Content)
 			}
-		}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, outMeta, blockReply)
+		}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, outMeta, blockReply, ptd)
 	}
 
 	// Inbound debounce: merge rapid messages from the same sender before processing.
@@ -783,6 +817,10 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			origChannel := msg.Metadata["origin_channel"]
 			origPeerKind := msg.Metadata["origin_peer_kind"]
 			origLocalKey := msg.Metadata["origin_local_key"]
+			origChatID := msg.Metadata["origin_chat_id"] // original chat (e.g. Telegram chat ID)
+			if origChatID == "" {
+				origChatID = msg.ChatID // fallback to inbound ChatID (team UUID for old dispatches)
+			}
 			origChannelType := resolveChannelType(channelMgr, origChannel)
 			targetAgent := msg.AgentID // team_message sets AgentID to the target agent key
 			if targetAgent == "" {
@@ -792,80 +830,176 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 				origPeerKind = string(sessions.PeerDirect)
 			}
 
-			if origChannel == "" || msg.ChatID == "" {
+			if origChannel == "" || origChatID == "" {
 				slog.Warn("teammate message: missing origin — DROPPED",
 					"sender", msg.SenderID,
 					"target", targetAgent,
 					"origin_channel", origChannel,
-					"chat_id", msg.ChatID,
+					"origin_chat_id", origChatID,
 					"user_id", msg.UserID,
 				)
 				continue
 			}
 
-			sessionKey := sessions.BuildScopedSessionKey(targetAgent, origChannel, sessions.PeerKind(origPeerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
-			sessionKey = overrideSessionKeyFromLocalKey(sessionKey, origLocalKey, targetAgent, origChannel, msg.ChatID, origPeerKind)
+			// Use isolated team session key so member execution doesn't share
+			// the user's direct chat session with this agent.
+			// Scoped per agent + team + chatID, matching workspace isolation.
+			sessionKey := sessions.BuildTeamSessionKey(targetAgent, msg.Metadata["team_id"], origChatID)
 
 			slog.Info("teammate message → scheduler (delegate lane)",
 				"from", msg.SenderID,
 				"to", targetAgent,
 				"session", sessionKey,
+				"team_task_id", msg.Metadata["team_task_id"],
 			)
 
 			announceUserID := msg.UserID
-			if origPeerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
-				announceUserID = fmt.Sprintf("group:%s:%s", origChannel, msg.ChatID)
+			if origPeerKind == string(sessions.PeerGroup) && origChatID != "" {
+				announceUserID = fmt.Sprintf("group:%s:%s", origChannel, origChatID)
 			}
 
 			outMeta := buildAnnounceOutMeta(origLocalKey)
 
+			// Link member agent trace back to lead's trace for unified tracing.
+			var linkedTraceID uuid.UUID
+			if tid := msg.Metadata["origin_trace_id"]; tid != "" {
+				linkedTraceID, _ = uuid.Parse(tid)
+			}
+
+			// Track task → session so the subscriber can cancel on task cancellation.
+			taskIDStr := msg.Metadata["team_task_id"]
+			if taskIDStr != "" {
+				taskRunSessions.Store(taskIDStr, sessionKey)
+			}
+
 			outCh := sched.Schedule(ctx, scheduler.LaneDelegate, agent.RunRequest{
-				SessionKey:  sessionKey,
-				Message:     msg.Content,
-				Channel:     origChannel,
-				ChannelType: origChannelType,
-				ChatID:      msg.ChatID,
-				PeerKind:    origPeerKind,
-				LocalKey:    origLocalKey,
-				UserID:      announceUserID,
-				RunID:       fmt.Sprintf("teammate-%s-%s", msg.Metadata["from_agent"], msg.Metadata["to_agent"]),
-				Stream:      false,
+				SessionKey:      sessionKey,
+				Message:         msg.Content,
+				Channel:         origChannel,
+				ChannelType:     origChannelType,
+				ChatID:          origChatID,
+				PeerKind:        origPeerKind,
+				LocalKey:        origLocalKey,
+				UserID:          announceUserID,
+				RunID:           fmt.Sprintf("teammate-%s-%s", msg.Metadata["from_agent"], msg.Metadata["to_agent"]),
+				Stream:          false,
+				TeamTaskID:      msg.Metadata["team_task_id"],
+				TeamWorkspace:   msg.Metadata["team_workspace"],
+				WorkspaceChatID: origChatID,
+				TeamID:          msg.Metadata["team_id"],
+				LinkedTraceID:   linkedTraceID,
 			})
 
-			go func(origCh, chatID, senderID string, meta, inMeta map[string]string) {
+			go func(origCh, origChatID, senderID, taskID string, meta, inMeta map[string]string) {
+				// Lock renewal heartbeat: extend task lock every 10 min to prevent
+				// the ticker from recovering long-running tasks as stale.
+				var lockStop chan struct{}
+				if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
+					teamTaskID, _ := uuid.Parse(taskIDStr)
+					teamID, _ := uuid.Parse(inMeta["team_id"])
+					if teamTaskID != uuid.Nil {
+						lockStop = make(chan struct{})
+						go func() {
+							ticker := time.NewTicker(10 * time.Minute)
+							defer ticker.Stop()
+							for {
+								select {
+								case <-ticker.C:
+									if err := teamStore.RenewTaskLock(ctx, teamTaskID, teamID); err != nil {
+										slog.Warn("teammate lock renewal failed", "task_id", teamTaskID, "error", err)
+										return
+									}
+									slog.Debug("teammate lock renewed", "task_id", teamTaskID)
+								case <-lockStop:
+									return
+								case <-ctx.Done():
+									return
+								}
+							}
+						}()
+					}
+				}
+
 				outcome := <-outCh
 
+				// Clean up task → session tracking now that the agent has finished.
+				if taskID != "" {
+					taskRunSessions.Delete(taskID)
+				}
+
+				// Stop lock renewal now that the agent has finished.
+				if lockStop != nil {
+					close(lockStop)
+				}
+
 				// Auto-complete/fail the associated team task (v2 only).
+				// Cache team lookup — reused later for announce routing.
+				var cachedTeam *store.TeamData
 				if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" {
 					teamTaskID, _ := uuid.Parse(taskIDStr)
 					teamID, _ := uuid.Parse(inMeta["team_id"])
 					if teamTaskID != uuid.Nil && teamStore != nil {
-						// Only auto-complete/fail for v2 teams.
-						team, _ := teamStore.GetTeam(ctx, teamID)
-						if team != nil && isConsumerTeamV2(team) {
-							if outcome.Err != nil {
-								_ = teamStore.FailTask(ctx, teamTaskID, teamID, outcome.Err.Error())
-								_ = teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-									TaskID:    teamTaskID,
-									EventType: "failed",
-									ActorType: "agent",
-									ActorID:   inMeta["to_agent"],
-								})
-							} else {
-								result := outcome.Result.Content
-								if len(outcome.Result.Deliverables) > 0 {
-									result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
+						cachedTeam, _ = teamStore.GetTeam(ctx, teamID)
+						if cachedTeam != nil && isConsumerTeamV2(cachedTeam) {
+							// Check current task status — agent may have already updated it via tool.
+							currentTask, taskErr := teamStore.GetTask(ctx, teamTaskID)
+							alreadyTerminal := taskErr == nil && currentTask != nil &&
+								(currentTask.Status == store.TeamTaskStatusCompleted ||
+									currentTask.Status == store.TeamTaskStatusFailed ||
+									currentTask.Status == store.TeamTaskStatusCancelled)
+
+							if !alreadyTerminal {
+								toAgent := inMeta["to_agent"]
+								now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+								if outcome.Err != nil {
+									if err := teamStore.FailTask(ctx, teamTaskID, teamID, outcome.Err.Error()); err != nil {
+										slog.Warn("auto-complete: FailTask error", "task_id", teamTaskID, "error", err)
+									} else {
+										msgBus.Broadcast(bus.Event{
+											Name: protocol.EventTeamTaskFailed,
+											Payload: protocol.TeamTaskEventPayload{
+												TeamID:    teamID.String(),
+												TaskID:    teamTaskID.String(),
+												Status:    store.TeamTaskStatusFailed,
+												Timestamp: now,
+												ActorType: "agent",
+												ActorID:   toAgent,
+											},
+										})
+										// FailTask also unblocks dependent tasks.
+										if postTurn != nil {
+											postTurn.DispatchUnblockedTasks(ctx, teamID)
+										}
+									}
+								} else {
+									result := outcome.Result.Content
+									if len(outcome.Result.Deliverables) > 0 {
+										result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
+									}
+									if len(result) > 100_000 {
+										result = result[:100_000] + "\n[truncated]"
+									}
+									if err := teamStore.CompleteTask(ctx, teamTaskID, teamID, result); err != nil {
+										slog.Warn("auto-complete: CompleteTask error", "task_id", teamTaskID, "error", err)
+									} else {
+										msgBus.Broadcast(bus.Event{
+											Name: protocol.EventTeamTaskCompleted,
+											Payload: protocol.TeamTaskEventPayload{
+												TeamID:        teamID.String(),
+												TaskID:        teamTaskID.String(),
+												Status:        store.TeamTaskStatusCompleted,
+												OwnerAgentKey: toAgent,
+												Timestamp:     now,
+												ActorType:     "agent",
+												ActorID:       toAgent,
+											},
+										})
+										// Dispatch newly-unblocked dependent tasks.
+										if postTurn != nil {
+											postTurn.DispatchUnblockedTasks(ctx, teamID)
+										}
+									}
 								}
-								if len(result) > 100_000 {
-									result = result[:100_000] + "\n[truncated]"
-								}
-								_ = teamStore.CompleteTask(ctx, teamTaskID, teamID, result)
-								_ = teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-									TaskID:    teamTaskID,
-									EventType: "completed",
-									ActorType: "agent",
-									ActorID:   inMeta["to_agent"],
-								})
 							}
 						}
 					}
@@ -879,17 +1013,118 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 					slog.Info("teammate message: suppressed silent/empty reply", "from", senderID)
 					return
 				}
-				// Deliver response to origin channel (same as delegate/subagent announce).
-				// This allows the lead to respond to users after receiving teammate updates.
+
+				// Announce result to lead agent (same pattern as subagent announce).
+				// The lead reformulates the result and presents to the user.
+				// Extract parent trace context so the announce run nests under the lead's trace.
+				var announceParentTraceID, announceParentRootSpanID uuid.UUID
+				if tid := inMeta["origin_trace_id"]; tid != "" {
+					announceParentTraceID, _ = uuid.Parse(tid)
+				}
+				if sid := inMeta["origin_root_span_id"]; sid != "" {
+					announceParentRootSpanID, _ = uuid.Parse(sid)
+				}
+
+				// Resolve lead from team — reuse cachedTeam to avoid duplicate DB call.
+				leadAgent := ""
+				if cachedTeam != nil {
+					if leadAg, err := agentStore.GetByID(ctx, cachedTeam.LeadAgentID); err == nil {
+						leadAgent = leadAg.AgentKey
+					}
+				} else if teamIDStr := inMeta["team_id"]; teamIDStr != "" {
+					if teamUUID, err := uuid.Parse(teamIDStr); err == nil {
+						if team, err := teamStore.GetTeam(ctx, teamUUID); err == nil {
+							if leadAg, err := agentStore.GetByID(ctx, team.LeadAgentID); err == nil {
+								leadAgent = leadAg.AgentKey
+							}
+						}
+					}
+				}
+				if leadAgent == "" {
+					leadAgent = inMeta["from_agent"]
+				}
+				if leadAgent == "" {
+					leadAgent = cfg.ResolveDefaultAgentID()
+				}
+				memberAgent := inMeta["to_agent"]
+
+				announceContent := fmt.Sprintf(
+					"[System Message] Team member %q completed task.\n\nResult:\n%s\n\n"+
+						"Present this result to the user. Any media files are forwarded automatically. Do NOT search for files — the result above contains all relevant information.",
+					memberAgent, outcome.Result.Content,
+				)
+				// Append team workspace path so lead can locate files without searching.
+				if ws := inMeta["team_workspace"]; ws != "" {
+					announceContent += fmt.Sprintf("\n[Team workspace: %s — use read_file with path relative to workspace root, e.g. read_file(path=\"teams/...\")]", ws)
+				}
+
+				// Route to the lead's session on the original channel/chat.
+				if origChatID == "" {
+					slog.Warn("teammate announce: no origin_chat_id, cannot announce to lead")
+					return
+				}
+				leadSessionKey := sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerDirect, origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+
+				announceReq := agent.RunRequest{
+					SessionKey:       leadSessionKey,
+					Message:          announceContent,
+					Channel:          origCh,
+					ChatID:           origChatID,
+					PeerKind:         string(sessions.PeerDirect),
+					UserID:           inMeta["origin_user_id"],
+					RunID:            fmt.Sprintf("teammate-announce-%s", memberAgent),
+					RunKind:          "announce",
+					HideInput:        true,
+					Stream:           false,
+					TeamID:           inMeta["team_id"],
+					ParentTraceID:    announceParentTraceID,
+					ParentRootSpanID: announceParentRootSpanID,
+				}
+				for _, mr := range outcome.Result.Media {
+					announceReq.ForwardMedia = append(announceReq.ForwardMedia, bus.MediaFile{
+						Path:     mr.Path,
+						MimeType: mr.ContentType,
+					})
+				}
+
+				// Inject post-turn tracker for announce run (leader may create new tasks).
+				announcePtd := tools.NewPendingTeamDispatch()
+				announceCtx := tools.WithPendingTeamDispatch(ctx, announcePtd)
+				announceOutCh := sched.Schedule(announceCtx, scheduler.LaneSubagent, announceReq)
+				announceOutcome := <-announceOutCh
+
+				// Post-turn: dispatch pending team tasks created during announce.
+				if postTurn != nil {
+					for tid, tIDs := range announcePtd.Drain() {
+						if err := postTurn.ProcessPendingTasks(ctx, tid, tIDs); err != nil {
+							slog.Warn("post_turn(announce): failed", "team_id", tid, "error", err)
+						}
+					}
+				}
+
+				if announceOutcome.Err != nil {
+					slog.Error("teammate announce: lead run failed", "error", announceOutcome.Err)
+					return
+				}
+
+				isSilent := announceOutcome.Result.Content == "" || agent.IsSilentReply(announceOutcome.Result.Content)
+				if isSilent && len(announceOutcome.Result.Media) == 0 {
+					return
+				}
+
+				announceOut := announceOutcome.Result.Content
+				if isSilent {
+					announceOut = ""
+				}
 				outMsg := bus.OutboundMessage{
 					Channel:  origCh,
-					ChatID:   chatID,
-					Content:  outcome.Result.Content,
+					ChatID:   origChatID,
+					Content:  announceOut,
 					Metadata: meta,
 				}
-				appendMediaToOutbound(&outMsg, outcome.Result.Media)
+				appendMediaToOutbound(&outMsg, announceOutcome.Result.Media)
 				msgBus.PublishOutbound(outMsg)
-			}(origChannel, msg.ChatID, msg.SenderID, outMeta, msg.Metadata)
+			}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 			continue
 		}
 
@@ -948,13 +1183,6 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			var cancelled bool
 			if cmd == "stopall" {
 				cancelled = sched.CancelSession(sessionKey)
-				// Also cancel async delegations for this chat (they bypass the scheduler)
-				if delegateMgr != nil {
-					dc := delegateMgr.CancelForOrigin(msg.Channel, msg.ChatID)
-					if dc > 0 {
-						cancelled = true
-					}
-				}
 				slog.Info("inbound: /stopall command", "session", sessionKey, "cancelled", cancelled)
 			} else {
 				cancelled = sched.CancelOneSession(sessionKey)
@@ -992,7 +1220,7 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 
 // autoSetFollowup sets followup reminders on in_progress tasks when the lead agent
 // replies on a real channel. Only sets followup if the task doesn't already have one
-// (respects LLM-initiated await_reply). Fire-and-forget, logs errors.
+// (respects LLM-initiated ask_user). Fire-and-forget, logs errors.
 func autoSetFollowup(ctx context.Context, teamStore store.TeamStore, agentStore store.AgentStore, agentKey, channel, chatID, content string) {
 	if agentStore == nil {
 		return
@@ -1014,6 +1242,12 @@ func autoSetFollowup(ctx context.Context, teamStore store.TeamStore, agentStore 
 	}
 	// Followup is a v2 feature.
 	if !isConsumerTeamV2(team) {
+		return
+	}
+
+	// Skip auto-followup when lead is waiting for teammates (not user).
+	if hasMember, _ := teamStore.HasActiveMemberTasks(ctx, team.ID, ag.ID); hasMember {
+		slog.Debug("auto-followup: skipping, active member tasks exist", "team_id", team.ID)
 		return
 	}
 

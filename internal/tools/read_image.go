@@ -48,7 +48,7 @@ func NewReadImageTool(registry *providers.Registry) *ReadImageTool {
 func (t *ReadImageTool) Name() string { return "read_image" }
 
 func (t *ReadImageTool) Description() string {
-	return "Analyze images attached to the current message using a vision model. Use this when you see <media:image> tags but cannot view images directly."
+	return "Analyze images sent by the user in the current message. Only use when you see <media:image> tags in the conversation — do NOT use for workspace files or generated images."
 }
 
 func (t *ReadImageTool) Parameters() map[string]any {

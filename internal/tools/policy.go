@@ -18,8 +18,7 @@ var toolGroups = map[string][]string{
 	"ui":         {"browser"},
 	"automation": {"cron"},
 	"messaging":  {"message", "create_forum_topic"},
-	"delegation": {"handoff", "delegate_search", "evaluate_loop"},
-	"team":       {"team_tasks", "team_message", "workspace_write", "workspace_read"},
+	"team": {"team_tasks", "team_message", "workspace_write", "workspace_read"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec",
@@ -30,7 +29,6 @@ var toolGroups = map[string][]string{
 		"read_image", "read_document", "read_audio", "read_video",
 		"create_image", "create_video",
 		"skill_search", "mcp_tool_search", "tts",
-		"handoff", "delegate_search", "evaluate_loop",
 		"team_tasks", "team_message", "workspace_write", "workspace_read",
 	},
 }

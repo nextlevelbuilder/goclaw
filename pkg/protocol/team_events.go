@@ -116,6 +116,10 @@ type TeamTaskEventPayload struct {
 	Channel          string `json:"channel"`
 	ChatID           string `json:"chat_id"`
 	Timestamp        string `json:"timestamp"`
+
+	// Actor info for audit trail (recorded to team_task_events by subscriber).
+	ActorType string `json:"actor_type,omitempty"` // "agent", "human", "system"
+	ActorID   string `json:"actor_id,omitempty"`   // agent key, user ID, or system identifier
 }
 
 // TeamMessageEventPayload is the typed payload for team.message.sent events.

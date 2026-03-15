@@ -129,6 +129,11 @@ const (
 	MethodTeamsWorkspaceDelete = "teams.workspace.delete"
 )
 
+// Team events
+const (
+	MethodTeamsEventsList = "teams.events.list"
+)
+
 // Delegation history
 const (
 	MethodDelegationsList = "delegations.list"

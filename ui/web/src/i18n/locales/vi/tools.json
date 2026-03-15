@@ -76,6 +76,8 @@
     "categoryCount": "{{count}} danh mục",
     "requires": "yêu cầu",
     "requiresTooltip": "Yêu cầu: {{list}}",
+    "deprecated": "Ngừng sử dụng",
+    "deprecatedTooltip": "Công cụ này đã ngừng sử dụng và không còn khả dụng",
     "settings": "Cài đặt",
     "configuredVia": "Cấu hình qua trang Config",
     "categories": {
@@ -178,12 +180,12 @@
       "sessions_send": "Gửi tin nhắn vào phiên chat đang hoạt động thay mặt agent",
       "message": "Gửi tin nhắn chủ động đến người dùng trên kênh đã kết nối (Telegram, Discord, v.v.)",
       "cron": "Lên lịch hoặc quản lý tác vụ định kỳ bằng biểu thức cron, thời gian cụ thể hoặc khoảng thời gian",
-      "spawn": "Tạo subagent cho công việc nền hoặc ủy quyền tác vụ cho agent được liên kết",
+      "spawn": "Tạo subagent cho công việc nền",
       "skill_search": "Tìm kiếm skill khả dụng theo từ khóa hoặc mô tả để tìm khả năng phù hợp",
       "use_skill": "Kích hoạt skill để sử dụng khả năng chuyên biệt (đánh dấu tracing)",
-      "delegate_search": "Tìm kiếm mục tiêu ủy quyền khả dụng theo từ khóa khi có quá nhiều agent liên kết",
-      "evaluate_loop": "Chạy vòng lặp tạo→đánh giá→chỉnh sửa giữa hai agent cho đầu ra cần chất lượng cao",
-      "handoff": "Chuyển cuộc hội thoại sang agent khác — người dùng sẽ nói chuyện trực tiếp với agent đó",
+      "delegate_search": "Tìm kiếm mục tiêu ủy quyền (ngừng sử dụng)",
+      "evaluate_loop": "Chạy vòng lặp tạo→đánh giá→chỉnh sửa giữa hai agent (ngừng sử dụng)",
+      "handoff": "Chuyển cuộc hội thoại sang agent khác (ngừng sử dụng)",
       "team_tasks": "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm",
       "team_message": "Gửi tin nhắn trực tiếp hoặc broadcast đến đồng đội trong nhóm agent"
     }

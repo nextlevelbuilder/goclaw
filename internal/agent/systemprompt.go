@@ -32,6 +32,7 @@ type SystemPromptConfig struct {
 	SkillsSummary string                 // XML from skills.Loader.BuildSummary()
 	HasMemory     bool                   // memory_search/memory_get available?
 	HasSpawn      bool                   // spawn tool available?
+	HasTeam       bool                   // agent belongs to a team? (skips generic spawn section)
 	ContextFiles  []bootstrap.ContextFile // bootstrap files for # Project Context
 	ExtraPrompt   string                 // extra system prompt (subagent context, etc.)
 	AgentType     string                 // "open" or "predefined" — affects context file framing
@@ -59,7 +60,7 @@ var coreToolSummaries = map[string]string{
 	"exec":          "Run shell commands",
 	"memory_search": "Search indexed memory files (MEMORY.md + memory/*.md)",
 	"memory_get":    "Read specific sections of memory files",
-	"spawn":         "Spawn a subagent or delegate to another agent",
+	"spawn":         "Spawn a self-clone subagent to handle a task in the background",
 	"web_search":    "Search the web",
 	"web_fetch":     "Fetch and extract content from a URL",
 	"cron":          "Manage scheduled jobs and reminders",
@@ -220,8 +221,8 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildProjectContextSection(otherFiles, cfg.AgentType)...)
 	}
 
-	// 13. ## Sub-Agent Spawning
-	if cfg.HasSpawn {
+	// 13. ## Sub-Agent Spawning — skipped for team agents (TEAM.md has its own workflow guidance)
+	if cfg.HasSpawn && !cfg.HasTeam {
 		lines = append(lines, buildSpawnSection()...)
 	}
 

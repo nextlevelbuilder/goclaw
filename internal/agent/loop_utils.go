@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -46,10 +47,8 @@ func (l *Loop) shouldShareWorkspace(userID, peerKind string) bool {
 	if ws == nil {
 		return false
 	}
-	for _, u := range ws.SharedUsers {
-		if u == userID {
-			return true
-		}
+	if slices.Contains(ws.SharedUsers, userID) {
+		return true
 	}
 	switch peerKind {
 	case "direct":

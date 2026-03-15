@@ -44,6 +44,23 @@ func parseMediaResult(toolOutput string) *MediaResult {
 	}
 }
 
+// deduplicateMedia removes duplicate media results by path, keeping the first occurrence.
+func deduplicateMedia(media []MediaResult) []MediaResult {
+	if len(media) <= 1 {
+		return media
+	}
+	seen := make(map[string]bool, len(media))
+	result := make([]MediaResult, 0, len(media))
+	for _, m := range media {
+		if seen[m.Path] {
+			continue
+		}
+		seen[m.Path] = true
+		result = append(result, m)
+	}
+	return result
+}
+
 // mimeFromExt returns a MIME type for common media file extensions.
 func mimeFromExt(ext string) string {
 	switch strings.ToLower(ext) {

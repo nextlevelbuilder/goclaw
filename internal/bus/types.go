@@ -83,6 +83,7 @@ const (
 	TopicCacheMCP              = "cache:mcp"
 	TopicCacheProvider         = "cache:provider"
 	TopicAudit                 = "audit"
+	TopicTeamTaskAudit         = "team-task-audit"
 	TopicChannelStreaming      = "channel-streaming"
 	TopicConfigChanged         = "config:changed"
 	TopicPairingRevoked        = "pairing:revoked"

@@ -139,6 +139,21 @@ func (a *AgentData) ParseThinkingLevel() string {
 	return cfg.ThinkingLevel
 }
 
+// ParseMaxTokens extracts max_tokens from other_config JSONB.
+// Returns 0 if not configured (caller should apply default).
+func (a *AgentData) ParseMaxTokens() int {
+	if len(a.OtherConfig) == 0 {
+		return 0
+	}
+	var cfg struct {
+		MaxTokens int `json:"max_tokens"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
+		return 0
+	}
+	return cfg.MaxTokens
+}
+
 // ParseSelfEvolve extracts self_evolve from other_config JSONB.
 // When true, predefined agents can update their SOUL.md (style/tone) through chat.
 func (a *AgentData) ParseSelfEvolve() bool {

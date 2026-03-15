@@ -2,6 +2,9 @@ package tools
 
 import (
 	"context"
+	"sync"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -33,6 +36,12 @@ const (
 	ChannelDashboard = "dashboard"
 	ChannelDelegate  = "delegate"
 )
+
+// MediaPathLoader resolves a media ID to a local file path.
+// Used by media analysis tools (read_document, read_audio, read_video).
+type MediaPathLoader interface {
+	LoadPath(id string) (string, error)
+}
 
 func WithToolChannel(ctx context.Context, channel string) context.Context {
 	return context.WithValue(ctx, ctxChannel, channel)
@@ -170,6 +179,21 @@ func effectiveRestrict(ctx context.Context, toolDefault bool) bool {
 	return toolDefault
 }
 
+// --- Parent agent model (for subagent inheritance) ---
+
+const ctxParentModel toolContextKey = "tool_parent_model"
+
+// WithParentModel sets the parent agent's model in context so subagents can inherit it.
+func WithParentModel(ctx context.Context, model string) context.Context {
+	return context.WithValue(ctx, ctxParentModel, model)
+}
+
+// ParentModelFromCtx returns the parent agent's model from context.
+func ParentModelFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxParentModel).(string)
+	return v
+}
+
 // --- Per-agent subagent config override ---
 
 const ctxSubagentCfg toolContextKey = "tool_subagent_config"
@@ -196,6 +220,39 @@ func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
 	return v
 }
 
+// --- Team ID propagation (task dispatch → workspace tools) ---
+
+const ctxTeamID toolContextKey = "tool_team_id"
+
+// WithToolTeamID injects the dispatching team's ID into context so workspace
+// tools (workspace_read, workspace_write, team_tasks, team_message) resolve
+// the correct team when the agent belongs to multiple teams.
+func WithToolTeamID(ctx context.Context, teamID string) context.Context {
+	return context.WithValue(ctx, ctxTeamID, teamID)
+}
+
+// ToolTeamIDFromCtx returns the dispatching team's ID from context.
+func ToolTeamIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxTeamID).(string)
+	return v
+}
+
+// --- Team task ID propagation (delegation origin → workspace tools) ---
+
+const ctxTeamTaskID toolContextKey = "tool_team_task_id"
+
+// WithTeamTaskID injects the delegation's team task ID into context
+// so workspace tools can auto-link files to the active task.
+func WithTeamTaskID(ctx context.Context, taskID string) context.Context {
+	return context.WithValue(ctx, ctxTeamTaskID, taskID)
+}
+
+// TeamTaskIDFromCtx returns the delegation's team task ID from context.
+func TeamTaskIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxTeamTaskID).(string)
+	return v
+}
+
 // --- Workspace scope propagation (delegation origin) ---
 
 const (
@@ -218,6 +275,47 @@ func WithWorkspaceChatID(ctx context.Context, chatID string) context.Context {
 
 func WorkspaceChatIDFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxWsChatID).(string)
+	return v
+}
+
+// --- Pending team task dispatch (post-turn processing) ---
+
+const ctxPendingDispatch toolContextKey = "tool_pending_team_dispatch"
+
+// PendingTeamDispatch tracks team tasks created during an agent turn.
+// After the turn ends, the consumer drains and dispatches them.
+// Thread-safe: tools may execute in parallel goroutines.
+type PendingTeamDispatch struct {
+	mu    sync.Mutex
+	tasks map[uuid.UUID][]uuid.UUID // teamID → []taskID
+}
+
+func NewPendingTeamDispatch() *PendingTeamDispatch {
+	return &PendingTeamDispatch{tasks: make(map[uuid.UUID][]uuid.UUID)}
+}
+
+// Add records a task created during this turn.
+func (p *PendingTeamDispatch) Add(teamID, taskID uuid.UUID) {
+	p.mu.Lock()
+	p.tasks[teamID] = append(p.tasks[teamID], taskID)
+	p.mu.Unlock()
+}
+
+// Drain returns all tracked tasks and resets the container.
+func (p *PendingTeamDispatch) Drain() map[uuid.UUID][]uuid.UUID {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := p.tasks
+	p.tasks = make(map[uuid.UUID][]uuid.UUID)
+	return out
+}
+
+func WithPendingTeamDispatch(ctx context.Context, ptd *PendingTeamDispatch) context.Context {
+	return context.WithValue(ctx, ctxPendingDispatch, ptd)
+}
+
+func PendingTeamDispatchFromCtx(ctx context.Context) *PendingTeamDispatch {
+	v, _ := ctx.Value(ctxPendingDispatch).(*PendingTeamDispatch)
 	return v
 }
 

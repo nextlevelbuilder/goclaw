@@ -41,9 +41,10 @@ func (sm *SubagentManager) emitLLMSpanStart(ctx context.Context, start time.Time
 	if parentID := tracing.ParentSpanIDFromContext(ctx); parentID != uuid.Nil {
 		span.ParentSpanID = &parentID
 	}
+	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
 	if collector.Verbose() && len(messages) > 0 {
 		if b, err := json.Marshal(messages); err == nil {
-			span.InputPreview = truncate(string(b), 50000)
+			span.InputPreview = truncate(string(b), 100000)
 		}
 	}
 	collector.EmitSpan(span)
@@ -85,7 +86,11 @@ func (sm *SubagentManager) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID,
 			}
 		}
 		updates["finish_reason"] = resp.FinishReason
-		updates["output_preview"] = truncate(resp.Content, 500)
+		previewLimit := 500
+		if collector.Verbose() {
+			previewLimit = 100000
+		}
+		updates["output_preview"] = truncate(resp.Content, previewLimit)
 	}
 	collector.EmitSpanUpdate(spanID, traceID, updates)
 }
@@ -102,6 +107,11 @@ func (sm *SubagentManager) emitToolSpanStart(ctx context.Context, start time.Tim
 		return uuid.Nil
 	}
 
+	previewLimit := 500
+	if collector.Verbose() {
+		previewLimit = 100000
+	}
+
 	spanID := store.GenNewID()
 	span := store.SpanData{
 		ID:           spanID,
@@ -111,7 +121,7 @@ func (sm *SubagentManager) emitToolSpanStart(ctx context.Context, start time.Tim
 		StartTime:    start,
 		ToolName:     toolName,
 		ToolCallID:   toolCallID,
-		InputPreview: truncate(input, 500),
+		InputPreview: truncate(input, previewLimit),
 		Status:       store.SpanStatusRunning,
 		Level:        store.SpanLevelDefault,
 		CreatedAt:    start,
@@ -119,6 +129,7 @@ func (sm *SubagentManager) emitToolSpanStart(ctx context.Context, start time.Tim
 	if parentID := tracing.ParentSpanIDFromContext(ctx); parentID != uuid.Nil {
 		span.ParentSpanID = &parentID
 	}
+	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
 	collector.EmitSpan(span)
 	return spanID
 }
@@ -135,11 +146,15 @@ func (sm *SubagentManager) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID
 	}
 
 	now := time.Now().UTC()
+	previewLimit := 500
+	if collector.Verbose() {
+		previewLimit = 100000
+	}
 	updates := map[string]any{
 		"end_time":       now,
 		"duration_ms":    int(now.Sub(start).Milliseconds()),
 		"status":         store.SpanStatusCompleted,
-		"output_preview": truncate(output, 500),
+		"output_preview": truncate(output, previewLimit),
 	}
 	if isError {
 		updates["status"] = store.SpanStatusError
@@ -160,6 +175,10 @@ func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uui
 		return
 	}
 
+	previewLimit := 500
+	if collector.Verbose() {
+		previewLimit = 100000
+	}
 	span := store.SpanData{
 		ID:           spanID,
 		TraceID:      traceID,
@@ -170,12 +189,13 @@ func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uui
 		Level:        store.SpanLevelDefault,
 		Model:        model,
 		Provider:     sm.provider.Name(),
-		InputPreview: truncate(task.Task, 500),
+		InputPreview: truncate(task.Task, previewLimit),
 		CreatedAt:    start,
 	}
 	if parentSpanID := tracing.ParentSpanIDFromContext(ctx); parentSpanID != uuid.Nil {
 		span.ParentSpanID = &parentSpanID
 	}
+	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
 	collector.EmitSpan(span)
 }
 
@@ -191,11 +211,15 @@ func (sm *SubagentManager) emitSubagentSpanEnd(ctx context.Context, spanID uuid.
 	}
 
 	now := time.Now().UTC()
+	previewLimit := 500
+	if collector.Verbose() {
+		previewLimit = 100000
+	}
 	updates := map[string]any{
 		"end_time":       now,
 		"duration_ms":    int(now.Sub(start).Milliseconds()),
 		"status":         store.SpanStatusCompleted,
-		"output_preview": truncate(output, 500),
+		"output_preview": truncate(output, previewLimit),
 	}
 	if task.Status == TaskStatusFailed || task.Status == TaskStatusCancelled {
 		updates["status"] = store.SpanStatusError

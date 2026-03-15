@@ -18,7 +18,6 @@ import (
 // They don't exist on disk — if the model tries to read them, return a hint.
 var virtualSystemFiles = map[string]string{
 	bootstrap.TeamFile:         "TEAM.md is already loaded in your system prompt. Refer to the TEAM.md section in your context above for team member information.",
-	bootstrap.DelegationFile:   "DELEGATION.md is already loaded in your system prompt. Refer to the DELEGATION.md section in your context above for delegation instructions and available agents.",
 	bootstrap.AvailabilityFile: "AVAILABILITY.md is already loaded in your system prompt. Refer to the AVAILABILITY.md section in your context above for agent availability information.",
 }
 

@@ -46,6 +46,7 @@ type Server struct {
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
 	delegationsHandler      *httpapi.DelegationsHandler      // delegation history API
+	teamEventsHandler       *httpapi.TeamEventsHandler       // team event history API
 	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
 	pendingMessagesHandler  *httpapi.PendingMessagesHandler  // pending messages API
 	memoryHandler           *httpapi.MemoryHandler           // memory management API
@@ -206,6 +207,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// Delegation history API
 	if s.delegationsHandler != nil {
 		s.delegationsHandler.RegisterRoutes(mux)
+	}
+
+	// Team event history API
+	if s.teamEventsHandler != nil {
+		s.teamEventsHandler.RegisterRoutes(mux)
 	}
 
 	// Builtin tool management API
@@ -451,6 +457,9 @@ func (s *Server) SetProvidersHandler(h *httpapi.ProvidersHandler) { s.providersH
 
 // SetDelegationsHandler sets the delegation history handler.
 func (s *Server) SetDelegationsHandler(h *httpapi.DelegationsHandler) { s.delegationsHandler = h }
+
+// SetTeamEventsHandler sets the team event history handler.
+func (s *Server) SetTeamEventsHandler(h *httpapi.TeamEventsHandler) { s.teamEventsHandler = h }
 
 // SetPendingMessagesHandler sets the pending messages handler.
 func (s *Server) SetPendingMessagesHandler(h *httpapi.PendingMessagesHandler) {

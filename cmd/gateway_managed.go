@@ -11,7 +11,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
-	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
@@ -48,13 +47,12 @@ func wireExtras(
 	sandboxMgr sandbox.Manager,
 	dynamicLoader *tools.DynamicToolLoader,
 	redisClient any, // nil when built without -tags redis or when Redis is unconfigured
-) (*tools.ContextFileInterceptor, *tools.DelegateManager, *mcpbridge.Pool, *media.Store) {
+) (*tools.ContextFileInterceptor, *mcpbridge.Pool, *media.Store, tools.PostTurnProcessor) {
 	// 1. Build cache instances (in-memory or Redis depending on build tags)
 	agentCtxCache, userCtxCache, gwCache := makeCaches(redisClient)
 
 	// 1a. Context file interceptor (created before resolver so callbacks can reference it)
 	var contextFileInterceptor *tools.ContextFileInterceptor
-	var delegateMgr *tools.DelegateManager
 	if stores.Agents != nil {
 		contextFileInterceptor = tools.NewContextFileInterceptor(stores.Agents, workspace, agentCtxCache, userCtxCache)
 	}
@@ -380,118 +378,11 @@ func wireExtras(
 		})
 	}
 
-	// Register delegate tool (inter-agent delegation) if link store is available.
-	// Uses a callback to bridge tools.DelegateRunRequest → agent.RunRequest,
-	// avoiding import cycle between tools and agent packages.
-	if stores.AgentLinks != nil && stores.Agents != nil {
-		runAgentFn := func(ctx context.Context, agentKey string, req tools.DelegateRunRequest) (*tools.DelegateRunResult, error) {
-			loop, err := agentRouter.Get(agentKey)
-			if err != nil {
-				return nil, err
-			}
-			result, err := loop.Run(ctx, agent.RunRequest{
-				SessionKey:        req.SessionKey,
-				Message:           req.Message,
-				Media:             req.Media,
-				UserID:            req.UserID,
-				Channel:           req.Channel,
-				ChatID:            req.ChatID,
-				PeerKind:          req.PeerKind,
-				RunID:             req.RunID,
-				Stream:            req.Stream,
-				ExtraSystemPrompt: req.ExtraSystemPrompt,
-				MaxIterations:     req.MaxIterations,
-				RunKind:           "delegation",
-				DelegationID:      req.DelegationID,
-				TeamID:            req.TeamID,
-				TeamTaskID:        req.TeamTaskID,
-				ParentAgentID:     req.ParentAgentID,
-				WorkspaceChannel:  req.WorkspaceChannel,
-				WorkspaceChatID:   req.WorkspaceChatID,
-			})
-			if err != nil {
-				return nil, err
-			}
-			var drMedia []bus.MediaFile
-			for _, m := range result.Media {
-				drMedia = append(drMedia, bus.MediaFile{Path: m.Path, MimeType: m.ContentType})
-			}
-			dr := &tools.DelegateRunResult{
-				Content:      result.Content,
-				Iterations:   result.Iterations,
-				Deliverables: result.Deliverables,
-				Media:        drMedia,
-			}
-			return dr, nil
-		}
-		delegateMgr = tools.NewDelegateManager(runAgentFn, stores.AgentLinks, stores.Agents, msgBus)
-		if stores.Teams != nil {
-			delegateMgr.SetTeamStore(stores.Teams)
-		}
-		delegateMgr.SetSessionStore(stores.Sessions)
-		if mediaStore != nil {
-			delegateMgr.SetMediaLoader(mediaStore)
-		}
-
-		// Hook engine (quality gates)
-		hookEngine := hooks.NewEngine()
-		hookEngine.RegisterEvaluator(hooks.HookTypeCommand, hooks.NewCommandEvaluator(workspace))
-		agentEvalFn := func(ctx context.Context, agentKey, task string) (string, error) {
-			result, err := delegateMgr.Delegate(hooks.WithSkipHooks(ctx, true), tools.DelegateOpts{
-				TargetAgentKey: agentKey, Task: task, Mode: "sync",
-			})
-			if err != nil {
-				return "", err
-			}
-			return result.Content, nil
-		}
-		hookEngine.RegisterEvaluator(hooks.HookTypeAgent, hooks.NewAgentEvaluator(agentEvalFn))
-		delegateMgr.SetHookEngine(hookEngine)
-
-		// Evaluate-optimize loop tool
-		toolsReg.Register(tools.NewEvaluateLoopTool(delegateMgr))
-
-		// Handoff tool (agent-to-agent conversation transfer)
-		toolsReg.Register(tools.NewHandoffTool(delegateMgr, stores.Teams, stores.Sessions, msgBus, workspace))
-
-		// Inject delegation capability into existing SpawnTool
-		if st, ok := toolsReg.Get("spawn"); ok {
-			if spawnTool, ok := st.(*tools.SpawnTool); ok {
-				spawnTool.SetDelegateManager(delegateMgr)
-				slog.Info("spawn tool: delegation enabled")
-			}
-		}
-
-		// Register delegate_search tool (hybrid FTS + semantic agent discovery)
-		var delegateEmbProvider store.EmbeddingProvider
-		if agentStore, ok := stores.Agents.(*pg.PGAgentStore); ok {
-			memCfg := appCfg.Agents.Defaults.Memory
-			if embProvider := resolveEmbeddingProvider(appCfg, memCfg, providerReg); embProvider != nil {
-				agentStore.SetEmbeddingProvider(embProvider)
-				delegateEmbProvider = embProvider
-				slog.Info("agent embeddings enabled")
-
-				// Backfill embeddings for existing agents with frontmatter
-				go func() {
-					count, err := agentStore.BackfillAgentEmbeddings(context.Background())
-					if err != nil {
-						slog.Warn("agent embeddings backfill failed", "error", err)
-					} else if count > 0 {
-						slog.Info("agent embeddings backfill complete", "updated", count)
-					}
-				}()
-			}
-		}
-		toolsReg.Register(tools.NewDelegateSearchTool(stores.AgentLinks, delegateEmbProvider))
-		slog.Info("delegate + delegate_search tools registered")
-	}
-
 	// Register team tools (team_tasks + team_message + workspace) if team store is available.
+	var postTurn tools.PostTurnProcessor
 	if stores.Teams != nil && stores.Agents != nil {
-		teamMgr := tools.NewTeamToolManager(stores.Teams, stores.Agents, msgBus)
-		if delegateMgr != nil {
-			teamMgr.SetDelegateManager(delegateMgr)
-		}
+		teamMgr := tools.NewTeamToolManager(stores.Teams, stores.Agents, msgBus, workspace)
+		postTurn = teamMgr
 		toolsReg.Register(tools.NewTeamTasksTool(teamMgr))
 		toolsReg.Register(tools.NewTeamMessageTool(teamMgr))
 		toolsReg.Register(tools.NewWorkspaceWriteTool(teamMgr, workspace))
@@ -508,6 +399,19 @@ func wireExtras(
 				return
 			}
 			teamMgr.InvalidateTeam()
+		})
+
+		// Agent cache invalidation: clear TeamToolManager's agent lookup cache
+		// when agent data changes (update/delete via WS or HTTP).
+		msgBus.Subscribe("cache.agent.team_mgr", func(event bus.Event) {
+			if event.Name != protocol.EventCacheInvalidate {
+				return
+			}
+			payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+			if !ok || payload.Kind != bus.CacheKindAgent {
+				return
+			}
+			teamMgr.InvalidateAgentCache()
 		})
 		slog.Info("team tools registered")
 	}
@@ -573,7 +477,7 @@ func wireExtras(
 	})
 
 	slog.Info("resolver + interceptors + cache subscribers wired")
-	return contextFileInterceptor, delegateMgr, mcpPool, mediaStore
+	return contextFileInterceptor, mcpPool, mediaStore, postTurn
 }
 
 // kgSettings holds KG extraction settings from the builtin_tools table.

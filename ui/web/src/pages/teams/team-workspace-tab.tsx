@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RefreshCw, Trash2, FileText, Pin } from "lucide-react";
+import { RefreshCw, Trash2, FileText } from "lucide-react";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useTranslation } from "react-i18next";
 import { useMinLoading } from "@/hooks/use-min-loading";
@@ -50,7 +49,7 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
   const spinning = useMinLoading(loading);
 
   const load = useCallback(() => {
-    listFiles(teamId, selectedScope?.channel, selectedScope?.chat_id).then(() => {
+    listFiles(teamId, selectedScope?.chat_id).then(() => {
       setInitialized(true);
     });
   }, [teamId, listFiles, selectedScope]);
@@ -62,7 +61,7 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
   const handleRowClick = useCallback(
     async (file: TeamWorkspaceFile) => {
       try {
-        const res = await readFile(teamId, file.file_name, file.channel, file.chat_id);
+        const res = await readFile(teamId, file.name, file.chat_id);
         setSelectedFile({ file: res.file ?? file, content: res.content ?? "" });
       } catch {
         // ignore
@@ -73,9 +72,9 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
 
   const handleDelete = useCallback(
     async (fileName: string) => {
-      const file = files.find((f) => f.file_name === fileName);
+      const file = files.find((f) => f.name === fileName);
       try {
-        await deleteFile(teamId, fileName, file?.channel, file?.chat_id);
+        await deleteFile(teamId, fileName, file?.chat_id);
         setDeleteTarget(null);
         load();
       } catch {
@@ -100,21 +99,20 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
           <h3 className="text-sm font-medium">{t("workspace.title")}</h3>
           {scopes && scopes.length > 0 && (
             <select
-              value={selectedScope ? `${selectedScope.channel}:${selectedScope.chat_id}` : ""}
+              value={selectedScope ? selectedScope.chat_id : ""}
               onChange={(e) => {
                 if (!e.target.value) {
                   setSelectedScope(null);
                 } else {
-                  const idx = e.target.value.indexOf(":");
-                  setSelectedScope({ channel: e.target.value.slice(0, idx), chat_id: e.target.value.slice(idx + 1) });
+                  setSelectedScope({ channel: "", chat_id: e.target.value });
                 }
               }}
               className="rounded-md border bg-background px-2 py-1 text-base md:text-sm"
             >
               <option value="">{t("scope.all")}</option>
               {scopes.map((s) => (
-                <option key={`${s.channel}:${s.chat_id}`} value={`${s.channel}:${s.chat_id}`}>
-                  {s.channel}:{s.chat_id.length > 12 ? s.chat_id.slice(0, 12) + "…" : s.chat_id}
+                <option key={s.chat_id} value={s.chat_id}>
+                  {s.chat_id.length > 16 ? s.chat_id.slice(0, 16) + "…" : s.chat_id}
                 </option>
               ))}
             </select>
@@ -143,7 +141,6 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
               <tr className="border-b text-left text-muted-foreground">
                 <th className="pb-2 font-medium">{t("workspace.columns.fileName")}</th>
                 <th className="pb-2 font-medium">{t("workspace.columns.size")}</th>
-                <th className="pb-2 font-medium">{t("workspace.columns.uploadedBy")}</th>
                 <th className="pb-2 font-medium">{t("workspace.columns.scope")}</th>
                 <th className="pb-2 font-medium">{t("workspace.columns.updated")}</th>
                 <th className="pb-2 font-medium" />
@@ -152,38 +149,18 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
             <tbody>
               {files.map((file) => (
                 <tr
-                  key={file.id}
+                  key={`${file.chat_id}/${file.name}`}
                   className="cursor-pointer border-b border-border/50 transition-colors hover:bg-muted/50"
                   onClick={() => handleRowClick(file)}
                 >
                   <td className="py-2.5 pr-3">
-                    <div className="flex items-center gap-1.5">
-                      {file.pinned && <Pin className="h-3 w-3 text-amber-500" />}
-                      <span className="font-mono text-xs">{file.file_name}</span>
-                      {file.missing && (
-                        <Badge variant="destructive" className="text-[10px]">
-                          missing
-                        </Badge>
-                      )}
-                      {file.tags?.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant={tag === "deliverable" ? "success" : "secondary"}
-                          className="text-[10px]"
-                        >
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
+                    <span className="font-mono text-xs">{file.name}</span>
                   </td>
                   <td className="py-2.5 pr-3 text-muted-foreground">
-                    {formatBytes(file.size_bytes)}
+                    {formatBytes(file.size)}
                   </td>
                   <td className="py-2.5 pr-3 text-muted-foreground">
-                    {file.uploaded_by_key || file.uploaded_by?.slice(0, 8)}
-                  </td>
-                  <td className="py-2.5 pr-3 text-muted-foreground">
-                    {file.channel || "default"}:{file.chat_id?.slice(0, 12) || "default"}
+                    {file.chat_id?.slice(0, 12) || "_default"}
                   </td>
                   <td className="py-2.5 pr-3 text-muted-foreground">
                     {formatDate(file.updated_at)}
@@ -195,7 +172,7 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDeleteTarget(file.file_name);
+                        setDeleteTarget(file.name);
                       }}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -213,7 +190,7 @@ export function TeamWorkspaceTab({ teamId, scopes }: TeamWorkspaceTabProps) {
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-mono text-sm">
-              {selectedFile?.file.file_name}
+              {selectedFile?.file.name}
             </DialogTitle>
           </DialogHeader>
           <pre className="mt-2 max-h-[60vh] overflow-auto rounded-md bg-muted p-4 text-xs">

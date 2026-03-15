@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -132,45 +131,6 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// Load bootstrap files from DB
 		contextFiles := bootstrap.LoadFromStore(ctx, deps.AgentStore, ag.ID)
 
-		// Inject DELEGATION.md from delegation links (only if not already present in DB).
-		// Uses DELEGATION.md (not AGENTS.md) to avoid collision with per-user AGENTS.md
-		// which contains workspace instructions for open agents.
-		hasDelegation := false
-		if deps.AgentLinkStore != nil {
-			hasDelegationMD := false
-			for _, cf := range contextFiles {
-				if cf.Path == bootstrap.DelegationFile {
-					hasDelegationMD = true
-					break
-				}
-			}
-			if !hasDelegationMD {
-				if allTargets, err := deps.AgentLinkStore.DelegateTargets(ctx, ag.ID); err == nil && len(allTargets) > 0 {
-					// Exclude auto-created team links — team members coordinate via
-					// team_tasks/team_message, not delegate. Only explicitly created
-					// links trigger DELEGATION.md.
-					targets := filterManualLinks(allTargets)
-					if len(targets) > 0 && len(targets) <= 15 {
-						// Static list: all targets directly
-						hasDelegation = true
-						contextFiles = append(contextFiles, bootstrap.ContextFile{
-							Path:    bootstrap.DelegationFile,
-							Content: buildDelegateAgentsMD(targets),
-						})
-					} else if len(targets) > 15 {
-						// Too many targets: instruct agent to use delegate_search tool
-						hasDelegation = true
-						contextFiles = append(contextFiles, bootstrap.ContextFile{
-							Path:    bootstrap.DelegationFile,
-							Content: buildDelegateSearchInstruction(len(targets)),
-						})
-					}
-				}
-			} else {
-				hasDelegation = true
-			}
-		}
-
 		// Inject TEAM.md for all team members (lead + members) so every agent
 		// knows the team workflow: create/claim/complete tasks via team_tasks tool.
 		hasTeam := false
@@ -206,20 +166,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 
 		// Inject negative context so the model doesn't waste iterations probing
-		// unavailable capabilities (team_tasks, delegate_search, etc.).
-		// Note: team agents have delegation targets via team links (TEAM.md),
-		// so only inject "no delegation" when both hasDelegation and hasTeam are false.
-		if !hasTeam || (!hasDelegation && !hasTeam) {
-			var notes []string
-			if !hasTeam {
-				notes = append(notes, "You are NOT part of any team. Do not use team_tasks or team_message tools.")
-			}
-			if !hasDelegation && !hasTeam {
-				notes = append(notes, "You have NO delegation targets. Do not use spawn with agent parameter or delegate_search tools.")
-			}
+		// unavailable capabilities (team_tasks, etc.).
+		if !hasTeam {
 			contextFiles = append(contextFiles, bootstrap.ContextFile{
 				Path:    bootstrap.AvailabilityFile,
-				Content: strings.Join(notes, "\n"),
+				Content: "You are NOT part of any team. Do not use team_tasks or team_message tools.",
 			})
 		}
 
@@ -356,6 +307,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			Provider:               provider,
 			Model:                  ag.Model,
 			ContextWindow:          contextWindow,
+			MaxTokens:              ag.ParseMaxTokens(),
 			MaxIterations:          maxIter,
 			Workspace:              workspace,
 			RestrictToWs:           &restrictVal,

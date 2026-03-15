@@ -145,11 +145,15 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 	toolsReg := sm.createTools()
 	sm.applyDenyList(toolsReg, task.Depth, task.spawnConfig)
 
-	// Determine model (cascading priority matching TS sessions-spawn-tool.ts):
-	// 1. Per-task model override (highest)
-	// 2. SubagentConfig.Model (global subagent override)
-	// 3. SubagentManager default model (inherited from parent)
+	// Determine model (cascading priority):
+	// 1. Per-task model override (highest — LLM specified model in spawn call)
+	// 2. SubagentConfig.Model (agent-level subagent override)
+	// 3. Parent agent's model (inherit from the agent that spawned us)
+	// 4. SubagentManager default model (system-wide fallback)
 	model = sm.model
+	if parentModel := ParentModelFromCtx(ctx); parentModel != "" {
+		model = parentModel
+	}
 	if task.spawnConfig.Model != "" {
 		model = task.spawnConfig.Model
 	}
