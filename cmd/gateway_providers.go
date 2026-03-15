@@ -270,7 +270,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 		}
 		// ACP provider — no API key needed (agents manage their own auth).
 		if p.ProviderType == store.ProviderACP {
-			registerACPFromDB(registry, p)
+			registerACPFromDB(registry, p, config.ResolvedDataDirFromEnv(), gatewayAddr, gatewayToken)
 			continue
 		}
 		// Local Ollama requires no API key — handle before the key guard (same pattern as ClaudeCLI).
@@ -372,13 +372,13 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 }
 
 // registerACPFromDB registers an ACP provider from a DB provider row.
-func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
+func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData, dataDir, gatewayAddr, gatewayToken string) {
 	binary := p.APIBase // repurpose api_base as binary path
 	if binary == "" {
 		slog.Warn("acp: no binary specified in DB provider", "name", p.Name)
 		return
 	}
-	if binary != "claude" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
+	if binary != "claude" && binary != "claude-agent-acp" && binary != "codex" && binary != "gemini" && !filepath.IsAbs(binary) {
 		slog.Warn("security.acp: invalid binary path from DB", "path", binary)
 		return
 	}
@@ -408,9 +408,14 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData) {
 	if workDir == "" {
 		workDir = defaultACPWorkDir()
 	}
+	var opts []providers.ACPOption
+	opts = append(opts, providers.WithACPName(p.Name), providers.WithACPModel(p.Name))
+	if gatewayAddr != "" {
+		opts = append(opts, providers.WithACPMCPBridge(gatewayAddr, gatewayToken))
+	}
 	registry.Register(providers.NewACPProvider(
 		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns,
-		providers.WithACPModel(p.Name),
+		opts...,
 	))
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")
 }

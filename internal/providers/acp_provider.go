@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -121,14 +123,17 @@ func (p *ACPProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse,
 	unlock := p.lockSession(sessionKey)
 	defer unlock()
 
+	systemPrompt, content := extractACPContent(req)
+	if len(content) == 0 {
+		return nil, fmt.Errorf("acp: no user message in request")
+	}
+
+	// Write system prompt to CLAUDE.md so Claude Code reads it automatically.
+	p.writeClaudeMD(systemPrompt)
+
 	proc, err := p.pool.GetOrSpawn(ctx, sessionKey)
 	if err != nil {
 		return nil, fmt.Errorf("acp: spawn failed: %w", err)
-	}
-
-	content := extractACPContent(req)
-	if len(content) == 0 {
-		return nil, fmt.Errorf("acp: no user message in request")
 	}
 
 	// Collect all text from session/update notifications.
@@ -170,14 +175,16 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 	unlock := p.lockSession(sessionKey)
 	defer unlock()
 
+	systemPrompt, content := extractACPContent(req)
+	if len(content) == 0 {
+		return nil, fmt.Errorf("acp: no user message in request")
+	}
+
+	p.writeClaudeMD(systemPrompt)
+
 	proc, err := p.pool.GetOrSpawn(ctx, sessionKey)
 	if err != nil {
 		return nil, fmt.Errorf("acp: spawn failed: %w", err)
-	}
-
-	content := extractACPContent(req)
-	if len(content) == 0 {
-		return nil, fmt.Errorf("acp: no user message in request")
 	}
 
 	// Handle context cancellation → send session/cancel
@@ -238,23 +245,17 @@ func (p *ACPProvider) lockSession(sessionKey string) func() {
 	return m.Unlock
 }
 
-// extractACPContent extracts user message + images from ChatRequest into ACP ContentBlocks.
-func extractACPContent(req ChatRequest) []acp.ContentBlock {
-	systemPrompt, userMsg, images := extractFromMessages(req.Messages)
+// extractACPContent extracts user message, system prompt, and images from ChatRequest.
+// System prompt is returned separately so the caller can write it to CLAUDE.md
+// instead of prepending it (Claude Code reads CLAUDE.md automatically).
+func extractACPContent(req ChatRequest) (systemPrompt string, blocks []acp.ContentBlock) {
+	sys, userMsg, images := extractFromMessages(req.Messages)
 	if userMsg == "" {
-		return nil
+		return sys, nil
 	}
 
-	var blocks []acp.ContentBlock
+	blocks = append(blocks, acp.ContentBlock{Type: "text", Text: userMsg})
 
-	// Prepend system prompt to first user message (ACP agents don't have separate system prompt API)
-	text := userMsg
-	if systemPrompt != "" {
-		text = systemPrompt + "\n\n" + userMsg
-	}
-	blocks = append(blocks, acp.ContentBlock{Type: "text", Text: text})
-
-	// Add images
 	for _, img := range images {
 		blocks = append(blocks, acp.ContentBlock{
 			Type:     "image",
@@ -263,7 +264,24 @@ func extractACPContent(req ChatRequest) []acp.ContentBlock {
 		})
 	}
 
-	return blocks
+	return sys, blocks
+}
+
+// writeClaudeMD writes the system prompt to CLAUDE.md in the ACP workspace.
+// Claude Code reads this file automatically on every run.
+// Skips write if content is unchanged.
+func (p *ACPProvider) writeClaudeMD(systemPrompt string) {
+	if systemPrompt == "" {
+		return
+	}
+	dir := p.pool.WorkDir()
+	path := filepath.Join(dir, "CLAUDE.md")
+	if existing, err := os.ReadFile(path); err == nil && string(existing) == systemPrompt {
+		return
+	}
+	if err := os.WriteFile(path, []byte(systemPrompt), 0600); err != nil {
+		slog.Warn("acp: failed to write CLAUDE.md", "path", path, "error", err)
+	}
 }
 
 // mapStopReason converts ACP stopReason to GoClaw finish reason.

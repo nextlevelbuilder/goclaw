@@ -32,7 +32,7 @@ ui/web/.vite/
 .mcp.json
 tmp
 .claude/
-.claude-code/
+editor/claude-code/
 
 deploy-*.sh
 

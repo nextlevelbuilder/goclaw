@@ -20,10 +20,9 @@ export NODE_PATH="/usr/local/lib/node_modules:$RUNTIME_DIR/npm-global/lib/node_m
 export PATH="$RUNTIME_DIR/npm-global/bin:$RUNTIME_DIR/pip/bin:$PATH"
 
 # Claude Code: seed credentials into writable volume if not present.
-# The volume mount overrides the image's /app/.claude, so we copy from a
-# bundled backup on first run.
-if [ -d /app/.claude-seed ] && [ ! -f /app/.claude/.credentials.json ]; then
-  cp -a /app/.claude-seed/. /app/.claude/
+# Volume mount overrides /app/.claude, so we seed from /etc/claude/ on first run.
+if [ -d /etc/claude ] && [ ! -f /app/.claude/.credentials.json ]; then
+  cp -a /etc/claude/. /app/.claude/
 fi
 
 case "${1:-serve}" in

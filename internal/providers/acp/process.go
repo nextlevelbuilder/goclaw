@@ -88,6 +88,11 @@ func (pp *ProcessPool) SetMCPServers(servers []MCPServerEntry) {
 	pp.mcpServers = servers
 }
 
+// WorkDir returns the process pool's working directory.
+func (pp *ProcessPool) WorkDir() string {
+	return pp.workDir
+}
+
 // getToolHandler returns the current tool handler (thread-safe).
 func (pp *ProcessPool) getToolHandler() RequestHandler {
 	pp.mu.RLock()
@@ -189,7 +194,7 @@ func (pp *ProcessPool) spawn(ctx context.Context, sessionKey string) (*ACPProces
 	go func() {
 		_ = cmd.Wait()
 		if s := stderrWriter.String(); s != "" {
-			slog.Debug("acp: process stderr", "session_key", sessionKey, "stderr", s)
+			slog.Info("acp: process stderr", "session_key", sessionKey, "stderr", s)
 		}
 		close(proc.exited)
 	}()

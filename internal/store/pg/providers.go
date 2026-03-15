@@ -100,6 +100,7 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 		var p store.LLMProviderData
 		var apiKey string
 		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			slog.Warn("provider scan error", "error", err)
 			continue
 		}
 		p.APIKey = s.decryptKey(apiKey, p.Name)
