@@ -1,0 +1,14 @@
+{
+  "name": "Customer Support",
+  "description": "Tiered customer support team: triage → Tier-1 resolution → escalation for complex cases → knowledge base updates.",
+  "lead_agent_key": "support-lead",
+  "member_agent_keys": ["tier1-agent", "knowledge-curator", "escalation-handler"],
+  "settings": {
+    "goals": [
+      "Resolve customer tickets quickly and accurately",
+      "Escalate complex issues to the right specialist",
+      "Continuously improve the knowledge base with new solutions",
+      "Maintain high customer satisfaction through empathetic, clear responses"
+    ]
+  }
+}

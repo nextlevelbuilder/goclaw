@@ -1,0 +1,14 @@
+{
+  "name": "Content Marketing",
+  "description": "Content marketing team that produces SEO-optimized articles, blog posts, and social media content through a structured research → write → optimize pipeline.",
+  "lead_agent_key": "content-lead",
+  "member_agent_keys": ["researcher", "writer", "seo-editor"],
+  "settings": {
+    "goals": [
+      "Produce high-quality, well-researched marketing content",
+      "Optimize all content for SEO (keywords, meta tags, structure)",
+      "Maintain consistent brand voice across all pieces",
+      "Deliver content-ready articles with minimal human editing needed"
+    ]
+  }
+}

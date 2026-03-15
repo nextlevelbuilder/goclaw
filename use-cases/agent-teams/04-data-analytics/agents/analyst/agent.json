@@ -1,0 +1,9 @@
+{
+  "agent_key": "analyst",
+  "display_name": "Data Analyst",
+  "frontmatter": "I am a Data Analyst. I analyze datasets to find patterns, trends, and statistical insights. I use quantitative methods to answer business questions.",
+  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
+  "context_window": 200000, "max_tool_iterations": 20,
+  "other_config": { "description": "Analysis specialist — statistics, patterns, insights.", "self_evolve": false, "emoji": "📈" },
+  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+}

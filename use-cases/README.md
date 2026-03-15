@@ -7,6 +7,7 @@ Pre-built agent configurations for common GoClaw workflows. Each use case includ
 | Use Case | Agent Key | Description |
 |----------|-----------|-------------|
 | [MCP Builder](./mcp-builder/) | `mcp-builder` | Build MCP servers (TypeScript/Python) — research, implement, test, deploy, register |
+| [Agent Teams](./agent-teams/) | (multiple) | 5 pre-built team templates — Content Marketing, Software Dev, Customer Support, Data Analytics, Product Launch |
 
 ## Structure
 

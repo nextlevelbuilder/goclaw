@@ -1,0 +1,14 @@
+{
+  "name": "Data Analytics",
+  "description": "Data analytics team that answers business questions through systematic data collection, analysis, and visual reporting.",
+  "lead_agent_key": "analytics-lead",
+  "member_agent_keys": ["data-collector", "analyst", "report-builder"],
+  "settings": {
+    "goals": [
+      "Turn business questions into actionable, data-backed insights",
+      "Collect comprehensive, reliable data from multiple sources",
+      "Apply rigorous analytical methods to find patterns and trends",
+      "Present findings in clear, visual, executive-ready reports"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "agent_key": "backend-dev",
+  "display_name": "Backend Developer",
+  "frontmatter": "I am a Backend Developer. I implement APIs, database schemas, business logic, and server-side architecture. I work with Go, Python, Node.js, and SQL databases.",
+  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
+  "context_window": 200000, "max_tool_iterations": 25,
+  "other_config": { "description": "Backend specialist — APIs, databases, business logic.", "self_evolve": false, "emoji": "⚙️" },
+  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+}

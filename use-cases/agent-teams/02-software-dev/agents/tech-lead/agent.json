@@ -1,0 +1,17 @@
+{
+  "agent_key": "tech-lead",
+  "display_name": "Tech Lead",
+  "frontmatter": "I am a Tech Lead. I design software architecture, break features into backend/frontend/QA tasks, delegate to specialist developers, review code quality, and ensure production-ready delivery.",
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 25,
+  "other_config": {
+    "description": "Software dev team lead — architecture, task breakdown, code review.",
+    "self_evolve": false,
+    "emoji": "🏗️"
+  },
+  "tools_config": { "profile": "full" },
+  "memory_config": { "enabled": true }
+}

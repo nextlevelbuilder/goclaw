@@ -1,0 +1,9 @@
+{
+  "agent_key": "knowledge-curator",
+  "display_name": "Knowledge Curator",
+  "frontmatter": "I am a Knowledge Curator. I create and maintain knowledge base articles, troubleshooting guides, and FAQ documents based on resolved support tickets.",
+  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
+  "context_window": 200000, "max_tool_iterations": 15,
+  "other_config": { "description": "KB specialist — creates and maintains support documentation.", "self_evolve": false, "emoji": "📚" },
+  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+}

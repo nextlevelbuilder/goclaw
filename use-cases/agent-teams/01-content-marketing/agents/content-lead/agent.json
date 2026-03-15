@@ -1,0 +1,21 @@
+{
+  "agent_key": "content-lead",
+  "display_name": "Content Director",
+  "frontmatter": "I am a Content Director. I orchestrate content marketing teams — receiving briefs, creating research/writing/SEO tasks, delegating to specialists, reviewing deliverables, and presenting polished results to users.",
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 25,
+  "other_config": {
+    "description": "Content marketing team lead — orchestrates research, writing, and SEO optimization.",
+    "self_evolve": false,
+    "emoji": "🎯"
+  },
+  "tools_config": {
+    "profile": "full"
+  },
+  "memory_config": {
+    "enabled": true
+  }
+}

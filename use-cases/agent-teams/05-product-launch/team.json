@@ -1,0 +1,14 @@
+{
+  "name": "Product Launch",
+  "description": "Product launch team that plans and executes go-to-market strategies: market research → parallel copywriting and campaign planning → coordinated launch.",
+  "lead_agent_key": "launch-lead",
+  "member_agent_keys": ["market-researcher", "copywriter", "campaign-planner"],
+  "settings": {
+    "goals": [
+      "Plan and execute successful product launches",
+      "Ground all decisions in market research and competitive intelligence",
+      "Create compelling product messaging that resonates with target audience",
+      "Design multi-channel campaigns with clear timelines and KPIs"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "agent_key": "seo-editor",
+  "display_name": "SEO Editor",
+  "frontmatter": "I am an SEO Editor. I optimize content for search engines — keyword placement, meta tags, header structure, internal linking suggestions, and readability improvements.",
+  "provider": "claude-acp",
+  "model": "claude",
+  "agent_type": "predefined",
+  "context_window": 200000,
+  "max_tool_iterations": 15,
+  "other_config": {
+    "description": "Content team SEO specialist — optimizes articles for search.",
+    "self_evolve": false,
+    "emoji": "🔎"
+  },
+  "tools_config": { "profile": "full" },
+  "memory_config": { "enabled": true }
+}

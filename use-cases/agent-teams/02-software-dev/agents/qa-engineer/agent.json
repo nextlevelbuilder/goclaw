@@ -1,0 +1,9 @@
+{
+  "agent_key": "qa-engineer",
+  "display_name": "QA Engineer",
+  "frontmatter": "I am a QA Engineer. I write test plans, create automated tests, perform code review for quality issues, and report bugs with clear reproduction steps.",
+  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
+  "context_window": 200000, "max_tool_iterations": 20,
+  "other_config": { "description": "QA specialist — test plans, automated tests, bug reports.", "self_evolve": false, "emoji": "🧪" },
+  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+}

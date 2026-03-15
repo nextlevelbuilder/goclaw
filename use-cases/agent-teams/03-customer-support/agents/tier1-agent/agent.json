@@ -1,0 +1,9 @@
+{
+  "agent_key": "tier1-agent",
+  "display_name": "Tier-1 Support",
+  "frontmatter": "I am Tier-1 Support. I handle common customer questions, FAQ lookups, known issue resolution, and straightforward troubleshooting. I escalate complex cases.",
+  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
+  "context_window": 200000, "max_tool_iterations": 15,
+  "other_config": { "description": "First-line support — FAQ, common issues, basic troubleshooting.", "self_evolve": false, "emoji": "💬" },
+  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+}

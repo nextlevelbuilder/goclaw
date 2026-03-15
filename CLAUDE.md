@@ -99,3 +99,32 @@ When implementing or modifying web UI components, follow these rules to ensure m
 - **Landscape:** Use `landscape-compact` class on top bars to reduce padding in phone landscape orientation (`max-height: 500px`)
 - **Portal dropdowns in dialogs:** Custom dropdown components using `createPortal(content, document.body)` MUST add `pointer-events-auto` class to the dropdown element. Radix Dialog sets `pointer-events: none` on `document.body` — without this class, dropdowns are unclickable. Radix-native portals (Select, Popover) handle this automatically
 - **Timezone:** User timezone stored in Zustand (`useUiStore`). Charts use `formatBucketTz()` from `lib/format.ts` with native `Intl.DateTimeFormat` — no date-fns-tz dependency
+
+## Deep Dive Docs
+
+Detailed documentation lives in `docs/`. Read these files when working on the corresponding subsystem:
+
+| File | Topic | Read when... |
+|------|-------|-------------|
+| `docs/00-architecture-overview.md` | System architecture, component map, data flow | Understanding overall design or adding new subsystems |
+| `docs/01-agent-loop.md` | Agent loop (think→act→observe), RunRequest/RunResult, auto-summarization | Modifying agent execution, context management, or event flow |
+| `docs/02-providers.md` | LLM providers (Anthropic, OpenAI-compat), streaming, retry logic | Adding/modifying LLM providers or changing streaming behavior |
+| `docs/03-tools-system.md` | Tool registry, built-in tools, MCP bridge, tool definitions | Adding new tools, modifying tool behavior, or MCP integration |
+| `docs/04-gateway-protocol.md` | WebSocket v3 protocol, frame types, method routing | Changing WS protocol, adding RPC methods, or debugging connections |
+| `docs/05-channels-messaging.md` | Channel manager (Telegram, Feishu, Zalo, Discord, WhatsApp), message formatting | Adding channels, fixing message rendering, or formatting issues |
+| `docs/06-store-data-model.md` | Store interfaces, PostgreSQL schema, data model, migrations | Modifying DB schema, adding stores, or writing migrations |
+| `docs/07-bootstrap-skills-memory.md` | System prompt bootstrap, SKILL.md loader, BM25 search, memory (pgvector) | Changing system prompts, skill loading, or memory retrieval |
+| `docs/08-scheduling-cron.md` | Lane-based scheduler, cron expressions (at/every/cron) | Modifying scheduling, concurrency lanes, or cron jobs |
+| `docs/09-security.md` | Security: rate limiting, input guard, CORS, SSRF, encryption | Security review, adding protection, or auditing vulnerabilities |
+| `docs/10-tracing-observability.md` | LLM call tracing, OTel export, build-tag gating | Adding tracing, debugging performance, or observability setup |
+| `docs/11-agent-teams.md` | Multi-agent teams, delegation, team orchestration | Implementing agent teams or modifying team communication |
+| `docs/12-extended-thinking.md` | Extended thinking / chain-of-thought support | Adding or modifying extended thinking features |
+| `docs/13-ws-team-events.md` | WebSocket events for agent teams | Modifying team event flow or debugging team WS communication |
+| `docs/14-skills-runtime.md` | Skill runtime execution environment | Changing how skills execute or adding runtime capabilities |
+| `docs/15-core-skills-system.md` | Core built-in skills architecture | Modifying core skills or adding new built-in skills |
+| `docs/16-skill-publishing.md` | Skill publishing and distribution | Implementing skill publishing or marketplace features |
+| `docs/17-mcp-builder-skill.md` | MCP Builder skill for creating MCP servers | Working on MCP builder or MCP server generation |
+| `docs/17-changelog.md` | Recent changes and version history | Understanding recent modifications |
+| `docs/18-http-api.md` | HTTP API endpoints (/v1/*) | Adding/modifying HTTP endpoints or API behavior |
+| `docs/19-websocket-rpc.md` | WebSocket RPC method reference | Adding RPC methods or debugging WS communication |
+| `docs/20-api-keys-auth.md` | API key management, authentication, AES-256-GCM encryption | Modifying auth, API keys, or encryption |

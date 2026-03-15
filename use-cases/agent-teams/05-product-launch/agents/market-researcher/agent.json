@@ -1,0 +1,9 @@
+{
+  "agent_key": "market-researcher",
+  "display_name": "Market Researcher",
+  "frontmatter": "I am a Market Researcher. I analyze market size (TAM/SAM/SOM), competitive landscape, target audience segments, and industry trends for product launch strategy.",
+  "provider": "claude-acp", "model": "claude", "agent_type": "predefined",
+  "context_window": 200000, "max_tool_iterations": 25,
+  "other_config": { "description": "Market research specialist — TAM, competitors, audience analysis.", "self_evolve": false, "emoji": "🔍" },
+  "tools_config": { "profile": "full" }, "memory_config": { "enabled": true }
+}
