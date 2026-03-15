@@ -7,8 +7,9 @@ package acp
 
 // InitializeRequest starts the ACP handshake.
 type InitializeRequest struct {
-	ClientInfo   ClientInfo `json:"clientInfo"`
-	Capabilities ClientCaps `json:"capabilities"`
+	ProtocolVersion int        `json:"protocolVersion"`
+	ClientInfo      ClientInfo `json:"clientInfo"`
+	Capabilities    ClientCaps `json:"capabilities"`
 }
 
 // ClientInfo identifies the ACP client.
@@ -66,7 +67,33 @@ type SessionCaps struct{}
 // --- Session Methods ---
 
 // NewSessionRequest creates a new ACP session.
-type NewSessionRequest struct{}
+type NewSessionRequest struct {
+	Cwd        string           `json:"cwd"`
+	McpServers []MCPServerEntry `json:"mcpServers"`
+}
+
+// MCPServerEntry describes an MCP server for the ACP session.
+type MCPServerEntry struct {
+	Name    string          `json:"name"`
+	Type    string          `json:"type"`              // "sse" or "stdio"
+	URL     string          `json:"url,omitempty"`     // for sse/http
+	Headers []MCPHeader     `json:"headers,omitempty"` // for sse/http (array format)
+	Command string          `json:"command,omitempty"` // for stdio
+	Args    []string        `json:"args,omitempty"`    // for stdio
+	Env     []MCPEnvEntry   `json:"env,omitempty"`     // for stdio
+}
+
+// MCPHeader is a name-value pair for MCP server headers.
+type MCPHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// MCPEnvEntry is a name-value pair for MCP server env vars.
+type MCPEnvEntry struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
 
 // NewSessionResponse carries the new session ID.
 type NewSessionResponse struct {
@@ -76,7 +103,7 @@ type NewSessionResponse struct {
 // PromptRequest sends user content to the agent.
 type PromptRequest struct {
 	SessionID string         `json:"sessionId"`
-	Content   []ContentBlock `json:"content"`
+	Prompt    []ContentBlock `json:"prompt"`
 }
 
 // PromptResponse is the final response after the agent completes.
@@ -102,8 +129,15 @@ type ContentBlock struct {
 // --- Agent → Client Notifications ---
 
 // SessionUpdate carries incremental updates during prompt execution.
+// Supports both the Zed adapter format (sessionUpdate + content) and the
+// generic ACP format (kind + message/toolCall).
 type SessionUpdate struct {
-	Kind       string          `json:"kind"`                 // "message", "toolCall", "plan"
+	// Zed adapter format
+	SessionUpdateType string        `json:"sessionUpdate,omitempty"` // "agent_message_chunk", "usage_update", etc.
+	Content           *ContentBlock `json:"content,omitempty"`       // single content block (adapter)
+
+	// Generic ACP format
+	Kind       string          `json:"kind,omitempty"`       // "message", "toolCall", "plan"
 	StopReason string          `json:"stopReason,omitempty"` // "endTurn", "cancelled"
 	Message    *MessageUpdate  `json:"message,omitempty"`
 	ToolCall   *ToolCallUpdate `json:"toolCall,omitempty"`

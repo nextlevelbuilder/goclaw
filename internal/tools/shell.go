@@ -188,7 +188,9 @@ func (t *ExecTool) SetApprovalManager(mgr *ExecApprovalManager, agentID string) 
 }
 
 func (t *ExecTool) Name() string        { return "exec" }
-func (t *ExecTool) Description() string { return "Execute a shell command and return its output" }
+func (t *ExecTool) Description() string {
+	return "Execute a shell command and return its output. Commands run in your workspace directory. Use relative paths — do not use absolute paths like /app/..."
+}
 func (t *ExecTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -252,7 +254,14 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 	if wd, _ := args["working_dir"].(string); wd != "" {
 		if effectiveRestrict(ctx, t.restrict) {
+			// Validate working_dir against both the shared workspace and the
+			// per-user workspace. Per-user workspaces (e.g. .goclaw/<agent>-workspace/ws/<user>)
+			// live outside the shared workspace but are legitimate exec targets.
 			resolved, err := resolvePath(wd, t.workingDir, true)
+			if err != nil && cwd != t.workingDir {
+				// Retry with per-user workspace from context as the boundary.
+				resolved, err = resolvePath(wd, cwd, true)
+			}
 			if err != nil {
 				return ErrorResult(err.Error())
 			}

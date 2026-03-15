@@ -109,8 +109,10 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile) []provider
 }
 
 // enrichDocumentPaths updates the last user message to include persisted file paths
-// in <media:document> tags. This allows skills (e.g. pdf skill via exec) to access
-// the file directly, matching how Claude Code skills work with file paths.
+// and media IDs in <media:document> tags. Path allows skills (e.g. pdf skill via exec)
+// to access the file directly. ID allows the LLM to pass a valid media_id to read_document.
+// Without the id attribute, the LLM hallucinates a media_id from the filename, causing
+// "not found in conversation" errors.
 func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []providers.MediaRef) {
 	if l.mediaStore == nil || len(messages) == 0 {
 		return
@@ -136,22 +138,24 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 		if err != nil {
 			continue
 		}
-		// Replace <media:document> or <media:document name="X"> with version that includes path.
-		// The hint tells the agent the file is directly accessible (no copy needed).
+		// Inject both id (for read_document tool) and path (for skill exec access).
+		idAttr := fmt.Sprintf(" id=%q", ref.ID)
 		pathAttr := fmt.Sprintf(" path=%q", p)
+		extraAttrs := idAttr + pathAttr
+
 		old1 := "<media:document>"
-		new1 := "<media:document" + pathAttr + ">"
+		new1 := "<media:document" + extraAttrs + ">"
 		// Replace the LAST bare tag (current message, not group history).
 		if idx := strings.LastIndex(content, old1); idx >= 0 {
 			content = content[:idx] + new1 + content[idx+len(old1):]
 			continue
 		}
-		// For named variant, inject path attribute (last occurrence)
+		// For named variant, inject id+path attributes (last occurrence)
 		if idx := strings.LastIndex(content, "<media:document name="); idx >= 0 {
 			closeIdx := strings.Index(content[idx:], ">")
 			if closeIdx >= 0 {
 				tag := content[idx : idx+closeIdx]
-				content = content[:idx] + tag + pathAttr + ">" + content[idx+closeIdx+1:]
+				content = content[:idx] + tag + extraAttrs + ">" + content[idx+closeIdx+1:]
 			}
 		}
 		// For Slack variant with file= attribute (last occurrence)
@@ -159,7 +163,7 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 			closeIdx := strings.Index(content[idx:], ">")
 			if closeIdx >= 0 {
 				tag := content[idx : idx+closeIdx]
-				content = content[:idx] + tag + pathAttr + ">" + content[idx+closeIdx+1:]
+				content = content[:idx] + tag + extraAttrs + ">" + content[idx+closeIdx+1:]
 			}
 		}
 	}

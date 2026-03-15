@@ -9,7 +9,8 @@ import (
 // Initialize sends the ACP initialize request to establish capabilities.
 func (p *ACPProcess) Initialize(ctx context.Context) error {
 	req := InitializeRequest{
-		ClientInfo: ClientInfo{Name: "goclaw", Version: "1.0"},
+		ProtocolVersion: 1,
+		ClientInfo:      ClientInfo{Name: "goclaw", Version: "1.0"},
 		Capabilities: ClientCaps{
 			Fs:       &FsCaps{ReadTextFile: true, WriteTextFile: true},
 			Terminal: &TerminalCaps{Enabled: true},
@@ -24,9 +25,13 @@ func (p *ACPProcess) Initialize(ctx context.Context) error {
 }
 
 // NewSession creates a new ACP session on this process.
-func (p *ACPProcess) NewSession(ctx context.Context) error {
+func (p *ACPProcess) NewSession(ctx context.Context, cwd string, mcpServers []MCPServerEntry) error {
+	req := NewSessionRequest{
+		Cwd:        cwd,
+		McpServers: mcpServers,
+	}
 	var resp NewSessionResponse
-	if err := p.conn.Call(ctx, "session/new", NewSessionRequest{}, &resp); err != nil {
+	if err := p.conn.Call(ctx, "session/new", req, &resp); err != nil {
 		return fmt.Errorf("acp session/new: %w", err)
 	}
 	p.sessionID = resp.SessionID
@@ -49,7 +54,7 @@ func (p *ACPProcess) Prompt(ctx context.Context, content []ContentBlock, onUpdat
 
 	req := PromptRequest{
 		SessionID: p.sessionID,
-		Content:   content,
+		Prompt:    content,
 	}
 	var resp PromptResponse
 	if err := p.conn.Call(ctx, "session/prompt", req, &resp); err != nil {

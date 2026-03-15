@@ -34,40 +34,63 @@ RUN set -eux; \
     ${TAGS} -o /out/goclaw .
 
 # ── Stage 2: Runtime ──
-FROM alpine:3.22
+FROM debian:bookworm-slim
 
 ARG ENABLE_SANDBOX=false
 ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
+ARG ENABLE_KUBECTL=false
+ARG ENABLE_CLAUDE_CODE=false
 ARG ENABLE_FULL_SKILLS=false
 
-# Install ca-certificates + wget (healthcheck) + optional runtimes.
-# ENABLE_FULL_SKILLS=true pre-installs all skill deps (larger image, no on-demand install needed).
-# Otherwise, skill packages are installed on-demand via the admin UI.
+# Install base packages + optional runtimes.
+# Debian bookworm-slim provides glibc required by Claude Code native binary.
 RUN set -eux; \
-    apk add --no-cache ca-certificates wget; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates wget curl; \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
-        apk add --no-cache docker-cli; \
+        apt-get install -y --no-install-recommends docker.io; \
     fi; \
     if [ "$ENABLE_FULL_SKILLS" = "true" ]; then \
-        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli doas; \
-        echo "permit nopass goclaw as root cmd apk" > /etc/doas.d/goclaw.conf; \
+        apt-get install -y --no-install-recommends python3 python3-pip nodejs npm pandoc gh sudo bash; \
+        curl -fsSL https://dl.k8s.io/release/v1.33.0/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl; \
+        curl -fsSL https://get.helm.sh/helm-v3.18.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin --strip-components=1 linux-amd64/helm; \
+        echo "goclaw ALL=(root) NOPASSWD: /usr/bin/apt-get" > /etc/sudoers.d/goclaw; \
         pip3 install --no-cache-dir --break-system-packages \
             pypdf openpyxl pandas python-pptx markitdown defusedxml lxml; \
         npm install -g --cache /tmp/npm-cache docx pptxgenjs; \
-        rm -rf /tmp/npm-cache /root/.cache /var/cache/apk/*; \
+        rm -rf /tmp/npm-cache /root/.cache; \
     else \
         if [ "$ENABLE_PYTHON" = "true" ]; then \
-            apk add --no-cache python3 py3-pip doas; \
-            echo "permit nopass goclaw as root cmd apk" > /etc/doas.d/goclaw.conf; \
+            apt-get install -y --no-install-recommends python3 python3-pip sudo; \
+            echo "goclaw ALL=(root) NOPASSWD: /usr/bin/apt-get" > /etc/sudoers.d/goclaw; \
         fi; \
         if [ "$ENABLE_NODE" = "true" ]; then \
-            apk add --no-cache nodejs npm; \
+            apt-get install -y --no-install-recommends nodejs npm; \
         fi; \
+        if [ "$ENABLE_KUBECTL" = "true" ]; then \
+            curl -fsSL https://dl.k8s.io/release/v1.33.0/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl; \
+            curl -fsSL https://get.helm.sh/helm-v3.18.0-linux-amd64.tar.gz | tar xz -C /usr/local/bin --strip-components=1 linux-amd64/helm; \
+        fi; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code: native binary (CLI) + ACP adapter (JSON-RPC 2.0 stdio).
+# - Native binary: installed via official installer for claude-cli provider
+# - ACP adapter (@zed-industries/claude-agent-acp): wraps Claude Agent SDK for ACP provider
+RUN set -eux; \
+    if [ "$ENABLE_CLAUDE_CODE" = "true" ]; then \
+        curl -fsSL https://claude.ai/install.sh | bash; \
+        cp -L /root/.local/bin/claude /usr/local/bin/claude; \
+        chmod +x /usr/local/bin/claude; \
+        claude --version; \
+        rm -rf /root/.claude /root/.local; \
+        npm install -g --cache /tmp/npm-cache @zed-industries/claude-agent-acp; \
+        rm -rf /tmp/npm-cache; \
     fi
 
 # Non-root user
-RUN adduser -D -u 1000 -h /app goclaw
+RUN useradd -m -d /app -u 1000 -s /bin/bash goclaw
 WORKDIR /app
 
 # Copy binary, migrations, and bundled skills
@@ -77,8 +100,15 @@ COPY --from=builder /src/skills/ /app/bundled-skills/
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Copy Claude Code auth credentials.
+# /app/.claude-seed is a backup — the entrypoint copies it to /app/.claude
+# on first run (volume mount overrides /app/.claude, so we need a seed).
+COPY .claude-code/.claude/ /app/.claude/
+COPY .claude-code/.claude/ /app/.claude-seed/
+COPY .claude-code/.claude.json /app/.claude.json
+
 # Create data directories (owned by goclaw user)
-RUN mkdir -p /app/workspace /app/data /app/sessions /app/skills /app/tsnet-state /app/.goclaw \
+RUN mkdir -p /app/workspace /app/data /app/data/acp-workspaces /app/sessions /app/skills /app/tsnet-state /app/.goclaw /app/.studio \
     && chown -R goclaw:goclaw /app
 
 # Default environment

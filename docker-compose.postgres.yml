@@ -34,7 +34,11 @@ services:
     volumes:
       - goclaw-skills:/app/skills
       - goclaw-workspace:/app/.goclaw
+      - goclaw-studio:/app/.studio
+      - goclaw-claude:/app/.claude
 
 volumes:
   postgres-data:
   goclaw-skills:
+  goclaw-studio:
+  goclaw-claude:

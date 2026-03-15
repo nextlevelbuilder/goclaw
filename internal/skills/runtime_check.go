@@ -33,6 +33,9 @@ func CheckRuntimes() *RuntimeStatus {
 		{"node", "node", "--version", false},
 		{"npm", "npm", "--version", false},
 		{"doas", "doas", "", false},
+		{"kubectl", "kubectl", "version --client", false},
+		{"helm", "helm", "version --short", false},
+		{"claude", "claude", "--version", false},
 	}
 
 	status := &RuntimeStatus{Ready: true}
@@ -58,12 +61,14 @@ func CheckRuntimes() *RuntimeStatus {
 	return status
 }
 
-// getVersion runs "bin flag" with a timeout and returns the first line of output.
+// getVersion runs "bin flag..." with a timeout and returns the first line of output.
+// The flag string is split on spaces to support multi-arg flags (e.g. "version --client").
 func getVersion(bin, flag string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, bin, flag).CombinedOutput()
+	args := strings.Fields(flag)
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
 	if err != nil {
 		return ""
 	}
