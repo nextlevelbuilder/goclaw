@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw, Plus, LayoutGrid, List } from "lucide-react";
+import { RefreshCw, Plus, LayoutGrid, List, FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useBoardStore } from "../stores/use-board-store";
 import type { GroupBy } from "../stores/use-board-store";
@@ -20,6 +20,7 @@ interface BoardToolbarProps {
   spinning: boolean;
   onRefresh: () => void;
   onCreateTask: () => void;
+  onWorkspace?: () => void;
 }
 
 const STATUS_FILTERS: { value: StatusFilter; labelKey: string }[] = [
@@ -37,7 +38,7 @@ const GROUP_OPTIONS: { value: GroupBy; labelKey: string }[] = [
 export const BoardToolbar = memo(function BoardToolbar({
   statusFilter, onStatusFilter,
   scopes, selectedScope, onScopeChange,
-  spinning, onRefresh, onCreateTask,
+  spinning, onRefresh, onCreateTask, onWorkspace,
 }: BoardToolbarProps) {
   const { t } = useTranslation("teams");
   const { viewMode, setViewMode, groupBy, setGroupBy } = useBoardStore();
@@ -109,6 +110,14 @@ export const BoardToolbar = memo(function BoardToolbar({
       </div>
 
       <div className="flex items-center gap-2">
+        {/* Workspace */}
+        {onWorkspace && (
+          <Button variant="outline" size="sm" onClick={onWorkspace} className="gap-1.5 h-8 text-xs">
+            <FolderOpen className="h-3.5 w-3.5" />
+            {t("workspace.title")}
+          </Button>
+        )}
+
         {/* View toggle */}
         <div className="flex rounded-lg border bg-muted/50 p-0.5">
           <button

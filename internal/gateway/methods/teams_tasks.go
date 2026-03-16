@@ -680,19 +680,30 @@ func (m *TeamsMethods) dispatchTaskToAgent(ctx context.Context, task *store.Team
 		}
 	}
 
+	// Resolve peer kind from task metadata; fallback to "direct" for old tasks.
+	originPeerKind := "direct"
+	if task.Metadata != nil {
+		if pk, ok := task.Metadata["peer_kind"].(string); ok && pk != "" {
+			originPeerKind = pk
+		}
+	}
+
 	meta := map[string]string{
 		"origin_channel":   originChannel,
-		"origin_peer_kind": "direct",
+		"origin_peer_kind": originPeerKind,
 		"origin_chat_id":   task.ChatID,
 		"from_agent":       fromAgent,
 		"to_agent":         ag.AgentKey,
 		"team_task_id":     taskID.String(),
 		"team_id":          teamID.String(),
 	}
-	// Pass team workspace from task metadata so member uses the team's workspace.
+	// Pass team workspace and local key from task metadata.
 	if task.Metadata != nil {
 		if ws, _ := task.Metadata["team_workspace"].(string); ws != "" {
 			meta["team_workspace"] = ws
+		}
+		if lk, _ := task.Metadata["local_key"].(string); lk != "" {
+			meta["origin_local_key"] = lk
 		}
 	}
 

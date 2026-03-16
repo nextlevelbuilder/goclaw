@@ -215,7 +215,10 @@ func minimaxModels() []ModelInfo {
 // DashScope does not expose a standard /v1/models endpoint.
 func dashScopeModels() []ModelInfo {
 	return []ModelInfo{
-		// Chat / text
+		// Qwen3.5 series — Text Generation + Deep Thinking + Visual Understanding
+		{ID: "qwen3.5-plus", Name: "Qwen 3.5 Plus"},
+		{ID: "qwen3.5-turbo", Name: "Qwen 3.5 Turbo"},
+		// Qwen3 hosted series — Text + Thinking
 		{ID: "qwen3-max", Name: "Qwen 3 Max"},
 		{ID: "qwen3-plus", Name: "Qwen 3 Plus"},
 		{ID: "qwen3-turbo", Name: "Qwen 3 Turbo"},

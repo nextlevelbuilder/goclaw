@@ -138,8 +138,18 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		relToRoot, _ := filepath.Rel(rootDir, path)
 		depth := strings.Count(relToRoot, string(filepath.Separator)) + 1
 
-		// At depth boundary: record dir but don't descend
+		// Beyond depth boundary: record the dir (with hasChildren hint) but don't descend.
 		if d.IsDir() && depth > maxDepth {
+			e := fileEntry{
+				Path:      rel,
+				Name:      d.Name(),
+				IsDir:     true,
+				Protected: isProtectedPath(rel),
+			}
+			if dirEntries, err := os.ReadDir(path); err == nil && len(dirEntries) > 0 {
+				e.HasChildren = true
+			}
+			entries = append(entries, e)
 			return filepath.SkipDir
 		}
 

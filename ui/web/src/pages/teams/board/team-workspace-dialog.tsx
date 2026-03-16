@@ -9,9 +9,16 @@ import {
 import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { FileBrowser } from "@/components/shared/file-browser";
-import { buildTree } from "@/lib/file-helpers";
+import { buildTree, isTextFile } from "@/lib/file-helpers";
 import { useTeamWorkspace } from "../hooks/use-team-workspace";
+import { useHttp } from "@/hooks/use-ws";
 import type { ScopeEntry } from "@/types/team";
+
+/** Strip chatID prefix from name for WS file ops (backend already scopes by chat_id). */
+function wsFileName(name: string, chatID: string | undefined): string {
+  if (chatID && name.startsWith(chatID + "/")) return name.slice(chatID.length + 1);
+  return name;
+}
 
 interface TeamWorkspaceDialogProps {
   open: boolean;
@@ -22,6 +29,7 @@ interface TeamWorkspaceDialogProps {
 
 export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: TeamWorkspaceDialogProps) {
   const { t } = useTranslation("teams");
+  const http = useHttp();
   const { files, loading, listFiles, readFile, deleteFile } = useTeamWorkspace();
   const [selectedScope, setSelectedScope] = useState<string>("__all__");
   const [fileContent, setFileContent] = useState<{ content: string; path: string; size: number } | null>(null);
@@ -40,6 +48,13 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     if (open) load();
   }, [open, load]);
 
+  // Map relative name → absolute disk path (for HTTP file serving).
+  const nameToAbsPath = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of files) if (!f.is_dir && f.path) m.set(f.name, f.path);
+    return m;
+  }, [files]);
+
   const tree = useMemo(
     () => buildTree(files.map((f) => ({
       path: f.name,
@@ -54,34 +69,51 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     const match = files.find((f) => f.name === path);
     if (!match || match.is_dir) return;
     setActivePath(path);
-    setContentLoading(true);
-    try {
-      const res = await readFile(teamId, match.name, match.chat_id || undefined);
-      setFileContent({ content: res.content ?? "", path: match.name, size: match.size ?? 0 });
-    } catch { /* ignore */ }
-    finally { setContentLoading(false); }
+    if (isTextFile(path)) {
+      setContentLoading(true);
+      try {
+        const fname = wsFileName(match.name, match.chat_id);
+        const res = await readFile(teamId, fname, match.chat_id || undefined);
+        setFileContent({ content: res.content ?? "", path: match.name, size: match.size ?? 0 });
+      } catch { setFileContent(null); }
+      finally { setContentLoading(false); }
+    } else {
+      // Non-text files (images, binaries): set metadata only — ImageViewer/UnsupportedViewer handle display.
+      setFileContent({ content: "", path: match.name, size: match.size ?? 0 });
+    }
   }, [teamId, files, readFile]);
 
   const handleDelete = useCallback(async (path: string) => {
     const match = files.find((f) => f.name === path);
     if (!match) return;
     try {
-      await deleteFile(teamId, match.name, match.chat_id || undefined);
+      const fname = wsFileName(match.name, match.chat_id);
+      await deleteFile(teamId, fname, match.chat_id || undefined);
       if (activePath === path) { setFileContent(null); setActivePath(null); }
       load();
     } catch { /* ignore */ }
   }, [teamId, files, deleteFile, activePath, load]);
 
-  const handleDownload = useCallback((path: string) => {
-    if (!fileContent || fileContent.path !== path) return;
-    const blob = new Blob([fileContent.content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = path.includes("/") ? path.split("/").pop()! : path;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [fileContent]);
+  /** Fetch raw blob from HTTP file endpoint (correct MIME, no corruption). */
+  const fetchBlobByName = useCallback(async (name: string): Promise<Blob> => {
+    const absPath = nameToAbsPath.get(name);
+    if (!absPath) throw new Error("file path not found");
+    return http.fetchBlob("/v1/files" + absPath);
+  }, [http, nameToAbsPath]);
+
+  const handleDownload = useCallback(async (path: string) => {
+    try {
+      const blob = await fetchBlobByName(path);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = path.includes("/") ? path.split("/").pop()! : path;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ }
+  }, [fetchBlobByName]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -121,6 +153,7 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
           fileContent={fileContent}
           onDelete={handleDelete}
           onDownload={handleDownload}
+          fetchBlob={fetchBlobByName}
           showSize
         />
       </DialogContent>

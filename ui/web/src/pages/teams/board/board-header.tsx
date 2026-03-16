@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Settings, Trash2, FolderOpen, Users } from "lucide-react";
+import { ArrowLeft, Settings, Trash2, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TeamData, TeamMemberData, TeamAccessSettings } from "@/types/team";
 
@@ -11,11 +11,10 @@ interface BoardHeaderProps {
   onDelete: () => void;
   onSettings: () => void;
   onMembers: () => void;
-  onWorkspace: () => void;
   onV2Click?: () => void;
 }
 
-export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMembers, onWorkspace, onV2Click }: BoardHeaderProps) {
+export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMembers, onV2Click }: BoardHeaderProps) {
   const { t } = useTranslation("teams");
   const settings = (team.settings ?? {}) as TeamAccessSettings;
   const isV2 = (settings.version ?? 1) >= 2;
@@ -61,9 +60,6 @@ export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMem
       {/* Actions */}
       <Button variant="ghost" size="icon" onClick={onMembers} className="shrink-0" title={t("members.title")}>
         <Users className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="icon" onClick={onWorkspace} className="shrink-0" title={t("workspace.title")}>
-        <FolderOpen className="h-4 w-4" />
       </Button>
       <Button variant="ghost" size="icon" onClick={onSettings} className="shrink-0" title={t("detail.tabs.settings")}>
         <Settings className="h-4 w-4" />

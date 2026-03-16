@@ -145,11 +145,15 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 		}
 	}
 
+	// Add cache_control breakpoint to the last system block (caches system prompt prefix).
+	if len(systemBlocks) > 0 {
+		systemBlocks[len(systemBlocks)-1]["cache_control"] = map[string]any{"type": "ephemeral"}
+	}
+
 	body := map[string]any{
-		"model":         model,
-		"max_tokens":    4096,
-		"messages":      messages,
-		"cache_control": map[string]any{"type": "ephemeral"},
+		"model":      model,
+		"max_tokens": 4096,
+		"messages":   messages,
 	}
 
 	if stream {
@@ -171,6 +175,10 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 				"input_schema": cleanedParams,
 			}
 			tools = append(tools, tool)
+		}
+		// Add cache_control breakpoint to the last tool (caches tool definitions prefix).
+		if len(tools) > 0 {
+			tools[len(tools)-1]["cache_control"] = map[string]any{"type": "ephemeral"}
 		}
 		body["tools"] = tools
 	}

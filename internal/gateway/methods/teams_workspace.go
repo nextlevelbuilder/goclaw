@@ -77,7 +77,7 @@ func (m *TeamsMethods) handleWorkspaceList(ctx context.Context, client *gateway.
 		scopeDir := teamWorkspaceDir(m.dataDir, teamID, params.ChatID)
 		files = walkDir(scopeDir, "", params.ChatID)
 	} else {
-		// Unscoped: list all chatID subdirectories and their files/folders.
+		// Unscoped: list all chatID subdirectories with chatID as top-level folder.
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
 			// Directory doesn't exist = empty workspace.
@@ -93,7 +93,15 @@ func (m *TeamsMethods) handleWorkspaceList(ctx context.Context, client *gateway.
 			}
 			chatID := entry.Name()
 			scopeDir := filepath.Join(baseDir, chatID)
-			files = append(files, walkDir(scopeDir, "", chatID)...)
+			// Add the chatID directory itself as a top-level entry.
+			files = append(files, workspaceFileEntry{
+				Name:   chatID,
+				Path:   scopeDir,
+				ChatID: chatID,
+				IsDir:  true,
+			})
+			// Prefix children with chatID so the tree nests under it.
+			files = append(files, walkDir(scopeDir, chatID, chatID)...)
 		}
 	}
 

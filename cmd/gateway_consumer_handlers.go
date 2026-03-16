@@ -660,14 +660,23 @@ func handleTeammateMessage(
 			slog.Warn("teammate announce: no origin_chat_id, cannot announce to lead")
 			return
 		}
-		leadSessionKey := sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerDirect, origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+		// Use the original peer kind so announce writes to the correct session
+		// (group session for group chats, direct session for DMs).
+		origPeerKind := inMeta["origin_peer_kind"]
+		if origPeerKind == "" {
+			origPeerKind = string(sessions.PeerDirect)
+		}
+		origLocalKey := inMeta["origin_local_key"]
+		leadSessionKey := sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+		leadSessionKey = overrideSessionKeyFromLocalKey(leadSessionKey, origLocalKey, leadAgent, origCh, origChatID, origPeerKind)
 
 		announceReq := agent.RunRequest{
 			SessionKey:       leadSessionKey,
 			Message:          announceContent,
 			Channel:          origCh,
 			ChatID:           origChatID,
-			PeerKind:         string(sessions.PeerDirect),
+			PeerKind:         origPeerKind,
+			LocalKey:         origLocalKey,
 			UserID:           inMeta["origin_user_id"],
 			RunID:            fmt.Sprintf("teammate-announce-%s", memberAgent),
 			RunKind:          "announce",

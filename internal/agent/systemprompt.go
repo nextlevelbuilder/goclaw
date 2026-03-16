@@ -67,6 +67,7 @@ var coreToolSummaries = map[string]string{
 	"spawn":         "Spawn a self-clone subagent to handle a task in the background",
 	"web_search":    "Search the web",
 	"web_fetch":     "Fetch and extract content from a URL",
+	"datetime":      "Get current date/time with timezone support — use before creating cron jobs or time-sensitive operations",
 	"cron":          "Manage scheduled jobs and reminders",
 	"skill_search":     "Search available skills by keyword (weather, translate, github, etc.)",
 	"use_skill":        "Invoke a skill by name and follow its instructions",

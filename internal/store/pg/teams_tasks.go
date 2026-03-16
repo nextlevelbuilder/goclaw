@@ -42,9 +42,6 @@ func (s *PGTeamStore) ListTaskScopes(ctx context.Context, teamID uuid.UUID) ([]s
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT channel, chat_id FROM team_tasks
 		 WHERE team_id = $1 AND channel IS NOT NULL AND channel != ''
-		 UNION
-		 SELECT DISTINCT channel, chat_id FROM team_workspace_files
-		 WHERE team_id = $1 AND archived_at IS NULL AND channel != ''
 		 ORDER BY channel, chat_id`, teamID)
 	if err != nil {
 		return nil, err

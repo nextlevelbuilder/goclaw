@@ -165,6 +165,9 @@ func runGateway() {
 	skillsLoader, skillSearchTool, globalSkillsDir := setupSkillsSystem(cfg, workspace, dataDir, pgStores, toolsReg, providerRegistry, msgBus)
 	_ = skillSearchTool // used via wireExtras → skillsLoader; kept for type clarity
 
+	// DateTime tool (precise time for cron scheduling, memory timestamps, etc.)
+	toolsReg.Register(tools.NewDateTimeTool())
+
 	// Cron tool (agent-facing, matching TS cron-tool.ts)
 	toolsReg.Register(tools.NewCronTool(pgStores.Cron))
 	slog.Info("cron tool registered")

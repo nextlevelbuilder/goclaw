@@ -24,11 +24,12 @@ interface BoardContainerProps {
   getTeamTasks: (teamId: string, status?: string, channel?: string, chatId?: string) => Promise<{ tasks: TeamTaskData[]; count: number }>;
   getTaskDetail: (teamId: string, taskId: string) => Promise<{ task: TeamTaskData; comments: TeamTaskComment[]; events: TeamTaskEvent[]; attachments: TeamTaskAttachment[] }>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
+  onWorkspace?: () => void;
 }
 
 export const BoardContainer = memo(function BoardContainer({
   teamId, members, scopes, isTeamV2,
-  getTeamTasks, getTaskDetail, deleteTask,
+  getTeamTasks, getTaskDetail, deleteTask, onWorkspace,
 }: BoardContainerProps) {
   const { t } = useTranslation("teams");
   const viewMode = useBoardStore((s) => s.viewMode);
@@ -133,6 +134,7 @@ export const BoardContainer = memo(function BoardContainer({
         spinning={refreshing}
         onRefresh={handleRefresh}
         onCreateTask={handleCreateTask}
+        onWorkspace={onWorkspace}
       />
 
       <div className="flex flex-1 flex-col min-h-0 overflow-hidden">

@@ -117,6 +117,14 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		}
 		taskMeta["original_blocked_by"] = ids
 	}
+	// Store peer kind so dispatches preserve the correct session scope (group vs direct).
+	if pk := ToolPeerKindFromCtx(ctx); pk != "" {
+		taskMeta["peer_kind"] = pk
+	}
+	// Store local key so forum-topic routing works on deferred/unblocked dispatches.
+	if lk := ToolLocalKeyFromCtx(ctx); lk != "" {
+		taskMeta["local_key"] = lk
+	}
 	// Store leader's trace context so unblocked dispatch links back to the leader's trace.
 	if traceID := tracing.TraceIDFromContext(ctx); traceID != uuid.Nil {
 		taskMeta["origin_trace_id"] = traceID.String()
@@ -278,7 +286,7 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		return ErrorResult("task does not belong to your team")
 	}
 	if task.OwnerAgentID == nil || *task.OwnerAgentID != agentID {
-		return ErrorResult("only the task owner can update progress")
+		return ErrorResult("only the assigned task owner can update progress. As team lead, task results arrive automatically when members complete their work.")
 	}
 
 	if err := t.manager.teamStore.UpdateTaskProgress(ctx, taskID, team.ID, percent, step); err != nil {

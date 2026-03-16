@@ -95,9 +95,19 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		originUserID = originChatID
 	}
 
+	// Resolve peer kind from context; fallback to task metadata, then "direct".
+	originPeerKind := ToolPeerKindFromCtx(ctx)
+	if originPeerKind == "" {
+		if pk, ok := task.Metadata["peer_kind"].(string); ok && pk != "" {
+			originPeerKind = pk
+		} else {
+			originPeerKind = "direct"
+		}
+	}
+
 	meta := map[string]string{
 		"origin_channel":   originChannel,
-		"origin_peer_kind": "direct",
+		"origin_peer_kind": originPeerKind,
 		"origin_chat_id":   originChatID,
 		"origin_user_id":   originUserID,
 		"from_agent":       fromAgent,
@@ -105,7 +115,14 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		"team_task_id":     task.ID.String(),
 		"team_id":          teamID.String(),
 	}
-	if localKey := ToolLocalKeyFromCtx(ctx); localKey != "" {
+	// Resolve local key from context; fallback to task metadata for deferred dispatches.
+	localKey := ToolLocalKeyFromCtx(ctx)
+	if localKey == "" {
+		if lk, ok := task.Metadata["local_key"].(string); ok {
+			localKey = lk
+		}
+	}
+	if localKey != "" {
 		meta["origin_local_key"] = localKey
 	}
 	// Pass the team workspace dir so member agents write files to the shared folder.

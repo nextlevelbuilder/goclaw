@@ -116,6 +116,7 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 
 			sb.WriteString("\n## Follow-up Reminders\n\n")
 			sb.WriteString("When you need user input/decision: create+claim task, then `ask_user` with text=<question>. ONLY use when you have a question for the user — NOT for waiting on teammates or status updates.\n")
+			sb.WriteString("IMPORTANT: Present the question directly to the user in your response. `ask_user` only sets up periodic REMINDERS in case they don't reply — it does NOT present the question for you.\n")
 			sb.WriteString("System auto-sends reminders. Call `clear_ask_user` when user replies.\n")
 		} else {
 			sb.WriteString("Create a task with `team_tasks` (with `assignee`), then the system dispatches automatically.\n")
@@ -133,7 +134,7 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("You are a **reviewer**. When evaluating, respond with **APPROVED** or **REJECTED: <feedback>**.\n\n")
 		}
 		sb.WriteString("As a member, just do the assigned work. Task completion is automatic.\n")
-		sb.WriteString("For long-running tasks, send progress updates via `team_message` action=send.\n")
+		sb.WriteString("For long-running tasks, use `team_tasks(action=\"progress\", percent=50, text=\"status update\")` to report progress. The task_id is auto-resolved from your assigned task — you don't need to specify it.\n")
 	}
 
 	return sb.String()
