@@ -13,7 +13,7 @@ export function PairingForm({ onApproved }: PairingFormProps) {
   const { t } = useTranslation("login");
   const [userId, setUserId] = useState("");
   const [code, setCode] = useState<string | null>(null);
-  const [senderID, setSenderID] = useState<string | null>(null);
+  const senderIDRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<PairingStatus>("idle");
 
@@ -87,14 +87,15 @@ export function PairingForm({ onApproved }: PairingFormProps) {
         payload.sender_id
       ) {
         setCode(payload.pairing_code as string);
-        setSenderID(payload.sender_id as string);
+        const sid = payload.sender_id as string;
+        senderIDRef.current = sid;
         setStatus("pending");
-        startPolling(ws, payload.sender_id as string);
+        startPolling(ws, sid);
         return;
       }
 
-      if (payload.status === "approved" && senderID) {
-        handleApproved(senderID);
+      if (payload.status === "approved" && senderIDRef.current) {
+        handleApproved(senderIDRef.current);
       }
     };
 
@@ -133,7 +134,7 @@ export function PairingForm({ onApproved }: PairingFormProps) {
     if (pollRef.current) clearTimeout(pollRef.current);
     if (wsRef.current) wsRef.current.close();
     setCode(null);
-    setSenderID(null);
+    senderIDRef.current = null;
     setStatus("idle");
   }
 

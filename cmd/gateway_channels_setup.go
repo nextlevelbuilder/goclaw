@@ -26,6 +26,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
+// IsInternalOrBrowser checks if a channel is internal or the browser WebSocket channel.
+// These channels don't use the outbound dispatch system.
+func IsInternalOrBrowser(name string) bool {
+	return channels.IsInternalChannel(name) || name == "browser"
+}
+
 // registerConfigChannels registers config-based channels as fallback when no DB instances are loaded.
 func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus, pgStores *store.Stores, instanceLoader *channels.InstanceLoader) {
 	if cfg.Channels.Telegram.Enabled && cfg.Channels.Telegram.Token != "" && instanceLoader == nil {
@@ -150,6 +156,11 @@ func wireChannelEventSubscribers(
 	// Wire pairing approval notification → channel (matching TS notifyPairingApproved).
 	botName := cfg.ResolveDisplayName("default")
 	pairingMethods.SetOnApprove(func(ctx context.Context, channel, chatID, senderID string) {
+		// Browser/internal channels use WebSocket — UI polls approval status directly.
+		if IsInternalOrBrowser(channel) {
+			slog.Debug("pairing approved for internal channel, skipping notification", "channel", channel)
+			return
+		}
 		msg := fmt.Sprintf("✅ %s access approved. Send a message to start chatting.", botName)
 		// Group pairings need group_id metadata so channels (e.g. Zalo) route to group API.
 		if strings.HasPrefix(senderID, "group:") {
