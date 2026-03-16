@@ -76,6 +76,7 @@ func extractAgentID(r *http.Request, model string) string {
 // --- Package-level API key cache for shared auth ---
 
 var pkgAPIKeyCache *apiKeyCache
+var pkgPairingStore store.PairingStore
 
 // InitAPIKeyCache initializes the shared API key cache with TTL and pubsub invalidation.
 // Must be called once during server startup before handling requests.
@@ -88,6 +89,12 @@ func InitAPIKeyCache(s store.APIKeyStore, mb *bus.MessageBus) {
 			}
 		})
 	}
+}
+
+// InitPairingAuth sets the pairing store for HTTP auth.
+// Allows browser-paired users to access HTTP APIs via X-GoClaw-Sender-Id header.
+func InitPairingAuth(ps store.PairingStore) {
+	pkgPairingStore = ps
 }
 
 // ResolveAPIKey checks if the bearer token is a valid API key using the shared cache.
@@ -122,6 +129,12 @@ func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult 
 	// API key → role from scopes
 	if _, role := ResolveAPIKey(r.Context(), bearer); role != "" {
 		return authResult{Role: role, Authenticated: true}
+	}
+	// Browser pairing → operator (via X-GoClaw-Sender-Id header)
+	if senderID := r.Header.Get("X-GoClaw-Sender-Id"); senderID != "" && pkgPairingStore != nil {
+		if paired, err := pkgPairingStore.IsPaired(senderID, "browser"); err == nil && paired {
+			return authResult{Role: permissions.RoleOperator, Authenticated: true}
+		}
 	}
 	// No auth configured → operator (backward compat)
 	if gatewayToken == "" {

@@ -44,6 +44,7 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       "",
       () => useAuthStore.getState().token,
       () => useAuthStore.getState().userId,
+      () => useAuthStore.getState().senderID,
     );
     client.onAuthFailure = () => {
       // Don't logout if authenticated via browser pairing (no token)

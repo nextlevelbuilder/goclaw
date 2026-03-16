@@ -354,6 +354,11 @@ func runGateway() {
 		httpapi.InitAPIKeyCache(pgStores.APIKeys, msgBus)
 	}
 
+	// Allow browser-paired users to access HTTP APIs
+	if pgStores.Pairing != nil {
+		httpapi.InitPairingAuth(pgStores.Pairing)
+	}
+
 	// Memory management API (wired directly, only needs MemoryStore + token)
 	if pgStores != nil && pgStores.Memory != nil {
 		server.SetMemoryHandler(httpapi.NewMemoryHandler(pgStores.Memory, cfg.Gateway.Token))
