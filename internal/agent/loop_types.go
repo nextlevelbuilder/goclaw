@@ -116,6 +116,9 @@ type Loop struct {
 	skillEvolve        bool
 	skillNudgeInterval int // nudge every N tool calls (0 = disabled, 15 = default)
 
+	// Strip trailing assistant messages before LLM call (for proxy providers)
+	stripAssistantPrefill bool
+
 	// Group writer cache for system prompt injection
 	groupWriterCache *store.GroupWriterCache
 
@@ -223,6 +226,9 @@ type LoopConfig struct {
 	// Thinking level: "off", "low", "medium", "high" (from agent other_config)
 	ThinkingLevel string
 
+	// Strip trailing assistant messages before LLM call (for proxy providers)
+	StripAssistantPrefill bool
+
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
 
@@ -328,6 +334,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
+		stripAssistantPrefill:  cfg.StripAssistantPrefill,
 		groupWriterCache:       cfg.GroupWriterCache,
 		teamStore:              cfg.TeamStore,
 		secureCLIStore:         cfg.SecureCLIStore,

@@ -43,6 +43,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
   const [skillNudgeInterval, setSkillNudgeInterval] = useState(
     typeof otherCfg.skill_nudge_interval === "number" ? otherCfg.skill_nudge_interval : 15,
   );
+  const [stripAssistantPrefill, setStripAssistantPrefill] = useState(Boolean(otherCfg.strip_assistant_prefill));
 
   // Save state
   const [saving, setSaving] = useState(false);
@@ -64,6 +65,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
         skill_evolve: skillEvolve,
         skill_nudge_interval: skillEvolve ? skillNudgeInterval : undefined,
         emoji: emoji.trim() || undefined,
+        strip_assistant_prefill: stripAssistantPrefill || undefined,
       };
       const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
       await onUpdate({
@@ -204,6 +206,8 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
         savedProvider={agent.provider}
         savedModel={agent.model}
         onSaveBlockedChange={handleSaveBlockedChange}
+        stripAssistantPrefill={stripAssistantPrefill}
+        onStripAssistantPrefillChange={setStripAssistantPrefill}
       />
 
       <Separator />

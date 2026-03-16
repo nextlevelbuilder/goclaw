@@ -16,6 +16,8 @@ interface LlmConfigSectionProps {
   savedModel: string;
   /** Called when verification status changes. True = save should be blocked. */
   onSaveBlockedChange?: (blocked: boolean) => void;
+  stripAssistantPrefill: boolean;
+  onStripAssistantPrefillChange: (v: boolean) => void;
 }
 
 export function LlmConfigSection({
@@ -30,6 +32,8 @@ export function LlmConfigSection({
   savedProvider,
   savedModel,
   onSaveBlockedChange,
+  stripAssistantPrefill,
+  onStripAssistantPrefillChange,
 }: LlmConfigSectionProps) {
   const { t } = useTranslation("agents");
   return (
@@ -70,6 +74,17 @@ export function LlmConfigSection({
             />
             <p className="text-xs text-muted-foreground">{t("llmConfig.maxToolIterationsHint")}</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="strip-assistant-prefill"
+            checked={stripAssistantPrefill}
+            onChange={(e) => onStripAssistantPrefillChange(e.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          <label htmlFor="strip-assistant-prefill" className="text-sm">{t("llmConfig.stripAssistantPrefill")}</label>
+          <span className="text-xs text-muted-foreground">{t("llmConfig.stripAssistantPrefillHint")}</span>
         </div>
       </div>
     </section>
