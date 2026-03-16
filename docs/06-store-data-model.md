@@ -10,7 +10,7 @@ The store layer abstracts all persistence behind Go interfaces backed by Postgre
 flowchart TD
     START["Gateway Startup"] --> PG["PostgreSQL Backend"]
 
-    PG --> PG_STORES["PGSessionStore<br/>PGAgentStore<br/>PGProviderStore<br/>PGCronStore<br/>PGPairingStore<br/>PGSkillStore<br/>PGMemoryStore<br/>PGTracingStore<br/>PGMCPServerStore<br/>PGCustomToolStore<br/>PGChannelInstanceStore<br/>PGConfigSecretsStore<br/>PGAgentLinkStore<br/>PGTeamStore"]
+    PG --> PG_STORES["PGSessionStore<br/>PGMemoryStore<br/>PGCronStore<br/>PGPairingStore<br/>PGSkillStore<br/>PGAgentStore<br/>PGProviderStore<br/>PGTracingStore<br/>PGMCPServerStore<br/>PGCustomToolStore<br/>PGChannelInstanceStore<br/>PGConfigSecretsStore<br/>PGTeamStore<br/>PGBuiltinToolStore<br/>PGPendingMessageStore<br/>PGKnowledgeGraphStore<br/>PGContactStore<br/>PGActivityStore<br/>PGSnapshotStore<br/>PGSecureCLIStore<br/>PGAPIKeyStore"]
 ```
 
 ---
@@ -19,22 +19,29 @@ flowchart TD
 
 The `Stores` struct is the top-level container holding all PostgreSQL-backed storage implementations.
 
-| Interface | Implementation |
-|-----------|---------------|
-| SessionStore | `PGSessionStore` |
-| MemoryStore | `PGMemoryStore` (tsvector + pgvector) |
-| CronStore | `PGCronStore` |
-| PairingStore | `PGPairingStore` |
-| SkillStore | `PGSkillStore` |
-| AgentStore | `PGAgentStore` |
-| ProviderStore | `PGProviderStore` |
-| TracingStore | `PGTracingStore` |
-| MCPServerStore | `PGMCPServerStore` |
-| CustomToolStore | `PGCustomToolStore` |
-| ChannelInstanceStore | `PGChannelInstanceStore` |
-| ConfigSecretsStore | `PGConfigSecretsStore` |
-| AgentLinkStore | `PGAgentLinkStore` |
-| TeamStore | `PGTeamStore` |
+| Interface | Implementation | Purpose |
+|-----------|---|---------|
+| SessionStore | `PGSessionStore` | Conversation history with in-memory write-behind cache |
+| MemoryStore | `PGMemoryStore` | Memory documents, embedding, FTS, hybrid search (tsvector + pgvector) |
+| CronStore | `PGCronStore` | Scheduled job definitions and execution logs |
+| PairingStore | `PGPairingStore` | Browser pairing codes and paired device tracking |
+| SkillStore | `PGSkillStore` | SKILL.md definitions, BM25 search, agent/user grants |
+| AgentStore | `PGAgentStore` | Agent definitions, soft delete, RBAC sharing, access control |
+| ProviderStore | `PGProviderStore` | LLM provider configs, encrypted API keys, model listings |
+| TracingStore | `PGTracingStore` | LLM call traces, spans, observability aggregation |
+| MCPServerStore | `PGMCPServerStore` | MCP server configs, transport (stdio/sse), tool grants |
+| CustomToolStore | `PGCustomToolStore` | Dynamic tool definitions, shell command templates, agent/global scoping |
+| ChannelInstanceStore | `PGChannelInstanceStore` | Channel instance configs (Telegram account, Discord guild, etc.) |
+| ConfigSecretsStore | `PGConfigSecretsStore` | Encrypted configuration secrets (AES-256-GCM) |
+| TeamStore | `PGTeamStore` | Teams, tasks (atomic claim), members, messages, delegation history |
+| BuiltinToolStore | `PGBuiltinToolStore` | System tool metadata, enable/disable toggles, settings |
+| PendingMessageStore | `PGPendingMessageStore` | Offline group chat message queue, auto-compaction to summaries |
+| KnowledgeGraphStore | `PGKnowledgeGraphStore` | Entity-relationship graphs, traversal, inference extraction |
+| ContactStore | `PGContactStore` | Channel contacts (auto-collected), cross-channel deduplication, merge |
+| ActivityStore | `PGActivityStore` | Audit logs, action tracking, compliance |
+| SnapshotStore | `PGSnapshotStore` | Hourly usage snapshots, cost aggregation, time series queries |
+| SecureCLIStore | `PGSecureCLIStore` | CLI binary configs with encrypted credential injection |
+| APIKeyStore | `PGAPIKeyStore` | Gateway API keys, scopes, expiration, revocation |
 
 ---
 
@@ -240,43 +247,7 @@ Dynamic tool definitions stored in PostgreSQL. Each tool defines a shell command
 
 ---
 
-## 10. Agent Link Store
-
-The agent link store manages inter-agent delegation permissions -- directed edges that control which agents can delegate to which others.
-
-### Table: `agent_links`
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | UUID v7 | Primary key |
-| `source_agent_id` | UUID | Agent that can delegate (FK → agents) |
-| `target_agent_id` | UUID | Agent being delegated to (FK → agents) |
-| `direction` | VARCHAR(20) | `outbound` (A→B only), `bidirectional` (A↔B) |
-| `team_id` | UUID | Non-nil = auto-created by team setup (FK → agent_teams, SET NULL on delete) |
-| `description` | TEXT | Link description |
-| `max_concurrent` | INT | Per-link concurrency cap (default 3) |
-| `settings` | JSONB | Per-user deny/allow lists for fine-grained access control |
-| `status` | VARCHAR(20) | `active` or `disabled` |
-| `created_by` | VARCHAR | Audit trail |
-
-**Constraints**: `UNIQUE(source_agent_id, target_agent_id)`, `CHECK (source_agent_id != target_agent_id)`
-
-### Agent Search Columns (migration 000002)
-
-The `agents` table gains three columns for agent discovery during delegation:
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| `frontmatter` | TEXT | Short expertise summary (distinct from `other_config.description` which is the summoning prompt) |
-| `tsv` | TSVECTOR | Auto-generated from `display_name + frontmatter`, GIN-indexed |
-| `embedding` | VECTOR(1536) | For cosine similarity search, HNSW-indexed |
-
-### AgentLinkStore Interface (12 methods)
-
-- **CRUD**: `CreateLink`, `DeleteLink`, `UpdateLink`, `GetLink`
-- **Queries**: `ListLinksFrom(agentID)`, `ListLinksTo(agentID)`
-- **Permission**: `CanDelegate(from, to)`, `GetLinkBetween(from, to)` (returns full link with Settings for per-user checks)
-- **Discovery**: `DelegateTargets(agentID)` (all targets with joined agent_key + display_name for DELEGATION.md), `SearchDelegateTargets` (FTS), `SearchDelegateTargetsByEmbedding` (vector cosine)
+## 10. Delegation History
 
 ### Table: `delegation_history`
 
@@ -304,7 +275,7 @@ Every sync and async delegation is persisted here automatically via `SaveDelegat
 
 ## 11. Team Store
 
-The team store manages collaborative multi-agent teams with a shared task board, peer-to-peer mailbox, and handoff routing.
+The team store manages collaborative multi-agent teams with a shared task board and peer-to-peer mailbox.
 
 ### Tables
 
@@ -314,7 +285,6 @@ The team store manages collaborative multi-agent teams with a shared task board,
 | `agent_team_members` | Team membership | PK `(team_id, agent_id)`, `role` (lead/member) |
 | `team_tasks` | Shared task board | `subject`, `status` (pending/in_progress/completed/blocked), `owner_agent_id`, `blocked_by` (UUID[]), `priority`, `result`, `tsv` (FTS) |
 | `team_messages` | Peer-to-peer mailbox | `from_agent_id`, `to_agent_id` (NULL = broadcast), `content`, `message_type` (chat/broadcast), `read` |
-| `handoff_routes` | Active routing overrides | UNIQUE `(channel, chat_id)`, `from_agent_key`, `to_agent_key`, `reason` |
 
 ### TeamStore Interface (22 methods)
 
@@ -325,8 +295,6 @@ The team store manages collaborative multi-agent teams with a shared task board,
 **Tasks**: `CreateTask`, `UpdateTask`, `ListTasks` (orderBy: priority/newest, statusFilter: active/completed/all), `GetTask`, `SearchTasks` (FTS on subject+description), `ClaimTask`, `CompleteTask`
 
 **Delegation History**: `SaveDelegationHistory`, `ListDelegationHistory` (with filter opts), `GetDelegationHistory`
-
-**Handoff Routes**: `SetHandoffRoute`, `GetHandoffRoute`, `ClearHandoffRoute`
 
 **Messages**: `SendMessage`, `GetUnread`, `MarkRead`
 
@@ -348,7 +316,119 @@ Tasks can declare `blocked_by` (UUID array) pointing to prerequisite tasks. When
 
 ---
 
-## 12. Database Schema
+## 12. Additional Store Interfaces
+
+### BuiltinToolStore
+
+System tool metadata storage. Built-in tools are seeded at startup with category, settings, and dependency metadata. Only `enabled` and `settings` are user-editable.
+
+| Method | Purpose |
+|--------|---------|
+| `List()` | Return all tool definitions |
+| `Get(name)` | Fetch tool by name |
+| `Update(name, updates)` | Modify settings or enabled status |
+| `Seed(tools)` | Populate tools at startup |
+| `ListEnabled()` | Return only enabled tools |
+| `GetSettings(name)` | Fetch settings JSON for a tool |
+
+### PendingMessageStore
+
+Offline message queue for group chats. Buffers messages when the bot is not actively listening, auto-compacts into summaries to prevent unbounded growth.
+
+| Method | Purpose |
+|--------|---------|
+| `AppendBatch(msgs)` | Insert multiple messages in one query |
+| `ListByKey(channelName, historyKey)` | Retrieve buffered messages for a group |
+| `DeleteByKey(channelName, historyKey)` | Clear messages after processing |
+| `Compact(deleteIDs, summary)` | Atomically delete old messages + insert summary |
+| `DeleteStale(olderThan)` | Prune messages older than duration |
+| `ListGroups()` | Return distinct channel+key groups with counts |
+| `CountAll()` | Total pending messages across all groups |
+| `ResolveGroupTitles(groups)` | Look up chat titles from session metadata |
+
+### KnowledgeGraphStore
+
+Entity-relationship graph storage for AI inference and knowledge extraction. Supports graph traversal, confidence pruning, and bulk ingestion.
+
+| Method | Purpose |
+|--------|---------|
+| `UpsertEntity(entity)` | Create or update entity node |
+| `GetEntity(agentID, userID, entityID)` | Fetch single entity |
+| `DeleteEntity(agentID, userID, entityID)` | Remove entity (cascades relations) |
+| `ListEntities(agentID, userID, opts)` | List with pagination and type filter |
+| `SearchEntities(agentID, userID, query, limit)` | Full-text search entities |
+| `UpsertRelation(relation)` | Create or update edge |
+| `DeleteRelation(agentID, userID, relationID)` | Remove edge |
+| `ListRelations(agentID, userID, entityID)` | Get edges connected to an entity |
+| `Traverse(agentID, userID, startEntityID, maxDepth)` | Breadth-first graph traversal |
+| `IngestExtraction(agentID, userID, entities, relations)` | Bulk insert from LLM extraction |
+| `PruneByConfidence(agentID, userID, minConfidence)` | Remove low-confidence nodes/edges |
+| `Stats(agentID, userID)` | Aggregate entity and relation counts |
+
+### ContactStore
+
+Auto-collected channel contact registry. Tracks users across platforms and supports cross-channel deduplication (merge contacts as same person).
+
+| Method | Purpose |
+|--------|---------|
+| `UpsertContact(...)` | Create or update contact; on conflict (channel_type, sender_id) updates metadata |
+| `ListContacts(opts)` | Search with pagination and filters (ILIKE on name/username/sender_id) |
+| `CountContacts(opts)` | Count matching contacts |
+| `GetContactsBySenderIDs(senderIDs)` | Batch lookup contacts by sender IDs |
+| `MergeContacts(contactIDs)` | Link multiple contacts as same person (set merged_id) |
+
+### ActivityStore
+
+Audit logging for compliance and troubleshooting. Logs all significant actions with actor, entity, and optional details.
+
+| Method | Purpose |
+|--------|---------|
+| `Log(entry)` | Record a single audit entry |
+| `List(opts)` | Retrieve audit logs with filters (actor_type, action, entity_type, etc.) |
+| `Count(opts)` | Count matching audit entries |
+
+### SnapshotStore
+
+Pre-computed usage snapshots (hourly aggregations) for analytics dashboards. Tracks token usage, cost, request counts, and tool utilization.
+
+| Method | Purpose |
+|--------|---------|
+| `UpsertSnapshots(snapshots)` | Insert or replace batch of hourly aggregations |
+| `GetTimeSeries(query)` | Fetch hourly or daily time series for charting |
+| `GetBreakdown(query)` | Aggregate by dimension (provider, model, channel, agent) |
+| `GetLatestBucket()` | Return most recent bucket_hour (worker resume point) |
+
+### SecureCLIStore
+
+CLI binary credential configuration with encrypted environment variable injection. Credentials are auto-injected into child processes without exposing them to command output.
+
+| Method | Purpose |
+|--------|---------|
+| `Create(binary)` | Register new CLI binary config |
+| `Get(id)` | Fetch config by ID |
+| `Update(id, updates)` | Modify settings (enable/disable, denyArgs, etc.) |
+| `Delete(id)` | Remove config |
+| `List()` | Return all configs |
+| `ListByAgent(agentID)` | Return configs for a specific agent |
+| `LookupByBinary(binaryName, agentID)` | Find best-matching config (agent-specific > global) |
+| `ListEnabled()` | Return enabled configs for TOOLS.md generation |
+
+### APIKeyStore
+
+Gateway API key management. Keys are SHA-256 hashed at rest; validation compares hash to incoming key. Supports scopes, expiration, and revocation.
+
+| Method | Purpose |
+|--------|---------|
+| `Create(key)` | Insert new API key record |
+| `GetByHash(keyHash)` | Lookup active (non-revoked, non-expired) key by hash |
+| `List()` | Return all keys for admin display (hashes omitted) |
+| `Revoke(id)` | Mark key as revoked |
+| `Delete(id)` | Permanently remove key |
+| `TouchLastUsed(id)` | Update last_used_at timestamp |
+
+---
+
+## 14. Database Schema
 
 All tables use UUID v7 (time-ordered) as primary keys via `GenNewID()`.
 
@@ -365,19 +445,10 @@ flowchart TD
         AG --> UAP["user_agent_profiles"]
     end
 
-    subgraph "Agent Links"
-        AG --> AL["agent_links"]
-        AL --> DH["delegation_history"]
-    end
-
     subgraph Teams
         AT["agent_teams"] --> ATM["agent_team_members"]
         AT --> TT["team_tasks"]
         AT --> TM["team_messages"]
-    end
-
-    subgraph Handoff
-        HR["handoff_routes"]
     end
 
     subgraph Sessions
@@ -426,13 +497,11 @@ flowchart TD
 | `agent_context_files` | Agent-level context | UNIQUE(agent_id, file_name) |
 | `user_context_files` | Per-user context | UNIQUE(agent_id, user_id, file_name) |
 | `user_agent_profiles` | User tracking | `first_seen_at`, `last_seen_at`, `workspace` |
-| `agent_links` | Inter-agent delegation permissions | UNIQUE(source, target), `direction`, `max_concurrent`, `settings` (JSONB) |
 | `agent_teams` | Team definitions | `name`, `lead_agent_id`, `status`, `settings` (JSONB) |
 | `agent_team_members` | Team membership | PK(team_id, agent_id), `role` (lead/member) |
 | `team_tasks` | Shared task board | `subject`, `status`, `owner_agent_id`, `blocked_by` (UUID[]), `tsv` (FTS) |
 | `team_messages` | Peer-to-peer mailbox | `from_agent_id`, `to_agent_id`, `message_type`, `read` |
 | `delegation_history` | Persisted delegation records | `source_agent_id`, `target_agent_id`, `mode`, `status`, `result`, `trace_id` |
-| `handoff_routes` | Active routing overrides | UNIQUE(channel, chat_id), `from_agent_key`, `to_agent_key` |
 | `sessions` | Conversation history | `session_key` (UNIQUE), `messages` (JSONB), `summary`, token counts |
 | `memory_documents` | Memory docs | UNIQUE(agent_id, COALESCE(user_id, ''), path) |
 | `memory_chunks` | Chunked + embedded text | `embedding` (VECTOR), `tsv` (TSVECTOR) |
@@ -452,7 +521,7 @@ flowchart TD
 | `000002_agent_links` | `agent_links` table + `frontmatter`, `tsv`, `embedding` on agents + `parent_trace_id` on traces |
 | `000003_agent_teams` | `agent_teams`, `agent_team_members`, `team_tasks`, `team_messages` + `team_id` on agent_links |
 | `000004_teams_v2` | FTS on `team_tasks` (tsv column) + `delegation_history` table |
-| `000005_phase4` | `handoff_routes` table |
+| `000005_phase4` | Additional team and delegation features |
 
 ### Required PostgreSQL Extensions
 
@@ -461,7 +530,7 @@ flowchart TD
 
 ---
 
-## 13. Context Propagation
+## 15. Context Propagation
 
 Metadata flows through `context.Context` instead of mutable state, ensuring thread safety across concurrent agent runs.
 
@@ -494,7 +563,7 @@ flowchart TD
 
 ---
 
-## 14. Key PostgreSQL Patterns
+## 16. Key PostgreSQL Patterns
 
 ### Database Driver
 
@@ -532,19 +601,18 @@ All "create or update" operations use `INSERT ... ON CONFLICT DO UPDATE`, ensuri
 
 ---
 
-## File Reference
+## 17. File Reference
 
 | File | Purpose |
 |------|---------|
-| `internal/store/stores.go` | `Stores` container struct (all 14 store interfaces) |
+| `internal/store/stores.go` | `Stores` container struct (all 22 store interfaces) |
 | `internal/store/types.go` | `BaseModel`, `StoreConfig`, `GenNewID()` |
 | `internal/store/context.go` | Context propagation: `WithUserID`, `WithAgentID`, `WithAgentType`, `WithSenderID` |
 | `internal/store/session_store.go` | `SessionStore` interface, `SessionData`, `SessionInfo` |
 | `internal/store/memory_store.go` | `MemoryStore` interface, `MemorySearchResult`, `EmbeddingProvider` |
 | `internal/store/skill_store.go` | `SkillStore` interface |
 | `internal/store/agent_store.go` | `AgentStore` interface |
-| `internal/store/agent_link_store.go` | `AgentLinkStore` interface, `AgentLinkData`, link constants |
-| `internal/store/team_store.go` | `TeamStore` interface, `TeamData`, `TeamTaskData`, `DelegationHistoryData`, `HandoffRouteData`, `TeamMessageData` |
+| `internal/store/team_store.go` | `TeamStore` interface, `TeamData`, `TeamTaskData`, `DelegationHistoryData`, `TeamMessageData` |
 | `internal/store/provider_store.go` | `ProviderStore` interface |
 | `internal/store/tracing_store.go` | `TracingStore` interface, `TraceData`, `SpanData` |
 | `internal/store/mcp_store.go` | `MCPServerStore` interface, grant types, access request types |
@@ -553,12 +621,19 @@ All "create or update" operations use `INSERT ... ON CONFLICT DO UPDATE`, ensuri
 | `internal/store/pairing_store.go` | `PairingStore` interface |
 | `internal/store/cron_store.go` | `CronStore` interface |
 | `internal/store/custom_tool_store.go` | `CustomToolStore` interface |
+| `internal/store/builtin_tool_store.go` | `BuiltinToolStore` interface, system tool metadata |
+| `internal/store/pending_message_store.go` | `PendingMessageStore` interface, group message queue |
+| `internal/store/knowledge_graph_store.go` | `KnowledgeGraphStore` interface, entities and relations |
+| `internal/store/contact_store.go` | `ContactStore` interface, channel contact tracking |
+| `internal/store/activity_store.go` | `ActivityStore` interface, audit logs |
+| `internal/store/snapshot_store.go` | `SnapshotStore` interface, usage aggregation |
+| `internal/store/secure_cli_store.go` | `SecureCLIStore` interface, CLI credential injection |
+| `internal/store/api_key_store.go` | `APIKeyStore` interface, gateway API keys |
 | `internal/store/pg/factory.go` | PG store factory: creates all PG store instances from a connection pool |
 | `internal/store/pg/sessions.go` | `PGSessionStore`: session cache, Save, GetOrCreate |
 | `internal/store/pg/agents.go` | `PGAgentStore`: CRUD, soft delete, access control |
 | `internal/store/pg/agents_context.go` | Agent and user context file operations |
-| `internal/store/pg/agent_links.go` | `PGAgentLinkStore`: link CRUD, permissions, FTS + vector search |
-| `internal/store/pg/teams.go` | `PGTeamStore`: teams, tasks (atomic claim), messages, delegation history, handoff routes |
+| `internal/store/pg/teams.go` | `PGTeamStore`: teams, tasks (atomic claim), messages, delegation history |
 | `internal/store/pg/memory_docs.go` | `PGMemoryStore`: document CRUD, indexing, chunking |
 | `internal/store/pg/memory_search.go` | Hybrid search: FTS, vector, ILIKE fallback, merge |
 | `internal/store/pg/skills.go` | `PGSkillStore`: skill CRUD and grants |

@@ -11,20 +11,49 @@ Three foundational systems that shape each agent's personality (Bootstrap), know
 
 ---
 
-## 1. Bootstrap Files -- 7 Template Files
+## 1. Bootstrap Files -- 13 Files (6 Template + 3 Virtual + 4 Memory Variants)
 
-Markdown files loaded at agent initialization and embedded into the system prompt. MEMORY.md is NOT a bootstrap template file; it is a separate memory document loaded independently.
+Bootstrap files are loaded at agent initialization and embedded into the system prompt. The system distinguishes between **stored template files** (with embedded defaults), **virtual system-injected files** (not stored on disk), and **memory files** (loaded separately from bootstrap).
 
-| # | File | Role | Full Session | Subagent/Cron |
-|---|------|------|:---:|:---:|
-| 1 | AGENTS.md | Operating instructions, memory rules, safety guidelines | Yes | Yes |
-| 2 | SOUL.md | Persona, tone of voice, boundaries | Yes | No |
-| 3 | TOOLS.md | Local tool notes (camera, SSH, TTS, etc.) | Yes | Yes |
-| 4 | IDENTITY.md | Agent name, creature, vibe, emoji | Yes | No |
-| 5 | USER.md | User profile (name, timezone, preferences) | Yes | No |
-| 6 | BOOTSTRAP.md | First-run ritual (deleted after completion) | Yes | No |
+### Stored Template Files (6 files)
+
+Markdown files with embedded templates in `internal/bootstrap/templates/`. These are seeded on agent/user creation and can be customized.
+
+| # | File | Role | Full Session | Subagent/Cron | Agent Level | Per-User |
+|---|------|------|:---:|:---:|:---:|:---:|
+| 1 | AGENTS.md | Operating instructions, memory rules, safety guidelines | Yes | Yes | predefined | both |
+| 2 | SOUL.md | Persona, tone of voice, boundaries | Yes | No | predefined | open only |
+| 3 | TOOLS.md | Local tool notes (camera, SSH, TTS, etc.) | Yes | Yes | predefined | open only |
+| 4 | IDENTITY.md | Agent name, creature, vibe, emoji | Yes | No | predefined | open only |
+| 5 | USER.md | User profile (name, timezone, preferences) | Yes | No | — | both |
+| 6 | BOOTSTRAP.md | First-run ritual (deleted after completion) | Yes | No | — | both |
+
+**Additional per-agent file:**
+- USER_PREDEFINED.md (agent-level only): Baseline user-handling rules for predefined agents, shared across all users
 
 Subagent and cron sessions load only AGENTS.md + TOOLS.md (the `minimalAllowlist`).
+
+### Virtual Context Files (3 files)
+
+System-injected files not stored on disk or in the database. Rendered in `<system_context>` tags.
+
+| File | Condition | Content | Bootstrap Skip |
+|------|-----------|---------|:---:|
+| DELEGATION.md | Agent has agent links (manual delegation) | ≤15 targets: static list inline. >15 targets: description-only (no tool needed) | Yes |
+| TEAM.md | Agent is a member of a team | Team name, role, teammate list with descriptions | Yes |
+| AVAILABILITY.md | Always present (in negative contexts) | Agent availability status and scope limitations | Yes |
+
+Virtual files skip during first-run bootstrap to avoid wasting tokens when the agent should focus on onboarding.
+
+### Memory Files (4 file variants)
+
+NOT part of bootstrap template loading. Loaded separately by the memory system.
+
+| File | Role | Storage | Search |
+|------|------|---------|--------|
+| MEMORY.md | Curated memory (Markdown) | Per-agent + per-user | FTS + vector |
+| memory.md | Fallback name for MEMORY.md | Checked if MEMORY.md missing | FTS + vector |
+| MEMORY.json | Machine-readable memory index | Deprecated | — |
 
 ---
 
@@ -59,23 +88,25 @@ When a file is truncated, a marker is inserted between the head and tail section
 
 ## 3. Seeding -- Template Creation
 
-Templates are embedded in the binary via Go `embed` (directory: `internal/bootstrap/templates/`). Seeding automatically creates default files for new users.
+Templates are embedded in the binary via Go `embed` (directory: `internal/bootstrap/templates/`). Seeding automatically creates default files at agent creation (agent-level) and first-chat (per-user).
 
 ```mermaid
 flowchart TD
-    subgraph "Agent Level"
-        SB["SeedToStore()"] --> SB1{"Agent type = open?"}
-        SB1 -->|Yes| SKIP_AGENT["Skip (open agents use per-user only)"]
-        SB1 -->|No| SB2["Seed 6 files to agent_context_files<br/>(all except BOOTSTRAP.md)"]
-        SB2 --> SB3{"File already has content?"}
-        SB3 -->|Yes| SKIP2["Skip"]
-        SB3 -->|No| WRITE2["Write embedded template"]
+    subgraph "Agent Level (SeedToStore)"
+        SB["New agent created"] --> SB1{"Agent type = open?"}
+        SB1 -->|Yes| SKIP_AGENT["Skip agent-level files<br/>(open agents use per-user only)"]
+        SB1 -->|No| SB2["predefined agent"]
+        SB2 --> SB3["Seed to agent_context_files:<br/>AGENTS.md, SOUL.md, IDENTITY.md,<br/>USER_PREDEFINED.md"]
+        SB3 --> SB4["(skip USER.md, TOOLS.md,<br/>BOOTSTRAP.md)"]
+        SB4 --> SB5{"File already has content?"}
+        SB5 -->|Yes| SKIP2["Skip"]
+        SB5 -->|No| WRITE2["Write embedded template"]
     end
 
-    subgraph "Per-User"
-        MC["SeedUserFiles()"] --> MC1{"Agent type?"}
-        MC1 -->|open| OPEN["Seed all 7 files to user_context_files"]
-        MC1 -->|predefined| PRED["Seed USER.md + BOOTSTRAP.md to user_context_files"]
+    subgraph "Per-User (SeedUserFiles)"
+        MC["First chat for user"] --> MC1{"Agent type?"}
+        MC1 -->|open| OPEN["Seed all 6 files:<br/>AGENTS.md, SOUL.md, TOOLS.md,<br/>IDENTITY.md, USER.md, BOOTSTRAP.md"]
+        MC1 -->|predefined| PRED["Seed 2 files:<br/>USER.md (with agent fallback),<br/>BOOTSTRAP.md (predefined template)"]
         OPEN --> CHECK{"File already has content?"}
         PRED --> CHECK
         CHECK -->|Yes| SKIP3["Skip -- never overwrite"]
@@ -83,11 +114,11 @@ flowchart TD
     end
 ```
 
-`SeedUserFiles()` is idempotent -- safe to call multiple times without overwriting personalized content.
+`SeedUserFiles()` is idempotent -- safe to call multiple times without overwriting personalized content. For predefined agents seeding USER.md, if the agent-level USER.md has content (e.g., configured by wizard/dashboard), that content is used as the per-user seed instead of the blank template, ensuring owner profiles propagate correctly.
 
-### Predefined Agent Bootstrap
+### Predefined Agent Bootstrap Ritual
 
-`BOOTSTRAP.md` is seeded for predefined agents (per-user). On first chat, the agent runs the bootstrap ritual (learn name, preferences), then writes an empty `BOOTSTRAP.md` which triggers deletion. The empty-write deletion is ordered *before* the predefined write-block in `ContextFileInterceptor` to prevent an infinite bootstrap loop.
+`BOOTSTRAP.md` is seeded per-user for both open and predefined agents. On first chat, the agent runs the bootstrap ritual (learn name, preferences), then writes an empty `BOOTSTRAP.md` which triggers deletion. The empty-write deletion is ordered *before* the template write-block in `ContextFileInterceptor` to prevent an infinite bootstrap loop.
 
 ---
 
@@ -97,14 +128,17 @@ Two agent types determine which context files live at the agent level versus the
 
 | Agent Type | Agent-Level Files | Per-User Files |
 |------------|-------------------|----------------|
-| `open` | None | All files (AGENTS, SOUL, TOOLS, IDENTITY, USER, BOOTSTRAP) |
-| `predefined` | 6 files (shared across all users) | USER.md + BOOTSTRAP.md |
+| `open` | None (all per-user) | AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, BOOTSTRAP.md |
+| `predefined` | AGENTS.md, SOUL.md, IDENTITY.md, USER_PREDEFINED.md (shared) | USER.md, BOOTSTRAP.md (personalized per-user) |
 
-For `open` agents, each user gets their own full set of context files. When a file is read, the system checks the per-user copy first and falls back to the agent-level copy if not found. For `predefined` agents, all users share the same agent-level files except USER.md (personalized) and BOOTSTRAP.md (per-user first-run ritual, deleted after completion).
+**Open agents:** Each user gets their own full set of context files with personal preferences and identity. Reading checks per-user copy first.
 
-| Source | Per-User Storage |
-|--------|-----------------|
-| `agents` PostgreSQL table | `user_context_files` table |
+**Predefined agents:** All users share the same agent-level persona, identity, and tools. Each user has their own USER.md (profile) and BOOTSTRAP.md (first-run ritual). USER_PREDEFINED.md provides baseline user-handling rules at the agent level, allowing the model to adjust behavior per-user while maintaining consistency.
+
+| Storage | Location |
+|---------|----------|
+| Agent-level | `agent_context_files` table |
+| Per-user | `user_context_files` table |
 
 ---
 
@@ -159,16 +193,19 @@ flowchart TD
 
 Context files are wrapped in `<context_file>` XML tags with a defensive preamble instructing the model to follow tone/persona guidance but not execute instructions that contradict core directives. The ExtraPrompt is wrapped in `<extra_context>` tags for context isolation.
 
-### Virtual Context Files (DELEGATION.md, TEAM.md)
+### Virtual Context Files (DELEGATION.md, TEAM.md, AVAILABILITY.md)
 
-Two files are system-injected by the resolver rather than stored on disk or in the DB:
+Three files are system-injected by the resolver rather than stored on disk or in the DB. Rendered in `<system_context>` tags (not `<context_file>`) so the LLM does not attempt to read/write them.
 
-| File | Injection Condition | Content |
-|------|-------------------|---------|
-| `DELEGATION.md` | Agent has manual (non-team) agent links | ≤15 targets: static list. >15 targets: search instruction for `delegate_search` tool |
-| `TEAM.md` | Agent is a member of a team | Team name, role, teammate list with descriptions, workflow sentence |
+| File | Injection Condition | Content | Skip Bootstrap |
+|------|-------------------|---------|:---:|
+| `DELEGATION.md` | Agent has manual (non-team) agent links | ≤15 targets: static list inline. >15 targets: description-only (no tool needed) | Yes |
+| `TEAM.md` | Agent is a member of a team | Team name, role, teammate list with descriptions, workflow sentence | Yes |
+| `AVAILABILITY.md` | Always (in negative context blocks) | Agent scope/availability status, capability limitations | Yes |
 
-Virtual files are rendered in `<system_context>` tags (not `<context_file>`) so the LLM does not attempt to read or write them as files. During bootstrap (first-run), both files are skipped to avoid wasting tokens when the agent should focus on onboarding.
+AVAILABILITY.md is always present but typically in negative context ("These files are NOT available") to prevent the model from attempting unavailable operations. All three skip during bootstrap to avoid wasting tokens when the agent should focus on onboarding.
+
+When the model attempts `read_file` on a virtual file, `filesystem.go` returns a reminder message ("already loaded in system prompt") instead of attempting disk access.
 
 ---
 
@@ -462,26 +499,41 @@ The flush is idempotent per compaction cycle -- it will not run again until the 
 
 ## File Reference
 
+### Bootstrap Files & Constants
 | File | Description |
 |------|-------------|
-| `internal/bootstrap/files.go` | Bootstrap file constants, loading, session filtering |
-| `internal/bootstrap/truncate.go` | Truncation pipeline (head/tail split, budget clamping) |
-| `internal/bootstrap/seed_store.go` | Seeding: SeedToStore, SeedUserFiles |
+| `internal/bootstrap/files.go` | File constants (AgentsFile, SoulFile, UserPredefinedFile, DelegationFile, TeamFile, AvailabilityFile, MemoryFile, etc.), loading, session filtering |
+| `internal/bootstrap/seed.go` | Workspace bootstrap seeding (EnsureWorkspaceFiles, embedded template FS) |
+| `internal/bootstrap/seed_store.go` | Store seeding (SeedToStore for agent-level, SeedUserFiles for per-user) |
 | `internal/bootstrap/load_store.go` | Load context files from DB (LoadFromStore) |
-| `internal/bootstrap/templates/*.md` | Embedded template files |
-| `internal/agent/systemprompt.go` | System prompt builder (BuildSystemPrompt, 17+ sections) |
-| `internal/agent/systemprompt_sections.go` | Section renderers, virtual file handling (DELEGATION.md, TEAM.md) |
-| `internal/agent/resolver.go` | Agent resolution, DELEGATION.md + TEAM.md injection |
+| `internal/bootstrap/truncate.go` | Truncation pipeline (head/tail split, budget clamping) |
+| `internal/bootstrap/templates/*.md` | Embedded template files: AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, USER_PREDEFINED.md, BOOTSTRAP.md, BOOTSTRAP_PREDEFINED.md |
+
+### System Prompt & Context Injection
+| File | Description |
+|------|-------------|
+| `internal/agent/systemprompt.go` | System prompt builder (BuildSystemPrompt, PromptFull/PromptMinimal modes) |
+| `internal/agent/systemprompt_sections.go` | Section renderers (17+ sections), virtual file handling (DELEGATION.md, TEAM.md, AVAILABILITY.md) |
+| `internal/agent/resolver.go` | Agent resolution, virtual file injection, negative context blocks |
 | `internal/agent/loop_history.go` | Context file merging (base + per-user, base-only preserved) |
 | `internal/agent/memoryflush.go` | Memory flush logic (shouldRunMemoryFlush, runMemoryFlush) |
 | `internal/http/summoner.go` | Agent summoning -- LLM-powered context file generation |
-| `internal/skills/loader.go` | Skill loader (5-tier hierarchy, BuildSummary, filtering) |
+| `internal/tools/filesystem.go` | File access interception (write_file, read_file), virtual file reminder handling |
+
+### Skills System
+| File | Description |
+|------|-------------|
+| `internal/skills/loader.go` | Skill loader (5-tier hierarchy, BuildSummary, inline/search mode decision) |
 | `internal/skills/search.go` | BM25 search index (tokenization, IDF scoring) |
-| `internal/skills/watcher.go` | fsnotify watcher (500ms debounce, version bumping) |
-| `internal/store/pg/skills.go` | Managed skill store (embedding search, backfill) |
-| `internal/store/pg/skills_grants.go` | Skill grants (agent/user visibility, version pinning) |
-| `internal/store/pg/memory_docs.go` | Memory document store (chunking, indexing, embedding) |
-| `internal/store/pg/memory_search.go` | Hybrid search (FTS + vector merge, weighted scoring) |
+| `internal/skills/watcher.go` | fsnotify watcher (500ms debounce, hot-reload, version bumping) |
+| `internal/store/pg/skills.go` | Managed skill store (embedding search, auto-backfill) |
+| `internal/store/pg/skills_grants.go` | Skill grants (agent/user visibility, version pinning, RBAC) |
+
+### Memory System
+| File | Description |
+|------|-------------|
+| `internal/store/pg/memory_docs.go` | Memory document store (chunking, indexing, embedding, scoping) |
+| `internal/store/pg/memory_search.go` | Hybrid search (FTS + vector merge, weighted scoring, scope filtering) |
 
 ---
 

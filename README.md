@@ -4,7 +4,7 @@
 
 # GoClaw
 
-[![Go](https://img.shields.io/badge/Go_1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL_18-316192?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![WebSocket](https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socket.io&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-000000?style=flat-square&logo=opentelemetry&logoColor=white)](https://opentelemetry.io/) [![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com/) [![OpenAI](https://img.shields.io/badge/OpenAI_Compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+[![Go](https://img.shields.io/badge/Go_1.26-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL_18-316192?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![WebSocket](https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socket.io&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-000000?style=flat-square&logo=opentelemetry&logoColor=white)](https://opentelemetry.io/) [![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com/) [![OpenAI](https://img.shields.io/badge/OpenAI_Compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
 **GoClaw** is a multi-agent AI gateway that connects LLMs to your tools, channels, and data — deployed as a single Go binary with zero runtime dependencies. It orchestrates agent teams, inter-agent delegation, and quality-gated workflows across 13+ LLM providers with full multi-tenant isolation.
 
@@ -12,7 +12,7 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 
 ## What Makes It Different
 
-- **Agent Teams & Orchestration** — Teams with shared task boards, inter-agent delegation (sync/async), conversation handoff, evaluate-loop quality gates, and hybrid agent discovery
+- **Agent Teams & Orchestration** — Teams with shared task boards, inter-agent delegation (sync/async), and hybrid agent discovery
 - **Multi-Tenant PostgreSQL** — Per-user workspaces, per-user context files, encrypted API keys (AES-256-GCM), isolated sessions — the only Claw project with DB-native multi-tenancy
 - **Single Binary** — ~25 MB static Go binary, no Node.js runtime, <1s startup, runs on a $5 VPS
 - **Production Security** — 5-layer defense: rate limiting, prompt injection detection, SSRF protection, shell deny patterns, AES-256-GCM encryption
@@ -41,8 +41,6 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Hooks system               | —                                    | —                                            | —                                     | ✅ Command + agent evaluators  |
 | MCP integration            | — (uses ACP)                         | —                                            | —                                     | ✅ (stdio/SSE/streamable-http) |
 | Agent teams                | —                                    | —                                            | —                                     | ✅ Task board + mailbox        |
-| Agent handoff              | —                                    | —                                            | —                                     | ✅ Conversation transfer       |
-| Evaluate loop              | —                                    | —                                            | —                                     | ✅ Generator-evaluator cycle   |
 | Quality gates              | —                                    | —                                            | —                                     | ✅ Hook-based validation       |
 | Security hardening         | ✅ (SSRF, path traversal, injection) | ✅ (sandbox, rate limit, injection, pairing) | Basic (workspace restrict, exec deny) | ✅ 5-layer defense             |
 | OTel observability         | ✅ (opt-in extension)                | ✅ (Prometheus + OTLP)                       | —                                     | ✅ OTLP (opt-in build tag)     |
@@ -57,7 +55,7 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (PostgreSQL)                |
 | Encrypted secrets          | — (env vars only)                    | ✅ ChaCha20-Poly1305                         | — (plaintext JSON)                    | ✅ AES-256-GCM in DB           |
 
-> **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, conversation handoff, evaluate-loop quality gates, hooks system, knowledge graph, and MCP protocol support.
+> **GoClaw unique strengths:** Only project with multi-tenant PostgreSQL, agent teams, hooks system, knowledge graph, and MCP protocol support.
 
 ## Architecture
 
@@ -168,7 +166,7 @@ agents.links.create {
 
 **Per-User Restrictions** — The `settings` JSONB on agent links supports per-user deny/allow lists.
 
-**Agent Discovery** — Each agent has a `frontmatter` field for discovery. With ≤15 targets, auto-generated `AGENTS.md` is injected into context. With >15 targets, agents use `delegate_search` for hybrid FTS + semantic search.
+**Agent Discovery** — Each agent has a `frontmatter` field for discovery. With ≤15 targets, auto-generated `AGENTS.md` is injected into context. Delegation uses subagent spawning for larger target sets.
 
 <details>
 <summary>Delegation vs Subagents</summary>
@@ -231,47 +229,6 @@ flowchart TD
 - **Team mailbox** — Direct peer-to-peer messaging (send, broadcast, read unread)
 - **Tools**: `team_tasks` for task management, `team_message` for mailbox
 
-### Agent Handoff
-
-Handoff transfers conversation control from one agent to another. Unlike delegation (where A stays in control), handoff means B completely takes over the user conversation.
-
-```mermaid
-flowchart LR
-    subgraph Delegation["Delegation (A stays in control)"]
-        direction TB
-        DA["Agent A"] -->|"delegate task"| DB["Agent B"]
-        DB -->|"return result"| DA
-        DA -->|"reply to user"| DU((User))
-    end
-
-    subgraph Handoff["Handoff (B takes over)"]
-        direction TB
-        HA["Agent A"] -->|"handoff"| HB["Agent B"]
-        HB -->|"now handles user"| HU((User))
-    end
-```
-
-- **Routing override** — Sets a routing rule so all future messages go to the target agent
-- **Context transfer** — Conversation context is passed to the new agent
-- **Revert** — `handoff(action="clear")` returns routing to the original agent
-
-### Evaluate Loop
-
-The evaluate loop orchestrates a generator-evaluator feedback cycle between two agents for quality-gated output.
-
-```mermaid
-flowchart LR
-    TASK["Task + Criteria"] --> GEN["Generator<br/>Agent"]
-    GEN -->|"output"| EVAL{"Evaluator<br/>Agent"}
-    EVAL -->|"APPROVED"| RESULT["Final Output"]
-    EVAL -->|"REJECTED + feedback"| GEN
-    EVAL -.->|"max rounds hit"| WARN["Last output + warning"]
-```
-
-- **Configurable rounds** — Default 3, max 5 revision cycles
-- **Custom pass criteria** — Define what "approved" means for the evaluator
-- **Tool**: `evaluate_loop(generator="writer-bot", evaluator="qa-bot", task="...", pass_criteria="...")`
-
 ### Quality Gates
 
 Quality gates validate agent output before it reaches users. Configured in agent `other_config`:
@@ -307,14 +264,12 @@ Quality gates validate agent output before it reaches users. Configured in agent
 - **Subagents** — Spawn child agents with different models for parallel task execution
 - **Agent delegation** — Sync/async inter-agent task delegation with permission links, concurrency limits, and per-user restrictions
 - **Agent teams** — Shared task boards with dependencies, team mailbox, and coordinated multi-agent workflows
-- **Agent handoff** — Transfer conversation control between agents with routing overrides
-- **Evaluate loop** — Generator-evaluator feedback cycles for quality-gated output
 - **Quality gates** — Hook-based output validation with command or agent evaluators
 - **Delegation history** — Queryable audit trail of all inter-agent delegations
 - **Concurrent execution** — Lane-based scheduler (main/subagent/delegate/cron), adaptive throttle for group chats
 
 ### Tools & Integrations
-- **30+ built-in tools** — File system, shell exec, web search/fetch, memory, browser automation, TTS, and more
+- **60+ built-in tools** — File system, shell exec, web search/fetch, memory, browser automation, TTS, and more
 - **MCP integration** — Connect external MCP servers via stdio, SSE, or streamable-http with per-agent/per-user grants
 - **Hooks system** — Event-driven hooks with command evaluators (shell exit code) and agent evaluators (delegate to reviewer) for output validation
 
@@ -436,7 +391,7 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 - Per-user context files and workspaces (`user_context_files` table)
 - Agent types: `open` (per-user workspace) vs `predefined` (shared context)
-- Agent teams, delegation, handoff, evaluate loops, quality gates
+- Agent teams, delegation, quality gates
 - LLM call tracing with spans and prompt cache metrics
 - MCP server integration with per-agent and per-user access grants
 - Event-driven hooks for agent lifecycle with command and agent evaluators
@@ -448,7 +403,7 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL 18 with pgvector
 - Docker (optional, for sandbox and containerized deployment)
 
@@ -823,9 +778,6 @@ This creates `.env` with `GOCLAW_ENCRYPTION_KEY` and `GOCLAW_GATEWAY_TOKEN` pre-
 | `spawn`            | —             | Spawn a subagent                                             |
 | `subagents`        | sessions      | Control running subagents                                    |
 | `delegate`         | orchestration | Delegate tasks to other agents (sync/async, cancel, list)    |
-| `delegate_search`  | orchestration | Search delegation targets (hybrid FTS + semantic)            |
-| `handoff`          | orchestration | Transfer conversation control to another agent               |
-| `evaluate_loop`    | orchestration | Generate-evaluate-revise quality feedback loop               |
 | `team_tasks`       | teams         | Shared task board (list, create, claim, complete, search)    |
 | `team_message`     | teams         | Team mailbox (send, broadcast, read)                         |
 | `sessions_list`    | sessions      | List active sessions                                         |
@@ -961,7 +913,6 @@ GOCLAW_OPENROUTER_API_KEY=sk-or-xxx go test -v ./tests/integration/ -timeout 120
 
 ### Implemented but Not Fully Tested
 
-- **Agent handoff** — Conversation transfer between agents with routing overrides. Implementation complete, needs E2E testing.
 - **Quality gates** — Hook-based output validation with command and agent evaluator types. Implementation complete, needs E2E testing.
 - **Slack** — Channel integration implemented, not yet validated with real users.
 - **Other messaging channels** — Discord, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp channel adapters are implemented but have not been tested end-to-end in production. Only Telegram has been validated with real users.

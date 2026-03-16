@@ -53,7 +53,7 @@ Context keys ensure each tool call receives the correct per-call values without 
 |------|-------------|
 | `read_file` | Read file contents with optional line range |
 | `write_file` | Write or create a file |
-| `edit_file` | Apply targeted edits to a file |
+| `edit` | Apply targeted edits to a file |
 | `list_files` | List directory contents |
 | `search` | Search file contents with regex |
 | `glob` | Find files matching a glob pattern |
@@ -63,20 +63,20 @@ Context keys ensure each tool call receives the correct per-call values without 
 | Tool | Description |
 |------|-------------|
 | `exec` | Execute a shell command |
-| `process` | Manage running processes |
+| `credentialed_exec` | Execute CLI with injected credentials (direct exec mode, no shell) |
 
 ### Web (group: `web`)
 
 | Tool | Description |
 |------|-------------|
-| `web_search` | Search the web |
+| `web_search` | Search the web (Brave, DuckDuckGo) |
 | `web_fetch` | Fetch and parse a URL |
 
 ### Memory (group: `memory`)
 
 | Tool | Description |
 |------|-------------|
-| `memory_search` | Search memory documents |
+| `memory_search` | Search memory documents (BM25 + vector) |
 | `memory_get` | Retrieve a specific memory document |
 
 ### Sessions (group: `sessions`)
@@ -89,19 +89,19 @@ Context keys ensure each tool call receives the correct per-call values without 
 | `spawn` | Spawn subagent or delegate to another agent |
 | `session_status` | Get current session status |
 
-### UI (group: `ui`)
+### Knowledge & Search (group: `knowledge`)
 
 | Tool | Description |
 |------|-------------|
-| `browser` | Browser automation via Rod + CDP |
-| `canvas` | Visual canvas operations |
+| `knowledge_graph_search` | Search knowledge graph for entities and relationships |
+| `skill_search` | Search available skills (BM25) |
 
 ### Automation (group: `automation`)
 
 | Tool | Description |
 |------|-------------|
 | `cron` | Manage scheduled tasks |
-| `gateway` | Gateway administration commands |
+| `datetime` | Get current date/time with timezone support |
 
 ### Messaging (group: `messaging`)
 
@@ -115,9 +115,6 @@ Context keys ensure each tool call receives the correct per-call values without 
 | Tool | Description |
 |------|-------------|
 | `delegate` | Delegate task to another agent (actions: delegate, cancel, list, history) |
-| `delegate_search` | Hybrid FTS + semantic agent discovery for delegation targets |
-| `evaluate_loop` | Generate-evaluate-revise cycle with two agents (max 5 rounds) |
-| `handoff` | Transfer conversation to another agent (routing override) |
 
 ### Teams (group: `teams`)
 
@@ -126,16 +123,64 @@ Context keys ensure each tool call receives the correct per-call values without 
 | `team_tasks` | Task board: list, create, claim, complete, search |
 | `team_message` | Mailbox: send, broadcast, read unread messages |
 
-### Other Tools
+### Media Generation
+
+#### Images
+| Tool | Description |
+|------|-------------|
+| `create_image` | Generate images from text description (OpenAI, Gemini, MiniMax, DashScope) |
+
+#### Audio & Music
+| Tool | Description |
+|------|-------------|
+| `create_audio` | Generate audio/music/sound effects (MiniMax music, ElevenLabs effects) |
+| `tts` | Text-to-speech synthesis (OpenAI, ElevenLabs, Edge, MiniMax) |
+
+#### Video
+| Tool | Description |
+|------|-------------|
+| `create_video` | Generate video from text/image (MiniMax) |
+
+### Media Reading
+
+#### Images
+| Tool | Description |
+|------|-------------|
+| `read_image` | Analyze/describe images using vision AI (Gemini, Anthropic, OpenRouter, DashScope) |
+
+#### Audio & Speech
+| Tool | Description |
+|------|-------------|
+| `read_audio` | Transcribe audio to text (Resolve transcription service) |
+
+#### Documents
+| Tool | Description |
+|------|-------------|
+| `read_document` | Extract and analyze documents (PDF, images, etc) via Gemini or Resolve service |
+
+#### Video
+| Tool | Description |
+|------|-------------|
+| `read_video` | Analyze/transcribe video content via Resolve service |
+
+### Skills & Content
 
 | Tool | Description |
 |------|-------------|
-| `skill_search` | Search available skills (BM25 + vector) |
-| `image` | Generate images |
-| `read_image` | Read/analyze an image file |
-| `create_image` | Create an image from description |
-| `tts` | Text-to-speech synthesis (OpenAI, ElevenLabs, Edge, MiniMax) |
-| `nodes` | Node graph operations |
+| `use_skill` | Activate a skill (marker tool for observability) |
+| `publish_skill` | Register a skill directory in the database |
+
+### AI & LLM
+
+| Tool | Description |
+|------|-------------|
+| `openai_compat_call` | Call OpenAI-compatible endpoints with custom request formats |
+
+### Workspace & Administration
+
+| Tool | Description |
+|------|-------------|
+| `workspace_dir` | Resolve workspace directory for team/user context |
 
 ---
 
@@ -307,8 +352,8 @@ flowchart TD
 | Profile | Tools Included |
 |---------|---------------|
 | `full` | All registered tools (no restriction) |
-| `coding` | `group:fs`, `group:runtime`, `group:sessions`, `group:memory`, `group:web`, `read_image`, `create_image`, `skill_search` |
-| `messaging` | `group:messaging`, `group:web`, `group:sessions`, `read_image`, `skill_search` |
+| `coding` | `group:fs`, `group:runtime`, `group:sessions`, `group:memory`, `group:web`, `group:knowledge`, `group:media_gen`, `group:media_read`, `group:skills` |
+| `messaging` | `group:messaging`, `group:web`, `group:sessions`, `group:media_read`, `skill_search` |
 | `minimal` | `session_status` only |
 
 ### Tool Groups
@@ -316,15 +361,18 @@ flowchart TD
 | Group | Members |
 |-------|---------|
 | `fs` | `read_file`, `write_file`, `list_files`, `edit`, `search`, `glob` |
-| `runtime` | `exec` |
+| `runtime` | `exec`, `credentialed_exec` |
 | `web` | `web_search`, `web_fetch` |
 | `memory` | `memory_search`, `memory_get` |
 | `sessions` | `sessions_list`, `sessions_history`, `sessions_send`, `spawn`, `session_status` |
-| `ui` | `browser` |
-| `automation` | `cron` |
+| `knowledge` | `knowledge_graph_search`, `skill_search` |
+| `automation` | `cron`, `datetime` |
 | `messaging` | `message`, `create_forum_topic` |
-| `delegation` | `handoff`, `delegate_search`, `evaluate_loop` |
-| `team` | `team_tasks`, `team_message` |
+| `delegation` | `delegate` |
+| `teams` | `team_tasks`, `team_message` |
+| `media_gen` | `create_image`, `create_audio`, `create_video`, `tts` |
+| `media_read` | `read_image`, `read_audio`, `read_document`, `read_video` |
+| `skills` | `use_skill`, `publish_skill` |
 | `goclaw` | All native tools (composite group) |
 
 Groups can be referenced in allow/deny lists with the `group:` prefix (e.g., `group:fs`). The MCP manager dynamically registers `mcp` and `mcp:{serverName}` groups at runtime.
@@ -393,7 +441,7 @@ Delegation allows named agents to delegate tasks to other fully independent agen
 
 ### DelegateManager
 
-The `DelegateManager` in `internal/tools/delegate.go` orchestrates all delegation operations:
+The subagent system in `internal/tools/subagent_spawn_tool.go` orchestrates all delegation operations:
 
 | Action | Mode | Behavior |
 |--------|------|----------|
@@ -413,22 +461,12 @@ type AgentRunFunc func(ctx context.Context, agentKey string, req DelegateRunRequ
 
 The `cmd` layer provides the implementation at wiring time. The `tools` package never knows `agent` exists.
 
-### Agent Links (Permission Control)
-
-Delegation requires an explicit link in the `agent_links` table. Links are directed edges:
-
-- **outbound** (A→B): Only A can delegate to B
-- **bidirectional** (A↔B): Both can delegate to each other
-
-Each link has `max_concurrent` and per-user `settings` (JSONB) for deny/allow lists.
-
 ### Concurrency Control
 
-Two layers prevent overload:
+Delegation concurrency is controlled at the agent level to prevent overload:
 
 | Layer | Config | Scope |
 |-------|--------|-------|
-| Per-link | `agent_links.max_concurrent` | A→B specifically |
 | Per-agent | `other_config.max_delegation_load` | B from all sources |
 
 When limits hit, the error message is written for LLM reasoning: *"Agent at capacity (5/5). Try a different agent or handle it yourself."*
@@ -438,7 +476,7 @@ When limits hit, the error message is written for LLM reasoning: *"Agent at capa
 During agent resolution, `DELEGATION.md` is auto-generated and injected into the system prompt:
 
 - **≤15 targets**: Full inline list with agent keys, names, and frontmatter
-- **>15 targets**: Search instruction pointing to the `delegate_search` tool (hybrid FTS + pgvector cosine)
+- **>15 targets**: Brief description-only list (LLM reads available delegation targets via resolver)
 
 ### Context File Merging (Open Agents)
 
@@ -493,56 +531,7 @@ Teammate results route through the message bus with a `"teammate:"` prefix. The 
 
 ---
 
-## 9. Evaluate-Optimize Loop
-
-A structured revision cycle between two agents: a generator and an evaluator.
-
-```mermaid
-sequenceDiagram
-    participant L as Calling Agent
-    participant G as Generator
-    participant V as Evaluator
-
-    L->>G: "Write product announcement"
-    G->>L: Draft v1
-    L->>V: "Evaluate against criteria"
-    V->>L: "REJECTED: Too long, missing pricing"
-    L->>G: "Revise. Feedback: too long, missing pricing"
-    G->>L: Draft v2
-    L->>V: "Evaluate revised version"
-    V->>L: "APPROVED"
-    L->>L: Return v2 as final output
-```
-
-The `evaluate_loop` tool orchestrates this. Parameters: generator agent, evaluator agent, pass criteria, and max rounds (default 3, cap 5). Each round is a pair of sync delegations. If the evaluator responds with "APPROVED" (case-insensitive prefix match), the loop exits. If "REJECTED: feedback", the generator gets another shot.
-
-Internal delegations use `WithSkipHooks(ctx)` to prevent quality gates from triggering recursion.
-
----
-
-## 10. Agent Handoff
-
-Handoff transfers a conversation from one agent to another. Unlike delegation (which keeps the source agent in the loop), handoff removes it entirely.
-
-| | Delegation | Handoff |
-|---|---|---|
-| Who talks to the user? | Source agent (always) | Target agent (after transfer) |
-| Source agent involvement | Waits for result, reformulates | Steps away completely |
-| Session | Target runs in source's context | Target gets a new session |
-| Duration | One task | Until cleared or handed back |
-
-### Mechanism
-
-When agent A calls `handoff(agent="billing", reason="billing question")`:
-1. A row is written to `handoff_routes`: this channel + chat ID now routes to billing
-2. A `handoff` event is broadcast (WS clients can react)
-3. An initial message is published to billing via the message bus with conversation context
-
-Subsequent messages from the user on that channel are routed to billing (consumer checks `handoff_routes` before normal routing). Billing can hand back via `handoff(action="clear")`.
-
----
-
-## 11. Quality Gates (Hook System)
+## 9. Quality Gates (Hook System)
 
 A general-purpose hook system for validating agent output before it reaches the user. Located in `internal/hooks/`.
 
@@ -584,7 +573,7 @@ Quality gates with agent evaluators can cause infinite recursion (gate delegates
 
 ---
 
-## 12. MCP Bridge Tools
+## 10. MCP Bridge Tools
 
 GoClaw integrates with Model Context Protocol (MCP) servers via `internal/mcp/`. The MCP Manager connects to external tool servers and registers their tools in the tool registry with a configurable prefix.
 
@@ -635,7 +624,7 @@ flowchart LR
 
 ---
 
-## 13. Custom Tools
+## 11. Custom Tools
 
 Define shell-based tools at runtime via the HTTP API -- no recompile or restart needed. Custom tools are stored in the `custom_tools` PostgreSQL table and loaded dynamically into the agent's tool registry.
 
@@ -695,7 +684,7 @@ flowchart TD
 
 ---
 
-## 14. Credential Scrubbing
+## 12. Credential Scrubbing
 
 Tool output is automatically scrubbed before being returned to the LLM. Enabled by default in the registry.
 
@@ -720,7 +709,7 @@ In addition to static patterns, values can be registered at runtime for scrubbin
 
 ---
 
-## 15. Rate Limiter
+## 13. Rate Limiter
 
 The tool registry supports per-session rate limiting via `ToolRateLimiter`. When configured, each `ExecuteWithContext` call checks `rateLimiter.Allow(sessionKey)` before tool execution. Rate-limited calls receive an error result without executing the tool.
 
@@ -728,38 +717,84 @@ The tool registry supports per-session rate limiting via `ToolRateLimiter`. When
 
 ## File Reference
 
+### Core Infrastructure
 | File | Purpose |
 |------|---------|
-| `internal/tools/registry.go` | Registry: Register, Execute, ExecuteWithContext, ProviderDefs |
-| `internal/tools/types.go` | Tool interface, ContextualTool, InterceptorAware, and other config interfaces |
-| `internal/tools/policy.go` | PolicyEngine: 7-step pipeline, tool groups, profiles, subagent deny lists |
-| `internal/tools/filesystem.go` | read_file, write_file, edit_file with interceptor support |
-| `internal/tools/filesystem_list.go` | list_files tool |
-| `internal/tools/filesystem_write.go` | Additional write operations |
-| `internal/tools/shell.go` | ExecTool: deny patterns, approval workflow, sandbox routing |
-| `internal/tools/scrub.go` | ScrubCredentials: credential pattern matching and redaction |
-| `internal/tools/subagent.go` | SubagentManager: spawn, cancel, steer, run sync, deny lists |
-| `internal/tools/delegate.go` | DelegateManager: sync, async, cancel, concurrency, per-user checks |
-| `internal/tools/delegate_tool.go` | Delegate tool wrapper (action: delegate/cancel/list/history) |
-| `internal/tools/delegate_search_tool.go` | Hybrid FTS + semantic agent discovery |
-| `internal/tools/evaluate_loop_tool.go` | Generate-evaluate-revise loop (max 5 rounds) |
-| `internal/tools/handoff_tool.go` | Conversation transfer (routing override + context carry) |
-| `internal/tools/team_tool_manager.go` | Shared backend for team tools |
-| `internal/tools/team_tasks_tool.go` | Task board: list, create, claim, complete, search |
-| `internal/tools/team_message_tool.go` | Mailbox: send, broadcast, read |
-| `internal/hooks/engine.go` | Hook engine: evaluator registry, EvaluateHooks |
-| `internal/hooks/command_evaluator.go` | Shell command evaluator |
-| `internal/hooks/agent_evaluator.go` | Agent delegation evaluator |
-| `internal/hooks/context.go` | WithSkipHooks / SkipHooksFromContext |
-| `internal/tools/context_file_interceptor.go` | ContextFileInterceptor: 7-file routing by agent type |
-| `internal/tools/memory_interceptor.go` | MemoryInterceptor: MEMORY.md and memory/* routing |
-| `internal/tools/skill_search.go` | Skill search tool (BM25) |
-| `internal/tools/tts.go` | Text-to-speech tool (4 providers) |
-| `internal/mcp/manager.go` | MCP Manager: server connections, health checks, tool registration |
-| `internal/mcp/bridge_tool.go` | MCP bridge tool implementation |
-| `internal/tools/dynamic_loader.go` | DynamicLoader: LoadGlobal, LoadForAgent, ReloadGlobal |
-| `internal/tools/dynamic_tool.go` | DynamicTool: template rendering, shell escaping, execution |
-| `internal/store/custom_tool_store.go` | CustomToolStore interface |
-| `internal/store/pg/custom_tools.go` | PostgreSQL custom tools implementation |
-| `internal/store/mcp_store.go` | MCPServerStore interface (grants, access requests) |
-| `internal/store/pg/mcp_servers.go` | PostgreSQL MCP implementation |
+| `internal/tools/{registry,types,policy,result}.go` | Registry, interfaces, PolicyEngine (7-step pipeline), result types |
+| `internal/tools/{context_keys,rate_limiter}.go` | Context key definitions, per-session rate limiting |
+| `internal/tools/{scrub,scrub_server}.go` | Credential scrubbing and dynamic value registration |
+
+### Filesystem Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/filesystem{,_list,_write}.go` | read_file, write_file, list_files, edit tools |
+| `internal/tools/edit.go` | edit tool: targeted file modifications |
+| `internal/tools/{context_file,memory,workspace}_interceptor.go` | File routing: context files, memory, team workspace |
+| `internal/tools/workspace_dir.go` | Workspace directory resolution for team/user context |
+
+### Runtime & Shell Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/shell.go` | exec tool: deny patterns, approval workflow, sandbox routing |
+| `internal/tools/exec_approval.go` | Approval workflow for restricted shell commands |
+| `internal/tools/credentialed_exec.go` | credentialed_exec: direct exec mode with credential injection |
+| `internal/tools/credential_{context,presets}.go` | TOOLS.md supplement + preset definitions (gh, gcloud, aws, etc.) |
+
+### Web Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/web_search{,_brave,_ddg}.go` | web_search tool (Brave, DuckDuckGo) |
+| `internal/tools/web_fetch{,_convert,_convert_handlers,_convert_utils,_hidden}.go` | web_fetch tool: fetch, HTML→Markdown, element handlers |
+| `internal/tools/web_shared.go` | Shared web utilities |
+
+### Memory, Knowledge & Sessions
+| File | Purpose |
+|------|---------|
+| `internal/tools/{memory,knowledge_graph,skill_search}.go` | Memory search, KG queries, skill BM25 search |
+| `internal/tools/sessions{,_history,_send}.go` | Session list, history, send tools |
+| `internal/tools/subagent{,_spawn_tool,_config,_exec,_control,_tracing}.go` | SubagentManager: spawn, cancel, steer, tracing |
+
+### Media Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/create_image.go` | create_image tool (OpenAI, Gemini, MiniMax, DashScope) |
+| `internal/tools/create_image_{dashscope,minimax}.go` | Provider-specific image generation |
+| `internal/tools/create_audio.go` | create_audio tool (MiniMax, ElevenLabs, Suno) |
+| `internal/tools/create_audio_{minimax,elevenlabs,suno}.go` | Provider-specific audio generation |
+| `internal/tools/create_video.go` | create_video tool (MiniMax) |
+| `internal/tools/tts.go` | tts tool: text-to-speech (OpenAI, ElevenLabs, Edge, MiniMax) |
+| `internal/tools/read_{image,audio,video,document}.go` | Media reading tools (vision, transcription, analysis) |
+| `internal/tools/read_{audio,video,document}_resolve.go` | Resolve service integrations |
+| `internal/tools/read_document_gemini.go` | Gemini file API for documents |
+| `internal/tools/gemini_file_api.go` | Google Gemini file API wrapper |
+| `internal/tools/media_provider_chain.go` | Media provider routing and fallback chain |
+
+### Skills & Content Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/use_skill.go` | use_skill tool: marker for observability |
+| `internal/tools/publish_skill.go` | publish_skill tool: skill registration in database |
+
+### Team Collaboration Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/team_tool_manager.go` | Shared backend: team cache (5-min TTL), resolution |
+| `internal/tools/team_tasks_tool.go` | team_tasks tool: task board operations |
+| `internal/tools/team_tasks_{read,mutations,lifecycle,followup}.go` | Task CRUD, state transitions, dependency handling |
+| `internal/tools/team_message_tool.go` | team_message tool: mailbox (send, broadcast, read) |
+| `internal/tools/team_tool_{cache,dispatch,helpers,validation}.go` | Team tool infrastructure |
+| `internal/tools/team_access_policy.go` | Access control policies for team tools |
+
+### Messaging, Automation & Custom Tools
+| File | Purpose |
+|------|---------|
+| `internal/tools/{message,telegram_forum,cron,datetime}.go` | Messaging, forum topics, cron scheduling, datetime |
+| `internal/tools/announce_queue.go` | Message queueing with debouncing |
+| `internal/tools/{dynamic_loader,dynamic_tool}.go` | Dynamic/custom tool loading and execution |
+| `internal/tools/openai_compat_call.go` | OpenAI-compatible endpoint calling utilities |
+
+### Hooks, MCP & Infrastructure
+| File | Purpose |
+|------|---------|
+| `internal/hooks/{engine,command_evaluator,agent_evaluator,context}.go` | Hook engine, evaluators, context |
+| `internal/mcp/{manager,bridge_tool}.go` | MCP server connections, bridge tool |

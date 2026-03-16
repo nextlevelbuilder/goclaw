@@ -74,7 +74,7 @@ The first request from a client must be `connect`. Any other method sent before 
 ### Event Frame Structure
 
 - `type`: always `"event"`
-- `event`: event name (e.g., `chat`, `agent`, `status`, `handoff`)
+- `event`: event name (e.g., `chat`, `agent`, `status`)
 - `payload`: event data
 - `seq`: ordering sequence number
 - `stateVersion`: version counters for optimistic state sync
@@ -110,9 +110,9 @@ flowchart LR
 
 | Role | Accessible Methods |
 |------|--------------------|
-| viewer | `agents.list`, `config.get`, `sessions.list`, `sessions.preview`, `health`, `status`, `models.list`, `skills.list`, `skills.get`, `channels.list`, `channels.status`, `cron.list`, `cron.status`, `cron.runs`, `usage.get`, `usage.summary` |
+| viewer | `agents.list`, `config.get`, `sessions.list`, `sessions.preview`, `health`, `status`, `providers.models`, `skills.list`, `skills.get`, `channels.list`, `channels.status`, `cron.list`, `cron.status`, `cron.runs`, `usage.get`, `usage.summary` |
 | operator | All viewer methods plus: `chat.send`, `chat.abort`, `chat.history`, `chat.inject`, `sessions.delete`, `sessions.reset`, `sessions.patch`, `cron.create`, `cron.update`, `cron.delete`, `cron.toggle`, `cron.run`, `skills.update`, `send`, `exec.approval.list`, `exec.approval.approve`, `exec.approval.deny`, `device.pair.request`, `device.pair.list` |
-| admin | All operator methods plus: `config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `agents.files.*`, `agents.links.*`, `teams.*`, `channels.toggle`, `device.pair.approve`, `device.pair.revoke` |
+| admin | All operator methods plus: `config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `agents.files.*`, `teams.*`, `channels.toggle`, `device.pair.approve`, `device.pair.revoke` |
 
 ---
 
@@ -142,7 +142,7 @@ flowchart TD
 | `connect` | Authentication handshake (must be first request) |
 | `health` | Health check |
 | `status` | Gateway status (connected clients, agents, channels) |
-| `models.list` | List available models from all providers |
+| `providers.models` | List available models from all providers |
 
 ### Chat
 
@@ -261,15 +261,6 @@ flowchart TD
 | `browser.snapshot` | Get DOM snapshot |
 | `browser.screenshot` | Take screenshot |
 
-### Agent Links
-
-| Method | Description |
-|--------|-------------|
-| `agents.links.list` | List agent links (by source agent) |
-| `agents.links.create` | Create an agent link (outbound or bidirectional) |
-| `agents.links.update` | Update a link (max_concurrent, settings, status) |
-| `agents.links.delete` | Delete an agent link |
-
 ### Teams
 
 | Method | Description |
@@ -278,7 +269,26 @@ flowchart TD
 | `teams.create` | Create a team (lead + members) |
 | `teams.get` | Get team details with members |
 | `teams.delete` | Delete a team |
+| `teams.update` | Update team configuration |
 | `teams.tasks.list` | List team tasks |
+| `teams.tasks.get` | Get task details |
+| `teams.tasks.create` | Create a new task |
+| `teams.tasks.delete` | Delete a task |
+| `teams.tasks.claim` | Claim a task (mark as in-progress) |
+| `teams.tasks.assign` | Assign task to member |
+| `teams.tasks.approve` | Approve completed task |
+| `teams.tasks.reject` | Reject task submission |
+| `teams.tasks.comment` | Add comment to task |
+| `teams.tasks.comments` | Get task comments |
+| `teams.tasks.events` | Get task event history |
+| `teams.members.add` | Add member to team |
+| `teams.members.remove` | Remove member from team |
+| `teams.workspace.list` | List team workspace files |
+| `teams.workspace.read` | Read workspace file content |
+| `teams.workspace.delete` | Delete workspace file |
+| `teams.events.list` | List team event history |
+| `teams.known_users` | Get list of known users for team |
+| `teams.scopes` | Get team member scopes |
 
 ### Delegations
 
@@ -286,6 +296,30 @@ flowchart TD
 |--------|-------------|
 | `delegations.list` | List delegation history (result truncated to 500 runes) |
 | `delegations.get` | Get delegation detail (result truncated to 8000 runes) |
+
+### Channel Instances
+
+| Method | Description |
+|--------|-------------|
+| `channels.instances.list` | List channel instances |
+| `channels.instances.get` | Get channel instance details |
+| `channels.instances.create` | Create a new channel instance |
+| `channels.instances.update` | Update channel instance config |
+| `channels.instances.delete` | Delete a channel instance |
+
+### API Keys
+
+| Method | Description |
+|--------|-------------|
+| `api_keys.list` | List API keys |
+| `api_keys.create` | Create a new API key |
+| `api_keys.revoke` | Revoke an API key |
+
+### Usage and Quotas
+
+| Method | Description |
+|--------|-------------|
+| `quota.usage` | Get quota usage information |
 
 ### Other
 
@@ -384,15 +418,6 @@ All CRUD endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id
 | POST | `/v1/agents/{id}/sharing` | Share agent with a user |
 | DELETE | `/v1/agents/{id}/sharing/{userID}` | Revoke user access |
 
-**Agent Links** (`/v1/agents/{id}/links`):
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/v1/agents/{id}/links` | List links for an agent |
-| POST | `/v1/agents/{id}/links` | Create a new link |
-| PUT | `/v1/agents/{id}/links/{linkID}` | Update a link |
-| DELETE | `/v1/agents/{id}/links/{linkID}` | Delete a link |
-
 **Delegations** (`/v1/delegations`):
 
 | Method | Path | Description |
@@ -414,6 +439,88 @@ All CRUD endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id
 |--------|------|-------------|
 | GET | `/v1/traces` | List traces (filter by agent_id, user_id, status, date range) |
 | GET | `/v1/traces/{id}` | Get trace details with all spans |
+
+**Channel Instances** (`/v1/channel-instances`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/channel-instances` | List channel instances |
+| POST | `/v1/channel-instances` | Create a new channel instance |
+| GET | `/v1/channel-instances/{id}` | Get channel instance details |
+| PUT | `/v1/channel-instances/{id}` | Update channel instance config |
+| DELETE | `/v1/channel-instances/{id}` | Delete a channel instance |
+
+**API Keys** (`/v1/api-keys`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/api-keys` | List API keys |
+| POST | `/v1/api-keys` | Create a new API key |
+| DELETE | `/v1/api-keys/{id}` | Revoke an API key |
+
+**Providers & Models** (`/v1/providers`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/providers` | List LLM providers |
+| POST | `/v1/providers` | Create a new provider |
+| GET | `/v1/providers/{id}` | Get provider details |
+| PUT | `/v1/providers/{id}` | Update provider config |
+| DELETE | `/v1/providers/{id}` | Delete a provider |
+
+**Memory** (`/v1/memory`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/memory` | Get memory entries |
+| POST | `/v1/memory` | Create memory entry |
+| DELETE | `/v1/memory/{id}` | Delete memory entry |
+
+**Knowledge Graph** (`/v1/kg`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/kg/entities` | List entities |
+| POST | `/v1/kg/entities` | Create entity |
+| GET | `/v1/kg/relations` | List relationships |
+| POST | `/v1/kg/relations` | Create relationship |
+
+**Files & Storage** (`/v1/files`, `/v1/storage`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/files` | List workspace files |
+| GET | `/v1/files/{path}` | Serve file content |
+| DELETE | `/v1/storage/{path}` | Delete workspace file |
+
+**Media** (`/v1/media`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/media/upload` | Upload media file |
+| GET | `/v1/media/{id}` | Serve media file |
+
+**Activity & Usage** (`/v1/activity`, `/v1/usage`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/activity` | List activity audit logs |
+| GET | `/v1/usage` | Get usage metrics |
+| GET | `/v1/usage/summary` | Get aggregated usage summary |
+
+**OAuth & Docs** (`/oauth`, `/docs`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET,POST | `/oauth/*` | OAuth authentication endpoints |
+| GET | `/docs/openapi.json` | OpenAPI specification |
+| GET | `/docs/swagger-ui/` | Swagger UI |
+
+**MCP Bridge** (`/mcp/bridge`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/mcp/bridge` | MCP server bridge (Claude CLI tools) |
 
 ---
 
@@ -471,22 +578,43 @@ Error responses include `retryable` (boolean) and `retryAfterMs` (integer) field
 | `internal/gateway/methods/config.go` | config.get/apply/patch/schema handlers |
 | `internal/gateway/methods/skills.go` | skills.list/get/update handlers |
 | `internal/gateway/methods/cron.go` | cron.list/create/update/delete/toggle/run/runs handlers |
-| `internal/gateway/methods/agent_links.go` | agents.links.* handlers + agent router cache invalidation |
 | `internal/gateway/methods/teams.go` | teams.* handlers + auto-linking teammates |
+| `internal/gateway/methods/teams_workspace.go` | teams.workspace.* handlers (file management) |
 | `internal/gateway/methods/delegations.go` | delegations.list/get handlers |
-| `internal/gateway/methods/channels.go` | channels.list/status handlers |
-| `internal/gateway/methods/pairing.go` | device.pair.* handlers |
+| `internal/gateway/methods/channels.go` | channels.list/status/toggle handlers |
+| `internal/gateway/methods/channel_instances.go` | channels.instances.* handlers (CRUD) |
+| `internal/gateway/methods/pairing.go` | device.pair.* and browser.pairing.* handlers |
 | `internal/gateway/methods/exec_approval.go` | exec.approval.* handlers |
 | `internal/gateway/methods/usage.go` | usage.get/summary handlers |
+| `internal/gateway/methods/api_keys.go` | api_keys.list/create/revoke handlers |
 | `internal/gateway/methods/send.go` | send handler (direct message to channel) |
 | `internal/http/chat_completions.go` | POST /v1/chat/completions (OpenAI-compatible) |
 | `internal/http/responses.go` | POST /v1/responses (OpenResponses protocol) |
 | `internal/http/tools_invoke.go` | POST /v1/tools/invoke (direct tool execution) |
-| `internal/http/agents.go` | Agent CRUD HTTP handlers |
-| `internal/http/skills.go` | Skills HTTP handlers |
-| `internal/http/traces.go` | Traces HTTP handlers |
-| `internal/http/delegations.go` | Delegation history HTTP handlers |
+| `internal/http/agents.go` | Agent CRUD HTTP handlers (/v1/agents, /v1/agents/{id}/sharing) |
+| `internal/http/skills.go` | Skills HTTP handlers (/v1/skills, upload, dependencies) |
+| `internal/http/traces.go` | Traces HTTP handlers (/v1/traces) |
+| `internal/http/delegations.go` | Delegation history HTTP handlers (/v1/delegations) |
+| `internal/http/channel_instances.go` | Channel instance CRUD handlers (/v1/channel-instances) |
+| `internal/http/providers.go` | LLM provider CRUD handlers (/v1/providers) |
+| `internal/http/memory.go` | Memory management handlers (/v1/memory) |
+| `internal/http/knowledge_graph.go` | Knowledge graph handlers (/v1/kg) |
+| `internal/http/files.go` | Workspace file serving handlers (/v1/files) |
+| `internal/http/storage.go` | Storage file CRUD handlers (/v1/storage) |
+| `internal/http/media_upload.go` | Media upload handlers (/v1/media/upload) |
+| `internal/http/media_serve.go` | Media serving handlers (/v1/media/{id}) |
+| `internal/http/activity.go` | Activity audit log handlers (/v1/activity) |
+| `internal/http/usage.go` | Usage analytics handlers (/v1/usage) |
+| `internal/http/api_keys.go` | API key management handlers (/v1/api-keys) |
+| `internal/http/custom_tools.go` | Custom tool CRUD handlers (/v1/tools/custom) |
+| `internal/http/mcp.go` | MCP server management handlers (/v1/mcp) |
 | `internal/http/summoner.go` | LLM-powered agent setup (XML parsing, context file generation) |
 | `internal/http/auth.go` | Bearer token authentication, timing-safe comparison |
+| `internal/http/oauth.go` | OAuth authentication endpoints (/oauth) |
+| `internal/http/docs.go` | OpenAPI documentation handlers (/docs) |
+| `internal/mcp/bridge.go` | MCP bridge for Claude CLI integration (/mcp/bridge) |
 | `internal/permissions/policy.go` | PolicyEngine: role hierarchy, method-to-role mapping |
 | `pkg/protocol/frames.go` | Frame types: RequestFrame, ResponseFrame, EventFrame, ErrorShape |
+| `pkg/protocol/methods.go` | RPC method name constants (Phase 1-3) |
+| `pkg/protocol/events.go` | WebSocket event names and event subtypes |
+| `pkg/protocol/errors.go` | Error code constants and error factories |

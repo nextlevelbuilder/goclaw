@@ -125,12 +125,16 @@ The task board is a shared work tracker accessible to all team members via the `
 ```mermaid
 flowchart TD
     subgraph "Task Lifecycle"
-        PENDING["Pending<br/>(just created)"] -->|claim| IN_PROGRESS["In Progress<br/>(agent working)"]
+        PENDING["Pending<br/>(just created)"] -->|claim or assign| IN_PROGRESS["In Progress<br/>(agent working)"]
         PENDING -->|blocked_by set| BLOCKED["Blocked<br/>(waiting on dependencies)"]
         BLOCKED -->|all blockers complete| PENDING
-        IN_PROGRESS -->|complete| COMPLETED["Completed<br/>(with result)"]
-        PENDING -->|cancel| CANCELLED["Cancelled"]
+        IN_PROGRESS -->|review| IN_REVIEW["In Review<br/>(pending approval)"]
+        IN_REVIEW -->|approve| COMPLETED["Completed<br/>(with result)"]
+        IN_REVIEW -->|reject| CANCELLED["Cancelled<br/>(auto-unblocks dependents)"]
         IN_PROGRESS -->|cancel| CANCELLED
+        PENDING -->|cancel| CANCELLED
+        PENDING -->|system failure| FAILED["Failed<br/>(stale/error)"]
+        FAILED -->|retry| PENDING
     end
 ```
 
@@ -138,28 +142,161 @@ flowchart TD
 
 | Action | Description | Who Uses It |
 |--------|-------------|-------------|
-| `create` | Create task with subject, description, priority, blocked_by | Lead |
-| `claim` | Atomically claim a pending task | Members (or auto-claimed by delegation) |
-| `complete` | Mark task done with a result summary | Members (or auto-completed by delegation) |
-| `cancel` | Cancel a task with a reason | Lead |
-| `list` | List tasks (filter: active/completed/all, order: priority/newest) | All |
-| `get` | Get full task detail including result | All |
+| `create` | Create task with subject, description, priority, assignee, blocked_by | Lead/Admin |
+| `claim` | Atomically claim a pending task | Members |
+| `complete` | Mark task done with result summary | Members/Agents |
+| `approve` | Approve completed task (human-in-the-loop) | Admin/Human |
+| `reject` | Reject task with reason, mark as cancelled, inject message to lead | Admin/Human |
+| `cancel` | Cancel task with reason | Lead |
+| `assign` | Admin-assign a pending task to an agent | Admin |
+| `review` | Submit task for review, transitions to in_review status | Members |
+| `comment` | Add comment to task | All |
+| `progress` | Update task progress (percent, step) | Members |
+| `list` | List tasks (filter: active/in_review/completed/all, page) | All |
+| `get` | Get full task detail with comments, events, attachments | All |
 | `search` | Full-text search over subject + description | All |
+| `attach` | Attach workspace file to task | Members |
+| `ask_user` | Set periodic reminder sent to user for decision | Members |
+| `clear_ask_user` | Cancel a previously set ask_user reminder | Members |
+| `retry` | Re-dispatch stale or failed tasks back to pending | Admin |
+| `update` | Update task metadata (priority, description, etc.) | Lead |
+
+### Team Versioning
+
+Many task actions require **team version >= 2**. Teams created with v1 only support basic actions.
+
+**V2-Required Actions:**
+- `approve` — Approve completed task
+- `reject` — Reject and cancel task
+- `review` — Submit for review
+- `comment` — Add comments
+- `progress` — Update progress
+- `attach` — Attach files
+- `update` — Update metadata
+- `ask_user` — Set reminders
+- `clear_ask_user` — Cancel reminders
+- `retry` — Retry failed tasks
+
+**V1 Teams** support only: `create`, `claim`, `complete`, `cancel`, `assign`, `list`, `get`, `search`
+
+If a v1 team tries a v2 action, error: `"action 'X' requires team version 2 — upgrade in team settings"`
 
 ### Atomic Claiming
 
 Two agents grabbing the same task is prevented at the database level. The claim operation uses a conditional update: `SET status = 'in_progress', owner = agent WHERE status = 'pending' AND owner IS NULL`. One row updated means claimed; zero rows means someone else got it first. No distributed mutex needed.
 
-### Task Dependencies
+### Task Dependencies & Blocking
 
-Tasks can declare `blocked_by` — a list of prerequisite task IDs. A blocked task stays in `blocked` status until all its prerequisites are completed. When a task is completed via `complete`, all dependent tasks whose blockers are now all done automatically transition from `blocked` to `pending`.
+Tasks can declare `blocked_by` — a list of prerequisite task IDs. When a task has blocking dependencies:
+- Task enters `blocked` status (distinct from `pending`)
+- Task remains blocked until ALL prerequisites are completed
+- When a blocking task completes, all dependent tasks with now-satisfied blockers automatically transition from `blocked` → `pending`
+- Cancelled tasks (via `cancel` or `reject`) also unblock their dependents
 
-### User Scoping
+The `blocked` status is one of 8 possible statuses: `pending`, `in_progress`, `in_review`, `completed`, `failed`, `cancelled`, `blocked`, `stale`.
 
-- Delegate and system channels see all tasks for the team
-- End users see only tasks they triggered (filtered by user ID)
-- List pagination: 20 tasks per page
-- Result truncation: 8,000 characters for `get`, 500 characters for search snippets
+### Task Data Model
+
+| Field | Description |
+|-------|-------------|
+| `id`, `team_id` | Unique ID + team ownership |
+| `subject`, `description` | Task title and details |
+| `status` | pending, in_progress, in_review, completed, failed, cancelled, blocked, stale |
+| `priority` | Integer (higher = more important) |
+| `owner_agent_id` | Agent currently working on task |
+| `created_by_agent_id` | Agent that created the task (if auto-created by agent) |
+| `blocked_by` | List of task IDs this task depends on |
+| `task_type` | "general" or custom type label |
+| `task_number` | Human-readable sequential number (team-local) |
+| `progress_percent`, `progress_step` | Current progress tracking |
+| `metadata` | Custom JSON for task snapshots, peer_kind, local_key, team_workspace |
+| `user_id`, `chat_id`, `channel` | Scope: which user/group triggered this task |
+| `result` | Result summary when completed |
+
+### Task Snapshots
+
+Completed tasks automatically store snapshots in metadata for UI board visualization:
+
+```json
+{
+  "snapshot": {
+    "completed_at": "2026-03-16T12:34:56Z",
+    "result_preview": "First 100 chars of result...",
+    "final_status": "completed",
+    "ai_summary": "Brief AI-generated summary of what was accomplished"
+  }
+}
+```
+
+The board displays these snapshots in a visual timeline, allowing users to review completed work at a glance.
+
+### Delegate Agent Restrictions
+
+Delegate agents (members executing delegated work) have restrictions to prevent lifecycle corruption:
+
+- **Cannot complete directly**: Results are auto-completed when delegation finishes
+  - Error: `"delegate agents cannot complete team tasks directly — results are auto-completed when delegation finishes"`
+- **Cannot cancel tasks**: Only the lead can cancel
+  - Error: `"delegate agents cannot cancel team tasks directly"`
+- **Cannot approve/reject**: Only lead and dashboard users can approve/reject
+  - Error: `"delegate agents cannot reject team tasks"` (for reject)
+
+This ensures task state transitions are controlled and audit-trail integrity is maintained.
+
+### Assignee is Mandatory
+
+When creating a task via `team_tasks(action="create")`, the `assignee` field is **required**. This specifies which team member should handle the task. If omitted, error: `"assignee is required — specify which team member should handle this task"`
+
+### Concurrent Creation Guard
+
+Agents must list existing tasks before creating new ones. This prevents duplicate task creation in concurrent sessions. When an agent calls `create` without first checking the board:
+- Error: `"You must check existing tasks first. Call team_tasks(action='list') to review the current task board before creating new tasks — this prevents duplicates in concurrent sessions."`
+
+### Auto-Claiming Behavior
+
+When an agent calls `complete` on a `pending` task, the task is **automatically claimed first**. This saves an extra tool call:
+1. Agent calls `complete` on task in `pending` status
+2. System atomically claims the task (pending → in_progress, assign to agent)
+3. System marks as `completed`
+4. Returns success in one action
+
+This is safe because the claim is atomic — only one agent can succeed.
+
+### User & Channel Scoping
+
+- **System/delegate channels**: See all tasks for the team
+- **Regular user channels**: Filter to tasks they triggered (filtered by user ID)
+- **Scope discovery**: `teams.scopes` lists all unique channel+chatID scopes across tasks
+- **Known users**: `teams.known_users` lists distinct user IDs from team member sessions (UI user select)
+- **Pagination**: 30 tasks per page for lists
+- **Result truncation**: 8,000 characters for `get`, 500 characters for search snippets
+
+### Comments, Events & Attachments
+
+#### Task Comments
+
+Humans and agents can add comments to provide feedback or clarification:
+
+- `handleTaskComment` (human adds comment via dashboard)
+- Comments stored with author ID (agent_id or user_id), creation timestamp
+- Emits `EventTeamTaskCommented` event
+- Visible in task detail page
+
+#### Task Events
+
+Audit trail of all task state changes:
+
+- Event types: `created`, `assigned`, `completed`, `approved`, `rejected`, `commented`, `failed`, `cancelled`, `stale`, `recovered`
+- Each event records actor type (agent or human), actor ID, timestamp, and optional metadata
+- Used for compliance audits and UI activity timeline
+
+#### Task Attachments
+
+Workspace files can be attached to tasks:
+
+- Attach action links workspace file (by file ID) to task
+- Auto-links files created during task execution
+- Metadata captures which agent/user attached the file
 
 ---
 
@@ -192,22 +329,74 @@ The receiving agent processes this as an inbound message, routed through the del
 
 ---
 
-## 6. Delegation Integration
+## 6. Team Workspace
+
+Each team has a shared workspace for storing files produced during task execution. Workspace scoping is configurable per team.
+
+### Workspace Modes
+
+| Mode | Directory Structure | Use Case |
+|------|-------------------|----------|
+| **Isolated** (default) | `{dataDir}/teams/{teamID}/{chatID}/` | Per-conversation file isolation; each user/chat has own folder |
+| **Shared** | `{dataDir}/teams/{teamID}/` | All team members access same folder; no user/chat isolation |
+
+Configure via team settings `workspace_scope: "shared"` (default: `"isolated"`).
+
+### Workspace Access
+
+Team members have file tools access to their team workspace:
+
+- **Read**: List files, read file content
+- **Write**: Create and update files (auto-linked to task)
+- **Delete**: Remove files from workspace
+
+When a member writes a file during task execution, it's automatically:
+1. Stored in team workspace with metadata
+2. Linked to the active task (task_id)
+3. Visible to other team members on task detail page
+
+### WorkspaceDir Context
+
+During task dispatch, the team workspace directory is injected into tool context:
+
+```go
+WithToolTeamWorkspace(ctx, "/path/to/teams/{teamID}/")
+WithToolTeamID(ctx, "{teamID}")
+WithTeamTaskID(ctx, "{taskID}")
+WithWorkspaceChannel(ctx, task.Channel)
+WithWorkspaceChatID(ctx, task.ChatID)
+```
+
+File tools use this context to resolve workspace paths and auto-link files to tasks.
+
+### Quota & Limits
+
+| Limit | Value |
+|-------|-------|
+| Max file size | 10 MB |
+| Max files per scope | 100 |
+| Directory creation | Automatic (0750 permissions) |
+
+---
+
+## 7. Delegation Integration
 
 Teams integrate deeply with the delegation system. The mandatory workflow ensures every piece of delegated work is tracked.
 
 ```mermaid
 flowchart TD
     LEAD["Lead receives user request"] --> CREATE["1. Create task on board<br/>team_tasks action=create<br/>→ returns task_id"]
-    CREATE --> SPAWN["2. Delegate to member<br/>spawn agent=member, task=...,<br/>team_task_id=task_id"]
-    SPAWN --> LANE["Scheduled through<br/>delegate lane"]
-    LANE --> MEMBER["Member agent executes<br/>in isolated session"]
+    CREATE --> SPAWN["2. Delegate to member<br/>spawn agent=member,<br/>team_task_id=task_id"]
+    SPAWN --> INJECT["Inject team workspace context<br/>WithToolTeamID<br/>WithToolTeamWorkspace<br/>WithTeamTaskID"]
+    INJECT --> LANE["Scheduled through<br/>delegate lane"]
+    LANE --> MEMBER["Member agent executes<br/>in isolated session<br/>with workspace access"]
     MEMBER --> COMPLETE["3. Task auto-completed<br/>with delegation result"]
-    COMPLETE --> CLEANUP["Session cleaned up"]
+    COMPLETE --> DISPATCH["Files auto-linked to task<br/>Comments/events recorded"]
+    DISPATCH --> CLEANUP["Session cleaned up"]
 
     subgraph "Parallel Delegation"
-        SPAWN2["spawn member_A, task_id=1"] --> RUN_A["Member A works"]
-        SPAWN3["spawn member_B, task_id=2"] --> RUN_B["Member B works"]
+        SPAWN2["spawn member_A, task_id=1"] --> RUN_A["Member A works<br/>with workspace"]
+        SPAWN3["spawn member_B, task_id=2"] --> RUN_B["Member B works<br/>with workspace"]
         RUN_A --> COLLECT["Results collected"]
         RUN_B --> COLLECT
         COLLECT --> ANNOUNCE["4. Single combined<br/>announcement to lead"]
@@ -228,9 +417,11 @@ When a team member delegates work, the system requires a valid `team_task_id`:
 When a delegation finishes (success or failure):
 
 1. The linked task is marked as `completed` with the delegation result
-2. A team message audit record is created (from member → lead)
-3. The delegation session is cleaned up (deleted)
-4. Delegation history is saved with team context (team_id, team_task_id, trace_id)
+2. Files created during execution are auto-linked to the task
+3. Workspace events are recorded (modified/created file events)
+4. A team message audit record is created (from member → lead)
+5. The delegation session is cleaned up (deleted)
+6. Delegation history is saved with team context (team_id, team_task_id, trace_id)
 
 ### Parallel Delegation Batching
 
@@ -255,7 +446,7 @@ If all delegations failed, the lead receives a friendly error notification with 
 
 ---
 
-## 7. TEAM.md — System-Injected Context
+## 8. TEAM.md — System-Injected Context
 
 `TEAM.md` is a virtual file generated at agent resolution time. It is not stored on disk or in the database — it's rendered dynamically based on the current team configuration and injected into the system prompt wrapped in `<system_context>` tags.
 
@@ -298,7 +489,7 @@ This prevents wasted LLM iterations probing unavailable capabilities.
 
 ---
 
-## 8. Message Routing
+## 9. Message Routing
 
 Team messages flow through the message bus with specific routing rules.
 
@@ -345,7 +536,7 @@ This ensures results land in the correct conversation thread, even in Telegram f
 
 ---
 
-## 9. Access Control
+## 10. Access Control
 
 Teams support fine-grained access control through team settings.
 
@@ -353,10 +544,17 @@ Teams support fine-grained access control through team settings.
 
 | Setting | Type | Description |
 |---------|------|-------------|
-| `AllowUserIDs` | String list | Only these users can trigger team work |
-| `DenyUserIDs` | String list | These users are blocked (deny takes priority) |
-| `AllowChannels` | String list | Only messages from these channels trigger team work |
-| `DenyChannels` | String list | Block messages from these channels |
+| `allow_user_ids` | String list | Only these users can trigger team work |
+| `deny_user_ids` | String list | These users are blocked (deny takes priority) |
+| `allow_channels` | String list | Only messages from these channels trigger team work |
+| `deny_channels` | String list | Block messages from these channels |
+| `workspace_scope` | String | "isolated" (default) or "shared" — file scope mode |
+| `workspace_quota_mb` | Integer | Max workspace size in MB (optional) |
+| `progress_notifications` | Boolean | Emit progress_notification events |
+| `followup_interval_minutes` | Integer | Ask_user reminder interval |
+| `followup_max_reminders` | Integer | Max ask_user reminders before escalation |
+| `escalation_mode` | String | How to escalate stale tasks: "notify_lead", "fail_task" |
+| `escalation_actions` | String list | Actions to take on escalation |
 
 System channels (`delegate`, `system`) always pass access checks. Empty settings mean open access.
 
@@ -380,7 +578,7 @@ When limits are hit, the error message is written for LLM reasoning: "Agent at c
 
 ---
 
-## 10. Delegation Context
+## 11. Delegation Context
 
 ### SenderID Clearing
 
@@ -390,20 +588,44 @@ In sync delegations, the delegate agent's context has the `senderID` cleared. Th
 
 Delegation traces are linked to the parent trace through `parent_trace_id`. This allows the tracing system to show the full delegation chain: user request → lead processing → member delegation → member execution.
 
+### Workspace & Task Context
+
+Delegation context includes team workspace and task information so member agents can:
+
+1. Access the team workspace directory (if configured)
+2. Auto-link files created to the active task
+3. Record task progress and comments
+4. Route results back to the correct user/chat
+
+Context keys injected:
+
+- `tool_team_id`: Team UUID for team_tasks/team_message tools
+- `tool_team_workspace`: Shared workspace directory path (or empty for isolated mode)
+- `tool_team_task_id`: Active task UUID for workspace file linking
+- `tool_workspace_channel`: Task's origin channel (for routing)
+- `tool_workspace_chat_id`: Task's origin chat ID (for routing)
+
 ---
 
-## 11. Events
+## 12. Events
 
 Teams emit events for real-time UI updates and observability.
 
 | Event | When |
 |-------|------|
+| `team_task.created` | New task added to board |
+| `team_task.assigned` | Task assigned to agent (admin or auto-assign) |
+| `team_task.completed` | Task marked as complete |
+| `team_task.approved` | Task approved by human (human-in-the-loop) |
+| `team_task.rejected` | Task rejected, returned to in_progress |
+| `team_task.commented` | Comment added by human |
+| `team_task.deleted` | Task hard-deleted (terminal status only) |
+| `team_updated` | Team settings updated |
+| `team_deleted` | Team deleted |
 | `delegation.started` | Async delegation begins |
 | `delegation.completed` | Delegation finishes successfully |
 | `delegation.failed` | Delegation fails |
 | `delegation.cancelled` | Delegation cancelled |
-| `team_task.created` | New task added to board |
-| `team_task.completed` | Task marked as complete |
 | `team_message.sent` | Mailbox message delivered |
 
 ---
@@ -412,20 +634,25 @@ Teams emit events for real-time UI updates and observability.
 
 | File | Purpose |
 |------|---------|
-| `internal/gateway/methods/teams.go` | Team CRUD RPC handlers, auto-link creation on team create/member add |
+| `internal/gateway/methods/teams_crud.go` | Team CRUD RPC: Get, Delete, Update settings, TaskList, KnownUsers, Scopes, Events |
+| `internal/gateway/methods/teams_tasks.go` | Task board RPC: Get, Create, Assign, Comment, Comments, Events, Approve, Reject, Delete, TaskDispatch |
+| `internal/gateway/methods/teams_workspace.go` | Workspace RPC: List, Read, Delete (with shared/isolated mode logic) |
 | `internal/tools/team_tool_manager.go` | Shared backend for team tools, team cache (5-min TTL), team resolution |
-| `internal/tools/team_tasks_tool.go` | Task board tool: list, get, create, claim, complete, cancel, search |
+| `internal/tools/team_tasks_tool.go` | Task board tool: list, get, create, claim, complete, cancel, search, approve, reject, comment, progress, attach, ask_user, update |
 | `internal/tools/team_message_tool.go` | Mailbox tool: send, broadcast, read, message routing via bus |
-| `internal/tools/delegate.go` | DelegateManager: sync/async delegation, team task enforcement, auto-completion |
-| `internal/tools/delegate_state.go` | Active delegation tracking, artifact accumulation, session cleanup |
-| `internal/tools/delegate_policy.go` | Access control: user permissions, team access, concurrency checks |
-| `internal/tools/delegate_events.go` | Delegation event broadcasting |
+| `internal/tools/team_access_policy.go` | Access control: checkTeamAccess validates user/channel against settings |
+| `internal/tools/subagent_spawn_tool.go` | Subagent spawning: sync/async delegation, team task enforcement |
+| `internal/tools/subagent_exec.go` | Delegation execution, artifact accumulation, session cleanup |
+| `internal/tools/subagent_config.go` | Delegation configuration and concurrency control |
+| `internal/tools/subagent_tracing.go` | Delegation tracing and event broadcasting |
+| `internal/tools/workspace_dir.go` | WorkspaceDir helper, shared/isolated mode detection, file limits |
+| `internal/tools/context_keys.go` | Tool context injection: team_id, team_workspace, team_task_id, workspace channel/chatid |
 | `internal/agent/resolver.go` | TEAM.md generation (buildTeamMD), injection during agent resolution |
 | `internal/agent/systemprompt_sections.go` | TEAM.md rendering in system prompt as `<system_context>` |
-| `internal/store/team_store.go` | TeamStore interface (22 methods), data types |
-| `internal/store/pg/teams.go` | PostgreSQL implementation: teams, tasks, messages, handoff routes |
+| `internal/store/team_store.go` | TeamStore interface (~40 methods), data types: TeamData, TeamTaskData, TeamMessageData, TeamTaskCommentData, etc. |
+| `internal/store/pg/teams.go` | PostgreSQL implementation: teams CRUD, members, tasks, messages, events, attachments |
 | `cmd/gateway_managed.go` | Team tool wiring, cache invalidation subscription |
-| `cmd/gateway_consumer.go` | Message routing for delegate/teammate prefixes |
+| `cmd/gateway_consumer.go` | Message routing for delegate/teammate prefixes, task dispatch to agents |
 
 ---
 
@@ -433,7 +660,7 @@ Teams emit events for real-time UI updates and observability.
 
 | Document | Relevant Content |
 |----------|-----------------|
-| [03-tools-system.md](./03-tools-system.md) | Delegation system, agent links, quality gates, evaluate loop |
-| [06-store-data-model.md](./06-store-data-model.md) | Team tables schema, delegation_history, handoff_routes |
+| [03-tools-system.md](./03-tools-system.md) | Delegation system, agent links, quality gates |
+| [06-store-data-model.md](./06-store-data-model.md) | Team tables schema, delegation_history |
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | Delegate scheduler lane (concurrency 100), cron |
 | [09-security.md](./09-security.md) | Delegation security, hook recursion prevention |
