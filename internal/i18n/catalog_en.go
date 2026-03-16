@@ -175,6 +175,7 @@ func init() {
 		MsgToolTeamTasks:       "View, create, update, and complete tasks on the team task board",
 		MsgToolTeamMessage:     "Send a direct message or broadcast to teammates in the agent team",
 		MsgToolRegisterMCPServer: "Register a locally-built or remote MCP server in GoClaw, making its tools available to agents",
+		MsgToolBuildDockerImage:  "Build a Docker image from a Dockerfile and optionally push to a container registry",
 
 		// MCP registration
 		MsgMCPServerNameConflict: "MCP server with name %s already exists",

@@ -42,6 +42,7 @@ func (f *FlexibleStringSlice) UnmarshalJSON(data []byte) error {
 type GeneralConfig struct {
 	AppName        string `json:"app_name"`
 	AppDescription string `json:"app_description,omitempty"`
+	DefaultTheme   string `json:"default_theme,omitempty"` // "light", "dark", or "system" (default "dark")
 }
 
 // Config is the root configuration for the GoClaw Gateway.
@@ -60,6 +61,7 @@ type Config struct {
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
+	Features  FeaturesConfig  `json:"features,omitempty"`
 	mu        sync.RWMutex
 }
 
@@ -396,10 +398,36 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Telemetry = src.Telemetry
 	c.Tailscale = src.Tailscale
 	c.Bindings = src.Bindings
+	c.Features = src.Features
 }
 
 // IdentityConfig defines agent persona / display identity.
 type IdentityConfig struct {
 	Name  string `json:"name,omitempty"`
 	Emoji string `json:"emoji,omitempty"`
+}
+
+// FeaturesConfig controls UI feature visibility.
+// All features default to true (opt-out). Setting a feature to false hides it from the dashboard.
+type FeaturesConfig struct {
+	Skills          *bool `json:"skills,omitempty"`
+	BuiltinTools    *bool `json:"builtin_tools,omitempty"`
+	MCP             *bool `json:"mcp,omitempty"`
+	TTS             *bool `json:"tts,omitempty"`
+	Cron            *bool `json:"cron,omitempty"`
+	Memory          *bool `json:"memory,omitempty"`
+	KnowledgeGraph  *bool `json:"knowledge_graph,omitempty"`
+	Storage         *bool `json:"storage,omitempty"`
+	Teams           *bool `json:"teams,omitempty"`
+	Channels        *bool `json:"channels,omitempty"`
+	Nodes           *bool `json:"nodes,omitempty"`
+	Sessions        *bool `json:"sessions,omitempty"`
+	PendingMessages *bool `json:"pending_messages,omitempty"`
+	Contacts        *bool `json:"contacts,omitempty"`
+	Traces          *bool `json:"traces,omitempty"`
+	Events          *bool `json:"events,omitempty"`
+	Delegations     *bool `json:"delegations,omitempty"`
+	Activity        *bool `json:"activity,omitempty"`
+	Logs            *bool `json:"logs,omitempty"`
+	Approvals       *bool `json:"approvals,omitempty"`
 }

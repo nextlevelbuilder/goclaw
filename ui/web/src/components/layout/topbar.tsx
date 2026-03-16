@@ -19,6 +19,7 @@ export function Topbar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const logout = useAuthStore((s) => s.logout);
+  const userId = useAuthStore((s) => s.userId);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { pendingCount } = usePendingPairingsCount({ showToast: true });
@@ -97,6 +98,9 @@ export function Topbar() {
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
+        {userId && (
+          <span className="text-xs text-muted-foreground hidden sm:inline">{userId}</span>
+        )}
         <button
           onClick={logout}
           className="cursor-pointer rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"

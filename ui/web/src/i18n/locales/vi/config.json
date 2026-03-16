@@ -19,6 +19,7 @@
   "tabs.quota": "Hạn mức",
   "tabs.tools": "Công cụ",
   "tabs.integrations": "Tích hợp",
+  "tabs.features": "Tính năng",
 
   "server.title": "Máy chủ Gateway",
   "server.description": "Cài đặt mạng, token xác thực và kiểm soát truy cập",
@@ -311,6 +312,11 @@
   "general.systemInfoTitle": "Thông tin hệ thống",
   "general.systemInfoDescription": "Thông tin chỉ đọc về phiên bản gateway này",
   "general.configPath": "Đường dẫn tệp cấu hình",
+  "general.defaultTheme": "Giao diện mặc định",
+  "general.defaultThemeTip": "Giao diện mặc định cho người dùng mới. Người dùng có thể thay đổi trong cài đặt cá nhân.",
+  "general.themeLight": "Sáng",
+  "general.themeDark": "Tối",
+  "general.themeSystem": "Hệ thống",
 
   "bindings.any": "Bất kỳ",
 

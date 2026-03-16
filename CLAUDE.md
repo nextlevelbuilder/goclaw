@@ -28,7 +28,7 @@ internal/
 ├── tracing/                  LLM call tracing + optional OTel export (build-tag gated)
 ├── scheduler/                Lane-based concurrency (main/subagent/cron)
 ├── cron/                     Cron scheduling (at/every/cron expr)
-├── permissions/              RBAC (admin/operator/viewer)
+├── permissions/              RBAC (root/admin/operator/viewer)
 ├── pairing/                  Browser pairing (8-char codes)
 ├── crypto/                   AES-256-GCM encryption for API keys
 ├── sandbox/                  Docker-based code sandbox

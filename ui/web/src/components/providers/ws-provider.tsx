@@ -33,6 +33,9 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
     wsRef.current.onAuthFailure = () => {
       useAuthStore.getState().logout();
     };
+    wsRef.current.onRoleResolved = (role: string) => {
+      useAuthStore.getState().setRole(role);
+    };
   }
   const ws = wsRef.current;
 

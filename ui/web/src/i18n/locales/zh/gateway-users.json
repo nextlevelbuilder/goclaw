@@ -1,0 +1,46 @@
+{
+  "title": "网关用户",
+  "description": "管理网关用户和访问令牌。",
+  "addUser": "添加用户",
+  "searchPlaceholder": "搜索用户...",
+  "emptyTitle": "暂无用户",
+  "emptyDescription": "网关用户将在此显示。根用户在启动时自动创建。",
+  "columns": {
+    "userId": "用户 ID",
+    "token": "令牌",
+    "role": "角色",
+    "created": "创建时间",
+    "actions": "操作"
+  },
+  "form": {
+    "title": "添加网关用户",
+    "description": "创建新的管理员用户并生成访问令牌。",
+    "userId": "用户 ID",
+    "userIdPlaceholder": "例如: admin-user",
+    "create": "创建",
+    "creating": "创建中...",
+    "cancel": "取消"
+  },
+  "created": {
+    "title": "用户已创建",
+    "description": "请立即复制网关令牌。令牌将不会再次显示。",
+    "copy": "复制",
+    "copied": "已复制",
+    "done": "完成"
+  },
+  "delete": {
+    "title": "删除用户",
+    "description": "确定要删除\"{{name}}\"吗？此操作无法撤消。",
+    "confirmLabel": "删除"
+  },
+  "toast": {
+    "created": "用户创建成功",
+    "deleted": "用户删除成功",
+    "failedCreate": "创建用户失败",
+    "failedDelete": "删除用户失败"
+  },
+  "roles": {
+    "root": "根用户",
+    "admin": "管理员"
+  }
+}

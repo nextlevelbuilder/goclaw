@@ -1,0 +1,46 @@
+{
+  "title": "Quản lý người dùng",
+  "description": "Quản lý người dùng gateway và token truy cập.",
+  "addUser": "Thêm người dùng",
+  "searchPlaceholder": "Tìm kiếm người dùng...",
+  "emptyTitle": "Chưa có người dùng",
+  "emptyDescription": "Người dùng gateway sẽ hiển thị ở đây. Người dùng root được tạo tự động khi khởi động.",
+  "columns": {
+    "userId": "ID người dùng",
+    "token": "Token",
+    "role": "Vai trò",
+    "created": "Ngày tạo",
+    "actions": "Thao tác"
+  },
+  "form": {
+    "title": "Thêm người dùng",
+    "description": "Tạo người dùng admin mới với token truy cập tự động.",
+    "userId": "ID người dùng",
+    "userIdPlaceholder": "Ví dụ: admin-user",
+    "create": "Tạo",
+    "creating": "Đang tạo...",
+    "cancel": "Hủy"
+  },
+  "created": {
+    "title": "Đã tạo người dùng",
+    "description": "Sao chép gateway token ngay bây giờ. Token sẽ không được hiển thị lại.",
+    "copy": "Sao chép",
+    "copied": "Đã sao chép",
+    "done": "Xong"
+  },
+  "delete": {
+    "title": "Xóa người dùng",
+    "description": "Bạn có chắc muốn xóa \"{{name}}\"? Hành động này không thể hoàn tác.",
+    "confirmLabel": "Xóa"
+  },
+  "toast": {
+    "created": "Đã tạo người dùng thành công",
+    "deleted": "Đã xóa người dùng thành công",
+    "failedCreate": "Không thể tạo người dùng",
+    "failedDelete": "Không thể xóa người dùng"
+  },
+  "roles": {
+    "root": "Root",
+    "admin": "Admin"
+  }
+}

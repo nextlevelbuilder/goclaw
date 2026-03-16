@@ -19,6 +19,7 @@
   "tabs.quota": "Quota",
   "tabs.tools": "Tools",
   "tabs.integrations": "Integrations",
+  "tabs.features": "Features",
 
   "server.title": "Gateway Server",
   "server.description": "Network binding, authentication token, and access control",
@@ -311,6 +312,11 @@
   "general.systemInfoTitle": "System Info",
   "general.systemInfoDescription": "Read-only information about this gateway instance",
   "general.configPath": "Config File Path",
+  "general.defaultTheme": "Default Theme",
+  "general.defaultThemeTip": "The default color theme for new users. Users can override this in their personal settings.",
+  "general.themeLight": "Light",
+  "general.themeDark": "Dark",
+  "general.themeSystem": "System",
 
   "bindings.any": "Any",
 

@@ -2,6 +2,9 @@ export const queryKeys = {
   apiKeys: {
     all: ["apiKeys"] as const,
   },
+  gatewayUsers: {
+    all: ["gatewayUsers"] as const,
+  },
   providers: {
     all: ["providers"] as const,
     models: (providerId: string) => ["providers", providerId, "models"] as const,

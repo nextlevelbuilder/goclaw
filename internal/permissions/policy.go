@@ -2,7 +2,7 @@
 //
 // GoClaw uses a 5-layer permission system:
 //
-//  1. Gateway Auth (token/password, scopes: admin/read/write/approvals/pairing)
+//  1. Gateway Auth (token/password, scopes: root/admin/read/write/approvals/pairing)
 //  2. Global Tool Policy (tools.allow[], tools.deny[], tools.profile)
 //  3. Per-Agent Policy (agents.list[].tools.allow/deny)
 //  4. Per-Channel/Group Policy (channels.*.groups.*.tools.policy)
@@ -23,6 +23,7 @@ import (
 type Role string
 
 const (
+	RoleRoot     Role = "root"     // Super-admin: full system access including root-only operations
 	RoleAdmin    Role = "admin"    // Full access to all methods
 	RoleOperator Role = "operator" // Read + write access (no admin operations)
 	RoleViewer   Role = "viewer"   // Read-only access
@@ -32,6 +33,7 @@ const (
 type Scope string
 
 const (
+	ScopeRoot      Scope = "operator.root"
 	ScopeAdmin     Scope = "operator.admin"
 	ScopeRead      Scope = "operator.read"
 	ScopeWrite     Scope = "operator.write"
@@ -41,6 +43,7 @@ const (
 
 // AllScopes is the set of all valid API key scopes.
 var AllScopes = map[Scope]bool{
+	ScopeRoot:      true,
 	ScopeAdmin:     true,
 	ScopeRead:      true,
 	ScopeWrite:     true,
@@ -105,6 +108,9 @@ func (pe *PolicyEngine) CanAccessWithScopes(scopes []Scope, method string) bool 
 
 // RoleFromScopes determines the effective role from a set of scopes.
 func RoleFromScopes(scopes []Scope) Role {
+	if slices.Contains(scopes, ScopeRoot) {
+		return RoleRoot
+	}
 	if slices.Contains(scopes, ScopeAdmin) {
 		return RoleAdmin
 	}
@@ -219,6 +225,8 @@ func HasMinRole(role, required Role) bool {
 
 func roleLevel(r Role) int {
 	switch r {
+	case RoleRoot:
+		return 4
 	case RoleAdmin:
 		return 3
 	case RoleOperator:

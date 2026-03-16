@@ -504,6 +504,12 @@ func setupSkillsSystem(
 		}
 	}
 
+	// Build Docker image tool — lets agents build and push container images
+	if pgStores.SecureCLI != nil {
+		toolsReg.Register(tools.NewBuildDockerImageTool(pgStores.SecureCLI, workspace))
+		slog.Info("build_docker_image tool registered")
+	}
+
 	// Wire embedding-based skill search + per-agent access filtering
 	if pgStores.Skills != nil {
 		if sas, ok := pgStores.Skills.(store.SkillAccessStore); ok {

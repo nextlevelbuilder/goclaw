@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -17,6 +18,7 @@ interface GeneralData {
   app_name?: string;
   app_description?: string;
   data_dir?: string;
+  default_theme?: string;
 }
 
 const DEFAULT: GeneralData = {};
@@ -85,6 +87,22 @@ export function GeneralSection({ data, configPath, onSave, saving }: Props) {
               onChange={(e) => update({ data_dir: e.target.value })}
               placeholder="~/.goclaw"
             />
+          </div>
+          <div className="grid gap-1.5">
+            <InfoLabel tip={t("general.defaultThemeTip")}>{t("general.defaultTheme")}</InfoLabel>
+            <Select
+              value={draft.default_theme || "light"}
+              onValueChange={(v) => update({ default_theme: v })}
+            >
+              <SelectTrigger className="text-base md:text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">{t("general.themeLight")}</SelectItem>
+                <SelectItem value="dark">{t("general.themeDark")}</SelectItem>
+                <SelectItem value="system">{t("general.themeSystem")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           {dirty && (
             <div className="flex justify-end pt-2">

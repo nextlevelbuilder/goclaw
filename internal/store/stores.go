@@ -27,4 +27,5 @@ type Stores struct {
 	Snapshots        SnapshotStore
 	SecureCLI        SecureCLIStore
 	APIKeys          APIKeyStore
+	GatewayUsers     GatewayUserStore
 }

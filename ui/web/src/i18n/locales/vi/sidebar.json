@@ -38,6 +38,7 @@
     "activity": "Hoạt động",
     "cliCredentials": "Xác thực CLI",
     "apiKeys": "Khóa API",
+    "gatewayUsers": "Người dùng",
     "apiDocs": "Tài liệu API"
   }
 }

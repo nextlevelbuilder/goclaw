@@ -36,13 +36,13 @@ type Server struct {
 	tools    *tools.Registry
 	router   *MethodRouter
 
-	policyEngine   *permissions.PolicyEngine
-	pairingService store.PairingStore
-	agentsHandler  *httpapi.AgentsHandler // agent CRUD API
-	skillsHandler  *httpapi.SkillsHandler // skill management API
-	tracesHandler  *httpapi.TracesHandler // LLM trace listing API
-	wakeHandler    *httpapi.WakeHandler  // external wake/trigger API
-	mcpHandler         *httpapi.MCPHandler         // MCP server management API
+	policyEngine            *permissions.PolicyEngine
+	pairingService          store.PairingStore
+	agentsHandler           *httpapi.AgentsHandler           // agent CRUD API
+	skillsHandler           *httpapi.SkillsHandler           // skill management API
+	tracesHandler           *httpapi.TracesHandler           // LLM trace listing API
+	wakeHandler             *httpapi.WakeHandler             // external wake/trigger API
+	mcpHandler              *httpapi.MCPHandler              // MCP server management API
 	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
@@ -50,7 +50,7 @@ type Server struct {
 	teamEventsHandler       *httpapi.TeamEventsHandler       // team event history API
 	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
 	pendingMessagesHandler  *httpapi.PendingMessagesHandler  // pending messages API
-	secureCLIHandler       *httpapi.SecureCLIHandler        // secure CLI credential CRUD API
+	secureCLIHandler        *httpapi.SecureCLIHandler        // secure CLI credential CRUD API
 	memoryHandler           *httpapi.MemoryHandler           // memory management API
 	kgHandler               *httpapi.KnowledgeGraphHandler   // knowledge graph API
 	oauthHandler            *httpapi.OAuthHandler            // OAuth endpoints
@@ -60,11 +60,12 @@ type Server struct {
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
 	activityHandler         *httpapi.ActivityHandler         // activity audit log API
 	usageHandler            *httpapi.UsageHandler            // usage analytics API
-	apiKeysHandler     *httpapi.APIKeysHandler      // API key management
-	apiKeyStore        store.APIKeyStore            // for API key auth lookup
-	docsHandler        *httpapi.DocsHandler         // OpenAPI spec + Swagger UI
-	agentStore         store.AgentStore             // for context injection in tools_invoke
-	msgBus             *bus.MessageBus              // for MCP bridge media delivery
+	apiKeysHandler          *httpapi.APIKeysHandler          // API key management
+	gatewayUsersHandler     *httpapi.GatewayUsersHandler     // gateway user management
+	apiKeyStore             store.APIKeyStore                // for API key auth lookup
+	docsHandler             *httpapi.DocsHandler             // OpenAPI spec + Swagger UI
+	agentStore              store.AgentStore                 // for context injection in tools_invoke
+	msgBus                  *bus.MessageBus                  // for MCP bridge media delivery
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -269,6 +270,10 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.apiKeysHandler.RegisterRoutes(mux)
 	}
 
+	if s.gatewayUsersHandler != nil {
+		s.gatewayUsersHandler.RegisterRoutes(mux)
+	}
+
 	if s.activityHandler != nil {
 		s.activityHandler.RegisterRoutes(mux)
 	}
@@ -443,8 +448,12 @@ func (s *Server) handlePublicConfigs(w http.ResponseWriter, r *http.Request) {
 
 	appName := s.cfg.AppName()
 	desc := s.cfg.General.AppDescription
+	theme := s.cfg.General.DefaultTheme
+	if theme == "" {
+		theme = "light"
+	}
 
-	fmt.Fprintf(w, `{"app_name":%q,"app_description":%q}`, appName, desc)
+	fmt.Fprintf(w, `{"app_name":%q,"app_description":%q,"default_theme":%q}`, appName, desc, theme)
 }
 
 // clientIP extracts the real client IP from the request, checking proxy headers first.
@@ -521,6 +530,11 @@ func (s *Server) SetOAuthHandler(h *httpapi.OAuthHandler) { s.oauthHandler = h }
 
 // SetAPIKeysHandler sets the API key management handler.
 func (s *Server) SetAPIKeysHandler(h *httpapi.APIKeysHandler) { s.apiKeysHandler = h }
+
+// SetGatewayUsersHandler sets the gateway user management handler.
+func (s *Server) SetGatewayUsersHandler(h *httpapi.GatewayUsersHandler) {
+	s.gatewayUsersHandler = h
+}
 
 // SetAPIKeyStore sets the API key store for token-based auth lookup.
 func (s *Server) SetAPIKeyStore(st store.APIKeyStore) { s.apiKeyStore = st }

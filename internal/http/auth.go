@@ -73,9 +73,10 @@ func extractAgentID(r *http.Request, model string) string {
 	return "default"
 }
 
-// --- Package-level API key cache for shared auth ---
+// --- Package-level caches for shared auth ---
 
 var pkgAPIKeyCache *apiKeyCache
+var pkgGatewayUserCache *gatewayUserCache
 
 // InitAPIKeyCache initializes the shared API key cache with TTL and pubsub invalidation.
 // Must be called once during server startup before handling requests.
@@ -87,6 +88,28 @@ func InitAPIKeyCache(s store.APIKeyStore, mb *bus.MessageBus) {
 				pkgAPIKeyCache.invalidateAll()
 			}
 		})
+	}
+}
+
+// InitGatewayUserCache initializes the shared gateway user cache with TTL.
+// Must be called once during server startup before handling requests.
+func InitGatewayUserCache(s store.GatewayUserStore) {
+	pkgGatewayUserCache = newGatewayUserCache(s, 5*time.Minute)
+}
+
+// ResolveGatewayUser checks if the bearer token belongs to a gateway user using the shared cache.
+// Returns the user data and derived role, or nil if not found.
+func ResolveGatewayUser(ctx context.Context, token string) (*store.GatewayUserData, permissions.Role) {
+	if pkgGatewayUserCache == nil || token == "" {
+		return nil, ""
+	}
+	return pkgGatewayUserCache.getOrFetch(ctx, token)
+}
+
+// InvalidateGatewayUserCache clears all cached gateway user entries.
+func InvalidateGatewayUserCache() {
+	if pkgGatewayUserCache != nil {
+		pkgGatewayUserCache.invalidateAll()
 	}
 }
 
@@ -115,7 +138,11 @@ func resolveAuth(r *http.Request, gatewayToken string) authResult {
 // resolveAuthBearer is like resolveAuth but accepts a pre-extracted bearer token.
 // Useful for handlers that also accept tokens from query params.
 func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult {
-	// Gateway token → admin
+	// Gateway user (DB lookup) → role from gateway_users table
+	if user, role := ResolveGatewayUser(r.Context(), bearer); user != nil {
+		return authResult{Role: role, Authenticated: true}
+	}
+	// Gateway token (env fallback for non-DB mode) → admin
 	if gatewayToken != "" && tokenMatch(bearer, gatewayToken) {
 		return authResult{Role: permissions.RoleAdmin, Authenticated: true}
 	}

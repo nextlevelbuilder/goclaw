@@ -1,0 +1,46 @@
+{
+  "title": "Gateway Users",
+  "description": "Manage gateway users and access tokens.",
+  "addUser": "Add User",
+  "searchPlaceholder": "Search users...",
+  "emptyTitle": "No users",
+  "emptyDescription": "Gateway users will appear here. The root user is created automatically on startup.",
+  "columns": {
+    "userId": "User ID",
+    "token": "Token",
+    "role": "Role",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "form": {
+    "title": "Add Gateway User",
+    "description": "Create a new admin user with a generated access token.",
+    "userId": "User ID",
+    "userIdPlaceholder": "e.g. admin-user",
+    "create": "Create",
+    "creating": "Creating...",
+    "cancel": "Cancel"
+  },
+  "created": {
+    "title": "User Created",
+    "description": "Copy the gateway token now. It will not be shown again.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "done": "Done"
+  },
+  "delete": {
+    "title": "Delete User",
+    "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirmLabel": "Delete"
+  },
+  "toast": {
+    "created": "User created successfully",
+    "deleted": "User deleted successfully",
+    "failedCreate": "Failed to create user",
+    "failedDelete": "Failed to delete user"
+  },
+  "roles": {
+    "root": "Root",
+    "admin": "Admin"
+  }
+}

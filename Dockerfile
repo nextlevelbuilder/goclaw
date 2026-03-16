@@ -37,6 +37,7 @@ RUN set -eux; \
 FROM debian:bookworm-slim
 
 ARG ENABLE_SANDBOX=false
+ARG ENABLE_DOCKER_BUILD=false
 ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
 ARG ENABLE_KUBECTL=false
@@ -48,7 +49,7 @@ ARG ENABLE_FULL_SKILLS=false
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates wget curl; \
-    if [ "$ENABLE_SANDBOX" = "true" ]; then \
+    if [ "$ENABLE_SANDBOX" = "true" ] || [ "$ENABLE_DOCKER_BUILD" = "true" ]; then \
     apt-get install -y --no-install-recommends docker.io; \
     fi; \
     if [ "$ENABLE_FULL_SKILLS" = "true" ]; then \
@@ -91,8 +92,14 @@ RUN set -eux; \
     rm -rf /tmp/npm-cache; \
     fi
 
-# Non-root user
-RUN useradd -m -d /app -u 1000 -s /bin/bash goclaw
+# Non-root user.
+# Add to docker group (GID 999) when Docker build is enabled so the goclaw user
+# can access /var/run/docker.sock mounted from the host (Docker-outside-of-Docker).
+RUN useradd -m -d /app -u 1000 -s /bin/bash goclaw; \
+    if [ "$ENABLE_DOCKER_BUILD" = "true" ] || [ "$ENABLE_SANDBOX" = "true" ]; then \
+    groupadd -g 999 docker 2>/dev/null || true; \
+    usermod -aG docker goclaw; \
+    fi
 WORKDIR /app
 
 # Copy binary, migrations, and bundled skills

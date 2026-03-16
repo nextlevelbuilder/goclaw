@@ -20,7 +20,7 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  theme: (localStorage.getItem(LOCAL_STORAGE_KEYS.THEME) as Theme) ?? "dark",
+  theme: (localStorage.getItem(LOCAL_STORAGE_KEYS.THEME) as Theme) ?? "light",
   language: (i18n.language as Language) ?? "en",
   timezone: localStorage.getItem(LOCAL_STORAGE_KEYS.TIMEZONE) ?? "auto",
   sidebarCollapsed:

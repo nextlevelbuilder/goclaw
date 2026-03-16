@@ -38,6 +38,7 @@
     "activity": "Activity",
     "cliCredentials": "CLI Credentials",
     "apiKeys": "API Keys",
+    "gatewayUsers": "Gateway Users",
     "apiDocs": "API Docs"
   }
 }

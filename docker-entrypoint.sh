@@ -19,6 +19,16 @@ export NPM_CONFIG_PREFIX="$RUNTIME_DIR/npm-global"
 export NODE_PATH="/usr/local/lib/node_modules:$RUNTIME_DIR/npm-global/lib/node_modules:${NODE_PATH:-}"
 export PATH="$RUNTIME_DIR/npm-global/bin:$RUNTIME_DIR/pip/bin:$PATH"
 
+# Docker socket: verify access if mounted (for build_docker_image tool).
+# The socket is mounted from host via -v /var/run/docker.sock:/var/run/docker.sock.
+if [ -S /var/run/docker.sock ]; then
+  if docker info >/dev/null 2>&1; then
+    echo "Docker socket accessible — docker build enabled"
+  else
+    echo "Warning: Docker socket exists but is not accessible (check permissions)"
+  fi
+fi
+
 # Claude Code: seed credentials into writable volume if not present.
 # Volume mount overrides /app/.claude, so we seed from /etc/claude/ on first run.
 if [ -d /etc/claude ] && [ ! -f /app/.claude/.credentials.json ]; then

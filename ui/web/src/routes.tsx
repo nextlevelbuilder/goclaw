@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router";
 import { AppLayout } from "@/components/layout/app-layout";
 import { RequireAuth } from "@/components/shared/require-auth";
 import { RequireSetup } from "@/components/shared/require-setup";
+import { RequireFeature } from "@/components/shared/require-feature";
 import { ROUTES } from "@/lib/constants";
 
 // Lazy-loaded pages
@@ -96,6 +97,9 @@ const CliCredentialsPage = lazy(() =>
 const ApiKeysPage = lazy(() =>
   import("@/pages/api-keys/api-keys-page").then((m) => ({ default: m.ApiKeysPage })),
 );
+const GatewayUsersPage = lazy(() =>
+  import("@/pages/gateway-users/gateway-users-page").then((m) => ({ default: m.GatewayUsersPage })),
+);
 
 function PageLoader() {
   return (
@@ -137,38 +141,39 @@ export function AppRoutes() {
           <Route path={ROUTES.CHAT_SESSION} element={<ChatPage />} />
           <Route path={ROUTES.AGENTS} element={<AgentsPage key="list" />} />
           <Route path={ROUTES.AGENT_DETAIL} element={<AgentsPage key="detail" />} />
-          <Route path={ROUTES.TEAMS} element={<TeamsPage key="list" />} />
-          <Route path={ROUTES.TEAM_DETAIL} element={<TeamsPage key="detail" />} />
-          <Route path={ROUTES.SESSIONS} element={<SessionsPage key="list" />} />
-          <Route path={ROUTES.SESSION_DETAIL} element={<SessionsPage key="detail" />} />
-          <Route path={ROUTES.SKILLS} element={<SkillsPage key="list" />} />
-          <Route path={ROUTES.SKILL_DETAIL} element={<SkillsPage key="detail" />} />
-          <Route path={ROUTES.CRON} element={<CronPage />} />
-          <Route path={ROUTES.CRON_DETAIL} element={<CronPage />} />
+          <Route path={ROUTES.TEAMS} element={<RequireFeature route={ROUTES.TEAMS}><TeamsPage key="list" /></RequireFeature>} />
+          <Route path={ROUTES.TEAM_DETAIL} element={<RequireFeature route={ROUTES.TEAMS}><TeamsPage key="detail" /></RequireFeature>} />
+          <Route path={ROUTES.SESSIONS} element={<RequireFeature route={ROUTES.SESSIONS}><SessionsPage key="list" /></RequireFeature>} />
+          <Route path={ROUTES.SESSION_DETAIL} element={<RequireFeature route={ROUTES.SESSIONS}><SessionsPage key="detail" /></RequireFeature>} />
+          <Route path={ROUTES.SKILLS} element={<RequireFeature route={ROUTES.SKILLS}><SkillsPage key="list" /></RequireFeature>} />
+          <Route path={ROUTES.SKILL_DETAIL} element={<RequireFeature route={ROUTES.SKILLS}><SkillsPage key="detail" /></RequireFeature>} />
+          <Route path={ROUTES.CRON} element={<RequireFeature route={ROUTES.CRON}><CronPage /></RequireFeature>} />
+          <Route path={ROUTES.CRON_DETAIL} element={<RequireFeature route={ROUTES.CRON}><CronPage /></RequireFeature>} />
           <Route path={ROUTES.CONFIG} element={<ConfigPage />} />
-          <Route path={ROUTES.TRACES} element={<TracesPage key="list" />} />
-          <Route path={ROUTES.TRACE_DETAIL} element={<TracesPage key="detail" />} />
-          <Route path={ROUTES.EVENTS} element={<EventsPage />} />
-          <Route path={ROUTES.DELEGATIONS} element={<DelegationsPage />} />
+          <Route path={ROUTES.TRACES} element={<RequireFeature route={ROUTES.TRACES}><TracesPage key="list" /></RequireFeature>} />
+          <Route path={ROUTES.TRACE_DETAIL} element={<RequireFeature route={ROUTES.TRACES}><TracesPage key="detail" /></RequireFeature>} />
+          <Route path={ROUTES.EVENTS} element={<RequireFeature route={ROUTES.EVENTS}><EventsPage /></RequireFeature>} />
+          <Route path={ROUTES.DELEGATIONS} element={<RequireFeature route={ROUTES.DELEGATIONS}><DelegationsPage /></RequireFeature>} />
           <Route path={ROUTES.USAGE} element={<Navigate to={ROUTES.OVERVIEW} replace />} />
-          <Route path={ROUTES.ACTIVITY} element={<ActivityPage />} />
-          <Route path={ROUTES.CHANNELS} element={<ChannelsPage key="list" />} />
-          <Route path={ROUTES.CHANNEL_DETAIL} element={<ChannelsPage key="detail" />} />
-          <Route path={ROUTES.CONTACTS} element={<ContactsPage />} />
-          <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
-          <Route path={ROUTES.NODES} element={<NodesPage />} />
-          <Route path={ROUTES.LOGS} element={<LogsPage />} />
+          <Route path={ROUTES.ACTIVITY} element={<RequireFeature route={ROUTES.ACTIVITY}><ActivityPage /></RequireFeature>} />
+          <Route path={ROUTES.CHANNELS} element={<RequireFeature route={ROUTES.CHANNELS}><ChannelsPage key="list" /></RequireFeature>} />
+          <Route path={ROUTES.CHANNEL_DETAIL} element={<RequireFeature route={ROUTES.CHANNELS}><ChannelsPage key="detail" /></RequireFeature>} />
+          <Route path={ROUTES.CONTACTS} element={<RequireFeature route={ROUTES.CONTACTS}><ContactsPage /></RequireFeature>} />
+          <Route path={ROUTES.APPROVALS} element={<RequireFeature route={ROUTES.APPROVALS}><ApprovalsPage /></RequireFeature>} />
+          <Route path={ROUTES.NODES} element={<RequireFeature route={ROUTES.NODES}><NodesPage /></RequireFeature>} />
+          <Route path={ROUTES.LOGS} element={<RequireFeature route={ROUTES.LOGS}><LogsPage /></RequireFeature>} />
           <Route path={ROUTES.PROVIDERS} element={<ProvidersPage />} />
           <Route path={ROUTES.CUSTOM_TOOLS} element={<CustomToolsPage />} />
-          <Route path={ROUTES.BUILTIN_TOOLS} element={<BuiltinToolsPage />} />
-          <Route path={ROUTES.MCP} element={<MCPPage />} />
-          <Route path={ROUTES.TTS} element={<TtsPage />} />
-          <Route path={ROUTES.STORAGE} element={<StoragePage />} />
-          <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
-          <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
-          <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />
+          <Route path={ROUTES.BUILTIN_TOOLS} element={<RequireFeature route={ROUTES.BUILTIN_TOOLS}><BuiltinToolsPage /></RequireFeature>} />
+          <Route path={ROUTES.MCP} element={<RequireFeature route={ROUTES.MCP}><MCPPage /></RequireFeature>} />
+          <Route path={ROUTES.TTS} element={<RequireFeature route={ROUTES.TTS}><TtsPage /></RequireFeature>} />
+          <Route path={ROUTES.STORAGE} element={<RequireFeature route={ROUTES.STORAGE}><StoragePage /></RequireFeature>} />
+          <Route path={ROUTES.PENDING_MESSAGES} element={<RequireFeature route={ROUTES.PENDING_MESSAGES}><PendingMessagesPage /></RequireFeature>} />
+          <Route path={ROUTES.MEMORY} element={<RequireFeature route={ROUTES.MEMORY}><MemoryPage /></RequireFeature>} />
+          <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<RequireFeature route={ROUTES.KNOWLEDGE_GRAPH}><KnowledgeGraphPage /></RequireFeature>} />
           <Route path={ROUTES.CLI_CREDENTIALS} element={<CliCredentialsPage />} />
           <Route path={ROUTES.API_KEYS} element={<ApiKeysPage />} />
+          <Route path={ROUTES.GATEWAY_USERS} element={<GatewayUsersPage />} />
         </Route>
 
         {/* Catch-all → overview */}

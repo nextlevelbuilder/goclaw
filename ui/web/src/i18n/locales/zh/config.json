@@ -19,6 +19,7 @@
   "tabs.quota": "配额",
   "tabs.tools": "工具",
   "tabs.integrations": "集成",
+  "tabs.features": "功能",
 
   "server.title": "网关服务器",
   "server.description": "网络绑定、认证令牌和访问控制",
@@ -311,6 +312,11 @@
   "general.systemInfoTitle": "系统信息",
   "general.systemInfoDescription": "此网关实例的只读信息",
   "general.configPath": "配置文件路径",
+  "general.defaultTheme": "默认主题",
+  "general.defaultThemeTip": "新用户的默认颜色主题。用户可以在个人设置中覆盖。",
+  "general.themeLight": "浅色",
+  "general.themeDark": "深色",
+  "general.themeSystem": "系统",
 
   "bindings.any": "任意",
 

@@ -360,6 +360,12 @@ func runGateway() {
 		httpapi.InitAPIKeyCache(pgStores.APIKeys, msgBus)
 	}
 
+	// Gateway user management
+	if pgStores != nil && pgStores.GatewayUsers != nil {
+		httpapi.InitGatewayUserCache(pgStores.GatewayUsers)
+		server.SetGatewayUsersHandler(httpapi.NewGatewayUsersHandler(pgStores.GatewayUsers, cfg.Gateway.Token))
+	}
+
 	// Memory management API (wired directly, only needs MemoryStore + token)
 	if pgStores != nil && pgStores.Memory != nil {
 		server.SetMemoryHandler(httpapi.NewMemoryHandler(pgStores.Memory, cfg.Gateway.Token))
@@ -392,6 +398,15 @@ func runGateway() {
 		seedBuiltinTools(context.Background(), pgStores.BuiltinTools)
 		migrateBuiltinToolSettings(context.Background(), pgStores.BuiltinTools)
 		applyBuiltinToolDisables(context.Background(), pgStores.BuiltinTools, toolsReg)
+	}
+
+	// Seed root gateway user from GOCLAW_GATEWAY_TOKEN
+	if pgStores.GatewayUsers != nil && cfg.Gateway.Token != "" {
+		if err := pgStores.GatewayUsers.EnsureRoot(context.Background(), cfg.Gateway.Token); err != nil {
+			slog.Error("failed to seed root gateway user", "error", err)
+		} else {
+			slog.Info("root gateway user ensured")
+		}
 	}
 
 	// Register all RPC methods

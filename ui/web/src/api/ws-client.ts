@@ -31,6 +31,8 @@ export class WsClient {
 
   onPairingRequired: ((code: string, senderID: string) => void) | null = null;
 
+  onRoleResolved: ((role: string) => void) | null = null;
+
   constructor(
     private url: string,
     private getToken: () => string,
@@ -218,6 +220,9 @@ export class WsClient {
       }
 
       this.authenticated = true;
+      if (res?.role) {
+        this.onRoleResolved?.(res.role);
+      }
       this.onStateChange("connected");
     } catch {
       if (this.connectGeneration === generation) {

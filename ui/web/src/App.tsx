@@ -3,6 +3,8 @@ import { BrowserRouter } from "react-router";
 import { AppProviders } from "@/components/providers/app-providers";
 import { AppRoutes } from "@/routes";
 import { useBrandingStore } from "@/stores/use-branding-store";
+import { useUiStore } from "@/stores/use-ui-store";
+import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
 
 export default function App() {
   const appName = useBrandingStore((s) => s.appName);
@@ -17,6 +19,10 @@ export default function App() {
       .then((data) => {
         if (data?.app_name) {
           setBranding(data.app_name, data.app_description ?? "");
+        }
+        // Apply server default theme only if user hasn't chosen one
+        if (data?.default_theme && !localStorage.getItem(LOCAL_STORAGE_KEYS.THEME)) {
+          useUiStore.getState().setTheme(data.default_theme);
         }
       })
       .catch(() => {

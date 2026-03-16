@@ -101,7 +101,18 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 
 	configToken := r.server.cfg.Gateway.Token
 
-	// Path 1: Valid gateway token → admin (constant-time comparison)
+	// Path 1: Gateway user (DB lookup) → role from gateway_users table
+	if params.Token != "" {
+		if gwUser, role := httpapi.ResolveGatewayUser(ctx, params.Token); gwUser != nil {
+			client.role = role
+			client.authenticated = true
+			client.userID = params.UserID
+			r.sendConnectResponse(client, req.ID)
+			return
+		}
+	}
+
+	// Path 1a: Valid gateway token (env fallback) → admin (constant-time comparison)
 	if configToken != "" && subtle.ConstantTimeCompare([]byte(params.Token), []byte(configToken)) == 1 {
 		client.role = permissions.RoleAdmin
 		client.authenticated = true

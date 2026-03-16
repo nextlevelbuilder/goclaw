@@ -109,6 +109,11 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		// mcp
 		{Name: "register_mcp_server", DisplayName: "Register MCP Server", Description: "Register a locally-built or remote MCP server in GoClaw, making its tools available to agents. Use after building an MCP server with the mcp-builder skill.", Category: "mcp", Enabled: true},
 
+		// docker
+		{Name: "build_docker_image", DisplayName: "Build Docker Image", Description: "Build a Docker image from a Dockerfile and optionally push to a container registry (Docker Hub, GHCR, ECR). Use after creating an MCP server or any project that needs containerization.", Category: "docker", Enabled: true,
+			Requires: []string{"docker"},
+		},
+
 		// delegation (deprecated — team_tasks is the coordination mechanism now)
 		{Name: "delegate_search", DisplayName: "Delegate Search", Description: "Search for available delegation targets by keyword (deprecated)", Category: "delegation", Enabled: false,
 			Requires: []string{"managed_mode", "agent_links"},

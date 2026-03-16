@@ -6,6 +6,7 @@ import { Topbar } from "./topbar";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useIsMobile } from "@/hooks/use-media-query";
+import { useFeaturesSync } from "@/hooks/use-features-sync";
 import { cn } from "@/lib/utils";
 
 export function AppLayout() {
@@ -15,6 +16,8 @@ export function AppLayout() {
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const connected = useAuthStore((s) => s.connected);
   const isMobile = useIsMobile();
+
+  useFeaturesSync();
 
   return (
     <div className="flex h-dvh overflow-hidden safe-top">

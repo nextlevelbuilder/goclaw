@@ -176,6 +176,7 @@ const (
 	MsgToolTeamTasks         = "core.tool.team_tasks"
 	MsgToolTeamMessage       = "core.tool.team_message"
 	MsgToolRegisterMCPServer = "core.tool.register_mcp_server"
+	MsgToolBuildDockerImage  = "core.tool.build_docker_image"
 
 	// --- MCP registration errors ---
 	MsgMCPServerNameConflict = "error.mcp_server_name_conflict" // "MCP server with name %s already exists"
