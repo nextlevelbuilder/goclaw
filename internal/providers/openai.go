@@ -228,10 +228,13 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	// Tool results are folded into plain user messages to preserve context.
 	inputMessages := req.Messages
 
-	// Compute provider capability once: does this endpoint support Google's extra content?
-	supportsExtraContent := strings.Contains(strings.ToLower(p.name), "gemini") || strings.Contains(strings.ToLower(p.apiBase), "generativelanguage")
+	// Compute provider capability once: does this endpoint support Google's thought_signature?
+	// We check name, apiBase, and the model string (which covers OpenRouter/LiteLLM routing to Gemini).
+	supportsThoughtSignature := strings.Contains(strings.ToLower(p.name), "gemini") ||
+		strings.Contains(strings.ToLower(p.apiBase), "generativelanguage") ||
+		strings.Contains(strings.ToLower(model), "gemini")
 
-	if supportsExtraContent {
+	if supportsThoughtSignature {
 		inputMessages = collapseToolCallsWithoutSig(inputMessages)
 	}
 
@@ -286,7 +289,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 				if sig := tc.Metadata["thought_signature"]; sig != "" {
 					// Only send thought_signature to providers that support it (Google/Gemini).
 					// Non-Google providers will reject the unknown field with 422 Unprocessable Entity.
-					if supportsExtraContent {
+					if supportsThoughtSignature {
 						fn["thought_signature"] = sig
 					}
 				}
