@@ -227,7 +227,11 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	// don't return it (e.g. gemini-3-flash) will cause HTTP 400 if sent as-is.
 	// Tool results are folded into plain user messages to preserve context.
 	inputMessages := req.Messages
-	if strings.Contains(strings.ToLower(p.name), "gemini") {
+
+	// Compute provider capability once: does this endpoint support Google's extra content?
+	supportsExtraContent := strings.Contains(strings.ToLower(p.name), "gemini") || strings.Contains(strings.ToLower(p.apiBase), "generativelanguage")
+
+	if supportsExtraContent {
 		inputMessages = collapseToolCallsWithoutSig(inputMessages)
 	}
 
@@ -280,7 +284,11 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 					"arguments": string(argsJSON),
 				}
 				if sig := tc.Metadata["thought_signature"]; sig != "" {
-					fn["thought_signature"] = sig
+					// Only send thought_signature to providers that support it (Google/Gemini).
+					// Non-Google providers will reject the unknown field with 422 Unprocessable Entity.
+					if supportsExtraContent {
+						fn["thought_signature"] = sig
+					}
 				}
 				toolCalls[i] = map[string]any{
 					"id":       tc.ID,
