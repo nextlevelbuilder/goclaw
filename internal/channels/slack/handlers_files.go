@@ -140,7 +140,6 @@ func (c *Channel) downloadFile(name, urlPrivate, urlPrivateDownload string, maxB
 	client := &http.Client{
 		Timeout: 60 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			req.Header.Del("Authorization") // strip auth on redirect (CDN presigned URL)
 			if req.URL.Scheme != "https" {
 				return fmt.Errorf("security: redirect to non-HTTPS URL blocked: %s", req.URL)
 			}
@@ -148,6 +147,11 @@ func (c *Channel) downloadFile(name, urlPrivate, urlPrivateDownload string, maxB
 			host := req.URL.Hostname()
 			if !isAllowedSlackHost(host) {
 				return fmt.Errorf("security: redirect to untrusted host blocked: %s", host)
+			}
+			// Strip auth for CDN edge hosts (presigned URLs don't need it),
+			// but keep it for core Slack API hosts that require the bot token.
+			if !strings.HasSuffix(host, ".slack.com") {
+				req.Header.Del("Authorization")
 			}
 			if len(via) >= 3 {
 				return fmt.Errorf("too many redirects")
