@@ -64,7 +64,7 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto py-2 px-1 -mx-1 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto py-2 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4">
           {/* Entity info */}
           {entity && (
             <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">

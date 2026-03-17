@@ -108,6 +108,10 @@ export const BoardContainer = memo(function BoardContainer({
   const handleCreateTask = useCallback(() => toast.info(t("board.createViaChat")), [t]);
   const handleTaskClick = useCallback((task: TeamTaskData) => setSelectedTask(task), []);
   const handleCloseDetail = useCallback(() => setSelectedTask(null), []);
+  const handleNavigateTask = useCallback((taskId: string) => {
+    const found = tasks.find((t) => t.id === taskId);
+    if (found) setSelectedTask(found);
+  }, [tasks]);
 
   // Delete handler for kanban cards (confirm + call API)
   const deleteTaskRef = useRef(deleteTask);
@@ -146,6 +150,7 @@ export const BoardContainer = memo(function BoardContainer({
             isTeamV2={isTeamV2}
             groupBy={groupBy}
             emojiLookup={emojiLookup}
+            taskLookup={taskLookup}
             onTaskClick={handleTaskClick}
             onDeleteTask={deleteTask ? handleDeleteTask : undefined}
           />
@@ -174,6 +179,7 @@ export const BoardContainer = memo(function BoardContainer({
           taskLookup={taskLookup}
           memberLookup={memberLookup}
           emojiLookup={emojiLookup}
+          onNavigateTask={handleNavigateTask}
         />
       )}
     </div>

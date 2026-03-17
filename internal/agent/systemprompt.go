@@ -32,7 +32,8 @@ type SystemPromptConfig struct {
 	SkillsSummary string                 // XML from skills.Loader.BuildSummary()
 	HasMemory     bool                   // memory_search/memory_get available?
 	HasSpawn      bool                   // spawn tool available?
-	HasTeam       bool                   // agent belongs to a team? (skips generic spawn section)
+	HasTeam        bool                   // agent belongs to a team? (skips generic spawn section)
+	TeamWorkspace  string                 // absolute path to team shared workspace (empty if not in team)
 	ContextFiles  []bootstrap.ContextFile // bootstrap files for # Project Context
 	ExtraPrompt   string                 // extra system prompt (subagent context, etc.)
 	AgentType     string                 // "open" or "predefined" — affects context file framing
@@ -88,13 +89,8 @@ var coreToolSummaries = map[string]string{
 	"create_image":            "Generate images from text descriptions using AI",
 	"create_audio":            "Generate music or sound effects from text descriptions using AI",
 	"knowledge_graph_search":  "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
-	"handoff":                 "Transfer conversation to another agent (ONLY when user explicitly asks to switch agents — NOT for task delegation)",
-	"evaluate_loop":           "Run a generate→evaluate→revise loop between two agents for quality-critical tasks",
-	"delegate_search":         "Search for agents by expertise to find the right delegation target",
 	"team_tasks":              "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
 	"team_message":            "Send messages to teammates (progress updates, questions)",
-	"workspace_write":         "Write files to the team shared workspace (visible to all team members)",
-	"workspace_read":          "Read, list, delete, pin, tag files in the team shared workspace",
 
 	// Claude Code tool aliases — enable Claude Code skills without modification
 	"Read":       "Alias for read_file — Read file contents",
@@ -194,9 +190,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 6. ## Workspace (sandbox-aware: show container workdir when sandboxed)
 	lines = append(lines, buildWorkspaceSection(cfg.Workspace, cfg.SandboxEnabled, cfg.SandboxContainerDir)...)
 
-	// 6.3. ## Team Workspace (when workspace tools are available)
+	// 6.3. ## Team Workspace (when agent belongs to a team)
 	if hasTeamWorkspace(cfg.ToolNames) {
-		lines = append(lines, buildTeamWorkspaceSection()...)
+		lines = append(lines, buildTeamWorkspaceSection(cfg.TeamWorkspace)...)
 	}
 
 	// 6.5 ## Sandbox (matching TS sandboxInfo section)

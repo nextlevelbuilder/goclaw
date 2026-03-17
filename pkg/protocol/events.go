@@ -22,9 +22,6 @@ const (
 	// Agent summoning events (predefined agent setup via LLM).
 	EventAgentSummoning = "agent.summoning"
 
-	// Agent handoff event (payload: from_agent, to_agent, reason).
-	EventHandoff = "handoff"
-
 	// Team activity events (real-time team workflow visibility).
 	EventTeamTaskCreated     = "team.task.created"
 	EventTeamTaskCompleted   = "team.task.completed"

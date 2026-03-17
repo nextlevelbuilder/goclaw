@@ -67,7 +67,7 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	}
 	// Hint: tell the agent it's on a team task and where the shared workspace is.
 	if ws := taskTeamWorkspace(task); ws != "" {
-		content += fmt.Sprintf("\n\n[Team workspace: %s — all files you create will be saved here, accessible by the team lead and other members via workspace_read.]", ws)
+		content += fmt.Sprintf("\n\n[Team workspace: %s — use read_file/write_file/list_files to access shared files. All files you write are visible to the team lead and other members.]", ws)
 	}
 
 	// Use task's stored channel/chat as primary source for routing.
@@ -237,8 +237,12 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 			m.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
 				TeamID:        teamID.String(),
 				TaskID:        task.ID.String(),
+				TaskNumber:    task.TaskNumber,
+				Subject:       task.Subject,
 				Status:        store.TeamTaskStatusInProgress,
 				OwnerAgentKey: m.agentKeyFromID(ctx, *task.OwnerAgentID),
+				Channel:       task.Channel,
+				ChatID:        task.ChatID,
 				Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 				ActorType:     "system",
 				ActorID:       "dispatch_unblocked",

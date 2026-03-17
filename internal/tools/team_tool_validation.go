@@ -94,8 +94,12 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		m.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
 			TeamID:        teamID.String(),
 			TaskID:        task.ID.String(),
+			TaskNumber:    task.TaskNumber,
+			Subject:       task.Subject,
 			Status:        store.TeamTaskStatusInProgress,
 			OwnerAgentKey: m.agentKeyFromID(ctx, *task.OwnerAgentID),
+			Channel:       task.Channel,
+			ChatID:        task.ChatID,
 			Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 			ActorType:     "system",
 			ActorID:       "post_turn",
@@ -144,6 +148,7 @@ func (m *TeamToolManager) failCycledTasks(ctx context.Context, teamID uuid.UUID,
 }
 
 // notifyLeaderCycleError sends a system message to the leader about cycled tasks.
+// Uses "notification:" sender prefix to go through normal consumer flow (not handleTeammateMessage).
 func (m *TeamToolManager) notifyLeaderCycleError(ctx context.Context, teamID uuid.UUID, cycleDesc string) {
 	if m.msgBus == nil {
 		return
@@ -156,19 +161,23 @@ func (m *TeamToolManager) notifyLeaderCycleError(ctx context.Context, teamID uui
 	if err != nil {
 		return
 	}
-	content := fmt.Sprintf("[System] %s\nPlease recreate these tasks with corrected dependencies.", cycleDesc)
+	content := fmt.Sprintf("[System] %s\nPlease recreate these tasks with corrected dependencies.\nUse team_tasks(action=\"list\") to view current task board.", cycleDesc)
+
+	// Resolve routing: use context channel/chatID if available, fallback to dashboard.
+	channel := ToolChannelFromCtx(ctx)
+	chatID := ToolChatIDFromCtx(ctx)
+	if channel == "" || channel == ChannelSystem || channel == ChannelDelegate {
+		channel = "dashboard"
+		chatID = teamID.String()
+	}
+
 	m.msgBus.TryPublishInbound(bus.InboundMessage{
-		Channel:  "system",
-		SenderID: "teammate:system",
-		ChatID:   teamID.String(),
+		Channel:  channel,
+		SenderID: "notification:system",
+		ChatID:   chatID,
 		AgentID:  leadAgent.AgentKey,
 		UserID:   team.CreatedBy,
 		Content:  content,
-		Metadata: map[string]string{
-			"team_id":    teamID.String(),
-			"from_agent": leadAgent.AgentKey,
-			"to_agent":   leadAgent.AgentKey,
-		},
 	})
 }
 

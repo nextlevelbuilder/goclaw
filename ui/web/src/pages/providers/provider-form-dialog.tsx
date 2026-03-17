@@ -145,7 +145,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
           <DialogTitle>{isEdit ? t("form.editTitle") : t("form.createTitle")}</DialogTitle>
           <DialogDescription>{t("form.configure")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4 px-0.5 -mx-0.5 overflow-y-auto min-h-0">
+        <div className="space-y-4 py-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           {/* Provider type selector — always shown in create mode */}
           {!isEdit && (
             <ProviderTypeSelect

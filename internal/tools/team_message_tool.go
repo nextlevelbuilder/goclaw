@@ -193,7 +193,7 @@ func (t *TeamMessageTool) executeSend(ctx context.Context, args map[string]any) 
 
 	// Real-time delivery via message bus
 	fromKey := t.manager.agentKeyFromID(ctx, agentID)
-	t.publishTeammateMessage(fromKey, toKey, text, mediaFiles, teamTaskID, team.ID, ctx)
+	t.publishTeammateMessage(fromKey, toKey, text, mediaFiles, teamTaskID, team.ID, team.Settings, ctx)
 
 	preview := text
 	if len(preview) > 100 {
@@ -249,7 +249,7 @@ func (t *TeamMessageTool) executeBroadcast(ctx context.Context, args map[string]
 			if m.AgentID == agentID {
 				continue // don't send to self
 			}
-			t.publishTeammateMessage(fromKey, m.AgentKey, text, nil, uuid.Nil, team.ID, ctx)
+			t.publishTeammateMessage(fromKey, m.AgentKey, text, nil, uuid.Nil, team.ID, team.Settings, ctx)
 		}
 	}
 
@@ -302,7 +302,7 @@ func (t *TeamMessageTool) executeRead(ctx context.Context) *Result {
 
 // publishTeammateMessage sends a real-time notification via the message bus.
 // Uses "teammate:{fromKey}" sender prefix so the consumer can route it.
-func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, media []bus.MediaFile, teamTaskID uuid.UUID, teamID uuid.UUID, ctx context.Context) {
+func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, media []bus.MediaFile, teamTaskID uuid.UUID, teamID uuid.UUID, teamSettings json.RawMessage, ctx context.Context) {
 	if t.manager.msgBus == nil {
 		return
 	}
@@ -337,7 +337,11 @@ func (t *TeamMessageTool) publishTeammateMessage(fromKey, toKey, text string, me
 		teamMeta["team_task_id"] = teamTaskID.String()
 	}
 	// Pass team workspace so the receiving agent can access shared files.
-	if ws, err := workspaceDir(t.manager.dataDir, teamID, "", chatID); err == nil {
+	wsChat := chatID
+	if IsSharedWorkspace(teamSettings) {
+		wsChat = ""
+	}
+	if ws, err := WorkspaceDir(t.manager.dataDir, teamID, wsChat); err == nil {
 		teamMeta["team_workspace"] = ws
 	}
 	// Propagate trace context so the receiving agent's trace links back.

@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -69,15 +70,26 @@ func (m *TeamsMethods) handleWorkspaceList(ctx context.Context, client *gateway.
 		return
 	}
 
+	// Check if team uses shared workspace (no chatID scoping).
+	shared := false
+	if team, err := m.teamStore.GetTeam(ctx, teamID); err == nil {
+		shared = tools.IsSharedWorkspace(team.Settings)
+	}
+
 	baseDir := teamWorkspaceDir(m.dataDir, teamID, "")
 	var files []workspaceFileEntry
 
-	if params.ChatID != "" {
-		// Scoped: list files and folders in specific chatID directory.
-		scopeDir := teamWorkspaceDir(m.dataDir, teamID, params.ChatID)
-		files = walkDir(scopeDir, "", params.ChatID)
+	if shared || params.ChatID != "" {
+		// Shared mode: list team root directly. Scoped mode: list specific chatID.
+		scopeDir := baseDir
+		scopeChatID := ""
+		if !shared && params.ChatID != "" {
+			scopeDir = teamWorkspaceDir(m.dataDir, teamID, params.ChatID)
+			scopeChatID = params.ChatID
+		}
+		files = walkDir(scopeDir, "", scopeChatID)
 	} else {
-		// Unscoped: list all chatID subdirectories with chatID as top-level folder.
+		// Isolated + unscoped: list all chatID subdirectories with chatID as top-level folder.
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
 			// Directory doesn't exist = empty workspace.
@@ -186,9 +198,13 @@ func (m *TeamsMethods) handleWorkspaceRead(ctx context.Context, client *gateway.
 		return
 	}
 
+	// Shared workspace: read from team root. Isolated: require chatID.
 	chatID := params.ChatID
-	if chatID == "" {
-		chatID = "_default"
+	if team, err := m.teamStore.GetTeam(ctx, teamID); err == nil && tools.IsSharedWorkspace(team.Settings) {
+		chatID = ""
+	} else if chatID == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "chat_id")))
+		return
 	}
 
 	scopeDir := teamWorkspaceDir(m.dataDir, teamID, chatID)
@@ -258,9 +274,13 @@ func (m *TeamsMethods) handleWorkspaceDelete(ctx context.Context, client *gatewa
 		return
 	}
 
+	// Shared workspace: delete from team root. Isolated: require chatID.
 	chatID := params.ChatID
-	if chatID == "" {
-		chatID = "_default"
+	if team, err := m.teamStore.GetTeam(ctx, teamID); err == nil && tools.IsSharedWorkspace(team.Settings) {
+		chatID = ""
+	} else if chatID == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "chat_id")))
+		return
 	}
 
 	scopeDir := teamWorkspaceDir(m.dataDir, teamID, chatID)

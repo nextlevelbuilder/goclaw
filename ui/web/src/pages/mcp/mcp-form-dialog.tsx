@@ -161,7 +161,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
           <DialogTitle>{server ? t("form.editTitle") : t("form.createTitle")}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2 px-0.5 -mx-0.5 overflow-y-auto min-h-0">
+        <div className="grid gap-4 py-2 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           <div className="grid gap-1.5">
             <Label htmlFor="mcp-name">{t("form.name")}</Label>
             <Input id="mcp-name" value={name} onChange={(e) => setName(slugify(e.target.value))} placeholder="my-mcp-server" />

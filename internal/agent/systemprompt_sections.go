@@ -347,27 +347,33 @@ func hasBootstrapFile(files []bootstrap.ContextFile) bool {
 	return false
 }
 
-// hasTeamWorkspace checks if workspace_write is in the tool list.
+// hasTeamWorkspace checks if team_tasks is in the tool list (indicates team context).
 func hasTeamWorkspace(toolNames []string) bool {
-	return slices.Contains(toolNames, "workspace_write")
+	return slices.Contains(toolNames, "team_tasks")
 }
 
-// buildTeamWorkspaceSection generates guidance for team workspace tools.
-func buildTeamWorkspaceSection() []string {
+// buildTeamWorkspaceSection generates guidance for team workspace file tools.
+// teamWsPath is the absolute path to the team shared workspace directory.
+func buildTeamWorkspaceSection(teamWsPath string) []string {
+	if teamWsPath == "" {
+		return nil
+	}
 	return []string{
 		"## Team Shared Workspace",
 		"",
-		"You are part of a team. Use the shared workspace to collaborate with teammates:",
+		fmt.Sprintf("Your team has a shared workspace at: %s", teamWsPath),
 		"",
-		"- **workspace_write**: Write files to share with the team (reports, data, code, notes).",
-		"  Use this instead of write_file when the output needs to be shared with teammates.",
-		"- **workspace_read**: List, read, delete, pin, or tag shared files.",
+		fmt.Sprintf("- Use list_files(path=\"%s\") to browse shared files", teamWsPath),
+		fmt.Sprintf("- Use read_file(path=\"%s/filename.md\") to read team files", teamWsPath),
+		fmt.Sprintf("- Use write_file(path=\"%s/filename.md\", content=\"...\") to write team files", teamWsPath),
+		"- All files in the team workspace are visible to all team members",
+		"- Your default workspace (for relative paths) is your personal workspace",
+		"- To delete a team file, use write_file with empty content",
 		"",
-		"Guidelines:",
-		"- When producing deliverables or intermediate results for the team, ALWAYS use workspace_write (not write_file).",
-		"- write_file is for your private workspace only. workspace_write is for team-shared files.",
-		"- Use workspace_read action=list to see what files teammates have shared.",
-		"- Before starting work, check the workspace for relevant files from other team members.",
+		"## Auto-Status Updates",
+		"You may receive [Auto-status] messages about team task progress.",
+		"These are informational — simply relay the update to the user naturally.",
+		"Do NOT create, retry, reassign, or modify tasks based on these updates.",
 		"",
 	}
 }

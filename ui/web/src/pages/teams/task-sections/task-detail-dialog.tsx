@@ -24,11 +24,12 @@ interface TaskDetailDialogProps {
   taskLookup?: Map<string, string>;
   memberLookup?: Map<string, string>;
   emojiLookup?: Map<string, string>;
+  onNavigateTask?: (taskId: string) => void;
 }
 
 export function TaskDetailDialog({
   task, teamId, isTeamV2, onClose,
-  getTaskDetail, deleteTask, taskLookup, memberLookup, emojiLookup,
+  getTaskDetail, deleteTask, taskLookup, memberLookup, emojiLookup, onNavigateTask,
 }: TaskDetailDialogProps) {
   const { t } = useTranslation("teams");
   const [events, setEvents] = useState<TeamTaskEvent[]>([]);
@@ -67,7 +68,7 @@ export function TaskDetailDialog({
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-h-[85vh] w-[95vw] overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="max-h-[85vh] w-[95vw] flex flex-col sm:max-w-4xl">
         <DialogHeader>
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="flex items-center gap-2">
@@ -84,7 +85,7 @@ export function TaskDetailDialog({
           </div>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6">
           {/* Subject */}
           <div className="rounded-md border p-3">
             <p className="mb-1 text-xs font-medium text-muted-foreground">{t("tasks.detail.subject")}</p>
@@ -171,7 +172,14 @@ export function TaskDetailDialog({
               <span className="text-muted-foreground">{t("tasks.detail.blockedBy")}</span>{" "}
               <div className="mt-1 flex flex-wrap gap-1">
                 {task.blocked_by.map((id) => (
-                  <Badge key={id} variant="outline" className="text-xs">{taskLookup?.get(id) || id.slice(0, 8)}</Badge>
+                  <Badge
+                    key={id}
+                    variant="outline"
+                    className={"text-xs" + (onNavigateTask ? " cursor-pointer hover:bg-accent" : "")}
+                    onClick={onNavigateTask ? () => onNavigateTask(id) : undefined}
+                  >
+                    {taskLookup?.get(id) || id.slice(0, 8)}
+                  </Badge>
                 ))}
               </div>
             </div>

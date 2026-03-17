@@ -67,9 +67,6 @@ const TtsPage = lazy(() =>
 const EventsPage = lazy(() =>
   import("@/pages/events/events-page").then((m) => ({ default: m.EventsPage })),
 );
-const DelegationsPage = lazy(() =>
-  import("@/pages/delegations/delegations-page").then((m) => ({ default: m.DelegationsPage })),
-);
 const StoragePage = lazy(() =>
   import("@/pages/storage/storage-page").then((m) => ({ default: m.StoragePage })),
 );
@@ -153,7 +150,6 @@ export function AppRoutes() {
           <Route path={ROUTES.TRACES} element={<RequireFeature route={ROUTES.TRACES}><TracesPage key="list" /></RequireFeature>} />
           <Route path={ROUTES.TRACE_DETAIL} element={<RequireFeature route={ROUTES.TRACES}><TracesPage key="detail" /></RequireFeature>} />
           <Route path={ROUTES.EVENTS} element={<RequireFeature route={ROUTES.EVENTS}><EventsPage /></RequireFeature>} />
-          <Route path={ROUTES.DELEGATIONS} element={<RequireFeature route={ROUTES.DELEGATIONS}><DelegationsPage /></RequireFeature>} />
           <Route path={ROUTES.USAGE} element={<Navigate to={ROUTES.OVERVIEW} replace />} />
           <Route path={ROUTES.ACTIVITY} element={<RequireFeature route={ROUTES.ACTIVITY}><ActivityPage /></RequireFeature>} />
           <Route path={ROUTES.CHANNELS} element={<RequireFeature route={ROUTES.CHANNELS}><ChannelsPage key="list" /></RequireFeature>} />

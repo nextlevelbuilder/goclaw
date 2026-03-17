@@ -35,11 +35,13 @@ flowchart TD
 
     MAP -->|Anthropic| ANTH["Budget tokens: 10,000<br/>Header: anthropic-beta<br/>Strip temperature"]
     MAP -->|OpenAI-compat| OAI["Map to reasoning_effort<br/>(low/medium/high)"]
-    MAP -->|DashScope| DASH["enable_thinking: true<br/>Budget: 16,384 tokens<br/>⚠ Disable streaming with tools"]
+    MAP -->|DashScope| DASH["enable_thinking: true<br/>Budget: 16,384 tokens<br/>⚠ Model-specific + tools limitation"]
+    MAP -->|Codex| CODEX["reasoning_tokens tracked<br/>via Responses API"]
 
     ANTH --> SEND["Send to LLM"]
     OAI --> SEND
     DASH --> SEND
+    CODEX --> SEND
 ```
 
 ### Anthropic (Native)
@@ -75,7 +77,20 @@ Reasoning content is returned in the `reasoning_content` field of the response d
 
 Enables thinking via `enable_thinking: true` plus a `thinking_budget` parameter.
 
+**Model-specific support**: Only certain Qwen3 models accept the `enable_thinking` / `thinking_budget` parameters:
+- **Qwen3.5 series**: `qwen3.5-plus`, `qwen3.5-turbo` (thinking + vision)
+- **Qwen3 hosted**: `qwen3-max`
+- **Qwen3 open-weight**: `qwen3-235b-a22b`, `qwen3-32b`, `qwen3-14b`, `qwen3-8b`
+
+Other models (e.g., `qwen3-plus`, `qwen3-turbo`) silently skip thinking injection to avoid API errors.
+
 **Important limitation**: DashScope does not support streaming when tools are present. When an agent has tools enabled and thinking is active, the provider automatically falls back to non-streaming mode (single `Chat()` call) and synthesizes chunk callbacks to maintain the event flow.
+
+### Codex (Alibaba AI Reasoning)
+
+Codex natively supports extended reasoning through its Responses API. Thinking/reasoning tokens are streamed as discrete `reasoning` events with summary fragments.
+
+**Token tracking**: Reasoning token count is exposed in `response.completed` / `response.incomplete` events as `OutputTokensDetails.ReasoningTokens` and accessible via `ChatResponse.Usage.ThinkingTokens`.
 
 ---
 
@@ -101,7 +116,8 @@ flowchart TD
 |----------|---------------|---------------|
 | Anthropic | `thinking_delta` in content blocks | `text_delta` in content blocks |
 | OpenAI-compat | `reasoning_content` in delta | `content` in delta |
-| DashScope | No streaming with tools (falls back to non-streaming) | Same |
+| DashScope | Same as OpenAI (when tools absent) | Same as OpenAI |
+| Codex | `reasoning` items with text summaries | `content` items |
 
 ### Token Estimation
 
@@ -141,7 +157,8 @@ OpenAI-compatible providers handle thinking/reasoning content as metadata. The `
 
 | Provider | Limitation |
 |----------|-----------|
-| DashScope | Cannot stream when tools are present — falls back to non-streaming mode |
+| DashScope | Cannot stream when tools are present — falls back to non-streaming mode. Only specific Qwen3 models support thinking. |
+| Codex | Reasoning tokens tracked via API response (not in streaming chunks themselves) |
 | Anthropic | Temperature parameter stripped when thinking is enabled |
 | All | Thinking tokens count against the context window budget |
 | All | Thinking increases latency and cost proportional to the budget level |
@@ -152,12 +169,13 @@ OpenAI-compatible providers handle thinking/reasoning content as metadata. The `
 
 | File | Purpose |
 |------|---------|
-| `internal/providers/types.go` | ThinkingCapable interface, StreamChunk.Thinking field, OptThinkingLevel constant |
-| `internal/providers/anthropic.go` | Anthropic thinking implementation: budget mapping, header injection, temperature stripping |
-| `internal/providers/anthropic_stream.go` | Streaming: thinking_delta handling, RawAssistantContent accumulation |
-| `internal/providers/anthropic_request.go` | Request building: thinking block preservation for tool loops |
+| `internal/providers/types.go` | ThinkingCapable interface, StreamChunk.Thinking field, Opt* thinking constants |
+| `internal/providers/anthropic.go` | Anthropic: budget mapping (4K/10K/32K), beta header injection, temperature stripping |
+| `internal/providers/anthropic_stream.go` | Anthropic streaming: thinking_delta handling, raw block accumulation |
+| `internal/providers/anthropic_request.go` | Anthropic request: thinking block preservation for tool loops |
 | `internal/providers/openai.go` | OpenAI-compat: reasoning_effort mapping, reasoning_content streaming |
-| `internal/providers/dashscope.go` | DashScope: thinking budget, tools+streaming limitation fallback |
+| `internal/providers/dashscope.go` | DashScope: model-specific thinking guard, budget mapping, tools+streaming fallback |
+| `internal/providers/codex.go` | Codex: reasoning event streaming, OutputTokensDetails.ReasoningTokens tracking |
 
 ---
 

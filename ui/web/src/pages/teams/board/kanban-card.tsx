@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
+import { Trash2, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { isTaskLocked } from "./board-utils";
@@ -24,20 +25,26 @@ interface KanbanCardProps {
   task: TeamTaskData;
   isTeamV2?: boolean;
   emojiLookup?: Map<string, string>;
+  taskLookup?: Map<string, string>;
   onClick: () => void;
   onDelete?: (taskId: string) => void;
 }
 
-export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup, onClick, onDelete }: KanbanCardProps) {
+export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup, taskLookup, onClick, onDelete }: KanbanCardProps) {
   const { t } = useTranslation("teams");
   const locked = isTaskLocked(task);
   const blocked = task.status === "blocked";
   const ownerEmoji = task.owner_agent_id && emojiLookup?.get(task.owner_agent_id);
   const canDelete = onDelete && isTerminalStatus(task.status);
   const prio = PRIORITY_LABELS[task.priority] ?? PRIORITY_LABELS[0]!;
+  const hasBlockers = task.blocked_by && task.blocked_by.length > 0;
 
   return (
-    <div
+    <motion.div
+      layoutId={task.id}
+      layout
+      initial={false}
+      transition={{ type: "spring", stiffness: 350, damping: 30 }}
       className={
         "group relative cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-colors hover:bg-accent/50" +
         (locked ? " border-l-2 border-l-green-500" : blocked ? " border-l-2 border-l-amber-500" : "")
@@ -68,7 +75,17 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
         </div>
       </div>
 
-      <p className="line-clamp-2 text-sm font-medium leading-snug">{task.subject}</p>
+      <p className="line-clamp-2 text-xs font-medium leading-snug">{task.subject}</p>
+
+      {/* Blocked-by row */}
+      {hasBlockers && (
+        <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+          <Ban className="h-3 w-3 shrink-0" />
+          <span className="truncate">
+            {task.blocked_by!.map((id) => taskLookup?.get(id) || id.slice(0, 8)).join(", ")}
+          </span>
+        </p>
+      )}
 
       {/* Bottom row: owner + type badge + priority */}
       <div className="mt-2 flex items-center gap-1.5">
@@ -95,6 +112,6 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
           <span className="text-[10px] text-muted-foreground">{task.progress_percent}%</span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 });

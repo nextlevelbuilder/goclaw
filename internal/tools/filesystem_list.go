@@ -88,7 +88,8 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, t.restrict))
+	allowed := allowedWithTeamWorkspace(ctx, nil)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), allowed)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -99,7 +100,11 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return SilentResult(fmt.Sprintf("Directory does not exist: %s", path))
+			msg := fmt.Sprintf("Directory does not exist: %s", path)
+			if teamWs := ToolTeamWorkspaceFromCtx(ctx); teamWs != "" && !strings.HasPrefix(resolved, teamWs) {
+				msg += fmt.Sprintf("\nHint: try the team workspace path: list_files(path=\"%s/%s\")", teamWs, path)
+			}
+			return SilentResult(msg)
 		}
 		return ErrorResult(fmt.Sprintf("failed to list directory: %v", err))
 	}

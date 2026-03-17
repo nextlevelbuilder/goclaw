@@ -87,7 +87,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 	}
 
 	if cfg.Providers.DashScope.APIKey != "" {
-		registry.Register(providers.NewDashScopeProvider(cfg.Providers.DashScope.APIKey, cfg.Providers.DashScope.APIBase, "qwen3-max"))
+		registry.Register(providers.NewDashScopeProvider("dashscope", cfg.Providers.DashScope.APIKey, cfg.Providers.DashScope.APIBase, "qwen3-max"))
 		slog.Info("registered provider", "name", "dashscope")
 	}
 
@@ -295,7 +295,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			registry.Register(providers.NewAnthropicProvider(p.APIKey,
 				providers.WithAnthropicBaseURL(p.APIBase)))
 		case store.ProviderDashScope:
-			registry.Register(providers.NewDashScopeProvider(p.APIKey, p.APIBase, ""))
+			registry.Register(providers.NewDashScopeProvider(p.Name, p.APIKey, p.APIBase, ""))
 		case store.ProviderBailian:
 			base := p.APIBase
 			if base == "" {

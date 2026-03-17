@@ -156,7 +156,7 @@ func (m *TeamsMethods) handleTaskList(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID)
+	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID, 0)
 	if err != nil {
 		slog.Warn("teams.tasks.list failed", "team_id", teamID, "status_filter", params.Status, "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))

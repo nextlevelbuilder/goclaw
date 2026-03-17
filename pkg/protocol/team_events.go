@@ -107,6 +107,7 @@ type QualityGateRetryPayload struct {
 type TeamTaskEventPayload struct {
 	TeamID           string `json:"team_id"`
 	TaskID           string `json:"task_id"`
+	TaskNumber       int    `json:"task_number,omitempty"`
 	Subject          string `json:"subject,omitempty"`
 	Status           string `json:"status"`
 	OwnerAgentKey    string `json:"owner_agent_key,omitempty"`
@@ -116,6 +117,10 @@ type TeamTaskEventPayload struct {
 	Channel          string `json:"channel"`
 	ChatID           string `json:"chat_id"`
 	Timestamp        string `json:"timestamp"`
+
+	// Progress (for team.task.progress events).
+	ProgressPercent int    `json:"progress_percent,omitempty"`
+	ProgressStep    string `json:"progress_step,omitempty"`
 
 	// Actor info for audit trail (recorded to team_task_events by subscriber).
 	ActorType string `json:"actor_type,omitempty"` // "agent", "human", "system"

@@ -9,11 +9,12 @@ interface KanbanBoardProps {
   isTeamV2?: boolean;
   groupBy: GroupBy;
   emojiLookup?: Map<string, string>;
+  taskLookup?: Map<string, string>;
   onTaskClick: (task: TeamTaskData) => void;
   onDeleteTask?: (taskId: string) => void;
 }
 
-export const KanbanBoard = memo(function KanbanBoard({ tasks, isTeamV2, groupBy, emojiLookup, onTaskClick, onDeleteTask }: KanbanBoardProps) {
+export const KanbanBoard = memo(function KanbanBoard({ tasks, isTeamV2, groupBy, emojiLookup, taskLookup, onTaskClick, onDeleteTask }: KanbanBoardProps) {
   const grouped = useMemo(() => groupTasksBy(tasks, groupBy), [tasks, groupBy]);
 
   const columns = useMemo(() => {
@@ -39,6 +40,7 @@ export const KanbanBoard = memo(function KanbanBoard({ tasks, isTeamV2, groupBy,
             tasks={grouped.get(col) ?? []}
             isTeamV2={isTeamV2}
             emojiLookup={emojiLookup}
+            taskLookup={taskLookup}
             onTaskClick={onTaskClick}
             onDeleteTask={onDeleteTask}
           />

@@ -375,7 +375,6 @@ var toolStatusMap = map[string]string{
 	"browser": "🌐 Browsing...",
 	// Delegation & teams
 	"spawn":        "👥 Delegating task...",
-	"handoff":      "🔄 Handing off...",
 	"team_tasks":   "📋 Managing team tasks...",
 	"team_message": "💬 Sending team message...",
 	// Sessions
@@ -388,8 +387,6 @@ var toolStatusMap = map[string]string{
 	"cron":            "⏰ Managing schedule...",
 	"skill_search":    "🔍 Searching skills...",
 	"use_skill":       "🧩 Using skill...",
-	"delegate_search": "🔍 Searching delegates...",
-	"evaluate_loop":   "🔄 Evaluating...",
 	"mcp_tool_search": "🔌 Searching MCP tools...",
 }
 

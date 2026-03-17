@@ -87,7 +87,7 @@ export function MCPToolsDialog({ open, onOpenChange, server, onLoadTools }: MCPT
               </Badge>
             </div>
 
-            <div className="overflow-y-auto min-h-0 -mx-1 px-1 max-h-[50vh]">
+            <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 max-h-[50vh]">
               {filtered.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-6">{t("tools.noMatch")}</p>
               ) : (

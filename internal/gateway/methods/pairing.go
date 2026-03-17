@@ -23,10 +23,11 @@ type PairingMethods struct {
 	msgBus      *bus.MessageBus
 	onApprove   PairingApproveCallback
 	broadcaster func(protocol.EventFrame)
+	rateLimiter *gateway.RateLimiter
 }
 
-func NewPairingMethods(service store.PairingStore, msgBus *bus.MessageBus) *PairingMethods {
-	return &PairingMethods{service: service, msgBus: msgBus}
+func NewPairingMethods(service store.PairingStore, msgBus *bus.MessageBus, rateLimiter *gateway.RateLimiter) *PairingMethods {
+	return &PairingMethods{service: service, msgBus: msgBus, rateLimiter: rateLimiter}
 }
 
 // SetOnApprove sets a callback that fires after a pairing is approved.
@@ -203,6 +204,11 @@ func (m *PairingMethods) handleRevoke(ctx context.Context, client *gateway.Clien
 // handleBrowserPairingStatus lets a pending browser client check if its pairing code has been approved.
 // Called by unauthenticated clients during the browser pairing flow.
 func (m *PairingMethods) handleBrowserPairingStatus(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	// Rate-limit unauthenticated polling to prevent sender_id enumeration.
+	if m.rateLimiter != nil && m.rateLimiter.Enabled() && !m.rateLimiter.Allow("pairing:"+client.RemoteAddr()) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrResourceExhausted, "rate limited"))
+		return
+	}
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
 		SenderID string `json:"sender_id"`

@@ -18,10 +18,10 @@ Current bundled core skills:
 
 | Slug | Purpose |
 |------|---------|
-| `read-pdf` | Extract text from PDF files via pypdf |
-| `read-docx` | Extract text from Word documents via python-docx |
-| `read-pptx` | Extract text from PowerPoint files via python-pptx |
-| `read-xlsx` | Read/analyze Excel spreadsheets via openpyxl |
+| `pdf` | Read, create, merge, split PDF files via pypdf |
+| `docx` | Read, create, edit Word documents via python-docx |
+| `pptx` | Read, create, edit PowerPoint presentations via python-pptx |
+| `xlsx` | Read, create, edit Excel spreadsheets via openpyxl |
 | `skill-creator` | Meta-skill for creating new skills |
 
 Shared helper modules live in `skills/_shared/` and are copied alongside each skill but not registered as standalone skills.
@@ -91,7 +91,7 @@ skills/
 ```
 
 Each version is copied to: `<baseDir>/<slug>/<version>/`
-Example: `/app/data/skills/read-pdf/3/`
+Example: `/app/data/skills/pdf/3/`
 
 ---
 
@@ -99,11 +99,10 @@ Example: `/app/data/skills/read-pdf/3/`
 
 ```yaml
 ---
-name: Read PDF
-slug: read-pdf
-description: Extract and analyze text content from PDF files
+name: pdf
+description: Use this skill whenever the user wants to do anything with PDF files...
 author: GoClaw Team
-tags: [pdf, document, extraction]
+tags: [pdf, document]
 ---
 
 ## Instructions
@@ -289,9 +288,11 @@ Count ≤ 40 AND tokens ≤ 5000:
   → build XML block injected into system prompt:
 
 <available_skills>
-  <skill name="read-pdf" slug="read-pdf">Extract text from PDF files</skill>
-  <skill name="read-docx" slug="read-docx">Extract text from Word documents</skill>
-  ...
+  <skill name="pdf" slug="pdf">Read, create, merge, split PDF files</skill>
+  <skill name="docx" slug="docx">Read, create, edit Word documents</skill>
+  <skill name="pptx" slug="pptx">Read, create, edit PowerPoint presentations</skill>
+  <skill name="xlsx" slug="xlsx">Read, create, edit Excel spreadsheets</skill>
+  <skill name="skill-creator" slug="skill-creator">Create new skills</skill>
 </available_skills>
 ```
 

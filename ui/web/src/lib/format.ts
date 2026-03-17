@@ -1,11 +1,14 @@
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date, tz?: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  const opts: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    second: "2-digit",
+  };
+  if (tz) opts.timeZone = resolveTimezone(tz);
+  return d.toLocaleDateString("en-US", opts);
 }
 
 export function formatRelativeTime(date: string | Date): string {

@@ -3,9 +3,9 @@ import type { TeamTaskData, TeamMemberData } from "@/types/team";
 /** All kanban column statuses in display order */
 export const KANBAN_STATUSES = [
   "pending",
+  "blocked",
   "in_progress",
   "completed",
-  "blocked",
   "failed",
   "cancelled",
 ] as const;

@@ -19,12 +19,14 @@ import { useTraces, type TraceData } from "./hooks/use-traces";
 import { TraceDetailDialog } from "./trace-detail-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
+import { useUiStore } from "@/stores/use-ui-store";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useChannelInstances } from "@/pages/channels/hooks/use-channel-instances";
 
 export function TracesPage() {
   const { t } = useTranslation("traces");
   const { t: tc } = useTranslation("common");
+  const tz = useUiStore((s) => s.timezone);
   const [agentFilter, setAgentFilter] = useState<string>();
   const [channelFilter, setChannelFilter] = useState<string>();
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
@@ -149,7 +151,7 @@ export function TracesPage() {
                       {trace.span_count}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {formatDate(trace.start_time)}
+                      {formatDate(trace.start_time, tz)}
                     </td>
                   </tr>
                 ))}

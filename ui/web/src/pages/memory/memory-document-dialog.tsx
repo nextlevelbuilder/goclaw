@@ -136,7 +136,7 @@ export function MemoryDocumentDialog({ open, onOpenChange, agentId, document }: 
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto py-2 px-1 -mx-1">
+        <div className="flex-1 min-h-0 overflow-y-auto py-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
           {tab === "content" && (
             <div className="grid gap-3">
               {detail && (

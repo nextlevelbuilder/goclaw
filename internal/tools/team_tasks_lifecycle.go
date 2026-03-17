@@ -87,10 +87,11 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 		ActorID:          ownerKey,
 	})
 
-	// Immediately dispatch any newly-unblocked tasks.
-	t.manager.DispatchUnblockedTasks(ctx, team.ID)
+	// Dependent tasks are dispatched by the consumer after this agent's turn ends
+	// (post-turn), not mid-turn. This prevents dependent tasks from completing and
+	// announcing to the leader before this agent's own run finishes.
 
-	return NewResult(fmt.Sprintf("Task %s completed. Dependent tasks have been unblocked.", taskID))
+	return NewResult(fmt.Sprintf("Task %s completed. Dependent tasks will be dispatched after this turn ends.", taskID))
 }
 
 func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) *Result {
@@ -135,10 +136,9 @@ func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) 
 		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
 
-	// Immediately dispatch any newly-unblocked tasks.
-	t.manager.DispatchUnblockedTasks(ctx, team.ID)
+	// Dependent tasks are dispatched by the consumer after this agent's turn ends (post-turn).
 
-	return NewResult(fmt.Sprintf("Task %s cancelled. Any running delegation has been stopped and dependent tasks unblocked.", taskID))
+	return NewResult(fmt.Sprintf("Task %s cancelled. Dependent tasks will be unblocked after this turn ends.", taskID))
 }
 
 func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) *Result {

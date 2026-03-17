@@ -203,15 +203,6 @@ Delete an agent (admin only).
 
 **Request:** `{agentId, name?, content?}`
 
-### Agent Links (Delegations)
-
-| Method | Description |
-|--------|-------------|
-| `agents.links.list` | List delegation links (direction: from/to/all) |
-| `agents.links.create` | Create link between agents |
-| `agents.links.update` | Update link settings |
-| `agents.links.delete` | Delete link |
-
 ---
 
 ## 4. Sessions
@@ -373,6 +364,24 @@ sequenceDiagram
 | `teams.tasks.comments` | List comments |
 | `teams.tasks.events` | List task events |
 | `teams.tasks.assign` | Assign to member |
+| `teams.tasks.delete` | Delete task |
+
+### Team Context
+
+| Method | Description |
+|--------|-------------|
+| `teams.known_users` | Get list of known user IDs in team |
+| `teams.scopes` | Get channel/chat scopes for task routing |
+| `teams.events.list` | List team task events (paginated) |
+
+**`teams.known_users` request:** `{teamId}`
+**Response:** `{users: ["user-1", "user-2", ...]}`
+
+**`teams.scopes` request:** `{teamId}`
+**Response:** `{scopes: [{channel, chatId, ...}]}`
+
+**`teams.events.list` request:** `{team_id, limit?, offset?}`
+**Response:** `{events: [...], count: N}`
 
 ### Workspace
 
@@ -465,7 +474,7 @@ Methods are gated by role. The role is determined at `connect` time from the tok
 
 ### Admin-Only Methods
 
-`config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `agents.links.*`, `channels.toggle`, `device.pair.approve`, `device.pair.deny`, `device.pair.revoke`, `teams.*`, `api_keys.*`
+`config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `channels.toggle`, `device.pair.approve`, `device.pair.deny`, `device.pair.revoke`, `teams.*`, `api_keys.*`
 
 ### Write Methods (Operator+)
 
@@ -510,7 +519,6 @@ The server pushes events to connected clients via event frames. Key event types:
 | `internal/gateway/methods/agents_delete.go` | Agent deletion |
 | `internal/gateway/methods/agents_files.go` | Agent context files |
 | `internal/gateway/methods/agents_identity.go` | Agent identity |
-| `internal/gateway/methods/agent_links.go` | Agent delegation links |
 | `internal/gateway/methods/config.go` | Config get/apply/patch/schema |
 | `internal/gateway/methods/sessions.go` | Session CRUD |
 | `internal/gateway/methods/skills.go` | Skill list/get/update |
@@ -518,8 +526,8 @@ The server pushes events to connected clients via event frames. Key event types:
 | `internal/gateway/methods/channels.go` | Channel listing |
 | `internal/gateway/methods/channel_instances.go` | Channel instance CRUD |
 | `internal/gateway/methods/pairing.go` | Device pairing flow |
-| `internal/gateway/methods/teams.go` | Team list |
-| `internal/gateway/methods/teams_crud.go` | Team CRUD |
+| `internal/gateway/methods/teams.go` | Team list, create, get, delete, context methods |
+| `internal/gateway/methods/teams_crud.go` | Team CRUD operations |
 | `internal/gateway/methods/teams_members.go` | Team membership |
 | `internal/gateway/methods/teams_tasks.go` | Team task management |
 | `internal/gateway/methods/teams_workspace.go` | Team workspace |

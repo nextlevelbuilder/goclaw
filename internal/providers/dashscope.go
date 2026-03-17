@@ -35,7 +35,7 @@ type DashScopeProvider struct {
 	*OpenAIProvider
 }
 
-func NewDashScopeProvider(apiKey, apiBase, defaultModel string) *DashScopeProvider {
+func NewDashScopeProvider(name, apiKey, apiBase, defaultModel string) *DashScopeProvider {
 	if apiBase == "" {
 		apiBase = dashscopeDefaultBase
 	}
@@ -43,11 +43,11 @@ func NewDashScopeProvider(apiKey, apiBase, defaultModel string) *DashScopeProvid
 		defaultModel = dashscopeDefaultModel
 	}
 	return &DashScopeProvider{
-		OpenAIProvider: NewOpenAIProvider("dashscope", apiKey, apiBase, defaultModel),
+		OpenAIProvider: NewOpenAIProvider(name, apiKey, apiBase, defaultModel),
 	}
 }
 
-func (p *DashScopeProvider) Name() string           { return "dashscope" }
+// Name is inherited from the embedded OpenAIProvider (returns the user-specified name).
 func (p *DashScopeProvider) SupportsThinking() bool { return true }
 
 // ModelSupportsThinking implements ModelThinkingCapable.

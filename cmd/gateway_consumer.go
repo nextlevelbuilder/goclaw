@@ -101,9 +101,6 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 		if handleDelegateAnnounce(ctx, msg, cfg, sched, channelMgr, msgBus, getAnnounceMu) {
 			continue
 		}
-		if handleHandoffAnnounce(ctx, msg, cfg, sched, channelMgr, msgBus) {
-			continue
-		}
 		if handleTeammateMessage(ctx, msg, cfg, sched, channelMgr, teamStore, agentStore, msgBus, postTurn, &taskRunSessions) {
 			continue
 		}

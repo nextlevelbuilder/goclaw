@@ -48,4 +48,5 @@ export interface SpanData {
   input_preview: string;
   output_preview: string;
   metadata?: { cache_creation_tokens?: number; cache_read_tokens?: number; thinking_tokens?: number };
+  created_at: string;
 }

@@ -83,6 +83,7 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("Do NOT use `spawn` for team delegation — `spawn` is only for self-clone subagent work.\n\n")
 			sb.WriteString("Rules:\n")
 			sb.WriteString("- Always specify `assignee` — match member expertise from the list above\n")
+			sb.WriteString("- **Check task board first** — ALWAYS call `team_tasks(action=\"list\")` before creating tasks. The system blocks creation if you skip this step\n")
 			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
 			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
 			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
@@ -174,9 +175,10 @@ func agentToolPolicyWithMCP(policy *config.ToolPolicySpec, hasMCP bool) *config.
 	return policy
 }
 
-// agentToolPolicyWithWorkspace injects workspace_write and workspace_read into
-// alsoAllow when the agent belongs to a team, ensuring the PolicyEngine doesn't
-// block them even if the agent has a restrictive allow list.
+// agentToolPolicyWithWorkspace injects file tools into alsoAllow when the agent
+// belongs to a team, ensuring the PolicyEngine doesn't block them even if the
+// agent has a restrictive allow list. File tools are now workspace-aware via
+// WorkspaceInterceptor, so no separate workspace_write/workspace_read needed.
 func agentToolPolicyWithWorkspace(policy *config.ToolPolicySpec, hasTeam bool) *config.ToolPolicySpec {
 	if !hasTeam {
 		return policy
@@ -184,7 +186,7 @@ func agentToolPolicyWithWorkspace(policy *config.ToolPolicySpec, hasTeam bool) *
 	if policy == nil {
 		policy = &config.ToolPolicySpec{}
 	}
-	for _, tool := range []string{"workspace_write", "workspace_read"} {
+	for _, tool := range []string{"read_file", "write_file", "list_files"} {
 		if !slices.Contains(policy.AlsoAllow, tool) {
 			policy.AlsoAllow = append(policy.AlsoAllow, tool)
 		}

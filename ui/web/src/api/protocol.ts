@@ -150,10 +150,6 @@ export const Methods = {
   TEAMS_WORKSPACE_READ: "teams.workspace.read",
   TEAMS_WORKSPACE_DELETE: "teams.workspace.delete",
 
-  // Delegation history
-  DELEGATIONS_LIST: "delegations.list",
-  DELEGATIONS_GET: "delegations.get",
-
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
 } as const;
@@ -177,17 +173,6 @@ export const Events = {
   VOICEWAKE_CHANGED: "voicewake.changed",
   CONNECT_CHALLENGE: "connect.challenge",
   TALK_MODE: "talk.mode",
-  HANDOFF: "handoff",
-
-  // Delegation lifecycle
-  DELEGATION_STARTED: "delegation.started",
-  DELEGATION_COMPLETED: "delegation.completed",
-  DELEGATION_FAILED: "delegation.failed",
-  DELEGATION_CANCELLED: "delegation.cancelled",
-  DELEGATION_PROGRESS: "delegation.progress",
-  DELEGATION_ACCUMULATED: "delegation.accumulated",
-  DELEGATION_ANNOUNCE: "delegation.announce",
-  DELEGATION_QUALITY_GATE_RETRY: "delegation.quality_gate.retry",
 
   // Team tasks
   TEAM_TASK_CREATED: "team.task.created",
@@ -234,10 +219,6 @@ export const Events = {
 
 /** All event names relevant to team debug view */
 export const TEAM_RELATED_EVENTS: Set<string> = new Set([
-  Events.DELEGATION_STARTED, Events.DELEGATION_COMPLETED,
-  Events.DELEGATION_FAILED, Events.DELEGATION_CANCELLED,
-  Events.DELEGATION_PROGRESS, Events.DELEGATION_ACCUMULATED,
-  Events.DELEGATION_ANNOUNCE, Events.DELEGATION_QUALITY_GATE_RETRY,
   Events.TEAM_TASK_CREATED, Events.TEAM_TASK_CLAIMED,
   Events.TEAM_TASK_COMPLETED, Events.TEAM_TASK_CANCELLED,
   Events.TEAM_TASK_REVIEWED, Events.TEAM_TASK_APPROVED,

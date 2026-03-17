@@ -183,9 +183,6 @@
       "spawn": "Tạo subagent cho công việc nền",
       "skill_search": "Tìm kiếm skill khả dụng theo từ khóa hoặc mô tả để tìm khả năng phù hợp",
       "use_skill": "Kích hoạt skill để sử dụng khả năng chuyên biệt (đánh dấu tracing)",
-      "delegate_search": "Tìm kiếm mục tiêu ủy quyền (ngừng sử dụng)",
-      "evaluate_loop": "Chạy vòng lặp tạo→đánh giá→chỉnh sửa giữa hai agent (ngừng sử dụng)",
-      "handoff": "Chuyển cuộc hội thoại sang agent khác (ngừng sử dụng)",
       "team_tasks": "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm",
       "team_message": "Gửi tin nhắn trực tiếp hoặc broadcast đến đồng đội trong nhóm agent"
     }

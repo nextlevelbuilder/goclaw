@@ -65,10 +65,6 @@ export const queryKeys = {
     all: ["usage"] as const,
     records: (params: Record<string, unknown>) => ["usage", "records", params] as const,
   },
-  delegations: {
-    all: ["delegations"] as const,
-    list: (params: Record<string, unknown>) => ["delegations", params] as const,
-  },
   teams: {
     all: ["teams"] as const,
     detail: (id: string) => ["teams", id] as const,

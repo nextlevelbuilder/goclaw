@@ -183,9 +183,6 @@
       "spawn": "Spawn a subagent to handle a task in the background",
       "skill_search": "Search for available skills by keyword or description to find relevant capabilities",
       "use_skill": "Activate a skill to use its specialized capabilities (tracing marker)",
-      "delegate_search": "Search for available delegation targets (deprecated)",
-      "evaluate_loop": "Run a generate→evaluate→revise loop between two agents (deprecated)",
-      "handoff": "Transfer the conversation to another agent (deprecated)",
       "team_tasks": "View, create, update, and complete tasks on the team task board",
       "team_message": "Send a direct message or broadcast to teammates in the agent team"
     }

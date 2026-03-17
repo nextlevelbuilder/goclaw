@@ -83,10 +83,10 @@ func NewCollector(ts store.TracingStore) *Collector {
 // Verbose returns true if verbose tracing is enabled (full LLM input logging).
 func (c *Collector) Verbose() bool { return c.verbose }
 
-// PreviewMaxLen returns the max preview length: 100K when verbose, 500 otherwise.
+// PreviewMaxLen returns the max preview length: 200K when verbose, 500 otherwise.
 func (c *Collector) PreviewMaxLen() int {
 	if c.verbose {
-		return 100_000
+		return 200_000
 	}
 	return previewMaxLen
 }

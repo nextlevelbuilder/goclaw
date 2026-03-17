@@ -268,63 +268,6 @@ func (s *PGTeamStore) KnownUserIDs(ctx context.Context, teamID uuid.UUID, limit 
 }
 
 // ============================================================
-// Handoff routing
-// ============================================================
-
-func (s *PGTeamStore) SetHandoffRoute(ctx context.Context, route *store.HandoffRouteData) error {
-	if route.ID == uuid.Nil {
-		route.ID = store.GenNewID()
-	}
-	route.CreatedAt = time.Now()
-
-	var teamID *uuid.UUID
-	if route.TeamID != uuid.Nil {
-		teamID = &route.TeamID
-	}
-
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO handoff_routes (id, channel, chat_id, from_agent_key, to_agent_key, reason, created_by, created_at, team_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		 ON CONFLICT (channel, chat_id)
-		 DO UPDATE SET to_agent_key = EXCLUDED.to_agent_key, from_agent_key = EXCLUDED.from_agent_key,
-		               reason = EXCLUDED.reason, created_by = EXCLUDED.created_by, created_at = EXCLUDED.created_at,
-		               team_id = EXCLUDED.team_id`,
-		route.ID, route.Channel, route.ChatID, route.FromAgentKey, route.ToAgentKey,
-		route.Reason, route.CreatedBy, route.CreatedAt, teamID,
-	)
-	return err
-}
-
-func (s *PGTeamStore) GetHandoffRoute(ctx context.Context, channel, chatID string) (*store.HandoffRouteData, error) {
-	var d store.HandoffRouteData
-	var teamID *uuid.UUID
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, channel, chat_id, from_agent_key, to_agent_key, reason, created_by, created_at, team_id
-		 FROM handoff_routes WHERE channel = $1 AND chat_id = $2`,
-		channel, chatID).Scan(
-		&d.ID, &d.Channel, &d.ChatID, &d.FromAgentKey, &d.ToAgentKey,
-		&d.Reason, &d.CreatedBy, &d.CreatedAt, &teamID,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if teamID != nil {
-		d.TeamID = *teamID
-	}
-	return &d, nil
-}
-
-func (s *PGTeamStore) ClearHandoffRoute(ctx context.Context, channel, chatID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM handoff_routes WHERE channel = $1 AND chat_id = $2`,
-		channel, chatID)
-	return err
-}
-
-// ============================================================
 // Scan helpers
 // ============================================================
 

@@ -58,19 +58,22 @@ export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMem
       </div>
 
       {/* Actions */}
-      <Button variant="ghost" size="icon" onClick={onMembers} className="shrink-0" title={t("members.title")}>
+      <Button variant="ghost" size="sm" onClick={onMembers} className="shrink-0 gap-1.5">
         <Users className="h-4 w-4" />
+        <span className="hidden sm:inline">{t("members.title")}</span>
       </Button>
-      <Button variant="ghost" size="icon" onClick={onSettings} className="shrink-0" title={t("detail.tabs.settings")}>
+      <Button variant="ghost" size="sm" onClick={onSettings} className="shrink-0 gap-1.5">
         <Settings className="h-4 w-4" />
+        <span className="hidden sm:inline">{t("detail.tabs.settings")}</span>
       </Button>
       <Button
         variant="ghost"
-        size="icon"
-        className="shrink-0 text-muted-foreground hover:text-destructive"
+        size="sm"
+        className="shrink-0 gap-1.5 text-muted-foreground hover:text-destructive"
         onClick={onDelete}
       >
         <Trash2 className="h-4 w-4" />
+        <span className="hidden sm:inline">{t("delete.title")}</span>
       </Button>
     </div>
   );

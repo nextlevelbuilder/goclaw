@@ -154,6 +154,7 @@ func wireExtras(
 		DynamicLoader:          dynamicLoader,
 		AgentLinkStore:         stores.AgentLinks,
 		TeamStore:              stores.Teams,
+		DataDir:                workspace,
 		SecureCLIStore:         stores.SecureCLI,
 		BuiltinToolStore:       stores.BuiltinTools,
 		MCPStore:               stores.MCP,
@@ -395,9 +396,15 @@ func wireExtras(
 		postTurn = teamMgr
 		toolsReg.Register(tools.NewTeamTasksTool(teamMgr))
 		toolsReg.Register(tools.NewTeamMessageTool(teamMgr))
-		toolsReg.Register(tools.NewWorkspaceWriteTool(teamMgr, workspace))
-		toolsReg.Register(tools.NewWorkspaceReadTool(teamMgr, workspace))
-		slog.Info("team + workspace tools registered", "workspace", workspace)
+		// Wire workspace interceptor into write_file so team workspace validation
+		// and event broadcasting happen transparently via existing file tools.
+		wsInterceptor := tools.NewWorkspaceInterceptor(teamMgr)
+		if writeTool, ok := toolsReg.Get("write_file"); ok {
+			if wia, ok := writeTool.(tools.WorkspaceInterceptorAware); ok {
+				wia.SetWorkspaceInterceptor(wsInterceptor)
+			}
+		}
+		slog.Info("team tools registered", "workspace", workspace)
 
 		// Team cache invalidation via pub/sub
 		msgBus.Subscribe(bus.TopicCacheTeam, func(event bus.Event) {

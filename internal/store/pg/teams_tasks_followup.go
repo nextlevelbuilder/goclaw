@@ -44,19 +44,20 @@ func (s *PGTeamStore) ClearTaskFollowup(ctx context.Context, taskID uuid.UUID) e
 	return err
 }
 
-func (s *PGTeamStore) ListFollowupDueTasks(ctx context.Context, teamID uuid.UUID) ([]store.TeamTaskData, error) {
+// ListAllFollowupDueTasks returns due followup tasks across all v2 active teams (batch).
+func (s *PGTeamStore) ListAllFollowupDueTasks(ctx context.Context) ([]store.TeamTaskData, error) {
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
-		 WHERE t.team_id = $1
-		   AND t.followup_at IS NOT NULL
-		   AND t.followup_at <= $2
-		   AND t.status = $3
+		 `+v2ActiveTeamJoin+`
+		 WHERE t.followup_at IS NOT NULL
+		   AND t.followup_at <= $1
+		   AND t.status = $2
 		   AND (t.followup_max = 0 OR t.followup_count < t.followup_max)
 		 ORDER BY t.followup_at
-		 LIMIT 50`,
-		teamID, now, store.TeamTaskStatusInProgress,
+		 LIMIT 100`,
+		now, store.TeamTaskStatusInProgress,
 	)
 	if err != nil {
 		return nil, err

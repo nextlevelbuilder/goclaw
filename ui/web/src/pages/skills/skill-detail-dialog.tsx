@@ -132,7 +132,7 @@ export function SkillDetailDialog({
             {hasFiles && <TabsTrigger value="files">{t("detail.files")}</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="content" className="flex-1 overflow-y-auto mt-2">
+          <TabsContent value="content" className="flex-1 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
             {skill.content ? (
               <div className="overflow-hidden rounded-md border bg-muted/30 p-4">
                 <MarkdownRenderer content={skill.content} />

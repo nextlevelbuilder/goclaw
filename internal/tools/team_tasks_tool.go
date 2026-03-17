@@ -54,7 +54,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			},
 			"status": map[string]any{
 				"type":        "string",
-				"description": "Filter for list: '' (active, default), 'completed', 'all'",
+				"description": "Filter for list: '' (all, default), 'active', 'completed', 'in_review'",
 			},
 			"query": map[string]any{
 				"type":        "string",
@@ -83,7 +83,11 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			},
 			"assignee": map[string]any{
 				"type":        "string",
-				"description": "Agent key to assign task to (for create). Auto-dispatches to that team member.",
+				"description": "Agent key to assign task to (REQUIRED for create). Auto-dispatches to that team member.",
+			},
+			"page": map[string]any{
+				"type":        "number",
+				"description": "Page number for list/search (default 1, 30 per page)",
 			},
 		},
 		"required": []string{"action"},

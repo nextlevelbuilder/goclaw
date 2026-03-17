@@ -145,7 +145,8 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), t.allowedPrefixes)
+	allowed := allowedWithTeamWorkspace(ctx, t.allowedPrefixes)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), allowed)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -155,7 +156,13 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 
 	data, err := os.ReadFile(resolved)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))
+		msg := fmt.Sprintf("failed to read file: %v", err)
+		if os.IsNotExist(err) {
+			if teamWs := ToolTeamWorkspaceFromCtx(ctx); teamWs != "" && !strings.HasPrefix(resolved, teamWs) {
+				msg += fmt.Sprintf("\nHint: file may be in the team workspace. Try: read_file(path=\"%s/%s\")", teamWs, path)
+			}
+		}
+		return ErrorResult(msg)
 	}
 
 	return SilentResult(string(data))
@@ -181,6 +188,19 @@ func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*san
 		return nil, err
 	}
 	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+}
+
+// allowedWithTeamWorkspace returns the allowed prefixes with team workspace appended
+// if present in context. Thread-safe: creates a new slice per request.
+func allowedWithTeamWorkspace(ctx context.Context, base []string) []string {
+	teamWs := ToolTeamWorkspaceFromCtx(ctx)
+	if teamWs == "" {
+		return base
+	}
+	out := make([]string, len(base)+1)
+	copy(out, base)
+	out[len(base)] = teamWs
+	return out
 }
 
 // resolvePathWithAllowed is like resolvePath but also allows paths under extra prefixes.

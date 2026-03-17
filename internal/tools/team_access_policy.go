@@ -14,8 +14,8 @@ type teamAccessSettings struct {
 	DenyUserIDs           []string `json:"deny_user_ids"`
 	AllowChannels         []string `json:"allow_channels"`
 	DenyChannels          []string `json:"deny_channels"`
-	ProgressNotifications *bool    `json:"progress_notifications,omitempty"`
-	FollowupIntervalMins  *int     `json:"followup_interval_minutes,omitempty"`
+	Notifications        *TeamNotifyConfig `json:"notifications,omitempty"`
+	FollowupIntervalMins *int              `json:"followup_interval_minutes,omitempty"`
 	FollowupMaxReminders  *int     `json:"followup_max_reminders,omitempty"`
 	EscalationMode        string   `json:"escalation_mode,omitempty"`
 	EscalationActions     []string `json:"escalation_actions,omitempty"`

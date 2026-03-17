@@ -19,10 +19,12 @@ import (
 )
 
 // InternalChannels are system channels excluded from outbound dispatch.
+// "browser" uses WebSocket directly — no outbound channel routing needed.
 var InternalChannels = map[string]bool{
 	"cli":      true,
 	"system":   true,
 	"subagent": true,
+	"browser":  true,
 }
 
 // IsInternalChannel checks if a channel name is internal.

@@ -20,6 +20,7 @@ type WriteFileTool struct {
 	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
 	memIntc          *MemoryInterceptor      // nil = no memory routing
 	groupWriterCache *store.GroupWriterCache // nil = no group write restriction
+	workspaceIntc    *WorkspaceInterceptor   // nil = no team workspace validation
 }
 
 // DenyPaths adds path prefixes that write_file must reject.
@@ -40,6 +41,11 @@ func (t *WriteFileTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 // SetGroupWriterCache enables group write permission checks.
 func (t *WriteFileTool) SetGroupWriterCache(c *store.GroupWriterCache) {
 	t.groupWriterCache = c
+}
+
+// SetWorkspaceInterceptor enables team workspace validation and event broadcasting.
+func (t *WriteFileTool) SetWorkspaceInterceptor(intc *WorkspaceInterceptor) {
+	t.workspaceIntc = intc
 }
 
 func NewWriteFileTool(workspace string, restrict bool) *WriteFileTool {
@@ -128,12 +134,28 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, t.restrict))
+	allowed := allowedWithTeamWorkspace(ctx, nil)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), allowed)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 	if err := checkDeniedPath(resolved, t.workspace, t.deniedPrefixes); err != nil {
 		return ErrorResult(err.Error())
+	}
+
+	// Team workspace validation + delete-on-empty.
+	if t.workspaceIntc != nil {
+		isDelete, intcErr := t.workspaceIntc.HandleWrite(ctx, resolved, content)
+		if intcErr != nil {
+			return ErrorResult(intcErr.Error())
+		}
+		if isDelete {
+			if err := os.Remove(resolved); err != nil && !os.IsNotExist(err) {
+				return ErrorResult(fmt.Sprintf("failed to delete file: %v", err))
+			}
+			t.workspaceIntc.AfterWrite(ctx, resolved, "delete")
+			return SilentResult(fmt.Sprintf("File deleted: %s", path))
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(resolved), 0755); err != nil {
@@ -142,6 +164,10 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	if err := os.WriteFile(resolved, []byte(content), 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
+	}
+
+	if t.workspaceIntc != nil {
+		t.workspaceIntc.AfterWrite(ctx, resolved, "write")
 	}
 
 	result := SilentResult(fmt.Sprintf("File written: %s (%d bytes)", path, len(content)))

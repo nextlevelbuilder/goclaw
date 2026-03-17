@@ -55,11 +55,7 @@ flowchart LR
     SEND --> WA
 ```
 
-Internal channels (`cli`, `system`, `subagent`) are silently skipped by the outbound dispatcher and never forwarded to external platforms.
-
-### Handoff Routing
-
-Before normal agent routing, the consumer checks the `handoff_routes` table for an active routing override. If a handoff route exists for the incoming channel + chat ID, the message is redirected to the target agent instead of the original.
+Internal channels (`cli`, `system`, `subagent`, `browser`) are silently skipped by the outbound dispatcher and never forwarded to external platforms. The `browser` channel uses WebSocket directly on the gateway connection.
 
 ### Message Routing Prefixes
 
@@ -70,7 +66,6 @@ The consumer routes system messages based on sender ID prefixes:
 | `subagent:` | Parent session queue | subagent |
 | `delegate:` | Parent agent's original session | delegate |
 | `teammate:` | Target agent session | delegate |
-| `handoff:` | Target agent via delegate lane | delegate |
 
 ---
 
@@ -80,7 +75,8 @@ Every channel must implement the base interface:
 
 | Method | Description |
 |--------|-------------|
-| `Name()` | Channel identifier (e.g., `"telegram"`, `"discord"`) |
+| `Name()` | Channel instance name (e.g., `"telegram"`, `"discord"`) |
+| `Type()` | Platform type identifier (e.g., `"telegram"`, `"zalo_personal"`). For config-based channels equals `Name()`; for DB instances may differ. |
 | `Start(ctx)` | Begin listening for messages (non-blocking) |
 | `Stop(ctx)` | Graceful shutdown |
 | `Send(ctx, msg)` | Deliver an outbound message to the platform |
@@ -91,9 +87,10 @@ Every channel must implement the base interface:
 
 | Interface | Purpose | Implemented By |
 |-----------|---------|----------------|
-| `StreamingChannel` | Real-time streaming updates | Telegram, Feishu |
+| `StreamingChannel` | Real-time streaming updates | Telegram, Slack |
 | `WebhookChannel` | Webhook HTTP handler mounting | Feishu |
-| `ReactionChannel` | Status reactions on messages | Telegram, Feishu |
+| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
+| `BlockReplyChannel` | Override gateway block_reply setting | Slack |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
 
@@ -405,7 +402,7 @@ The Slack channel uses the `slack-go/slack` library to connect via Socket Mode (
 - **Message debounce**: Per-thread batching of rapid messages (300ms default, configurable)
 - **Dead socket classification**: Non-retryable auth errors (invalid_auth, token_revoked) fail fast instead of infinite reconnect
 - **Streaming**: Edit-in-place via `chat.update` with 1000ms throttle (Slack Tier 3 rate limit)
-- **Reactions**: Status emoji on user messages (thinking_face, hammer_and_wrench, white_check_mark, x, hourglass)
+- **Reactions**: Status emoji on user messages (thinking_face, hammer_and_wrench, white_check_mark, x, hourglass_flowing_sand)
 - **SSRF protection**: File download hostname allowlist (*.slack.com, *.slack-edge.com, *.slack-files.com), auth token stripped on redirect
 - **Health probe**: `auth.test()` with 2.5s timeout for monitoring integration
 
@@ -568,8 +565,9 @@ flowchart TD
 
 | File | Purpose |
 |------|---------|
-| `internal/channels/channel.go` | Channel interface, BaseChannel, extended interfaces, HandleMessage |
-| `internal/channels/manager.go` | Manager: registration, StartAll, StopAll, outbound dispatch, webhook collection |
+| `internal/channels/channel.go` | Channel interface, BaseChannel, extended interfaces, HandleMessage, Type() method |
+| `internal/channels/manager.go` | Manager: registration, StartAll, StopAll, channel lifecycle, webhook collection |
+| `internal/channels/dispatch.go` | Outbound message dispatcher, send error formatting |
 | `internal/channels/instance_loader.go` | DB-based channel instance loading |
 | `internal/channels/telegram/channel.go` | Telegram core: long polling, mention gating, typing indicators |
 | `internal/channels/telegram/handlers.go` | Message handling, media processing, forum topic detection |
@@ -579,21 +577,24 @@ flowchart TD
 | `internal/channels/telegram/stream.go` | Streaming placeholder management |
 | `internal/channels/telegram/reactions.go` | Status reactions on messages |
 | `internal/channels/telegram/format.go` | Markdown → Telegram HTML pipeline, table rendering |
-| `internal/channels/feishu/feishu.go` | Feishu core: WS/Webhook modes, config |
-| `internal/channels/feishu/streaming.go` | Streaming card create/update/close |
+| `internal/channels/feishu/feishu.go` | Feishu core: WS/Webhook modes, config, reactions |
+| `internal/channels/feishu/larkclient_messaging.go` | Streaming card create/update/close, message sending |
 | `internal/channels/feishu/media.go` | Media upload/download, type detection |
 | `internal/channels/feishu/bot_parse.go` | Mention resolution, message event parsing |
 | `internal/channels/feishu/bot.go` | Bot message handlers |
 | `internal/channels/feishu/bot_policy.go` | Policy evaluation |
-| `internal/channels/discord/discord.go` | Discord: gateway events, placeholder editing |
-| `internal/channels/slack/slack.go` | Slack: Socket Mode, mention gating, thread caching |
+| `internal/channels/discord/discord.go` | Discord: gateway setup, session management, lifecycle |
+| `internal/channels/discord/handler.go` | Message handling, typing indicators, placeholder management |
+| `internal/channels/slack/channel.go` | Slack: Socket Mode, mention gating, thread caching, streaming |
+| `internal/channels/slack/handlers.go` | Message and event handling, pairing, group policy |
 | `internal/channels/slack/format.go` | Markdown → Slack mrkdwn pipeline |
 | `internal/channels/slack/reactions.go` | Status emoji reactions on messages |
+| `internal/channels/slack/stream.go` | Streaming message updates via placeholder editing |
 | `internal/channels/whatsapp/whatsapp.go` | WhatsApp: external WS bridge |
 | `internal/channels/zalo/zalo.go` | Zalo OA: Bot API, long polling |
 | `internal/channels/zalo/personal/channel.go` | Zalo Personal: reverse-engineered protocol |
 | `internal/store/pg/pairing.go` | Pairing: code generation, approval, persistence (database-backed) |
-| `cmd/gateway_consumer.go` | Message routing: prefixes, handoff, cancel interception |
+| `cmd/gateway_consumer.go` | Message routing: prefixes, cancel interception |
 
 ---
 

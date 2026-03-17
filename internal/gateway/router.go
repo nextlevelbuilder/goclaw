@@ -153,9 +153,13 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 	if ps != nil && params.SenderID != "" {
 		paired, pairErr := ps.IsPaired(params.SenderID, "browser")
 		if pairErr != nil {
-			slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+			slog.Warn("security.pairing_check_failed",
 				"sender_id", params.SenderID, "error", pairErr)
-			paired = true
+			// Fail-closed: deny access on DB error instead of granting operator role.
+			locale := i18n.Normalize(client.locale)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal,
+				i18n.T(locale, i18n.MsgInternalError, pairErr.Error())))
+			return
 		}
 		if paired {
 			client.role = permissions.RoleOperator

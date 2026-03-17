@@ -36,7 +36,7 @@ export function TeamVersionModal({ open, onOpenChange }: TeamVersionModalProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] w-[95vw] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[85vh] w-[95vw] flex flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {t("settings.versionModal.title")}
@@ -47,6 +47,7 @@ export function TeamVersionModal({ open, onOpenChange }: TeamVersionModalProps) 
           <DialogDescription className="sr-only">{t("settings.versionModal.title")}</DialogDescription>
         </DialogHeader>
 
+        <div className="overflow-y-auto min-h-0 space-y-4 -mx-4 px-4 sm:-mx-6 sm:px-6">
         {/* Version columns header */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border bg-muted/30 p-3 text-center">
@@ -115,6 +116,8 @@ export function TeamVersionModal({ open, onOpenChange }: TeamVersionModalProps) 
         <div className="space-y-1 rounded-lg border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
           <p>{t("settings.versionModal.downgradeNote")}</p>
           <p>{t("settings.versionModal.betaNote")}</p>
+        </div>
+
         </div>
 
         <div className="flex justify-end">

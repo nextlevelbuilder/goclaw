@@ -160,7 +160,8 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	if workspace == "" {
 		workspace = t.workspace
 	}
-	resolved, err := resolvePath(path, workspace, effectiveRestrict(ctx, t.restrict))
+	allowed := allowedWithTeamWorkspace(ctx, nil)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, t.restrict), allowed)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}

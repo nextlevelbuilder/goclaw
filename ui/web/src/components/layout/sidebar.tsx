@@ -17,7 +17,6 @@ import {
   Plug,
   Volume2,
   Cpu,
-  ArrowRightLeft,
   ClipboardList,
   HardDrive,
   Inbox,
@@ -118,11 +117,10 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
           </SidebarGroup>
         )}
 
-        {(isRouteEnabled(ROUTES.TRACES) || isRouteEnabled(ROUTES.EVENTS) || isRouteEnabled(ROUTES.DELEGATIONS) || isRouteEnabled(ROUTES.ACTIVITY) || isRouteEnabled(ROUTES.LOGS)) && (
+        {(isRouteEnabled(ROUTES.TRACES) || isRouteEnabled(ROUTES.EVENTS) || isRouteEnabled(ROUTES.ACTIVITY) || isRouteEnabled(ROUTES.LOGS)) && (
           <SidebarGroup label={t("groups.monitoring")} collapsed={collapsed}>
             {isRouteEnabled(ROUTES.TRACES) && <SidebarItem to={ROUTES.TRACES} icon={Activity} label={t("nav.traces")} collapsed={collapsed} />}
             {isRouteEnabled(ROUTES.EVENTS) && <SidebarItem to={ROUTES.EVENTS} icon={Radar} label={t("nav.realtimeEvents")} collapsed={collapsed} />}
-            {isRouteEnabled(ROUTES.DELEGATIONS) && <SidebarItem to={ROUTES.DELEGATIONS} icon={ArrowRightLeft} label={t("nav.delegations")} collapsed={collapsed} />}
             {isRouteEnabled(ROUTES.ACTIVITY) && <SidebarItem to={ROUTES.ACTIVITY} icon={ClipboardList} label={t("nav.activity")} collapsed={collapsed} />}
             {isRouteEnabled(ROUTES.LOGS) && <SidebarItem to={ROUTES.LOGS} icon={Terminal} label={t("nav.logs")} collapsed={collapsed} />}
           </SidebarGroup>

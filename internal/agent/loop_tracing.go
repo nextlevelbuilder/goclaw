@@ -274,6 +274,11 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		return
 	}
 
+	previewLimit := 500
+	if collector.Verbose() {
+		previewLimit = 100000
+	}
+
 	spanName := l.id
 	span := store.SpanData{
 		ID:           agentSpanID,
@@ -285,7 +290,7 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		Level:        store.SpanLevelDefault,
 		Model:        l.model,
 		Provider:     l.provider.Name(),
-		InputPreview: truncateStr(inputPreview, 500),
+		InputPreview: truncateStr(inputPreview, previewLimit),
 		CreatedAt:    start,
 	}
 	// Nest under parent root span if this is an announce run.

@@ -37,7 +37,7 @@ func newDashScopeTestServer(t *testing.T) (*httptest.Server, *map[string]any) {
 func callDashScopeStream(t *testing.T, req ChatRequest) map[string]any {
 	t.Helper()
 	server, captured := newDashScopeTestServer(t)
-	p := NewDashScopeProvider("test-key", server.URL, "")
+	p := NewDashScopeProvider("dashscope-test", "test-key", server.URL, "")
 	p.retryConfig.Attempts = 1
 	p.ChatStream(context.Background(), req, nil) //nolint:errcheck
 	return *captured
@@ -45,7 +45,7 @@ func callDashScopeStream(t *testing.T, req ChatRequest) map[string]any {
 
 // TestDashScopeModelSupportsThinking verifies the whitelist is correct.
 func TestDashScopeModelSupportsThinking(t *testing.T) {
-	p := NewDashScopeProvider("key", "", "")
+	p := NewDashScopeProvider("dashscope", "key", "", "")
 
 	tests := []struct {
 		model string

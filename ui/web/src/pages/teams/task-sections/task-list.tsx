@@ -120,6 +120,10 @@ export function TaskList({
           taskLookup={taskLookup}
           memberLookup={memberLookup}
           emojiLookup={emojiLookup}
+          onNavigateTask={(taskId) => {
+            const found = tasks.find((t) => t.id === taskId);
+            if (found) setSelectedTask(found);
+          }}
         />
       )}
     </>

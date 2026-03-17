@@ -62,16 +62,20 @@ flowchart TD
 
 ## 2. Session Queue
 
-Each session key gets a dedicated queue that manages agent runs. The queue supports configurable concurrent runs per session.
+Each session key gets a dedicated queue that manages agent runs. The queue supports configurable concurrent runs per session and adaptive throttling.
 
 ### Concurrent Runs
+
+The scheduler configuration defines a default `MaxConcurrent` value (typically 1 for serial execution). Per-request overrides are available via `ScheduleWithOpts()`:
 
 | Context | `maxConcurrent` | Rationale |
 |---------|:--------------:|-----------|
 | DMs | 1 | Single-threaded per user (no interleaving) |
-| Groups | 3 | Multiple users can get responses in parallel |
+| Groups | 3+ | Multiple users can get responses in parallel |
 
-**Adaptive throttle**: When session history exceeds 60% of the context window, concurrency drops to 1 to prevent context window overflow.
+Application code (not the scheduler) decides whether to override based on channel type.
+
+**Adaptive throttle**: When session history exceeds 60% of the context window, concurrency automatically drops to 1 to prevent context window overflow. Controlled by optional `TokenEstimateFunc` callback set on the scheduler.
 
 ### Queue Modes
 
@@ -113,14 +117,28 @@ Cancel commands for Telegram and other channels.
 ### Implementation Details
 
 - **Debouncer bypass**: `/stop` and `/stopall` are intercepted before the 800ms debouncer to avoid being merged with the next user message
-- **Cancel mechanism**: `SessionQueue.Cancel()` exposes the `CancelFunc` from the scheduler. Context cancellation propagates to the agent loop
+- **Cancel mechanism**: `SessionQueue.CancelOne()` (for `/stop`) and `SessionQueue.CancelAll()` (for `/stopall`) expose the cancel functions. Context cancellation propagates to the agent loop
+- **Stale message skipping**: `/stopall` sets an abort cutoff timestamp. Messages enqueued before the cutoff are skipped on next scheduling, preventing old messages from running after an abort
 - **Empty outbound**: On cancel, an empty outbound message is published to trigger cleanup (stop typing indicator, clear reactions)
 - **Trace finalization**: When `ctx.Err() != nil`, trace finalization falls back to `context.Background()` for the final DB write. Status is set to `"cancelled"`
 - **Context survival**: Context values (traceID, collector) survive cancellation -- only the Done channel fires
+- **Generation counter**: Each `SessionQueue` tracks a generation counter. When reset (e.g., during SIGUSR1 in-process restart), old generations are ignored, preventing stale completions from interfering with new requests
 
 ---
 
-## 4. Cron Lifecycle
+## 4. Adaptive Concurrency Control
+
+The scheduler can automatically reduce concurrency based on token usage. When a session's context history approaches the summary threshold (60% of context window), the effective `MaxConcurrent` is reduced to 1, enforcing serial execution to prevent overflow.
+
+**Implementation:**
+- Set via `Scheduler.SetTokenEstimateFunc(fn TokenEstimateFunc)`
+- `TokenEstimateFunc` returns `(tokens int, contextWindow int)` for a session
+- Checked in `SessionQueue.effectiveMaxConcurrent()` before starting new runs
+- Does not affect already-running tasks, only gates new task starts
+
+---
+
+## 5. Cron Lifecycle
 
 Scheduled tasks that run agent turns automatically. The run loop checks every second for due jobs.
 
@@ -133,11 +151,13 @@ stateDiagram-v2
     DueCheck --> Executing: nextRunAtMS <= now
     Executing --> Completed: Success
     Executing --> Failed: Failure
-    Failed --> Retrying: retry < MaxRetries
-    Retrying --> Executing: Backoff delay
+    Failed --> Retrying: retry < MaxRetries (0-3)
+    Retrying --> Executing: Backoff delay (2s to 30s)
     Failed --> ErrorLogged: Retries exhausted
     Completed --> Scheduled: Compute next nextRunAtMS (every/cron)
     Completed --> Deleted: deleteAfterRun (at jobs)
+    Scheduled --> Paused: Paused via EnableJob(false)
+    Paused --> Scheduled: Re-enabled via EnableJob(true)
 ```
 
 ### Schedule Types
@@ -150,9 +170,11 @@ stateDiagram-v2
 
 ### Job States
 
-Jobs can be `active` or `paused`. Paused jobs skip execution during the due check. Run results are logged to the `cron_run_logs` table. Cache invalidation propagates via the message bus.
+Jobs have an `Enabled` boolean flag. When `false`, the job is skipped during the due-job check. When re-enabled, the next run is recomputed. Run results are logged in-memory (last 200 entries) and persisted to the PostgreSQL `cron_run_logs` table. Job state changes propagate via the message bus cache invalidation (`cache:cron` event).
 
 ### Retry -- Exponential Backoff with Jitter
+
+When a cron job execution fails, it's automatically retried with exponential backoff before being logged as an error.
 
 | Parameter | Default |
 |-----------|---------|
@@ -160,23 +182,48 @@ Jobs can be `active` or `paused`. Paused jobs skip execution during the due chec
 | BaseDelay | 2 seconds |
 | MaxDelay | 30 seconds |
 
-**Formula**: `delay = min(base x 2^attempt, max) +/- 25% jitter`
+**Formula**: `delay = min(base × 2^attempt, max) ± 25% jitter`
+
+Example retry sequence: fail → wait 2s → retry → fail → wait 4s → retry → fail → wait 8s → retry → fail → wait 16s → stop.
+
+Retries are transparent to the user; final run status (ok or error) is logged to the `cron_run_logs` table.
 
 ---
 
 ## File Reference
 
+### Scheduler (Lane-Based Concurrency)
 | File | Description |
 |------|-------------|
 | `internal/scheduler/lanes.go` | Lane and LaneManager (semaphore-based worker pools) |
-| `internal/scheduler/queue.go` | SessionQueue, Scheduler, drop policies, debounce |
-| `internal/cron/service.go` | Cron run loop, schedule parsing, job lifecycle |
-| `internal/cron/retry.go` | Retry with exponential backoff + jitter |
+| `internal/scheduler/queue.go` | SessionQueue, Scheduler, drop policies, debounce, cancel mechanics |
+| `internal/scheduler/scheduler.go` | Scheduler top-level API, draining mode for graceful shutdown |
+| `internal/scheduler/errors.go` | Error types: ErrQueueFull, ErrQueueDropped, ErrMessageStale, ErrGatewayDraining, ErrLaneCleared |
+
+### Cron Service (In-Memory)
+| File | Description |
+|------|-------------|
+| `internal/cron/service.go` | Cron service lifecycle (start/stop), job CRUD |
+| `internal/cron/service_execution.go` | Run loop (every 1s), job execution, schedule parsing, persistence |
+| `internal/cron/retry.go` | Retry with exponential backoff + jitter, output truncation |
+| `internal/cron/types.go` | Job, Schedule, JobState, RunLogEntry types |
+
+### Cron Persistence (PostgreSQL)
+| File | Description |
+|------|-------------|
 | `internal/store/cron_store.go` | CronStore interface (jobs + run logs) |
-| `internal/store/pg/cron.go` | PostgreSQL cron implementation |
+| `internal/store/pg/cron.go` | PostgreSQL cron operations (create, list, update, delete) |
+| `internal/store/pg/cron_crud.go` | CRUD helpers for job mutations |
 | `internal/store/pg/cron_scheduler.go` | PG job cache, due-job detection, execution |
+| `internal/store/pg/cron_exec.go` | Execution flow and result recording |
+| `internal/store/pg/cron_scan.go` | Row scanning for jobs and run logs |
+| `internal/store/pg/cron_update.go` | Job state updates in PostgreSQL |
+
+### Gateway Integration
+| File | Description |
+|------|-------------|
 | `cmd/gateway_cron.go` | makeCronJobHandler (routes cron execution to scheduler) |
-| `cmd/gateway_agents.go` | Agent initialization |
+| `cmd/gateway_agents.go` | Agent initialization and run loop setup |
 | `internal/gateway/methods/cron.go` | RPC method handlers (list, create, update, delete, toggle, run, runs) |
 
 ---

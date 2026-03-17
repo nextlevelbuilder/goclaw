@@ -37,16 +37,45 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
   const [activePath, setActivePath] = useState<string | null>(null);
 
   const scopeValue = selectedScope === "__all__" ? "" : selectedScope;
+  // Stable scope list: populated once from "all" listing, not recalculated on filter.
+  const [cachedScopes, setCachedScopes] = useState<ScopeEntry[]>([]);
 
+  // Load files for the selected scope. On "all" load, also cache scope list.
   const load = useCallback(() => {
-    listFiles(teamId, scopeValue || undefined);
+    listFiles(teamId, scopeValue || undefined).then((result) => {
+      // Only update cached scopes from the "all" listing (no filter applied).
+      if (!scopeValue && result.length > 0) {
+        const seen = new Set<string>();
+        const derived: ScopeEntry[] = [];
+        for (const f of result) {
+          if (f.chat_id && !seen.has(f.chat_id)) {
+            seen.add(f.chat_id);
+            derived.push({ channel: "", chat_id: f.chat_id });
+          }
+        }
+        derived.sort((a, b) => a.chat_id.localeCompare(b.chat_id));
+        setCachedScopes(derived);
+      }
+    });
     setFileContent(null);
     setActivePath(null);
   }, [teamId, listFiles, scopeValue]);
 
   useEffect(() => {
-    if (open) load();
-  }, [open, load]);
+    if (open) {
+      setSelectedScope("__all__"); // reset filter on open
+      load();
+    }
+  }, [open]); // intentionally only depend on `open`, not `load`
+
+  // Re-fetch when scope changes (but not on initial open — handled above).
+  useEffect(() => {
+    if (open && scopeValue) {
+      listFiles(teamId, scopeValue);
+      setFileContent(null);
+      setActivePath(null);
+    }
+  }, [open, scopeValue, teamId, listFiles]);
 
   // Map relative name → absolute disk path (for HTTP file serving).
   const nameToAbsPath = useMemo(() => {
@@ -54,6 +83,9 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     for (const f of files) if (!f.is_dir && f.path) m.set(f.name, f.path);
     return m;
   }, [files]);
+
+  // Use provided scopes, or cached scopes from first "all" load.
+  const effectiveScopes = scopes.length > 0 ? scopes : cachedScopes;
 
   const tree = useMemo(
     () => buildTree(files.map((f) => ({
@@ -122,14 +154,14 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
           <div className="flex items-center justify-between">
             <DialogTitle>{t("workspace.title")}</DialogTitle>
             <div className="flex items-center gap-2">
-              {scopes.length > 0 && (
+              {effectiveScopes.length > 1 && (
                 <Select value={selectedScope} onValueChange={setSelectedScope}>
                   <SelectTrigger className="h-8 w-40 text-xs">
                     <SelectValue placeholder={t("scope.all")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__all__">{t("scope.all")}</SelectItem>
-                    {scopes.map((s) => (
+                    {effectiveScopes.map((s) => (
                       <SelectItem key={s.chat_id} value={s.chat_id}>
                         {s.chat_id.length > 16 ? s.chat_id.slice(0, 16) + "\u2026" : s.chat_id}
                       </SelectItem>

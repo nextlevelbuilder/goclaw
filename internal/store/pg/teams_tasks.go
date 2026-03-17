@@ -32,7 +32,7 @@ const taskJoinClause = `FROM team_tasks t
 		 LEFT JOIN agents ca ON ca.id = t.created_by_agent_id`
 
 // maxListTasksRows caps ListTasks results to prevent unbounded queries.
-const maxListTasksRows = 50
+const maxListTasksRows = 30
 
 // ============================================================
 // Scopes
@@ -163,20 +163,21 @@ func (s *PGTeamStore) UpdateTask(ctx context.Context, taskID uuid.UUID, updates 
 	return execMapUpdate(ctx, s.db, "team_tasks", taskID, updates)
 }
 
-func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string) ([]store.TeamTaskData, error) {
+func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, offset int) ([]store.TeamTaskData, error) {
 	orderClause := "t.priority DESC, t.created_at"
 	if orderBy == "newest" {
 		orderClause = "t.created_at DESC"
 	}
 
-	statusWhere := "AND t.status NOT IN ('completed','cancelled')" // default: active only
+	statusWhere := "" // default: all statuses (no filter)
 	switch statusFilter {
-	case store.TeamTaskFilterAll:
-		statusWhere = ""
+	case store.TeamTaskFilterActive:
+		statusWhere = "AND t.status NOT IN ('completed','cancelled')"
 	case store.TeamTaskFilterInReview:
 		statusWhere = "AND t.status = 'in_review'"
 	case store.TeamTaskFilterCompleted:
 		statusWhere = "AND t.status IN ('completed','cancelled')"
+	// "", store.TeamTaskFilterAll ("all") → no filter (all statuses)
 	}
 
 	// Scope filter: always bind $4/$5 but only enforce when non-empty.
@@ -187,7 +188,7 @@ func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy s
 		 `+taskJoinClause+`
 		 WHERE t.team_id = $1 AND ($2 = '' OR t.user_id = $2) `+statusWhere+` `+scopeWhere+`
 		 ORDER BY `+orderClause+`
-		 LIMIT $3`, teamID, userID, maxListTasksRows, channel, chatID)
+		 LIMIT $3 OFFSET $6`, teamID, userID, maxListTasksRows+1, channel, chatID, offset)
 	if err != nil {
 		return nil, err
 	}

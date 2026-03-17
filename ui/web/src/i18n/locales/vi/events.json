@@ -11,7 +11,6 @@
   "eventCountPlural": "{{count}} sự kiện",
   "categories": {
     "all": "Tất cả",
-    "delegation": "Ủy quyền",
     "task": "Nhiệm vụ",
     "message": "Tin nhắn",
     "agent": "Agent",

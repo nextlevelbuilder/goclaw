@@ -138,6 +138,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
 		HasTeam:                hasTeamTools,
+		TeamWorkspace:          tools.ToolTeamWorkspaceFromCtx(ctx),
 		HasSkillSearch:         hasSkillSearch,
 		HasMCPToolSearch:       hasMCPToolSearch,
 		HasKnowledgeGraph:      hasKG,

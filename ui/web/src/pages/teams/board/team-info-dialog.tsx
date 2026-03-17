@@ -34,7 +34,7 @@ export function TeamInfoDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[85vh] w-[95vw] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {team.name}
@@ -52,6 +52,7 @@ export function TeamInfoDialog({
             </DialogTitle>
           </DialogHeader>
 
+          <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4">
           {/* Team overview */}
           <div className="grid grid-cols-1 gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
             {team.description && (
@@ -72,6 +73,7 @@ export function TeamInfoDialog({
 
           {/* Settings form */}
           <TeamSettingsTab teamId={teamId} team={team} onSaved={() => { onSaved(); onOpenChange(false); }} />
+          </div>
         </DialogContent>
       </Dialog>
 
