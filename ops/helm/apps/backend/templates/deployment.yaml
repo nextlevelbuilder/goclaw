@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nilclaw.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nilclaw.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nilclaw.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "nilclaw.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "nilclaw.serviceAccountName" . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: gateway
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            # --- Plain-text env ---
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            # --- Secrets from Vault → K8s Secret ---
+            - name: NILCLAW_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.postgresDsn" . }}
+            - name: NILCLAW_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.encryptionKey" . }}
+            - name: NILCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.gatewayToken" . }}
+            - name: NILCLAW_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.openaiApiKey" . }}
+            - name: NILCLAW_OPENAI_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.openaiBaseUrl" . }}
+            - name: NILCLAW_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.model" . }}
+            - name: NILCLAW_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nilclaw.secretName" . }}
+                  key: {{ include "nilclaw.secret.key.provider" . }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /data/workspace
+            - name: sessions
+              mountPath: /data/sessions
+          {{- end }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: workspace
+          persistentVolumeClaim:
+            claimName: {{ include "nilclaw.fullname" . }}-workspace
+        - name: sessions
+          persistentVolumeClaim:
+            claimName: {{ include "nilclaw.fullname" . }}-sessions
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

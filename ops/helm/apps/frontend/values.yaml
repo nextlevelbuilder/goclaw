@@ -1,0 +1,130 @@
+# Portal Helm Chart - values.yaml
+
+namespace: nilclaw
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nilclaw/portal
+  tag: "latest"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+# --- Backend ---
+backend:
+  # nilclaw gateway service name (for nginx reverse proxy)
+  serviceName: nilclaw
+  servicePort: 18790
+  # Public paths (routed by Cloudflare Tunnel to nilclaw)
+  apiPath: /v1
+  wsPath: /ws
+
+# --- Service ---
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  nodePort:
+    enabled: false
+    port: 31880
+
+# --- Ingress ---
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: portal.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# --- Resources ---
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# --- Health Probes ---
+livenessProbe:
+  httpGet:
+    path: /nginx-health
+    port: 80
+  initialDelaySeconds: 5
+  periodSeconds: 15
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /nginx-health
+    port: 80
+  initialDelaySeconds: 3
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# --- Secret Contract ---
+# Follows infrastructure charts pattern (postgresql, redis, vault)
+# Portal may need Keycloak/SSO credentials injected at runtime
+secret:
+  mode: existingSecret
+  name: ""
+  keys:
+    keycloakClientSecret: keycloak-client-secret
+    keycloakRealm: keycloak-realm
+  externalSecret:
+    enabled: false
+    refreshInterval: 1h
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: ""
+    target:
+      name: ""
+      templateType: Opaque
+    data: []
+    # Example for Vault KV v2:
+    # data:
+    #   - secretKey: keycloak-client-secret
+    #     remoteRef:
+    #       key: portal/config
+    #       property: keycloak-client-secret
+
+# Auth (inline — dev/testing only)
+auth:
+  keycloakClientSecret: ""
+  keycloakRealm: ""
+
+# --- Pod settings ---
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- Autoscaling ---
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+# --- Pod Disruption Budget ---
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# --- Service Account ---
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

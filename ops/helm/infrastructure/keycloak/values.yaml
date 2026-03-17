@@ -1,0 +1,136 @@
+# Keycloak Identity and Access Management
+# Default values for keycloak chart
+
+# Namespace override (Keycloak deploys to keycloak, not infrastructure)
+namespace: keycloak
+
+# Keycloak image configuration
+image:
+  repository: quay.io/keycloak/keycloak
+  tag: "26.0"
+  pullPolicy: IfNotPresent
+
+# Number of Keycloak replicas
+replicas: 1
+
+# Authentication settings
+auth:
+  adminUsername: admin
+
+# Secret contract
+secret:
+  mode: existingSecret
+  # Kubernetes Secret consumed by both StatefulSet and init-db Job
+  # Defaults to <release>-keycloak-secret when empty
+  name: ""
+  keys:
+    adminPassword: keycloak-admin-password
+    dbPassword: keycloak-db-password
+    postgresPassword: keycloak-postgres-password
+  externalSecret:
+    enabled: true
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: ""
+    refreshInterval: "1h"
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    target:
+      # Must resolve to the same Secret as secret.name
+      name: ""
+      templateType: Opaque
+    data: []
+
+# Keycloak resource limits
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+# Persistent storage for Keycloak data
+storage:
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+
+# Database configuration
+database:
+  type: postgres
+  host: postgresql-haproxy.infrastructure.svc.cluster.local
+  port: "5432"
+  name: keycloak
+  schema: public
+  username: keycloak
+
+# Keycloak server configuration
+config:
+  hostnameStrict: "false"
+  httpEnabled: "true"
+  proxyHeaders: xforwarded
+  healthEnabled: "true"
+  metricsEnabled: "true"
+  logLevel: INFO
+  features: "token-exchange,admin-fine-grained-authz"
+
+# Init DB Job configuration
+initDb:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+  ttlSecondsAfterFinished: 300
+
+# Service configuration
+service:
+  type: ClusterIP
+  httpPort: 8080
+  httpsPort: 8443
+
+# NodePort service for external access
+nodePort:
+  enabled: true
+  port: 30880
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Prometheus metrics annotations
+metrics:
+  enabled: true
+  port: "8080"
+  path: "/metrics"
+
+# Probes configuration
+probes:
+  readiness:
+    path: /health/ready
+    port: 9000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 5
+  liveness:
+    path: /health/live
+    port: 9000
+    initialDelaySeconds: 60
+    periodSeconds: 15
+    failureThreshold: 3
+    timeoutSeconds: 5
+  startup:
+    path: /health/started
+    port: 9000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 60
+    timeoutSeconds: 5

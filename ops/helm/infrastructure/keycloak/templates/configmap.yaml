@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "keycloak.configMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+data:
+  KC_DB: {{ .Values.database.type | quote }}
+  KC_DB_URL_HOST: {{ .Values.database.host | quote }}
+  KC_DB_URL_PORT: {{ .Values.database.port | quote }}
+  KC_DB_URL_DATABASE: {{ .Values.database.name | quote }}
+  KC_DB_SCHEMA: {{ .Values.database.schema | quote }}
+  KC_DB_USERNAME: {{ .Values.database.username | quote }}
+  KC_HOSTNAME_STRICT: {{ .Values.config.hostnameStrict | quote }}
+  KC_HTTP_ENABLED: {{ .Values.config.httpEnabled | quote }}
+  KC_PROXY_HEADERS: {{ .Values.config.proxyHeaders | quote }}
+  KC_HEALTH_ENABLED: {{ .Values.config.healthEnabled | quote }}
+  KC_METRICS_ENABLED: {{ .Values.config.metricsEnabled | quote }}
+  KC_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  KC_FEATURES: {{ .Values.config.features | quote }}

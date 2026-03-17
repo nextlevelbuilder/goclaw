@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgresql
+description: PostgreSQL primary-replica cluster with HAProxy load balancer and pgvector support
+type: application
+version: 0.1.0
+appVersion: "16"

@@ -1,0 +1,19 @@
+{{- if .Values.nodePort.enabled }}
+# NodePort Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vault.fullname" . }}-nodeport
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vault.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "vault.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8200
+      targetPort: 8200
+      nodePort: {{ .Values.nodePort.port }}
+      name: http
+{{- end }}

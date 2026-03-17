@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgresql.haproxy.configName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+data:
+  haproxy.cfg: |
+    global
+        maxconn {{ .Values.haproxy.global.maxconn }}
+        log stdout format raw local0
+
+    resolvers kubernetes
+        nameserver dns1 kube-dns.kube-system.svc.cluster.local:53
+        resolve_retries 3
+        timeout resolve 1s
+        timeout retry   1s
+        hold valid      10s
+
+    defaults
+        mode tcp
+        timeout connect {{ .Values.haproxy.timeouts.connect }}
+        timeout client {{ .Values.haproxy.timeouts.client }}
+        timeout server {{ .Values.haproxy.timeouts.server }}
+        log global
+        option tcplog
+
+    # Frontend for PostgreSQL - Primary (Read/Write)
+    frontend postgresql_primary
+        bind *:{{ .Values.haproxy.service.primaryPort }}
+        default_backend postgresql_master
+
+    # Frontend for PostgreSQL - Read Replicas
+    frontend postgresql_readonly
+        bind *:{{ .Values.haproxy.service.readonlyPort }}
+        default_backend postgresql_slaves
+
+    # Backend for PostgreSQL Master (Write operations)
+    backend postgresql_master
+        option pgsql-check user {{ .Values.auth.postgresUser }}
+        server {{ include "postgresql.master.fullname" . }}-0 {{ include "postgresql.master.fullname" . }}-0.{{ include "postgresql.master.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:5432 check inter 3s fall 3 rise 2 resolvers kubernetes init-addr none
+
+    # Backend for PostgreSQL Slaves (Read operations)
+    backend postgresql_slaves
+        balance roundrobin
+        option pgsql-check user {{ .Values.auth.postgresUser }}
+        {{- $masterFullname := include "postgresql.master.fullname" . }}
+        {{- $slaveFullname := include "postgresql.slave.fullname" . }}
+        {{- $namespace := .Release.Namespace }}
+        {{- range $i := until (int .Values.slave.replicas) }}
+        server {{ $slaveFullname }}-{{ $i }} {{ $slaveFullname }}-{{ $i }}.{{ $slaveFullname }}.{{ $namespace }}.svc.cluster.local:5432 check inter 3s fall 3 rise 2 resolvers kubernetes init-addr none
+        {{- end }}
+
+    # Stats page
+    frontend stats
+        mode http
+        bind *:{{ .Values.haproxy.stats.port }}
+        stats enable
+        stats uri {{ .Values.haproxy.stats.uri }}
+        stats refresh {{ .Values.haproxy.stats.refreshInterval }}
+        stats admin if LOCALHOST

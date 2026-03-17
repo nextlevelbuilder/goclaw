@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vault.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vault.labels" . | nindent 4 }}
+data:
+  vault.hcl: |
+    # Vault Server Configuration
+
+    ui = {{ .Values.vault.ui }}
+
+    # Listener Configuration
+    listener "tcp" {
+      address         = "0.0.0.0:8200"
+      cluster_address = "0.0.0.0:8201"
+      tls_disable     = {{ .Values.vault.config.tlsDisable }}
+    }
+
+    # Raft Storage Backend (Integrated Storage)
+    storage "raft" {
+      path    = "/vault/data"
+      node_id = "HOSTNAME"
+    }
+
+    # API Address
+    api_addr     = "http://HOSTNAME.{{ include "vault.internalServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local:8200"
+    cluster_addr = "http://HOSTNAME.{{ include "vault.internalServiceName" . }}.{{ .Release.Namespace }}.svc.cluster.local:8201"
+
+    # Disable memory lock for containers
+    disable_mlock = true
+
+    # Telemetry
+    telemetry {
+      prometheus_retention_time = {{ .Values.vault.config.prometheusRetentionTime | quote }}
+      disable_hostname          = true
+    }
+
+    # Service Registration (for Kubernetes)
+    service_registration "kubernetes" {}

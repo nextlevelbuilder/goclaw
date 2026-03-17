@@ -1,0 +1,23 @@
+{{- if .Values.haproxy.nodePort.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgresql.haproxy.fullname" . }}-nodeport
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+    {{- include "postgresql.haproxy.selectorLabels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "postgresql.haproxy.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.haproxy.service.primaryPort }}
+      targetPort: {{ .Values.haproxy.service.primaryPort }}
+      nodePort: {{ .Values.haproxy.nodePort.primaryPort }}
+      name: postgresql-primary
+    - port: {{ .Values.haproxy.stats.port }}
+      targetPort: {{ .Values.haproxy.stats.port }}
+      nodePort: {{ .Values.haproxy.nodePort.statsPort }}
+      name: stats
+{{- end }}

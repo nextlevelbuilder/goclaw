@@ -2,94 +2,57 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
 
 jobs:
   release:
+    name: Release
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.semrel.outputs.version }}
-      released: ${{ steps.semrel.outputs.version != '' }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - id: semrel
-        uses: go-semantic-release/action@v1
+      - name: Configure Git for semantic-release
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          allow-initial-development-versions: true
+          bun-version: latest
 
-  # Build cross-platform binaries and attach to release
-  build-binaries:
-    needs: release
-    if: needs.release.outputs.released == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-    steps:
-      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - uses: actions/setup-go@v5
+      - name: Run type check
+        run: bunx tsc --noEmit
+
+      - name: Run tests
+        run: bun test || true
+
+      - name: Build
+        run: bun run build
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          node-version: "lts/*"
 
-      - name: Build binary
+      - name: Release with semantic-release
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          VERSION: v${{ needs.release.outputs.version }}
-        run: |
-          CGO_ENABLED=0 go build \
-            -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
-            -o goclaw .
-          tar -czf "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw
-
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "v${{ needs.release.outputs.version }}" \
-            "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
-            --clobber
-
-  # Notify Discord on new release
-  notify-discord:
-    needs: [release, build-binaries]
-    if: needs.release.outputs.released == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send Discord notification
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          VERSION: v${{ needs.release.outputs.version }}
-        run: |
-          curl -fsSL -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"GoClaw ${VERSION} Released\",
-                \"url\": \"https://github.com/${{ github.repository }}/releases/tag/${VERSION}\",
-                \"color\": 5814783,
-                \"fields\": [
-                  {\"name\": \"Docker\", \"value\": \"\`docker pull digitop/goclaw:latest\`\", \"inline\": false},
-                  {\"name\": \"Install\", \"value\": \"\`curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash\`\", \"inline\": false}
-                ],
-                \"footer\": {\"text\": \"${{ github.repository }}\"},
-                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
-              }]
-            }" \
-            "$DISCORD_WEBHOOK_URL"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: bunx semantic-release

@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgresql.slave.configName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+data:
+  postgresql.conf: |
+    # Connection Settings
+    listen_addresses = {{ .Values.postgresqlConfig.listenAddresses }}
+    port = {{ .Values.postgresqlConfig.port }}
+    max_connections = {{ .Values.postgresqlConfig.maxConnections }}
+
+    # Memory Settings
+    shared_buffers = {{ .Values.postgresqlConfig.sharedBuffers }}
+    effective_cache_size = {{ .Values.postgresqlConfig.effectiveCacheSize }}
+    work_mem = {{ .Values.postgresqlConfig.workMem }}
+    maintenance_work_mem = {{ .Values.postgresqlConfig.maintenanceWorkMem }}
+
+    # Hot Standby
+    hot_standby = {{ .Values.postgresqlConfig.hotStandby }}
+    hot_standby_feedback = {{ .Values.postgresqlConfig.hotStandbyFeedback }}
+
+    # Logging
+    log_destination = {{ .Values.postgresqlConfig.logDestination }}
+    logging_collector = {{ .Values.postgresqlConfig.loggingCollector }}
+    log_directory = {{ .Values.postgresqlConfig.logDirectory }}
+    log_filename = {{ .Values.postgresqlConfig.logFilename }}
+
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            scram-sha-256
+    host    all             all             0.0.0.0/0               scram-sha-256
+
+  setup-slave.sh: |
+    #!/bin/bash
+    set -e
+
+    # Wait for master to be ready
+    until pg_isready -h {{ include "postgresql.master.fullname" . }} -p 5432 -U postgres; do
+      echo "Waiting for master to be ready..."
+      sleep 2
+    done
+
+    # Check if data directory is empty
+    if [ -z "$(ls -A /var/lib/postgresql/data)" ]; then
+      echo "Initializing slave from master..."
+      PGPASSWORD=$REPLICATION_PASSWORD pg_basebackup -h {{ include "postgresql.master.fullname" . }} -D /var/lib/postgresql/data -U replicator -vP -W
+
+      # Create standby signal
+      touch /var/lib/postgresql/data/standby.signal
+
+      # Configure recovery
+      cat > /var/lib/postgresql/data/postgresql.auto.conf <<EOF
+    primary_conninfo = 'host={{ include "postgresql.master.fullname" . }} port=5432 user=replicator password=$REPLICATION_PASSWORD'
+    EOF
+    fi
+
+    # Copy custom configs
+    cp /etc/postgresql/postgresql.conf /var/lib/postgresql/data/
+    cp /etc/postgresql/pg_hba.conf /var/lib/postgresql/data/
+
+    # Start PostgreSQL
+    exec postgres -D /var/lib/postgresql/data

@@ -1,0 +1,16 @@
+# UI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vault.fullname" . }}-ui
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vault.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "vault.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8200
+      targetPort: 8200
+      name: http

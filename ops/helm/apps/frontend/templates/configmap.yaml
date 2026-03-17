@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "portal.fullname" . }}-nginx
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "portal.labels" . | nindent 4 }}
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # SPA fallback — Cloudflare Tunnel routes /v1 and /ws to nilclaw directly
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Health check
+        location /nginx-health {
+            return 200 'ok';
+            add_header Content-Type text/plain;
+        }
+
+        # Gzip
+        gzip on;
+        gzip_vary on;
+        gzip_proxied any;
+        gzip_comp_level 6;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        # Cache static assets (exclude config.js — must not be cached)
+        location ~* \.(css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 7d;
+            add_header Cache-Control "public, immutable";
+        }
+        location ~* \.js$ {
+            expires 7d;
+            add_header Cache-Control "public, immutable";
+        }
+    }

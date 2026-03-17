@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "keycloak.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+  annotations:
+    description: "Keycloak IAM - Use this for all Keycloak connections"
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "keycloak.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.service.httpPort }}
+      targetPort: {{ .Values.service.httpPort }}
+      name: http
+    - port: {{ .Values.service.httpsPort }}
+      targetPort: {{ .Values.service.httpsPort }}
+      name: https

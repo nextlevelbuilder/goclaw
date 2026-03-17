@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "postgresql.master.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+    role: master
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "postgresql.master.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgresql

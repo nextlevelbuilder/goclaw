@@ -1,0 +1,20 @@
+# Headless Service (for StatefulSet DNS)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vault.internalServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vault.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "vault.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: 8200
+      targetPort: 8200
+      name: http
+    - port: 8201
+      targetPort: 8201
+      name: https-internal

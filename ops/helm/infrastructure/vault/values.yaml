@@ -1,0 +1,62 @@
+# Default values for vault Helm chart
+
+namespace: infrastructure
+
+image:
+  repository: hashicorp/vault
+  tag: "1.15"
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
+
+storage:
+  size: 10Gi
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 100
+  runAsGroup: 1000
+  fsGroup: 1000
+
+vault:
+  logLevel: info
+  ui: true
+  config:
+    tlsDisable: true
+    prometheusRetentionTime: "30s"
+
+secret:
+  mode: existingSecret
+  # Kubernetes Secret consumed by Vault operational workflows
+  # Defaults to <release>-vault-secret when empty
+  name: ""
+  keys:
+    rootToken: vault-root-token
+  externalSecret:
+    enabled: true
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: ""
+    refreshInterval: "1h"
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    target:
+      # Must resolve to the same Secret as secret.name
+      name: ""
+      templateType: Opaque
+    data: []
+
+nodePort:
+  enabled: true
+  port: 30820
+
+serviceAccount:
+  create: true

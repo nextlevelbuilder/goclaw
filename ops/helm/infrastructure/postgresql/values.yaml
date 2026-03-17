@@ -1,0 +1,162 @@
+# PostgreSQL primary-replica cluster with HAProxy
+# Default values for postgresql chart
+
+namespace: infrastructure
+
+# PostgreSQL image settings
+image:
+  repository: pgvector/pgvector
+  tag: pg16
+  pullPolicy: IfNotPresent
+
+# Secret contract
+secret:
+  mode: existingSecret
+  # Optional override. Defaults to "<release>-postgresql-secret" when empty.
+  name: ""
+  keys:
+    # canonical logical keys
+    postgresPassword: postgres-password
+    replicationPassword: replication-password
+    # deprecated aliases (supported for 2 minor releases)
+    password: postgres-password
+    replication: replication-password
+  externalSecret:
+    enabled: false
+    refreshInterval: 1h
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: ""
+    target:
+      templateType: Opaque
+    data: []
+
+# Authentication (password fields deprecated as aliases, supported for 2 minor releases)
+auth:
+  postgresPassword: ""
+  replicationPassword: ""
+  postgresUser: "postgres"
+  postgresDb: "postgres"
+
+# Master (Primary) configuration
+master:
+  replicas: 1
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  storage:
+    size: 20Gi
+    # storageClassName: ""
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# Slave (Replica) configuration
+slave:
+  replicas: 2
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  storage:
+    size: 20Gi
+    # storageClassName: ""
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# PostgreSQL configuration parameters
+postgresqlConfig:
+  # Connection settings
+  listenAddresses: "'*'"
+  port: 5432
+  maxConnections: 200
+
+  # Memory settings
+  sharedBuffers: 256MB
+  effectiveCacheSize: 768MB
+  workMem: 4MB
+  maintenanceWorkMem: 64MB
+
+  # WAL / Replication settings (master only)
+  walLevel: replica
+  maxWalSenders: 10
+  walKeepSize: 1GB
+  hotStandby: "on"
+  synchronousCommit: "on"
+  synchronousStandbyNames: "'*'"
+
+  # Logging
+  logDestination: "'stderr'"
+  loggingCollector: "on"
+  logDirectory: "'pg_log'"
+  logFilename: "'postgresql-%Y-%m-%d_%H%M%S.log'"
+  logMinMessages: warning
+  logMinErrorStatement: error
+  logMinDurationStatement: 1000
+
+  # Archiving (master only)
+  archiveMode: "on"
+  archiveCommand: "'cp %p /var/lib/postgresql/archive/%f'"
+
+  # Slave-specific
+  hotStandbyFeedback: "on"
+
+# HAProxy configuration
+haproxy:
+  replicas: 2
+  image:
+    repository: haproxy
+    tag: 2.9-alpine
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  livenessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readinessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  # HAProxy global settings
+  global:
+    maxconn: 4096
+  # HAProxy timeout settings
+  timeouts:
+    connect: 10s
+    client: 30s
+    server: 30s
+  # Stats page
+  stats:
+    port: 8404
+    uri: /stats
+    refreshInterval: 10s
+  # Service ports
+  service:
+    primaryPort: 5432
+    readonlyPort: 5433
+    statsPort: 8404
+  # NodePort service (optional external access)
+  nodePort:
+    enabled: true
+    primaryPort: 30432
+    statsPort: 30485

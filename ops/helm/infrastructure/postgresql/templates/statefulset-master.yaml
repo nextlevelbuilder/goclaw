@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "postgresql.master.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+    role: master
+spec:
+  serviceName: {{ include "postgresql.master.fullname" . }}
+  replicas: {{ .Values.master.replicas }}
+  selector:
+    matchLabels:
+      {{- include "postgresql.master.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "postgresql.master.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.auth.postgresUser | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.auth.postgresDb | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql.secretName" . }}
+                  key: {{ include "postgresql.secret.key.postgresPassword" . }}
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql.secretName" . }}
+                  key: {{ include "postgresql.secret.key.replicationPassword" . }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          command:
+            - sh
+            - -c
+            - |
+              # If database already initialized, copy configs to PGDATA
+              if [ -f /var/lib/postgresql/data/pgdata/PG_VERSION ]; then
+                cp /etc/postgresql/postgresql.conf /var/lib/postgresql/data/pgdata/postgresql.conf
+                cp /etc/postgresql/pg_hba.conf /var/lib/postgresql/data/pgdata/pg_hba.conf
+              fi
+
+              # Run original entrypoint with config overrides
+              exec docker-entrypoint.sh postgres \
+                -c listen_addresses={{ .Values.postgresqlConfig.listenAddresses }} \
+                -c port={{ .Values.postgresqlConfig.port }} \
+                -c max_connections={{ .Values.postgresqlConfig.maxConnections }} \
+                -c shared_buffers={{ .Values.postgresqlConfig.sharedBuffers }} \
+                -c wal_level={{ .Values.postgresqlConfig.walLevel }} \
+                -c max_wal_senders={{ .Values.postgresqlConfig.maxWalSenders }} \
+                -c wal_keep_size={{ .Values.postgresqlConfig.walKeepSize }} \
+                -c hot_standby={{ .Values.postgresqlConfig.hotStandby }} \
+                -c synchronous_commit={{ .Values.postgresqlConfig.synchronousCommit }} \
+                -c archive_mode={{ .Values.postgresqlConfig.archiveMode }} \
+                -c archive_command={{ .Values.postgresqlConfig.archiveCommand }} \
+                -c hba_file=/etc/postgresql/pg_hba.conf
+          volumeMounts:
+            - name: config
+              mountPath: /etc/postgresql
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            {{- toYaml .Values.master.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: {{ .Values.master.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.master.livenessProbe.periodSeconds }}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: {{ .Values.master.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.master.readinessProbe.periodSeconds }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "postgresql.master.configName" . }}
+            items:
+              - key: postgresql.conf
+                path: postgresql.conf
+              - key: pg_hba.conf
+                path: pg_hba.conf
+        - name: init-scripts
+          configMap:
+            name: {{ include "postgresql.master.configName" . }}
+            items:
+              - key: init-master.sh
+                path: init-master.sh
+                mode: 0755
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.master.storage.storageClassName }}
+        storageClassName: {{ .Values.master.storage.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.master.storage.size }}

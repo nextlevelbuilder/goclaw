@@ -1,0 +1,144 @@
+# NilClaw Helm Chart - values.yaml
+
+namespace: apps
+
+# NOTE: Keep at 1 until sessions migrate to PostgreSQL.
+# FileSessionStore (file-based) cannot safely share PVC across pods.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nilclaw/nilclaw
+  tag: "latest"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ghcr-secret
+
+# --- Service ---
+service:
+  type: ClusterIP
+  port: 18790
+  targetPort: 18790
+  nodePort:
+    enabled: false
+    port: 31879
+
+# --- Ingress ---
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: nilclaw.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# --- Resources ---
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# --- Health Probes ---
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 18790
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 18790
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# --- Plain-text environment (non-sensitive) ---
+env:
+  NILCLAW_PORT: "18790"
+  NILCLAW_HOST: "0.0.0.0"
+  NILCLAW_MODE: "managed"
+  NILCLAW_WORKSPACE: "/data/workspace"
+  NILCLAW_SESSIONS_STORAGE: "/data/sessions"
+  NILCLAW_DATA_DIR: "/data/data"
+
+# --- Secret Contract ---
+secret:
+  mode: existingSecret
+  name: ""
+  keys:
+    postgresDsn: postgres-dsn
+    encryptionKey: encryption-key
+    gatewayToken: gateway-token
+    openaiApiKey: openai-api-key
+    openaiBaseUrl: openai-base-url
+    model: model
+    provider: provider
+  externalSecret:
+    enabled: false
+    refreshInterval: 1h
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: ""
+    target:
+      name: ""
+      templateType: Opaque
+    data: []
+
+# Auth (inline — dev/testing only, deprecated)
+auth:
+  postgresDsn: ""
+  encryptionKey: ""
+  gatewayToken: ""
+  openaiApiKey: ""
+  openaiBaseUrl: ""
+  model: ""
+  provider: ""
+
+# --- Persistence ---
+persistence:
+  enabled: true
+  workspace:
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+  sessions:
+    size: 2Gi
+    accessModes:
+      - ReadWriteOnce
+
+# --- Pod settings ---
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- Autoscaling ---
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+# --- Pod Disruption Budget ---
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# --- Service Account ---
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

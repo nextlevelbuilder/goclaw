@@ -1,0 +1,6 @@
+apiVersion: v2
+name: keycloak
+description: Keycloak Identity and Access Management
+type: application
+version: 0.1.0
+appVersion: "26.0"

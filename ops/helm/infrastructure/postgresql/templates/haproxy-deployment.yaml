@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "postgresql.haproxy.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+    {{- include "postgresql.haproxy.selectorLabels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.haproxy.replicas }}
+  selector:
+    matchLabels:
+      {{- include "postgresql.haproxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "postgresql.haproxy.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: haproxy
+          image: {{ .Values.haproxy.image.repository }}:{{ .Values.haproxy.image.tag }}
+          imagePullPolicy: {{ .Values.haproxy.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.haproxy.service.primaryPort }}
+              name: postgresql
+            - containerPort: {{ .Values.haproxy.service.readonlyPort }}
+              name: pg-readonly
+            - containerPort: {{ .Values.haproxy.stats.port }}
+              name: stats
+          volumeMounts:
+            - name: config
+              mountPath: /usr/local/etc/haproxy
+          resources:
+            {{- toYaml .Values.haproxy.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.haproxy.stats.uri }}
+              port: {{ .Values.haproxy.stats.port }}
+            initialDelaySeconds: {{ .Values.haproxy.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.haproxy.livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.haproxy.stats.uri }}
+              port: {{ .Values.haproxy.stats.port }}
+            initialDelaySeconds: {{ .Values.haproxy.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.haproxy.readinessProbe.periodSeconds }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "postgresql.haproxy.configName" . }}

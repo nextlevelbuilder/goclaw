@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "postgresql.slave.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+    role: slave
+spec:
+  serviceName: {{ include "postgresql.slave.fullname" . }}
+  replicas: {{ .Values.slave.replicas }}
+  selector:
+    matchLabels:
+      {{- include "postgresql.slave.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "postgresql.slave.selectorLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+        - name: init-slave
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql.secretName" . }}
+                  key: {{ include "postgresql.secret.key.replicationPassword" . }}
+          command:
+            - sh
+            - -c
+            - |
+              # Wait for master
+              until pg_isready -h {{ include "postgresql.master.fullname" . }} -p 5432; do
+                echo "Waiting for master..."
+                sleep 2
+              done
+
+              # Check if already initialized
+              if [ -f /var/lib/postgresql/data/pgdata/PG_VERSION ]; then
+                echo "Already initialized, skipping..."
+                exit 0
+              fi
+
+              # Backup from master
+              echo "Initializing from master..."
+              PGPASSWORD=$REPLICATION_PASSWORD pg_basebackup \
+                -h {{ include "postgresql.master.fullname" . }} \
+                -D /var/lib/postgresql/data/pgdata \
+                -U replicator \
+                -vP \
+                -R \
+                --checkpoint=fast
+
+              # Create standby signal
+              touch /var/lib/postgresql/data/pgdata/standby.signal
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgresql
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 5432
+              name: postgresql
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgresql.secretName" . }}
+                  key: {{ include "postgresql.secret.key.postgresPassword" . }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          command:
+            - sh
+            - -c
+            - |
+              # Copy config files to PGDATA (init container already copied data from master)
+              cp /etc/postgresql/postgresql.conf /var/lib/postgresql/data/pgdata/postgresql.conf 2>/dev/null || true
+              cp /etc/postgresql/pg_hba.conf /var/lib/postgresql/data/pgdata/pg_hba.conf 2>/dev/null || true
+
+              # Run postgres with inline config override
+              exec docker-entrypoint.sh postgres \
+                -c listen_addresses={{ .Values.postgresqlConfig.listenAddresses }} \
+                -c port={{ .Values.postgresqlConfig.port }} \
+                -c max_connections={{ .Values.postgresqlConfig.maxConnections }} \
+                -c shared_buffers={{ .Values.postgresqlConfig.sharedBuffers }} \
+                -c hot_standby={{ .Values.postgresqlConfig.hotStandby }} \
+                -c hot_standby_feedback={{ .Values.postgresqlConfig.hotStandbyFeedback }} \
+                -c hba_file=/etc/postgresql/pg_hba.conf
+          volumeMounts:
+            - name: config
+              mountPath: /etc/postgresql
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.slave.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: {{ .Values.slave.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.slave.livenessProbe.periodSeconds }}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: {{ .Values.slave.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.slave.readinessProbe.periodSeconds }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "postgresql.slave.configName" . }}
+            items:
+              - key: postgresql.conf
+                path: postgresql.conf
+              - key: pg_hba.conf
+                path: pg_hba.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.slave.storage.storageClassName }}
+        storageClassName: {{ .Values.slave.storage.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.slave.storage.size }}

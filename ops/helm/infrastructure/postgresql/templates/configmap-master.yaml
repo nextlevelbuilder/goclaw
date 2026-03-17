@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgresql.master.configName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+data:
+  postgresql.conf: |
+    # Connection Settings
+    listen_addresses = {{ .Values.postgresqlConfig.listenAddresses }}
+    port = {{ .Values.postgresqlConfig.port }}
+    max_connections = {{ .Values.postgresqlConfig.maxConnections }}
+
+    # Memory Settings
+    shared_buffers = {{ .Values.postgresqlConfig.sharedBuffers }}
+    effective_cache_size = {{ .Values.postgresqlConfig.effectiveCacheSize }}
+    work_mem = {{ .Values.postgresqlConfig.workMem }}
+    maintenance_work_mem = {{ .Values.postgresqlConfig.maintenanceWorkMem }}
+
+    # Write-Ahead Log
+    wal_level = {{ .Values.postgresqlConfig.walLevel }}
+    max_wal_senders = {{ .Values.postgresqlConfig.maxWalSenders }}
+    wal_keep_size = {{ .Values.postgresqlConfig.walKeepSize }}
+    hot_standby = {{ .Values.postgresqlConfig.hotStandby }}
+
+    # Replication
+    synchronous_commit = {{ .Values.postgresqlConfig.synchronousCommit }}
+    synchronous_standby_names = {{ .Values.postgresqlConfig.synchronousStandbyNames }}
+
+    # Logging
+    log_destination = {{ .Values.postgresqlConfig.logDestination }}
+    logging_collector = {{ .Values.postgresqlConfig.loggingCollector }}
+    log_directory = {{ .Values.postgresqlConfig.logDirectory }}
+    log_filename = {{ .Values.postgresqlConfig.logFilename }}
+    log_min_messages = {{ .Values.postgresqlConfig.logMinMessages }}
+    log_min_error_statement = {{ .Values.postgresqlConfig.logMinErrorStatement }}
+    log_min_duration_statement = {{ .Values.postgresqlConfig.logMinDurationStatement }}
+
+    # Archiving
+    archive_mode = {{ .Values.postgresqlConfig.archiveMode }}
+    archive_command = {{ .Values.postgresqlConfig.archiveCommand }}
+
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            scram-sha-256
+    host    all             all             0.0.0.0/0               scram-sha-256
+    host    replication     replicator      0.0.0.0/0               scram-sha-256
+
+  init-master.sh: |
+    #!/bin/bash
+    set -e
+
+    # Create replication user
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD '$REPLICATION_PASSWORD';
+        GRANT pg_read_all_data TO replicator;
+    EOSQL
+
+    # Enable pgvector extension
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE EXTENSION IF NOT EXISTS vector;
+    EOSQL
+
+    # Create archive directory
+    mkdir -p /var/lib/postgresql/archive
+    chown postgres:postgres /var/lib/postgresql/archive

@@ -1,0 +1,29 @@
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nilclaw.fullname" . }}-workspace
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nilclaw.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.workspace.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.workspace.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nilclaw.fullname" . }}-sessions
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nilclaw.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.sessions.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.sessions.size }}
+{{- end }}

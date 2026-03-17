@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nilclaw
+description: NilClaw — AI Agent Gateway (Bun.js runtime)
+type: application
+version: 0.1.0
+appVersion: "1.7.0"

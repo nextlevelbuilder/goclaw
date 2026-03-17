@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "keycloak.fullname" . }}-init-db
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "keycloak.labels" . | nindent 4 }}
+    component: init-db
+spec:
+  ttlSecondsAfterFinished: {{ .Values.initDb.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "keycloak.selectorLabels" . | nindent 8 }}
+        component: init-db
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init-db
+          image: {{ .Values.initDb.image.repository }}:{{ .Values.initDb.image.tag }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "keycloak.secretName" . }}
+                  key: {{ include "keycloak.secretKey.postgresPassword" . | quote }}
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "keycloak.secretName" . }}
+                  key: {{ include "keycloak.secretKey.dbPassword" . | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ .Values.database.host }} -p {{ .Values.database.port }} -U postgres; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+
+              PGPASSWORD=$POSTGRES_PASSWORD psql -v ON_ERROR_STOP=1 -h {{ .Values.database.host }} -p {{ .Values.database.port }} -U postgres <<-EOSQL
+                DO \$\$
+                BEGIN
+                  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ .Values.database.username }}') THEN
+                    CREATE USER {{ .Values.database.username }} WITH ENCRYPTED PASSWORD '${KC_DB_PASSWORD}';
+                  ELSE
+                    ALTER USER {{ .Values.database.username }} WITH ENCRYPTED PASSWORD '${KC_DB_PASSWORD}';
+                  END IF;
+                END
+                \$\$;
+                SELECT 'CREATE DATABASE {{ .Values.database.name }} OWNER {{ .Values.database.username }}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ .Values.database.name }}')\gexec
+                ALTER DATABASE {{ .Values.database.name }} OWNER TO {{ .Values.database.username }};
+                GRANT ALL PRIVILEGES ON DATABASE {{ .Values.database.name }} TO {{ .Values.database.username }};
+                \c {{ .Values.database.name }}
+                ALTER SCHEMA {{ .Values.database.schema }} OWNER TO {{ .Values.database.username }};
+                GRANT ALL ON SCHEMA {{ .Values.database.schema }} TO {{ .Values.database.username }};
+              EOSQL
+
+              echo "Keycloak database initialized!"
+          resources:
+            {{- toYaml .Values.initDb.resources | nindent 12 }}

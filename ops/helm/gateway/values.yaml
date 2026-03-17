@@ -1,0 +1,87 @@
+# Cloudflared Helm Chart - values.yaml
+# Zero Trust tunnel ingress gateway
+# Routing rules are configured in Cloudflare Dashboard, not here.
+
+namespace: gateway
+
+replicaCount: 2
+
+image:
+  repository: cloudflare/cloudflared
+  tag: "latest"
+  pullPolicy: Always
+
+# --- Tunnel Configuration ---
+tunnel:
+  # Tunnel protocol (http2 recommended for k8s, quic may be blocked)
+  protocol: http2
+  metrics:
+    port: 2000
+
+# --- Secret Contract ---
+secret:
+  mode: existingSecret
+  # Optional override. Defaults to "<release>-cloudflared-secret" when empty.
+  name: ""
+  keys:
+    tunnelToken: tunnel-token
+  externalSecret:
+    enabled: false
+    refreshInterval: 1h
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    secretStoreRef:
+      kind: ClusterSecretStore
+      name: ""
+    target:
+      name: ""
+      templateType: Opaque
+    data: []
+
+# Auth (inline — dev/testing only, deprecated)
+auth:
+  tunnelToken: ""
+
+# --- Resources ---
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "200m"
+
+# --- Health Probes ---
+livenessProbe:
+  httpGet:
+    path: /ready
+    port: 2000
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 2000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# --- Pod settings ---
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# --- Pod Disruption Budget ---
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# --- Service Account ---
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
