@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -35,8 +36,11 @@ func (c *Channel) uploadFile(ctx context.Context, data io.Reader, fileName, file
 
 // sendImage sends an image message using an image_key.
 func (c *Channel) sendImage(ctx context.Context, chatID, receiveIDType, imageKey string) error {
-	content := fmt.Sprintf(`{"image_key":"%s"}`, imageKey)
-	_, err := c.client.SendMessage(ctx, receiveIDType, chatID, "image", content)
+	contentBytes, err := json.Marshal(map[string]string{"image_key": imageKey})
+	if err != nil {
+		return fmt.Errorf("marshal image content: %w", err)
+	}
+	_, err = c.client.SendMessage(ctx, receiveIDType, chatID, "image", string(contentBytes))
 	if err != nil {
 		return fmt.Errorf("feishu send image: %w", err)
 	}
@@ -49,8 +53,11 @@ func (c *Channel) sendFile(ctx context.Context, chatID, receiveIDType, fileKey, 
 	if msgType == "" {
 		msgType = "file"
 	}
-	content := fmt.Sprintf(`{"file_key":"%s"}`, fileKey)
-	_, err := c.client.SendMessage(ctx, receiveIDType, chatID, msgType, content)
+	contentBytes, err := json.Marshal(map[string]string{"file_key": fileKey})
+	if err != nil {
+		return fmt.Errorf("marshal file content: %w", err)
+	}
+	_, err = c.client.SendMessage(ctx, receiveIDType, chatID, msgType, string(contentBytes))
 	if err != nil {
 		return fmt.Errorf("feishu send file: %w", err)
 	}

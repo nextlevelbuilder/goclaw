@@ -134,7 +134,9 @@ func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping zalo_personal channel")
 	c.stopOnce.Do(func() { close(c.stopCh) })
 	c.typingCtrls.Range(func(key, val any) bool {
-		val.(*typing.Controller).Stop()
+		if ctrl, ok := val.(*typing.Controller); ok {
+			ctrl.Stop()
+		}
 		c.typingCtrls.Delete(key)
 		return true
 	})

@@ -151,7 +151,7 @@ func (c *Channel) sendPairingReply(senderID, chatID string) {
 
 	// Debounce
 	if lastSent, ok := c.pairingDebounce.Load(senderID); ok {
-		if time.Since(lastSent.(time.Time)) < pairingDebounceTime {
+		if t, ok := lastSent.(time.Time); ok && time.Since(t) < pairingDebounceTime {
 			return
 		}
 	}

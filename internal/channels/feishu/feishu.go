@@ -440,10 +440,9 @@ func shouldUseCard(text string) bool {
 func (c *Channel) isDuplicate(messageID string) bool {
 	_, loaded := c.dedup.LoadOrStore(messageID, struct{}{})
 	if !loaded {
-		go func() {
-			time.Sleep(5 * time.Minute)
+		time.AfterFunc(5*time.Minute, func() {
 			c.dedup.Delete(messageID)
-		}()
+		})
 	}
 	return loaded
 }

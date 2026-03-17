@@ -147,7 +147,9 @@ func (c *Channel) startTyping(threadID string, threadType protocol.ThreadType) {
 		},
 	})
 	if prev, ok := c.typingCtrls.Load(threadID); ok {
-		prev.(*typing.Controller).Stop()
+		if ctrl, ok := prev.(*typing.Controller); ok {
+			ctrl.Stop()
+		}
 	}
 	c.typingCtrls.Store(threadID, ctrl)
 	ctrl.Start()
