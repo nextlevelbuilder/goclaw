@@ -42,6 +42,10 @@
     "searchAgents": "Tìm kiếm agent...",
     "adding": "Đang thêm...",
     "add": "Thêm",
+    "added": "Đã thêm thành viên",
+    "failedAdd": "Thêm thành viên thất bại",
+    "removed": "Đã xóa thành viên",
+    "failedRemove": "Xóa thành viên thất bại",
     "removeMember": "Xóa thành viên",
     "columns": {
       "agent": "Agent",

@@ -42,6 +42,10 @@
     "searchAgents": "Search agents...",
     "adding": "Adding...",
     "add": "Add",
+    "added": "Member added",
+    "failedAdd": "Failed to add member",
+    "removed": "Member removed",
+    "failedRemove": "Failed to remove member",
     "removeMember": "Remove member",
     "columns": {
       "agent": "Agent",

@@ -80,6 +80,14 @@ export function TaskList({
                 {task.task_type && task.task_type !== "general" && (
                   <Badge variant="outline" className="mt-0.5 text-[10px]">{task.task_type}</Badge>
                 )}
+                {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <div className="h-1.5 flex-1 rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${task.progress_percent}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">{task.progress_percent}%</span>
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-1">
                 <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status.replace(/_/g, " ")}</Badge>

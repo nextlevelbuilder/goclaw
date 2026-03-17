@@ -10,6 +10,7 @@ openclaw-go
 
 # OS
 .DS_Store
+._*
 
 # Environment
 .env*
@@ -37,6 +38,7 @@ editor/claude-code/
 deploy-*.sh
 
 docs/technical-diaries
+docs/zuey
 plans
 release-manifest.json
 k8s-*/*
@@ -45,6 +47,7 @@ k8s-*/*
 tests/**/creds.json
 ui/simple-saas
 *.tar
+
 
 # Auto Claude data directory
 .auto-claude/

@@ -15,6 +15,11 @@
 services:
   upgrade:
     image: goclaw-goclaw:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ENABLE_OTEL: "false"
     env_file:
       - path: .env
         required: false

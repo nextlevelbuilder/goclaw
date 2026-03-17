@@ -42,6 +42,10 @@
     "searchAgents": "搜索Agent...",
     "adding": "添加中...",
     "add": "添加",
+    "added": "成员已添加",
+    "failedAdd": "添加成员失败",
+    "removed": "成员已移除",
+    "failedRemove": "移除成员失败",
     "removeMember": "移除成员",
     "columns": {
       "agent": "Agent",

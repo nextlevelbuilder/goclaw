@@ -170,6 +170,8 @@ const (
 	MsgToolSpawn             = "core.tool.spawn"
 	MsgToolSkillSearch       = "core.tool.skill_search"
 	MsgToolUseSkill          = "core.tool.use_skill"
+	MsgToolSkillManage       = "core.tool.skill_manage"
+	MsgToolPublishSkill      = "core.tool.publish_skill"
 	MsgToolTeamTasks         = "core.tool.team_tasks"
 	MsgToolTeamMessage       = "core.tool.team_message"
 	MsgToolRegisterMCPServer = "core.tool.register_mcp_server"
@@ -177,4 +179,9 @@ const (
 
 	// --- MCP registration errors ---
 	MsgMCPServerNameConflict = "error.mcp_server_name_conflict" // "MCP server with name %s already exists"
+
+	// Skill evolution nudges (user-facing)
+	MsgSkillNudgePostscript = "skill.nudge_postscript"
+	MsgSkillNudge70Pct      = "skill.nudge_70_pct"
+	MsgSkillNudge90Pct      = "skill.nudge_90_pct"
 )

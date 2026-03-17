@@ -315,6 +315,25 @@ func (m *Manager) ActivateTools(names []string) {
 	slog.Info("mcp.tools.activated", "tools", activated)
 }
 
+// ActivateToolIfDeferred activates a single named tool if it is currently deferred.
+// Returns true if the tool is now in the registry.
+// Used by the Registry's deferredActivator callback for lazy tool activation.
+func (m *Manager) ActivateToolIfDeferred(name string) bool {
+	m.mu.RLock()
+	_, isDeferred := m.deferredTools[name]
+	_, isActivated := m.activatedTools[name]
+	m.mu.RUnlock()
+	if isActivated {
+		return true // already activated by a concurrent call
+	}
+	if !isDeferred {
+		return false
+	}
+	m.ActivateTools([]string{name})
+	_, ok := m.registry.Get(name)
+	return ok
+}
+
 // Stop shuts down all MCP server connections and unregisters tools.
 func (m *Manager) Stop() {
 	m.mu.Lock()

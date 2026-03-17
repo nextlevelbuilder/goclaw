@@ -26,6 +26,7 @@ import { PROVIDER_TYPES } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
+import { Loader2 } from "lucide-react";
 
 interface ProviderFormDialogProps {
   open: boolean;
@@ -293,7 +294,9 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
             <Button
               onClick={handleSubmit}
               disabled={!name.trim() || !isValidSlug(name) || !providerType || loading}
+              className="gap-1"
             >
+              {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {loading
                 ? (isEdit ? t("form.saving") : t("form.creating"))
                 : isEdit ? t("form.save") : t("form.create")}

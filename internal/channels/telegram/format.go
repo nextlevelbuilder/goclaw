@@ -365,15 +365,42 @@ func chunkHTML(text string, maxLen int) []string {
 			break
 		}
 
-		// Find best split point within maxLen
+		// Strategy: search backwards for best natural breakpoint within maxLen.
 		cutAt := maxLen
-		// Prefer paragraph boundary
+
+		// 1. Look for preferred boundaries: paragraph, then newline, then space.
 		if idx := strings.LastIndex(remaining[:cutAt], "\n\n"); idx > 0 {
-			cutAt = idx + 1 // include first newline
+			cutAt = idx + 2
 		} else if idx := strings.LastIndex(remaining[:cutAt], "\n"); idx > 0 {
 			cutAt = idx + 1
 		} else if idx := strings.LastIndex(remaining[:cutAt], " "); idx > 0 {
 			cutAt = idx + 1
+		}
+
+		// 2. Safety: ensure we don't cut in the middle of an HTML tag or entity.
+		// Tag check: find last '<' and see if it was closed before cutAt.
+		if lastOpen := strings.LastIndex(remaining[:cutAt], "<"); lastOpen != -1 {
+			lastClose := strings.LastIndex(remaining[:cutAt], ">")
+			if lastOpen > lastClose {
+				// We're inside a tag (e.g. "<a hre"). Move cutAt back to start of tag.
+				// This ensures the tag remains whole in the next chunk.
+				cutAt = lastOpen
+			}
+		}
+
+		// Entity check: find last '&' and see if it was closed before cutAt.
+		if lastOpen := strings.LastIndex(remaining[:cutAt], "&"); lastOpen != -1 {
+			lastClose := strings.LastIndex(remaining[:cutAt], ";")
+			if lastOpen > lastClose {
+				// Inside an entity (e.g. "&am"). Move cutAt back to start of entity.
+				cutAt = lastOpen
+			}
+		}
+
+		// 3. Fallback for monolithic blocks: if boundaries or safety moved cutAt to 0,
+		// force progress by using maxLen anyway. This avoids infinite loops.
+		if cutAt <= 0 {
+			cutAt = maxLen
 		}
 
 		chunks = append(chunks, strings.TrimRight(remaining[:cutAt], " \n"))

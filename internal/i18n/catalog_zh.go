@@ -169,6 +169,8 @@ func init() {
 		MsgToolSpawn:           "创建子代理执行后台工作或将任务委派给已链接的代理",
 		MsgToolSkillSearch:     "按关键字或描述搜索可用技能以查找相关功能",
 		MsgToolUseSkill:        "激活技能以使用其专门功能（追踪标记）",
+		MsgToolSkillManage:     "从对话经验中创建、修补或删除技能",
+		MsgToolPublishSkill:    "将技能目录注册到系统数据库中，使其可被发现和授权",
 		MsgToolTeamTasks:       "查看、创建、更新和完成团队任务板上的任务",
 		MsgToolTeamMessage:     "向代理团队中的队友发送直接消息或广播",
 		MsgToolRegisterMCPServer: "在 GoClaw 中注册本地或远程 MCP 服务器，使其工具可供代理使用",
@@ -176,5 +178,9 @@ func init() {
 
 		// MCP 注册
 		MsgMCPServerNameConflict: "名为 %s 的 MCP 服务器已存在",
+
+		MsgSkillNudgePostscript: "此任务涉及多个步骤。要我将此过程保存为可重用技能吗？回复 **\"保存技能\"** 或 **\"跳过\"**。",
+		MsgSkillNudge70Pct:      "[System] 您已使用 70% 的迭代预算。请考虑本次会话中的模式是否值得保存为技能。",
+		MsgSkillNudge90Pct:      "[System] 您已使用 90% 的迭代预算。如果本次会话涉及可重用的模式，请考虑在完成前将其保存为技能。",
 	})
 }

@@ -55,7 +55,15 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
   const initialGates = (Array.isArray(otherObj.quality_gates) ? otherObj.quality_gates : []) as QualityGateConfig[];
   const initialThinkingLevel = (typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off");
   const initialWsSharing = (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig;
-  const { workspace_sharing: _ws, quality_gates: _qg, thinking_level: _tl, ...otherWithoutManaged } = otherObj;
+  // Strip all managed keys so they don't leak into the raw JSON editor.
+  // General tab manages: emoji, self_evolve, description, skill_evolve, skill_nudge_interval
+  // Config tab manages: workspace_sharing, quality_gates, thinking_level
+  const {
+    workspace_sharing: _ws, quality_gates: _qg, thinking_level: _tl,
+    emoji: _emoji, self_evolve: _se, description: _desc,
+    skill_evolve: _ske, skill_nudge_interval: _sni,
+    ...otherWithoutManaged
+  } = otherObj;
 
   const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(initialWsSharing);
 

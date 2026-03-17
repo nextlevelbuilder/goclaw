@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/google/uuid"
 
@@ -84,12 +85,24 @@ func (s *PGSkillStore) DeleteSkill(id uuid.UUID) error {
 	return nil
 }
 
-// CreateSkillManaged creates a skill from upload parameters.
+// slugAdvisoryLock returns a stable int64 lock key derived from a slug string,
+// suitable for use with pg_advisory_xact_lock.
+func slugAdvisoryLock(slug string) int64 {
+	h := fnv.New64a()
+	h.Write([]byte(slug))
+	return int64(h.Sum64())
+}
+
+// CreateSkillManaged creates or updates a skill from upload parameters.
+// It uses a transaction with an advisory lock on the slug to prevent concurrent
+// callers from racing on version calculation and upsert.
+// The RETURNING id clause ensures the actual row ID is returned (new insert or
+// existing row on conflict), so callers always receive a valid ID.
 func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreateParams) (uuid.UUID, error) {
 	if err := store.ValidateUserID(p.OwnerID); err != nil {
 		return uuid.Nil, err
 	}
-	id := store.GenNewID()
+
 	// Marshal frontmatter to JSON for DB storage
 	fmJSON := []byte("{}")
 	if len(p.Frontmatter) > 0 {
@@ -97,7 +110,31 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 			fmJSON = b
 		}
 	}
-	_, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Acquire advisory lock scoped to this transaction so concurrent calls for
+	// the same slug serialize version calculation and the upsert atomically.
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", slugAdvisoryLock(p.Slug)); err != nil {
+		return uuid.Nil, fmt.Errorf("advisory lock: %w", err)
+	}
+
+	// Compute next version atomically under the lock.
+	var version int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(version), 0) + 1 FROM skills WHERE slug = $1",
+		p.Slug,
+	).Scan(&version); err != nil {
+		return uuid.Nil, fmt.Errorf("get next version: %w", err)
+	}
+
+	id := store.GenNewID()
+	var returnedID uuid.UUID
+	err = tx.QueryRowContext(ctx,
 		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9, $10, $11, NOW(), NOW())
 		 ON CONFLICT (slug) DO UPDATE SET
@@ -106,20 +143,28 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 		   file_path = EXCLUDED.file_path,
 		   file_size = EXCLUDED.file_size, file_hash = EXCLUDED.file_hash,
 		   visibility = CASE WHEN skills.status = 'archived' THEN 'private' ELSE skills.visibility END,
-		   status = 'active', updated_at = NOW()`,
-		id, p.Name, p.Slug, p.Description, p.OwnerID, p.Visibility, p.Version,
+		   status = 'active', updated_at = NOW()
+		 RETURNING id`,
+		id, p.Name, p.Slug, p.Description, p.OwnerID, p.Visibility, version,
 		fmJSON, p.FilePath, p.FileSize, p.FileHash,
-	)
-	if err == nil {
-		s.BumpVersion()
-		// Generate embedding asynchronously
-		desc := ""
-		if p.Description != nil {
-			desc = *p.Description
-		}
-		go s.generateEmbedding(context.Background(), p.Slug, p.Name, desc)
+	).Scan(&returnedID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("upsert skill: %w", err)
 	}
-	return id, err
+
+	if err := tx.Commit(); err != nil {
+		return uuid.Nil, fmt.Errorf("commit: %w", err)
+	}
+
+	s.BumpVersion()
+	// Generate embedding asynchronously
+	desc := ""
+	if p.Description != nil {
+		desc = *p.Description
+	}
+	go s.generateEmbedding(context.Background(), p.Slug, p.Name, desc)
+
+	return returnedID, nil
 }
 
 // GetSkillFilePath returns the filesystem path and version for a skill by UUID.
@@ -131,10 +176,36 @@ func (s *PGSkillStore) GetSkillFilePath(id uuid.UUID) (filePath string, slug str
 }
 
 // GetNextVersion returns the next version number for a skill slug.
+// NOTE: This function has an inherent race condition — two concurrent callers
+// for the same slug can receive the same version number. Use it only for
+// informational purposes (e.g. display). For write paths, use CreateSkillManaged
+// which computes the version atomically under a pg_advisory_xact_lock.
 func (s *PGSkillStore) GetNextVersion(slug string) int {
 	var maxVersion int
 	s.db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM skills WHERE slug = $1", slug).Scan(&maxVersion)
 	return maxVersion + 1
+}
+
+// GetNextVersionLocked computes the next version atomically using an advisory lock.
+// Safe for concurrent write paths (patch, create). Returns version and a cleanup func
+// that MUST be called to release the lock (commits the transaction).
+func (s *PGSkillStore) GetNextVersionLocked(ctx context.Context, slug string) (int, func() error, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, nil, fmt.Errorf("begin tx: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", slugAdvisoryLock(slug)); err != nil {
+		tx.Rollback()
+		return 0, nil, fmt.Errorf("advisory lock: %w", err)
+	}
+	var version int
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COALESCE(MAX(version), 0) + 1 FROM skills WHERE slug = $1", slug,
+	).Scan(&version); err != nil {
+		tx.Rollback()
+		return 0, nil, fmt.Errorf("get next version: %w", err)
+	}
+	return version, func() error { return tx.Commit() }, nil
 }
 
 // ToggleSkill enables or disables a skill by UUID.

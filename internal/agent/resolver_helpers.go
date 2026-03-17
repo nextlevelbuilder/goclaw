@@ -134,8 +134,13 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		if selfRole == store.TeamRoleReviewer {
 			sb.WriteString("You are a **reviewer**. When evaluating, respond with **APPROVED** or **REJECTED: <feedback>**.\n\n")
 		}
-		sb.WriteString("As a member, just do the assigned work. Task completion is automatic.\n")
-		sb.WriteString("For long-running tasks, use `team_tasks(action=\"progress\", percent=50, text=\"status update\")` to report progress. The task_id is auto-resolved from your assigned task — you don't need to specify it.\n")
+		sb.WriteString("As a member, focus entirely on your assigned task.\n\n")
+		sb.WriteString("Rules:\n")
+		sb.WriteString("- Stay on task — do not deviate from the assignment\n")
+		sb.WriteString("- Your final response becomes the task result — make it clear, complete, and actionable\n")
+		sb.WriteString("- For long tasks, report progress: `team_tasks(action=\"progress\", percent=50, text=\"status\")`\n")
+		sb.WriteString("- The task_id is auto-resolved — you don't need to specify it\n")
+		sb.WriteString("- Task completion is automatic when your run finishes\n")
 	}
 
 	return sb.String()

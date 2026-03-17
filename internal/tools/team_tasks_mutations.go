@@ -305,14 +305,23 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		return ErrorResult("failed to update progress: " + err.Error())
 	}
 
+	ownerKey := ""
+	if task.OwnerAgentID != nil {
+		ownerKey = t.manager.agentKeyFromID(ctx, *task.OwnerAgentID)
+	}
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskProgress, protocol.TeamTaskEventPayload{
-		TeamID:    team.ID.String(),
-		TaskID:    taskID.String(),
-		Status:    store.TeamTaskStatusInProgress,
-		UserID:    store.UserIDFromContext(ctx),
-		Channel:   ToolChannelFromCtx(ctx),
-		ChatID:    ToolChatIDFromCtx(ctx),
-		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		TeamID:          team.ID.String(),
+		TaskID:          taskID.String(),
+		TaskNumber:      task.TaskNumber,
+		Subject:         task.Subject,
+		Status:          store.TeamTaskStatusInProgress,
+		OwnerAgentKey:   ownerKey,
+		ProgressPercent: percent,
+		ProgressStep:    step,
+		UserID:          store.UserIDFromContext(ctx),
+		Channel:         ToolChannelFromCtx(ctx),
+		ChatID:          ToolChatIDFromCtx(ctx),
+		Timestamp:       time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	})
 
 	return SilentResult(fmt.Sprintf("Progress updated: %d%% %s", percent, step))

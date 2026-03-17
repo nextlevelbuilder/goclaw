@@ -169,6 +169,8 @@ func init() {
 		MsgToolSpawn:           "Spawn a subagent for background work or delegate a task to a linked agent",
 		MsgToolSkillSearch:     "Search for available skills by keyword or description to find relevant capabilities",
 		MsgToolUseSkill:        "Activate a skill to use its specialized capabilities (tracing marker)",
+		MsgToolSkillManage:     "Create, patch, or delete skills from conversation experience",
+		MsgToolPublishSkill:    "Register a skill directory in the system database, making it discoverable",
 		MsgToolTeamTasks:       "View, create, update, and complete tasks on the team task board",
 		MsgToolTeamMessage:     "Send a direct message or broadcast to teammates in the agent team",
 		MsgToolRegisterMCPServer: "Register a locally-built or remote MCP server in GoClaw, making its tools available to agents",
@@ -176,5 +178,9 @@ func init() {
 
 		// MCP registration
 		MsgMCPServerNameConflict: "MCP server with name %s already exists",
+
+		MsgSkillNudgePostscript: "This task involved several steps. Want me to save the process as a reusable skill? Reply **\"save as skill\"** or **\"skip\"**.",
+		MsgSkillNudge70Pct:      "[System] You are at 70% of your iteration budget. Consider whether any patterns from this session would make a good skill.",
+		MsgSkillNudge90Pct:      "[System] You are at 90% of your iteration budget. If this session involved reusable patterns, consider saving them as a skill before completing.",
 	})
 }

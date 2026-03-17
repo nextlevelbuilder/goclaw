@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWsEvent } from "./use-ws-event";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { Events } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import type { AgentEventPayload } from "@/types/chat";
@@ -60,6 +61,21 @@ export function useWsQueryInvalidation() {
     },
     [queryClient],
   );
+
+  // Invalidate all queries on WS reconnect so pages get fresh data
+  const connected = useAuthStore((s) => s.connected);
+  const wasConnectedRef = useRef(false);
+  const hasConnectedOnceRef = useRef(false);
+
+  useEffect(() => {
+    if (connected && !wasConnectedRef.current && hasConnectedOnceRef.current) {
+      queryClient.invalidateQueries();
+    }
+    if (connected) {
+      hasConnectedOnceRef.current = true;
+    }
+    wasConnectedRef.current = connected;
+  }, [connected, queryClient]);
 
   useWsEvent(Events.AGENT, handleAgentEvent);
   useWsEvent(Events.TRACE_UPDATED, handleTraceUpdated);

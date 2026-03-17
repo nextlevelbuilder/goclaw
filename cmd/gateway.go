@@ -599,7 +599,11 @@ func runGateway() {
 			case "dispatched":
 				content = fmt.Sprintf("📋 Task #%d \"%s\" → assigned to %s", payload.TaskNumber, payload.Subject, agentName)
 			case "progress":
-				content = fmt.Sprintf("⏳ Task #%d: %d%% — %s", payload.TaskNumber, payload.ProgressPercent, payload.ProgressStep)
+				if payload.ProgressStep != "" {
+					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%% — %s", payload.TaskNumber, payload.Subject, payload.ProgressPercent, payload.ProgressStep)
+				} else {
+					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%%", payload.TaskNumber, payload.Subject, payload.ProgressPercent)
+				}
 			case "failed":
 				reason := payload.Reason
 				if len(reason) > 200 {

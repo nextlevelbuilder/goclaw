@@ -74,8 +74,8 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 				"description": "Require user approval before claim (for create, default false)",
 			},
 			"percent": map[string]any{
-				"type":        "number",
-				"description": "Progress 0-100 (for progress)",
+				"type":        "integer",
+				"description": "Progress percentage 0-100 (for progress action)",
 			},
 			"file_id": map[string]any{
 				"type":        "string",

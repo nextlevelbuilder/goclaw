@@ -169,6 +169,41 @@ func (a *AgentData) ParseSelfEvolve() bool {
 	return cfg.SelfEvolve
 }
 
+// ParseSkillEvolve extracts skill_evolve from other_config JSONB.
+// When true, the agent's learning loop is enabled: system prompt includes skill
+// creation guidance, and the loop injects nudges at tool count milestones.
+func (a *AgentData) ParseSkillEvolve() bool {
+	if len(a.OtherConfig) == 0 {
+		return false
+	}
+	var cfg struct {
+		SkillEvolve bool `json:"skill_evolve"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
+		return false
+	}
+	return cfg.SkillEvolve
+}
+
+// ParseSkillNudgeInterval extracts skill_nudge_interval from other_config JSONB.
+// Returns the interval (in tool calls) at which the loop injects a skill creation reminder.
+// Default 15 when not set. Explicitly 0 disables mid-loop nudges (system prompt guidance still shown).
+func (a *AgentData) ParseSkillNudgeInterval() int {
+	if len(a.OtherConfig) == 0 {
+		return 15
+	}
+	var cfg struct {
+		SkillNudgeInterval *int `json:"skill_nudge_interval"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
+		return 15
+	}
+	if cfg.SkillNudgeInterval == nil {
+		return 15
+	}
+	return *cfg.SkillNudgeInterval
+}
+
 // WorkspaceSharingConfig controls per-user workspace isolation.
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.
