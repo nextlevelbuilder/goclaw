@@ -23,6 +23,7 @@ import { CronSection } from "./sections/cron-section";
 import { TelemetrySection } from "./sections/telemetry-section";
 import { BindingsSection } from "./sections/bindings-section";
 import { FeaturesSection } from "./sections/features-section";
+import { useFeaturesStore } from "@/stores/use-features-store";
 
 export function ConfigPage() {
   const { t } = useTranslation("config");
@@ -185,7 +186,10 @@ export function ConfigPage() {
         <TabsContent value="features" className="space-y-4">
           <FeaturesSection
             data={config.features as any}
-            onSave={(v) => patch({ features: v })}
+            onSave={(v) => {
+              patch({ features: v });
+              useFeaturesStore.getState().setFeatures(v);
+            }}
             saving={saving}
           />
         </TabsContent>
