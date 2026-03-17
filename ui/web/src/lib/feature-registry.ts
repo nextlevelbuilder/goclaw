@@ -64,7 +64,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     features: [
       { key: "traces", labelKey: "features:items.traces", descKey: "features:desc.traces", route: ROUTES.TRACES },
       { key: "events", labelKey: "features:items.events", descKey: "features:desc.events", route: ROUTES.EVENTS },
-      { key: "delegations", labelKey: "features:items.delegations", descKey: "features:desc.delegations", route: ROUTES.DELEGATIONS },
+
       { key: "activity", labelKey: "features:items.activity", descKey: "features:desc.activity", route: ROUTES.ACTIVITY },
       { key: "logs", labelKey: "features:items.logs", descKey: "features:desc.logs", route: ROUTES.LOGS },
     ],
