@@ -105,6 +105,7 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "skill_search", DisplayName: "Skill Search", Description: "Search for available skills by keyword or description to find relevant capabilities", Category: "skills", Enabled: true},
 		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
 		{Name: "publish_skill", DisplayName: "Publish Skill", Description: "Register a skill directory (created via skill-creator) in the system database, making it discoverable and grantable to agents", Category: "skills", Enabled: true},
+		{Name: "skill_manage", DisplayName: "Skill Manager", Description: "Create, patch, or delete skills from conversation experience", Category: "skills", Enabled: true},
 
 		// teams
 		{Name: "team_tasks", DisplayName: "Team Tasks", Description: "View, create, update, and complete tasks on the team task board", Category: "teams", Enabled: true,

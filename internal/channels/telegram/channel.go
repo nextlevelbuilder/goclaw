@@ -203,11 +203,11 @@ func (c *Channel) StreamEnabled(isGroup bool) bool {
 }
 
 // draftTransportEnabled returns whether sendMessageDraft should be used for DM streaming.
-// Default: true (enabled). Uses stealth preview with no per-edit notifications.
-// Note: may cause "reply to deleted message" artifacts on some Telegram clients (tdesktop#10315).
+// Default: false (disabled). When enabled, uses stealth preview with no per-edit notifications,
+// but may cause "reply to deleted message" artifacts on some Telegram clients (tdesktop#10315).
 func (c *Channel) draftTransportEnabled() bool {
 	if c.config.DraftTransport == nil {
-		return true
+		return false
 	}
 	return *c.config.DraftTransport
 }

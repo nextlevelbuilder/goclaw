@@ -100,6 +100,12 @@
     "selfEvolutionLabel": "Cho phép agent tiến hóa phong cách giao tiếp",
     "selfEvolutionHint": "Khi được bật, agent có thể cập nhật SOUL.md để tinh chỉnh giọng điệu, từ vựng và phong cách phản hồi dựa trên tương tác. Nhận dạng, tên và hướng dẫn hoạt động vẫn bị khóa.",
     "selfEvolutionInfo": "Agent sẽ tiến hóa phong cách theo thời gian qua các cập nhật SOUL.md. Chỉ phong cách và giọng điệu bị ảnh hưởng — nhận dạng và quy tắc quy trình làm việc vẫn cố định.",
+    "skillLearning": "Học kỹ năng",
+    "skillLearningLabel": "Cho phép agent tạo và quản lý kỹ năng từ trải nghiệm",
+    "skillLearningHint": "Khi được bật, agent nhận hướng dẫn và nhắc nhở nhẹ để lưu lại quy trình làm việc tái sử dụng thành kỹ năng sau các tác vụ phức tạp. Tool skill_manage được bật mặc định.",
+    "skillLearningInfo": "Sau các tác vụ phức tạp, agent có thể đề xuất lưu quy trình thành kỹ năng tái sử dụng. Luôn cần sự đồng ý của người dùng trước khi tạo kỹ năng. Kỹ năng mặc định là riêng tư.",
+    "skillNudgeIntervalLabel": "Nhắc sau N lệnh tool",
+    "skillNudgeIntervalHint": "Sau số lượng lệnh tool này, agent sẽ đề xuất lưu quy trình thành kỹ năng. Đặt 0 để tắt đề xuất sau tác vụ (hướng dẫn trong system prompt vẫn hiển thị).",
     "budget": "Ngân sách hàng tháng",
     "budgetLabel": "Giới hạn ngân sách (USD)",
     "budgetHint": "Giới hạn chi tiêu hàng tháng tùy chọn. Agent sẽ từ chối yêu cầu khi vượt quá. Để trống cho không giới hạn.",
@@ -134,12 +140,12 @@
     "maxToolIterationsHint": "Số lần gọi công cụ tối đa mỗi yêu cầu."
   },
   "workspace": {
-    "title": "Không gian làm việc",
-    "workspacePath": "Đường dẫn không gian làm việc",
+    "title": "Workspace",
+    "workspacePath": "Đường dẫn workspace",
     "workspacePathHint": "Được gán tự động khi agent được tạo. Các thư mục con theo người dùng được tạo khi chạy.",
-    "noWorkspace": "Chưa cấu hình không gian làm việc",
-    "restrictToWorkspace": "Giới hạn trong không gian làm việc",
-    "restrictToWorkspaceHint": "Giới hạn quyền truy cập tệp trong đường dẫn không gian làm việc."
+    "noWorkspace": "Chưa cấu hình workspace",
+    "restrictToWorkspace": "Giới hạn trong workspace",
+    "restrictToWorkspaceHint": "Giới hạn quyền truy cập tệp trong đường dẫn workspace."
   },
   "config": {
     "saveConfig": "Lưu cấu hình",
@@ -354,7 +360,7 @@
       "title": "Hộp cát",
       "description": "Hộp cát Docker để cô lập thực thi code",
       "mode": "Chế độ",
-      "workspaceAccess": "Truy cập không gian làm việc",
+      "workspaceAccess": "Truy cập workspace",
       "image": "Hình ảnh",
       "scope": "Phạm vi",
       "timeout": "Hết giờ (giây)",

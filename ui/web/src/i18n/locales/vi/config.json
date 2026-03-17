@@ -57,10 +57,10 @@
   "agents.maxToolIterationsTip": "Số lần lặp gọi công cụ tối đa cho mỗi yêu cầu agent.",
   "agents.contextWindow": "Cửa sổ ngữ cảnh",
   "agents.contextWindowTip": "Tổng ngân sách token cho cửa sổ ngữ cảnh model.",
-  "agents.workspace": "Đường dẫn không gian làm việc",
+  "agents.workspace": "Đường dẫn workspace",
   "agents.workspaceTip": "Thư mục gốc cho các thao tác tệp của agent. Thư mục con theo người dùng được tạo tự động.",
-  "agents.restrictToWorkspace": "Giới hạn trong không gian làm việc",
-  "agents.restrictToWorkspaceTip": "Ngăn agent đọc hoặc ghi tệp ngoài đường dẫn không gian làm việc.",
+  "agents.restrictToWorkspace": "Giới hạn trong workspace",
+  "agents.restrictToWorkspaceTip": "Ngăn agent đọc hoặc ghi tệp ngoài đường dẫn workspace.",
   "agents.intentClassify": "Phân loại ý định",
   "agents.saveError": "Lưu mặc định agent thất bại",
 

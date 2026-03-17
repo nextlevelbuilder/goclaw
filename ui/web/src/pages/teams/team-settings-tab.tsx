@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
-import { X, Save, Check, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot } from "lucide-react";
+import { X, Save, Check, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import type { TeamData, TeamAccessSettings, EscalationMode, EscalationAction } from "@/types/team";
@@ -449,7 +449,9 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
           {saving ? (
-            t("settings.saving")
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("settings.saving")}
+            </>
           ) : saved ? (
             <>
               <Check className="h-4 w-4" /> {t("settings.saved")}

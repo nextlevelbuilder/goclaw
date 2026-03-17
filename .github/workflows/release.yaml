@@ -10,12 +10,86 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.semrel.outputs.version }}
+      released: ${{ steps.semrel.outputs.version != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: go-semantic-release/action@v1
+      - id: semrel
+        uses: go-semantic-release/action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           allow-initial-development-versions: true
+
+  # Build cross-platform binaries and attach to release
+  build-binaries:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: v${{ needs.release.outputs.version }}
+        run: |
+          CGO_ENABLED=0 go build \
+            -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
+            -o goclaw .
+          tar -czf "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ needs.release.outputs.version }}" \
+            "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+            --clobber
+
+  # Notify Discord on new release
+  notify-discord:
+    needs: [release, build-binaries]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: v${{ needs.release.outputs.version }}
+        run: |
+          curl -fsSL -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"GoClaw ${VERSION} Released\",
+                \"url\": \"https://github.com/${{ github.repository }}/releases/tag/${VERSION}\",
+                \"color\": 5814783,
+                \"fields\": [
+                  {\"name\": \"Docker\", \"value\": \"\`docker pull digitop/goclaw:latest\`\", \"inline\": false},
+                  {\"name\": \"Install\", \"value\": \"\`curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash\`\", \"inline\": false}
+                ],
+                \"footer\": {\"text\": \"${{ github.repository }}\"},
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+              }]
+            }" \
+            "$DISCORD_WEBHOOK_URL"

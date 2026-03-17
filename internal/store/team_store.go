@@ -327,6 +327,9 @@ type TeamStore interface {
 	// DeleteTask permanently removes a terminal-status task (completed/failed/cancelled).
 	// Returns ErrTaskNotFound if the task does not exist or is not in a terminal status.
 	DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) error
+	// DeleteTasks permanently removes multiple terminal-status tasks in a single query.
+	// Returns the list of IDs that were actually deleted.
+	DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error)
 
 	// ClaimTask atomically transitions a task from pending to in_progress.
 	// Only one agent can claim a given task (row-level lock, race-safe).

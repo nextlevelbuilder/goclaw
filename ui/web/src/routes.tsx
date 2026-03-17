@@ -1,96 +1,98 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router";
 import { AppLayout } from "@/components/layout/app-layout";
 import { RequireAuth } from "@/components/shared/require-auth";
 import { RequireSetup } from "@/components/shared/require-setup";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { ROUTES } from "@/lib/constants";
+import { lazyWithRetry } from "@/lib/lazy-with-retry";
 
 // Lazy-loaded pages
-const LoginPage = lazy(() =>
+const LoginPage = lazyWithRetry(() =>
   import("@/pages/login/login-page").then((m) => ({ default: m.LoginPage })),
 );
-const OverviewPage = lazy(() =>
+const OverviewPage = lazyWithRetry(() =>
   import("@/pages/overview/overview-page").then((m) => ({ default: m.OverviewPage })),
 );
-const ChatPage = lazy(() =>
+const ChatPage = lazyWithRetry(() =>
   import("@/pages/chat/chat-page").then((m) => ({ default: m.ChatPage })),
 );
-const AgentsPage = lazy(() =>
+const AgentsPage = lazyWithRetry(() =>
   import("@/pages/agents/agents-page").then((m) => ({ default: m.AgentsPage })),
 );
-const SessionsPage = lazy(() =>
+const SessionsPage = lazyWithRetry(() =>
   import("@/pages/sessions/sessions-page").then((m) => ({ default: m.SessionsPage })),
 );
-const SkillsPage = lazy(() =>
+const SkillsPage = lazyWithRetry(() =>
   import("@/pages/skills/skills-page").then((m) => ({ default: m.SkillsPage })),
 );
-const CronPage = lazy(() =>
+const CronPage = lazyWithRetry(() =>
   import("@/pages/cron/cron-page").then((m) => ({ default: m.CronPage })),
 );
-const ConfigPage = lazy(() =>
+const ConfigPage = lazyWithRetry(() =>
   import("@/pages/config/config-page").then((m) => ({ default: m.ConfigPage })),
 );
-const TracesPage = lazy(() =>
+const TracesPage = lazyWithRetry(() =>
   import("@/pages/traces/traces-page").then((m) => ({ default: m.TracesPage })),
 );
-const ChannelsPage = lazy(() =>
+const ChannelsPage = lazyWithRetry(() =>
   import("@/pages/channels/channels-page").then((m) => ({ default: m.ChannelsPage })),
 );
-const ApprovalsPage = lazy(() =>
+const ApprovalsPage = lazyWithRetry(() =>
   import("@/pages/approvals/approvals-page").then((m) => ({ default: m.ApprovalsPage })),
 );
-const NodesPage = lazy(() =>
+const NodesPage = lazyWithRetry(() =>
   import("@/pages/nodes/nodes-page").then((m) => ({ default: m.NodesPage })),
 );
-const LogsPage = lazy(() =>
+const LogsPage = lazyWithRetry(() =>
   import("@/pages/logs/logs-page").then((m) => ({ default: m.LogsPage })),
 );
-const ProvidersPage = lazy(() =>
+const ProvidersPage = lazyWithRetry(() =>
   import("@/pages/providers/providers-page").then((m) => ({ default: m.ProvidersPage })),
 );
-const CustomToolsPage = lazy(() =>
+const CustomToolsPage = lazyWithRetry(() =>
   import("@/pages/custom-tools/custom-tools-page").then((m) => ({ default: m.CustomToolsPage })),
 );
-const MCPPage = lazy(() =>
+const MCPPage = lazyWithRetry(() =>
   import("@/pages/mcp/mcp-page").then((m) => ({ default: m.MCPPage })),
 );
-const TeamsPage = lazy(() =>
+const TeamsPage = lazyWithRetry(() =>
   import("@/pages/teams/teams-page").then((m) => ({ default: m.TeamsPage })),
 );
-const BuiltinToolsPage = lazy(() =>
+const BuiltinToolsPage = lazyWithRetry(() =>
   import("@/pages/builtin-tools/builtin-tools-page").then((m) => ({ default: m.BuiltinToolsPage })),
 );
-const TtsPage = lazy(() =>
+const TtsPage = lazyWithRetry(() =>
   import("@/pages/tts/tts-page").then((m) => ({ default: m.TtsPage })),
 );
-const EventsPage = lazy(() =>
+const EventsPage = lazyWithRetry(() =>
   import("@/pages/events/events-page").then((m) => ({ default: m.EventsPage })),
 );
-const StoragePage = lazy(() =>
+const StoragePage = lazyWithRetry(() =>
   import("@/pages/storage/storage-page").then((m) => ({ default: m.StoragePage })),
 );
-const SetupPage = lazy(() =>
+const SetupPage = lazyWithRetry(() =>
   import("@/pages/setup/setup-page").then((m) => ({ default: m.SetupPage })),
 );
-const PendingMessagesPage = lazy(() =>
+const PendingMessagesPage = lazyWithRetry(() =>
   import("@/pages/pending-messages/pending-messages-page").then((m) => ({ default: m.PendingMessagesPage })),
 );
-const MemoryPage = lazy(() =>
+const MemoryPage = lazyWithRetry(() =>
   import("@/pages/memory/memory-page").then((m) => ({ default: m.MemoryPage })),
 );
-const KnowledgeGraphPage = lazy(() =>
+const KnowledgeGraphPage = lazyWithRetry(() =>
   import("@/pages/knowledge-graph/knowledge-graph-page").then((m) => ({ default: m.KnowledgeGraphPage })),
 );
-const ContactsPage = lazy(() =>
+const ContactsPage = lazyWithRetry(() =>
   import("@/pages/contacts/contacts-page").then((m) => ({ default: m.ContactsPage })),
 );
-const ActivityPage = lazy(() =>
+const ActivityPage = lazyWithRetry(() =>
   import("@/pages/activity/activity-page").then((m) => ({ default: m.ActivityPage })),
 );
-const CliCredentialsPage = lazy(() =>
+const CliCredentialsPage = lazyWithRetry(() =>
   import("@/pages/cli-credentials/cli-credentials-page").then((m) => ({ default: m.CliCredentialsPage })),
 );
-const ApiKeysPage = lazy(() =>
+const ApiKeysPage = lazyWithRetry(() =>
   import("@/pages/api-keys/api-keys-page").then((m) => ({ default: m.ApiKeysPage })),
 );
 
@@ -104,6 +106,7 @@ function PageLoader() {
 
 export function AppRoutes() {
   return (
+    <ErrorBoundary>
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
@@ -171,5 +174,6 @@ export function AppRoutes() {
         <Route path="*" element={<Navigate to={ROUTES.OVERVIEW} replace />} />
       </Routes>
     </Suspense>
+    </ErrorBoundary>
   );
 }

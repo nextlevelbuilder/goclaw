@@ -1,14 +1,20 @@
 # Base docker-compose — shared service definition.
+# Pre-built images: ghcr.io/nextlevelbuilder/goclaw (also on Docker Hub: digitop/goclaw)
+#
 # Combine with overlays for your deployment:
 #
-#   Recommended (+ Web Dashboard):
+#   Recommended (+ Web Dashboard, pre-built images):
+#     docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d
+#
+#   Build from source (add --build):
 #     docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
 #
-#   Without dashboard:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+#   Without dashboard:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 #   With OTel tracing:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.otel.yml up -d --build
 
 services:
   goclaw:
+    image: ghcr.io/nextlevelbuilder/goclaw:latest
     build:
       context: .
       dockerfile: Dockerfile

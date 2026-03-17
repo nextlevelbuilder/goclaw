@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Save, Check, AlertCircle, Sparkles, Info, DollarSign } from "lucide-react";
+import { Save, Check, AlertCircle, Sparkles, Info, DollarSign, GraduationCap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,10 +35,14 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
     agent.budget_monthly_cents ? String(agent.budget_monthly_cents / 100) : "",
   );
 
-  // Self-evolve (predefined agents only)
+  // Self-evolve & skill-evolve (predefined agents only)
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
   const [emoji, setEmoji] = useState(typeof otherCfg.emoji === "string" ? otherCfg.emoji : "");
   const [selfEvolve, setSelfEvolve] = useState(Boolean(otherCfg.self_evolve));
+  const [skillEvolve, setSkillEvolve] = useState(Boolean(otherCfg.skill_evolve));
+  const [skillNudgeInterval, setSkillNudgeInterval] = useState(
+    typeof otherCfg.skill_nudge_interval === "number" ? otherCfg.skill_nudge_interval : 15,
+  );
 
   // Save state
   const [saving, setSaving] = useState(false);
@@ -54,7 +58,13 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
     setSaveError(null);
     setSaved(false);
     try {
-      const updatedOtherConfig = { ...otherCfg, self_evolve: selfEvolve, emoji: emoji.trim() || undefined };
+      const updatedOtherConfig = {
+        ...otherCfg,
+        self_evolve: selfEvolve,
+        skill_evolve: skillEvolve,
+        skill_nudge_interval: skillEvolve ? skillNudgeInterval : undefined,
+        emoji: emoji.trim() || undefined,
+      };
       const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
       await onUpdate({
         display_name: displayName,
@@ -92,6 +102,93 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
         isDefault={isDefault}
         onIsDefaultChange={setIsDefault}
       />
+
+      {/* Self-Evolve (predefined agents only) — right after Identity */}
+      {agent.agent_type === "predefined" && (
+        <>
+          <Separator />
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-4 w-4 text-violet-500" />
+              <h3 className="text-sm font-medium">{t("general.selfEvolution")}</h3>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="self-evolve" className="text-sm font-normal">
+                  {t("general.selfEvolutionLabel")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("general.selfEvolutionHint")}
+                </p>
+              </div>
+              <Switch
+                id="self-evolve"
+                checked={selfEvolve}
+                onCheckedChange={setSelfEvolve}
+              />
+            </div>
+            {selfEvolve && (
+              <div className="flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{t("general.selfEvolutionInfo")}</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Skill Learning (predefined agents only) — right after Self-Evolve */}
+      {agent.agent_type === "predefined" && (
+        <>
+          <Separator />
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <GraduationCap className="h-4 w-4 text-amber-500" />
+              <h3 className="text-sm font-medium">{t("general.skillLearning")}</h3>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="skill-evolve" className="text-sm font-normal">
+                  {t("general.skillLearningLabel")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("general.skillLearningHint")}
+                </p>
+              </div>
+              <Switch
+                id="skill-evolve"
+                checked={skillEvolve}
+                onCheckedChange={setSkillEvolve}
+              />
+            </div>
+            {skillEvolve && (
+              <>
+                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{t("general.skillLearningInfo")}</span>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="nudge-interval" className="text-xs font-normal text-muted-foreground">
+                    {t("general.skillNudgeIntervalLabel")}
+                  </Label>
+                  <Input
+                    id="nudge-interval"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={skillNudgeInterval}
+                    onChange={(e) => setSkillNudgeInterval(Number(e.target.value) || 0)}
+                    className="max-w-[120px] text-base md:text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("general.skillNudgeIntervalHint")}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       <Separator />
 
@@ -139,40 +236,6 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
           className="max-w-[200px]"
         />
       </div>
-
-      {/* Self-Evolve (predefined agents only) */}
-      {agent.agent_type === "predefined" && (
-        <>
-          <Separator />
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-4 w-4 text-violet-500" />
-              <h3 className="text-sm font-medium">{t("general.selfEvolution")}</h3>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="self-evolve" className="text-sm font-normal">
-                  {t("general.selfEvolutionLabel")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("general.selfEvolutionHint")}
-                </p>
-              </div>
-              <Switch
-                id="self-evolve"
-                checked={selfEvolve}
-                onCheckedChange={setSelfEvolve}
-              />
-            </div>
-            {selfEvolve && (
-              <div className="flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>{t("general.selfEvolutionInfo")}</span>
-              </div>
-            )}
-          </div>
-        </>
-      )}
 
       {/* Save */}
       {saveError && (

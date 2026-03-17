@@ -337,10 +337,10 @@ func buildPersonaReminder(files []bootstrap.ContextFile, agentType string) []str
 	return []string{reminder, ""}
 }
 
-// hasBootstrapFile checks if BOOTSTRAP.md is present in the context files.
+// hasBootstrapFile checks if BOOTSTRAP.md is present in context files.
 func hasBootstrapFile(files []bootstrap.ContextFile) bool {
 	for _, f := range files {
-		if strings.EqualFold(filepath.Base(f.Path), bootstrap.BootstrapFile) {
+		if filepath.Base(f.Path) == bootstrap.BootstrapFile {
 			return true
 		}
 	}

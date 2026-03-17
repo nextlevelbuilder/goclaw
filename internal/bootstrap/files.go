@@ -122,6 +122,14 @@ func IsCronSession(sessionKey string) bool {
 	return strings.HasPrefix(strings.ToLower(rest), "cron:")
 }
 
+// IsTeamSession checks if a session key indicates a team-dispatched task session.
+// Session key format: agent:{agentId}:team:{teamID}:{chatID}
+// Team sessions have "team:" in the rest part.
+func IsTeamSession(sessionKey string) bool {
+	rest := sessionRest(sessionKey)
+	return strings.HasPrefix(strings.ToLower(rest), "team:")
+}
+
 // sessionRest extracts the rest part after "agent:{agentId}:" from a session key.
 func sessionRest(sessionKey string) string {
 	// Format: agent:{agentId}:{rest}

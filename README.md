@@ -344,10 +344,14 @@ The script creates `.env` from `.env.example`, auto-generates `GOCLAW_ENCRYPTION
 
 ```bash
 # Recommended: Gateway + Web Dashboard (http://localhost:3000)
+# Pull pre-built images:
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d
+
+# Or build from source:
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
 
 # Without dashboard
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 
 # + OpenTelemetry tracing (Jaeger at http://localhost:16686)
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.otel.yml up -d --build
@@ -440,7 +444,40 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -tags "otel,tsnet" -o goclaw .
 
 > Optional features are gated behind build tags to avoid binary bloat. OTel adds ~11 MB (gRPC + protobuf). Tailscale adds ~20 MB (tsnet + WireGuard). The base build includes in-app tracing backed by PostgreSQL and localhost-only access.
 
-### Docker Build
+### Docker Images (Pre-built)
+
+Pre-built multi-arch images (linux/amd64 + linux/arm64) are published to **GHCR** and **Docker Hub** on every release:
+
+```bash
+# GHCR (recommended)
+docker pull ghcr.io/nextlevelbuilder/goclaw:latest
+
+# Docker Hub
+docker pull digitop/goclaw:latest
+```
+
+**Available tags:**
+
+| Tag        | Description                            |
+| ---------- | -------------------------------------- |
+| `latest`   | Base image (~50 MB Alpine)             |
+| `node`     | + Node.js runtime for JS tools         |
+| `python`   | + Python runtime for Python tools      |
+| `full`     | + Node.js + Python + all bundled skills |
+| `otel`     | + OpenTelemetry tracing support        |
+| `tsnet`    | + Tailscale VPN mesh listener          |
+| `redis`    | + Redis cache backend                  |
+
+Semver tags are also available: `1.0.0`, `1.0`, etc. (e.g. `ghcr.io/nextlevelbuilder/goclaw:1.0.0-python`).
+
+**Web Dashboard:**
+
+```bash
+docker pull ghcr.io/nextlevelbuilder/goclaw-web:latest
+docker pull digitop/goclaw-web:latest
+```
+
+### Docker Build (from source)
 
 ```bash
 # Standard image (~50MB Alpine)
@@ -682,13 +719,13 @@ Composable files for different deployment scenarios:
 # Prepare .env (auto-generates secrets, prompts for API key)
 chmod +x prepare-env.sh && ./prepare-env.sh
 
-# Managed (PostgreSQL)
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+# Using pre-built images (no --build flag):
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
 
 # Managed + Web Dashboard (http://localhost:3000)
 docker compose -f docker-compose.yml \
   -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d --build
+  -f docker-compose.selfservice.yml up -d
 
 # Managed + Web Dashboard + OpenTelemetry (Jaeger UI at http://localhost:16686)
 docker compose -f docker-compose.yml \
@@ -705,15 +742,21 @@ docker compose -f docker-compose.yml \
 curl http://localhost:18790/health
 ```
 
+> **Note:** Omit `--build` to use pre-built images from GHCR. Add `--build` to build from source. Overlays that require build args (otel, tsnet, redis, sandbox) need `--build`.
+
 ### Upgrading (Docker Compose)
 
-**Simple upgrade** — pull the latest code, rebuild, and restart. The entrypoint automatically runs `goclaw upgrade` (schema migrations + data hooks) before starting:
+**Simple upgrade** — pull the latest images and restart. The entrypoint automatically runs `goclaw upgrade` (schema migrations + data hooks) before starting:
 
 ```bash
-# Pull latest code
-git pull
+# Using pre-built images (recommended):
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
+  -f docker-compose.selfservice.yml pull
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
+  -f docker-compose.selfservice.yml up -d
 
-# Rebuild and restart (auto-upgrades database on start)
+# Or build from source:
+git pull
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
   -f docker-compose.selfservice.yml up -d --build
 ```

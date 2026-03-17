@@ -61,3 +61,72 @@ func TestRenderTableAsCode_Vietnamese(t *testing.T) {
 		}
 	}
 }
+
+func TestChunkHTML(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   []string
+	}{
+		{
+			name:   "natural boundary",
+			input:  "hello world",
+			maxLen: 6,
+			want:   []string{"hello", "world"},
+		},
+		{
+			name:   "tag exceeds maxLen uses fallback",
+			input:  "hello <a href='url'>link</a> world",
+			maxLen: 12,
+			want:   []string{"hello", "<a href='url", "'>link</a>", "world"},
+		},
+		{
+			name:   "avoid mid-tag split safe",
+			input:  "hello <a href='url'>link</a> world",
+			maxLen: 25,
+			// "hello " (6) -> remaining "<a href='url'>link</a> world" (28)
+			// maxLen 25. remaining[:25] is "<a href='url'>link</a> wo"
+			// lastOpen is at "</a" (18). lastClose at "</a>" (21).
+			// lastOpen < lastClose (18 < 21). No cut change from safety.
+			// lastSpace is at index 22 (" world"). cutAt=23.
+			want: []string{"hello", "<a href='url'>link</a>", "world"},
+		},
+		{
+			name:   "avoid mid-entity split",
+			input:  "hello &amp; world",
+			maxLen: 9,
+			// "hello " (6) -> then "&amp; world"
+			// At second chunk: remaining="&amp; world", maxLen=9
+			// remaining[:9] is "&amp; wor"
+			// lastSpace is at index 5. cutAt=6.
+			want: []string{"hello", "&amp;", "world"},
+		},
+		{
+			name:   "monolithic fallback",
+			input:  "monolithicblock",
+			maxLen: 5,
+			want:   []string{"monol", "ithic", "block"},
+		},
+		{
+			name:   "paragraph preferred",
+			input:  "para1\n\npara2\nline3",
+			maxLen: 10,
+			want:   []string{"para1", "para2", "line3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := chunkHTML(tt.input, tt.maxLen)
+			if len(got) != len(tt.want) {
+				t.Fatalf("chunkHTML() returned %d chunks, want %d\ngot:  %q\nwant: %q", len(got), len(tt.want), got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("chunk[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}

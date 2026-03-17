@@ -14,7 +14,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -96,13 +98,16 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Per-user workspace isolation.
 	// Workspace path comes from user_agent_profiles (includes channel segment
 	// for cross-channel isolation). Cached in userWorkspaces to avoid repeated DB queries.
+	isTeamSession := bootstrap.IsTeamSession(req.SessionKey)
 	if l.workspace != "" && req.UserID != "" {
 		cachedWs, loaded := l.userWorkspaces.Load(req.UserID)
 		if !loaded {
 			// First request for this user: get/create profile → returns stored workspace.
 			// Also seeds per-user context files on first chat.
+			// Team-dispatched sessions skip seeding — members process tasks with full
+			// capabilities, no bootstrap/user onboarding needed.
 			ws := l.workspace
-			if l.ensureUserFiles != nil {
+			if l.ensureUserFiles != nil && !isTeamSession {
 				var err error
 				ws, err = l.ensureUserFiles(ctx, l.agentUUID, req.UserID, l.agentType, l.workspace, req.Channel)
 				if err != nil {
@@ -364,7 +369,15 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					}
 					if t.Status == store.TeamTaskStatusInProgress {
 						age := time.Since(t.UpdatedAt).Truncate(time.Minute)
-						inProgress = append(inProgress, fmt.Sprintf("- %s: \"%s\" (in progress %s)", t.ID, t.Subject, age))
+						progressInfo := fmt.Sprintf("in progress %s", age)
+						if t.ProgressPercent > 0 {
+							if t.ProgressStep != "" {
+								progressInfo = fmt.Sprintf("%d%% — %s, %s", t.ProgressPercent, t.ProgressStep, age)
+							} else {
+								progressInfo = fmt.Sprintf("%d%%, %s", t.ProgressPercent, age)
+							}
+						}
+						inProgress = append(inProgress, fmt.Sprintf("- %s: \"%s\" (%s)", t.ID, t.Subject, progressInfo))
 					}
 				}
 				var parts []string
@@ -391,6 +404,28 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		}
 	}
 
+	// 2g. Member task reminder: inject task context for members working on dispatched tasks.
+	// Caches task subject/number for mid-loop progress nudge (avoids extra DB query).
+	var memberTaskSubject string
+	var memberTaskNumber int
+	if req.TeamTaskID != "" && l.teamStore != nil {
+		if taskUUID, err := uuid.Parse(req.TeamTaskID); err == nil {
+			if task, err := l.teamStore.GetTask(ctx, taskUUID); err == nil && task != nil {
+				memberTaskSubject = task.Subject
+				memberTaskNumber = task.TaskNumber
+				reminder := fmt.Sprintf(
+					"[System] You are working on team task #%d: %q. "+
+						"Stay focused on this task. Your final response becomes the task result — make it clear and complete. "+
+						"For long tasks, report progress: team_tasks(action=\"progress\", percent=50, text=\"status\").",
+					task.TaskNumber, task.Subject)
+				messages = append(messages,
+					providers.Message{Role: "user", Content: reminder},
+					providers.Message{Role: "assistant", Content: "Understood. I'll focus on this task and report progress."},
+				)
+			}
+		}
+	}
+
 	// 3. Buffer new messages — write to session only AFTER the run completes.
 	// This prevents concurrent runs from seeing each other's in-progress messages.
 	// NOTE: pendingMsgs stores text + lightweight MediaRefs (not base64 images).
@@ -411,6 +446,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	var finalContent string
 	var finalThinking string
 	var asyncToolCalls []string    // track async spawn tool names for fallback
+	var bootstrapWriteDetected bool // track if write_file was called during bootstrap
 	var mediaResults []MediaResult // media files from tool MEDIA: results
 	var deliverables []string      // actual content from tool outputs (for team task results)
 	var blockReplies int           // count of block.reply events emitted (for dedup in consumer)
@@ -424,6 +460,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// If the LLM creates tasks but forgets to spawn, inject a reminder.
 	var teamTaskCreates int // count of team_tasks action=create calls
 	var teamTaskSpawns int  // count of spawn calls with team_task_id
+
+	// Skill evolution: budget pressure nudge state (sent at most once each per run).
+	var skillNudge70Sent, skillNudge90Sent bool
+	var skillPostscriptSent bool
+
+	// Member progress nudge: remind dispatched members to report progress (every 10 iterations).
 
 	// Inject retry hook so channels can update placeholder on LLM retries.
 	ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, err error) {
@@ -462,6 +504,47 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 		slog.Debug("agent iteration", "agent", l.id, "iteration", iteration, "messages", len(messages))
 
+		// Skill evolution: budget pressure nudges at 70% and 90% of iteration budget.
+		// Ephemeral (in-memory only, not persisted to session) — LLM sees them during this run only.
+		if l.skillEvolve && maxIter > 0 {
+			locale := store.LocaleFromContext(ctx)
+			iterPct := float64(iteration) / float64(maxIter)
+			if iterPct >= 0.90 && !skillNudge90Sent {
+				skillNudge90Sent = true
+				messages = append(messages, providers.Message{
+					Role:    "user",
+					Content: i18n.T(locale, i18n.MsgSkillNudge90Pct),
+				})
+			} else if iterPct >= 0.70 && !skillNudge70Sent {
+				skillNudge70Sent = true
+				messages = append(messages, providers.Message{
+					Role:    "user",
+					Content: i18n.T(locale, i18n.MsgSkillNudge70Pct),
+				})
+			}
+		}
+
+		// Member progress nudge: remind to report progress every 10 iterations.
+		// Suggests percent based on iteration ratio — model can adjust but has a baseline.
+		if req.TeamTaskID != "" && memberTaskSubject != "" && iteration > 0 && iteration%10 == 0 {
+			var nudge string
+			if maxIter > 0 {
+				suggestedPct := iteration * 100 / maxIter
+				nudge = fmt.Sprintf(
+					"[System] You are at iteration %d/%d (~%d%% of budget) working on task #%d: %q. "+
+						"Report your progress now: team_tasks(action=\"progress\", percent=%d, text=\"what you've accomplished so far\"). "+
+						"Adjust percent based on actual work completed.",
+					iteration, maxIter, suggestedPct, memberTaskNumber, memberTaskSubject, suggestedPct)
+			} else {
+				nudge = fmt.Sprintf(
+					"[System] You are at iteration %d working on task #%d: %q. "+
+						"Report your progress now: team_tasks(action=\"progress\", percent=50, text=\"what you've accomplished so far\"). "+
+						"Adjust percent based on actual work completed.",
+					iteration, memberTaskNumber, memberTaskSubject)
+			}
+			messages = append(messages, providers.Message{Role: "user", Content: nudge})
+		}
+
 		// Emit activity event: thinking phase
 		emitRun(AgentEvent{
 			Type:    protocol.AgentEventActivity,
@@ -481,6 +564,30 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			}
 		} else {
 			toolDefs = l.tools.ProviderDefs()
+		}
+
+		// Bootstrap mode: restrict API tool definitions to write_file only (open agents).
+		// Predefined agents keep all tools — BOOTSTRAP.md guides behavior.
+		if hadBootstrap && l.agentType != "predefined" {
+			var bootstrapDefs []providers.ToolDefinition
+			for _, td := range toolDefs {
+				if bootstrapToolAllowlist[td.Function.Name] {
+					bootstrapDefs = append(bootstrapDefs, td)
+				}
+			}
+			toolDefs = bootstrapDefs
+		}
+
+		// Hide skill_manage from LLM when skill_evolve is off.
+		// Tool stays in the registry (shared) but won't appear in API tool definitions.
+		if !l.skillEvolve {
+			filtered := toolDefs[:0:0]
+			for _, td := range toolDefs {
+				if td.Function.Name != "skill_manage" {
+					filtered = append(filtered, td)
+				}
+			}
+			toolDefs = filtered
 		}
 
 		chatReq := providers.ChatRequest{
@@ -730,9 +837,23 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			toolSpanID := l.emitToolSpanStart(ctx, toolSpanStart, tc.Name, tc.ID, string(argsJSON))
 			var result *tools.Result
 			if allowedTools != nil && !allowedTools[tc.Name] {
-				slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name)
-				result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
-			} else {
+				// Attempt lazy activation: deferred MCP tools can be activated on first call
+				// so the LLM can call them by name directly without mcp_tool_search.
+				if l.tools.TryActivateDeferred(tc.Name) {
+					// Verify tool isn't explicitly denied by policy before allowing.
+					if l.toolPolicy != nil && l.toolPolicy.IsDenied(tc.Name, l.agentToolPolicy) {
+						slog.Warn("security.tool_policy_denied_lazy", "agent", l.id, "tool", tc.Name)
+						result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
+					} else {
+						allowedTools[tc.Name] = true
+						slog.Info("mcp.tool.lazy_activated", "agent", l.id, "tool", tc.Name)
+					}
+				} else {
+					slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name)
+					result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
+				}
+			}
+			if result == nil {
 				result = l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 			}
 
@@ -758,6 +879,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				if tid, _ := tc.Arguments["team_task_id"].(string); tid != "" {
 					teamTaskSpawns++
 				}
+			}
+			if hadBootstrap && bootstrapToolAllowlist[tc.Name] {
+				bootstrapWriteDetected = true
 			}
 
 			toolResultPayload := map[string]any{
@@ -853,9 +977,23 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					spanID := l.emitToolSpanStart(ctx, spanStart, tc.Name, tc.ID, string(argsJSON))
 					var result *tools.Result
 					if allowedTools != nil && !allowedTools[tc.Name] {
-						slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name)
-						result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
-					} else {
+						// Attempt lazy activation for deferred MCP tools.
+						// Note: don't write back to allowedTools — concurrent goroutines share
+						// the map and writes would race. TryActivateDeferred is idempotent.
+						if l.tools.TryActivateDeferred(tc.Name) {
+							// Verify tool isn't explicitly denied by policy before allowing.
+							if l.toolPolicy != nil && l.toolPolicy.IsDenied(tc.Name, l.agentToolPolicy) {
+								slog.Warn("security.tool_policy_denied_lazy", "agent", l.id, "tool", tc.Name)
+								result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
+							} else {
+								slog.Info("mcp.tool.lazy_activated", "agent", l.id, "tool", tc.Name)
+							}
+						} else {
+							slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name)
+							result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
+						}
+					}
+					if result == nil {
 						result = l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 					}
 					l.emitToolSpanEnd(ctx, spanID, spanStart, result)
@@ -903,6 +1041,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					if tid, _ := r.tc.Arguments["team_task_id"].(string); tid != "" {
 						teamTaskSpawns++
 					}
+				}
+				if hadBootstrap && bootstrapToolAllowlist[r.tc.Name] {
+					bootstrapWriteDetected = true
 				}
 
 				parToolResultPayload := map[string]any{
@@ -973,6 +1114,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			messages = append(messages, forLLM...)
 			pendingMsgs = append(pendingMsgs, forSession...)
 		}
+
 	}
 
 	// 4. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
@@ -986,6 +1128,19 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Matching TS: NO_REPLY is saved (via resolveSilentReplyFallbackText) but
 	// filtered at the payload level before delivery.
 	isSilent := IsSilentReply(finalContent)
+
+	// 5b. Skill evolution: postscript suggestion after complex tasks.
+	// Fires when skill_evolve=true AND the run involved enough tool calls to warrant a skill.
+	// Appended to the agent's own final response so the user sees it inline and can explicitly
+	// consent ("save as skill") before anything is created. No mid-loop injection, no async
+	// goroutine, no session contamination — the next user turn naturally triggers skill creation.
+	if l.skillEvolve && l.skillNudgeInterval > 0 &&
+		totalToolCalls >= l.skillNudgeInterval &&
+		finalContent != "" && !isSilent && !skillPostscriptSent {
+		skillPostscriptSent = true
+		locale := store.LocaleFromContext(ctx)
+		finalContent += "\n\n---\n_" + i18n.T(locale, i18n.MsgSkillNudgePostscript) + "_"
+	}
 
 	// 6. Fallback for empty content
 	if finalContent == "" {
@@ -1006,6 +1161,26 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		Content:  finalContent,
 		Thinking: finalThinking,
 	})
+
+	// Bootstrap nudge: if model didn't call write_file on turn 2+, inject reminder
+	// into session history so the next turn sees it. Appended to pendingMsgs so it's
+	// flushed in the single Save below (avoids double I/O).
+	// Note: the nudge counts as a "user" turn in history, which accelerates auto-cleanup
+	// by one turn — acceptable since bootstrap should complete in 2-3 turns anyway.
+	if hadBootstrap && l.bootstrapCleanup != nil {
+		nudgeUserTurns := 1
+		for _, m := range history {
+			if m.Role == "user" {
+				nudgeUserTurns++
+			}
+		}
+		if !bootstrapWriteDetected && nudgeUserTurns >= 2 && nudgeUserTurns < bootstrapAutoCleanupTurns {
+			pendingMsgs = append(pendingMsgs, providers.Message{
+				Role:    "user",
+				Content: "[System] You haven't completed onboarding yet. Please update USER.md with the user's details and clear BOOTSTRAP.md as instructed.",
+			})
+		}
+	}
 
 	// Flush all buffered messages to session atomically.
 	// This ensures concurrent runs never see each other's in-progress messages.

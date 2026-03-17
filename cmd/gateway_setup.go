@@ -500,6 +500,8 @@ func setupSkillsSystem(
 			if len(storeDirs) > 0 {
 				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], skillsLoader))
 				slog.Info("publish_skill tool registered")
+				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], skillsLoader))
+				slog.Info("skill_manage tool registered")
 			}
 		}
 	}

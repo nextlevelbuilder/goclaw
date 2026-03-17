@@ -344,6 +344,40 @@ func unionWithSpec(current []string, allTools []string, spec []string) []string 
 	return current
 }
 
+// IsDenied checks if a tool name is explicitly denied by global or agent policy.
+// Used to prevent lazy-activated deferred tools from bypassing the deny list.
+func (pe *PolicyEngine) IsDenied(name string, agentPolicy *config.ToolPolicySpec) bool {
+	if pe.globalPolicy != nil {
+		if matchDenySpec(name, pe.globalPolicy.Deny) {
+			return true
+		}
+	}
+	if agentPolicy != nil {
+		if matchDenySpec(name, agentPolicy.Deny) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchDenySpec returns true if name matches any entry in the deny spec (with group expansion).
+func matchDenySpec(name string, spec []string) bool {
+	for _, s := range spec {
+		if after, ok := strings.CutPrefix(s, "group:"); ok {
+			if members, ok := toolGroups[after]; ok {
+				for _, m := range members {
+					if m == name {
+						return true
+					}
+				}
+			}
+		} else if s == name {
+			return true
+		}
+	}
+	return false
+}
+
 func resolveAlias(name string) string {
 	if canonical, ok := legacyToolAliases[name]; ok {
 		return canonical

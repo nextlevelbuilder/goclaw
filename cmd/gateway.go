@@ -512,16 +512,37 @@ func runGateway() {
 
 	// Team progress notification subscriber — forwards task events to chat channels.
 	// Reads team.settings.notifications config; direct mode sends outbound, leader mode
-	// injects into leader agent session.
+	// injects into leader agent session. Notifications are batched per chat
+	// with 2s debounce to avoid spamming users when multiple tasks dispatch at once.
 	if pgStores.Teams != nil {
 		notifyTeamStore := pgStores.Teams
 		notifyAgentStore := pgStores.Agents
+		teamNotifyQueue := tools.NewTeamNotifyQueue(2000, func(items []string, meta tools.NotifyRoutingMeta) {
+			content := tools.FormatBatchedNotify(items)
+			if meta.Mode == "leader" {
+				leaderContent := fmt.Sprintf("[Auto-status — relay to user, NO task actions]\n%s\n\nBriefly inform the user. Do NOT create, retry, reassign, or modify any tasks.", content)
+				msgBus.TryPublishInbound(bus.InboundMessage{
+					Channel:  meta.Channel,
+					SenderID: "notification:progress",
+					ChatID:   meta.ChatID,
+					AgentID:  meta.LeadAgent,
+					UserID:   meta.UserID,
+					Content:  leaderContent,
+				})
+			} else {
+				msgBus.PublishOutbound(bus.OutboundMessage{
+					Channel: meta.Channel,
+					ChatID:  meta.ChatID,
+					Content: content,
+				})
+			}
+		})
 		msgBus.Subscribe("consumer.team-notify", func(evt bus.Event) {
 			payload, ok := evt.Payload.(protocol.TeamTaskEventPayload)
 			if !ok || payload.TeamID == "" || payload.Channel == "" {
 				return
 			}
-			// Only forward assigned/failed events (completed handled by announce-back).
+			// Only forward assigned/failed/progress events (completed handled by announce-back).
 			var notifyType string
 			switch evt.Name {
 			case protocol.EventTeamTaskAssigned:
@@ -575,7 +596,11 @@ func runGateway() {
 			case "dispatched":
 				content = fmt.Sprintf("📋 Task #%d \"%s\" → assigned to %s", payload.TaskNumber, payload.Subject, agentName)
 			case "progress":
-				content = fmt.Sprintf("⏳ Task #%d: %d%% — %s", payload.TaskNumber, payload.ProgressPercent, payload.ProgressStep)
+				if payload.ProgressStep != "" {
+					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%% — %s", payload.TaskNumber, payload.Subject, payload.ProgressPercent, payload.ProgressStep)
+				} else {
+					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%%", payload.TaskNumber, payload.Subject, payload.ProgressPercent)
+				}
 			case "failed":
 				reason := payload.Reason
 				if len(reason) > 200 {
@@ -584,9 +609,9 @@ func runGateway() {
 				content = fmt.Sprintf("❌ Task #%d \"%s\" failed: %s", payload.TaskNumber, payload.Subject, reason)
 			}
 
+			// Resolve leader agent for leader mode routing.
+			var leadAgent string
 			if cfg.Mode == "leader" {
-				// Route through leader agent — model reformulates.
-				leadAgent := ""
 				if notifyAgentStore != nil {
 					if la, err := notifyAgentStore.GetByID(context.Background(), team.LeadAgentID); err == nil {
 						leadAgent = la.AgentKey
@@ -595,23 +620,16 @@ func runGateway() {
 				if leadAgent == "" {
 					return
 				}
-				leaderContent := fmt.Sprintf("[Auto-status — relay to user, NO task actions]\n%s\n\nBriefly inform the user. Do NOT create, retry, reassign, or modify any tasks.", content)
-				msgBus.TryPublishInbound(bus.InboundMessage{
-					Channel:  payload.Channel,
-					SenderID: "notification:progress",
-					ChatID:   payload.ChatID,
-					AgentID:  leadAgent,
-					UserID:   payload.UserID,
-					Content:  leaderContent,
-				})
-			} else {
-				// Direct mode — send outbound directly to channel.
-				msgBus.PublishOutbound(bus.OutboundMessage{
-					Channel: payload.Channel,
-					ChatID:  payload.ChatID,
-					Content: content,
-				})
 			}
+
+			batchKey := payload.TeamID + ":" + payload.ChatID
+			teamNotifyQueue.Enqueue(batchKey, content, tools.NotifyRoutingMeta{
+				Mode:      cfg.Mode,
+				Channel:   payload.Channel,
+				ChatID:    payload.ChatID,
+				UserID:    payload.UserID,
+				LeadAgent: leadAgent,
+			})
 		})
 		slog.Info("team progress notification subscriber registered")
 	}

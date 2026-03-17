@@ -261,6 +261,30 @@ func (s *PGTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) 
 	return nil
 }
 
+func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error) {
+	if len(taskIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`DELETE FROM team_tasks
+		 WHERE id = ANY($1) AND team_id = $2 AND status IN ('completed','failed','cancelled')
+		 RETURNING id`,
+		taskIDs, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var deleted []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return deleted, err
+		}
+		deleted = append(deleted, id)
+	}
+	return deleted, rows.Err()
+}
+
 func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 	var tasks []store.TeamTaskData
 	for rows.Next() {

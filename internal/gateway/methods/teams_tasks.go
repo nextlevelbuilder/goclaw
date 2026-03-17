@@ -53,6 +53,7 @@ func (m *TeamsMethods) RegisterTasks(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsTaskEvents, m.handleTaskEvents)
 	router.Register(protocol.MethodTeamsTaskCreate, m.handleTaskCreate)
 	router.Register(protocol.MethodTeamsTaskDelete, m.handleTaskDelete)
+	router.Register(protocol.MethodTeamsTaskDeleteBulk, m.handleTaskDeleteBulk)
 	router.Register(protocol.MethodTeamsTaskAssign, m.handleTaskAssign)
 }
 
@@ -648,6 +649,70 @@ func (m *TeamsMethods) handleTaskDelete(ctx context.Context, client *gateway.Cli
 			ActorType: "human",
 			ActorID:   client.UserID(),
 		}))
+	}
+}
+
+// --- Task Delete Bulk (hard-delete multiple terminal-status tasks) ---
+
+type taskDeleteBulkParams struct {
+	TeamID  string   `json:"teamId"`
+	TaskIDs []string `json:"taskIds"`
+}
+
+func (m *TeamsMethods) handleTaskDeleteBulk(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params taskDeleteBulkParams
+	locale, ok := m.parseTaskParams(ctx, client, req, &params)
+	if !ok {
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "teamId")))
+		return
+	}
+	if len(params.TaskIDs) == 0 {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "taskIds is required"))
+		return
+	}
+
+	taskUUIDs := make([]uuid.UUID, 0, len(params.TaskIDs))
+	for _, raw := range params.TaskIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			continue // skip invalid IDs
+		}
+		taskUUIDs = append(taskUUIDs, id)
+	}
+	if len(taskUUIDs) == 0 {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "no valid taskIds"))
+		return
+	}
+
+	deleted, err := m.teamStore.DeleteTasks(ctx, taskUUIDs, teamID)
+	if err != nil {
+		slog.Warn("teams.tasks.delete-bulk failed", "team_id", teamID, "error", err)
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		return
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"deleted": len(deleted),
+	}))
+
+	// Broadcast delete event per task for real-time UI sync.
+	if m.msgBus != nil {
+		for _, id := range deleted {
+			m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskDeleted, protocol.TeamTaskEventPayload{
+				TeamID:    teamID.String(),
+				TaskID:    id.String(),
+				UserID:    client.UserID(),
+				Channel:   "dashboard",
+				Timestamp: taskNowUTC(),
+				ActorType: "human",
+				ActorID:   client.UserID(),
+			}))
+		}
 	}
 }
 

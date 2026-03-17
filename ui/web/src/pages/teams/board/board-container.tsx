@@ -24,12 +24,13 @@ interface BoardContainerProps {
   getTeamTasks: (teamId: string, status?: string, channel?: string, chatId?: string) => Promise<{ tasks: TeamTaskData[]; count: number }>;
   getTaskDetail: (teamId: string, taskId: string) => Promise<{ task: TeamTaskData; comments: TeamTaskComment[]; events: TeamTaskEvent[]; attachments: TeamTaskAttachment[] }>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
+  deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
   onWorkspace?: () => void;
 }
 
 export const BoardContainer = memo(function BoardContainer({
   teamId, members, scopes, isTeamV2,
-  getTeamTasks, getTaskDetail, deleteTask, onWorkspace,
+  getTeamTasks, getTaskDetail, deleteTask, deleteTasksBulk, onWorkspace,
 }: BoardContainerProps) {
   const { t } = useTranslation("teams");
   const viewMode = useBoardStore((s) => s.viewMode);
@@ -164,6 +165,7 @@ export const BoardContainer = memo(function BoardContainer({
             emojiLookup={emojiLookup}
             getTaskDetail={getTaskDetail}
             deleteTask={deleteTask}
+            deleteTasksBulk={deleteTasksBulk}
           />
         )}
       </div>

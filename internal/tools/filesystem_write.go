@@ -77,7 +77,7 @@ func (t *WriteFileTool) Parameters() map[string]any {
 			},
 			"deliver": map[string]any{
 				"type":        "boolean",
-				"description": "If true, deliver this file to the user as an attachment (image, document, etc.)",
+				"description": "Deliver this file to the user as an attachment. Defaults to true. Set to false for intermediate/temporary files (e.g. config, cache, temp scripts).",
 			},
 		},
 		"required": []string{"path", "content"},
@@ -87,7 +87,10 @@ func (t *WriteFileTool) Parameters() map[string]any {
 func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Result {
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
-	deliver, _ := args["deliver"].(bool)
+	deliver := true
+	if v, ok := args["deliver"].(bool); ok {
+		deliver = v
+	}
 	if path == "" {
 		return ErrorResult("path is required")
 	}

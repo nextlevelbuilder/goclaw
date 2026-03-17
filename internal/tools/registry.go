@@ -19,6 +19,10 @@ type Registry struct {
 	mu          sync.RWMutex
 	rateLimiter *ToolRateLimiter // nil = no rate limiting
 	scrubbing   bool             // scrub credentials from output (default true)
+
+	// deferredActivator is called when a tool is not in the registry but may be
+	// a deferred MCP tool. Returns true if the tool was successfully activated.
+	deferredActivator func(name string) bool
 }
 
 func NewRegistry() *Registry {
@@ -27,6 +31,26 @@ func NewRegistry() *Registry {
 		aliases:   make(map[string]string),
 		scrubbing: true, // enabled by default
 	}
+}
+
+// SetDeferredActivator registers a callback that activates deferred tools on demand.
+// Used by the MCP Manager to enable lazy activation when a deferred tool is called directly.
+func (r *Registry) SetDeferredActivator(fn func(name string) bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deferredActivator = fn
+}
+
+// TryActivateDeferred attempts to activate a named tool via the deferred activator.
+// Returns true if the tool is now in the registry (either already was or just activated).
+func (r *Registry) TryActivateDeferred(name string) bool {
+	r.mu.RLock()
+	fn := r.deferredActivator
+	r.mu.RUnlock()
+	if fn == nil {
+		return false
+	}
+	return fn(name)
 }
 
 // SetRateLimiter enables per-key tool rate limiting.

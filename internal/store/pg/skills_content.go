@@ -150,6 +150,28 @@ func (s *PGSkillStore) GetSkillByID(id uuid.UUID) (store.SkillInfo, bool) {
 	return info, true
 }
 
+// GetSkillOwnerID returns the owner_id for a skill by UUID.
+// Returns ("", false) if the skill does not exist.
+func (s *PGSkillStore) GetSkillOwnerID(id uuid.UUID) (string, bool) {
+	var ownerID string
+	err := s.db.QueryRow("SELECT owner_id FROM skills WHERE id = $1", id).Scan(&ownerID)
+	if err != nil {
+		return "", false
+	}
+	return ownerID, true
+}
+
+// GetSkillOwnerIDBySlug returns the owner_id for a skill by slug.
+// Returns ("", false) if the skill does not exist or is archived.
+func (s *PGSkillStore) GetSkillOwnerIDBySlug(slug string) (string, bool) {
+	var ownerID string
+	err := s.db.QueryRow("SELECT owner_id FROM skills WHERE slug = $1 AND status = 'active'", slug).Scan(&ownerID)
+	if err != nil {
+		return "", false
+	}
+	return ownerID, true
+}
+
 func buildSkillInfo(id, name, slug string, desc *string, version int, baseDir string) store.SkillInfo {
 	d := ""
 	if desc != nil {

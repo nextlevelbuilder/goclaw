@@ -10,6 +10,7 @@ openclaw-go
 
 # OS
 .DS_Store
+._*
 
 # Environment
 .env*
@@ -36,6 +37,7 @@ tmp
 deploy-*.sh
 
 docs/technical-diaries
+docs/zuey
 plans
 release-manifest.json
 k8s-*/*

@@ -42,6 +42,10 @@
     "searchAgents": "搜索Agent...",
     "adding": "添加中...",
     "add": "添加",
+    "added": "成员已添加",
+    "failedAdd": "添加成员失败",
+    "removed": "成员已移除",
+    "failedRemove": "移除成员失败",
     "removeMember": "移除成员",
     "columns": {
       "agent": "Agent",
@@ -116,6 +120,10 @@
     },
     "delete": "删除",
     "deleteConfirm": "删除此任务？此操作无法撤消。",
+    "selected": "已选择 {{count}} 项",
+    "deleteSelected": "删除所选",
+    "deleteBulkTitle": "批量删除任务",
+    "deleteBulkConfirm": "此操作将永久删除 {{count}} 个任务。输入「delete」确认。",
     "badges": {
       "awaitingReply": "等待回复"
     }

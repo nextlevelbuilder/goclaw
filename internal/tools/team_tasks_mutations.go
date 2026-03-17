@@ -24,7 +24,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	// Gate: must list tasks before creating to prevent duplicates in concurrent group chat.
 	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
-		return ErrorResult("You must check existing tasks first. Call team_tasks(action=\"list\") to review the current task board before creating new tasks — this prevents duplicates in concurrent sessions.")
+		return ErrorResult("You must check existing tasks first. Call team_tasks(action=\"search\", query=\"<keywords>\") to check for similar tasks before creating — this saves tokens vs listing all. Alternatively use action=\"list\" to see the full board.")
 	}
 
 	subject, _ := args["subject"].(string)
@@ -176,21 +176,6 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		ActorType: "agent",
 		ActorID:   agentKey,
 	})
-	t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
-		TeamID:        team.ID.String(),
-		TaskID:        task.ID.String(),
-		TaskNumber:    task.TaskNumber,
-		Subject:       task.Subject,
-		Status:        status,
-		OwnerAgentKey: t.manager.agentKeyFromID(ctx, assigneeID),
-		UserID:        store.UserIDFromContext(ctx),
-		Channel:       ToolChannelFromCtx(ctx),
-		ChatID:        chatID,
-		Timestamp:     task.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		ActorType:     "agent",
-		ActorID:       agentKey,
-	})
-
 	// Track for post-turn dispatch. If no post-turn hook (e.g. HTTP API), dispatch immediately.
 	if status == store.TeamTaskStatusPending {
 		if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil {
@@ -305,14 +290,23 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		return ErrorResult("failed to update progress: " + err.Error())
 	}
 
+	ownerKey := ""
+	if task.OwnerAgentID != nil {
+		ownerKey = t.manager.agentKeyFromID(ctx, *task.OwnerAgentID)
+	}
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskProgress, protocol.TeamTaskEventPayload{
-		TeamID:    team.ID.String(),
-		TaskID:    taskID.String(),
-		Status:    store.TeamTaskStatusInProgress,
-		UserID:    store.UserIDFromContext(ctx),
-		Channel:   ToolChannelFromCtx(ctx),
-		ChatID:    ToolChatIDFromCtx(ctx),
-		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		TeamID:          team.ID.String(),
+		TaskID:          taskID.String(),
+		TaskNumber:      task.TaskNumber,
+		Subject:         task.Subject,
+		Status:          store.TeamTaskStatusInProgress,
+		OwnerAgentKey:   ownerKey,
+		ProgressPercent: percent,
+		ProgressStep:    step,
+		UserID:          store.UserIDFromContext(ctx),
+		Channel:         ToolChannelFromCtx(ctx),
+		ChatID:          ToolChatIDFromCtx(ctx),
+		Timestamp:       time.Now().UTC().Format("2006-01-02T15:04:05Z"),
 	})
 
 	return SilentResult(fmt.Sprintf("Progress updated: %d%% %s", percent, step))

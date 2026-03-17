@@ -140,6 +140,7 @@ export const Methods = {
   TEAMS_TASK_EVENTS: "teams.tasks.events",
   TEAMS_TASK_CREATE: "teams.tasks.create",
   TEAMS_TASK_DELETE: "teams.tasks.delete",
+  TEAMS_TASK_DELETE_BULK: "teams.tasks.delete-bulk",
   TEAMS_TASK_ASSIGN: "teams.tasks.assign",
   TEAMS_MEMBERS_ADD: "teams.members.add",
   TEAMS_MEMBERS_REMOVE: "teams.members.remove",

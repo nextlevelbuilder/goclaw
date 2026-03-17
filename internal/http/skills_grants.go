@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -41,6 +42,15 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
 		return
+	}
+
+	// Ownership check (admins bypass)
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
+			return
+		}
 	}
 
 	var req struct {
@@ -82,6 +92,16 @@ func (h *SkillsHandler) handleRevokeAgent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	// Ownership check (admins bypass)
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		userID := store.UserIDFromContext(r.Context())
+		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
+			return
+		}
+	}
+
 	agentIDStr := r.PathValue("agentID")
 	agentID, err := uuid.Parse(agentIDStr)
 	if err != nil {
@@ -108,6 +128,15 @@ func (h *SkillsHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
 		return
+	}
+
+	// Ownership check (admins bypass)
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
+			return
+		}
 	}
 
 	var req struct {
@@ -144,6 +173,16 @@ func (h *SkillsHandler) handleRevokeUser(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
 		return
+	}
+
+	// Ownership check (admins bypass)
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		userID := store.UserIDFromContext(r.Context())
+		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
+			return
+		}
 	}
 
 	targetUserID := r.PathValue("userID")

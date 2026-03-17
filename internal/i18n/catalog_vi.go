@@ -141,11 +141,11 @@ func init() {
 		MsgInvalidProviderOrModel: "provider hoặc model không hợp lệ",
 
 		// Mô tả công cụ tích hợp
-		MsgToolReadFile:        "Đọc nội dung tệp từ không gian làm việc của agent theo đường dẫn",
-		MsgToolWriteFile:       "Ghi nội dung vào tệp trong không gian làm việc, tự động tạo thư mục nếu cần",
+		MsgToolReadFile:        "Đọc nội dung tệp từ workspace của agent theo đường dẫn",
+		MsgToolWriteFile:       "Ghi nội dung vào tệp trong workspace, tự động tạo thư mục nếu cần",
 		MsgToolListFiles:       "Liệt kê tệp và thư mục trong đường dẫn chỉ định",
 		MsgToolEdit:            "Chỉnh sửa tệp bằng cách tìm và thay thế đoạn văn bản cụ thể",
-		MsgToolExec:            "Thực thi lệnh shell trong không gian làm việc và trả về kết quả",
+		MsgToolExec:            "Thực thi lệnh shell trong workspace và trả về kết quả",
 		MsgToolWebSearch:       "Tìm kiếm thông tin trên web bằng công cụ tìm kiếm (Brave hoặc DuckDuckGo)",
 		MsgToolWebFetch:        "Tải trang web hoặc API endpoint và trích xuất nội dung văn bản",
 		MsgToolMemorySearch:    "Tìm kiếm trong bộ nhớ dài hạn của agent bằng độ tương đồng ngữ nghĩa",
@@ -169,7 +169,13 @@ func init() {
 		MsgToolSpawn:           "Tạo subagent chạy nền hoặc giao việc cho agent đã liên kết",
 		MsgToolSkillSearch:     "Tìm kiếm kỹ năng có sẵn theo từ khóa hoặc mô tả",
 		MsgToolUseSkill:        "Kích hoạt kỹ năng để sử dụng khả năng chuyên biệt (đánh dấu tracing)",
+		MsgToolSkillManage:     "Tạo, sửa hoặc xóa kỹ năng từ trải nghiệm hội thoại",
+		MsgToolPublishSkill:    "Đăng ký thư mục kỹ năng vào hệ thống, cho phép tìm kiếm và cấp quyền",
 		MsgToolTeamTasks:       "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm",
 		MsgToolTeamMessage:     "Gửi tin nhắn trực tiếp hoặc broadcast đến đồng đội trong nhóm agent",
+
+		MsgSkillNudgePostscript: "Tác vụ này cần nhiều bước. Bạn muốn tôi lưu quy trình này thành kỹ năng tái sử dụng không? Trả lời **\"lưu kỹ năng\"** hoặc **\"bỏ qua\"**.",
+		MsgSkillNudge70Pct:      "[System] Bạn đã dùng 70% ngân sách vòng lặp. Cân nhắc xem các mẫu trong phiên này có nên lưu thành kỹ năng không.",
+		MsgSkillNudge90Pct:      "[System] Bạn đã dùng 90% ngân sách vòng lặp. Nếu phiên này có quy trình tái sử dụng, hãy cân nhắc lưu thành kỹ năng trước khi hoàn thành.",
 	})
 }

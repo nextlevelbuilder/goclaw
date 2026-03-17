@@ -20,7 +20,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const { t } = useTranslation("teams");
   const {
     getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
-    getTaskDetail, deleteTask,
+    getTaskDetail, deleteTask, deleteTasksBulk,
   } = useTeams();
 
   const [team, setTeam] = useState<TeamData | null>(null);
@@ -100,6 +100,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         getTeamTasks={getTeamTasks}
         getTaskDetail={getTaskDetail}
         deleteTask={deleteTask}
+        deleteTasksBulk={deleteTasksBulk}
         onWorkspace={() => setWorkspaceOpen(true)}
       />
 
