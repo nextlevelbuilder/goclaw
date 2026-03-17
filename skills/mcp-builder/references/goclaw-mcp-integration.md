@@ -37,30 +37,17 @@ After building an MCP server, register it in GoClaw using the `register_mcp_serv
 
 ## Examples
 
-### Local stdio Server (TypeScript)
+### Local stdio Server (Bun)
 
 ```
 register_mcp_server({
   "name": "github-mcp",
   "display_name": "GitHub MCP Server",
   "transport": "stdio",
-  "command": "node",
-  "args": ["path/to/dist/index.js"],
+  "command": "bun",
+  "args": ["run", "path/to/src/index.ts"],
   "env": {"GITHUB_TOKEN": "ghp_..."},
   "tool_prefix": "github"
-})
-```
-
-### Local stdio Server (Python)
-
-```
-register_mcp_server({
-  "name": "slack-mcp",
-  "display_name": "Slack MCP Server",
-  "transport": "stdio",
-  "command": "python",
-  "args": ["-m", "slack_mcp"],
-  "env": {"SLACK_TOKEN": "xoxb-..."}
 })
 ```
 

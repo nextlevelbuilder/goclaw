@@ -40,6 +40,7 @@ ARG ENABLE_SANDBOX=false
 ARG ENABLE_DOCKER_BUILD=false
 ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
+ARG ENABLE_BUN=false
 ARG ENABLE_KUBECTL=false
 ARG ENABLE_CLAUDE_CODE=false
 ARG ENABLE_FULL_SKILLS=false
@@ -70,6 +71,14 @@ RUN set -eux; \
     fi; \
     if [ "$ENABLE_NODE" = "true" ]; then \
     apt-get install -y --no-install-recommends nodejs npm; \
+    fi; \
+    if [ "$ENABLE_BUN" = "true" ]; then \
+    apt-get install -y --no-install-recommends unzip; \
+    curl -fsSL https://bun.sh/install | bash; \
+    cp -L /root/.bun/bin/bun /usr/local/bin/bun; \
+    chmod +x /usr/local/bin/bun; \
+    bun --version; \
+    rm -rf /root/.bun; \
     fi; \
     if [ "$ENABLE_KUBECTL" = "true" ]; then \
     curl -fsSL https://dl.k8s.io/release/v1.33.0/bin/linux/amd64/kubectl -o /usr/local/bin/kubectl && chmod +x /usr/local/bin/kubectl; \

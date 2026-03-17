@@ -3,8 +3,7 @@
 ## Quick Reference
 
 ### Server Naming
-- **Python**: `{service}_mcp` (e.g., `slack_mcp`)
-- **Node/TypeScript**: `{service}-mcp-server` (e.g., `slack-mcp-server`)
+- **Bun/TypeScript**: `{service}-mcp-server` (e.g., `slack-mcp-server`)
 
 ### Tool Naming
 - Use snake_case with service prefix
@@ -30,13 +29,10 @@
 
 ## Server Naming Conventions
 
-Follow these standardized naming patterns:
+Follow this standardized naming pattern:
 
-**Python**: Use format `{service}_mcp` (lowercase with underscores)
-- Examples: `slack_mcp`, `github_mcp`, `jira_mcp`
-
-**Node/TypeScript**: Use format `{service}-mcp-server` (lowercase with hyphens)
-- Examples: `slack-mcp-server`, `github-mcp-server`, `jira-mcp-server`
+**Bun/TypeScript**: Use format `{service}-mcp-server` (lowercase with hyphens)
+- Examples: `slack-mcp-server`, `github-mcp-server`, `jira-mcp-server`, `pokeapi-mcp-server`
 
 The name should be general, descriptive of the service being integrated, easy to infer from the task description, and without version numbers.
 

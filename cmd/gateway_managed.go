@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/google/uuid"
@@ -122,6 +123,13 @@ func wireExtras(
 	var mcpPool *mcpbridge.Pool
 	if stores.MCP != nil {
 		mcpPool = mcpbridge.NewPool()
+	}
+
+	// 5b. Register register_mcp_server tool (enables agents to register MCP servers)
+	if stores.MCP != nil {
+		encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		toolsReg.Register(tools.NewRegisterMCPServerTool(stores.MCP, encKey))
+		slog.Info("register_mcp_server tool registered")
 	}
 
 	// 6. Set up agent resolver: lazy-creates Loops from DB

@@ -22,6 +22,7 @@ services:
         ENABLE_OTEL: "false"
         ENABLE_PYTHON: "true"
         ENABLE_NODE: "true"
+        ENABLE_BUN: "true"
         ENABLE_KUBECTL: "true"
         ENABLE_CLAUDE_CODE: "true"
     ports:

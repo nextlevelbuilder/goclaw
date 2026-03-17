@@ -50,48 +50,36 @@ kubectl --kubeconfig=/path/to/kubeconfig cluster-info
 
 ## Step 1: Containerize the MCP Server
 
-### Dockerfile (TypeScript)
+### Dockerfile (Bun)
 
 ```dockerfile
-FROM node:22-alpine AS builder
+FROM oven/bun:1-alpine AS base
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
 
-FROM node:22-alpine
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+# Install dependencies
+FROM base AS deps
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
-EXPOSE 3000
-ENV MCP_TRANSPORT=streamable-http
+# Final image
+FROM base
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json bun.lock ./
+COPY src ./src
+
+ENV NODE_ENV=production
+ENV MCP_TRANSPORT=http
 ENV MCP_PORT=3000
+EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+CMD ["bun", "run", "src/index.ts"]
 ```
 
-### Dockerfile (Python)
-
-```dockerfile
-FROM python:3.12-slim AS builder
-WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --target=/deps -r requirements.txt
-
-FROM python:3.12-slim
-WORKDIR /app
-COPY --from=builder /deps /usr/local/lib/python3.12/site-packages
-COPY . .
-
-EXPOSE 3000
-ENV MCP_TRANSPORT=streamable-http
-ENV MCP_PORT=3000
-
-CMD ["python", "-m", "server"]
-```
+**Key points:**
+- Base image: `oven/bun:1-alpine` (NOT `node:*-alpine`)
+- No build step — Bun runs TypeScript directly
+- Entry point: `bun run src/index.ts` (NOT `node dist/index.js`)
+- No `dist/` directory needed
 
 ### Build and Push
 

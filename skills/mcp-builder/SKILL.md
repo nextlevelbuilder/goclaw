@@ -1,11 +1,11 @@
 ---
 name: mcp-builder
 slug: mcp-builder
-description: Guide for building and registering MCP (Model Context Protocol) servers that enable agents to interact with external services. Use when creating MCP servers in Python (FastMCP) or TypeScript (MCP SDK), testing MCP connections, evaluating MCP server quality, or registering MCP servers into GoClaw for agent use.
+description: Guide for building and registering MCP (Model Context Protocol) servers that enable agents to interact with external services. Use when creating MCP servers in TypeScript with Bun runtime, testing MCP connections, evaluating MCP server quality, or registering MCP servers into GoClaw for agent use.
 license: Complete terms in LICENSE.txt
 metadata:
   author: GoClaw
-  version: "1.0.0"
+  version: "2.0.0"
 ---
 
 # MCP Server Development Guide
@@ -13,6 +13,8 @@ metadata:
 ## Overview
 
 Create MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. The quality of an MCP server is measured by how well it enables LLMs to accomplish real-world tasks.
+
+**Runtime: Bun (TypeScript).** All MCP servers are built using Bun runtime with TypeScript and the `@modelcontextprotocol/sdk`.
 
 ---
 
@@ -53,21 +55,17 @@ Key pages to review:
 
 #### 1.3 Study Framework Documentation
 
-**Recommended stack:**
-- **Language**: TypeScript (high-quality SDK support and good compatibility in many execution environments e.g. MCPB. Plus AI models are good at generating TypeScript code, benefiting from its broad usage, static typing and good linting tools)
-- **Transport**: Streamable HTTP for remote servers, using stateless JSON (simpler to scale and maintain, as opposed to stateful sessions and streaming responses). stdio for local servers.
+**Stack: Bun + TypeScript + MCP SDK**
+- **Runtime**: Bun (fast TypeScript execution, built-in test runner, auto .env loading)
+- **Language**: TypeScript (strict mode, Zod for validation)
+- **Transport**: Streamable HTTP for remote servers (using `node:http`), stdio for local servers
 
 **Load framework documentation:**
 
 - **MCP Best Practices**: [View Best Practices](./references/mcp_best_practices.md) - Core guidelines
-
-**For TypeScript (recommended):**
+- **Bun MCP Server Guide**: [Bun Guide](./references/bun_mcp_server.md) - Bun patterns, project structure, examples
+- **BunJS Template**: [MCP Server Template](./references/mcp_server_template.md) - Complete working template
 - **TypeScript SDK**: Use WebFetch to load `https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/main/README.md`
-- [TypeScript Guide](./references/node_mcp_server.md) - TypeScript patterns and examples
-
-**For Python:**
-- **Python SDK**: Use WebFetch to load `https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/main/README.md`
-- [Python Guide](./references/python_mcp_server.md) - Python patterns and examples
 
 #### 1.4 Plan Your Implementation
 
@@ -83,42 +81,39 @@ Prioritize comprehensive API coverage. List endpoints to implement, starting wit
 
 #### 2.1 Set Up Project Structure
 
-See language-specific guides for project setup:
-- [TypeScript Guide](./references/node_mcp_server.md) - Project structure, package.json, tsconfig.json
-- [Python Guide](./references/python_mcp_server.md) - Module organization, dependencies
+See [Bun MCP Server Guide](./references/bun_mcp_server.md) for project setup:
+- Project structure with `src/tools/`, `src/resources/`, `src/prompts/`
+- `package.json` with Bun scripts
+- `tsconfig.json` with strict mode
+- `Dockerfile` using `oven/bun:1-alpine`
 
 #### 2.2 Implement Core Infrastructure
 
 Create shared utilities:
-- API client with authentication
-- Error handling helpers
-- Response formatting (JSON/Markdown)
-- Pagination support
+- Error handling: `toolError()` + `withErrorHandling()` (tools MUST NEVER throw)
+- Logging: stderr-only via `log()` helper (NEVER `console.log()`)
+- API client using global `fetch` with `AbortSignal.timeout()` (NOT axios)
+- SSRF protection for URL-fetching tools
+- Response formatting helpers
 
 #### 2.3 Implement Tools
 
 For each tool:
 
 **Input Schema:**
-- Use Zod (TypeScript) or Pydantic (Python)
-- Include constraints and clear descriptions
+- Use Zod with constraints and `.describe()` on every field
 - Add examples in field descriptions
-
-**Output Schema:**
-- Define `outputSchema` where possible for structured data
-- Use `structuredContent` in tool responses (TypeScript SDK feature)
-- Helps clients understand and process tool outputs
 
 **Tool Description:**
 - Concise summary of functionality
 - Parameter descriptions
-- Return type schema
+- Return type information
 
 **Implementation:**
-- Async/await for I/O operations
+- Async/await with `withErrorHandling()` wrapper
+- `AbortSignal.timeout()` on all fetch calls
 - Proper error handling with actionable messages
 - Support pagination where applicable
-- Return both text content and structured data when using modern SDKs
 
 **Annotations:**
 - `readOnlyHint`: true/false
@@ -134,21 +129,27 @@ For each tool:
 
 Review for:
 - No duplicated code (DRY principle)
-- Consistent error handling
-- Full type coverage
+- Consistent error handling via `withErrorHandling()`
+- Full type coverage (strict TypeScript)
 - Clear tool descriptions
+- No `console.log()` usage
 
 #### 3.2 Build and Test
 
-**TypeScript:**
-- Run `npm run build` to verify compilation
-- Test with MCP Inspector: `npx @modelcontextprotocol/inspector`
+```bash
+# Verify server starts
+bun run src/index.ts
 
-**Python:**
-- Verify syntax: `python -m py_compile your_server.py`
-- Test with MCP Inspector
+# Run tests
+bun test
 
-See language-specific guides for detailed testing approaches and quality checklists.
+# Test HTTP transport
+MCP_TRANSPORT=http bun run src/index.ts
+# Then: curl http://localhost:3000/health
+
+# Inspect with MCP Inspector
+bun run inspect
+```
 
 ---
 
@@ -215,8 +216,8 @@ After building and testing your MCP server, deploy it and register in GoClaw so 
 register_mcp_server({
   "name": "my-api-server",
   "transport": "stdio",
-  "command": "node",
-  "args": ["dist/index.js"],
+  "command": "bun",
+  "args": ["run", "src/index.ts"],
   "display_name": "My API Server"
 })
 ```
@@ -292,10 +293,9 @@ Load these resources as needed during development:
 |-------|----------|-------------|
 | 1 | **MCP Protocol** — `https://modelcontextprotocol.io/sitemap.xml` | Spec overview, transports, tool definitions |
 | 1 | [MCP Best Practices](./references/mcp_best_practices.md) | Naming, response formats, pagination, security |
-| 1-2 | **Python SDK** — fetch `https://raw.githubusercontent.com/modelcontextprotocol/python-sdk/main/README.md` | Official Python SDK docs |
 | 1-2 | **TypeScript SDK** — fetch `https://raw.githubusercontent.com/modelcontextprotocol/typescript-sdk/main/README.md` | Official TypeScript SDK docs |
-| 2 | [Python Guide](./references/python_mcp_server.md) | FastMCP patterns, Pydantic, working examples |
-| 2 | [TypeScript Guide](./references/node_mcp_server.md) | Zod schemas, project structure, working examples |
+| 2 | [Bun MCP Server Guide](./references/bun_mcp_server.md) | Bun patterns, project structure, working examples |
+| 2 | [MCP Server Template](./references/mcp_server_template.md) | Complete working Bun MCP server template |
 | 4 | [Evaluation Guide](./references/evaluation.md) | QA creation, XML format, running evals |
 | 5 | [GoClaw Integration](./references/goclaw-mcp-integration.md) | `register_mcp_server` tool, transport config, grants |
 | 5 | [Kubernetes Deployment](./references/kubernetes-mcp-deployment.md) | Helm chart, kubectl, NodePort/IP, Dockerfile, HPA |

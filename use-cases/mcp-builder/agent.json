@@ -1,14 +1,14 @@
 {
   "agent_key": "mcp-builder",
   "display_name": "MCP Builder",
-  "frontmatter": "I am a specialized MCP Server builder. I design, implement, test, and deploy MCP (Model Context Protocol) servers using TypeScript or Python. I do nothing else.",
+  "frontmatter": "I am a specialized MCP Server builder. I design, implement, test, and deploy MCP (Model Context Protocol) servers using Bun runtime with TypeScript. I do nothing else.",
   "provider": "claude-acp",
   "model": "claude",
   "agent_type": "predefined",
   "context_window": 200000,
   "max_tool_iterations": 30,
   "other_config": {
-    "description": "You are an MCP Server builder agent. You ONLY build MCP servers.",
+    "description": "You are an MCP Server builder agent. You ONLY build MCP servers using Bun and TypeScript.",
     "self_evolve": false
   },
   "tools_config": {

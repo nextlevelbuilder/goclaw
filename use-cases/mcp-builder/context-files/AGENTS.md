@@ -15,40 +15,46 @@ Before starting any MCP server project, ALWAYS invoke the `mcp-builder` skill vi
 ### Rule 3: Follow the 5-Phase Workflow
 1. **Research & Plan** — Understand the API, load SDK docs, plan tool set
 2. **Implement** — Build the server with proper structure, schemas, docs
-3. **Review & Test** — DRY check, build verification, MCP Inspector
+3. **Review & Test** — DRY check, `bun test`, verify server starts
 4. **Evaluate** — Create QA evaluation suite (recommended)
 5. **Deploy & Register** — Deploy and register in GoClaw
 
 ### Rule 4: Quality Standards
 Every MCP server you build MUST have:
 - Service-prefixed tool names (`{service}_{action}_{resource}`)
-- Full Zod/Pydantic input validation with constraints and descriptions
+- Zod input validation with `.describe()` on every field
 - Tool annotations (readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
-- Comprehensive tool descriptions (not just one-liners)
-- Both JSON and Markdown response format support
-- Pagination for list operations
+- `withErrorHandling()` wrapper on all tool handlers
+- `AbortSignal.timeout()` on all fetch calls
 - Actionable error messages
 - No code duplication
+- No `console.log()` — only `console.error()` or `log()` helper
 
-### Rule 5: Language & Transport Defaults
-- **Language**: TypeScript (unless user explicitly requests Python)
+### Rule 5: Bun Only
+- **Runtime**: Bun (NOT Node.js, NOT Python)
+- **Commands**: `bun install`, `bun run`, `bun test`, `bunx` (NOT npm, npx, pip)
+- **HTTP client**: Global `fetch` (NOT axios)
+- **HTTP transport**: `node:http` + `StreamableHTTPServerTransport` (NOT `Bun.serve()`)
+- **Docker**: `oven/bun:1-alpine` base image
 - **Remote transport**: streamable-http (not SSE, which is deprecated)
 - **Local transport**: stdio
-- **SDK**: `@modelcontextprotocol/sdk` (TS) or `mcp` with FastMCP (Python)
+- **SDK**: `@modelcontextprotocol/sdk` with `zod`
 
 ### Rule 6: Security
-- API keys in environment variables only
-- Input sanitization via schema validation
+- API keys in environment variables only (Bun loads .env automatically)
+- Input sanitization via Zod schema validation
+- SSRF protection for URL-fetching tools
 - No internal error exposure to clients
-- DNS rebinding protection for local HTTP servers
+- `AbortSignal.timeout()` prevents hanging requests
 
 ## Tool Usage
 
 You have access to tools for:
 - **File operations**: Read, write, edit files in your workspace
 - **Web search/fetch**: Research APIs and load documentation
-- **Shell execution**: Run npm/pip, build projects, test servers
+- **Shell execution**: Run bun commands, build, test
 - **Skill invocation**: Load the mcp-builder skill and its references
 - **MCP registration**: Register completed servers in GoClaw via `register_mcp_server`
+- **K8s deployment**: kubectl/helm for Kubernetes deployment
 
 Use these tools actively. Don't just describe what you'd do — actually do it.
