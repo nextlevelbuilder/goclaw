@@ -353,6 +353,9 @@ func runGateway() {
 		server.SetUsageHandler(httpapi.NewUsageHandler(pgStores.Snapshots, pgStores.DB, cfg.Gateway.Token))
 	}
 
+	// Runtime package management (install/uninstall system/pip/npm packages)
+	server.SetPackagesHandler(httpapi.NewPackagesHandler(cfg.Gateway.Token))
+
 	// API key management
 	// API documentation (OpenAPI spec + Swagger UI at /docs)
 	server.SetDocsHandler(httpapi.NewDocsHandler(cfg.Gateway.Token))
@@ -566,15 +569,18 @@ func runGateway() {
 			if !ok || payload.TeamID == "" || payload.Channel == "" {
 				return
 			}
-			// Only forward assigned/failed/progress events (completed handled by announce-back).
 			var notifyType string
 			switch evt.Name {
-			case protocol.EventTeamTaskAssigned:
+			case protocol.EventTeamTaskDispatched:
 				notifyType = "dispatched"
+			case protocol.EventTeamTaskAssigned:
+				notifyType = "dispatched" // same config flag — human assign also notifies
 			case protocol.EventTeamTaskFailed:
 				notifyType = "failed"
 			case protocol.EventTeamTaskProgress:
 				notifyType = "progress"
+			case protocol.EventTeamTaskCompleted:
+				notifyType = "completed"
 			default:
 				return
 			}
@@ -603,10 +609,28 @@ func runGateway() {
 				if !cfg.Progress {
 					return
 				}
+			case "completed":
+				if !cfg.Completed {
+					return
+				}
 			}
 
 			// Skip internal channels.
 			if payload.Channel == tools.ChannelSystem || payload.Channel == tools.ChannelDelegate {
+				return
+			}
+
+			// Resolve lead agent key (needed for leader mode routing + completed-by-leader skip).
+			var leadAgentKey string
+			if notifyAgentStore != nil {
+				if la, err := notifyAgentStore.GetByID(context.Background(), team.LeadAgentID); err == nil {
+					leadAgentKey = la.AgentKey
+				}
+			}
+
+			// Skip completed notification if task was completed by the leader
+			// (leader is already talking to the user, notification would be redundant).
+			if notifyType == "completed" && payload.OwnerAgentKey == leadAgentKey {
 				return
 			}
 
@@ -616,16 +640,24 @@ func runGateway() {
 			if payload.OwnerDisplayName != "" {
 				agentName = payload.OwnerDisplayName
 			}
-			switch notifyType {
-			case "dispatched":
+			switch evt.Name {
+			case protocol.EventTeamTaskDispatched:
+				if payload.ActorID == "dispatch_unblocked" {
+					content = fmt.Sprintf("▶️ Task #%d \"%s\" → unblocked, dispatched to %s", payload.TaskNumber, payload.Subject, agentName)
+				} else {
+					content = fmt.Sprintf("📋 Task #%d \"%s\" → dispatched to %s", payload.TaskNumber, payload.Subject, agentName)
+				}
+			case protocol.EventTeamTaskAssigned:
 				content = fmt.Sprintf("📋 Task #%d \"%s\" → assigned to %s", payload.TaskNumber, payload.Subject, agentName)
-			case "progress":
+			case protocol.EventTeamTaskCompleted:
+				content = fmt.Sprintf("✅ Task #%d \"%s\" completed", payload.TaskNumber, payload.Subject)
+			case protocol.EventTeamTaskProgress:
 				if payload.ProgressStep != "" {
 					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%% — %s", payload.TaskNumber, payload.Subject, payload.ProgressPercent, payload.ProgressStep)
 				} else {
 					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%%", payload.TaskNumber, payload.Subject, payload.ProgressPercent)
 				}
-			case "failed":
+			case protocol.EventTeamTaskFailed:
 				reason := payload.Reason
 				if len(reason) > 200 {
 					reason = reason[:200] + "..."
@@ -633,17 +665,9 @@ func runGateway() {
 				content = fmt.Sprintf("❌ Task #%d \"%s\" failed: %s", payload.TaskNumber, payload.Subject, reason)
 			}
 
-			// Resolve leader agent for leader mode routing.
-			var leadAgent string
-			if cfg.Mode == "leader" {
-				if notifyAgentStore != nil {
-					if la, err := notifyAgentStore.GetByID(context.Background(), team.LeadAgentID); err == nil {
-						leadAgent = la.AgentKey
-					}
-				}
-				if leadAgent == "" {
-					return
-				}
+			// In leader mode, require resolved agent key for routing.
+			if cfg.Mode == "leader" && leadAgentKey == "" {
+				return
 			}
 
 			batchKey := payload.TeamID + ":" + payload.ChatID
@@ -652,7 +676,7 @@ func runGateway() {
 				Channel:   payload.Channel,
 				ChatID:    payload.ChatID,
 				UserID:    payload.UserID,
-				LeadAgent: leadAgent,
+				LeadAgent: leadAgentKey,
 			})
 		})
 		slog.Info("team progress notification subscriber registered")
@@ -913,6 +937,8 @@ func teamTaskEventType(eventName string) string {
 		return "claimed"
 	case protocol.EventTeamTaskAssigned:
 		return "assigned"
+	case protocol.EventTeamTaskDispatched:
+		return "dispatched"
 	case protocol.EventTeamTaskCompleted:
 		return "completed"
 	case protocol.EventTeamTaskFailed:

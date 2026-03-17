@@ -37,6 +37,7 @@ export const ROUTES = {
   ACTIVITY: "/activity",
   API_KEYS: "/api-keys",
   GATEWAY_USERS: "/gateway-users",
+  PACKAGES: "/packages",
   SETUP: "/setup",
 } as const;
 

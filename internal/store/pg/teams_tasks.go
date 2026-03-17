@@ -163,7 +163,7 @@ func (s *PGTeamStore) UpdateTask(ctx context.Context, taskID uuid.UUID, updates 
 	return execMapUpdate(ctx, s.db, "team_tasks", taskID, updates)
 }
 
-func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, offset int) ([]store.TeamTaskData, error) {
+func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, limit int, offset int) ([]store.TeamTaskData, error) {
 	orderClause := "t.priority DESC, t.created_at"
 	if orderBy == "newest" {
 		orderClause = "t.created_at DESC"
@@ -180,6 +180,10 @@ func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy s
 	// "", store.TeamTaskFilterAll ("all") → no filter (all statuses)
 	}
 
+	if limit <= 0 {
+		limit = maxListTasksRows
+	}
+
 	// Scope filter: always bind $4/$5 but only enforce when non-empty.
 	scopeWhere := "AND ($4 = '' OR COALESCE(t.channel,'') = $4) AND ($5 = '' OR COALESCE(t.chat_id,'') = $5)"
 
@@ -188,7 +192,7 @@ func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy s
 		 `+taskJoinClause+`
 		 WHERE t.team_id = $1 AND ($2 = '' OR t.user_id = $2) `+statusWhere+` `+scopeWhere+`
 		 ORDER BY `+orderClause+`
-		 LIMIT $3 OFFSET $6`, teamID, userID, maxListTasksRows+1, channel, chatID, offset)
+		 LIMIT $3 OFFSET $6`, teamID, userID, limit+1, channel, chatID, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -259,6 +263,30 @@ func (s *PGTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) 
 		return store.ErrTaskNotFound
 	}
 	return nil
+}
+
+func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error) {
+	if len(taskIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`DELETE FROM team_tasks
+		 WHERE id = ANY($1) AND team_id = $2 AND status IN ('completed','failed','cancelled')
+		 RETURNING id`,
+		taskIDs, teamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var deleted []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return deleted, err
+		}
+		deleted = append(deleted, id)
+	}
+	return deleted, rows.Err()
 }
 
 func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {

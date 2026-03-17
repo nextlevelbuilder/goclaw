@@ -73,9 +73,19 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	}
 
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
+	// Fetch task for TaskNumber/Subject needed by notification subscriber.
+	completedTask, _ := t.manager.teamStore.GetTask(ctx, taskID)
+	var taskNumber int
+	var taskSubject string
+	if completedTask != nil {
+		taskNumber = completedTask.TaskNumber
+		taskSubject = completedTask.Subject
+	}
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCompleted, protocol.TeamTaskEventPayload{
 		TeamID:           team.ID.String(),
 		TaskID:           taskID.String(),
+		TaskNumber:       taskNumber,
+		Subject:          taskSubject,
 		Status:           store.TeamTaskStatusCompleted,
 		OwnerAgentKey:    ownerKey,
 		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),

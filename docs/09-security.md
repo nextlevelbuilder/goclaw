@@ -131,6 +131,15 @@ All four filesystem tools (`read_file`, `write_file`, `list_files`, `edit`) impl
 
 The workspace is injected into tools via `WithToolWorkspace(ctx)` context injection. Tools read the workspace from context at execution time (fallback to the struct field for backward compatibility). User IDs are sanitized: anything outside `[a-zA-Z0-9_-]` becomes an underscore (`group:telegram:-1001234` → `group_telegram_-1001234`).
 
+**Privilege separation for package management** -- System packages (apk) are installed via root-privileged helper:
+
+| Component | User | Scope | Socket |
+|-----------|------|-------|--------|
+| Main app | goclaw (1000) | All operations except system packages | N/A |
+| pkg-helper | root | System package (apk) install/uninstall only | `/tmp/pkg.sock` (0660 root:goclaw) |
+
+The pkg-helper is started in `docker-entrypoint.sh` *before* privileges are dropped to goclaw. The main app connects to the Unix socket to request apk operations. System packages are persisted to `/app/data/.runtime/apk-packages` so they survive container recreation. Python and npm packages are installed directly by the goclaw user to writable runtime directories (`$PIP_TARGET`, `$NPM_CONFIG_PREFIX`).
+
 **Docker sandbox** -- Container-based isolation for shell command execution:
 
 | Hardening | Configuration |
@@ -148,7 +157,53 @@ The workspace is injected into tools via `WithToolWorkspace(ctx)` context inject
 
 ---
 
-## 2. Encryption
+## 2. Docker Entrypoint & Runtime Configuration
+
+GoClaw runs in a non-root container with three privilege levels:
+
+**Phase 1: Root (docker-entrypoint.sh)**
+- Re-install persisted system packages from `/app/data/.runtime/apk-packages`
+- Start `pkg-helper` (root-privileged service listening on `/tmp/pkg.sock`)
+- Set up Python and Node.js runtime directories with proper env vars
+
+**Phase 2: Drop to goclaw user (su-exec)**
+- Main app runs as `goclaw` (UID 1000) via `su-exec goclaw /app/goclaw`
+- All agent operations execute in this context
+- System package requests are delegated to pkg-helper via Unix socket
+
+**Phase 3: Optional sandbox (per-agent)**
+- Exec operations can be sandboxed in Docker containers (configurable)
+- Sandbox containers inherit resource limits and security options
+
+### Docker Compose Security
+
+| Config | Purpose |
+|--------|---------|
+| `cap_drop: ALL` | Remove all Linux capabilities |
+| `cap_add: [SETUID, SETGID, CHOWN, DAC_OVERRIDE]` | Minimum required for su-exec and pkg-helper socket |
+| `security_opt: no-new-privileges:true` | Prevent privilege escalation |
+| `tmpfs: /tmp` | Writable /tmp (256MB, noexec, nosuid) |
+
+Docker-compose.yml mounts data volume at `/app/data`, which contains:
+- config.json (runtime configuration)
+- .runtime/apk-packages (persisted system packages list)
+- .runtime/pip (pip install target directory)
+- .runtime/npm-global (npm install prefix)
+- skills/ (uploaded skills)
+
+### Runtime Directory Structure
+
+| Path | Owner | Purpose |
+|------|-------|---------|
+| `/app/data/.runtime/apk-packages` | 0666 (rw-rw-rw-) | Persisted apk package list, written by pkg-helper |
+| `/app/data/.runtime/pip` | goclaw | Python packages installed via pip install --target |
+| `/app/data/.runtime/npm-global` | goclaw | npm packages installed globally to prefix |
+| `/app/data/.runtime/pip-cache` | goclaw | pip cache directory |
+| `/tmp/pkg.sock` | 0660 (rw-rw----) | Unix socket: owner root, group goclaw |
+
+---
+
+## 3. Encryption
 
 AES-256-GCM encryption for secrets stored in PostgreSQL. Key provided via `GOCLAW_ENCRYPTION_KEY` environment variable.
 
@@ -164,7 +219,7 @@ Backward compatible: values without the `aes-gcm:` prefix are returned as plaint
 
 ---
 
-## 3. Rate Limiting -- Gateway + Tool
+## 4. Rate Limiting -- Gateway + Tool
 
 Protection at two levels: gateway-wide (per user/IP) and tool-level (per session).
 
@@ -194,7 +249,7 @@ Gateway rate limiting applies to both WebSocket (`chat.send`) and HTTP (`/v1/cha
 
 ---
 
-## 4. RBAC -- 3 Roles
+## 5. RBAC -- 3 Roles
 
 Role-based access control for WebSocket RPC methods and HTTP API endpoints. Roles are hierarchical: higher levels include all permissions of lower levels.
 
@@ -225,7 +280,7 @@ Token-based role assignment happens during the WebSocket `connect` handshake. Sc
 
 ---
 
-## 5. Sandbox -- Container Lifecycle
+## 6. Sandbox -- Container Lifecycle
 
 Docker-based code isolation for shell command execution.
 
@@ -286,7 +341,7 @@ flowchart TD
 
 ---
 
-## 6. API Key Security
+## 7. API Key Security
 
 API keys are generated and stored securely.
 
@@ -300,7 +355,7 @@ API keys are generated and stored securely.
 
 ---
 
-## 7. Security Logging Convention
+## 8. Security Logging Convention
 
 All security events use `slog.Warn` with a `security.*` prefix for consistent filtering and alerting.
 
@@ -316,7 +371,7 @@ Filter all security events by grepping for the `security.` prefix in log output.
 
 ---
 
-## 8. Hook Recursion Prevention
+## 9. Hook Recursion Prevention
 
 The hook system (quality gates) can trigger infinite recursion: an agent evaluator delegates to a reviewer → delegation completes → fires quality gate → delegates to reviewer again → infinite loop.
 
@@ -332,7 +387,7 @@ A context flag `hooks.WithSkipHooks(ctx, true)` prevents this. Three injection p
 
 ---
 
-## 9. Group File Writer Restrictions
+## 10. Group File Writer Restrictions
 
 In group chats (Telegram), write-sensitive operations are restricted to designated writers. This prevents unauthorized users from modifying agent files or resetting sessions in shared groups.
 
@@ -364,7 +419,7 @@ Writers are managed via `/addwriter` (reply to a user's message) and `/removewri
 
 ---
 
-## 10. Browser Pairing Security
+## 11. Browser Pairing Security
 
 Browser pairing allows web UI clients to authenticate without full admin credentials.
 
@@ -380,7 +435,7 @@ Browser pairing allows web UI clients to authenticate without full admin credent
 
 ---
 
-## 11. Delegation Security
+## 12. Delegation Security
 
 Agent delegation is protected through delegation history tracking and concurrency controls.
 
@@ -410,11 +465,13 @@ When concurrency limits are hit, the error message is written for LLM reasoning:
 | `internal/tools/types.go` | PathDenyable interface definition |
 | `internal/tools/filesystem.go` | Denied path checking (`checkDeniedPath` helper) |
 | `internal/tools/filesystem_list.go` | Denied path support + directory filtering |
-| `internal/hooks/context.go` | WithSkipHooks / SkipHooksFromContext (recursion prevention) |
-| `internal/hooks/engine.go` | Hook engine, evaluator registry |
 | `internal/gateway/methods/pairing.go` | Pairing RPC methods (request, approve, deny, list, revoke) |
 | `internal/store/pg/pairing.go` | Pairing store implementation (code generation, TTLs) |
 | `internal/store/pairing_store.go` | Pairing store interface definition |
+| `cmd/pkg-helper/main.go` | Root-privileged helper for apk add/del via Unix socket |
+| `internal/http/packages.go` | HTTP handlers for package management endpoints |
+| `internal/skills/package_lister.go` | Query installed packages from apk/pip3/npm |
+| `docker-entrypoint.sh` | Container initialization: setup runtime dirs, start pkg-helper, drop privileges |
 
 ---
 
@@ -422,7 +479,7 @@ When concurrency limits are hit, the error message is written for LLM reasoning:
 
 | Document | Relevant Content |
 |----------|-----------------|
-| [03-tools-system.md](./03-tools-system.md) | Shell deny patterns, exec approval, PathDenyable, delegation system, quality gates |
+| [03-tools-system.md](./03-tools-system.md) | Shell deny patterns, exec approval, PathDenyable, delegation system |
 | [04-gateway-protocol.md](./04-gateway-protocol.md) | WebSocket auth, RBAC, rate limiting |
 | [06-store-data-model.md](./06-store-data-model.md) | API key encryption, agent access control pipeline |
 | [07-bootstrap-skills-memory.md](./07-bootstrap-skills-memory.md) | Context file merging, virtual files |

@@ -120,6 +120,10 @@
     },
     "delete": "删除",
     "deleteConfirm": "删除此任务？此操作无法撤消。",
+    "selected": "已选择 {{count}} 项",
+    "deleteSelected": "删除所选",
+    "deleteBulkTitle": "批量删除任务",
+    "deleteBulkConfirm": "此操作将永久删除 {{count}} 个任务。输入「delete」确认。",
     "badges": {
       "awaitingReply": "等待回复"
     }

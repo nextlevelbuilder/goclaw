@@ -62,8 +62,8 @@ func TestResolveAuth_NoAuthConfigured(t *testing.T) {
 	if !auth.Authenticated {
 		t.Fatal("expected authenticated when no token configured")
 	}
-	if auth.Role != permissions.RoleOperator {
-		t.Errorf("role = %v, want operator (backward compat)", auth.Role)
+	if auth.Role != permissions.RoleAdmin {
+		t.Errorf("role = %v, want admin (no token = dev/single-user mode)", auth.Role)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestRequireAuth_InjectLocaleAndUserID(t *testing.T) {
 }
 
 func TestRequireAuth_AdminRoleEnforced(t *testing.T) {
-	// No auth configured → operator role (backward compat)
+	// No auth configured → admin role (dev/single-user mode) → admin endpoint accessible
 	setupTestCache(t, nil)
 
 	handler := requireAuth("", permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
@@ -226,9 +226,9 @@ func TestRequireAuth_AdminRoleEnforced(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler(w, r)
 
-	// No token configured → operator role, but admin required → 403
-	if w.Code != http.StatusForbidden {
-		t.Errorf("status = %d, want 403 (operator cannot access admin endpoint)", w.Code)
+	// No token configured → admin role, admin endpoint → 200
+	if w.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200 (no token = admin in dev mode)", w.Code)
 	}
 }
 

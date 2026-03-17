@@ -35,6 +35,7 @@ import enApiKeys from "./locales/en/api-keys.json";
 import enCliCredentials from "./locales/en/cli-credentials.json";
 import enFeatures from "./locales/en/features.json";
 import enGatewayUsers from "./locales/en/gateway-users.json";
+import enPackages from "./locales/en/packages.json";
 
 // --- VI namespaces ---
 import viCommon from "./locales/vi/common.json";
@@ -70,6 +71,7 @@ import viApiKeys from "./locales/vi/api-keys.json";
 import viCliCredentials from "./locales/vi/cli-credentials.json";
 import viFeatures from "./locales/vi/features.json";
 import viGatewayUsers from "./locales/vi/gateway-users.json";
+import viPackages from "./locales/vi/packages.json";
 
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
@@ -105,6 +107,7 @@ import zhApiKeys from "./locales/zh/api-keys.json";
 import zhCliCredentials from "./locales/zh/cli-credentials.json";
 import zhFeatures from "./locales/zh/features.json";
 import zhGatewayUsers from "./locales/zh/gateway-users.json";
+import zhPackages from "./locales/zh/packages.json";
 
 const STORAGE_KEY = "goclaw:language";
 
@@ -123,7 +126,7 @@ const ns = [
   "channels", "providers", "traces", "events",
   "usage", "approvals", "nodes", "logs", "tools", "mcp", "tts",
   "setup", "memory", "storage", "pending-messages", "contacts", "activity", "api-keys",
-  "cli-credentials", "features", "gateway-users",
+  "cli-credentials", "features", "gateway-users", "packages",
 ] as const;
 
 i18n.use(initReactI18next).init({
@@ -141,6 +144,7 @@ i18n.use(initReactI18next).init({
       "cli-credentials": enCliCredentials,
       features: enFeatures,
       "gateway-users": enGatewayUsers,
+      packages: enPackages,
     },
     vi: {
       common: viCommon, sidebar: viSidebar, topbar: viTopbar, login: viLogin,
@@ -155,6 +159,7 @@ i18n.use(initReactI18next).init({
       "cli-credentials": viCliCredentials,
       features: viFeatures,
       "gateway-users": viGatewayUsers,
+      packages: viPackages,
     },
     zh: {
       common: zhCommon, sidebar: zhSidebar, topbar: zhTopbar, login: zhLogin,
@@ -169,6 +174,7 @@ i18n.use(initReactI18next).init({
       "cli-credentials": zhCliCredentials,
       features: zhFeatures,
       "gateway-users": zhGatewayUsers,
+      packages: zhPackages,
     },
   },
   ns: [...ns],

@@ -141,11 +141,11 @@ func init() {
 		MsgInvalidProviderOrModel: "provider hoặc model không hợp lệ",
 
 		// Mô tả công cụ tích hợp
-		MsgToolReadFile:        "Đọc nội dung tệp từ không gian làm việc của agent theo đường dẫn",
-		MsgToolWriteFile:       "Ghi nội dung vào tệp trong không gian làm việc, tự động tạo thư mục nếu cần",
+		MsgToolReadFile:        "Đọc nội dung tệp từ workspace của agent theo đường dẫn",
+		MsgToolWriteFile:       "Ghi nội dung vào tệp trong workspace, tự động tạo thư mục nếu cần",
 		MsgToolListFiles:       "Liệt kê tệp và thư mục trong đường dẫn chỉ định",
 		MsgToolEdit:            "Chỉnh sửa tệp bằng cách tìm và thay thế đoạn văn bản cụ thể",
-		MsgToolExec:            "Thực thi lệnh shell trong không gian làm việc và trả về kết quả",
+		MsgToolExec:            "Thực thi lệnh shell trong workspace và trả về kết quả",
 		MsgToolWebSearch:       "Tìm kiếm thông tin trên web bằng công cụ tìm kiếm (Brave hoặc DuckDuckGo)",
 		MsgToolWebFetch:        "Tải trang web hoặc API endpoint và trích xuất nội dung văn bản",
 		MsgToolMemorySearch:    "Tìm kiếm trong bộ nhớ dài hạn của agent bằng độ tương đồng ngữ nghĩa",

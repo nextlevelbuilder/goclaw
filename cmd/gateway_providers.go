@@ -366,7 +366,7 @@ func registerACPFromConfig(registry *providers.Registry, cfg config.ACPConfig) {
 		opts = append(opts, providers.WithACPPermMode(cfg.PermMode))
 	}
 	registry.Register(providers.NewACPProvider(
-		cfg.Binary, cfg.Args, workDir, idleTTL, tools.DefaultDenyPatterns, opts...,
+		cfg.Binary, cfg.Args, workDir, idleTTL, tools.DefaultDenyPatterns(), opts...,
 	))
 	slog.Info("registered provider", "name", "acp", "binary", cfg.Binary)
 }
@@ -414,7 +414,7 @@ func registerACPFromDB(registry *providers.Registry, p store.LLMProviderData, da
 		opts = append(opts, providers.WithACPMCPBridge(gatewayAddr, gatewayToken))
 	}
 	registry.Register(providers.NewACPProvider(
-		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns,
+		binary, settings.Args, workDir, idleTTL, tools.DefaultDenyPatterns(),
 		opts...,
 	))
 	slog.Info("registered provider from DB", "name", p.Name, "type", "acp")

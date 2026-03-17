@@ -234,7 +234,7 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 				slog.Warn("DispatchUnblockedTasks: assign failed", "task_id", task.ID, "error", err)
 				continue
 			}
-			m.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+			m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
 				TeamID:        teamID.String(),
 				TaskID:        task.ID.String(),
 				TaskNumber:    task.TaskNumber,

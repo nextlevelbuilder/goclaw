@@ -31,7 +31,9 @@ RUN set -eux; \
     if [ -n "$TAGS" ]; then TAGS="-tags $TAGS"; fi; \
     CGO_ENABLED=0 GOOS=linux \
     go build -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
-    ${TAGS} -o /out/goclaw .
+    ${TAGS} -o /out/goclaw . && \
+    CGO_ENABLED=0 GOOS=linux \
+    go build -ldflags="-s -w" -o /out/pkg-helper ./cmd/pkg-helper
 
 # ── Stage 2: Runtime ──
 FROM debian:bookworm-slim
@@ -113,10 +115,12 @@ WORKDIR /app
 
 # Copy binary, migrations, and bundled skills
 COPY --from=builder /out/goclaw /app/goclaw
+COPY --from=builder /out/pkg-helper /app/pkg-helper
 COPY --from=builder /src/migrations/ /app/migrations/
 COPY --from=builder /src/skills/ /app/bundled-skills/
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh && \
+    chmod 755 /app/pkg-helper && chown root:root /app/pkg-helper
 
 # Copy Claude Code auth credentials.
 # /etc/claude/ holds seed credentials outside /app so volume mounts don't
@@ -125,9 +129,11 @@ COPY editor/claude-code/.claude/ /app/.claude/
 COPY editor/claude-code/.claude/ /etc/claude/
 COPY editor/claude-code/.claude.json /app/.claude.json
 
-# Create data directories (owned by goclaw user)
+# Create data directories (owned by goclaw user).
+# Binaries and entrypoint stay root-owned (readable by all).
 RUN mkdir -p /app/workspace /app/data /app/skills /app/tsnet-state /app/.goclaw \
-    && chown -R goclaw:goclaw /app
+    && chown -R goclaw:goclaw /app/workspace /app/data /app/skills /app/tsnet-state /app/.goclaw \
+    && chown goclaw:goclaw /app/bundled-skills
 
 # Default environment
 ENV GOCLAW_CONFIG=/app/config.json \
@@ -138,7 +144,8 @@ ENV GOCLAW_CONFIG=/app/config.json \
     GOCLAW_HOST=0.0.0.0 \
     GOCLAW_PORT=18790
 
-USER goclaw
+# Entrypoint runs as root to install persisted packages and start pkg-helper,
+# then drops to goclaw user via su-exec before starting the app.
 
 EXPOSE 18790
 

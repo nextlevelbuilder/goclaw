@@ -169,7 +169,7 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 		ptd.MarkListed()
 	}
 
-	tasks, err := t.manager.teamStore.ListTasks(ctx, team.ID, "priority", statusFilter, filterUserID, "", listChatID, offset)
+	tasks, err := t.manager.teamStore.ListTasks(ctx, team.ID, "priority", statusFilter, filterUserID, "", listChatID, 0, offset)
 	if err != nil {
 		return ErrorResult("failed to list tasks: " + err.Error())
 	}
@@ -309,6 +309,15 @@ func (t *TeamTasksTool) executeSearch(ctx context.Context, args map[string]any) 
 	channel := ToolChannelFromCtx(ctx)
 	if channel != ChannelDelegate && channel != ChannelSystem {
 		filterUserID = store.UserIDFromContext(ctx)
+	}
+
+	// Acquire team create lock so search also satisfies the list-before-create gate.
+	chatID := ToolChatIDFromCtx(ctx)
+	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
+		lock := getTeamCreateLock(team.ID.String(), chatID)
+		lock.Lock()
+		ptd.SetTeamLock(lock)
+		ptd.MarkListed()
 	}
 
 	tasks, err := t.manager.teamStore.SearchTasks(ctx, team.ID, query, listPageSize, filterUserID)

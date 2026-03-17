@@ -1,0 +1,43 @@
+{
+  "title": "运行时与软件包",
+  "description": "管理系统运行时和已安装的软件包",
+  "runtimes": {
+    "title": "运行时",
+    "available": "可用",
+    "missing": "缺失"
+  },
+  "system": {
+    "title": "系统软件包",
+    "placeholder": "包名（例如 github-cli）"
+  },
+  "pip": {
+    "title": "Python 软件包",
+    "placeholder": "包名（例如 pandas）"
+  },
+  "npm": {
+    "title": "Node 软件包",
+    "placeholder": "包名（例如 typescript）"
+  },
+  "actions": {
+    "install": "安装",
+    "uninstall": "卸载",
+    "installing": "安装中...",
+    "uninstalling": "卸载中..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} 安装成功",
+    "installError": "{{name}} 安装失败",
+    "uninstallSuccess": "{{name}} 已卸载",
+    "uninstallError": "{{name}} 卸载失败"
+  },
+  "confirmUninstall": {
+    "title": "确认卸载",
+    "description": "确定要卸载 {{name}} 吗？此操作不可撤销。"
+  },
+  "table": {
+    "name": "名称",
+    "version": "版本",
+    "actions": "操作",
+    "empty": "暂无已安装的软件包"
+  }
+}

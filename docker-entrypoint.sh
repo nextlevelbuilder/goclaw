@@ -35,31 +35,89 @@ if [ -d /etc/claude ] && [ ! -f /app/.claude/.credentials.json ]; then
   cp -a /etc/claude/. /app/.claude/
 fi
 
+# System packages: re-install on-demand packages persisted across recreates.
+# In Docker: entrypoint runs as root (then drops via gosu/su).
+# Outside Docker: may run as non-root — skip privileged operations gracefully.
+APT_LIST="$RUNTIME_DIR/apt-packages"
+touch "$APT_LIST" 2>/dev/null || true
+if [ "$(id -u)" = "0" ]; then
+  chown root:goclaw "$APT_LIST" 2>/dev/null || true
+  chmod 0640 "$APT_LIST" 2>/dev/null || true
+fi
+if [ -f "$APT_LIST" ] && [ -s "$APT_LIST" ]; then
+  echo "Re-installing persisted system packages..."
+  VALID_PKGS=""
+  while IFS= read -r pkg || [ -n "$pkg" ]; do
+    pkg="$(printf '%s' "$pkg" | tr -d '[:space:]')"
+    case "$pkg" in
+      [a-zA-Z0-9@]*) VALID_PKGS="$VALID_PKGS $pkg" ;;
+      "") ;;
+      *) echo "WARNING: skipping invalid package: $pkg" ;;
+    esac
+  done < "$APT_LIST"
+  if [ -n "$VALID_PKGS" ]; then
+    # shellcheck disable=SC2086
+    apt-get update && apt-get install -y --no-install-recommends $VALID_PKGS 2>/dev/null || \
+      echo "Warning: some packages failed to install"
+    rm -rf /var/lib/apt/lists/*
+  fi
+fi
+
+# Start the root-privileged package helper (listens on /tmp/pkg.sock).
+# Only in Docker (running as root). Outside Docker, pkg-helper is not available.
+if [ -x /app/pkg-helper ] && [ "$(id -u)" = "0" ]; then
+  /app/pkg-helper &
+  PKG_PID=$!
+  for _i in 1 2 3 4; do
+    [ -S /tmp/pkg.sock ] && break
+    sleep 0.5
+  done
+  if ! [ -S /tmp/pkg.sock ]; then
+    echo "ERROR: pkg-helper failed to start (PID $PKG_PID)"
+    kill "$PKG_PID" 2>/dev/null || true
+  fi
+fi
+
+# Run command with privilege drop.
+# Debian uses su instead of su-exec; fall back to direct exec if not root.
+run_as_goclaw() {
+  if [ "$(id -u)" = "0" ]; then
+    exec su -s /bin/sh goclaw -c '"$0" "$@"' -- "$@"
+  else
+    exec "$@"
+  fi
+}
+
 case "${1:-serve}" in
   serve)
     # Auto-upgrade (schema migrations + data hooks) before starting.
     if [ -n "$GOCLAW_POSTGRES_DSN" ]; then
       echo "Running database upgrade..."
-      /app/goclaw upgrade || \
-        echo "Upgrade warning (may already be up-to-date)"
+      if [ "$(id -u)" = "0" ]; then
+        su -s /bin/sh goclaw -c '/app/goclaw upgrade' || \
+          echo "Upgrade warning (may already be up-to-date)"
+      else
+        /app/goclaw upgrade || \
+          echo "Upgrade warning (may already be up-to-date)"
+      fi
     fi
-    exec /app/goclaw
+    run_as_goclaw /app/goclaw
     ;;
   upgrade)
     shift
-    exec /app/goclaw upgrade "$@"
+    run_as_goclaw /app/goclaw upgrade "$@"
     ;;
   migrate)
     shift
-    exec /app/goclaw migrate "$@"
+    run_as_goclaw /app/goclaw migrate "$@"
     ;;
   onboard)
-    exec /app/goclaw onboard
+    run_as_goclaw /app/goclaw onboard
     ;;
   version)
-    exec /app/goclaw version
+    run_as_goclaw /app/goclaw version
     ;;
   *)
-    exec /app/goclaw "$@"
+    run_as_goclaw /app/goclaw "$@"
     ;;
 esac

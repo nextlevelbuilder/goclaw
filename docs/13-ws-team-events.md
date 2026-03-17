@@ -40,14 +40,14 @@ Emitted when a lead agent initiates a delegation to a member agent.
 ```
 
 #### `delegation.completed`
-Emitted when a delegation finishes successfully (quality gates passed).
+Emitted when a delegation finishes successfully.
 
 Same payload as `delegation.started` with:
 - `status`: `"completed"`
 - `elapsed_ms`: total duration in milliseconds
 
 #### `delegation.failed`
-Emitted when a delegation fails (agent error or quality gate rejection).
+Emitted when a delegation fails (agent error).
 
 Same payload as `delegation.started` with:
 - `status`: `"failed"`
@@ -140,25 +140,6 @@ Emitted when the last sibling delegation completes and all accumulated results a
   "completed_task_ids": ["019ca84f-...", "019ca850-..."],
   "total_elapsed_ms": 52000,
   "has_media": true
-}
-```
-
-#### `delegation.quality_gate.retry`
-Emitted when a quality gate rejects a delegation result and triggers a retry.
-
-```json
-{
-  "delegation_id": "a1b2c3d4",
-  "target_agent_key": "tieu-la",
-  "user_id": "user123",
-  "channel": "telegram",
-  "chat_id": "-100123456",
-  "team_id": "019c9503-...",
-  "team_task_id": "019ca84f-...",
-  "gate_type": "agent",
-  "attempt": 2,
-  "max_retries": 3,
-  "feedback": "Image aspect ratio should be 4:5..."
 }
 ```
 
@@ -564,7 +545,6 @@ All event name constants are defined in `pkg/protocol/events.go`:
 | `EventDelegationProgress` | `delegation.progress` |
 | `EventDelegationAccumulated` | `delegation.accumulated` |
 | `EventDelegationAnnounce` | `delegation.announce` |
-| `EventQualityGateRetry` | `delegation.quality_gate.retry` |
 
 ### Team Task Lifecycle Events
 | Constant | Event Name | Status |

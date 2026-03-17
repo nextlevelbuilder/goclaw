@@ -98,6 +98,8 @@ func mimeFromExt(ext string) string {
 		return "application/msword"
 	case ".xls", ".xlsx":
 		return "application/vnd.ms-excel"
+	case ".md":
+		return "text/markdown"
 	default:
 		return "application/octet-stream"
 	}

@@ -140,12 +140,12 @@
     "maxToolIterationsHint": "Số lần gọi công cụ tối đa mỗi yêu cầu."
   },
   "workspace": {
-    "title": "Không gian làm việc",
-    "workspacePath": "Đường dẫn không gian làm việc",
+    "title": "Workspace",
+    "workspacePath": "Đường dẫn workspace",
     "workspacePathHint": "Được gán tự động khi agent được tạo. Các thư mục con theo người dùng được tạo khi chạy.",
-    "noWorkspace": "Chưa cấu hình không gian làm việc",
-    "restrictToWorkspace": "Giới hạn trong không gian làm việc",
-    "restrictToWorkspaceHint": "Giới hạn quyền truy cập tệp trong đường dẫn không gian làm việc."
+    "noWorkspace": "Chưa cấu hình workspace",
+    "restrictToWorkspace": "Giới hạn trong workspace",
+    "restrictToWorkspaceHint": "Giới hạn quyền truy cập tệp trong đường dẫn workspace."
   },
   "config": {
     "saveConfig": "Lưu cấu hình",
@@ -360,7 +360,7 @@
       "title": "Hộp cát",
       "description": "Hộp cát Docker để cô lập thực thi code",
       "mode": "Chế độ",
-      "workspaceAccess": "Truy cập không gian làm việc",
+      "workspaceAccess": "Truy cập workspace",
       "image": "Hình ảnh",
       "scope": "Phạm vi",
       "timeout": "Hết giờ (giây)",
@@ -390,19 +390,6 @@
       "mediumDesc": "~10-16K ngân sách token",
       "high": "Cao",
       "highDesc": "~32K ngân sách token"
-    },
-    "qualityGates": {
-      "title": "Cổng chất lượng",
-      "description": "Xác thực đầu ra ủy quyền trước khi trả về cho người gọi",
-      "noGates": "Chưa cấu hình cổng chất lượng. Nhấp \"Thêm cổng\" để tạo.",
-      "addGate": "Thêm cổng",
-      "gateNumber": "Cổng #{{number}}",
-      "type": "Loại",
-      "reviewerAgentKey": "Khóa agent đánh giá",
-      "command": "Lệnh",
-      "blockOnFailure": "Chặn khi thất bại",
-      "maxRetries": "Số lần thử lại tối đa",
-      "timeout": "Hết giờ (giây)"
     },
     "otherConfig": {
       "title": "Cấu hình khác",

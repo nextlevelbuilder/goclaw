@@ -156,11 +156,18 @@ func (m *TeamsMethods) handleTaskList(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID, 0)
+	const dashboardLimit = 200
+	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID, dashboardLimit, 0)
 	if err != nil {
 		slog.Warn("teams.tasks.list failed", "team_id", teamID, "status_filter", params.Status, "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
+	}
+
+	// ListTasks returns limit+1 rows for hasMore detection; truncate for dashboard response.
+	hasMore := len(tasks) > dashboardLimit
+	if hasMore {
+		tasks = tasks[:dashboardLimit]
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

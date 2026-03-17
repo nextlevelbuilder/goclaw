@@ -763,7 +763,7 @@ func buildTaskBoardSnapshot(ctx context.Context, teamStore store.TeamStore, team
 	if team, err := teamStore.GetTeam(ctx, teamID); err == nil && tools.IsSharedWorkspace(team.Settings) {
 		snapshotChatID = ""
 	}
-	allTasks, err := teamStore.ListTasks(ctx, teamID, "", store.TeamTaskFilterAll, "", "", snapshotChatID, 0)
+	allTasks, err := teamStore.ListTasks(ctx, teamID, "", store.TeamTaskFilterAll, "", "", snapshotChatID, 0, 0)
 	if err != nil || len(allTasks) == 0 {
 		return ""
 	}

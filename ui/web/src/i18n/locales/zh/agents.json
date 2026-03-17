@@ -391,19 +391,6 @@
       "high": "高",
       "highDesc": "~32K 令牌预算"
     },
-    "qualityGates": {
-      "title": "质量门控",
-      "description": "在返回给调用者之前验证委派输出",
-      "noGates": "未配置质量门控。点击「添加门控」创建。",
-      "addGate": "添加门控",
-      "gateNumber": "门控 #{{number}}",
-      "type": "类型",
-      "reviewerAgentKey": "审查Agent标识",
-      "command": "命令",
-      "blockOnFailure": "失败时阻止",
-      "maxRetries": "最大重试次数",
-      "timeout": "超时（秒）"
-    },
     "otherConfig": {
       "title": "其他配置",
       "description": "其他部分未涵盖的高级设置的额外 JSON 配置",

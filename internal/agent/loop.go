@@ -359,7 +359,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Stale recovery (expired lock → pending) is handled by the background TaskTicker.
 	if l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil && team.LeadAgentID == l.agentUUID {
-			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "active", req.UserID, "", "", 0); err == nil {
+			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "active", req.UserID, "", "", 0, 0); err == nil {
 				var stale []string
 				var inProgress []string
 				for _, t := range tasks {
@@ -465,7 +465,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	var skillNudge70Sent, skillNudge90Sent bool
 	var skillPostscriptSent bool
 
-	// Member progress nudge: remind dispatched members to report progress (every 10 iterations).
+	// Member progress nudge: remind dispatched members to report progress (every 6 iterations).
 
 	// Inject retry hook so channels can update placeholder on LLM retries.
 	ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, err error) {
@@ -524,9 +524,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			}
 		}
 
-		// Member progress nudge: remind to report progress every 10 iterations.
+		// Member progress nudge: remind to report progress every 6 iterations.
 		// Suggests percent based on iteration ratio — model can adjust but has a baseline.
-		if req.TeamTaskID != "" && memberTaskSubject != "" && iteration > 0 && iteration%10 == 0 {
+		if req.TeamTaskID != "" && memberTaskSubject != "" && iteration > 0 && iteration%6 == 0 {
 			var nudge string
 			if maxIter > 0 {
 				suggestedPct := iteration * 100 / maxIter

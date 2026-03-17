@@ -13,6 +13,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/** Extract the first emoji (single grapheme cluster) from a string, or empty. */
+function extractSingleEmoji(str: string): string {
+  // Match first emoji (handles compound emoji like flags, skin tones)
+  const match = str.match(/\p{Emoji_Presentation}(\u200D\p{Emoji_Presentation})*/u)
+    ?? str.match(/\p{Extended_Pictographic}(\uFE0F?\u200D\p{Extended_Pictographic})*/u);
+  return match?.[0] ?? "";
+}
+
 interface IdentitySectionProps {
   agentKey: string;
   emoji?: string;
@@ -80,10 +88,13 @@ export function IdentitySection({
             <Input
               id="emoji"
               value={emoji ?? ""}
-              onChange={(e) => onEmojiChange?.(e.target.value)}
+              onChange={(e) => {
+                const picked = extractSingleEmoji(e.target.value);
+                onEmojiChange?.(picked);
+              }}
+              onFocus={(e) => e.target.select()}
               placeholder="🤖"
-              className="w-14 shrink-0 text-center text-lg"
-              maxLength={2}
+              className="w-14 shrink-0 text-center text-base md:text-lg"
               title={t("identity.emojiHint")}
             />
             <Input

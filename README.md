@@ -6,7 +6,7 @@
 
 [![Go](https://img.shields.io/badge/Go_1.26-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL_18-316192?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/) [![WebSocket](https://img.shields.io/badge/WebSocket-010101?style=flat-square&logo=socket.io&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-000000?style=flat-square&logo=opentelemetry&logoColor=white)](https://opentelemetry.io/) [![Anthropic](https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white)](https://www.anthropic.com/) [![OpenAI](https://img.shields.io/badge/OpenAI_Compatible-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-**GoClaw** is a multi-agent AI gateway that connects LLMs to your tools, channels, and data — deployed as a single Go binary with zero runtime dependencies. It orchestrates agent teams, inter-agent delegation, and quality-gated workflows across 13+ LLM providers with full multi-tenant isolation.
+**GoClaw** is a multi-agent AI gateway that connects LLMs to your tools, channels, and data — deployed as a single Go binary with zero runtime dependencies. It orchestrates agent teams and inter-agent delegation across 13+ LLM providers with full multi-tenant isolation.
 
 A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced security, multi-tenant PostgreSQL, and production-grade observability.
 
@@ -38,10 +38,8 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Feature                    | OpenClaw                             | ZeroClaw                                     | PicoClaw                              | **GoClaw**                     |
 | -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- | ------------------------------ |
 | Multi-tenant (PostgreSQL)  | —                                    | —                                            | —                                     | ✅                             |
-| Hooks system               | —                                    | —                                            | —                                     | ✅ Command + agent evaluators  |
 | MCP integration            | — (uses ACP)                         | —                                            | —                                     | ✅ (stdio/SSE/streamable-http) |
 | Agent teams                | —                                    | —                                            | —                                     | ✅ Task board + mailbox        |
-| Quality gates              | —                                    | —                                            | —                                     | ✅ Hook-based validation       |
 | Security hardening         | ✅ (SSRF, path traversal, injection) | ✅ (sandbox, rate limit, injection, pairing) | Basic (workspace restrict, exec deny) | ✅ 5-layer defense             |
 | OTel observability         | ✅ (opt-in extension)                | ✅ (Prometheus + OTLP)                       | —                                     | ✅ OTLP (opt-in build tag)     |
 | Prompt caching             | —                                    | —                                            | —                                     | ✅ Anthropic + OpenAI-compat   |
@@ -229,28 +227,6 @@ flowchart TD
 - **Team mailbox** — Direct peer-to-peer messaging (send, broadcast, read unread)
 - **Tools**: `team_tasks` for task management, `team_message` for mailbox
 
-### Quality Gates
-
-Quality gates validate agent output before it reaches users. Configured in agent `other_config`:
-
-```json
-{
-  "quality_gates": [
-    {
-      "event": "delegation.completed",
-      "type": "agent",
-      "agent": "qa-reviewer",
-      "block_on_failure": true,
-      "max_retries": 2
-    }
-  ]
-}
-```
-
-- **Hook types**: `command` (shell exit code: 0 = pass) or `agent` (delegate to reviewer agent)
-- **Blocking** — Failed gates can block output and trigger automatic retry with feedback
-- **Recursion-safe** — Quality gate evaluators skip their own gates to prevent infinite loops
-
 ## Features
 
 ### LLM Providers
@@ -264,7 +240,6 @@ Quality gates validate agent output before it reaches users. Configured in agent
 - **Subagents** — Spawn child agents with different models for parallel task execution
 - **Agent delegation** — Sync/async inter-agent task delegation with permission links, concurrency limits, and per-user restrictions
 - **Agent teams** — Shared task boards with dependencies, team mailbox, and coordinated multi-agent workflows
-- **Quality gates** — Hook-based output validation with command or agent evaluators
 - **Delegation history** — Queryable audit trail of all inter-agent delegations
 - **Concurrent execution** — Lane-based scheduler (main/subagent/delegate/cron), adaptive throttle for group chats
 
@@ -395,10 +370,9 @@ export GOCLAW_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 - Per-user context files and workspaces (`user_context_files` table)
 - Agent types: `open` (per-user workspace) vs `predefined` (shared context)
-- Agent teams, delegation, quality gates
+- Agent teams, delegation
 - LLM call tracing with spans and prompt cache metrics
 - MCP server integration with per-agent and per-user access grants
-- Event-driven hooks for agent lifecycle with command and agent evaluators
 - Embedding-based skill search (hybrid BM25 + pgvector)
 - Web dashboard for agents, traces, skills, teams, and MCP servers
 - API key encryption (AES-256-GCM)
@@ -956,7 +930,6 @@ GOCLAW_OPENROUTER_API_KEY=sk-or-xxx go test -v ./tests/integration/ -timeout 120
 
 ### Implemented but Not Fully Tested
 
-- **Quality gates** — Hook-based output validation with command and agent evaluator types. Implementation complete, needs E2E testing.
 - **Slack** — Channel integration implemented, not yet validated with real users.
 - **Other messaging channels** — Discord, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp channel adapters are implemented but have not been tested end-to-end in production. Only Telegram has been validated with real users.
 - **OpenTelemetry export** — OTLP gRPC/HTTP exporter implemented (build-tag gated). In-app tracing works; external OTel export not validated in production.

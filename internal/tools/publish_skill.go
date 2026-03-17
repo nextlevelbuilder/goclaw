@@ -177,7 +177,12 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 		result += "\n- Granted to current agent"
 	}
 	if depsWarning != "" {
-		result += fmt.Sprintf("\n\n⚠ Missing dependencies: %s\nTry installing them with exec (e.g. pip install <pkg> or npm install <pkg>). If you cannot install system binaries, inform the user.", depsWarning)
+		denyGroups := store.ShellDenyGroupsFromContext(ctx)
+		if IsGroupDenied(denyGroups, "package_install") {
+			result += fmt.Sprintf("\n\n⚠ Missing dependencies: %s\nPackage installation is restricted. Inform the user to install via Web UI Packages page.", depsWarning)
+		} else {
+			result += fmt.Sprintf("\n\n⚠ Missing dependencies: %s\nTry installing them with exec (e.g. pip install <pkg> or npm install <pkg>).", depsWarning)
+		}
 	}
 
 	return NewResult(result)

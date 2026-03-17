@@ -531,48 +531,6 @@ Teammate results route through the message bus with a `"teammate:"` prefix. The 
 
 ---
 
-## 9. Quality Gates (Hook System)
-
-A general-purpose hook system for validating agent output before it reaches the user. Located in `internal/hooks/`.
-
-### Evaluator Types
-
-| Type | How it works | Example |
-|------|-------------|---------|
-| **command** | Run a shell command. Exit 0 = pass. Stderr = feedback. | `npm test`, `eslint --stdin` |
-| **agent** | Delegate to a reviewer agent. Parse "APPROVED" or "REJECTED: feedback". | QA reviewer checks tone/accuracy |
-
-### Configuration
-
-Quality gates live in the source agent's `other_config` JSON:
-
-```json
-{
-  "quality_gates": [
-    {
-      "event": "delegation.completed",
-      "type": "agent",
-      "agent": "qa-reviewer",
-      "block_on_failure": true,
-      "max_retries": 2
-    }
-  ]
-}
-```
-
-When `block_on_failure` is true and retries remain, the system re-runs the target agent with the evaluator's feedback injected as a revision prompt.
-
-### Recursion Prevention
-
-Quality gates with agent evaluators can cause infinite recursion (gate delegates to reviewer → reviewer completes → gate fires again). The fix is a context flag: `hooks.WithSkipHooks(ctx, true)`. Three places set it:
-1. **Agent evaluator** -- when delegating to the reviewer
-2. **Evaluate loop** -- for all internal generator/evaluator delegations
-3. **Agent eval callback in cmd layer** -- when the hook engine itself triggers delegation
-
-`DelegateManager.Delegate()` checks `hooks.SkipHooksFromContext(ctx)` before applying gates. If set, gates are skipped.
-
----
-
 ## 10. MCP Bridge Tools
 
 GoClaw integrates with Model Context Protocol (MCP) servers via `internal/mcp/`. The MCP Manager connects to external tool servers and registers their tools in the tool registry with a configurable prefix.
@@ -793,8 +751,7 @@ The tool registry supports per-session rate limiting via `ToolRateLimiter`. When
 | `internal/tools/{dynamic_loader,dynamic_tool}.go` | Dynamic/custom tool loading and execution |
 | `internal/tools/openai_compat_call.go` | OpenAI-compatible endpoint calling utilities |
 
-### Hooks, MCP & Infrastructure
+### MCP & Infrastructure
 | File | Purpose |
 |------|---------|
-| `internal/hooks/{engine,command_evaluator,agent_evaluator,context}.go` | Hook engine, evaluators, context |
 | `internal/mcp/{manager,bridge_tool}.go` | MCP server connections, bridge tool |

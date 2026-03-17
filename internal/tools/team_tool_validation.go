@@ -91,7 +91,7 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 			slog.Warn("post_turn: assign failed", "task_id", task.ID, "error", err)
 			continue
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+		m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
 			TeamID:        teamID.String(),
 			TaskID:        task.ID.String(),
 			TaskNumber:    task.TaskNumber,

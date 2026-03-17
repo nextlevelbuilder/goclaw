@@ -24,7 +24,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	// Gate: must list tasks before creating to prevent duplicates in concurrent group chat.
 	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
-		return ErrorResult("You must check existing tasks first. Call team_tasks(action=\"list\") to review the current task board before creating new tasks — this prevents duplicates in concurrent sessions.")
+		return ErrorResult("You must check existing tasks first. Call team_tasks(action=\"search\", query=\"<keywords>\") to check for similar tasks before creating — this saves tokens vs listing all. Alternatively use action=\"list\" to see the full board.")
 	}
 
 	subject, _ := args["subject"].(string)
@@ -185,7 +185,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 			if err := t.manager.teamStore.AssignTask(ctx, task.ID, assigneeID, team.ID); err != nil {
 				slog.Warn("executeCreate: fallback assign failed", "task_id", task.ID, "error", err)
 			} else {
-				t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+				t.manager.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
 					TeamID:        team.ID.String(),
 					TaskID:        task.ID.String(),
 					TaskNumber:    task.TaskNumber,
@@ -203,7 +203,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		}
 	}
 
-	return NewResult(fmt.Sprintf("Task created: %s (id=%s, identifier=%s, status=%s)", subject, task.ID, task.Identifier, status))
+	return NewResult(fmt.Sprintf("Task created: %s (id=%s, task_number=%d, status=%s)", subject, task.ID, task.TaskNumber, status))
 }
 
 func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any) *Result {

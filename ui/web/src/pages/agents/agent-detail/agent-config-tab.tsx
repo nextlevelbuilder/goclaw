@@ -10,7 +10,6 @@ import type {
   ContextPruningConfig,
   SandboxConfig,
   MemoryConfig,
-  QualityGateConfig,
   WorkspaceSharingConfig,
 } from "@/types/agent";
 import {
@@ -21,7 +20,6 @@ import {
   SandboxSection,
   MemorySection,
   OtherConfigSection,
-  QualityGatesSection,
   ThinkingSection,
   WorkspaceSharingSection,
 } from "./config-sections";
@@ -52,23 +50,19 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
   const [mem, setMem] = useState<MemoryConfig>(agent.memory_config ?? {});
 
   const otherObj = (agent.other_config ?? {}) as Record<string, unknown>;
-  const initialGates = (Array.isArray(otherObj.quality_gates) ? otherObj.quality_gates : []) as QualityGateConfig[];
   const initialThinkingLevel = (typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off");
   const initialWsSharing = (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig;
   // Strip all managed keys so they don't leak into the raw JSON editor.
   // General tab manages: emoji, self_evolve, description, skill_evolve, skill_nudge_interval
-  // Config tab manages: workspace_sharing, quality_gates, thinking_level
+  // Config tab manages: workspace_sharing, thinking_level
   const {
-    workspace_sharing: _ws, quality_gates: _qg, thinking_level: _tl,
+    workspace_sharing: _ws, thinking_level: _tl,
     emoji: _emoji, self_evolve: _se, description: _desc,
     skill_evolve: _ske, skill_nudge_interval: _sni,
     ...otherWithoutManaged
   } = otherObj;
 
   const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(initialWsSharing);
-
-  const [qgEnabled, setQgEnabled] = useState(initialGates.length > 0);
-  const [qualityGates, setQualityGates] = useState<QualityGateConfig[]>(initialGates);
 
   const [thinkingLevel, setThinkingLevel] = useState(initialThinkingLevel);
 
@@ -98,12 +92,14 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
         sandbox_config: sbEnabled ? sb : null,
         memory_config: memEnabled ? mem : null,
       };
-      let otherBase: Record<string, unknown> = {};
+      // Preserve existing other_config fields not managed by this tab (e.g. emoji from General tab).
+      const existing = (agent.other_config as Record<string, unknown> | null) ?? {};
+      let otherBase: Record<string, unknown> = { ...existing };
+      // Strip fields managed by this tab — they'll be re-added below from local state.
+      delete otherBase.thinking_level;
+      delete otherBase.workspace_sharing;
       if (otherEnabled) {
-        try { otherBase = JSON.parse(otherJson); } catch { /* keep empty */ }
-      }
-      if (qgEnabled && qualityGates.length > 0) {
-        otherBase.quality_gates = qualityGates;
+        try { Object.assign(otherBase, JSON.parse(otherJson)); } catch { /* keep existing */ }
       }
       if (thinkingLevel && thinkingLevel !== "off") {
         otherBase.thinking_level = thinkingLevel;
@@ -186,18 +182,12 @@ export function AgentConfigTab({ agent, onUpdate }: AgentConfigTabProps) {
         />
       </div>
 
-      {/* Quality & Advanced */}
+      {/* Advanced */}
       <ConfigGroupHeader
         title={t("configGroups.advanced")}
         description={t("configGroups.advancedDesc")}
       />
       <div className="space-y-4">
-        <QualityGatesSection
-          enabled={qgEnabled}
-          value={qualityGates}
-          onToggle={(v: boolean) => { setQgEnabled(v); if (!v) setQualityGates([]); }}
-          onChange={setQualityGates}
-        />
         <OtherConfigSection
           enabled={otherEnabled}
           value={otherJson}

@@ -40,7 +40,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       <div
         className={`max-w-[80%] rounded-lg px-4 py-2 ${
           isUser
-            ? "bg-primary text-primary-foreground"
+            ? "bg-foreground/90 text-background"
             : "bg-card text-card-foreground border border-border shadow-sm"
         }`}
       >

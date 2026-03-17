@@ -8,6 +8,26 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Added
 
+#### Runtime & Packages Management (2026-03-17)
+- **Packages page**: New "Packages" page in Web UI under System group for managing installed packages
+- **HTTP API endpoints**: GET/POST `/v1/packages`, `/v1/packages/install`, `/v1/packages/uninstall`, GET `/v1/packages/runtimes`
+- **Three package categories**: System (apk), Python (pip), Node (npm) with version tracking
+- **pkg-helper binary**: Root-privileged helper service for secure system package management via Unix socket `/tmp/pkg.sock`
+- **Package persistence**: System packages persisted to `/app/data/.runtime/apk-packages` for container recreation
+- **Input validation**: Regex + MaxBytesReader (4096 bytes) for package names to prevent injection
+
+#### Docker Security Hardening (2026-03-17)
+- **Privilege separation**: Entrypoint drops privileges to non-root goclaw user after installing packages
+- **pkg-helper service**: Started as root, listens on Unix socket with 0660 permissions (root:goclaw group)
+- **Runtime directories**: Python and Node.js packages install to writable `/app/data/.runtime` directories
+- **su-exec integration**: Used instead of USER directive for cleaner privilege transition
+- **Docker capabilities**: Added SETUID/SETGID/CHOWN/DAC_OVERRIDE for pkg-helper and user switching
+- **Environment variables**: PIP_TARGET, NPM_CONFIG_PREFIX, PYTHONPATH configured for runtime installs
+
+#### Auth Fix (2026-03-17)
+- **Empty gateway token handling**: When GOCLAW_GATEWAY_TOKEN is empty (dev/single-user mode), all requests get admin role
+- **CLI credentials access**: Admin-only endpoints (/v1/cli-credentials) now accessible in dev mode
+
 #### Team Workspace Improvements (2026-03-16)
 - **Team workspace resolution**: Lead agents resolve per-team workspace directories for both lead and member agents
 - **WorkspaceInterceptor**: Transparently rewrites file tool requests to team workspace context
@@ -70,6 +90,13 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 #### Knowledge Graph Improvements (2026-03-14)
 - **LLM JSON sanitization**: Sanitize LLM JSON output before parsing to handle edge cases
 
+#### CI/CD & Release Pipeline (2026-03-16)
+- **Semantic release**: Automated versioning via `go-semantic-release` on push to `main`
+- **Cross-platform binaries**: Build and attach `linux/darwin × amd64/arm64` tarballs to GitHub Releases
+- **Discord webhook notification**: Post release embed to Discord with changelog, version, Docker pull command, and install script link after successful build
+- **Install scripts**: One-liner binary installer (`scripts/install.sh`) and interactive Docker setup (`scripts/setup-docker.sh`) with variant selection (alpine/node/python/full)
+- **Docker image publishing**: Publish multi-arch images to GHCR and Docker Hub via GitHub Actions
+
 #### Traces & Observability (2026-03-16)
 - **Trace UI improvements**: Added timestamps, copy button, syntax highlighting to trace/span views
 - **Trace export**: Added gzip export with recursive sub-trace collection
@@ -88,6 +115,7 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Changed
 
+- **Docker entrypoint**: Reimplemented for privilege separation with pkg-helper lifecycle management
 - **Team workspace refactor**: Removed legacy `workspace_read`/`workspace_write` tools in favor of file tools for team workspace
 - **Config hardcoding**: Centralized ~/goclaw paths via config resolution instead of hardcoded values
 - **Workspace media files**: Preserve workspace media files during subtree lazy-loading
@@ -102,6 +130,9 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Documentation
 
+- Updated `18-http-api.md` — Added section 17 for Runtime & Packages Management endpoints
+- Updated `09-security.md` — Added Docker entrypoint documentation, pkg-helper architecture, privilege separation
+- Updated `17-changelog.md` — New entries for packages management, Docker security, and auth fix
 - Added `18-http-api.md` — Complete HTTP REST API reference (all endpoints, auth, error codes)
 - Added `19-websocket-rpc.md` — Complete WebSocket RPC method catalog (64+ methods, permission matrix)
 - Added `20-api-keys-auth.md` — API key authentication, RBAC scopes, security model, usage examples

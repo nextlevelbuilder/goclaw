@@ -391,19 +391,6 @@
       "high": "High",
       "highDesc": "~32K token budget"
     },
-    "qualityGates": {
-      "title": "Quality Gates",
-      "description": "Validate delegation output before returning to the caller",
-      "noGates": "No quality gates configured. Click \"Add Gate\" to create one.",
-      "addGate": "Add Gate",
-      "gateNumber": "Gate #{{number}}",
-      "type": "Type",
-      "reviewerAgentKey": "Reviewer Agent Key",
-      "command": "Command",
-      "blockOnFailure": "Block on Failure",
-      "maxRetries": "Max Retries",
-      "timeout": "Timeout (seconds)"
-    },
     "otherConfig": {
       "title": "Other Config",
       "description": "Additional JSON config for advanced settings not covered by other sections",

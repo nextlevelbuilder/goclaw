@@ -35,7 +35,6 @@ const (
 	EventDelegationProgress    = "delegation.progress"
 	EventDelegationAccumulated = "delegation.accumulated"
 	EventDelegationAnnounce    = "delegation.announce"
-	EventQualityGateRetry      = "delegation.quality_gate.retry"
 
 	// Team task lifecycle events.
 	EventTeamTaskClaimed   = "team.task.claimed"
@@ -46,7 +45,8 @@ const (
 	EventTeamTaskRejected  = "team.task.rejected"
 	EventTeamTaskProgress  = "team.task.progress"
 	EventTeamTaskCommented = "team.task.commented"
-	EventTeamTaskAssigned  = "team.task.assigned"
+	EventTeamTaskAssigned   = "team.task.assigned"
+	EventTeamTaskDispatched = "team.task.dispatched"
 	EventTeamTaskUpdated   = "team.task.updated"
 	EventTeamTaskDeleted   = "team.task.deleted"
 	EventTeamTaskStale     = "team.task.stale"

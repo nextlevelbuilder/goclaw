@@ -86,22 +86,6 @@ type DelegationAnnouncePayload struct {
 	HasMedia          bool                              `json:"has_media"`
 }
 
-// QualityGateRetryPayload is emitted when a quality gate rejects a delegation
-// result and triggers a retry.
-type QualityGateRetryPayload struct {
-	DelegationID   string `json:"delegation_id"`
-	TargetAgentKey string `json:"target_agent_key"`
-	UserID         string `json:"user_id"`
-	Channel        string `json:"channel"`
-	ChatID         string `json:"chat_id"`
-	TeamID         string `json:"team_id,omitempty"`
-	TeamTaskID     string `json:"team_task_id,omitempty"`
-	GateType       string `json:"gate_type"`
-	Attempt        int    `json:"attempt"`
-	MaxRetries     int    `json:"max_retries"`
-	Feedback       string `json:"feedback,omitempty"`
-}
-
 // TeamTaskEventPayload is the typed payload for team task lifecycle events
 // (created, claimed, completed, cancelled, approved, rejected).
 type TeamTaskEventPayload struct {

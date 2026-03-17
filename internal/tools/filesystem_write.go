@@ -77,7 +77,7 @@ func (t *WriteFileTool) Parameters() map[string]any {
 			},
 			"deliver": map[string]any{
 				"type":        "boolean",
-				"description": "If true, deliver this file to the user as an attachment (image, document, etc.)",
+				"description": "Deliver this file to the user as an attachment. Defaults to true. Set to false for intermediate/temporary files (e.g. config, cache, temp scripts).",
 			},
 		},
 		"required": []string{"path", "content"},
@@ -87,7 +87,10 @@ func (t *WriteFileTool) Parameters() map[string]any {
 func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Result {
 	path, _ := args["path"].(string)
 	content, _ := args["content"].(string)
-	deliver, _ := args["deliver"].(bool)
+	deliver := true
+	if v, ok := args["deliver"].(bool); ok {
+		deliver = v
+	}
 	if path == "" {
 		return ErrorResult("path is required")
 	}
@@ -170,7 +173,11 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 		t.workspaceIntc.AfterWrite(ctx, resolved, "write")
 	}
 
-	result := SilentResult(fmt.Sprintf("File written: %s (%d bytes)", path, len(content)))
+	msg := fmt.Sprintf("File written: %s (%d bytes)", path, len(content))
+	if deliver {
+		msg += ". File will be automatically delivered to the user — do NOT send it again via message tool."
+	}
+	result := SilentResult(msg)
 	result.Deliverable = content
 	if deliver {
 		result.Media = []bus.MediaFile{{Path: resolved}}
@@ -188,7 +195,11 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
 	}
 
-	result := SilentResult(fmt.Sprintf("File written: %s (%d bytes)", path, len(content)))
+	msg := fmt.Sprintf("File written: %s (%d bytes)", path, len(content))
+	if deliver {
+		msg += ". File will be automatically delivered to the user — do NOT send it again via message tool."
+	}
+	result := SilentResult(msg)
 	result.Deliverable = content
 	if deliver {
 		// Sandbox workspace is bind-mounted — resolve to host path for delivery

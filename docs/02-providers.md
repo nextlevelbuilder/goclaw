@@ -629,12 +629,6 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 
 ---
 
-## 13. Agent Evaluators (Hook System)
-
-Agent evaluators in the quality gate / hook system (see [03-tools-system.md](./03-tools-system.md)) use the same provider resolution as normal agent runs. When a quality gate is configured with `"type": "agent"`, the hook engine delegates to the specified reviewer agent, which resolves its own provider through the standard provider registry. No separate provider configuration is needed for evaluator agents.
-
----
-
 ## 14. File Reference
 
 | File | Purpose |

@@ -120,6 +120,10 @@
     },
     "delete": "Delete",
     "deleteConfirm": "Delete this task? This cannot be undone.",
+    "selected": "{{count}} selected",
+    "deleteSelected": "Delete selected",
+    "deleteBulkTitle": "Delete tasks",
+    "deleteBulkConfirm": "This will permanently delete {{count}} task(s). Type \"delete\" to confirm.",
     "badges": {
       "awaitingReply": "awaiting reply"
     }
