@@ -26,19 +26,7 @@ func (h *DelegationsHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *DelegationsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			if extractBearerToken(r) != h.token {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		locale := extractLocale(r)
-		ctx := store.WithLocale(r.Context(), locale)
-		r = r.WithContext(ctx)
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 func (h *DelegationsHandler) handleList(w http.ResponseWriter, r *http.Request) {

@@ -67,9 +67,15 @@ Token counts are aggregated **only from `llm_call` spans** (not `agent` spans) t
 | Mode | InputPreview | OutputPreview |
 |------|:---:|:---:|
 | Normal | Not recorded | 500 characters max |
-| Verbose (`GOCLAW_TRACE_VERBOSE=1`) | Up to 50KB | 500 characters max |
+| Verbose (`GOCLAW_TRACE_VERBOSE=1`) | Up to 200KB | Up to 200KB |
 
-Verbose mode is useful for debugging LLM conversations. Full input messages (including system prompt, history, and tool results) are serialized as JSON and stored in the span's `InputPreview` field, truncated at 50,000 characters.
+Verbose mode is useful for debugging LLM conversations. When enabled via `GOCLAW_TRACE_VERBOSE=1`:
+
+- **LLM spans**: Full input messages (including system prompt, history, and tool results) are serialized as JSON and stored in `InputPreview` (truncated at 200KB). LLM response content is stored in `OutputPreview` (truncated at 200KB, includes `<thinking>` tag if present).
+- **Tool spans**: Tool input and output are both recorded up to 200KB.
+- **Agent span**: Input message and output are both recorded up to 200KB.
+
+In normal mode, previews are truncated to 500 characters max to minimize storage overhead.
 
 ---
 
@@ -106,7 +112,70 @@ The exporter lives in a separate sub-package (`internal/tracing/otelexport/`) so
 
 ---
 
-## 5. Trace HTTP API
+## 5. Cost Calculation
+
+Per-span cost is calculated using the `CalculateCost()` function in `internal/tracing/cost.go`. For each LLM call span:
+
+```
+Cost = (PromptTokens × InputCostPerMillion) / 1,000,000
+      + (CompletionTokens × OutputCostPerMillion) / 1,000,000
+      + (CacheReadTokens × CacheReadCostPerMillion) / 1,000,000
+      + (CacheCreationTokens × CacheCreateCostPerMillion) / 1,000,000
+```
+
+Model pricing is loaded from `config.ModelPricing` and keyed by `provider/model` (with fallback to `model` only). Cost is stored in the `total_cost` field of each LLM call span. The trace aggregation sums costs from all child `llm_call` spans to compute the trace-level `total_cost`.
+
+Cache token costs (read + create) are optional and only applied if the pricing config specifies non-zero values.
+
+---
+
+## 6. Snapshot Worker -- Realtime Usage Aggregation
+
+The `SnapshotWorker` periodically aggregates trace and span data into hourly `usage_snapshots` for realtime analytics and dashboard displays.
+
+### Operation
+
+- **Schedule**: Ticks every hour at HH:05:00 UTC (5 minutes past the hour)
+- **Catch-up**: On startup and after each tick, computes snapshots for all missed hours
+- **Backfill**: `Backfill()` method populates historical snapshots from the earliest trace to now
+
+### Snapshot Dimensions
+
+For each hour `[00:00, 01:00)`, the worker creates two types of snapshot rows:
+
+1. **Totals Row** (`provider=""`, `model=""`) — Aggregated from traces:
+   - `request_count` — Count of root traces
+   - `error_count` — Count of failed traces
+   - `unique_users` — Distinct `user_id` in traces
+   - `input_tokens`, `output_tokens` — Sum from all child `llm_call` spans
+   - `total_cost` — Sum of costs from all child `llm_call` spans
+   - `tool_call_count` — Sum from traces
+   - `avg_duration_ms` — Average trace duration
+   - `memory_docs`, `memory_chunks` — Point-in-time count (attached to agent's totals row only)
+   - `kg_entities`, `kg_relations` — Point-in-time count (attached to agent's totals row only)
+
+2. **Detail Rows** (`provider` + `model` specified) — Aggregated from `llm_call` spans:
+   - `llm_call_count` — Count of LLM calls for this provider/model
+   - `input_tokens`, `output_tokens` — Sum of tokens
+   - `total_cost` — Sum of per-call costs
+   - `cache_read_tokens`, `cache_create_tokens`, `thinking_tokens` — Sum from span metadata
+
+Grouping: by `(agent_id, channel)` for totals; by `(agent_id, channel, provider, model)` for details.
+
+### Usage
+
+```go
+worker := tracing.NewSnapshotWorker(db, snapshotStore)
+worker.Start()
+
+// Later:
+hoursBackfilled, err := worker.Backfill(ctx)
+worker.Stop()
+```
+
+---
+
+## 7. Trace HTTP API
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -126,7 +195,7 @@ The exporter lives in a separate sub-package (`internal/tracing/otelexport/`) so
 
 ---
 
-## 6. Delegation History
+## 8. Delegation History
 
 Delegation history records are stored in the `delegation_history` table and exposed alongside traces for cross-referencing agent interactions.
 
@@ -144,10 +213,12 @@ Delegation history is automatically recorded by `DelegateManager.saveDelegationH
 
 | File | Description |
 |------|-------------|
-| `internal/tracing/collector.go` | Collector buffer-flush, EmitSpan, FinishTrace |
-| `internal/tracing/context.go` | Trace context propagation (TraceID, ParentSpanID) |
+| `internal/tracing/collector.go` | Collector buffer-flush, EmitSpan, FinishTrace, verbose mode |
+| `internal/tracing/context.go` | Trace context propagation (TraceID, ParentSpanID, DelegateParentTraceID) |
+| `internal/tracing/cost.go` | Cost calculation and pricing lookup |
+| `internal/tracing/snapshot_worker.go` | Hourly usage aggregation into snapshots |
 | `internal/tracing/otelexport/exporter.go` | OTel OTLP exporter (gRPC + HTTP) |
-| `internal/store/tracing_store.go` | TracingStore interface |
+| `internal/store/tracing_store.go` | TracingStore interface, span/trace type constants |
 | `internal/store/pg/tracing.go` | PostgreSQL trace/span persistence + aggregation |
 | `internal/http/traces.go` | Trace HTTP API handler (GET /v1/traces) |
 | `internal/agent/loop_tracing.go` | Span emission from agent loop (LLM, tool, agent spans) |

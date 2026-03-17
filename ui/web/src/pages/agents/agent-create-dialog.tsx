@@ -37,6 +37,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const { t } = useTranslation("agents");
   const agentPresets = useAgentPresets();
   const { providers } = useProviders();
+  const [emoji, setEmoji] = useState("");
   const [agentKey, setAgentKey] = useState("");
   const [keyTouched, setKeyTouched] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -81,6 +82,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     setError("");
     try {
       const otherConfig: Record<string, unknown> = {};
+      if (emoji.trim()) otherConfig.emoji = emoji.trim();
       if (description.trim()) otherConfig.description = description.trim();
       if (selfEvolve) otherConfig.self_evolve = true;
       await onCreate({
@@ -92,6 +94,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
         other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
       });
       onOpenChange(false);
+      setEmoji("");
       setAgentKey("");
       setKeyTouched(false);
       setDisplayName("");
@@ -119,21 +122,32 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
         <DialogHeader>
           <DialogTitle>{t("create.title")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4 px-0.5 -mx-0.5 overflow-y-auto min-h-0">
+        <div className="space-y-4 py-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="displayName">{t("create.displayName")}</Label>
-              <Input
-                id="displayName"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                onBlur={() => {
-                  if (!keyTouched && displayName.trim()) {
-                    setAgentKey(slugify(displayName.trim()));
-                  }
-                }}
-                placeholder={t("create.displayNamePlaceholder")}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="emoji"
+                  value={emoji}
+                  onChange={(e) => setEmoji(e.target.value)}
+                  placeholder="🤖"
+                  className="w-14 shrink-0 text-center text-lg"
+                  maxLength={2}
+                  title={t("create.emojiHint")}
+                />
+                <Input
+                  id="displayName"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  onBlur={() => {
+                    if (!keyTouched && displayName.trim()) {
+                      setAgentKey(slugify(displayName.trim()));
+                    }
+                  }}
+                  placeholder={t("create.displayNamePlaceholder")}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="agentKey">{t("create.agentKey")}</Label>

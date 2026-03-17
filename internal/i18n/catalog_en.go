@@ -169,9 +169,6 @@ func init() {
 		MsgToolSpawn:           "Spawn a subagent for background work or delegate a task to a linked agent",
 		MsgToolSkillSearch:     "Search for available skills by keyword or description to find relevant capabilities",
 		MsgToolUseSkill:        "Activate a skill to use its specialized capabilities (tracing marker)",
-		MsgToolDelegateSearch:  "Search for available delegation targets by keyword when there are too many linked agents to list",
-		MsgToolEvaluateLoop:    "Run a generate→evaluate→revise loop between two agents for quality-critical output",
-		MsgToolHandoff:         "Transfer the conversation to another agent — the user will talk directly to that agent",
 		MsgToolTeamTasks:       "View, create, update, and complete tasks on the team task board",
 		MsgToolTeamMessage:     "Send a direct message or broadcast to teammates in the agent team",
 	})

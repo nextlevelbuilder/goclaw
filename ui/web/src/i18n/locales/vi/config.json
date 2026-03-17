@@ -291,5 +291,17 @@
   "channels.reasoningStream": "Hiện suy luận",
   "channels.reasoningStreamHint": "Hiển thị quá trình suy nghĩ của AI thành tin nhắn riêng",
   "channels.reactionLevel": "Mức phản ứng",
-  "channels.connectionMode": "Chế độ kết nối"
+  "channels.connectionMode": "Chế độ kết nối",
+  "channels.reactionOff": "Tắt",
+  "channels.reactionMinimal": "Tối thiểu",
+  "channels.reactionFull": "Đầy đủ",
+  "channels.connectionWebsocket": "WebSocket",
+  "channels.connectionWebhook": "Webhook",
+
+  "bindings.any": "Bất kỳ",
+
+  "toast": {
+    "saved": "Đã lưu cấu hình",
+    "saveFailed": "Không thể lưu cấu hình"
+  }
 }

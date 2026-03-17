@@ -65,6 +65,21 @@ func BuildSubagentSessionKey(agentID, label string) string {
 	return fmt.Sprintf("agent:%s:subagent:%s", agentID, label)
 }
 
+// BuildTeamSessionKey builds an isolated session key for team task execution.
+// Scoped per agent + team + chatID (user), matching workspace isolation.
+// All tasks from the same user within the same team share one session per member agent.
+//
+//	agent:{agentId}:team:{teamId}:{chatId}
+func BuildTeamSessionKey(agentID, teamID, chatID string) string {
+	return fmt.Sprintf("agent:%s:team:%s:%s", agentID, teamID, chatID)
+}
+
+// IsTeamSession checks if a session key indicates a team session.
+func IsTeamSession(key string) bool {
+	_, rest := ParseSessionKey(key)
+	return strings.HasPrefix(rest, "team:")
+}
+
 // BuildCronSessionKey builds the session key for a cron job.
 // Each cron job gets one persistent session (all runs share the same history).
 //

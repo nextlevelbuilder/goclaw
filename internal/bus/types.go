@@ -65,6 +65,7 @@ const (
 	CacheKindSkillGrants      = "skill_grants"
 	CacheKindMCP              = "mcp"
 	CacheKindProvider         = "provider"
+	CacheKindAPIKeys          = "api_keys"
 )
 
 // Topic constants for msgBus.Subscribe() / Broadcast().
@@ -83,6 +84,7 @@ const (
 	TopicCacheMCP              = "cache:mcp"
 	TopicCacheProvider         = "cache:provider"
 	TopicAudit                 = "audit"
+	TopicTeamTaskAudit         = "team-task-audit"
 	TopicChannelStreaming      = "channel-streaming"
 	TopicConfigChanged         = "config:changed"
 	TopicPairingRevoked        = "pairing:revoked"

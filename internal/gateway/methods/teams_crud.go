@@ -156,7 +156,7 @@ func (m *TeamsMethods) handleTaskList(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID)
+	tasks, err := m.teamStore.ListTasks(ctx, teamID, "newest", params.Status, "", params.Channel, params.ChatID, 0)
 	if err != nil {
 		slog.Warn("teams.tasks.list failed", "team_id", teamID, "status_filter", params.Status, "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
@@ -339,6 +339,52 @@ func (m *TeamsMethods) handleScopes(ctx context.Context, client *gateway.Client,
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"scopes": scopes,
+	}))
+}
+
+// --- Events ---
+
+type teamsEventsListParams struct {
+	TeamID string `json:"team_id"`
+	Limit  int    `json:"limit"`
+	Offset int    `json:"offset"`
+}
+
+func (m *TeamsMethods) handleEventsList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	if m.teamStore == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgTeamsNotConfigured)))
+		return
+	}
+
+	var params teamsEventsListParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+		return
+	}
+	if params.TeamID == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "team_id")))
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid team_id"))
+		return
+	}
+
+	events, err := m.teamStore.ListTeamEvents(ctx, teamID, params.Limit, params.Offset)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
+		return
+	}
+	if events == nil {
+		events = []store.TeamTaskEventData{}
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"events": events,
+		"count":  len(events),
 	}))
 }
 

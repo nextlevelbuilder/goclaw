@@ -65,6 +65,9 @@
   "invalidJson": "Invalid JSON syntax",
   "usingGlobalDefaults": "Using global defaults from config.json",
   "disconnectedGateway": "Disconnected from gateway. Attempting to reconnect...",
+  "serverUnreachable": "Server Unreachable",
+  "serverUnreachableDesc": "Cannot connect to the gateway server. Please check that the server is running.",
+  "reconnecting": "Reconnecting...",
   "noFiles": "No files found.",
   "selectFileToView": "Select a file to view its content",
   "typeToConfirmPrefix": "Type",
@@ -103,5 +106,14 @@
   "customTools": "Custom",
   "selectOrTypeTools": "Select or type tool names...",
   "selectOrTypeSkills": "Select or type skill names...",
-  "typeAndPressEnter": "Type and press Enter..."
+  "typeAndPressEnter": "Type and press Enter...",
+  "copyCode": "Copy code",
+  "copy": "Copy",
+  "download": "Download",
+  "errorBoundary": "Something went wrong rendering this section.",
+  "csvRows": "csv ({{count}} rows)",
+  "failedToLoadImage": "Failed to load image",
+  "deleteFolder": "Delete folder",
+  "deleteFile": "Delete file",
+  "loadMore": "Load more..."
 }

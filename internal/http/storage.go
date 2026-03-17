@@ -47,17 +47,7 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			provided := extractBearerToken(r)
-			if !tokenMatch(provided, h.token) {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 // protectedDirs are top-level directories where deletion is blocked
@@ -126,10 +116,10 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil
 		}
-		rel, _ := filepath.Rel(h.baseDir, path)
-		if rel == "." {
+		if path == rootDir {
 			return nil
 		}
+		rel, _ := filepath.Rel(h.baseDir, path)
 
 		// Skip symlinks
 		if d.Type()&os.ModeSymlink != 0 {
@@ -148,8 +138,18 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		relToRoot, _ := filepath.Rel(rootDir, path)
 		depth := strings.Count(relToRoot, string(filepath.Separator)) + 1
 
-		// At depth boundary: record dir but don't descend
+		// Beyond depth boundary: record the dir (with hasChildren hint) but don't descend.
 		if d.IsDir() && depth > maxDepth {
+			e := fileEntry{
+				Path:      rel,
+				Name:      d.Name(),
+				IsDir:     true,
+				Protected: isProtectedPath(rel),
+			}
+			if dirEntries, err := os.ReadDir(path); err == nil && len(dirEntries) > 0 {
+				e.HasChildren = true
+			}
+			entries = append(entries, e)
 			return filepath.SkipDir
 		}
 

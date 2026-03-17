@@ -301,13 +301,14 @@ Next agent turn picks up the new skill in its tool set.
 |------|---------|
 | `internal/tools/publish_skill.go` | Tool implementation |
 | `internal/skills/helpers.go` | Shared helpers: ParseSkillFrontmatter, Slugify, IsSystemArtifact, SlugRegexp |
-| `internal/store/pg/skills.go` | DB operations: CreateSkillManaged, GetNextVersion, IsSystemSkill, StoreMissingDeps |
+| `internal/store/pg/skills_crud.go` | DB operations: CreateSkillManaged, GetNextVersion, StoreMissingDeps |
+| `internal/store/pg/skills_admin.go` | Admin operations: IsSystemSkill |
 | `internal/store/pg/skills_grants.go` | GrantToAgent, RevokeFromAgent, ListAccessible |
 | `internal/skills/loader.go` | Filesystem skill loader with priority hierarchy |
 | `internal/skills/seeder.go` | System skill seeder (bundled → DB) |
 | `internal/skills/dep_scanner.go` | Static analysis for skill dependencies |
 | `internal/skills/dep_checker.go` | Runtime dependency verification |
 | `internal/http/skills_upload.go` | HTTP ZIP upload handler (alternative to publish_skill) |
-| `cmd/gateway.go` | Tool registration |
+| `cmd/gateway.go` | Tool registration and gateway initialization |
 | `cmd/gateway_builtin_tools.go` | Builtin tool seed data |
 | `skills/skill-creator/SKILL.md` | Core skill instructions |

@@ -22,9 +22,6 @@ const (
 	// Agent summoning events (predefined agent setup via LLM).
 	EventAgentSummoning = "agent.summoning"
 
-	// Agent handoff event (payload: from_agent, to_agent, reason).
-	EventHandoff = "handoff"
-
 	// Team activity events (real-time team workflow visibility).
 	EventTeamTaskCreated     = "team.task.created"
 	EventTeamTaskCompleted   = "team.task.completed"
@@ -43,12 +40,16 @@ const (
 	// Team task lifecycle events.
 	EventTeamTaskClaimed   = "team.task.claimed"
 	EventTeamTaskCancelled = "team.task.cancelled"
+	EventTeamTaskFailed    = "team.task.failed"
 	EventTeamTaskReviewed  = "team.task.reviewed"
 	EventTeamTaskApproved  = "team.task.approved"
 	EventTeamTaskRejected  = "team.task.rejected"
 	EventTeamTaskProgress  = "team.task.progress"
 	EventTeamTaskCommented = "team.task.commented"
 	EventTeamTaskAssigned  = "team.task.assigned"
+	EventTeamTaskUpdated   = "team.task.updated"
+	EventTeamTaskDeleted   = "team.task.deleted"
+	EventTeamTaskStale     = "team.task.stale"
 
 	// Team CRUD events (admin operations).
 	EventTeamCreated       = "team.created"

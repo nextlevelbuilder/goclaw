@@ -19,7 +19,6 @@
     "config": "配置",
     "cron": "定时任务",
     "customTools": "自定义工具",
-    "delegations": "委托",
     "logs": "日志",
     "mcpServers": "MCP 服务器",
     "memory": "记忆",
@@ -35,6 +34,9 @@
     "traces": "追踪",
     "tts": "TTS",
     "usage": "用量",
-    "activity": "活动日志"
+    "activity": "活动日志",
+    "cliCredentials": "CLI 凭证",
+    "apiKeys": "API 密钥",
+    "apiDocs": "API 文档"
   }
 }

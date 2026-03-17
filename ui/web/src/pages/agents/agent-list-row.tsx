@@ -19,7 +19,9 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
   const { t } = useTranslation("agents");
   const displayName = agent.display_name
     || (UUID_RE.test(agent.agent_key) ? t("card.unnamedAgent") : agent.agent_key);
-  const selfEvolve = agent.agent_type === "predefined" && Boolean((agent.other_config as Record<string, unknown> | null)?.self_evolve);
+  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
+  const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
+  const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
 
   return (
     <button
@@ -29,7 +31,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
     >
       {/* Icon */}
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <Bot className="h-4 w-4" />
+        {emoji ? <span className="text-base leading-none">{emoji}</span> : <Bot className="h-4 w-4" />}
       </div>
 
       {/* Name + key */}

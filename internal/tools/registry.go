@@ -2,8 +2,10 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"maps"
+	"strings"
 	"sync"
 	"time"
 
@@ -133,6 +135,21 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 	if r.rateLimiter != nil && sessionKey != "" {
 		if err := r.rateLimiter.Allow(sessionKey); err != nil {
 			return ErrorResult(err.Error())
+		}
+	}
+
+	// Detect empty tool call arguments — typically caused by providers truncating
+	// or dropping arguments when output is too large (e.g. DashScope with long content).
+	// Give the model an actionable hint instead of a confusing "X is required" error.
+	if len(args) == 0 {
+		if params := tool.Parameters(); params != nil {
+			if req, ok := params["required"].([]string); ok && len(req) > 0 {
+				return ErrorResult(fmt.Sprintf(
+					"Tool call had empty arguments (required: %s). "+
+						"This usually means your previous response was too long for the API to include tool parameters. "+
+						"Try again with shorter content — split into smaller parts if needed.",
+					strings.Join(req, ", ")))
+			}
 		}
 	}
 

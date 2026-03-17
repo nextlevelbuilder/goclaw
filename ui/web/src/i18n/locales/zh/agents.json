@@ -46,6 +46,8 @@
   },
   "create": {
     "title": "创建Agent",
+    "emoji": "图标",
+    "emojiHint": "可选的表情图标",
     "displayName": "显示名称 *",
     "displayNamePlaceholder": "我的Agent",
     "agentKey": "Agent标识 *",
@@ -120,7 +122,9 @@
     "active": "活跃",
     "inactive": "非活跃",
     "summonFailed": "召唤失败",
-    "defaultAgent": "默认Agent"
+    "defaultAgent": "默认Agent",
+    "emoji": "图标",
+    "emojiHint": "可选的表情图标"
   },
   "llmConfig": {
     "title": "LLM 配置",
@@ -168,7 +172,8 @@
     "perUser": "每用户",
     "emptyFile": "空",
     "estTokens": "估计 {{tokens}} token",
-    "insertContact": "搜索联系人以插入..."
+    "insertContact": "搜索联系人以插入...",
+    "contentPlaceholder": "文件内容..."
   },
   "fileEditor": {
     "editWithAi": "AI 编辑",
@@ -190,7 +195,11 @@
     "user": "用户",
     "revokeTitle": "撤销共享",
     "revokeDesc": "撤销用户「{{userId}}」的访问权限？他们将无法再使用此Agent。",
-    "revoke": "撤销"
+    "revoke": "撤销",
+    "role.user": "用户",
+    "role.viewer": "查看者",
+    "roleDesc.user": "可以使用代理和聊天",
+    "roleDesc.viewer": "只读访问"
   },
   "links": {
     "teamsHint": "Agent Links 即将移除。请使用 Agent Teams 进行多代理协作——它提供任务跟踪、共享工作区和质量控制，且设置更简单。",
@@ -259,7 +268,10 @@
     "continue": "继续",
     "retry": "重试",
     "retrying": "重试中...",
-    "done": "完成"
+    "done": "完成",
+    "fileLabelSOUL": "灵魂与个性",
+    "fileLabelIDENTITY": "身份卡",
+    "fileLabelUSER_PREDEFINED": "默认用户上下文"
   },
   "configGroups": {
     "core": "核心",
@@ -392,5 +404,14 @@
       "formatJson": "格式化 JSON",
       "invalidJson": "JSON 语法无效"
     }
+  },
+  "toast": {
+    "created": "代理已创建",
+    "createFailed": "创建代理失败",
+    "updated": "代理已更新",
+    "updateFailed": "更新代理失败",
+    "deleted": "代理已删除",
+    "deleteFailed": "删除代理失败",
+    "unknownError": "未知错误"
   }
 }

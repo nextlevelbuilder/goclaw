@@ -169,9 +169,6 @@ func init() {
 		MsgToolSpawn:           "Tạo subagent chạy nền hoặc giao việc cho agent đã liên kết",
 		MsgToolSkillSearch:     "Tìm kiếm kỹ năng có sẵn theo từ khóa hoặc mô tả",
 		MsgToolUseSkill:        "Kích hoạt kỹ năng để sử dụng khả năng chuyên biệt (đánh dấu tracing)",
-		MsgToolDelegateSearch:  "Tìm kiếm agent mục tiêu ủy quyền theo từ khóa khi có quá nhiều agent liên kết",
-		MsgToolEvaluateLoop:    "Chạy vòng lặp tạo→đánh giá→sửa đổi giữa hai agent cho nội dung cần chất lượng cao",
-		MsgToolHandoff:         "Chuyển cuộc hội thoại sang agent khác — người dùng sẽ nói chuyện trực tiếp với agent đó",
 		MsgToolTeamTasks:       "Xem, tạo, cập nhật và hoàn thành tác vụ trên bảng tác vụ nhóm",
 		MsgToolTeamMessage:     "Gửi tin nhắn trực tiếp hoặc broadcast đến đồng đội trong nhóm agent",
 	})

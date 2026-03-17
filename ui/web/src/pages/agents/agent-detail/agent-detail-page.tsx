@@ -67,6 +67,9 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
 
   const title = agentDisplayName(agent, t("card.unnamedAgent"));
   const subtitle = agentSubtitle(agent);
+  const emoji = typeof (agent.other_config as Record<string, unknown> | null)?.emoji === "string"
+    ? (agent.other_config as Record<string, unknown>).emoji as string
+    : "";
 
   return (
     <TooltipProvider>
@@ -77,7 +80,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Bot className="h-6 w-6" />
+          {emoji ? <span className="text-2xl leading-none">{emoji}</span> : <Bot className="h-6 w-6" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

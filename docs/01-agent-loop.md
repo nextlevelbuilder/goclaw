@@ -111,9 +111,10 @@ flowchart TD
 - Filter the available tools through the PolicyEngine (RBAC).
 - Call the LLM. Streaming calls emit `chunk` events in real time; non-streaming calls return a single response.
 - Record an LLM span for tracing with token counts and timing.
+- **Mid-loop compaction**: if prompt tokens exceed 75% of context window (or `MaxHistoryShare` if configured), summarize ~70% of in-memory messages, keeping the last ~30%. This happens during active iterations to prevent context overflow in long-running tasks.
 - If the response contains no tool calls, exit the loop.
 - If tool calls are present, proceed to Phase 5 and then loop back.
-- Maximum 20 iterations before the loop forcibly exits.
+- Maximum iterations before loop forcibly exits (default 20, set via `maxIterations` in agent config or `req.MaxIterations` per-request).
 
 ### Phase 5: Tool Execution
 
@@ -149,32 +150,36 @@ When the context is cancelled (via `/stop` or `/stopall`), the loop exits immedi
 
 ## 2. System Prompt
 
-The system prompt is assembled dynamically from 15+ sections. Two modes control the amount of content included:
+The system prompt is assembled dynamically from 19 sections. Two modes control the amount of content included:
 
 - **PromptFull**: used for main agent runs. Includes all sections.
-- **PromptMinimal**: used for sub-agents and cron jobs. Stripped-down version with only essential context.
+- **PromptMinimal**: used for sub-agents and cron jobs. Reduced sections (only AGENTS.md and TOOLS.md from bootstrap files).
 
-### Sections
+### Sections (In Build Order)
 
-1. **Identity** -- agent persona loaded from bootstrap files (IDENTITY.md, SOUL.md).
-2. **First-run bootstrap** -- instructions shown only on the very first interaction.
-3. **Tooling** -- descriptions and usage guidelines for available tools.
-4. **Safety** -- defensive preamble for handling external content, wrapped in XML tags.
-5. **Skills (inline)** -- skill content injected directly when the skill set is small.
-6. **Skills (search mode)** -- BM25 skill search tool when the skill set is large.
-7. **Memory Recall** -- recalled memory snippets relevant to the current conversation.
-8. **Workspace** -- working directory path and file structure context.
-9. **Sandbox** -- Docker sandbox instructions when sandbox mode is enabled.
-10. **User Identity** -- the current user's display name and identifier.
-11. **Time** -- current date and time for temporal awareness.
-12. **Messaging** -- channel-specific formatting instructions (Telegram, Feishu, etc.).
-13. **Extra context** -- additional prompt text wrapped in `<extra_context>` XML tags.
-14. **Project Context** -- context files loaded from the database or filesystem, wrapped in `<context_file>` XML tags with a defensive preamble.
-15. **Silent Replies** -- instructions for the NO_REPLY convention.
-16. **Sub-Agent Spawning** -- rules for launching child agents.
-18. **Delegation** -- auto-generated `DELEGATION.md` listing available delegation targets (inline if ≤15, search instruction if >15).
-19. **Team** -- `TEAM.md` injected for team leads only (team name, role, teammate list).
-20. **Runtime** -- runtime metadata (agent ID, session key, provider info).
+1. **Identity** -- channel-aware context with platform type (Telegram, Zalo, etc.) and chat type (direct/group).
+2. **First-run bootstrap** -- `[MANDATORY]` notice injected if BOOTSTRAP.md is present, forcing immediate execution.
+3. **Persona** -- SOUL.md and IDENTITY.md injected early in the "primacy zone" to prevent drift in long conversations.
+4. **Tooling** -- core tool descriptions, filtered by policy and sandbox status.
+5. **Credentialed CLI** -- optional secure CLI context for credentialed exec tool access.
+6. **Safety** -- defensive preamble for handling external content, identity anchoring for predefined agents.
+7. **Self-Evolution** -- rules for predefined agents to update SOUL.md (style/tone) from user feedback.
+8. **Skills (inline)** -- skill content injected directly when the skill set is small (≤15 skills).
+9. **Skills (search mode)** -- use `skill_search` tool when the skill set is large.
+10. **MCP Tools (inline)** -- external integration tools with real descriptions.
+11. **MCP Tools (search mode)** -- use `mcp_tool_search` when many MCP tools are available.
+12. **Workspace** -- working directory path, file structure, sandbox container workdir.
+13. **Team Workspace** -- absolute path to shared team workspace (for team agents).
+14. **Sandbox** -- Docker container instructions, available commands, policy notes.
+15. **User Identity** -- owner IDs for permission checks (full mode only).
+16. **Time** -- current UTC date/time for temporal awareness.
+17. **Channel Formatting** -- platform-specific output hints (e.g., Zalo → plain text).
+18. **Extra Context** -- additional context wrapped in `<extra_context>` tags (subagent context, etc.).
+19. **Project Context** -- bootstrap context files (remaining after persona extraction), wrapped in defensive preamble.
+20. **Sub-Agent Spawning** -- rules for launching child agents (skipped for team agents with TEAM.md).
+21. **Runtime** -- agent ID, session key, provider info, model pricing.
+22. **Persona Reminder** -- recency reinforcement to combat "lost in the middle" in long conversations.
+23. **Memory Reminders** -- prompts to run memory_search and knowledge_graph_search before answering.
 
 ---
 
@@ -312,15 +317,31 @@ The following messages are never pruned:
 
 ## 7. Auto-Summarize and Compaction
 
-When the conversation grows too long, the auto-summarization system compresses older history into a summary while preserving recent context.
+The system uses a two-stage compaction strategy: **mid-loop** (during active iterations) and **post-run** (after completion).
+
+### Mid-Loop Compaction (During Iteration)
+
+When in-memory messages exceed 75% of context window during LLM iterations, the agent immediately summarizes the first ~70% of messages in place, keeping the last ~30%. This prevents context overflow in long-running tasks without waiting for post-run summarization.
+
+```
+Threshold: prompt_tokens >= contextWindow * 0.75 (configurable via MaxHistoryShare)
+Trigger: Once per run, inside the iteration loop (between LLM calls)
+Output: In-memory messages replaced with [summary] + [recent 4 messages]
+```
+
+### Post-Run Compaction (After Completion)
+
+When the session history exceeds thresholds **after** a run completes, the session is compacted in the background.
 
 ```mermaid
 flowchart TD
     CHECK{"> 50 messages OR<br/>> 75% context window?"}
     CHECK -->|No| SKIP[Skip compaction]
-    CHECK -->|Yes| FLUSH
+    CHECK -->|Yes| LOCK["Per-session non-blocking lock<br/>(skip if another run already compacting)"]
+    LOCK -->|Lock acquired| FLUSH
+    LOCK -->|Already locked| SKIP
 
-    FLUSH["Step 1: Memory Flush (synchronous)<br/>LLM turn with write_file tool<br/>Agent writes durable memories before truncation<br/>Max 5 iterations, 90s timeout"]
+    FLUSH["Step 1: Memory Flush (synchronous)<br/>Embedded agent turn with write_file tool<br/>Agent stores durable memories before truncation<br/>Uses PromptMinimal mode<br/>Max 5 iterations, 90s timeout"]
     FLUSH --> SUMMARIZE
 
     SUMMARIZE["Step 2: Summarize (background goroutine)<br/>Keep last 4 messages<br/>LLM summarizes older messages<br/>temp=0.3, max_tokens=1024, timeout 120s"]
@@ -333,22 +354,42 @@ flowchart TD
 
 On the next request, the saved summary is injected at the beginning of the message list as two messages:
 
-1. `{role: "user", content: "[Previous conversation summary]\n{summary}"}`
+1. `{role: "user", content: "[Summary of earlier conversation]\n{summary}"}`
 2. `{role: "assistant", content: "I understand the context..."}`
 
-This gives the LLM continuity without replaying the full history.
+This gives the LLM continuity without replaying the full history. Protected zone: the last 3 assistant messages are never pruned.
 
 ---
 
 ## 8. Memory Flush
 
-Memory flush runs synchronously before compaction to give the agent an opportunity to persist important information.
+Memory flush runs **synchronously before post-run compaction** to give the agent an opportunity to persist important information before session history is truncated.
 
-- **Trigger**: token estimate >= contextWindow - 20,000 - 4,000.
-- **Deduplication**: runs at most once per compaction cycle, tracked by the compaction counter.
-- **Mechanism**: an embedded agent turn using `PromptMinimal` mode with a flush prompt and the 10 most recent messages. The default prompt is: "Store durable memories now, if nothing to store reply NO_REPLY."
-- **Available tools**: `write_file` and `read_file`, so the agent can write and read memory files.
-- **Timing**: fully synchronous -- blocks the summarization step until the flush completes.
+### Trigger Conditions
+
+- **Primary**: compaction is about to run (message count or token ratio exceeded).
+- **Token threshold**: only runs when session tokens are significant enough to warrant capture.
+- **Deduplication**: runs at most once per compaction cycle, tracked by comparing compaction counter.
+
+### Mechanism
+
+An embedded agent turn with special configuration:
+
+- **System prompt mode**: `PromptMinimal` (stripped-down context).
+- **Message window**: latest 10 messages only (not the full history).
+- **Available tools**: `write_file` and `read_file` for memory file operations.
+- **Default prompt**: "Pre-compaction memory flush. Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed). If nothing to store, reply with NO_REPLY."
+- **Output handling**: recognizes `NO_REPLY` convention (silent completion).
+
+### Timing
+
+- **Synchronous blocking**: blocks the entire post-run path until flush LLM call completes.
+- **Timeout**: 90 seconds for the entire flush turn (5 max iterations).
+- **Configurable**: can be disabled or customized via `compaction.memory_flush` config section.
+
+### Results
+
+The agent can write findings to `memory/YYYY-MM-DD.md` files. These persist across session compaction and are available to future sessions via `memory_search` and `memory_get` tools.
 
 ---
 
@@ -399,15 +440,47 @@ flowchart TD
 ### Resolved Properties
 
 - **Provider**: looked up by name from the provider registry. Falls back to the first registered provider if not found.
-- **Bootstrap files**: loaded from the `agent_context_files` table (agent-level files like IDENTITY.md, SOUL.md).
-- **Agent type**: `open` (per-user context with 7 template files) or `predefined` (agent-level context plus USER.md per user).
+- **Bootstrap files**: loaded from the workspace directory via `bootstrap.LoadWorkspaceFiles()`. Standard files: AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, BOOTSTRAP.md. Additional files (MEMORY.md, USER_PREDEFINED.md, DELEGATION.md, TEAM.md, AVAILABILITY.md) loaded separately as needed. Per-user files (USER.md) created on first chat via `EnsureUserFilesFunc`.
+- **Agent type**: `open` (per-user context, seeded from template files) or `predefined` (agent-level context plus per-user USER.md overlay).
 - **Per-user seeding**: `EnsureUserFilesFunc` seeds template files on first chat, idempotent (skips files that already exist). Uses PostgreSQL's `xmax` trick in `GetOrCreateUserProfile` to distinguish INSERT from ON CONFLICT UPDATE, triggering seeding only for genuinely new users.
-- **Dynamic context loading**: `ContextFileLoaderFunc` resolves context files based on agent type -- per-user files for open agents, agent-level files for predefined agents.
+- **Dynamic context loading**: `ContextFileLoaderFunc` resolves context files based on agent type and request context. Returns a `[]bootstrap.ContextFile` list with truncated content for system prompt injection. For open agents: loads per-user files from workspace. For predefined agents: loads agent-level files plus per-user USER.md.
 - **Custom tools**: `DynamicLoader.LoadForAgent()` clones the global tool registry and adds per-agent custom tools, ensuring each agent gets its own isolated set of dynamic tools.
+- **Team context**: auto-resolved for agents that belong to a team. Lead agents get the team workspace as default workspace; non-lead members keep their own workspace with team workspace accessible via absolute path tool context.
 
 ---
 
-## 11. Event System
+## 11. Team Workspace Handling
+
+Agents that belong to a team have access to shared team workspaces for collaboration.
+
+### Workspace Resolution
+
+**For dispatched tasks** (via `req.TeamWorkspace`):
+- The team workspace becomes the **default workspace** for relative path operations
+- All file tools (read_file, write_file, list_files) use team workspace by default
+- Agent workspace is still accessible via `WithToolTeamWorkspace()` context for absolute-path access
+
+**For direct chat** (auto-resolved via team membership):
+- Lead agents get team workspace as their default workspace (primary job is team coordination)
+- Non-lead member agents keep their own workspace as default
+- Team workspace is accessible via `WithToolTeamWorkspace()` context
+
+### Path Scoping
+
+- **Shared workspace mode** (team.settings.shared_workspace): all agents in team share single workspace
+- **Isolated workspace mode** (default): each agent gets a workspace scoped by `(teamID, chatID)` or `(teamID, userID)`
+
+### Context Variables
+
+During runs with team context:
+- `WithToolTeamWorkspace(ctx, wsDir)` — absolute path to shared team workspace
+- `WithToolWorkspace(ctx, effectiveWorkspace)` — effective default workspace for file operations
+- `WithToolTeamID(ctx, teamID)` — team UUID string for team-scoped tool operations
+- `WithToolTaskID(ctx, taskID)` — team task ID when executing dispatched team tasks
+
+---
+
+## 12. Event System
 
 The Loop publishes events via an `onEvent` callback. The WebSocket gateway forwards these as `EventFrame` messages to connected clients for real-time progress tracking.
 
@@ -415,13 +488,16 @@ The Loop publishes events via an `onEvent` callback. The WebSocket gateway forwa
 
 | Event | When | Payload |
 |-------|------|---------|
-| `run.started` | Run begins | -- |
+| `run.started` | Run begins | `{"message": "..."}` |
+| `activity` | Phase transitions | `{"phase": "thinking"|"tool_exec"|"compacting", "iteration": N}` |
 | `chunk` | Streaming: each text fragment from the LLM | `{"content": "..."}` |
-| `tool.call` | Tool execution begins | `{"name": "...", "id": "..."}` |
-| `tool.result` | Tool execution completes | `{"name": "...", "id": "...", "is_error": bool}` |
-| `run.completed` | Run finishes successfully | -- |
+| `thinking` | Streaming: thinking tokens (extended thinking models) | `{"content": "..."}` |
+| `tool.call` | Tool execution begins | `{"name": "...", "id": "...", "arguments": {...}}` |
+| `tool.result` | Tool execution completes | `{"name": "...", "id": "...", "is_error": bool, "result": "..."}` |
+| `block.reply` | Intermediate assistant content during tool iterations | `{"content": "..."}` |
+| `run.retrying` | LLM provider retry after failure | `{"attempt": N, "maxAttempts": M, "error": "..."}` |
+| `run.completed` | Run finishes successfully | `{"content": "...", "usage": {...}}` |
 | `run.failed` | Run finishes with an error | `{"error": "..."}` |
-| `handoff` | Conversation transferred to another agent | `{"from": "...", "to": "...", "reason": "..."}` |
 
 ### Event Flow
 
@@ -449,7 +525,7 @@ sequenceDiagram
 
 ---
 
-## 12. Tracing
+## 13. Tracing
 
 Every agent run produces a trace with a hierarchy of spans for debugging, analysis, and cost tracking.
 
@@ -484,16 +560,21 @@ Enabled via the `GOCLAW_TRACE_VERBOSE=1` environment variable.
 
 ---
 
-## 13. File Reference
+## 14. File Reference
 
 | File | Responsibility |
 |------|---------------|
-| `internal/agent/loop.go` | Core Loop struct, RunRequest/RunResult, LLM iteration loop, tool execution, event emission |
-| `internal/agent/loop_history.go` | History pipeline: limitHistoryTurns, sanitizeHistory, summary injection |
+| `internal/agent/loop_run.go` | Run() entry point: trace creation, span management, event emission wrapper |
+| `internal/agent/loop.go` | runLoop() core loop: LLM iteration, tool execution, message buffering, event emission |
+| `internal/agent/loop_history.go` | History pipeline: limitHistoryTurns, pruneContextMessages, sanitizeHistory, summary injection |
 | `internal/agent/pruning.go` | Context pruning: 2-pass soft trim and hard clear algorithm |
-| `internal/agent/systemprompt.go` | System prompt assembly (15+ sections), PromptFull and PromptMinimal modes |
+| `internal/agent/loop_compact.go` | Mid-loop compaction: in-memory message summarization during iterations |
+| `internal/agent/systemprompt.go` | System prompt assembly (19+ sections), PromptFull and PromptMinimal modes |
+| `internal/agent/systemprompt_sections.go` | Individual section builders (tooling, workspace, sandbox, skills, MCP, etc.) |
 | `internal/agent/resolver.go` | ManagedResolver: lazy Loop creation from PostgreSQL, provider resolution, bootstrap loading |
 | `internal/agent/loop_tracing.go` | Trace and span creation, verbose mode input capture, span finalization |
 | `internal/agent/input_guard.go` | Input Guard: 6 regex patterns, 4 action modes, security logging |
 | `internal/agent/sanitize.go` | 7-step output sanitization pipeline |
 | `internal/agent/memoryflush.go` | Pre-compaction memory flush: embedded agent turn with write_file tool |
+| `internal/agent/toolloop.go` | Tool execution and loop detection (no-progress warnings) |
+| `internal/bootstrap/files.go` | Bootstrap file loading and context file preparation |

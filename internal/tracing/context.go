@@ -14,6 +14,7 @@ const (
 	collectorKey            contextKey = "goclaw_trace_collector"
 	announceParentKey       contextKey = "goclaw_announce_parent_span_id"
 	delegateParentTraceKey  contextKey = "goclaw_delegate_parent_trace_id"
+	traceTeamIDKey          contextKey = "goclaw_trace_team_id"
 )
 
 // WithTraceID returns a context with the given trace ID.
@@ -83,4 +84,27 @@ func DelegateParentTraceIDFromContext(ctx context.Context) uuid.UUID {
 		return v
 	}
 	return uuid.Nil
+}
+
+// WithTraceTeamID sets the team ID for trace/span scoping.
+func WithTraceTeamID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, traceTeamIDKey, id)
+}
+
+// TraceTeamIDFromContext extracts the team ID for trace/span scoping.
+// Returns uuid.Nil if not set (non-team run).
+func TraceTeamIDFromContext(ctx context.Context) uuid.UUID {
+	if v, ok := ctx.Value(traceTeamIDKey).(uuid.UUID); ok {
+		return v
+	}
+	return uuid.Nil
+}
+
+// TraceTeamIDPtrFromContext returns *uuid.UUID for setting on SpanData.TeamID.
+// Returns nil if not set (non-team run).
+func TraceTeamIDPtrFromContext(ctx context.Context) *uuid.UUID {
+	if v, ok := ctx.Value(traceTeamIDKey).(uuid.UUID); ok && v != uuid.Nil {
+		return &v
+	}
+	return nil
 }

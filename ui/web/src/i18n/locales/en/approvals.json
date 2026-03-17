@@ -19,5 +19,15 @@
     "title": "Deny Execution",
     "description": "Deny execution request \"{{command}}\" from agent \"{{agentId}}\"?",
     "confirmLabel": "Deny"
+  },
+  "toast": {
+    "approved": "Approved",
+    "approvedAlways": "Command always allowed",
+    "approvedOnce": "Command approved",
+    "approveFailed": "Failed to approve",
+    "denied": "Denied",
+    "deniedDesc": "Command denied",
+    "denyFailed": "Failed to deny",
+    "unknownError": "Unknown error"
   }
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // filteredToolNames returns tool names after applying policy filters.
@@ -27,6 +28,19 @@ func (l *Loop) filteredToolNames() []string {
 		names[i] = d.Function.Name
 	}
 	return names
+}
+
+// buildCredentialCLIContext generates the TOOLS.md supplement for credentialed CLIs.
+// Returns empty string if no secure CLI store is configured or no enabled CLIs.
+func (l *Loop) buildCredentialCLIContext(ctx context.Context) string {
+	if l.secureCLIStore == nil {
+		return ""
+	}
+	creds, err := l.secureCLIStore.ListEnabled(ctx)
+	if err != nil || len(creds) == 0 {
+		return ""
+	}
+	return tools.GenerateCredentialContext(creds)
 }
 
 // buildMCPToolDescs extracts real descriptions for MCP tools from the registry.
@@ -60,6 +74,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	_, hasSpawn := l.tools.Get("spawn")
+	_, hasTeamTools := l.tools.Get("team_tasks")
 	_, hasSkillSearch := l.tools.Get("skill_search")
 	_, hasMCPToolSearch := l.tools.Get("mcp_tool_search")
 	_, hasKG := l.tools.Get("knowledge_graph_search")
@@ -122,6 +137,8 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SkillsSummary:          l.resolveSkillsSummary(skillFilter),
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
+		HasTeam:                hasTeamTools,
+		TeamWorkspace:          tools.ToolTeamWorkspaceFromCtx(ctx),
 		HasSkillSearch:         hasSkillSearch,
 		HasMCPToolSearch:       hasMCPToolSearch,
 		HasKnowledgeGraph:      hasKG,
@@ -133,6 +150,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SandboxContainerDir:    l.sandboxContainerDir,
 		SandboxWorkspaceAccess: l.sandboxWorkspaceAccess,
 		SelfEvolve:             l.selfEvolve,
+		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
 	})
 
 	messages = append(messages, providers.Message{

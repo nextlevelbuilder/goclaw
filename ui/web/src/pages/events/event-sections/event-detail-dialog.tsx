@@ -24,7 +24,7 @@ export function EventDetailDialog({ entry, onClose }: EventDetailDialogProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] flex flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Badge variant="secondary" className="font-mono text-xs">
@@ -36,7 +36,7 @@ export function EventDetailDialog({ entry, onClose }: EventDetailDialogProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative">
+        <div className="relative min-h-0 flex-1 -mx-4 px-4 sm:-mx-6 sm:px-6">
           <Button
             variant="ghost"
             size="sm"
@@ -50,7 +50,7 @@ export function EventDetailDialog({ entry, onClose }: EventDetailDialogProps) {
             )}
             {copied ? t("detail.copied") : t("detail.copy")}
           </Button>
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm leading-relaxed">
+          <pre className="max-h-full overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm leading-relaxed">
             <code>
               <JsonHighlight json={json} />
             </code>

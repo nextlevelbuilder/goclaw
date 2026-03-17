@@ -66,9 +66,6 @@ const TtsPage = lazy(() =>
 const EventsPage = lazy(() =>
   import("@/pages/events/events-page").then((m) => ({ default: m.EventsPage })),
 );
-const DelegationsPage = lazy(() =>
-  import("@/pages/delegations/delegations-page").then((m) => ({ default: m.DelegationsPage })),
-);
 const StoragePage = lazy(() =>
   import("@/pages/storage/storage-page").then((m) => ({ default: m.StoragePage })),
 );
@@ -89,6 +86,12 @@ const ContactsPage = lazy(() =>
 );
 const ActivityPage = lazy(() =>
   import("@/pages/activity/activity-page").then((m) => ({ default: m.ActivityPage })),
+);
+const CliCredentialsPage = lazy(() =>
+  import("@/pages/cli-credentials/cli-credentials-page").then((m) => ({ default: m.CliCredentialsPage })),
+);
+const ApiKeysPage = lazy(() =>
+  import("@/pages/api-keys/api-keys-page").then((m) => ({ default: m.ApiKeysPage })),
 );
 
 function PageLoader() {
@@ -143,7 +146,6 @@ export function AppRoutes() {
           <Route path={ROUTES.TRACES} element={<TracesPage key="list" />} />
           <Route path={ROUTES.TRACE_DETAIL} element={<TracesPage key="detail" />} />
           <Route path={ROUTES.EVENTS} element={<EventsPage />} />
-          <Route path={ROUTES.DELEGATIONS} element={<DelegationsPage />} />
           <Route path={ROUTES.USAGE} element={<Navigate to={ROUTES.OVERVIEW} replace />} />
           <Route path={ROUTES.ACTIVITY} element={<ActivityPage />} />
           <Route path={ROUTES.CHANNELS} element={<ChannelsPage key="list" />} />
@@ -161,6 +163,8 @@ export function AppRoutes() {
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
           <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />
+          <Route path={ROUTES.CLI_CREDENTIALS} element={<CliCredentialsPage />} />
+          <Route path={ROUTES.API_KEYS} element={<ApiKeysPage />} />
         </Route>
 
         {/* Catch-all → overview */}

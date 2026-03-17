@@ -170,9 +170,6 @@ const (
 	MsgToolSpawn             = "core.tool.spawn"
 	MsgToolSkillSearch       = "core.tool.skill_search"
 	MsgToolUseSkill          = "core.tool.use_skill"
-	MsgToolDelegateSearch    = "core.tool.delegate_search"
-	MsgToolEvaluateLoop      = "core.tool.evaluate_loop"
-	MsgToolHandoff           = "core.tool.handoff"
 	MsgToolTeamTasks         = "core.tool.team_tasks"
 	MsgToolTeamMessage       = "core.tool.team_message"
 )

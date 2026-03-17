@@ -282,9 +282,17 @@ func (s *PGTeamStore) CopyFilesToTeam(ctx context.Context, fileIDs []uuid.UUID, 
 		if !strings.HasPrefix(filepath.Clean(destPath), filepath.Clean(targetDir)+string(os.PathSeparator)) {
 			continue
 		}
-		if err := copyFile(src.FilePath, destPath); err != nil {
+		// Resolve source path (may be relative or absolute).
+		srcDiskPath := src.FilePath
+		if !filepath.IsAbs(srcDiskPath) {
+			srcDiskPath = filepath.Join(dataDir, srcDiskPath)
+		}
+		if err := copyFile(srcDiskPath, destPath); err != nil {
 			continue
 		}
+
+		// Store relative path for destination record.
+		destRelPath := filepath.Join("teams", targetTeamID.String(), targetChatID, src.FileName)
 
 		// Insert DB record for target team.
 		newID := store.GenNewID()
@@ -296,7 +304,7 @@ func (s *PGTeamStore) CopyFilesToTeam(ctx context.Context, fileIDs []uuid.UUID, 
 			   file_path = EXCLUDED.file_path, size_bytes = EXCLUDED.size_bytes, updated_at = EXCLUDED.updated_at`,
 			newID, targetTeamID, targetChatID, src.FileName,
 			sql.NullString{String: src.MimeType, Valid: src.MimeType != ""},
-			destPath, src.SizeBytes, src.UploadedBy, false, pq.Array(src.Tags), now, now,
+			destRelPath, src.SizeBytes, src.UploadedBy, false, pq.Array(src.Tags), now, now,
 		)
 	}
 	return nil

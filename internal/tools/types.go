@@ -55,6 +55,11 @@ type GroupWriterAware interface {
 	SetGroupWriterCache(*store.GroupWriterCache)
 }
 
+// WorkspaceInterceptorAware tools can receive a WorkspaceInterceptor for team workspace validation.
+type WorkspaceInterceptorAware interface {
+	SetWorkspaceInterceptor(*WorkspaceInterceptor)
+}
+
 // MemoryStoreAware tools can receive a MemoryStore for Postgres queries.
 type MemoryStoreAware interface {
 	SetMemoryStore(store.MemoryStore)

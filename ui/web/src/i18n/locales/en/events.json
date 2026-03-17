@@ -11,7 +11,6 @@
   "eventCountPlural": "{{count}} events",
   "categories": {
     "all": "All",
-    "delegation": "Delegation",
     "task": "Task",
     "message": "Message",
     "agent": "Agent",
@@ -30,5 +29,8 @@
   "detail": {
     "copy": "Copy",
     "copied": "Copied"
-  }
+  },
+  "toolBadge": { "error": "error", "activated": "activated", "ok": "ok" },
+  "moreArgs": "...{{count}} more",
+  "parentLabel": "parent:"
 }

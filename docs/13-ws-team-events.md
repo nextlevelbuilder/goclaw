@@ -177,14 +177,16 @@ Emitted when a new team task is created (manual or auto-created by delegation).
   "status": "pending",
   "owner_agent_key": "",
   "user_id": "user123",
-  "channel": "telegram",
+  "channel": "dashboard",
   "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:00:00Z"
+  "timestamp": "2026-03-05T10:00:00Z",
+  "actor_type": "human",
+  "actor_id": "user123"
 }
 ```
 
 #### `team.task.claimed`
-Emitted when an agent claims a task (manual or auto-claim before delegation).
+Emitted when an agent claims a task (reserved for future use; not currently emitted).
 
 ```json
 {
@@ -194,14 +196,32 @@ Emitted when an agent claims a task (manual or auto-claim before delegation).
   "owner_agent_key": "tieu-la",
   "owner_display_name": "Tieu La",
   "user_id": "user123",
-  "channel": "delegate",
+  "channel": "system",
   "chat_id": "-100123456",
   "timestamp": "2026-03-05T10:00:01Z"
 }
 ```
 
+#### `team.task.assigned`
+Emitted when a task is assigned to an agent (either auto-assigned at creation or manually via `teams.tasks.assign` RPC).
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "status": "in_progress",
+  "owner_agent_key": "tieu-la",
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:00:01Z",
+  "actor_type": "human",
+  "actor_id": "user123"
+}
+```
+
 #### `team.task.completed`
-Emitted when a task is completed (manual or auto-completed by delegation).
+Emitted when a task is completed (auto-completed by delegation or marked complete by agent).
 
 ```json
 {
@@ -211,7 +231,7 @@ Emitted when a task is completed (manual or auto-completed by delegation).
   "owner_agent_key": "tieu-la",
   "owner_display_name": "Tieu La",
   "user_id": "user123",
-  "channel": "delegate",
+  "channel": "system",
   "chat_id": "-100123456",
   "timestamp": "2026-03-05T10:00:45Z"
 }
@@ -227,11 +247,112 @@ Emitted when a task is cancelled. Separated from `team.task.completed` for corre
   "status": "cancelled",
   "reason": "Task no longer needed",
   "user_id": "user123",
-  "channel": "telegram",
+  "channel": "dashboard",
   "chat_id": "-100123456",
   "timestamp": "2026-03-05T10:01:00Z"
 }
 ```
+
+#### `team.task.approved`
+Emitted when a human approves a task via the dashboard (status becomes completed).
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "status": "completed",
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:02:00Z",
+  "actor_type": "human",
+  "actor_id": "user123"
+}
+```
+
+#### `team.task.rejected`
+Emitted when a human rejects a task via the dashboard (status becomes cancelled with reason).
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "status": "cancelled",
+  "reason": "Image aspect ratio should be 4:5",
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:02:30Z",
+  "actor_type": "human",
+  "actor_id": "user123"
+}
+```
+
+#### `team.task.commented`
+Emitted when a human adds a comment to a task (no status change).
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:02:45Z"
+}
+```
+
+#### `team.task.deleted`
+Emitted when a terminal-status task is hard-deleted via the dashboard.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "status": "completed",
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:03:00Z",
+  "actor_type": "human",
+  "actor_id": "user123"
+}
+```
+
+#### `team.task.failed`
+Reserved for future use. Emitted when a task auto-execution fails (not currently triggered).
+
+#### `team.task.reviewed`
+Reserved for future use. Emitted when a task enters review stage (not currently triggered).
+
+#### `team.task.progress`
+Reserved for future use. Emitted periodically for long-running tasks (not currently triggered).
+
+#### `team.task.updated`
+Reserved for future use. Emitted when task metadata is updated (not currently triggered).
+
+#### `team.task.stale`
+Reserved for future use. Emitted when a task hasn't been updated within a timeout threshold (not currently triggered).
+
+---
+
+### Workspace Events
+
+#### `workspace.file.changed`
+Emitted when a file in a team's workspace directory is created, modified, or deleted. This event is reserved for future implementation; not currently broadcasted.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "chat_id": "-100123456",
+  "file_name": "project/notes.md",
+  "change_type": "created",
+  "timestamp": "2026-03-05T10:00:00Z"
+}
+```
+
+**Potential field values:**
+- `change_type`: `"created"`, `"modified"`, `"deleted"`
 
 ---
 
@@ -312,47 +433,6 @@ These events are emitted from RPC handlers when teams are managed via the Web UI
   "agent_id": "019ca748-...",
   "agent_key": "tieu-la",
   "display_name": "Tieu La"
-}
-```
-
----
-
-### Agent Link Events (Admin)
-
-Emitted from RPC handlers when agent links are managed via the Web UI.
-
-#### `agent_link.created`
-```json
-{
-  "link_id": "019cab12-...",
-  "source_agent_id": "019c839b-...",
-  "source_agent_key": "default",
-  "target_agent_id": "019ca748-...",
-  "target_agent_key": "tieu-la",
-  "direction": "outbound",
-  "team_id": "019c9503-...",
-  "status": "active"
-}
-```
-
-#### `agent_link.updated`
-```json
-{
-  "link_id": "019cab12-...",
-  "source_agent_key": "default",
-  "target_agent_key": "tieu-la",
-  "direction": "bidirectional",
-  "status": "active",
-  "changes": ["direction", "settings"]
-}
-```
-
-#### `agent_link.deleted`
-```json
-{
-  "link_id": "019cab12-...",
-  "source_agent_key": "default",
-  "target_agent_key": "tieu-la"
 }
 ```
 
@@ -474,6 +554,7 @@ User sends "Create Instagram post" to Default Agent (lead)
 
 All event name constants are defined in `pkg/protocol/events.go`:
 
+### Delegation Lifecycle Events
 | Constant | Event Name |
 |----------|-----------|
 | `EventDelegationStarted` | `delegation.started` |
@@ -484,18 +565,42 @@ All event name constants are defined in `pkg/protocol/events.go`:
 | `EventDelegationAccumulated` | `delegation.accumulated` |
 | `EventDelegationAnnounce` | `delegation.announce` |
 | `EventQualityGateRetry` | `delegation.quality_gate.retry` |
-| `EventTeamTaskCreated` | `team.task.created` |
-| `EventTeamTaskClaimed` | `team.task.claimed` |
-| `EventTeamTaskCompleted` | `team.task.completed` |
-| `EventTeamTaskCancelled` | `team.task.cancelled` |
-| `EventTeamMessageSent` | `team.message.sent` |
+
+### Team Task Lifecycle Events
+| Constant | Event Name | Status |
+|----------|-----------|--------|
+| `EventTeamTaskCreated` | `team.task.created` | Active |
+| `EventTeamTaskClaimed` | `team.task.claimed` | Reserved (not emitted) |
+| `EventTeamTaskAssigned` | `team.task.assigned` | Active |
+| `EventTeamTaskCompleted` | `team.task.completed` | Active |
+| `EventTeamTaskCancelled` | `team.task.cancelled` | Active |
+| `EventTeamTaskApproved` | `team.task.approved` | Active |
+| `EventTeamTaskRejected` | `team.task.rejected` | Active |
+| `EventTeamTaskCommented` | `team.task.commented` | Active |
+| `EventTeamTaskDeleted` | `team.task.deleted` | Active |
+| `EventTeamTaskFailed` | `team.task.failed` | Reserved (future) |
+| `EventTeamTaskReviewed` | `team.task.reviewed` | Reserved (future) |
+| `EventTeamTaskProgress` | `team.task.progress` | Reserved (future) |
+| `EventTeamTaskUpdated` | `team.task.updated` | Reserved (future) |
+| `EventTeamTaskStale` | `team.task.stale` | Reserved (future) |
+
+### Team CRUD Events
+| Constant | Event Name |
+|----------|-----------|
 | `EventTeamCreated` | `team.created` |
 | `EventTeamUpdated` | `team.updated` |
 | `EventTeamDeleted` | `team.deleted` |
 | `EventTeamMemberAdded` | `team.member.added` |
 | `EventTeamMemberRemoved` | `team.member.removed` |
-| `EventAgentLinkCreated` | `agent_link.created` |
-| `EventAgentLinkUpdated` | `agent_link.updated` |
-| `EventAgentLinkDeleted` | `agent_link.deleted` |
 
-Typed payload structs are defined in `pkg/protocol/team_events.go`.
+### Workspace Events
+| Constant | Event Name | Status |
+|----------|-----------|--------|
+| `EventWorkspaceFileChanged` | `workspace.file.changed` | Reserved (future) |
+
+### Team Message Events
+| Constant | Event Name |
+|----------|-----------|
+| `EventTeamMessageSent` | `team.message.sent` |
+
+**Payload structs:** Typed payloads are defined in `pkg/protocol/team_events.go` (e.g., `TeamTaskEventPayload`, `DelegationEventPayload`, etc.).

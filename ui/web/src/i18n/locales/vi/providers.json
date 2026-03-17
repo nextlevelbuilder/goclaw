@@ -108,7 +108,8 @@
     "loggedOut": "Đã đăng xuất",
     "loggedOutDesc": "Đã xóa OAuth token OpenAI",
     "oauthFailed": "OAuth thất bại",
-    "exchangeFailed": "Trao đổi thất bại"
+    "exchangeFailed": "Trao đổi thất bại",
+    "logoutFailed": "Đăng xuất thất bại"
   },
   "cli": {
     "description": "Claude CLI sử dụng tệp nhị phân",

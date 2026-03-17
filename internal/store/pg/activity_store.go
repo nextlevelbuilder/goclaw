@@ -38,7 +38,7 @@ func (s *PGActivityStore) List(ctx context.Context, opts store.ActivityListOpts)
 	args = append(args, limit, opts.Offset)
 
 	query := fmt.Sprintf(
-		`SELECT id, actor_type, actor_id, action, COALESCE(entity_type,''), COALESCE(entity_id,''), details, COALESCE(ip_address,''), created_at
+		`SELECT id, actor_type, actor_id, action, COALESCE(entity_type,''), COALESCE(entity_id,''), COALESCE(details, 'null'::jsonb), COALESCE(ip_address,''), created_at
 		 FROM activity_logs %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		where, len(args)-1, len(args),
 	)

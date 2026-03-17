@@ -1,4 +1,7 @@
 export const queryKeys = {
+  apiKeys: {
+    all: ["apiKeys"] as const,
+  },
   providers: {
     all: ["providers"] as const,
     models: (providerId: string) => ["providers", providerId, "models"] as const,
@@ -21,6 +24,9 @@ export const queryKeys = {
   customTools: {
     all: ["customTools"] as const,
     list: (params: Record<string, unknown>) => ["customTools", params] as const,
+  },
+  cliCredentials: {
+    all: ["cliCredentials"] as const,
   },
   mcp: {
     all: ["mcp"] as const,
@@ -55,10 +61,6 @@ export const queryKeys = {
   usage: {
     all: ["usage"] as const,
     records: (params: Record<string, unknown>) => ["usage", "records", params] as const,
-  },
-  delegations: {
-    all: ["delegations"] as const,
-    list: (params: Record<string, unknown>) => ["delegations", params] as const,
   },
   teams: {
     all: ["teams"] as const,

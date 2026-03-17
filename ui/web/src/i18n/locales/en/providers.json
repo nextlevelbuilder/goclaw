@@ -108,7 +108,8 @@
     "loggedOut": "Logged out",
     "loggedOutDesc": "OpenAI OAuth token removed",
     "oauthFailed": "OAuth failed",
-    "exchangeFailed": "Exchange failed"
+    "exchangeFailed": "Exchange failed",
+    "logoutFailed": "Logout failed"
   },
   "cli": {
     "description": "Claude CLI uses your local",

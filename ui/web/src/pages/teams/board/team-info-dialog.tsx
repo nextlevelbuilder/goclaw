@@ -1,0 +1,83 @@
+import { useState } from "react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { useTranslation } from "react-i18next";
+import { TeamSettingsTab } from "../team-settings-tab";
+import { TeamVersionModal } from "../team-version-modal";
+import type { TeamData, TeamMemberData, TeamAccessSettings } from "@/types/team";
+
+interface TeamInfoDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  team: TeamData;
+  teamId: string;
+  members: TeamMemberData[];
+  onSaved: () => void;
+}
+
+export function TeamInfoDialog({
+  open, onOpenChange, team, teamId, members, onSaved,
+}: TeamInfoDialogProps) {
+  const { t } = useTranslation("teams");
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+
+  const settings = (team.settings ?? {}) as TeamAccessSettings;
+  const isV2 = (settings.version ?? 1) >= 2;
+
+  // Resolve lead name from members (more reliable than team.lead_display_name which can be empty)
+  const leadMember = members.find((m) => m.role === "lead");
+  const leadName = leadMember?.display_name || leadMember?.agent_key
+    || team.lead_display_name || team.lead_agent_key || "—";
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {team.name}
+              <Badge variant={team.status === "active" ? "success" : "secondary"} className="text-[10px]">
+                {team.status}
+              </Badge>
+              {isV2 && (
+                <Badge
+                  className="bg-gradient-to-r from-violet-500 to-indigo-500 text-[10px] px-2 py-0.5 text-white border-0 font-semibold shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setVersionModalOpen(true)}
+                >
+                  v2 Super Team (Beta)
+                </Badge>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4">
+          {/* Team overview */}
+          <div className="grid grid-cols-1 gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
+            {team.description && (
+              <div className="sm:col-span-2">
+                <span className="text-xs text-muted-foreground">{t("create.description")}</span>
+                <p className="mt-0.5">{team.description}</p>
+              </div>
+            )}
+            <div>
+              <span className="text-xs text-muted-foreground">{t("detail.lead")}</span>
+              <p className="mt-0.5 font-medium">{leadName}</p>
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground">{t("members.title")}</span>
+              <p className="mt-0.5 font-medium">{t("detail.memberCountPlural", { count: members.length })}</p>
+            </div>
+          </div>
+
+          {/* Settings form */}
+          <TeamSettingsTab teamId={teamId} team={team} onSaved={() => { onSaved(); onOpenChange(false); }} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <TeamVersionModal open={versionModalOpen} onOpenChange={setVersionModalOpen} />
+    </>
+  );
+}

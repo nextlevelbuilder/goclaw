@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -177,9 +178,7 @@ func (s *PGChannelInstanceStore) Update(ctx context.Context, id uuid.UUID, updat
 			if err != nil {
 				return fmt.Errorf("load existing credentials for merge: %w", err)
 			}
-			for k, v := range newCreds {
-				existing[k] = v
-			}
+			maps.Copy(existing, newCreds)
 			newCreds = existing
 		}
 

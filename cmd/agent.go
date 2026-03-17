@@ -211,7 +211,7 @@ func runAgentAdd() {
 	}
 
 	// Step 5: Workspace
-	defaultWS := fmt.Sprintf("~/.goclaw/workspace-%s", agentID)
+	defaultWS := fmt.Sprintf("%s/%s", cfg.Agents.Defaults.Workspace, agentID)
 	workspace, err := promptString("Workspace directory", "", defaultWS)
 	if err != nil {
 		fmt.Println("Cancelled.")

@@ -115,7 +115,7 @@ export function FileEditor({
           }}
           readOnly={!canEdit}
           className={`flex-1 resize-none font-mono text-sm ${!canEdit ? "opacity-70" : ""}`}
-          placeholder="File content..."
+          placeholder={t("files.contentPlaceholder")}
         />
       )}
     </div>

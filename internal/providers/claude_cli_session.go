@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 // validCLIModels lists accepted model aliases for the Claude CLI.
@@ -167,13 +168,9 @@ func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 	}
 }
 
-// defaultCLIWorkDir returns ~/.goclaw/cli-workspaces, falling back to temp dir.
+// defaultCLIWorkDir returns dataDir/cli-workspaces.
 func defaultCLIWorkDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(os.TempDir(), "goclaw-cli-workspaces")
-	}
-	return filepath.Join(home, ".goclaw", "cli-workspaces")
+	return filepath.Join(config.ResolvedDataDirFromEnv(), "cli-workspaces")
 }
 
 // deriveSessionUUID creates a deterministic UUID v5 from a session key string.

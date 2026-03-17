@@ -15,6 +15,8 @@ import {
 
 interface IdentitySectionProps {
   agentKey: string;
+  emoji?: string;
+  onEmojiChange?: (v: string) => void;
   displayName: string;
   onDisplayNameChange: (v: string) => void;
   frontmatter: string;
@@ -27,6 +29,8 @@ interface IdentitySectionProps {
 
 export function IdentitySection({
   agentKey,
+  emoji,
+  onEmojiChange,
   displayName,
   onDisplayNameChange,
   frontmatter,
@@ -72,12 +76,23 @@ export function IdentitySection({
         </div>
         <div className="space-y-2">
           <Label htmlFor="displayName">{t("identity.displayName")}</Label>
-          <Input
-            id="displayName"
-            value={displayName}
-            onChange={(e) => onDisplayNameChange(e.target.value)}
-            placeholder={t("identity.displayNamePlaceholder")}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="emoji"
+              value={emoji ?? ""}
+              onChange={(e) => onEmojiChange?.(e.target.value)}
+              placeholder="🤖"
+              className="w-14 shrink-0 text-center text-lg"
+              maxLength={2}
+              title={t("identity.emojiHint")}
+            />
+            <Input
+              id="displayName"
+              value={displayName}
+              onChange={(e) => onDisplayNameChange(e.target.value)}
+              placeholder={t("identity.displayNamePlaceholder")}
+            />
+          </div>
           <p className="text-xs text-muted-foreground">
             {t("identity.displayNameHint")}
           </p>

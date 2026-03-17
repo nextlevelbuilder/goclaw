@@ -108,7 +108,8 @@
     "loggedOut": "已登出",
     "loggedOutDesc": "OpenAI OAuth 令牌已移除",
     "oauthFailed": "OAuth 失败",
-    "exchangeFailed": "交换失败"
+    "exchangeFailed": "交换失败",
+    "logoutFailed": "登出失败"
   },
   "cli": {
     "description": "Claude CLI 使用本地",

@@ -1,6 +1,6 @@
 # 02 - LLM Providers
 
-GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Two concrete implementations exist: an Anthropic provider using native `net/http` with SSE streaming, and a generic OpenAI-compatible provider that covers 10+ API endpoints.
+GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Six concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), Claude CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking).
 
 ---
 
@@ -14,40 +14,67 @@ flowchart TD
 
     PI --> ANTH["Anthropic Provider<br/>native net/http + SSE"]
     PI --> OAI["OpenAI-Compatible Provider<br/>generic HTTP client"]
+    PI --> CLAUDE["Claude CLI Provider<br/>stdio subprocess"]
+    PI --> CODEX["Codex Provider<br/>OAuth-based Responses API"]
+    PI --> ACP["ACP Provider<br/>JSON-RPC 2.0 subagents"]
+    PI --> DASH["DashScope Provider<br/>OpenAI-compat wrapper"]
 
-    ANTH --> CLAUDE["Claude API<br/>api.anthropic.com/v1"]
+    ANTH --> ANTHROPIC["Claude API<br/>api.anthropic.com/v1"]
     OAI --> OPENAI["OpenAI API"]
     OAI --> OR["OpenRouter API"]
     OAI --> GROQ["Groq API"]
     OAI --> DS["DeepSeek API"]
     OAI --> GEM["Gemini API"]
-    OAI --> OTHER["Mistral / xAI / MiniMax<br/>Cohere / Perplexity"]
+    OAI --> OTHER["Mistral / xAI / MiniMax<br/>Cohere / Perplexity / Ollama"]
+    CLAUDE --> CLI["claude CLI binary<br/>stdio + MCP bridge"]
+    CODEX --> CODEX_API["ChatGPT Responses API<br/>chatgpt.com/backend-api"]
+    ACP --> AGENTS["Claude Code / Codex<br/>Gemini CLI agents"]
+    DASH --> QWEN["Alibaba DashScope<br/>Qwen3 models"]
 ```
 
-The Anthropic provider uses `x-api-key` header authentication and the `anthropic-version: 2023-06-01` header. The OpenAI-compatible provider uses `Authorization: Bearer` tokens and targets each provider's `/chat/completions` endpoint. Both providers set an HTTP client timeout of 120 seconds.
+Authentication and timeouts vary by provider type:
+- **Anthropic**: `x-api-key` header + `anthropic-version: 2023-06-01`
+- **OpenAI-compatible**: `Authorization: Bearer` token
+- **Claude CLI**: stdio subprocess (no auth; uses local CLI session)
+- **Codex**: OAuth access token (auto-refreshed via TokenSource)
+- **ACP**: JSON-RPC 2.0 over subprocess stdio
+- **DashScope**: `Authorization: Bearer` token (inherits from OpenAI-compatible)
+
+All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second timeout.
 
 ---
 
 ## 2. Supported Providers
 
-| Provider | Type | API Base / Binary | Default Model |
+### Six Core Provider Types
+
+| Provider | Type | Configuration | Default Model |
 |----------|------|----------|---------------|
-| anthropic | Native HTTP + SSE | `https://api.anthropic.com/v1` | `claude-sonnet-4-5-20250929` |
-| openai | OpenAI-compatible | `https://api.openai.com/v1` | `gpt-4o` |
-| openrouter | OpenAI-compatible | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` |
-| groq | OpenAI-compatible | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
-| deepseek | OpenAI-compatible | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| gemini | OpenAI-compatible | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
-| mistral | OpenAI-compatible | `https://api.mistral.ai/v1` | `mistral-large-latest` |
-| xai | OpenAI-compatible | `https://api.x.ai/v1` | `grok-3-mini` |
-| minimax | OpenAI-compatible | `https://api.minimax.chat/v1` | `MiniMax-M2.5` |
-| cohere | OpenAI-compatible | `https://api.cohere.com/v2` | `command-a` |
-| perplexity | OpenAI-compatible | `https://api.perplexity.ai` | `sonar-pro` |
-| dashscope | OpenAI-compatible | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `qwen3-max` |
-| bailian | OpenAI-compatible | `https://coding-intl.dashscope.aliyuncs.com/v1` | `qwen3.5-plus` |
-| zai | OpenAI-compatible | `https://api.z.ai/api/paas/v4` | `glm-5` |
-| zai_coding | OpenAI-compatible | `https://api.z.ai/api/coding/paas/v4` | `glm-5` |
-| acp | ACP (JSON-RPC 2.0 stdio) | `claude`, `codex`, `gemini` (binary name) | `claude` |
+| **anthropic** | Native HTTP + SSE | API key required | `claude-sonnet-4-5-20250929` |
+| **claude_cli** | stdio subprocess + MCP | Binary path (default: `claude`) | `sonnet` |
+| **codex** | OAuth Responses API | OAuth token source | `gpt-5.3-codex` |
+| **acp** | JSON-RPC 2.0 subagents | Binary + workspace dir | `claude` |
+| **dashscope** | OpenAI-compat wrapper | API key + custom models | `qwen3-max` |
+| **openai** (+ 10+ variants) | OpenAI-compatible | API key + endpoint URL | Model-specific |
+
+### OpenAI-Compatible Providers
+
+| Provider | API Base | Default Model | Notes |
+|----------|----------|---------------|-------|
+| openai | `https://api.openai.com/v1` | `gpt-4o` | |
+| openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` | Model must contain `/` |
+| groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
+| deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
+| gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
+| mistral | `https://api.mistral.ai/v1` | `mistral-large-latest` | |
+| xai | `https://api.x.ai/v1` | `grok-3-mini` | |
+| minimax | `https://api.minimax.io/v1` | `MiniMax-M2.5` | Uses custom chat path |
+| cohere | `https://api.cohere.ai/compatibility/v1` | `command-a` | |
+| perplexity | `https://api.perplexity.ai` | `sonar-pro` | |
+| ollama | `http://localhost:11434/v1` | `llama3.3` | Local/configurable |
+| bailian | `https://coding-intl.dashscope.aliyuncs.com/v1` | `qwen3.5-plus` | Alibaba Coding API |
+| zai | `https://api.z.ai/api/paas/v4` | `glm-5` | |
+| zai-coding | `https://api.z.ai/api/coding/paas/v4` | `glm-5` | |
 
 ---
 
@@ -452,29 +479,196 @@ Emits `StreamChunk` for each text delta via callback. Supports context cancellat
 
 ---
 
-## 11. Agent Evaluators (Hook System)
+## 11. Claude CLI Provider
+
+The Claude CLI provider enables GoClaw to delegate requests to a local `claude` CLI binary. The CLI manages session history, context files, and tool execution independently; GoClaw only passes messages and streams responses back.
+
+### Architecture Overview
+
+```mermaid
+flowchart TD
+    AL["Agent Loop"] -->|Chat / ChatStream| CLI["ClaudeCLIProvider"]
+    CLI --> POOL["SessionPool"]
+    POOL -->|spawn/reuse| PROC["Subprocess<br/>claude --server=stdio"]
+    PROC -->|manages| SESS["Session<br/>(session ID, history)"]
+
+    SESS -->|fs/readTextFile| TOOLS["CLI Tool Execution"]
+    SESS -->|fs/writeTextFile| TOOLS
+    SESS -->|exec/run| TOOLS
+    SESS -->|web/fetch| TOOLS
+
+    TOOLS -->|via MCP| MCP["MCP Servers<br/>(if configured)"]
+```
+
+### Configuration
+
+ClaudeCLIProvider can be configured in `config.json`:
+
+```json5
+{
+  "providers": {
+    "claude_cli": {
+      "cli_path": "claude",           // binary path or name
+      "default_model": "sonnet",      // opus, sonnet, haiku
+      "base_work_dir": "/tmp/agents", // workspace directory
+      "perm_mode": "bypassPermissions", // permission mode
+      "disable_hooks": false,         // disable security hooks if true
+      "deny_patterns": ["^/etc/", "^\\.env"]
+    }
+  }
+}
+```
+
+Or via database `llm_providers` table with `provider_type = "claude_cli"`.
+
+### Session Management
+
+Each conversation gets a persistent session tied to `session_key` option. Sessions survive across multiple requests and maintain:
+- Conversation history
+- Workspace directory (for file operations)
+- MCP server connections
+- Tool execution state
+
+Idle sessions are automatically cleaned up after inactivity.
+
+### Tool Execution
+
+Claude CLI executes tools natively (filesystem, exec, web, memory). GoClaw forwards tool results back and lets the CLI loop continue. This differs from standard providers which return tool calls for the agent loop to execute.
+
+### Model Aliases
+
+Like the Anthropic provider, Claude CLI supports short aliases:
+- `opus` → `claude-opus-4-6`
+- `sonnet` → `claude-sonnet-4-6`
+- `haiku` → `claude-haiku-4-5-20251001`
+
+### MCP Configuration
+
+Per-session MCP servers are configured via `MCPConfigData`. The CLI automatically loads and communicates with configured MCP servers for extended functionality.
+
+### Streaming
+
+- **Chat**: Returns complete response after CLI execution
+- **ChatStream**: Streams text chunks as they are produced by the CLI
+
+### Thinking Support
+
+Claude CLI inherits thinking support from the underlying Claude model. Thinking blocks are passed through in streaming chunks if the model supports them.
+
+---
+
+## 12. Codex Provider
+
+The Codex provider integrates with OpenAI's ChatGPT Responses API (OAuth-based), enabling access to gpt-5.3-codex model through the chatgpt.com backend. Unlike standard OpenAI endpoints, Codex uses OAuth token refresh and a custom response format with "phase" markers.
+
+### Configuration
+
+Codex requires an OAuth token source (handles auto-refresh):
+
+```go
+tokenSource := &MyTokenSource{} // implements TokenSource interface
+provider := NewCodexProvider("codex", tokenSource, "", "")
+// or specify custom API base and model:
+provider := NewCodexProvider("codex", tokenSource,
+  "https://chatgpt.com/backend-api", "gpt-5.3-codex")
+```
+
+### API Endpoint
+
+```
+POST https://chatgpt.com/backend-api/codex/responses
+Authorization: Bearer {oauth_token}
+```
+
+The provider automatically handles token refresh via the TokenSource.
+
+### Response Format
+
+Codex returns structured responses with phase markers:
+
+```json
+{
+  "id": "...",
+  "model": "gpt-5.3-codex",
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": "...",
+      "metadata": {
+        "phase": "commentary"  // or "final_answer"
+      }
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": { ... }
+}
+```
+
+### Phase Field
+
+The `phase` field indicates message purpose:
+- `"commentary"` — intermediate reasoning
+- `"final_answer"` — closeout response
+
+GoClaw persists this on assistant messages and passes it back in subsequent requests. Codex performance depends on this field being echoed correctly.
+
+### Streaming
+
+Codex supports SSE streaming similar to Anthropic:
+- Each SSE event contains a partial response
+- Phase marker included in final delta
+- Tool calls streamed via `input_json_delta` equivalent
+
+### Extended Thinking
+
+Codex provider reports `SupportsThinking() = true`, allowing thinking_level to be injected. The provider maps thinking levels to reasoning_effort parameters as needed.
+
+### Token Usage
+
+Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheReadTokens` are supported for prompt caching if available.
+
+---
+
+## 13. Agent Evaluators (Hook System)
 
 Agent evaluators in the quality gate / hook system (see [03-tools-system.md](./03-tools-system.md)) use the same provider resolution as normal agent runs. When a quality gate is configured with `"type": "agent"`, the hook engine delegates to the specified reviewer agent, which resolves its own provider through the standard provider registry. No separate provider configuration is needed for evaluator agents.
 
 ---
 
-## File Reference
+## 14. File Reference
 
 | File | Purpose |
 |------|---------|
 | `internal/providers/types.go` | Provider interface, ChatRequest, ChatResponse, Message, ToolCall, Usage types |
-| `internal/providers/anthropic.go` | Anthropic provider implementation (native HTTP + SSE streaming) |
-| `internal/providers/openai.go` | OpenAI-compatible provider implementation (generic HTTP) |
-| `internal/providers/retry.go` | RetryDo[T] generic function, RetryConfig, IsRetryableError, backoff computation |
-| `internal/providers/schema_cleaner.go` | CleanSchemaForProvider, CleanToolSchemas, recursive schema field removal |
-| `internal/providers/dashscope.go` | DashScope provider: thinking budget, tools+streaming fallback |
-| `internal/providers/acp_provider.go` | ACPProvider implementation: orchestrates ACP agents as subprocesses |
+| `internal/providers/anthropic.go` | Anthropic provider: native HTTP + SSE, request/response marshaling |
+| `internal/providers/anthropic_request.go` | Anthropic request builder: message formatting, tool schemas, system blocks |
+| `internal/providers/anthropic_stream.go` | Anthropic SSE event parsing and response accumulation |
+| `internal/providers/openai.go` | OpenAI-compatible provider: generic HTTP client for 10+ endpoints |
+| `internal/providers/openai_types.go` | OpenAI request/response types and message formatting |
+| `internal/providers/openai_gemini.go` | Gemini-specific compatibility: empty content handling, tool schema cleaning |
+| `internal/providers/claude_cli.go` | ClaudeCLIProvider: orchestrates local claude CLI binary via stdio |
+| `internal/providers/claude_cli_chat.go` | Chat/ChatStream implementation for CLI provider |
+| `internal/providers/claude_cli_session.go` | Session management: per-session state, history, workspace |
+| `internal/providers/claude_cli_mcp.go` | MCP configuration and server bridge for CLI provider |
+| `internal/providers/claude_cli_auth.go` | Authentication and token handling for CLI |
+| `internal/providers/claude_cli_parse.go` | Response parsing and message extraction from CLI output |
+| `internal/providers/claude_cli_deny_patterns.go` | Path validation and deny pattern enforcement |
+| `internal/providers/claude_cli_hooks.go` | Security hooks configuration for CLI tool execution |
+| `internal/providers/claude_cli_types.go` | Internal types for CLI provider (session, config, options) |
+| `internal/providers/codex.go` | CodexProvider: OAuth-based ChatGPT Responses API |
+| `internal/providers/codex_build.go` | Codex request builder: message formatting, phase handling |
+| `internal/providers/codex_types.go` | Codex request/response types and OAuth token management |
+| `internal/providers/dashscope.go` | DashScope provider: OpenAI-compat wrapper with thinking budget, tools+streaming fallback |
+| `internal/providers/acp_provider.go` | ACPProvider: orchestrates ACP-compatible agent subprocesses |
 | `internal/providers/acp/types.go` | ACP protocol types: InitializeRequest, SessionUpdate, ContentBlock, etc. |
 | `internal/providers/acp/process.go` | ProcessPool: subprocess lifecycle, idle TTL reaping, crash recovery |
 | `internal/providers/acp/jsonrpc.go` | JSON-RPC 2.0 request/response marshaling over stdio |
 | `internal/providers/acp/tool_bridge.go` | ToolBridge: handles fs and terminal requests, workspace sandboxing |
 | `internal/providers/acp/terminal.go` | Terminal lifecycle: create, output, exit, release, kill |
 | `internal/providers/acp/session.go` | Session state tracking per ACP agent |
+| `internal/providers/retry.go` | RetryDo[T] generic function, RetryConfig, IsRetryableError, backoff computation |
+| `internal/providers/schema_cleaner.go` | CleanSchemaForProvider, CleanToolSchemas, recursive schema field removal |
+| `internal/providers/registry.go` | Provider registry: registration, lookup, lifecycle management |
 | `cmd/gateway_providers.go` | Provider registration from config and database during gateway startup |
 
 ---

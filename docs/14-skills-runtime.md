@@ -158,7 +158,6 @@ Skills shipped with the Docker image at `/app/bundled-skills/`. Lowest priority 
 | `docx` | Read, create, edit Word documents |
 | `pptx` | Read, create, edit presentations |
 | `skill-creator` | Create new skills |
-| `ai-multimodal` | AI-powered media analysis and generation |
 
 ### How It Works
 

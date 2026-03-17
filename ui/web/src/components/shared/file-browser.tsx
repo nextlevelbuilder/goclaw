@@ -25,13 +25,14 @@ function FileActions({
   size: number;
   onDownload?: () => void;
 }) {
+  const { t } = useTranslation("common");
   return (
     <div className="flex items-center gap-1.5 shrink-0 ml-auto">
       <Badge variant={sizeBadgeVariant(size)} className="text-[10px] px-1.5 py-0">
         {formatSize(size)}
       </Badge>
       {onDownload && (
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDownload} title="Download">
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDownload} title={t("download")}>
           <Download className="h-3.5 w-3.5" />
         </Button>
       )}

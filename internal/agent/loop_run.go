@@ -72,7 +72,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			UserID:       req.UserID,
 			Channel:      req.Channel,
 			Name:         traceName,
-			InputPreview: truncateStr(req.Message, 500),
+			InputPreview: truncateStr(req.Message, l.traceCollector.PreviewMaxLen()),
 			Status:       store.TraceStatusRunning,
 			StartTime:    now,
 			CreatedAt:    now,
@@ -81,15 +81,26 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if l.agentUUID != uuid.Nil {
 			trace.AgentID = &l.agentUUID
 		}
-		// Link to parent trace if this is a delegated run
+		// Link to parent trace: delegation context or explicit LinkedTraceID (team task runs).
 		if delegateParent := tracing.DelegateParentTraceIDFromContext(ctx); delegateParent != uuid.Nil {
 			trace.ParentTraceID = &delegateParent
+		} else if req.LinkedTraceID != uuid.Nil {
+			trace.ParentTraceID = &req.LinkedTraceID
+		}
+		// Set team_id on trace for team-scoped runs.
+		if req.TeamID != "" {
+			if tid, err := uuid.Parse(req.TeamID); err == nil {
+				trace.TeamID = &tid
+			}
 		}
 		if err := l.traceCollector.CreateTrace(ctx, trace); err != nil {
 			slog.Warn("tracing: failed to create trace", "error", err)
 		} else {
 			ctx = tracing.WithTraceID(ctx, traceID)
 			ctx = tracing.WithCollector(ctx, l.traceCollector)
+			if trace.TeamID != nil {
+				ctx = tracing.WithTraceTeamID(ctx, *trace.TeamID)
+			}
 
 			// Pre-generate root "agent" span ID so LLM/tool spans can reference it as parent.
 			agentSpanID = store.GenNewID()
@@ -174,7 +185,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		Payload: completedPayload,
 	})
 	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
-		l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, 500))
+		l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
 	}
 	return result, nil
 }

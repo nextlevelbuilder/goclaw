@@ -30,9 +30,6 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
   const [maxToolIterations, setMaxToolIterations] = useState(agent.max_tool_iterations || 20);
   const [llmSaveBlocked, setLlmSaveBlocked] = useState(false);
 
-  // Workspace
-  const [restrictToWorkspace, setRestrictToWorkspace] = useState(agent.restrict_to_workspace);
-
   // Budget (stored in cents, displayed in dollars)
   const [budgetDollars, setBudgetDollars] = useState(
     agent.budget_monthly_cents ? String(agent.budget_monthly_cents / 100) : "",
@@ -40,6 +37,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
 
   // Self-evolve (predefined agents only)
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
+  const [emoji, setEmoji] = useState(typeof otherCfg.emoji === "string" ? otherCfg.emoji : "");
   const [selfEvolve, setSelfEvolve] = useState(Boolean(otherCfg.self_evolve));
 
   // Save state
@@ -56,7 +54,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
     setSaveError(null);
     setSaved(false);
     try {
-      const updatedOtherConfig = { ...otherCfg, self_evolve: selfEvolve };
+      const updatedOtherConfig = { ...otherCfg, self_evolve: selfEvolve, emoji: emoji.trim() || undefined };
       const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
       await onUpdate({
         display_name: displayName,
@@ -65,7 +63,6 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
         model,
         context_window: contextWindow,
         max_tool_iterations: maxToolIterations,
-        restrict_to_workspace: restrictToWorkspace,
         status,
         is_default: isDefault,
         other_config: updatedOtherConfig,
@@ -84,6 +81,8 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
     <div className="max-w-4xl space-y-6">
       <IdentitySection
         agentKey={agent.agent_key}
+        emoji={emoji}
+        onEmojiChange={setEmoji}
         displayName={displayName}
         onDisplayNameChange={setDisplayName}
         frontmatter={frontmatter}
@@ -112,11 +111,7 @@ export function AgentGeneralTab({ agent, onUpdate }: AgentGeneralTabProps) {
 
       <Separator />
 
-      <WorkspaceSection
-        workspace={agent.workspace}
-        restrictToWorkspace={restrictToWorkspace}
-        onRestrictChange={setRestrictToWorkspace}
-      />
+      <WorkspaceSection workspace={agent.workspace} />
 
       {/* Budget */}
       <Separator />

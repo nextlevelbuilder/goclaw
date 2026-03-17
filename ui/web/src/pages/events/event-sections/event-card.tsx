@@ -6,7 +6,6 @@ import { formatRelativeTime } from "@/lib/format";
 import type { TeamEventEntry } from "@/stores/use-team-event-store";
 import { useAgentResolver } from "./use-agent-resolver";
 import { getCategoryConfig } from "./event-categories";
-import { DelegationEventCard } from "./delegation-event-cards";
 import { TaskEventCard } from "./task-event-cards";
 import { MessageEventCard } from "./message-event-card";
 import { AgentEventCard } from "./agent-event-cards";
@@ -26,9 +25,7 @@ export function EventCard({ entry, resolveTeam }: EventCardProps) {
   const CategoryIcon = config.icon;
 
   let content: React.ReactNode;
-  if (event.startsWith("delegation.")) {
-    content = <DelegationEventCard entry={entry} resolveAgent={resolveAgent} />;
-  } else if (event.startsWith("team.task.")) {
+  if (event.startsWith("team.task.")) {
     content = <TaskEventCard entry={entry} resolveAgent={resolveAgent} />;
   } else if (event === "team.message.sent") {
     content = <MessageEventCard entry={entry} resolveAgent={resolveAgent} />;

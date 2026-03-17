@@ -7,6 +7,8 @@
   "emptyDescription": "Tạo Team đầu tiên để bắt đầu.",
   "noMatchTitle": "Không tìm thấy Team phù hợp",
   "noMatchDescription": "Thử từ khóa tìm kiếm khác.",
+  "viewCard": "Dạng thẻ",
+  "viewList": "Dạng danh sách",
   "scope": {
     "all": "Tất cả phạm vi",
     "label": "Phạm vi"
@@ -20,6 +22,7 @@
     "lead": "Trưởng nhóm",
     "memberCount": "{{count}} thành viên",
     "memberCountPlural": "{{count}} thành viên",
+    "more": "khác",
     "deleteDescription": "Bạn có chắc chắn muốn xóa \"{{name}}\"? Tất cả thành viên, nhiệm vụ và cấu hình sẽ bị xóa vĩnh viễn.",
     "tabs": {
       "tasks": "Nhiệm vụ",
@@ -64,6 +67,8 @@
     "unassigned": "Chưa gán",
     "filters": {
       "active": "Đang hoạt động",
+      "pending": "Chờ xử lý",
+      "inProgress": "Đang chạy",
       "inReview": "Chờ duyệt",
       "completed": "Đã hoàn thành",
       "all": "Tất cả"
@@ -109,6 +114,8 @@
       "followupNext": "Nhắc tiếp:",
       "followupDone": "Đã nhắc hết"
     },
+    "delete": "Xoá",
+    "deleteConfirm": "Xoá task này? Không thể hoàn tác.",
     "badges": {
       "awaitingReply": "chờ trả lời"
     }
@@ -168,8 +175,19 @@
     "deniedChannels": "Channel bị từ chối",
     "deniedChannelsHint": "Tin nhắn từ các channel này luôn bị chặn.",
     "notifications": "Thông báo",
-    "progressNotifications": "Thông báo tiến trình",
-    "progressNotificationsHint": "Gửi định kỳ thông báo \"Team của bạn đang xử lý...\" trong quá trình ủy quyền bất đồng bộ.",
+    "notifyDispatched": "Giao nhiệm vụ",
+    "notifyDispatchedHint": "Thông báo khi nhiệm vụ được giao cho thành viên.",
+    "notifyProgress": "Tiến trình",
+    "notifyProgressHint": "Thông báo khi thành viên cập nhật tiến trình.",
+    "notifyFailed": "Thất bại",
+    "notifyFailedHint": "Thông báo khi nhiệm vụ thất bại.",
+    "notifyMode": "Chế độ gửi",
+    "notifyModeHint": "Cách thông báo được gửi đến kênh chat.",
+    "notifyModeDirect": "Trực tiếp",
+    "notifyModeDirectDesc": "Gửi thông báo thẳng đến kênh chat. Nhanh, không qua AI.",
+    "notifyModeLeader": "Qua Leader",
+    "notifyModeLeaderDesc": "Leader diễn đạt lại cập nhật một cách tự nhiên trước khi gửi.",
+    "notifyModeLeaderWarning": "Chế độ Leader dùng AI để diễn đạt lại (tốn token, có thể chậm hơn).",
     "searchUsers": "Tìm kiếm người dùng...",
     "selectChannel": "Chọn channel...",
     "escalationPolicy": "Chính sách Leo thang",
@@ -191,12 +209,12 @@
     "followupMaxReminders": "Số lần nhắc tối đa",
     "followupMaxRemindersHint": "Số lần nhắc tối đa cho mỗi nhiệm vụ. 0 = không giới hạn (nhắc cho đến khi người dùng trả lời).",
     "workspace": "Không gian làm việc",
-    "workspaceScope": "Chia sẻ không gian làm việc",
-    "workspaceScopeHint": "Kiểm soát cách các agent truy cập tệp trong không gian làm việc của team.",
+    "workspaceScope": "Phạm vi workspace",
+    "workspaceScopeHint": "Kiểm soát cách tổ chức tệp trong workspace của team.",
     "workspaceScopeIsolated": "Cô lập",
-    "workspaceScopeIsolatedDesc": "Mỗi agent có không gian làm việc riêng. Không thể đọc hoặc ghi tệp của agent khác.",
+    "workspaceScopeIsolatedDesc": "Mỗi cuộc hội thoại có thư mục workspace riêng. Tệp từ chat này không hiển thị ở chat khác.",
     "workspaceScopeShared": "Chia sẻ",
-    "workspaceScopeSharedDesc": "Tất cả agent dùng chung một không gian làm việc. Có thể đọc và ghi tệp của nhau.",
+    "workspaceScopeSharedDesc": "Tất cả cuộc hội thoại dùng chung một thư mục workspace. Tệp tạo từ bất kỳ chat nào đều hiển thị cho tất cả.",
     "teamVersion": "Phiên bản Team",
     "versionBasic": "Cơ bản",
     "versionAdvanced": "Nâng cao",
@@ -224,6 +242,7 @@
       "autoRecoveryDesc": "Nhiệm vụ bị treo tự đặt lại sau thời gian chờ",
       "escalationPolicy": "Chính sách leo thang",
       "escalationPolicyDesc": "Kiểm soát những gì agent có thể tự thực hiện",
+      "comingSoon": "Sắp ra mắt",
       "downgradeNote": "Hạ cấp an toàn — dữ liệu V2 được giữ lại nhưng ẩn đi.",
       "betaNote": "V2 hiện đang ở giai đoạn Beta.",
       "gotIt": "Đã hiểu"
@@ -261,8 +280,30 @@
     "failedAddMember": "Không thể thêm thành viên",
     "failedRemoveMember": "Không thể xóa thành viên",
     "taskCreated": "Đã tạo nhiệm vụ",
+    "taskDeleted": "Đã xoá task",
     "taskAssigned": "Đã gán nhiệm vụ",
     "failedCreateTask": "Không thể tạo nhiệm vụ",
+    "failedDeleteTask": "Xoá task thất bại",
     "failedAssignTask": "Không thể gán nhiệm vụ"
+  },
+  "board": {
+    "kanban": "Bảng",
+    "list": "Danh sách",
+    "groupBy": "Nhóm theo",
+    "groupByStatus": "Trạng thái",
+    "groupByOwner": "Người phụ trách",
+    "groupByType": "Loại",
+    "running": "Đang chạy",
+    "locked": "Agent đang chạy",
+    "emptyColumn": "Không có task",
+    "unassigned": "Chưa gán",
+    "createViaChat": "Chat với agent của team để tạo task"
+  },
+  "sidebar": {
+    "members": "Thành viên",
+    "workspace": "Không gian làm việc",
+    "delegations": "Ủy quyền",
+    "settings": "Cài đặt",
+    "addMember": "Thêm thành viên"
   }
 }

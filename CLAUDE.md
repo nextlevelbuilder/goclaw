@@ -4,36 +4,45 @@ PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.
 
 ## Tech Stack
 
-**Backend:** Go 1.25, Cobra CLI, gorilla/websocket, pgx/v5 (database/sql, no ORM), golang-migrate, go-rod/rod, telego (Telegram)
+**Backend:** Go 1.26, Cobra CLI, gorilla/websocket, pgx/v5 (database/sql, no ORM), golang-migrate, go-rod/rod, telego (Telegram)
 **Web UI:** React 19, Vite 6, TypeScript, Tailwind CSS 4, Radix UI, Zustand, React Router 7. Located in `ui/web/`. **Use `pnpm` (not npm).**
-**Database:** PostgreSQL 15+ with pgvector. Raw SQL with `$1, $2` positional params. Nullable columns: `*string`, `*time.Time`, etc.
+**Database:** PostgreSQL 18 with pgvector. Raw SQL with `$1, $2` positional params. Nullable columns: `*string`, `*time.Time`, etc.
 
 ## Project Structure
 
 ```
 cmd/                          CLI commands, gateway startup, onboard wizard, migrations
 internal/
+├── agent/                    Agent loop (think→act→observe), router, resolver, input guard
+├── bootstrap/                System prompt files (SOUL.md, IDENTITY.md) + seeding + per-user seed
+├── bus/                      Event bus system
+├── cache/                    Caching layer
+├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp
+├── config/                   Config loading (JSON5) + env var overlay
+├── crypto/                   AES-256-GCM encryption for API keys
+├── cron/                     Cron scheduling (at/every/cron expr)
 ├── gateway/                  WS + HTTP server, client, method router
 │   └── methods/              RPC handlers (chat, agents, sessions, config, skills, cron, pairing)
-├── agent/                    Agent loop (think→act→observe), router, resolver, input guard
-├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE)
-├── tools/                    Tool registry, filesystem, exec, web, memory, subagent, MCP bridge
-├── store/                    Store interfaces + pg/ (PostgreSQL) implementations
-├── bootstrap/                System prompt files (SOUL.md, IDENTITY.md) + seeding + per-user seed
-├── config/                   Config loading (JSON5) + env var overlay
-├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp
+├── hooks/                    Hook system for extensibility
 ├── http/                     HTTP API (/v1/chat/completions, /v1/agents, /v1/skills, etc.)
-├── skills/                   SKILL.md loader + BM25 search
-├── memory/                   Memory system (pgvector)
-├── tracing/                  LLM call tracing + optional OTel export (build-tag gated)
-├── scheduler/                Lane-based concurrency (main/subagent/cron)
-├── cron/                     Cron scheduling (at/every/cron expr)
-├── permissions/              RBAC (admin/operator/viewer)
-├── pairing/                  Browser pairing (8-char codes)
-├── crypto/                   AES-256-GCM encryption for API keys
-├── sandbox/                  Docker-based code sandbox
-├── tts/                      Text-to-Speech (OpenAI, ElevenLabs, Edge, MiniMax)
 ├── i18n/                     Message catalog: T(locale, key, args...) + per-locale catalogs (en/vi/zh)
+├── knowledgegraph/           Knowledge graph storage and traversal
+├── mcp/                      Model Context Protocol bridge/server
+├── media/                    Media handling utilities
+├── memory/                   Memory system (pgvector)
+├── oauth/                    OAuth authentication
+├── permissions/              RBAC (admin/operator/viewer)
+├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI)
+├── sandbox/                  Docker-based code sandbox
+├── scheduler/                Lane-based concurrency (main/subagent/cron)
+├── sessions/                 Session management
+├── skills/                   SKILL.md loader + BM25 search
+├── store/                    Store interfaces + pg/ (PostgreSQL) implementations
+├── tasks/                    Task management
+├── tools/                    Tool registry, filesystem, exec, web, memory, subagent, MCP bridge
+├── tracing/                  LLM call tracing + optional OTel export (build-tag gated)
+├── tts/                      Text-to-Speech (OpenAI, ElevenLabs, Edge, MiniMax)
+├── upgrade/                  Database schema version tracking
 pkg/protocol/                 Wire types (frames, methods, errors, events)
 pkg/browser/                  Browser automation (Rod + CDP)
 migrations/                   PostgreSQL migration files
@@ -45,7 +54,7 @@ ui/web/                       React SPA (pnpm, Vite, Tailwind, Radix UI)
 - **Store layer:** Interface-based (`store.SessionStore`, `store.AgentStore`, etc.) with pg/ (PostgreSQL) implementations. Uses `database/sql` + `pgx/v5/stdlib`, raw SQL, `execMapUpdate()` helper in `pg/helpers.go`
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
-- **Providers:** Anthropic (native HTTP+SSE) and OpenAI-compat (generic). Both use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys
+- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys
 - **Agent loop:** `RunRequest` → think→act→observe → `RunResult`. Events: `run.started`, `run.completed`, `chunk`, `tool.call`, `tool.result`. Auto-summarization at >75% context
 - **Context propagation:** `store.WithAgentType(ctx)`, `store.WithUserID(ctx)`, `store.WithAgentID(ctx)`, `store.WithLocale(ctx)`
 - **WebSocket protocol (v3):** Frame types `req`/`res`/`event`. First request must be `connect`

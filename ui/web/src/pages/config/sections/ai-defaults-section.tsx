@@ -137,13 +137,6 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
               placeholder="~/.goclaw/workspace"
             />
           </div>
-          <div className="flex items-center justify-between">
-            <InfoLabel tip={t("agents.restrictToWorkspaceTip")}>{t("agents.restrictToWorkspace")}</InfoLabel>
-            <Switch
-              checked={defaults.restrict_to_workspace ?? false}
-              onCheckedChange={(v) => updateDefaults({ restrict_to_workspace: v })}
-            />
-          </div>
         </div>
 
         {/* Collapsible sub-sections */}

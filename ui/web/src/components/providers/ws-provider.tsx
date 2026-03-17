@@ -31,7 +31,10 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       },
     );
     wsRef.current.onAuthFailure = () => {
-      useAuthStore.getState().logout();
+      // Don't logout if authenticated via browser pairing (no token)
+      const state = useAuthStore.getState();
+      if (state.senderID && !state.token) return;
+      state.logout();
     };
   }
   const ws = wsRef.current;
@@ -41,9 +44,13 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
       "",
       () => useAuthStore.getState().token,
       () => useAuthStore.getState().userId,
+      () => useAuthStore.getState().senderID,
     );
     client.onAuthFailure = () => {
-      useAuthStore.getState().logout();
+      // Don't logout if authenticated via browser pairing (no token)
+      const state = useAuthStore.getState();
+      if (state.senderID && !state.token) return;
+      state.logout();
     };
     return client;
   }, []);

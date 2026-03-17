@@ -136,7 +136,7 @@ func (t *WebFetchTool) Parameters() map[string]any {
 			},
 			"maxChars": map[string]any{
 				"type":        "number",
-				"description": "Maximum characters to return (truncates when exceeded).",
+				"description": "Maximum characters to return (truncates when exceeded). Default: 60000. Omit to use the default.",
 				"minimum":     100.0,
 			},
 		},
@@ -310,9 +310,10 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 	sb.WriteString(fmt.Sprintf("Status: %d\n", resp.StatusCode))
 	sb.WriteString(fmt.Sprintf("Extractor: %s\n", extractor))
 
-	// If content exceeds maxChars, save full content to a temp file
+	// If content exceeds maxChars, save full content to a file in workspace
 	if len(text) > maxChars {
-		tmpPath, writeErr := writeWebFetchTempFile(text, finalURL)
+		workspace := ToolWorkspaceFromCtx(ctx)
+		tmpPath, writeErr := writeWebFetchTempFile(workspace, text, finalURL)
 		if writeErr != nil {
 			// Fallback: truncate inline if temp file write fails
 			slog.Warn("web_fetch: failed to write temp file, falling back to truncation", "error", writeErr)
@@ -339,30 +340,37 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 	return sb.String(), nil
 }
 
-// writeWebFetchTempFile saves fetched content to a temp file with security sanitization.
-// Returns the file path. The file is created in os.TempDir() with a random name
-// to prevent path prediction attacks.
-func writeWebFetchTempFile(content, sourceURL string) (string, error) {
+// writeWebFetchTempFile saves fetched content to a file with security sanitization.
+// When workspace is non-empty, writes to {workspace}/web-fetch/; otherwise falls back to os.TempDir().
+func writeWebFetchTempFile(workspace, content, sourceURL string) (string, error) {
 	// Generate cryptographically random filename to prevent path prediction
 	var randBytes [8]byte
 	if _, err := rand.Read(randBytes[:]); err != nil {
 		return "", fmt.Errorf("generate random name: %w", err)
 	}
 	filename := fmt.Sprintf("web-fetch-%s.txt", hex.EncodeToString(randBytes[:]))
-	tmpPath := filepath.Join(os.TempDir(), filename)
+
+	dir := os.TempDir()
+	if workspace != "" {
+		dir = filepath.Join(workspace, "web-fetch")
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", fmt.Errorf("create web-fetch dir: %w", err)
+	}
+	outPath := filepath.Join(dir, filename)
 
 	// Sanitize content: strip any potential prompt injection markers
 	sanitized := sanitizeMarkers(content)
 
 	// Write with restrictive permissions (owner read/write only)
-	if err := os.WriteFile(tmpPath, []byte(sanitized), 0600); err != nil {
-		return "", fmt.Errorf("write temp file: %w", err)
+	if err := os.WriteFile(outPath, []byte(sanitized), 0600); err != nil {
+		return "", fmt.Errorf("write file: %w", err)
 	}
 
-	slog.Info("web_fetch: content saved to temp file",
-		"path", tmpPath,
+	slog.Info("web_fetch: content saved to file",
+		"path", outPath,
 		"chars", len(sanitized),
 		"source_url", sourceURL,
 	)
-	return tmpPath, nil
+	return outPath, nil
 }

@@ -9,6 +9,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// RecoveredTaskInfo contains minimal info for leader notification after batch recovery/stale.
+type RecoveredTaskInfo struct {
+	ID         uuid.UUID
+	TeamID     uuid.UUID
+	TaskNumber int
+	Subject    string
+	Channel    string // task's origin channel for notification routing
+	ChatID     string // task scope for notification routing
+}
+
 // ErrFileLocked is returned when a workspace file is being written by another agent.
 var ErrFileLocked = errors.New("file is being written by another agent, try again shortly")
 
@@ -37,14 +47,15 @@ const (
 	TeamTaskStatusFailed     = "failed"
 	TeamTaskStatusInReview   = "in_review"
 	TeamTaskStatusCancelled  = "cancelled"
+	TeamTaskStatusStale      = "stale"
 )
 
 // Team task list filter constants (for ListTasks statusFilter parameter).
 const (
-	TeamTaskFilterActive    = ""          // default: pending + in_progress + blocked
+	TeamTaskFilterActive    = "active" // pending + in_progress + blocked
 	TeamTaskFilterInReview  = "in_review" // only in_review tasks
 	TeamTaskFilterCompleted = "completed" // only completed tasks
-	TeamTaskFilterAll       = "all"       // all statuses
+	TeamTaskFilterAll       = "all"       // all statuses (default when "" passed)
 )
 
 // Team message type constants.
@@ -64,8 +75,12 @@ type TeamData struct {
 	CreatedBy   string          `json:"created_by"`
 
 	// Joined fields (populated by queries that JOIN agents table)
-	LeadAgentKey     string `json:"lead_agent_key,omitempty"`
-	LeadDisplayName  string `json:"lead_display_name,omitempty"`
+	LeadAgentKey    string `json:"lead_agent_key,omitempty"`
+	LeadDisplayName string `json:"lead_display_name,omitempty"`
+
+	// Enriched fields (populated by ListTeams)
+	MemberCount int              `json:"member_count"`
+	Members     []TeamMemberData `json:"members,omitempty"`
 }
 
 // TeamMemberData represents a team member.
@@ -79,6 +94,7 @@ type TeamMemberData struct {
 	AgentKey    string `json:"agent_key,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
 	Frontmatter string `json:"frontmatter,omitempty"`
+	Emoji       string `json:"emoji,omitempty"`
 }
 
 // TeamTaskData represents a task in the team's shared task list.
@@ -193,20 +209,6 @@ type DelegationHistoryListOpts struct {
 	Offset        int
 }
 
-// HandoffRouteData represents an active routing override for agent handoff.
-type HandoffRouteData struct {
-	ID           uuid.UUID      `json:"id"`
-	TeamID       uuid.UUID      `json:"team_id,omitempty"`
-	Channel      string         `json:"channel"`
-	ChatID       string         `json:"chat_id"`
-	FromAgentKey string         `json:"from_agent_key"`
-	ToAgentKey   string         `json:"to_agent_key"`
-	Reason       string         `json:"reason,omitempty"`
-	CreatedBy    string         `json:"created_by"`
-	CreatedAt    time.Time      `json:"created_at"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-}
-
 // TeamMessageData represents a message in the team mailbox.
 type TeamMessageData struct {
 	ID          uuid.UUID      `json:"id"`
@@ -314,12 +316,17 @@ type TeamStore interface {
 	// statusFilter: "" = non-completed (default), "completed", "all".
 	// userID: if non-empty, filter to tasks created by this user.
 	// channel+chatID: if either is non-empty, filter to that exact scope.
-	ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string) ([]TeamTaskData, error)
+	ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, offset int) ([]TeamTaskData, error)
 	// GetTask returns a single task by ID with joined agent info.
 	GetTask(ctx context.Context, taskID uuid.UUID) (*TeamTaskData, error)
+	// GetTasksByIDs returns multiple tasks by IDs in a single query.
+	GetTasksByIDs(ctx context.Context, ids []uuid.UUID) ([]TeamTaskData, error)
 	// SearchTasks performs FTS search over task subject+description.
 	// userID: if non-empty, filter to tasks created by this user.
 	SearchTasks(ctx context.Context, teamID uuid.UUID, query string, limit int, userID string) ([]TeamTaskData, error)
+	// DeleteTask permanently removes a terminal-status task (completed/failed/cancelled).
+	// Returns ErrTaskNotFound if the task does not exist or is not in a terminal status.
+	DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) error
 
 	// ClaimTask atomically transitions a task from pending to in_progress.
 	// Only one agent can claim a given task (row-level lock, race-safe).
@@ -342,6 +349,9 @@ type TeamStore interface {
 	// FailTask marks an in_progress task as failed and stores the error message.
 	// Unblocks dependent tasks so they aren't stuck.
 	FailTask(ctx context.Context, taskID, teamID uuid.UUID, errMsg string) error
+	// FailPendingTask marks a pending or blocked task as failed (post-turn validation).
+	// Unlike FailTask, accepts pending/blocked source statuses.
+	FailPendingTask(ctx context.Context, taskID, teamID uuid.UUID, errMsg string) error
 
 	// Review workflow
 	ReviewTask(ctx context.Context, taskID, teamID uuid.UUID) error
@@ -355,6 +365,8 @@ type TeamStore interface {
 	// Audit events
 	RecordTaskEvent(ctx context.Context, event *TeamTaskEventData) error
 	ListTaskEvents(ctx context.Context, taskID uuid.UUID) ([]TeamTaskEventData, error)
+	// ListTeamEvents returns recent events across all tasks in a team.
+	ListTeamEvents(ctx context.Context, teamID uuid.UUID, limit, offset int) ([]TeamTaskEventData, error)
 
 	// Attachments
 	AttachFileToTask(ctx context.Context, att *TeamTaskAttachmentData) error
@@ -364,7 +376,8 @@ type TeamStore interface {
 	// Follow-up reminders
 	SetTaskFollowup(ctx context.Context, taskID, teamID uuid.UUID, followupAt time.Time, max int, message, channel, chatID string) error
 	ClearTaskFollowup(ctx context.Context, taskID uuid.UUID) error
-	ListFollowupDueTasks(ctx context.Context, teamID uuid.UUID) ([]TeamTaskData, error)
+	// ListAllFollowupDueTasks returns due followup tasks across all v2 active teams (batch).
+	ListAllFollowupDueTasks(ctx context.Context) ([]TeamTaskData, error)
 	IncrementFollowupCount(ctx context.Context, taskID uuid.UUID, nextAt *time.Time) error
 
 	// Auto follow-up guardrails (system-level, no LLM dependency)
@@ -373,27 +386,35 @@ type TeamStore interface {
 	// SetFollowupForActiveTasks sets followup on in_progress tasks that don't already have one.
 	// Matches tasks scoped to the given channel+chatID, or unscoped tasks in the same team.
 	SetFollowupForActiveTasks(ctx context.Context, teamID uuid.UUID, channel, chatID string, followupAt time.Time, max int, message string) (int, error)
+	// HasActiveMemberTasks returns true if there are pending/in_progress/blocked tasks
+	// assigned to agents other than the given agent (typically the lead).
+	// Used to suppress auto-followup when the lead is waiting for teammates, not the user.
+	HasActiveMemberTasks(ctx context.Context, teamID uuid.UUID, excludeAgentID uuid.UUID) (bool, error)
 
 	// Progress
 	UpdateTaskProgress(ctx context.Context, taskID, teamID uuid.UUID, percent int, step string) error
 
-	// Stale recovery
-	RecoverStaleTasks(ctx context.Context, teamID uuid.UUID) (int, error)
+	// Lock renewal (heartbeat to prevent stale recovery of long-running tasks)
+	RenewTaskLock(ctx context.Context, taskID, teamID uuid.UUID) error
+
+	// Stale recovery (batch — all v2 active teams in single query)
+	// RecoverAllStaleTasks resets in_progress tasks with expired locks back to pending.
+	RecoverAllStaleTasks(ctx context.Context) ([]RecoveredTaskInfo, error)
 	// ForceRecoverAllTasks resets ALL in_progress tasks back to pending (ignoring lock expiry).
 	// Used on startup when no agents are running.
-	ForceRecoverAllTasks(ctx context.Context, teamID uuid.UUID) (int, error)
+	ForceRecoverAllTasks(ctx context.Context) ([]RecoveredTaskInfo, error)
 	// ListRecoverableTasks returns all pending tasks (including stale in_progress with expired locks).
+	// Per-team: used by DispatchUnblockedTasks after task completion.
 	ListRecoverableTasks(ctx context.Context, teamID uuid.UUID) ([]TeamTaskData, error)
+	// MarkAllStaleTasks sets pending tasks older than olderThan to stale status across all v2 active teams.
+	MarkAllStaleTasks(ctx context.Context, olderThan time.Time) ([]RecoveredTaskInfo, error)
+	// ResetTaskStatus resets a stale or failed task back to pending for retry.
+	ResetTaskStatus(ctx context.Context, taskID, teamID uuid.UUID) error
 
 	// Delegation history
 	SaveDelegationHistory(ctx context.Context, record *DelegationHistoryData) error
 	ListDelegationHistory(ctx context.Context, opts DelegationHistoryListOpts) ([]DelegationHistoryData, int, error)
 	GetDelegationHistory(ctx context.Context, id uuid.UUID) (*DelegationHistoryData, error)
-
-	// Handoff routing
-	SetHandoffRoute(ctx context.Context, route *HandoffRouteData) error
-	GetHandoffRoute(ctx context.Context, channel, chatID string) (*HandoffRouteData, error)
-	ClearHandoffRoute(ctx context.Context, channel, chatID string) error
 
 	// Messages (mailbox)
 	SendMessage(ctx context.Context, msg *TeamMessageData) error

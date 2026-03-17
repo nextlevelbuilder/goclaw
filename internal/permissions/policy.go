@@ -39,6 +39,20 @@ const (
 	ScopePairing   Scope = "operator.pairing"
 )
 
+// AllScopes is the set of all valid API key scopes.
+var AllScopes = map[Scope]bool{
+	ScopeAdmin:     true,
+	ScopeRead:      true,
+	ScopeWrite:     true,
+	ScopeApprovals: true,
+	ScopePairing:   true,
+}
+
+// ValidScope reports whether s is a recognised API key scope.
+func ValidScope(s string) bool {
+	return AllScopes[Scope(s)]
+}
+
 // PolicyEngine evaluates user permissions for gateway method access.
 type PolicyEngine struct {
 	ownerIDs map[string]bool // sender IDs that are considered "owner"
@@ -94,8 +108,9 @@ func RoleFromScopes(scopes []Scope) Role {
 	if slices.Contains(scopes, ScopeAdmin) {
 		return RoleAdmin
 	}
-	hasWrite := slices.Contains(scopes, ScopeWrite)
-	if hasWrite {
+	if slices.Contains(scopes, ScopeWrite) ||
+		slices.Contains(scopes, ScopeApprovals) ||
+		slices.Contains(scopes, ScopePairing) {
 		return RoleOperator
 	}
 	if slices.Contains(scopes, ScopeRead) {
@@ -159,6 +174,9 @@ func isAdminMethod(method string) bool {
 		protocol.MethodTeamsTaskGet,
 		protocol.MethodTeamsTaskComments,
 		protocol.MethodTeamsTaskEvents,
+		protocol.MethodAPIKeysList,
+		protocol.MethodAPIKeysCreate,
+		protocol.MethodAPIKeysRevoke,
 	}
 	return slices.Contains(adminMethods, method)
 }
@@ -192,6 +210,11 @@ func isWriteMethod(method string) bool {
 		}
 	}
 	return false
+}
+
+// HasMinRole checks if the given role meets the minimum required level.
+func HasMinRole(role, required Role) bool {
+	return roleLevel(role) >= roleLevel(required)
 }
 
 func roleLevel(r Role) int {

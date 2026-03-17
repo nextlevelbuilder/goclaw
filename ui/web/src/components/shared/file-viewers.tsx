@@ -55,6 +55,7 @@ hljs.registerLanguage("lua", lua);
 
 function CodeViewer({ content, language }: { content: string; language: string }) {
   const { copied, copy } = useClipboard();
+  const { t } = useTranslation("common");
   const codeRef = useRef<HTMLElement>(null);
 
   const highlighted = useMemo(() => {
@@ -74,7 +75,7 @@ function CodeViewer({ content, language }: { content: string; language: string }
           type="button"
           onClick={() => copy(content)}
           className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"
-          title="Copy"
+          title={t("copy")}
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
@@ -92,6 +93,7 @@ function CodeViewer({ content, language }: { content: string; language: string }
 
 function CsvViewer({ content }: { content: string }) {
   const { copied, copy } = useClipboard();
+  const { t } = useTranslation("common");
   const rows = useMemo(() => {
     return content.split("\n").filter(Boolean).map((line) => {
       const cols: string[] = [];
@@ -115,12 +117,12 @@ function CsvViewer({ content }: { content: string }) {
   return (
     <div className="group relative rounded-lg border border-border/60 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase shrink-0">
-        <span>csv ({body.length} rows)</span>
+        <span>{t("csvRows", { count: body.length })}</span>
         <button
           type="button"
           onClick={() => copy(content)}
           className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"
-          title="Copy"
+          title={t("copy")}
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
@@ -154,6 +156,7 @@ function CsvViewer({ content }: { content: string }) {
 }
 
 function ImageViewer({ path, fetchBlob }: { path: string; fetchBlob: (path: string) => Promise<Blob> }) {
+  const { t } = useTranslation("common");
   const [src, setSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -187,7 +190,7 @@ function ImageViewer({ path, fetchBlob }: { path: string; fetchBlob: (path: stri
   if (error || !src) {
     return (
       <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-        Failed to load image
+        {t("failedToLoadImage")}
       </div>
     );
   }

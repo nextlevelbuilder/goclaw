@@ -46,6 +46,8 @@
   },
   "create": {
     "title": "Tạo agent",
+    "emoji": "Biểu tượng",
+    "emojiHint": "Emoji tùy chọn",
     "displayName": "Tên hiển thị *",
     "displayNamePlaceholder": "Agent của tôi",
     "agentKey": "Khóa agent *",
@@ -120,7 +122,9 @@
     "active": "Hoạt động",
     "inactive": "Không hoạt động",
     "summonFailed": "Triệu hồi thất bại",
-    "defaultAgent": "Agent mặc định"
+    "defaultAgent": "Agent mặc định",
+    "emoji": "Biểu tượng",
+    "emojiHint": "Emoji tùy chọn"
   },
   "llmConfig": {
     "title": "Cấu hình LLM",
@@ -168,7 +172,8 @@
     "perUser": "theo người dùng",
     "emptyFile": "trống",
     "estTokens": "Ước {{tokens}} token",
-    "insertContact": "Tìm liên hệ để chèn..."
+    "insertContact": "Tìm liên hệ để chèn...",
+    "contentPlaceholder": "Nội dung tệp..."
   },
   "fileEditor": {
     "editWithAi": "Chỉnh sửa với AI",
@@ -190,7 +195,11 @@
     "user": "Người dùng",
     "revokeTitle": "Thu hồi chia sẻ",
     "revokeDesc": "Thu hồi quyền truy cập của người dùng \"{{userId}}\"? Họ sẽ không thể sử dụng agent này nữa.",
-    "revoke": "Thu hồi"
+    "revoke": "Thu hồi",
+    "role.user": "Người dùng",
+    "role.viewer": "Người xem",
+    "roleDesc.user": "Có thể sử dụng agent và trò chuyện",
+    "roleDesc.viewer": "Chỉ đọc"
   },
   "links": {
     "teamsHint": "Agent Links sẽ sớm bị gỡ bỏ. Vui lòng sử dụng Agent Teams để cộng tác đa agent — hỗ trợ quản lý nhiệm vụ, workspace chung và kiểm soát chất lượng trong một hệ thống đơn giản hơn.",
@@ -259,7 +268,10 @@
     "continue": "Tiếp tục",
     "retry": "Thử lại",
     "retrying": "Đang thử lại...",
-    "done": "xong"
+    "done": "xong",
+    "fileLabelSOUL": "Linh hồn & Tính cách",
+    "fileLabelIDENTITY": "Thẻ danh tính",
+    "fileLabelUSER_PREDEFINED": "Ngữ cảnh người dùng mặc định"
   },
   "configGroups": {
     "core": "Cốt lõi",
@@ -392,5 +404,14 @@
       "formatJson": "Định dạng JSON",
       "invalidJson": "Cú pháp JSON không hợp lệ"
     }
+  },
+  "toast": {
+    "created": "Đã tạo agent",
+    "createFailed": "Không thể tạo agent",
+    "updated": "Đã cập nhật agent",
+    "updateFailed": "Không thể cập nhật agent",
+    "deleted": "Đã xóa agent",
+    "deleteFailed": "Không thể xóa agent",
+    "unknownError": "Lỗi không xác định"
   }
 }

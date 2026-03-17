@@ -64,6 +64,7 @@ func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration 
 	if l.agentUUID != uuid.Nil {
 		span.AgentID = &l.agentUUID
 	}
+	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
 
 	// Verbose mode: include input messages (same stripping as emitLLMSpan).
 	if collector.Verbose() && len(messages) > 0 {
@@ -193,6 +194,7 @@ func (l *Loop) emitToolSpanStart(ctx context.Context, start time.Time, toolName,
 	if l.agentUUID != uuid.Nil {
 		span.AgentID = &l.agentUUID
 	}
+	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
 
 	collector.EmitSpan(span)
 	return spanID
@@ -272,6 +274,11 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		return
 	}
 
+	previewLimit := 500
+	if collector.Verbose() {
+		previewLimit = 100000
+	}
+
 	spanName := l.id
 	span := store.SpanData{
 		ID:           agentSpanID,
@@ -283,7 +290,7 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		Level:        store.SpanLevelDefault,
 		Model:        l.model,
 		Provider:     l.provider.Name(),
-		InputPreview: truncateStr(inputPreview, 500),
+		InputPreview: truncateStr(inputPreview, previewLimit),
 		CreatedAt:    start,
 	}
 	// Nest under parent root span if this is an announce run.
@@ -294,6 +301,7 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 	if l.agentUUID != uuid.Nil {
 		span.AgentID = &l.agentUUID
 	}
+	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
 
 	collector.EmitSpan(span)
 }

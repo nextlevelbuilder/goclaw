@@ -169,9 +169,6 @@ func init() {
 		MsgToolSpawn:           "创建子代理执行后台工作或将任务委派给已链接的代理",
 		MsgToolSkillSearch:     "按关键字或描述搜索可用技能以查找相关功能",
 		MsgToolUseSkill:        "激活技能以使用其专门功能（追踪标记）",
-		MsgToolDelegateSearch:  "当链接代理过多时，按关键字搜索可用的委派目标",
-		MsgToolEvaluateLoop:    "在两个代理之间运行生成→评估→修改循环，用于高质量输出",
-		MsgToolHandoff:         "将对话转移给另一个代理——用户将直接与该代理交谈",
 		MsgToolTeamTasks:       "查看、创建、更新和完成团队任务板上的任务",
 		MsgToolTeamMessage:     "向代理团队中的队友发送直接消息或广播",
 	})

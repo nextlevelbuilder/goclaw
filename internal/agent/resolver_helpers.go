@@ -11,75 +11,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// filterManualLinks removes auto-created team links from delegation targets.
-// Team members coordinate via team_tasks/team_message, not delegate.
-func filterManualLinks(targets []store.AgentLinkData) []store.AgentLinkData {
-	var filtered []store.AgentLinkData
-	for _, t := range targets {
-		if t.TeamID == nil {
-			filtered = append(filtered, t)
-		}
-	}
-	return filtered
-}
-
-// buildDelegateAgentsMD generates DELEGATION.md content listing available delegation targets.
-func buildDelegateAgentsMD(targets []store.AgentLinkData) string {
-	var sb strings.Builder
-	sb.WriteString("# Agent Delegation\n\n")
-	sb.WriteString("Use `spawn` with the `agent` parameter to delegate tasks to other specialized agents.\n")
-	sb.WriteString("The agent list below is complete and authoritative — answer questions about available agents directly from it.\n")
-	sb.WriteString("Only delegate when you need to actually assign work, not to check who is available.\n\n")
-	sb.WriteString("## Available Agents\n")
-
-	for _, t := range targets {
-		sb.WriteString(fmt.Sprintf("\n### %s", t.TargetAgentKey))
-		if t.TargetDisplayName != "" {
-			sb.WriteString(fmt.Sprintf(" (%s)", t.TargetDisplayName))
-		}
-		if t.TargetIsTeamLead && t.TargetTeamName != "" {
-			sb.WriteString(fmt.Sprintf(" [Team Lead: %s]", t.TargetTeamName))
-		}
-		sb.WriteString("\n")
-		if t.TargetDescription != "" {
-			sb.WriteString(t.TargetDescription + "\n")
-		}
-		sb.WriteString(fmt.Sprintf("→ `spawn(agent=\"%s\", task=\"describe the task\")`\n", t.TargetAgentKey))
-	}
-
-	sb.WriteString("\n## When to Delegate\n\n")
-	sb.WriteString("- The task clearly falls under another agent's expertise\n")
-	sb.WriteString("- You lack the tools or knowledge to handle it well\n")
-	sb.WriteString("- The user explicitly asks to involve another agent\n")
-
-	sb.WriteString("\n## Important\n\n")
-	sb.WriteString("- Do NOT use `handoff` to delegate tasks. Use `spawn` instead.\n")
-	sb.WriteString("- `handoff` transfers the ENTIRE conversation — the user will talk directly to the other agent.\n")
-	sb.WriteString("- Only use `handoff` when the user explicitly asks to be transferred/switched to another agent.\n")
-
-	return sb.String()
-}
-
-// buildDelegateSearchInstruction generates DELEGATION.md content that instructs the agent
-// to use delegate_search tool instead of listing all targets (used when >15 targets).
-func buildDelegateSearchInstruction(targetCount int) string {
-	return fmt.Sprintf(`# Agent Delegation
-
-You have the `+"`spawn`"+` tool (with `+"`agent`"+` parameter) and `+"`delegate_search`"+` tool available.
-Do NOT look for delegation info on disk — it is provided here.
-
-You have access to %d specialized agents. To find the right one:
-
-1. `+"`delegate_search(query=\"your keywords\")`"+` — search agents by expertise
-2. `+"`spawn(agent=\"agent-key\", task=\"describe the task\")`"+` — delegate the task
-
-Example:
-- User asks about billing → `+"`delegate_search(query=\"billing payment\")`"+` → `+"`spawn(agent=\"billing-agent\", task=\"...\")`"+`
-
-Do NOT guess agent keys. Always search first.
-`, targetCount)
-}
-
 // buildTeamMD generates compact TEAM.md content for an agent that is part of a team.
 // Kept minimal — tool descriptions already live in tool Parameters()/Description().
 // isV2 controls whether advanced sections (orchestration, followup, review) are rendered.
@@ -127,7 +58,7 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		}
 		if len(reviewers) > 0 {
 			sb.WriteString("\n## Reviewers\n")
-			sb.WriteString("Use reviewers as evaluators in `evaluate_loop` for quality-critical tasks.\n\n")
+			sb.WriteString("Reviewers evaluate quality-critical task results.\n\n")
 			for _, r := range reviewers {
 				if r.DisplayName != "" {
 					sb.WriteString(fmt.Sprintf("- **%s** `%s`", r.DisplayName, r.AgentKey))
@@ -143,41 +74,59 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 	}
 
 	// Workflow guidance — version-aware to match backend behavior.
-	// V2: spawn auto-creates tasks, leads should NOT manually create.
-	// V1: leads must create tasks first, then spawn with team_task_id.
 	sb.WriteString("\n## Workflow\n\n")
 	if selfRole == store.TeamRoleLead {
 		if isV2 {
-			sb.WriteString("**NEVER use `team_tasks create` before spawning.** The system handles task creation automatically.\n\n")
-			sb.WriteString("WRONG: `team_tasks(action=\"create\", ...)` → `spawn(team_task_id=...)`\n")
-			sb.WriteString("CORRECT: `spawn(agent=\"...\", task=\"...\", label=\"short title\")`\n\n")
-			sb.WriteString("Just call `spawn` — the system auto-creates one tracking task per delegation.\n")
-			sb.WriteString("The `label` parameter sets the auto-created task title. Tasks auto-complete when delegation finishes.\n\n")
+			sb.WriteString("Delegate work to team members using `team_tasks` with `assignee`.\n\n")
+			sb.WriteString("```\nteam_tasks(action=\"create\", subject=\"...\", description=\"...\", assignee=\"agent-key\")\n```\n\n")
+			sb.WriteString("The system auto-dispatches to the assigned member and auto-completes when done.\n")
+			sb.WriteString("Do NOT use `spawn` for team delegation — `spawn` is only for self-clone subagent work.\n\n")
 			sb.WriteString("Rules:\n")
-			sb.WriteString("- Each spawn call creates its own task — never pass the same `team_task_id` to multiple spawns\n")
-			sb.WriteString("- Call all spawns first, then briefly tell the user what you delegated\n")
+			sb.WriteString("- Always specify `assignee` — match member expertise from the list above\n")
+			sb.WriteString("- **Check task board first** — ALWAYS call `team_tasks(action=\"list\")` before creating tasks. The system blocks creation if you skip this step\n")
+			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
 			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
-			sb.WriteString("- Parallel results arrive in a single combined notification — do NOT present partial results\n")
-			sb.WriteString("- `team_tasks create` is ONLY for dependency chains (tasks with `blocked_by`), then `spawn` with that `team_task_id`\n")
+			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
+			sb.WriteString("- **Prefer delegation** — if the user asks to involve the team, delegate tasks immediately. Do NOT do the work yourself first then hand off to members\n")
+			sb.WriteString("- **Do NOT block on completed tasks** — if a dependency task is already done, pass its result in the new task's description instead of using blocked_by\n")
+			sb.WriteString("- For dependency chains: use `blocked_by` to sequence tasks\n")
 
-			sb.WriteString("\n## Orchestration Patterns\n\n")
-			sb.WriteString("- **Sequential**: A finishes → review → delegate to B with A's output\n")
-			sb.WriteString("- **Iterative**: A drafts → B reviews → A revises with feedback\n")
-			sb.WriteString("- **Mixed**: A+B parallel → review both → C combines outputs\n\n")
+			sb.WriteString("\n## Task Decomposition (CRITICAL)\n\n")
+			sb.WriteString("NEVER assign one big task to one member. ALWAYS break user requests into small, atomic tasks:\n\n")
+			sb.WriteString("1. **Analyze** the request — identify distinct steps, deliverables, and SKILLS needed (writing, data, design, code...)\n")
+			sb.WriteString("2. **Match by SKILL, not topic** — assign based on what the task DOES, not what it's ABOUT.\n")
+			sb.WriteString("   Domain experts provide DATA/INFO. Content writers WRITE the article. Designers CREATE visuals.\n")
+			sb.WriteString("   Example: \"write about astrology\" → astrology expert provides facts → content writer composes the article\n")
+			sb.WriteString("3. **Decompose** into tasks where each has ONE clear deliverable\n")
+			sb.WriteString("4. **Distribute** across members — use ALL available members, not just one\n")
+			sb.WriteString("5. **Sequence** with `blocked_by` — if task B needs task A's output, set `blocked_by=[task_A_id]`\n")
+			sb.WriteString("   IMPORTANT: `blocked_by` requires real task UUIDs from previous create results.\n")
+			sb.WriteString("   Create dependency tasks FIRST, get their IDs, THEN create dependent tasks.\n")
+			sb.WriteString("   Do NOT use placeholders like \"task_1\" — only real UUIDs work.\n\n")
+
+			sb.WriteString("## Orchestration Patterns\n\n")
+			sb.WriteString("For complex requests with multiple steps, plan the full task graph UPFRONT and create all tasks in one turn:\n\n")
+			sb.WriteString("- **Parallel**: Independent tasks → create all with different assignees\n")
+			sb.WriteString("- **Sequential**: Create Task A first → get its UUID → create Task B with `blocked_by=[A_id]`\n")
+			sb.WriteString("- **Mixed**: Create A+B (parallel) → create C with `blocked_by=[A_id, B_id]`\n\n")
+			sb.WriteString("Create tasks in order: independent tasks first, then dependent tasks using the returned UUIDs.\n")
+			sb.WriteString("The system auto-dispatches blocked tasks when their dependencies complete.\n")
+			sb.WriteString("Do NOT wait for results to create follow-up tasks — plan the full pipeline ahead.\n\n")
 			sb.WriteString("After results: present to user (if done) or continue orchestrating.\n")
 			sb.WriteString("Vary announcement phrasing between delegation rounds.\n")
 
 			sb.WriteString("\n## Follow-up Reminders\n\n")
-			sb.WriteString("When waiting for user reply: create+claim task, then `await_reply` with text=<reminder>.\n")
-			sb.WriteString("System auto-sends reminders. Call `clear_followup` when user replies.\n")
+			sb.WriteString("When you need user input/decision: create+claim task, then `ask_user` with text=<question>. ONLY use when you have a question for the user — NOT for waiting on teammates or status updates.\n")
+			sb.WriteString("IMPORTANT: Present the question directly to the user in your response. `ask_user` only sets up periodic REMINDERS in case they don't reply — it does NOT present the question for you.\n")
+			sb.WriteString("System auto-sends reminders. Call `clear_ask_user` when user replies.\n")
 		} else {
-			sb.WriteString("Create a task with `team_tasks` first, then `spawn` with that `team_task_id`.\n")
-			sb.WriteString("Tasks auto-complete when delegation finishes.\n\n")
+			sb.WriteString("Create a task with `team_tasks` (with `assignee`), then the system dispatches automatically.\n")
+			sb.WriteString("Tasks auto-complete when the member finishes.\n\n")
 			sb.WriteString("Rules:\n")
-			sb.WriteString("- Each task should have exactly one spawn (1:1 mapping)\n")
-			sb.WriteString("- Call all spawns first, then briefly tell the user what you delegated\n")
+			sb.WriteString("- Always specify `assignee` when creating tasks\n")
+			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
 			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
-			sb.WriteString("- Parallel results arrive in a single combined notification — do NOT present partial results\n")
+			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
 		}
 
 		sb.WriteString("\nFor simple questions about team composition, answer directly from the member list above.\n")
@@ -185,8 +134,8 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		if selfRole == store.TeamRoleReviewer {
 			sb.WriteString("You are a **reviewer**. When evaluating, respond with **APPROVED** or **REJECTED: <feedback>**.\n\n")
 		}
-		sb.WriteString("As a member, just do the delegated work. Task completion is automatic.\n")
-		sb.WriteString("For long-running tasks, send progress updates via `team_message` action=send.\n")
+		sb.WriteString("As a member, just do the assigned work. Task completion is automatic.\n")
+		sb.WriteString("For long-running tasks, use `team_tasks(action=\"progress\", percent=50, text=\"status update\")` to report progress. The task_id is auto-resolved from your assigned task — you don't need to specify it.\n")
 	}
 
 	return sb.String()
@@ -226,9 +175,10 @@ func agentToolPolicyWithMCP(policy *config.ToolPolicySpec, hasMCP bool) *config.
 	return policy
 }
 
-// agentToolPolicyWithWorkspace injects workspace_write and workspace_read into
-// alsoAllow when the agent belongs to a team, ensuring the PolicyEngine doesn't
-// block them even if the agent has a restrictive allow list.
+// agentToolPolicyWithWorkspace injects file tools into alsoAllow when the agent
+// belongs to a team, ensuring the PolicyEngine doesn't block them even if the
+// agent has a restrictive allow list. File tools are now workspace-aware via
+// WorkspaceInterceptor, so no separate workspace_write/workspace_read needed.
 func agentToolPolicyWithWorkspace(policy *config.ToolPolicySpec, hasTeam bool) *config.ToolPolicySpec {
 	if !hasTeam {
 		return policy
@@ -236,7 +186,7 @@ func agentToolPolicyWithWorkspace(policy *config.ToolPolicySpec, hasTeam bool) *
 	if policy == nil {
 		policy = &config.ToolPolicySpec{}
 	}
-	for _, tool := range []string{"workspace_write", "workspace_read"} {
+	for _, tool := range []string{"read_file", "write_file", "list_files"} {
 		if !slices.Contains(policy.AlsoAllow, tool) {
 			policy.AlsoAllow = append(policy.AlsoAllow, tool)
 		}

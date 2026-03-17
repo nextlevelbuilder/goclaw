@@ -166,6 +166,25 @@
     "indexed": "所有文档已索引",
     "failedCreate": "创建文档失败",
     "failedDelete": "删除文档失败",
-    "failedIndex": "索引文档失败"
+    "failedIndex": "索引文档失败",
+    "entitySaved": "实体已保存",
+    "entitySaveFailed": "保存实体失败",
+    "entityDeleted": "实体已删除",
+    "entityDeleteFailed": "删除实体失败",
+    "extractionComplete": "提取完成",
+    "extractionFailed": "提取失败",
+    "traversalFailed": "遍历失败",
+    "unknownError": "未知错误",
+    "docCreated": "文档已创建",
+    "docCreateFailed": "创建文档失败",
+    "docUpdated": "文档已更新",
+    "docUpdateFailed": "更新文档失败",
+    "docDeleted": "文档已删除",
+    "docDeleteFailed": "删除文档失败",
+    "docIndexed": "文档已索引",
+    "docIndexFailed": "索引文档失败",
+    "allIndexed": "所有文档已索引",
+    "allIndexFailed": "索引所有文档失败",
+    "searchFailed": "搜索失败"
   }
 }

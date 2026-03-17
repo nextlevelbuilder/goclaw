@@ -7,6 +7,8 @@
   "emptyDescription": "Create your first team to get started.",
   "noMatchTitle": "No matching teams",
   "noMatchDescription": "Try a different search term.",
+  "viewCard": "Card view",
+  "viewList": "List view",
   "scope": {
     "all": "All scopes",
     "label": "Scope"
@@ -20,6 +22,7 @@
     "lead": "Lead",
     "memberCount": "{{count}} member",
     "memberCountPlural": "{{count}} members",
+    "more": "more",
     "deleteDescription": "Are you sure you want to delete \"{{name}}\"? All members, tasks, and configuration will be permanently removed.",
     "tabs": {
       "tasks": "Tasks",
@@ -64,6 +67,8 @@
     "unassigned": "Unassigned",
     "filters": {
       "active": "Active",
+      "pending": "Pending",
+      "inProgress": "In Progress",
       "inReview": "In Review",
       "completed": "Completed",
       "all": "All"
@@ -109,6 +114,8 @@
       "followupNext": "Next reminder:",
       "followupDone": "All reminders sent"
     },
+    "delete": "Delete",
+    "deleteConfirm": "Delete this task? This cannot be undone.",
     "badges": {
       "awaitingReply": "awaiting reply"
     }
@@ -168,8 +175,19 @@
     "deniedChannels": "Denied Channels",
     "deniedChannelsHint": "Messages from these channels are always blocked.",
     "notifications": "Notifications",
-    "progressNotifications": "Progress notifications",
-    "progressNotificationsHint": "Send periodic \"Your team is working on it...\" messages to chat during async delegations.",
+    "notifyDispatched": "Task dispatched",
+    "notifyDispatchedHint": "Notify when a task is assigned to a team member.",
+    "notifyProgress": "Task progress",
+    "notifyProgressHint": "Notify when a member updates task progress.",
+    "notifyFailed": "Task failed",
+    "notifyFailedHint": "Notify when a task fails.",
+    "notifyMode": "Delivery mode",
+    "notifyModeHint": "How notifications are delivered to the chat channel.",
+    "notifyModeDirect": "Direct",
+    "notifyModeDirectDesc": "Send notifications straight to the chat channel. Fast, no AI processing.",
+    "notifyModeLeader": "Through Leader",
+    "notifyModeLeaderDesc": "Leader agent reformulates updates naturally before sending to user.",
+    "notifyModeLeaderWarning": "Leader mode uses AI to reformulate messages (costs tokens, may be slower).",
     "searchUsers": "Search users...",
     "selectChannel": "Select channel...",
     "escalationPolicy": "Escalation Policy",
@@ -191,12 +209,12 @@
     "followupMaxReminders": "Max reminders",
     "followupMaxRemindersHint": "Maximum number of reminders per task. 0 = unlimited (remind until user replies).",
     "workspace": "Workspace",
-    "workspaceScope": "Workspace Sharing",
-    "workspaceScopeHint": "Control how agents access files in the team workspace.",
+    "workspaceScope": "Workspace Scope",
+    "workspaceScopeHint": "Control how team workspace files are organized.",
     "workspaceScopeIsolated": "Isolated",
-    "workspaceScopeIsolatedDesc": "Each agent has its own private workspace. Agents cannot read or write files from other agents.",
+    "workspaceScopeIsolatedDesc": "Each conversation has its own workspace folder. Files from one chat are not visible in another.",
     "workspaceScopeShared": "Shared",
-    "workspaceScopeSharedDesc": "All agents share a single team workspace. Agents can read and write each other's files.",
+    "workspaceScopeSharedDesc": "All conversations share a single workspace folder. Files created in any chat are visible to all.",
     "teamVersion": "Team Version",
     "versionBasic": "Basic",
     "versionAdvanced": "Advanced",
@@ -224,6 +242,7 @@
       "autoRecoveryDesc": "Stuck tasks auto-reset after timeout",
       "escalationPolicy": "Escalation Policy",
       "escalationPolicyDesc": "Control what agents can do autonomously",
+      "comingSoon": "Coming soon",
       "downgradeNote": "Downgrade is safe — V2 data is preserved but hidden.",
       "betaNote": "V2 is currently in Beta.",
       "gotIt": "Got it"
@@ -261,8 +280,30 @@
     "failedAddMember": "Failed to add member",
     "failedRemoveMember": "Failed to remove member",
     "taskCreated": "Task created",
+    "taskDeleted": "Task deleted",
     "taskAssigned": "Task assigned",
     "failedCreateTask": "Failed to create task",
+    "failedDeleteTask": "Failed to delete task",
     "failedAssignTask": "Failed to assign task"
+  },
+  "board": {
+    "kanban": "Board",
+    "list": "List",
+    "groupBy": "Group by",
+    "groupByStatus": "Status",
+    "groupByOwner": "Owner",
+    "groupByType": "Type",
+    "running": "Running",
+    "locked": "Agent is running",
+    "emptyColumn": "No tasks",
+    "unassigned": "Unassigned",
+    "createViaChat": "Chat with the team agent to create tasks"
+  },
+  "sidebar": {
+    "members": "Members",
+    "workspace": "Workspace",
+    "delegations": "Delegations",
+    "settings": "Settings",
+    "addMember": "Add member"
   }
 }

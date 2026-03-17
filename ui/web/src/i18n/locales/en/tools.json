@@ -76,6 +76,8 @@
     "categoryCount": "{{count}} categories",
     "requires": "req",
     "requiresTooltip": "Requires: {{list}}",
+    "deprecated": "Deprecated",
+    "deprecatedTooltip": "This tool has been deprecated and is no longer available",
     "settings": "Settings",
     "configuredVia": "Configured via the Config page",
     "categories": {
@@ -178,12 +180,9 @@
       "sessions_send": "Send a message to an active chat session on behalf of the agent",
       "message": "Send a proactive message to a user on a connected channel (Telegram, Discord, etc.)",
       "cron": "Schedule or manage recurring tasks using cron expressions, at-times, or intervals",
-      "spawn": "Spawn a subagent for background work or delegate a task to a linked agent",
+      "spawn": "Spawn a subagent to handle a task in the background",
       "skill_search": "Search for available skills by keyword or description to find relevant capabilities",
       "use_skill": "Activate a skill to use its specialized capabilities (tracing marker)",
-      "delegate_search": "Search for available delegation targets by keyword when there are too many linked agents to list",
-      "evaluate_loop": "Run a generate→evaluate→revise loop between two agents for quality-critical output",
-      "handoff": "Transfer the conversation to another agent — the user will talk directly to that agent",
       "team_tasks": "View, create, update, and complete tasks on the team task board",
       "team_message": "Send a direct message or broadcast to teammates in the agent team"
     }

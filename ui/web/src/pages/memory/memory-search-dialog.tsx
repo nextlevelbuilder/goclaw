@@ -65,7 +65,7 @@ export function MemorySearchDialog({ open, onOpenChange, agentId }: MemorySearch
           </Button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto mt-2">
+        <div className="flex-1 min-h-0 overflow-y-auto mt-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
           {results.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground text-sm">
               {searching ? t("searchDialog.searching") : t("searchDialog.noResults")}

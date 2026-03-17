@@ -34,6 +34,10 @@ function getConfigHint(tool: BuiltinToolData): string | undefined {
   return (tool.metadata as any)?.config_hint as string | undefined;
 }
 
+function isDeprecated(tool: BuiltinToolData): boolean {
+  return (tool.metadata as any)?.deprecated === true;
+}
+
 export function BuiltinToolsPage() {
   const { t } = useTranslation("tools");
   const { tools, loading, refresh, updateTool } = useBuiltinTools();
@@ -178,14 +182,29 @@ function ToolRow({
   const { t } = useTranslation("tools");
   const configHint = getConfigHint(tool);
   const editable = hasEditableSettings(tool);
+  const deprecated = isDeprecated(tool);
 
   return (
-    <div className="flex items-center gap-4 px-4 py-2 hover:bg-muted/30 transition-colors">
+    <div className={`flex items-center gap-4 px-4 py-2 hover:bg-muted/30 transition-colors${deprecated ? " opacity-60" : ""}`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-1.5">
           <span className="text-sm font-medium leading-tight">{tool.display_name}</span>
           <code className="text-[11px] text-muted-foreground">{tool.name}</code>
-          {tool.requires && tool.requires.length > 0 && (
+          {deprecated && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="destructive" className="ml-1 h-4 px-1 text-[10px] leading-none cursor-default">
+                    {t("builtin.deprecated")}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">{t("builtin.deprecatedTooltip")}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {!deprecated && tool.requires && tool.requires.length > 0 && (
             <TooltipProvider delayDuration={200}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -208,7 +227,7 @@ function ToolRow({
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0">
-        {editable && (
+        {editable && !deprecated && (
           <Button
             variant="ghost"
             size="sm"
@@ -219,7 +238,7 @@ function ToolRow({
             {t("builtin.settings")}
           </Button>
         )}
-        {!editable && configHint && (
+        {!editable && !deprecated && configHint && (
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -237,6 +256,7 @@ function ToolRow({
         <Switch
           checked={tool.enabled}
           onCheckedChange={() => onToggle(tool)}
+          disabled={deprecated}
         />
       </div>
     </div>

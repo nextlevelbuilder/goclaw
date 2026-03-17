@@ -29,6 +29,7 @@
     "name": "Tên *",
     "nameHint": "Chỉ dùng chữ thường, số và dấu gạch ngang",
     "displayName": "Tên hiển thị",
+    "displayNamePlaceholder": "Máy chủ MCP của tôi",
     "transport": "Giao thức *",
     "command": "Lệnh *",
     "args": "Tham số (phân cách bằng dấu phẩy)",

@@ -19,5 +19,15 @@
     "title": "Từ chối thực thi",
     "description": "Từ chối yêu cầu thực thi \"{{command}}\" từ agent \"{{agentId}}\"?",
     "confirmLabel": "Từ chối"
+  },
+  "toast": {
+    "approved": "Đã phê duyệt",
+    "approvedAlways": "Lệnh luôn được phép",
+    "approvedOnce": "Lệnh đã được phê duyệt",
+    "approveFailed": "Không thể phê duyệt",
+    "denied": "Đã từ chối",
+    "deniedDesc": "Lệnh bị từ chối",
+    "denyFailed": "Không thể từ chối",
+    "unknownError": "Lỗi không xác định"
   }
 }

@@ -55,13 +55,14 @@ func loadImages(files []bus.MediaFile) []providers.ImageContent {
 // If mediaStore is nil, falls back to legacy behavior (no persistence, delete temp files).
 func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile) []providers.MediaRef {
 	if l.mediaStore == nil {
-		// Fallback: no persistent storage configured — delete temp files after loading.
-		slog.Warn("media: no media store configured, temp files will be deleted", "agent", l.id)
-		defer func() {
-			for _, f := range files {
-				_ = os.Remove(f.Path)
-			}
-		}()
+		// Fallback: no persistent storage configured.
+		// slog.Warn("media: no media store configured, temp files will be deleted", "agent", l.id)
+		// Keep workspace files — don't delete originals.
+		// defer func() {
+		// 	for _, f := range files {
+		// 		_ = os.Remove(f.Path)
+		// 	}
+		// }()
 		return nil
 	}
 
@@ -82,17 +83,18 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile) []provider
 			} else {
 				srcPath = sanitized
 				mime = "image/jpeg" // sanitized output is always JPEG
-				// Clean up original if sanitized to a different file.
-				if sanitized != f.Path {
-					_ = os.Remove(f.Path)
-				}
+				// Keep workspace files — don't delete originals after sanitization.
+				// if sanitized != f.Path {
+				// 	_ = os.Remove(f.Path)
+				// }
 			}
 		}
 
 		id, _, err := l.mediaStore.SaveFile(sessionKey, srcPath, mime)
 		if err != nil {
 			slog.Warn("media: failed to persist file", "path", f.Path, "error", err)
-			_ = os.Remove(srcPath)
+			// Keep workspace files — don't delete on persist failure.
+			// _ = os.Remove(srcPath)
 			continue
 		}
 

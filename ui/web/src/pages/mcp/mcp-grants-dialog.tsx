@@ -163,7 +163,7 @@ export function MCPGrantsDialog({
           <DialogTitle>{t("grants.title", { name: server.display_name || server.name })}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 px-0.5 -mx-0.5 overflow-y-auto min-h-0">
+        <div className="space-y-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           {/* Existing grants */}
           {grants.length > 0 && (
             <div className="space-y-2">

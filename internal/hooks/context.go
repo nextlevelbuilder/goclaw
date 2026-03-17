@@ -7,7 +7,7 @@ type ctxKey string
 const skipHooksKey ctxKey = "skip_hooks"
 
 // WithSkipHooks returns a context that signals hook evaluation should be skipped.
-// Used by evaluate_loop and agent evaluator to prevent recursive hook firing.
+// Used by agent evaluator to prevent recursive hook firing.
 func WithSkipHooks(ctx context.Context, skip bool) context.Context {
 	return context.WithValue(ctx, skipHooksKey, skip)
 }

@@ -100,7 +100,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 }
 
 // wireChannelRPCMethods registers WS RPC methods for channels, instances, agent links, and teams.
-func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, channelMgr *channels.Manager, agentRouter *agent.Router, msgBus *bus.MessageBus) {
+func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, channelMgr *channels.Manager, agentRouter *agent.Router, msgBus *bus.MessageBus, dataDir string) {
 	// Register channels RPC methods (after channelMgr is initialized with all channels)
 	methods.NewChannelsMethods(channelMgr).Register(server.Router())
 
@@ -118,7 +118,7 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 
 	// Register agent teams WS RPC methods
 	if pgStores.Teams != nil {
-		methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus, msgBus).Register(server.Router())
+		methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus, msgBus, dataDir).Register(server.Router())
 	}
 }
 
@@ -150,6 +150,11 @@ func wireChannelEventSubscribers(
 	// Wire pairing approval notification → channel (matching TS notifyPairingApproved).
 	botName := cfg.ResolveDisplayName("default")
 	pairingMethods.SetOnApprove(func(ctx context.Context, channel, chatID, senderID string) {
+		// Browser/internal channels use WebSocket — UI polls approval status directly.
+		if channels.IsInternalChannel(channel) {
+			slog.Debug("pairing approved for internal channel, skipping notification", "channel", channel)
+			return
+		}
 		msg := fmt.Sprintf("✅ %s access approved. Send a message to start chatting.", botName)
 		// Group pairings need group_id metadata so channels (e.g. Zalo) route to group API.
 		if strings.HasPrefix(senderID, "group:") {

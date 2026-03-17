@@ -17,6 +17,26 @@ const (
 	anthropicAPIVersion = "2023-06-01"
 )
 
+// claudeModelAliases maps short model aliases to full Anthropic model IDs.
+// This allows agents configured with aliases (e.g. "opus") to work with the
+// anthropic_native provider, consistent with the Claude CLI provider.
+var claudeModelAliases = map[string]string{
+	"opus":   "claude-opus-4-6",
+	"sonnet": "claude-sonnet-4-6",
+	"haiku":  "claude-haiku-4-5-20251001",
+}
+
+// resolveModel expands a short alias to a full model ID, or returns the input unchanged.
+func resolveAnthropicModel(model, defaultModel string) string {
+	if model == "" {
+		return defaultModel
+	}
+	if full, ok := claudeModelAliases[model]; ok {
+		return full
+	}
+	return model
+}
+
 // AnthropicProvider implements Provider using the Anthropic Claude API via net/http.
 type AnthropicProvider struct {
 	apiKey       string
@@ -60,10 +80,7 @@ func (p *AnthropicProvider) DefaultModel() string   { return p.defaultModel }
 func (p *AnthropicProvider) SupportsThinking() bool { return true }
 
 func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
-	model := req.Model
-	if model == "" {
-		model = p.defaultModel
-	}
+	model := resolveAnthropicModel(req.Model, p.defaultModel)
 
 	body := p.buildRequestBody(model, req, false)
 

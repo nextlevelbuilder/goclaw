@@ -291,5 +291,17 @@
   "channels.reasoningStream": "显示推理",
   "channels.reasoningStreamHint": "将AI思考过程显示为单独的消息",
   "channels.reactionLevel": "反应级别",
-  "channels.connectionMode": "连接模式"
+  "channels.connectionMode": "连接模式",
+  "channels.reactionOff": "关闭",
+  "channels.reactionMinimal": "最小",
+  "channels.reactionFull": "完整",
+  "channels.connectionWebsocket": "WebSocket",
+  "channels.connectionWebhook": "Webhook",
+
+  "bindings.any": "任意",
+
+  "toast": {
+    "saved": "配置已保存",
+    "saveFailed": "保存配置失败"
+  }
 }

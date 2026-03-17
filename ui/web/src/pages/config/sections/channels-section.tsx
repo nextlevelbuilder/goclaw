@@ -245,9 +245,9 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
                             <Select value={chData.reaction_level ?? "off"} onValueChange={(v) => updateChannel(ch, { reaction_level: v })}>
                               <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="off">Off</SelectItem>
-                                <SelectItem value="minimal">Minimal</SelectItem>
-                                <SelectItem value="full">Full</SelectItem>
+                                <SelectItem value="off">{t("channels.reactionOff")}</SelectItem>
+                                <SelectItem value="minimal">{t("channels.reactionMinimal")}</SelectItem>
+                                <SelectItem value="full">{t("channels.reactionFull")}</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -262,8 +262,8 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
                         <Select value={chData.connection_mode ?? "websocket"} onValueChange={(v) => updateChannel(ch, { connection_mode: v })}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="websocket">WebSocket</SelectItem>
-                            <SelectItem value="webhook">Webhook</SelectItem>
+                            <SelectItem value="websocket">{t("channels.connectionWebsocket")}</SelectItem>
+                            <SelectItem value="webhook">{t("channels.connectionWebhook")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

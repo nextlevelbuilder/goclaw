@@ -68,6 +68,8 @@
     "noMatchTitle": "未找到匹配工具",
     "requires": "需要",
     "requiresTooltip": "需要：{{list}}",
+    "deprecated": "已弃用",
+    "deprecatedTooltip": "此工具已弃用，不再可用",
     "searchPlaceholder": "搜索工具...",
     "settings": "设置",
     "settingsDialog": {
@@ -114,12 +116,9 @@
       "sessions_send": "代表Agent向活跃聊天Session发送消息",
       "message": "向已连接渠道（Telegram、Discord等）上的用户发送主动消息",
       "cron": "使用cron表达式、定时或间隔调度或管理定期任务",
-      "spawn": "生成子Agent进行后台工作或将任务委托给已链接的Agent",
+      "spawn": "生成子Agent进行后台工作",
       "skill_search": "按关键字或描述搜索可用Skill以找到相关能力",
       "use_skill": "激活Skill以使用其专业能力（追踪标记）",
-      "delegate_search": "当链接Agent太多时按关键字搜索可用委托目标",
-      "evaluate_loop": "在两个Agent之间运行生成→评估→修订循环以产出高质量内容",
-      "handoff": "将对话转移给另一个Agent — 用户将直接与该Agent交流",
       "team_tasks": "查看、创建、更新和完成团队任务板上的任务",
       "team_message": "向Agent团队中的队友发送直接消息或广播"
     }

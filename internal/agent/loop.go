@@ -71,6 +71,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if l.subagentsCfg != nil {
 		ctx = tools.WithSubagentConfig(ctx, l.subagentsCfg)
 	}
+	// Pass the agent's model so subagents inherit it instead of the system default.
+	if l.model != "" {
+		ctx = tools.WithParentModel(ctx, l.model)
+	}
 	if l.memoryCfg != nil {
 		ctx = tools.WithMemoryConfig(ctx, l.memoryCfg)
 	}
@@ -84,6 +88,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}
 	if req.WorkspaceChatID != "" {
 		ctx = tools.WithWorkspaceChatID(ctx, req.WorkspaceChatID)
+	}
+	if req.TeamTaskID != "" {
+		ctx = tools.WithTeamTaskID(ctx, req.TeamTaskID)
 	}
 
 	// Per-user workspace isolation.
@@ -124,6 +131,48 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		ctx = tools.WithToolWorkspace(ctx, effectiveWorkspace)
 	} else if l.workspace != "" {
 		ctx = tools.WithToolWorkspace(ctx, l.workspace)
+	}
+
+	// Team workspace handling:
+	// - Dispatched task (req.TeamWorkspace set): override default workspace so
+	//   relative paths resolve to team workspace. Agent workspace is accessible
+	//   via ToolTeamWorkspace for absolute-path access.
+	// - Direct chat (auto-resolved): keep agent workspace as default, team
+	//   workspace accessible via absolute path.
+	if req.TeamWorkspace != "" {
+		if err := os.MkdirAll(req.TeamWorkspace, 0755); err != nil {
+			slog.Warn("failed to create team workspace directory", "workspace", req.TeamWorkspace, "error", err)
+		}
+		ctx = tools.WithToolTeamWorkspace(ctx, req.TeamWorkspace)
+		ctx = tools.WithToolWorkspace(ctx, req.TeamWorkspace) // default for relative paths
+	}
+	if req.TeamID != "" {
+		ctx = tools.WithToolTeamID(ctx, req.TeamID)
+	}
+
+	// Auto-resolve team workspace for agents not dispatched via team task.
+	// Lead agents default to team workspace (primary job is team coordination).
+	// Non-lead members keep own workspace; team workspace is accessible via absolute path.
+	if req.TeamWorkspace == "" && l.teamStore != nil && l.agentUUID != uuid.Nil {
+		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
+			// Shared workspace: scope by teamID only. Isolated (default): scope by chatID too.
+			wsChat := req.ChatID
+			if wsChat == "" {
+				wsChat = req.UserID
+			}
+			if tools.IsSharedWorkspace(team.Settings) {
+				wsChat = ""
+			}
+			if wsDir, err := tools.WorkspaceDir(l.dataDir, team.ID, wsChat); err == nil {
+				ctx = tools.WithToolTeamWorkspace(ctx, wsDir)
+				if team.LeadAgentID == l.agentUUID {
+					ctx = tools.WithToolWorkspace(ctx, wsDir)
+				}
+			}
+			if req.TeamID == "" {
+				ctx = tools.WithToolTeamID(ctx, team.ID.String())
+			}
+		}
 	}
 
 	// Persist agent UUID + user ID on the session (for querying/tracing)
@@ -301,17 +350,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// knows images were received and stored (consistent with audio/video enrichment).
 	l.enrichImageIDs(messages, mediaRefs)
 
-	// 2f. Cross-session recovery: notify team leads about orphaned pending tasks
-	// and in-progress tasks being handled by delegates.
-	// Safe because Bước 1 (early ClaimTask) ensures running tasks are in_progress,
-	// so only truly un-spawned tasks remain pending.
+	// 2f. Cross-session task reminder: notify team leads about pending and in-progress tasks.
+	// Stale recovery (expired lock → pending) is handled by the background TaskTicker.
 	if l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil && team.LeadAgentID == l.agentUUID {
-			// Recover tasks with expired locks (stale in_progress → pending)
-			if recovered, err := l.teamStore.RecoverStaleTasks(ctx, team.ID); err == nil && recovered > 0 {
-				slog.Info("recovered stale tasks", "team", team.ID, "count", recovered)
-			}
-			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "", req.UserID, "", ""); err == nil {
+			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "active", req.UserID, "", "", 0); err == nil {
 				var stale []string
 				var inProgress []string
 				for _, t := range tasks {
@@ -327,13 +370,13 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				var parts []string
 				if len(stale) > 0 {
 					parts = append(parts, fmt.Sprintf(
-						"You have %d pending team task(s) that were never spawned:\n%s\n"+
-							"Spawn each one, or cancel with team_tasks action=cancel if no longer needed.",
+						"You have %d pending team task(s) awaiting dispatch:\n%s\n"+
+							"These tasks will be auto-dispatched to available team members. If no longer needed, cancel with team_tasks action=cancel.",
 						len(stale), strings.Join(stale, "\n")))
 				}
 				if len(inProgress) > 0 {
 					parts = append(parts, fmt.Sprintf(
-						"You have %d in-progress team task(s) being handled by delegates:\n%s\n"+
+						"You have %d in-progress team task(s) being handled by team members:\n%s\n"+
 							"Their results will arrive automatically. Do NOT cancel, re-create, or re-spawn these tasks.",
 						len(inProgress), strings.Join(inProgress, "\n")))
 				}
@@ -379,9 +422,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	// Team task orphan detection: track team_tasks create vs spawn calls.
 	// If the LLM creates tasks but forgets to spawn, inject a reminder.
-	var teamTaskCreates int  // count of team_tasks action=create calls
-	var teamTaskSpawns int   // count of spawn calls with team_task_id
-	var teamTaskRetried bool // only retry once to prevent infinite loops
+	var teamTaskCreates int // count of team_tasks action=create calls
+	var teamTaskSpawns int  // count of spawn calls with team_task_id
 
 	// Inject retry hook so channels can update placeholder on LLM retries.
 	ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, err error) {
@@ -446,7 +488,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			Tools:    toolDefs,
 			Model:    l.model,
 			Options: map[string]any{
-				providers.OptMaxTokens:   8192,
+				providers.OptMaxTokens:   l.effectiveMaxTokens(),
 				providers.OptTemperature: 0.7,
 				providers.OptSessionKey:  req.SessionKey,
 				providers.OptAgentID:     l.agentUUID.String(),
@@ -565,39 +607,23 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			}
 		}
 
+		// Output truncated (max_tokens hit). Tool call args are likely incomplete.
+		// Inject a system hint so the model can retry with shorter output.
+		if resp.FinishReason == "length" && len(resp.ToolCalls) > 0 {
+			slog.Warn("output truncated (max_tokens), tool calls may have incomplete args",
+				"agent", l.id, "iteration", iteration, "max_tokens", l.effectiveMaxTokens())
+			messages = append(messages,
+				providers.Message{Role: "assistant", Content: resp.Content},
+				providers.Message{
+					Role:    "user",
+					Content: "[System] Your output was truncated because it exceeded max_tokens. Your tool call arguments were incomplete. Please retry with shorter content — split large writes into multiple smaller calls, or reduce the amount of text.",
+				},
+			)
+			continue
+		}
+
 		// No tool calls → done
 		if len(resp.ToolCalls) == 0 {
-			// Guard: detect orphaned team_tasks create (created but not spawned) — v2 only.
-			// Query DB for actual pending tasks instead of just counting tool calls,
-			// because auto-created tasks (from spawn without team_task_id) bypass the counter.
-			if teamTaskCreates > teamTaskSpawns && !teamTaskRetried {
-				if l.teamStore != nil && l.agentUUID != uuid.Nil {
-					if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil && tools.IsTeamV2(team) {
-						if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "", req.UserID, "", ""); err == nil {
-							var pendingIDs []string
-							for _, t := range tasks {
-								if t.Status == store.TeamTaskStatusPending {
-									pendingIDs = append(pendingIDs, t.ID.String())
-								}
-							}
-							if len(pendingIDs) > 0 {
-								teamTaskRetried = true
-								slog.Warn("team task orphan detected",
-									"agent", l.id, "pending", len(pendingIDs),
-									"creates", teamTaskCreates, "spawns", teamTaskSpawns)
-								messages = append(messages,
-									providers.Message{Role: "assistant", Content: resp.Content},
-									providers.Message{
-										Role:    "user",
-										Content: fmt.Sprintf("[System] You have %d pending task(s) that were never delegated: %s. Call `spawn` for each, or cancel with team_tasks action=cancel.", len(pendingIDs), strings.Join(pendingIDs, ", ")),
-									},
-								)
-								continue
-							}
-						}
-					}
-				}
-			}
 			// Mid-run injection (Point B): drain all buffered user follow-up messages
 			// before exiting. If found, save current assistant response and continue
 			// the loop so the LLM can respond to the injected messages.
@@ -1055,6 +1081,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		}
 		mediaResults = append(mediaResults, MediaResult{Path: mf.Path, ContentType: ct})
 	}
+
+	// Deduplicate media by path — prevents the same image being sent twice
+	// (e.g. once via ForwardMedia and again when the LLM reads the file).
+	mediaResults = deduplicateMedia(mediaResults)
 
 	return &RunResult{
 		Content:        finalContent,

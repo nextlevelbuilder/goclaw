@@ -154,7 +154,7 @@
     }
   },
   "fieldConfig": {
-    "token": { "label": "Bot Token" },
+    "token": { "label": "Bot Token", "help": "Từ @BotFather" },
     "bot_token": { "label": "Bot Token" },
     "app_token": { "label": "Token cấp ứng dụng", "help": "Token cấp ứng dụng với scope connections:write (bắt buộc cho Socket Mode)" },
     "user_token": { "label": "Token người dùng (Tùy chọn)", "help": "Tùy chọn: Token OAuth người dùng cho danh tính bot tùy chỉnh. Để trống để dùng danh tính bot mặc định." },
@@ -190,7 +190,10 @@
     "group_allow_from": { "label": "Người dùng nhóm được phép", "help": "Danh sách cho phép riêng cho người gửi nhóm" },
     "native_stream": { "label": "Stream gốc (Agents & AI Apps)", "help": "Dùng API ChatStreamer của Slack cho stream gốc. Quay về chỉnh sửa tại chỗ nếu không khả dụng." },
     "debounce_delay": { "label": "Độ trễ debounce (ms)", "help": "Mili giây chờ trước khi gửi tin nhắn nhanh. Đặt 0 để tắt." },
-    "thread_ttl": { "label": "TTL tham gia luồng (giờ)", "help": "Số giờ trước khi bot ngừng tự động trả lời trong các luồng đã tham gia. 0 = luôn yêu cầu @đề cập." }
+    "thread_ttl": { "label": "TTL tham gia luồng (giờ)", "help": "Số giờ trước khi bot ngừng tự động trả lời trong các luồng đã tham gia. 0 = luôn yêu cầu @đề cập." },
+    "skills": { "label": "Bộ lọc skill", "help": "Giới hạn skill khả dụng cho nhóm này" },
+    "tools": { "label": "Danh sách công cụ được phép", "help": "Giới hạn công cụ agent có thể dùng trong nhóm này" },
+    "system_prompt": { "label": "Prompt hệ thống" }
   },
   "fieldOptions": {
     "block_reply": {
@@ -267,6 +270,12 @@
       "inherit": "Kế thừa (mặc định channel)",
       "yes": "Có",
       "no": "Không"
+    }
+  },
+  "wizard": {
+    "zaloPersonal": {
+      "createLabel": "Tạo & Xác thực",
+      "formBanner": "Sau khi tạo, bạn sẽ xác thực bằng mã QR và cấu hình người dùng được phép."
     }
   },
   "toast": {

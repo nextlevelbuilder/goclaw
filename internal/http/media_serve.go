@@ -29,16 +29,13 @@ func (h *MediaServeHandler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *MediaServeHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			provided := extractBearerToken(r)
-			if provided == "" {
-				provided = r.URL.Query().Get("token")
-			}
-			if provided != h.token {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
+		// Accept token via Bearer header or ?token= query param (for <img src>).
+		provided := extractBearerToken(r)
+		if provided == "" {
+			provided = r.URL.Query().Get("token")
+		}
+		if !requireAuthBearer(h.token, "", provided, w, r) {
+			return
 		}
 		next(w, r)
 	}

@@ -62,6 +62,7 @@ type TraceData struct {
 	Error             string          `json:"error,omitempty"`
 	Metadata          json.RawMessage `json:"metadata,omitempty"`
 	Tags              []string        `json:"tags,omitempty"`
+	TeamID            *uuid.UUID      `json:"team_id,omitempty"`
 	CreatedAt         time.Time       `json:"created_at"`
 }
 
@@ -91,6 +92,7 @@ type SpanData struct {
 	InputPreview  string          `json:"input_preview,omitempty"`
 	OutputPreview string          `json:"output_preview,omitempty"`
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
+	TeamID        *uuid.UUID      `json:"team_id,omitempty"`
 	CreatedAt     time.Time       `json:"created_at"`
 }
 

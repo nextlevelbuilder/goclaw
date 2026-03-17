@@ -154,7 +154,7 @@
     }
   },
   "fieldConfig": {
-    "token": { "label": "Bot Token" },
+    "token": { "label": "Bot Token", "help": "来自 @BotFather" },
     "bot_token": { "label": "Bot Token" },
     "app_token": { "label": "应用级Token", "help": "具有 connections:write 权限的应用级Token（Socket Mode 必需）" },
     "user_token": { "label": "用户Token（可选）", "help": "可选：用于自定义Bot身份的用户OAuth Token。留空使用默认Bot身份。" },
@@ -190,7 +190,10 @@
     "group_allow_from": { "label": "群组允许的用户", "help": "群组发送者的单独白名单" },
     "native_stream": { "label": "原生流式传输 (Agents & AI Apps)", "help": "使用 Slack 的 ChatStreamer API 进行原生流式传输。不可用时回退到原地编辑。" },
     "debounce_delay": { "label": "防抖延迟 (ms)", "help": "发送快速消息前等待的毫秒数。设为 0 禁用。" },
-    "thread_ttl": { "label": "线程参与 TTL（小时）", "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。" }
+    "thread_ttl": { "label": "线程参与 TTL（小时）", "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。" },
+    "skills": { "label": "Skill过滤", "help": "限制此群组可用的Skill" },
+    "tools": { "label": "工具白名单", "help": "限制Agent在此群组中可使用的工具" },
+    "system_prompt": { "label": "系统提示词" }
   },
   "fieldOptions": {
     "block_reply": {
@@ -267,6 +270,12 @@
       "inherit": "继承（Channel默认）",
       "yes": "是",
       "no": "否"
+    }
+  },
+  "wizard": {
+    "zaloPersonal": {
+      "createLabel": "创建并认证",
+      "formBanner": "创建后，您将通过二维码进行认证并配置允许的用户。"
     }
   },
   "toast": {

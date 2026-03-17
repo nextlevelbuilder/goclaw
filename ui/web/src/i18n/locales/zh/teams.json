@@ -7,6 +7,8 @@
   "emptyDescription": "创建您的第一个Team以开始使用。",
   "noMatchTitle": "未找到匹配Team",
   "noMatchDescription": "请尝试其他搜索词。",
+  "viewCard": "卡片视图",
+  "viewList": "列表视图",
   "scope": {
     "all": "所有范围",
     "label": "范围"
@@ -20,6 +22,7 @@
     "lead": "负责人",
     "memberCount": "{{count}} 位成员",
     "memberCountPlural": "{{count}} 位成员",
+    "more": "更多",
     "deleteDescription": "确定要删除「{{name}}」吗？所有成员、任务和配置将被永久移除。",
     "tabs": {
       "tasks": "任务",
@@ -64,6 +67,8 @@
     "unassigned": "未分配",
     "filters": {
       "active": "进行中",
+      "pending": "待处理",
+      "inProgress": "处理中",
       "inReview": "待审核",
       "completed": "已完成",
       "all": "全部"
@@ -109,6 +114,8 @@
       "followupNext": "下次提醒：",
       "followupDone": "已全部提醒"
     },
+    "delete": "删除",
+    "deleteConfirm": "删除此任务？此操作无法撤消。",
     "badges": {
       "awaitingReply": "等待回复"
     }
@@ -168,8 +175,19 @@
     "deniedChannels": "拒绝的Channel",
     "deniedChannelsHint": "来自这些Channel的消息始终被阻止。",
     "notifications": "通知",
-    "progressNotifications": "进度通知",
-    "progressNotificationsHint": "在异步委托期间，定期向对话发送「您的Team正在处理中...」消息。",
+    "notifyDispatched": "任务分派",
+    "notifyDispatchedHint": "任务分配给成员时通知。",
+    "notifyProgress": "任务进度",
+    "notifyProgressHint": "成员更新进度时通知。",
+    "notifyFailed": "任务失败",
+    "notifyFailedHint": "任务失败时通知。",
+    "notifyMode": "发送方式",
+    "notifyModeHint": "通知如何发送到聊天频道。",
+    "notifyModeDirect": "直接发送",
+    "notifyModeDirectDesc": "直接将通知发送到聊天频道。快速，无需AI处理。",
+    "notifyModeLeader": "通过Leader",
+    "notifyModeLeaderDesc": "Leader代理在发送前自然地重新表述更新内容。",
+    "notifyModeLeaderWarning": "Leader模式使用AI重新表述消息（消耗token，可能更慢）。",
     "searchUsers": "搜索用户...",
     "selectChannel": "选择Channel...",
     "escalationPolicy": "升级策略",
@@ -191,12 +209,12 @@
     "followupMaxReminders": "最大提醒次数",
     "followupMaxRemindersHint": "每个任务的最大提醒次数。0 = 无限制（持续提醒直到用户回复）。",
     "workspace": "工作区",
-    "workspaceScope": "工作区共享",
-    "workspaceScopeHint": "控制代理如何访问团队工作区中的文件。",
+    "workspaceScope": "工作区范围",
+    "workspaceScopeHint": "控制团队工作区文件的组织方式。",
     "workspaceScopeIsolated": "隔离",
-    "workspaceScopeIsolatedDesc": "每个代理拥有独立的工作区。无法读取或写入其他代理的文件。",
+    "workspaceScopeIsolatedDesc": "每个对话有独立的工作区文件夹。一个聊天中的文件在另一个聊天中不可见。",
     "workspaceScopeShared": "共享",
-    "workspaceScopeSharedDesc": "所有代理共享同一个工作区。可以读取和写入彼此的文件。",
+    "workspaceScopeSharedDesc": "所有对话共享一个工作区文件夹。在任何聊天中创建的文件对所有人可见。",
     "teamVersion": "团队版本",
     "versionBasic": "基础版",
     "versionAdvanced": "高级版",
@@ -224,6 +242,7 @@
       "autoRecoveryDesc": "卡住的任务在超时后自动重置",
       "escalationPolicy": "升级策略",
       "escalationPolicyDesc": "控制代理可以自主执行的操作",
+      "comingSoon": "即将推出",
       "downgradeNote": "降级是安全的 — V2数据会保留但隐藏。",
       "betaNote": "V2目前处于Beta阶段。",
       "gotIt": "知道了"
@@ -261,8 +280,30 @@
     "failedAddMember": "添加成员失败",
     "failedRemoveMember": "移除成员失败",
     "taskCreated": "任务已创建",
+    "taskDeleted": "任务已删除",
     "taskAssigned": "任务已分配",
     "failedCreateTask": "创建任务失败",
+    "failedDeleteTask": "删除任务失败",
     "failedAssignTask": "分配任务失败"
+  },
+  "board": {
+    "kanban": "看板",
+    "list": "列表",
+    "groupBy": "分组",
+    "groupByStatus": "状态",
+    "groupByOwner": "负责人",
+    "groupByType": "类型",
+    "running": "运行中",
+    "locked": "代理正在运行",
+    "emptyColumn": "暂无任务",
+    "unassigned": "未分配",
+    "createViaChat": "与团队代理聊天以创建任务"
+  },
+  "sidebar": {
+    "members": "成员",
+    "workspace": "工作区",
+    "delegations": "委派",
+    "settings": "设置",
+    "addMember": "添加成员"
   }
 }

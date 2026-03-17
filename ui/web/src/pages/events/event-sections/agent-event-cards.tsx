@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import type { TeamEventEntry } from "@/stores/use-team-event-store";
 import type { EnrichedAgentEventPayload } from "@/types/team-events";
@@ -48,6 +49,7 @@ function RunEventCard({ p, resolveAgent }: { p: EnrichedAgentEventPayload; resol
 
 /** tool.call / tool.result */
 function ToolEventCard({ p, resolveAgent }: { p: EnrichedAgentEventPayload; resolveAgent: Props["resolveAgent"] }) {
+  const { t } = useTranslation("events");
   const isResult = p.type === "tool.result";
   const toolName = p.payload?.name;
   const isError = isResult && p.payload?.is_error;
@@ -72,7 +74,7 @@ function ToolEventCard({ p, resolveAgent }: { p: EnrichedAgentEventPayload; reso
             <span className="shrink-0 text-muted-foreground">&rarr;</span>
             <span className="truncate font-medium">{agentName}</span>
             <Badge variant={isError ? "destructive" : isSkill ? "warning" : "success"} className="shrink-0 text-xs">
-              {isError ? "error" : isSkill ? "activated" : "ok"}
+              {isError ? t("toolBadge.error") : isSkill ? t("toolBadge.activated") : t("toolBadge.ok")}
             </Badge>
             {p.runKind && <RunKindBadge kind={p.runKind} />}
           </>
@@ -100,6 +102,7 @@ function ToolEventCard({ p, resolveAgent }: { p: EnrichedAgentEventPayload; reso
 
 /** Render tool arguments as structured key-value pairs */
 function ToolArgs({ args }: { args: Record<string, unknown> }) {
+  const { t } = useTranslation("events");
   const entries = Object.entries(args);
   if (entries.length === 0) return null;
 
@@ -118,7 +121,7 @@ function ToolArgs({ args }: { args: Record<string, unknown> }) {
         </div>
       ))}
       {remaining > 0 && (
-        <span className="text-muted-foreground">...{remaining} more</span>
+        <span className="text-muted-foreground">{t("moreArgs", { count: remaining })}</span>
       )}
     </div>
   );
@@ -134,6 +137,7 @@ function ContextRow({
   resolveAgent: Props["resolveAgent"];
   showCallId?: boolean;
 }) {
+  const { t } = useTranslation("events");
   const hasContext = p.runId || p.delegationId || p.parentAgentId || p.teamTaskId || (showCallId && p.payload?.id);
   if (!hasContext) return null;
 
@@ -142,7 +146,7 @@ function ContextRow({
       {p.delegationId && <PillId label="deleg" id={p.delegationId} />}
       {p.parentAgentId && (
         <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5">
-          parent: <span className="font-medium text-foreground">{resolveAgent(p.parentAgentId)}</span>
+          {t("parentLabel")} <span className="font-medium text-foreground">{resolveAgent(p.parentAgentId)}</span>
         </span>
       )}
       {p.teamTaskId && <PillId label="task" id={p.teamTaskId} />}

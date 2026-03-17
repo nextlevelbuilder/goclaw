@@ -29,7 +29,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 
 	// Phase 2: Pairing (store created externally, shared with channel manager).
 	// OnApprove callback is set later by the caller after channel manager is created.
-	pairingMethods := methods.NewPairingMethods(pairingStore, msgBus)
+	pairingMethods := methods.NewPairingMethods(pairingStore, msgBus, server.RateLimiter())
 	pairingMethods.Register(router)
 
 	// Phase 2: Usage (queries SessionStore for real token data)

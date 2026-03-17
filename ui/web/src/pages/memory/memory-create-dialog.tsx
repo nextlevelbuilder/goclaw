@@ -101,7 +101,7 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
           <DialogTitle>{t("createDialog.title")}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2 px-1 -mx-1 overflow-y-auto min-h-0">
+        <div className="grid gap-4 py-2 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           {/* Agent selector */}
           <div className="grid gap-1.5">
             <Label htmlFor="mc-agent">{t("createDialog.agentId")}</Label>

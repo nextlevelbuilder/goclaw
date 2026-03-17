@@ -139,7 +139,8 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 }
 
 // Exec runs a command inside the container.
-func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir string) (*ExecResult, error) {
+// Optional ExecOption (e.g. WithEnv) injects per-call env vars via docker exec -e.
+func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir string, opts ...ExecOption) (*ExecResult, error) {
 	s.mu.Lock()
 	s.lastUsed = time.Now()
 	s.mu.Unlock()
@@ -152,7 +153,13 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	o := ApplyExecOpts(opts)
+
 	args := []string{"exec"}
+	// Inject env vars as -e flags before containerID (credentialed exec)
+	for k, v := range o.Env {
+		args = append(args, "-e", k+"="+v)
+	}
 	if workDir != "" {
 		args = append(args, "-w", workDir)
 	}

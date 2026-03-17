@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, LayoutGrid, List } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchInput } from "@/components/shared/search-input";
@@ -9,9 +9,11 @@ import { Pagination } from "@/components/shared/pagination";
 import { CardSkeleton } from "@/components/shared/loading-skeleton";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { Button } from "@/components/ui/button";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useTeams } from "./hooks/use-teams";
 import { TeamCard } from "./team-card";
+import { TeamListRow } from "./team-list-row";
 import { TeamCreateDialog } from "./team-create-dialog";
 import { TeamDetailPage } from "./team-detail-page";
 import { usePagination } from "@/hooks/use-pagination";
@@ -25,6 +27,7 @@ export function TeamsPage() {
   const showSkeleton = useDeferredLoading(loading && teams.length === 0);
 
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
@@ -66,13 +69,45 @@ export function TeamsPage() {
         }
       />
 
-      <div className="mt-4">
+      {/* Toolbar: search + view toggle */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
         <SearchInput
           value={search}
           onChange={setSearch}
           placeholder={t("searchPlaceholder")}
           className="max-w-sm"
         />
+
+        <TooltipProvider>
+          <div className="ml-auto flex items-center gap-0.5 rounded-md border p-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={viewMode === "card" ? "default" : "ghost"}
+                  size="xs"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setViewMode("card")}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("viewCard")}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="xs"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setViewMode("list")}
+                >
+                  <List className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t("viewList")}</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
 
       <div className="mt-6">
@@ -90,16 +125,31 @@ export function TeamsPage() {
           />
         ) : (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {pageItems.map((team) => (
-                <TeamCard
-                  key={team.id}
-                  team={team}
-                  onClick={() => navigate(`/teams/${team.id}`)}
-                  onDelete={() => setDeleteTarget({ id: team.id, name: team.name })}
-                />
-              ))}
-            </div>
+            <TooltipProvider>
+              {viewMode === "card" ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {pageItems.map((team) => (
+                    <TeamCard
+                      key={team.id}
+                      team={team}
+                      onClick={() => navigate(`/teams/${team.id}`)}
+                      onDelete={() => setDeleteTarget({ id: team.id, name: team.name })}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {pageItems.map((team) => (
+                    <TeamListRow
+                      key={team.id}
+                      team={team}
+                      onClick={() => navigate(`/teams/${team.id}`)}
+                      onDelete={() => setDeleteTarget({ id: team.id, name: team.name })}
+                    />
+                  ))}
+                </div>
+              )}
+            </TooltipProvider>
             <div className="mt-4">
               <Pagination
                 page={pagination.page}

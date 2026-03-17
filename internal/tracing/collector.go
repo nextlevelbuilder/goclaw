@@ -83,6 +83,14 @@ func NewCollector(ts store.TracingStore) *Collector {
 // Verbose returns true if verbose tracing is enabled (full LLM input logging).
 func (c *Collector) Verbose() bool { return c.verbose }
 
+// PreviewMaxLen returns the max preview length: 200K when verbose, 500 otherwise.
+func (c *Collector) PreviewMaxLen() int {
+	if c.verbose {
+		return 200_000
+	}
+	return previewMaxLen
+}
+
 // SetExporter attaches an external span exporter (e.g. OpenTelemetry OTLP).
 // When set, spans are exported to the external backend during each flush cycle.
 func (c *Collector) SetExporter(exp SpanExporter) {
@@ -177,7 +185,7 @@ func (c *Collector) FinishTrace(ctx context.Context, traceID uuid.UUID, status s
 		updates["error"] = errMsg
 	}
 	if outputPreview != "" {
-		updates["output_preview"] = truncatePreview(outputPreview)
+		updates["output_preview"] = c.truncatePreviewStr(outputPreview)
 	}
 	if err := c.store.UpdateTrace(ctx, traceID, updates); err != nil {
 		slog.Warn("tracing: failed to finish trace", "trace_id", traceID, "error", err)
@@ -288,15 +296,15 @@ doneUpdates:
 	}
 }
 
-// truncatePreview sanitizes and truncates a string to previewMaxLen bytes.
-func truncatePreview(s string) string {
+// truncatePreviewStr sanitizes and truncates a string based on verbose mode.
+func (c *Collector) truncatePreviewStr(s string) string {
+	limit := c.PreviewMaxLen()
 	s = strings.ToValidUTF8(s, "")
-	if len(s) <= previewMaxLen {
+	if len(s) <= limit {
 		return s
 	}
-	maxLen := previewMaxLen
-	for maxLen > 0 && !utf8.RuneStart(s[maxLen]) {
-		maxLen--
+	for limit > 0 && !utf8.RuneStart(s[limit]) {
+		limit--
 	}
-	return s[:maxLen] + "..."
+	return s[:limit] + "..."
 }

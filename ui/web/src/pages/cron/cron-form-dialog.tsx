@@ -72,7 +72,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
         <DialogHeader>
           <DialogTitle>{t("create.title")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 px-0.5 -mx-0.5 overflow-y-auto min-h-0">
+        <div className="space-y-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           <div className="space-y-2">
             <Label>{t("create.name")}</Label>
             <Input value={name} onChange={(e) => setName(slugify(e.target.value))} placeholder={t("create.namePlaceholder")} />

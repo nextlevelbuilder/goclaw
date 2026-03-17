@@ -16,6 +16,7 @@ const (
 	codeAlphabet         = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 	codeLength           = 8
 	codeTTL              = 60 * time.Minute
+	pairedDeviceTTL      = 30 * 24 * time.Hour // 30 days
 	maxPendingPerAccount = 3
 )
 
@@ -90,12 +91,13 @@ func (s *PGPairingStore) ApprovePairing(code, approvedBy string) (*store.PairedD
 	// Remove from pending
 	s.db.Exec("DELETE FROM pairing_requests WHERE id = $1", reqID)
 
-	// Add to paired
+	// Add to paired (with expiry for defense-in-depth)
 	now := time.Now()
+	expiresAt := now.Add(pairedDeviceTTL)
 	_, err = s.db.Exec(
-		`INSERT INTO paired_devices (id, sender_id, channel, chat_id, paired_by, paired_at, metadata)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		uuid.Must(uuid.NewV7()), senderID, channel, chatID, approvedBy, now, metaJSON,
+		`INSERT INTO paired_devices (id, sender_id, channel, chat_id, paired_by, paired_at, metadata, expires_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		uuid.Must(uuid.NewV7()), senderID, channel, chatID, approvedBy, now, metaJSON, expiresAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create paired device: %w", err)
@@ -142,7 +144,10 @@ func (s *PGPairingStore) RevokePairing(senderID, channel string) error {
 
 func (s *PGPairingStore) IsPaired(senderID, channel string) (bool, error) {
 	var count int64
-	err := s.db.QueryRow("SELECT COUNT(*) FROM paired_devices WHERE sender_id = $1 AND channel = $2", senderID, channel).Scan(&count)
+	err := s.db.QueryRow(
+		"SELECT COUNT(*) FROM paired_devices WHERE sender_id = $1 AND channel = $2 AND (expires_at IS NULL OR expires_at > NOW())",
+		senderID, channel,
+	).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("pairing check query: %w", err)
 	}
@@ -182,6 +187,9 @@ func (s *PGPairingStore) ListPending() []store.PairingRequestData {
 }
 
 func (s *PGPairingStore) ListPaired() []store.PairedDeviceData {
+	// Prune expired paired devices
+	s.db.Exec("DELETE FROM paired_devices WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+
 	rows, err := s.db.Query("SELECT sender_id, channel, chat_id, paired_by, paired_at, COALESCE(metadata, '{}') FROM paired_devices ORDER BY paired_at DESC")
 	if err != nil {
 		return nil

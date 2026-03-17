@@ -265,13 +265,14 @@ func (s *PGSessionStore) Save(key string) error {
 			memory_flush_compaction_count = $9, memory_flush_at = $10,
 			label = $11, spawned_by = $12, spawn_depth = $13,
 			agent_id = $14, user_id = $15, metadata = $16, updated_at = $17,
-			full_messages = $19
-		 WHERE session_key = $18`,
+			team_id = $18, full_messages = $20
+		 WHERE session_key = $19`,
 		msgsJSON, nilStr(snapshot.Summary), nilStr(snapshot.Model), nilStr(snapshot.Provider), nilStr(snapshot.Channel),
 		snapshot.InputTokens, snapshot.OutputTokens, snapshot.CompactionCount,
 		snapshot.MemoryFlushCompactionCount, snapshot.MemoryFlushAt,
 		nilStr(snapshot.Label), nilStr(snapshot.SpawnedBy), snapshot.SpawnDepth,
 		nilSessionUUID(snapshot.AgentUUID), nilStr(snapshot.UserID), metaJSON, snapshot.Updated,
+		snapshot.TeamID,
 		key,
 		fullMsgsJSON,
 	)
@@ -353,7 +354,7 @@ func (s *PGSessionStore) loadFromDB(key string) *store.SessionData {
 	var sessionKey string
 	var msgsJSON []byte
 	var summary, model, provider, channel, label, spawnedBy, userID *string
-	var agentID *uuid.UUID
+	var agentID, teamID *uuid.UUID
 	var inputTokens, outputTokens int64
 	var compactionCount, memoryFlushCompactionCount, spawnDepth int
 	var memoryFlushAt int64
@@ -368,13 +369,14 @@ func (s *PGSessionStore) loadFromDB(key string) *store.SessionData {
 		 memory_flush_compaction_count, memory_flush_at,
 		 label, spawned_by, spawn_depth, agent_id, user_id,
 		 COALESCE(metadata, '{}'), created_at, updated_at,
-		 COALESCE(full_messages, '[]'), COALESCE(agent_session_num, 0)
+		 team_id, COALESCE(full_messages, '[]'), COALESCE(agent_session_num, 0)
 		 FROM sessions WHERE session_key = $1`, key,
 	).Scan(&sessionKey, &msgsJSON, &summary, &model, &provider, &channel,
 		&inputTokens, &outputTokens, &compactionCount,
 		&memoryFlushCompactionCount, &memoryFlushAt,
 		&label, &spawnedBy, &spawnDepth, &agentID, &userID,
-		&metaJSON, &createdAt, &updatedAt, &fullMsgsJSON, &numericID)
+		&metaJSON, &createdAt, &updatedAt,
+		&teamID, &fullMsgsJSON, &numericID)
 	if err != nil {
 		return nil
 	}
@@ -401,6 +403,7 @@ func (s *PGSessionStore) loadFromDB(key string) *store.SessionData {
 		Updated:                    updatedAt,
 		AgentUUID:                  derefUUID(agentID),
 		UserID:                     derefStr(userID),
+		TeamID:                     teamID,
 		Model:                      derefStr(model),
 		Provider:                   derefStr(provider),
 		Channel:                    derefStr(channel),

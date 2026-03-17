@@ -52,6 +52,7 @@ func (m *TeamsMethods) RegisterTasks(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsTaskComments, m.handleTaskComments)
 	router.Register(protocol.MethodTeamsTaskEvents, m.handleTaskEvents)
 	router.Register(protocol.MethodTeamsTaskCreate, m.handleTaskCreate)
+	router.Register(protocol.MethodTeamsTaskDelete, m.handleTaskDelete)
 	router.Register(protocol.MethodTeamsTaskAssign, m.handleTaskAssign)
 }
 
@@ -146,16 +147,6 @@ func (m *TeamsMethods) handleTaskApprove(ctx context.Context, client *gateway.Cl
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "approved",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", taskID, "event", "approved", "error", err)
-	}
-
 	// Add optional comment.
 	if params.Comment != "" {
 		if err := m.teamStore.AddTaskComment(ctx, &store.TeamTaskCommentData{
@@ -177,6 +168,8 @@ func (m *TeamsMethods) handleTaskApprove(ctx context.Context, client *gateway.Cl
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 	}
 }
@@ -222,16 +215,6 @@ func (m *TeamsMethods) handleTaskReject(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "rejected",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", taskID, "event", "rejected", "error", err)
-	}
-
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
@@ -243,6 +226,8 @@ func (m *TeamsMethods) handleTaskReject(ctx context.Context, client *gateway.Cli
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 	}
 }
@@ -471,16 +456,6 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    task.ID,
-		EventType: "created",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", task.ID, "event", "created", "error", err)
-	}
-
 	// Auto-assign: use explicit assignTo, otherwise fall back to team lead.
 	assignTo := params.AssignTo
 	if assignTo == "" {
@@ -499,15 +474,6 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 				task.Status = store.TeamTaskStatusInProgress
 				task.OwnerAgentID = &agentID
 				autoAssignedAgentID = agentID
-				if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-					TaskID:    task.ID,
-					EventType: "assigned",
-					ActorType: "human",
-					ActorID:   client.UserID(),
-					Data:      json.RawMessage(`{"agent_id":"` + agentID.String() + `"}`),
-				}); err != nil {
-					slog.Warn("audit.record_failed", "task_id", task.ID, "event", "assigned", "error", err)
-				}
 			}
 		}
 	}
@@ -522,10 +488,24 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 
-		// Dispatch to assigned agent if auto-assigned during creation.
 		if autoAssignedAgentID != uuid.Nil {
+			m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+				TeamID:        teamID.String(),
+				TaskID:        task.ID.String(),
+				Status:        store.TeamTaskStatusInProgress,
+				OwnerAgentKey: autoAssignedAgentID.String(),
+				UserID:        client.UserID(),
+				Channel:       "dashboard",
+				Timestamp:     taskNowUTC(),
+				ActorType:     "human",
+				ActorID:       client.UserID(),
+			}))
+
+			// Dispatch to assigned agent.
 			m.dispatchTaskToAgent(ctx, task, task.ID, teamID, autoAssignedAgentID, client.UserID())
 		}
 	}
@@ -584,17 +564,6 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Record audit event.
-	if err := m.teamStore.RecordTaskEvent(ctx, &store.TeamTaskEventData{
-		TaskID:    taskID,
-		EventType: "assigned",
-		ActorType: "human",
-		ActorID:   client.UserID(),
-		Data:      json.RawMessage(`{"agent_id":"` + agentID.String() + `"}`),
-	}); err != nil {
-		slog.Warn("audit.record_failed", "task_id", taskID, "event", "assigned", "error", err)
-	}
-
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
@@ -605,11 +574,80 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
 		}))
 
 		// Dispatch task to the assigned agent via message bus so the consumer
 		// routes it through the agent loop (same pattern as team_message).
 		m.dispatchTaskToAgent(ctx, task, taskID, teamID, agentID, client.UserID())
+	}
+}
+
+// --- Task Delete (hard-delete terminal-status tasks) ---
+
+type taskDeleteParams struct {
+	TeamID string `json:"teamId"`
+	TaskID string `json:"taskId"`
+}
+
+func (m *TeamsMethods) handleTaskDelete(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params taskDeleteParams
+	locale, ok := m.parseTaskParams(ctx, client, req, &params)
+	if !ok {
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "teamId")))
+		return
+	}
+	taskID, err := uuid.Parse(params.TaskID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "taskId")))
+		return
+	}
+
+	// Validate task belongs to team (prevent IDOR).
+	task, err := m.teamStore.GetTask(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, store.ErrTaskNotFound) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		} else {
+			slog.Warn("teams.tasks.delete get failed", "task_id", taskID, "error", err)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		}
+		return
+	}
+	if task.TeamID != teamID {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		return
+	}
+
+	if err := m.teamStore.DeleteTask(ctx, taskID, teamID); err != nil {
+		if errors.Is(err, store.ErrTaskNotFound) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "task is not in a deletable state"))
+		} else {
+			slog.Warn("teams.tasks.delete failed", "task_id", taskID, "error", err)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		}
+		return
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
+
+	if m.msgBus != nil {
+		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskDeleted, protocol.TeamTaskEventPayload{
+			TeamID:    teamID.String(),
+			TaskID:    taskID.String(),
+			Status:    task.Status,
+			UserID:    client.UserID(),
+			Channel:   "dashboard",
+			Timestamp: taskNowUTC(),
+			ActorType: "human",
+			ActorID:   client.UserID(),
+		}))
 	}
 }
 
@@ -624,26 +662,59 @@ func (m *TeamsMethods) dispatchTaskToAgent(ctx context.Context, task *store.Team
 	}
 
 	// Build task prompt for the agent.
-	content := fmt.Sprintf("[Assigned task #%d]: %s", task.TaskNumber, task.Subject)
+	content := fmt.Sprintf("[Assigned task #%d (id: %s)]: %s", task.TaskNumber, task.ID, task.Subject)
 	if task.Description != "" {
 		content += "\n\n" + task.Description
 	}
 
+	// Use the task's original channel/chat so completion announcements route
+	// back to the user's real channel (e.g. Telegram) instead of void "dashboard".
+	originChannel := task.Channel
+	if originChannel == "" {
+		originChannel = "dashboard"
+	}
+	fromAgent := "dashboard"
+	if team, err := m.teamStore.GetTeam(ctx, teamID); err == nil && team != nil {
+		if leadAg, err := m.agentStore.GetByID(ctx, team.LeadAgentID); err == nil {
+			fromAgent = leadAg.AgentKey
+		}
+	}
+
+	// Resolve peer kind from task metadata; fallback to "direct" for old tasks.
+	originPeerKind := "direct"
+	if task.Metadata != nil {
+		if pk, ok := task.Metadata["peer_kind"].(string); ok && pk != "" {
+			originPeerKind = pk
+		}
+	}
+
+	meta := map[string]string{
+		"origin_channel":   originChannel,
+		"origin_peer_kind": originPeerKind,
+		"origin_chat_id":   task.ChatID,
+		"from_agent":       fromAgent,
+		"to_agent":         ag.AgentKey,
+		"team_task_id":     taskID.String(),
+		"team_id":          teamID.String(),
+	}
+	// Pass team workspace and local key from task metadata.
+	if task.Metadata != nil {
+		if ws, _ := task.Metadata["team_workspace"].(string); ws != "" {
+			meta["team_workspace"] = ws
+		}
+		if lk, _ := task.Metadata["local_key"].(string); lk != "" {
+			meta["origin_local_key"] = lk
+		}
+	}
+
 	m.msgBus.PublishInbound(bus.InboundMessage{
 		Channel:  "system",
-		SenderID: fmt.Sprintf("teammate:dashboard"),
+		SenderID: "teammate:dashboard",
 		ChatID:   teamID.String(),
 		Content:  content,
 		UserID:   userID,
 		AgentID:  ag.AgentKey,
-		Metadata: map[string]string{
-			"origin_channel":   "dashboard",
-			"origin_peer_kind": "direct",
-			"from_agent":       "dashboard",
-			"to_agent":         ag.AgentKey,
-			"team_task_id":     taskID.String(),
-			"team_id":          teamID.String(),
-		},
+		Metadata: meta,
 	})
 	slog.Info("teams.tasks.dispatch: sent task to agent",
 		"task_id", taskID,

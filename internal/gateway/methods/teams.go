@@ -22,10 +22,11 @@ type TeamsMethods struct {
 	agentRouter *agent.Router        // for cache invalidation
 	msgBus      *bus.MessageBus      // for pub/sub cache invalidation
 	eventBus    bus.EventPublisher
+	dataDir     string // workspace data directory for resolving file paths
 }
 
-func NewTeamsMethods(teamStore store.TeamStore, agentStore store.AgentStore, linkStore store.AgentLinkStore, agentRouter *agent.Router, msgBus *bus.MessageBus, eventBus bus.EventPublisher) *TeamsMethods {
-	return &TeamsMethods{teamStore: teamStore, agentStore: agentStore, linkStore: linkStore, agentRouter: agentRouter, msgBus: msgBus, eventBus: eventBus}
+func NewTeamsMethods(teamStore store.TeamStore, agentStore store.AgentStore, linkStore store.AgentLinkStore, agentRouter *agent.Router, msgBus *bus.MessageBus, eventBus bus.EventPublisher, dataDir string) *TeamsMethods {
+	return &TeamsMethods{teamStore: teamStore, agentStore: agentStore, linkStore: linkStore, agentRouter: agentRouter, msgBus: msgBus, eventBus: eventBus, dataDir: dataDir}
 }
 
 // emitTeamCacheInvalidate broadcasts a cache invalidation event for team data.
@@ -55,6 +56,9 @@ func (m *TeamsMethods) Register(router *gateway.MethodRouter) {
 
 	// Workspace handlers
 	m.RegisterWorkspace(router)
+
+	// Events handlers
+	router.Register(protocol.MethodTeamsEventsList, m.handleEventsList)
 
 	// Task detail handlers
 	m.RegisterTasks(router)

@@ -34,17 +34,7 @@ func (h *MediaUploadHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *MediaUploadHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			provided := extractBearerToken(r)
-			if provided != h.token {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 func (h *MediaUploadHandler) handleUpload(w http.ResponseWriter, r *http.Request) {

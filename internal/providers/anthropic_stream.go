@@ -10,10 +10,7 @@ import (
 )
 
 func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
-	model := req.Model
-	if model == "" {
-		model = p.defaultModel
-	}
+	model := resolveAnthropicModel(req.Model, p.defaultModel)
 
 	body := p.buildRequestBody(model, req, true)
 

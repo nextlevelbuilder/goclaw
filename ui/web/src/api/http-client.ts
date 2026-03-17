@@ -7,6 +7,7 @@ export class HttpClient {
     private baseUrl: string,
     private getToken: () => string,
     private getUserId: () => string,
+    private getSenderID: () => string = () => "",
   ) {}
 
   async get<T>(path: string, params?: Record<string, string>): Promise<T> {
@@ -108,6 +109,8 @@ export class HttpClient {
     if (token) h["Authorization"] = `Bearer ${token}`;
     const userId = this.getUserId();
     if (userId) h["X-GoClaw-User-Id"] = userId;
+    const senderID = this.getSenderID();
+    if (senderID) h["X-GoClaw-Sender-Id"] = senderID;
     return h;
   }
 

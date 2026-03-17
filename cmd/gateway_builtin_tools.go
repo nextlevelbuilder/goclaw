@@ -96,8 +96,8 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Metadata: json.RawMessage(`{"config_hint":"Config → Cron"}`),
 		},
 
-		// subagents & delegation (unified spawn tool)
-		{Name: "spawn", DisplayName: "Spawn / Delegate", Description: "Spawn a subagent for background work or delegate a task to a linked agent", Category: "subagents", Enabled: true,
+		// subagents
+		{Name: "spawn", DisplayName: "Spawn", Description: "Spawn a subagent to handle a task in the background", Category: "subagents", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Agents Defaults"}`),
 		},
 
@@ -106,28 +106,11 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "use_skill", DisplayName: "Use Skill", Description: "Activate a skill to use its specialized capabilities (tracing marker)", Category: "skills", Enabled: true},
 		{Name: "publish_skill", DisplayName: "Publish Skill", Description: "Register a skill directory (created via skill-creator) in the system database, making it discoverable and grantable to agents", Category: "skills", Enabled: true},
 
-		// delegation
-		{Name: "delegate_search", DisplayName: "Delegate Search", Description: "Search for available delegation targets by keyword when there are too many linked agents to list", Category: "delegation", Enabled: true,
-			Requires: []string{"managed_mode", "agent_links"},
-		},
-		{Name: "evaluate_loop", DisplayName: "Evaluate Loop", Description: "Run a generate→evaluate→revise loop between two agents for quality-critical output", Category: "delegation", Enabled: true,
-			Requires: []string{"managed_mode", "agent_links"},
-		},
-		{Name: "handoff", DisplayName: "Handoff", Description: "Transfer the conversation to another agent — the user will talk directly to that agent", Category: "delegation", Enabled: false,
-			Requires: []string{"managed_mode", "agent_links"},
-		},
-
 		// teams
 		{Name: "team_tasks", DisplayName: "Team Tasks", Description: "View, create, update, and complete tasks on the team task board", Category: "teams", Enabled: true,
 			Requires: []string{"managed_mode", "teams"},
 		},
 		{Name: "team_message", DisplayName: "Team Message", Description: "Send a direct message or broadcast to teammates in the agent team", Category: "teams", Enabled: true,
-			Requires: []string{"managed_mode", "teams"},
-		},
-		{Name: "workspace_write", DisplayName: "Workspace Write", Description: "Write files to the team shared workspace visible to all team members", Category: "teams", Enabled: true,
-			Requires: []string{"managed_mode", "teams"},
-		},
-		{Name: "workspace_read", DisplayName: "Workspace Read", Description: "Read, list, delete, pin, and tag files in the team shared workspace", Category: "teams", Enabled: true,
 			Requires: []string{"managed_mode", "teams"},
 		},
 	}

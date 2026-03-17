@@ -18,7 +18,6 @@ import enChannels from "./locales/en/channels.json";
 import enProviders from "./locales/en/providers.json";
 import enTraces from "./locales/en/traces.json";
 import enEvents from "./locales/en/events.json";
-import enDelegations from "./locales/en/delegations.json";
 import enUsage from "./locales/en/usage.json";
 import enApprovals from "./locales/en/approvals.json";
 import enNodes from "./locales/en/nodes.json";
@@ -32,6 +31,8 @@ import enStorage from "./locales/en/storage.json";
 import enPendingMessages from "./locales/en/pending-messages.json";
 import enContacts from "./locales/en/contacts.json";
 import enActivity from "./locales/en/activity.json";
+import enApiKeys from "./locales/en/api-keys.json";
+import enCliCredentials from "./locales/en/cli-credentials.json";
 
 // --- VI namespaces ---
 import viCommon from "./locales/vi/common.json";
@@ -50,7 +51,6 @@ import viChannels from "./locales/vi/channels.json";
 import viProviders from "./locales/vi/providers.json";
 import viTraces from "./locales/vi/traces.json";
 import viEvents from "./locales/vi/events.json";
-import viDelegations from "./locales/vi/delegations.json";
 import viUsage from "./locales/vi/usage.json";
 import viApprovals from "./locales/vi/approvals.json";
 import viNodes from "./locales/vi/nodes.json";
@@ -64,6 +64,8 @@ import viStorage from "./locales/vi/storage.json";
 import viPendingMessages from "./locales/vi/pending-messages.json";
 import viContacts from "./locales/vi/contacts.json";
 import viActivity from "./locales/vi/activity.json";
+import viApiKeys from "./locales/vi/api-keys.json";
+import viCliCredentials from "./locales/vi/cli-credentials.json";
 
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
@@ -82,7 +84,6 @@ import zhChannels from "./locales/zh/channels.json";
 import zhProviders from "./locales/zh/providers.json";
 import zhTraces from "./locales/zh/traces.json";
 import zhEvents from "./locales/zh/events.json";
-import zhDelegations from "./locales/zh/delegations.json";
 import zhUsage from "./locales/zh/usage.json";
 import zhApprovals from "./locales/zh/approvals.json";
 import zhNodes from "./locales/zh/nodes.json";
@@ -96,6 +97,8 @@ import zhStorage from "./locales/zh/storage.json";
 import zhPendingMessages from "./locales/zh/pending-messages.json";
 import zhContacts from "./locales/zh/contacts.json";
 import zhActivity from "./locales/zh/activity.json";
+import zhApiKeys from "./locales/zh/api-keys.json";
+import zhCliCredentials from "./locales/zh/cli-credentials.json";
 
 const STORAGE_KEY = "goclaw:language";
 
@@ -111,9 +114,10 @@ function getInitialLanguage(): string {
 const ns = [
   "common", "sidebar", "topbar", "login", "overview", "chat",
   "agents", "teams", "sessions", "skills", "cron", "config",
-  "channels", "providers", "traces", "events", "delegations",
+  "channels", "providers", "traces", "events",
   "usage", "approvals", "nodes", "logs", "tools", "mcp", "tts",
-  "setup", "memory", "storage", "pending-messages", "contacts", "activity",
+  "setup", "memory", "storage", "pending-messages", "contacts", "activity", "api-keys",
+  "cli-credentials",
 ] as const;
 
 i18n.use(initReactI18next).init({
@@ -123,33 +127,36 @@ i18n.use(initReactI18next).init({
       overview: enOverview, chat: enChat, agents: enAgents, teams: enTeams,
       sessions: enSessions, skills: enSkills, cron: enCron, config: enConfig,
       channels: enChannels, providers: enProviders, traces: enTraces,
-      events: enEvents, delegations: enDelegations, usage: enUsage,
+      events: enEvents, usage: enUsage,
       approvals: enApprovals, nodes: enNodes, logs: enLogs, tools: enTools,
       mcp: enMcp, tts: enTts, setup: enSetup, memory: enMemory, storage: enStorage,
       "pending-messages": enPendingMessages,
-      contacts: enContacts, activity: enActivity,
+      contacts: enContacts, activity: enActivity, "api-keys": enApiKeys,
+      "cli-credentials": enCliCredentials,
     },
     vi: {
       common: viCommon, sidebar: viSidebar, topbar: viTopbar, login: viLogin,
       overview: viOverview, chat: viChat, agents: viAgents, teams: viTeams,
       sessions: viSessions, skills: viSkills, cron: viCron, config: viConfig,
       channels: viChannels, providers: viProviders, traces: viTraces,
-      events: viEvents, delegations: viDelegations, usage: viUsage,
+      events: viEvents, usage: viUsage,
       approvals: viApprovals, nodes: viNodes, logs: viLogs, tools: viTools,
       mcp: viMcp, tts: viTts, setup: viSetup, memory: viMemory, storage: viStorage,
       "pending-messages": viPendingMessages,
-      contacts: viContacts, activity: viActivity,
+      contacts: viContacts, activity: viActivity, "api-keys": viApiKeys,
+      "cli-credentials": viCliCredentials,
     },
     zh: {
       common: zhCommon, sidebar: zhSidebar, topbar: zhTopbar, login: zhLogin,
       overview: zhOverview, chat: zhChat, agents: zhAgents, teams: zhTeams,
       sessions: zhSessions, skills: zhSkills, cron: zhCron, config: zhConfig,
       channels: zhChannels, providers: zhProviders, traces: zhTraces,
-      events: zhEvents, delegations: zhDelegations, usage: zhUsage,
+      events: zhEvents, usage: zhUsage,
       approvals: zhApprovals, nodes: zhNodes, logs: zhLogs, tools: zhTools,
       mcp: zhMcp, tts: zhTts, setup: zhSetup, memory: zhMemory, storage: zhStorage,
       "pending-messages": zhPendingMessages,
-      contacts: zhContacts, activity: zhActivity,
+      contacts: zhContacts, activity: zhActivity, "api-keys": zhApiKeys,
+      "cli-credentials": zhCliCredentials,
     },
   },
   ns: [...ns],

@@ -46,6 +46,8 @@
   },
   "create": {
     "title": "Create Agent",
+    "emoji": "Icon",
+    "emojiHint": "Optional emoji icon",
     "displayName": "Display Name *",
     "displayNamePlaceholder": "My Agent",
     "agentKey": "Agent Key *",
@@ -120,7 +122,9 @@
     "active": "Active",
     "inactive": "Inactive",
     "summonFailed": "Summon Failed",
-    "defaultAgent": "Default Agent"
+    "defaultAgent": "Default Agent",
+    "emoji": "Icon",
+    "emojiHint": "Optional emoji icon"
   },
   "llmConfig": {
     "title": "LLM Configuration",
@@ -168,7 +172,8 @@
     "perUser": "per-user",
     "emptyFile": "empty",
     "estTokens": "Est {{tokens}} tokens",
-    "insertContact": "Search contact to insert..."
+    "insertContact": "Search contact to insert...",
+    "contentPlaceholder": "File content..."
   },
   "fileEditor": {
     "editWithAi": "Edit with AI",
@@ -190,7 +195,11 @@
     "user": "User",
     "revokeTitle": "Revoke Share",
     "revokeDesc": "Revoke access for user \"{{userId}}\"? They will no longer be able to use this agent.",
-    "revoke": "Revoke"
+    "revoke": "Revoke",
+    "role.user": "User",
+    "role.viewer": "Viewer",
+    "roleDesc.user": "Can use the agent and chat",
+    "roleDesc.viewer": "Read-only access"
   },
   "links": {
     "teamsHint": "Agent Links will be removed soon. Please use Agent Teams for multi-agent collaboration — it provides task tracking, shared workspace, and quality control in a simpler setup.",
@@ -259,7 +268,10 @@
     "continue": "Continue",
     "retry": "Retry",
     "retrying": "Retrying...",
-    "done": "done"
+    "done": "done",
+    "fileLabelSOUL": "Soul & Personality",
+    "fileLabelIDENTITY": "Identity Card",
+    "fileLabelUSER_PREDEFINED": "Default User Context"
   },
   "configGroups": {
     "core": "Core",
@@ -392,5 +404,14 @@
       "formatJson": "Format JSON",
       "invalidJson": "Invalid JSON syntax"
     }
+  },
+  "toast": {
+    "created": "Agent created",
+    "createFailed": "Failed to create agent",
+    "updated": "Agent updated",
+    "updateFailed": "Failed to update agent",
+    "deleted": "Agent deleted",
+    "deleteFailed": "Failed to delete agent",
+    "unknownError": "Unknown error"
   }
 }

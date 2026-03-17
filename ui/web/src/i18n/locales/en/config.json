@@ -291,5 +291,17 @@
   "channels.reasoningStream": "Show Reasoning",
   "channels.reasoningStreamHint": "Display AI thinking process as a separate message",
   "channels.reactionLevel": "Reaction Level",
-  "channels.connectionMode": "Connection Mode"
+  "channels.connectionMode": "Connection Mode",
+  "channels.reactionOff": "Off",
+  "channels.reactionMinimal": "Minimal",
+  "channels.reactionFull": "Full",
+  "channels.connectionWebsocket": "WebSocket",
+  "channels.connectionWebhook": "Webhook",
+
+  "bindings.any": "Any",
+
+  "toast": {
+    "saved": "Config saved",
+    "saveFailed": "Failed to save config"
+  }
 }

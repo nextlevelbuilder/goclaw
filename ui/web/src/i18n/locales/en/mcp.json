@@ -29,6 +29,7 @@
     "name": "Name *",
     "nameHint": "Lowercase letters, numbers, and hyphens only",
     "displayName": "Display Name",
+    "displayNamePlaceholder": "My MCP Server",
     "transport": "Transport *",
     "command": "Command *",
     "args": "Args (comma-separated)",

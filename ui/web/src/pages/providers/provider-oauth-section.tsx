@@ -132,7 +132,7 @@ export function OAuthSection({ onSuccess }: { onSuccess: () => void }) {
       setStatus({ authenticated: false });
       toast.success(i18next.t("providers:oauth.loggedOut"), i18next.t("providers:oauth.loggedOutDesc"));
     } catch (err) {
-      toast.error("Logout failed", err instanceof Error ? err.message : "");
+      toast.error(i18next.t("providers:oauth.logoutFailed"), err instanceof Error ? err.message : "");
     }
   };
 

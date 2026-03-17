@@ -77,16 +77,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			if extractBearerToken(r) != h.token {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		next(w, r)
-	}
+	return requireAuth(h.token, "", next)
 }
 
 // maskAPIKey replaces non-empty API keys with "***".
@@ -134,7 +125,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		h.providerReg.Register(providers.NewAnthropicProvider(p.APIKey,
 			providers.WithAnthropicBaseURL(p.APIBase)))
 	case store.ProviderDashScope:
-		h.providerReg.Register(providers.NewDashScopeProvider(p.APIKey, p.APIBase, ""))
+		h.providerReg.Register(providers.NewDashScopeProvider(p.Name, p.APIKey, p.APIBase, ""))
 	case store.ProviderBailian:
 		base := p.APIBase
 		if base == "" {

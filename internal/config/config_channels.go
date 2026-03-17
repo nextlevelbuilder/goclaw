@@ -379,7 +379,6 @@ type DuckDuckGoConfig struct {
 // SessionsConfig controls session behavior.
 // Matching TS src/config/sessions/types.ts + src/config/types.base.ts.
 type SessionsConfig struct {
-	Storage string `json:"storage"`            // directory for session files
 	Scope   string `json:"scope,omitempty"`    // "per-sender" (default), "global"
 	DmScope string `json:"dm_scope,omitempty"` // "main", "per-peer", "per-channel-peer" (default), "per-account-channel-peer"
 	MainKey string `json:"main_key,omitempty"` // main session key suffix (default "main", used when dm_scope="main")
