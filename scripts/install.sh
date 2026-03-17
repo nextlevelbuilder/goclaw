@@ -12,6 +12,7 @@ set -euo pipefail
 
 REPO="nextlevelbuilder/goclaw"
 INSTALL_DIR="${GOCLAW_INSTALL_DIR:-/usr/local/bin}"
+MIGRATIONS_DIR="/usr/local/share/goclaw/migrations"
 VERSION=""
 
 # ── Parse args ──
@@ -64,25 +65,30 @@ tar -xzf "${TMP}/${ASSET}" -C "$TMP"
 if [ -w "$INSTALL_DIR" ]; then
   cp "${TMP}/goclaw" "${INSTALL_DIR}/goclaw"
   chmod +x "${INSTALL_DIR}/goclaw"
+  mkdir -p "${MIGRATIONS_DIR}"
+  cp -r "${TMP}/migrations/"* "${MIGRATIONS_DIR}/"
 else
   echo "Installing to ${INSTALL_DIR} (requires sudo)..."
   sudo cp "${TMP}/goclaw" "${INSTALL_DIR}/goclaw"
   sudo chmod +x "${INSTALL_DIR}/goclaw"
+  sudo mkdir -p "${MIGRATIONS_DIR}"
+  sudo cp -r "${TMP}/migrations/"* "${MIGRATIONS_DIR}/"
 fi
 
 echo ""
 echo "GoClaw ${VERSION} installed to ${INSTALL_DIR}/goclaw"
+echo "Migrations installed to ${MIGRATIONS_DIR}"
 echo ""
 echo "Next steps:"
 echo "  1. Set up PostgreSQL (pgvector):"
 echo "     docker run -d --name goclaw-pg -p 5432:5432 -e POSTGRES_PASSWORD=goclaw pgvector/pgvector:pg18"
 echo ""
-echo "  2. Run database migrations:"
+echo "  2. Set environment variables:"
 echo "     export GOCLAW_POSTGRES_DSN='postgres://postgres:goclaw@localhost:5432/postgres?sslmode=disable'"
-echo "     goclaw migrate up"
+echo "     export GOCLAW_MIGRATIONS_DIR='${MIGRATIONS_DIR}'"
 echo ""
-echo "  3. Start the onboard wizard:"
+echo "  3. Start the onboard wizard (runs migrations automatically):"
 echo "     goclaw onboard"
 echo ""
 echo "  4. Start the gateway:"
-echo "     goclaw"
+echo "     source .env.local && goclaw"
