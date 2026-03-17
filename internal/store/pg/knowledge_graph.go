@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,7 +111,9 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 	if limit <= 0 {
 		limit = 20
 	}
-	pattern := "%" + query + "%"
+	// Escape LIKE wildcards to prevent pattern injection.
+	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	pattern := "%" + escaped + "%"
 
 	where := "agent_id = $1"
 	args := []any{aid}

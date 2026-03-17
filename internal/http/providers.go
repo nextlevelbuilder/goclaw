@@ -270,9 +270,8 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	// Prevent updating immutable fields
-	delete(updates, "id")
-	delete(updates, "created_at")
+	// Allowlist: only permit known provider columns.
+	updates = filterAllowedKeys(updates, providerAllowedFields)
 
 	// Track old name before update for registry cleanup
 	var oldName string

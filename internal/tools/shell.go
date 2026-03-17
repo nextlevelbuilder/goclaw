@@ -244,9 +244,11 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = cwd
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Limit output to 1MB to prevent OOM from runaway commands.
+	stdout := &limitedBuffer{max: 1 << 20}
+	stderr := &limitedBuffer{max: 1 << 20}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	err := cmd.Run()
 
@@ -285,12 +287,13 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)
 		}
-		// Docker unavailable (binary missing, daemon down) → fallback to host
-		slog.Warn("sandbox unavailable, falling back to host exec",
+		// Docker unavailable (binary missing, daemon down) → fail closed.
+		// Do NOT silently fallback to host — that defeats the purpose of sandboxing.
+		slog.Warn("security.sandbox_unavailable",
 			"error", err,
 			"command", truncateCmd(command, 80),
 		)
-		return t.executeOnHost(ctx, command, cwd)
+		return ErrorResult(fmt.Sprintf("sandbox unavailable: %v (will not fall back to unsandboxed host execution)", err))
 	}
 
 	// Map host workdir to container workdir
@@ -327,3 +330,37 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 
 	return SilentResult(output)
 }
+
+// limitedBuffer caps output to prevent OOM from runaway commands.
+type limitedBuffer struct {
+	buf       bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func (lb *limitedBuffer) Write(p []byte) (int, error) {
+	if lb.truncated {
+		return len(p), nil
+	}
+	remaining := lb.max - lb.buf.Len()
+	if remaining <= 0 {
+		lb.truncated = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		lb.buf.Write(p[:remaining])
+		lb.truncated = true
+		return len(p), nil
+	}
+	return lb.buf.Write(p)
+}
+
+func (lb *limitedBuffer) String() string {
+	s := lb.buf.String()
+	if lb.truncated {
+		s += "\n[output truncated at 1MB]"
+	}
+	return s
+}
+
+func (lb *limitedBuffer) Len() int { return lb.buf.Len() }

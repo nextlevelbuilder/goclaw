@@ -174,6 +174,9 @@ func (h *MCPHandler) handleUpdateServer(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	// Allowlist: only permit known MCP server columns.
+	updates = filterAllowedKeys(updates, mcpServerAllowedFields)
+
 	if err := h.store.UpdateServer(r.Context(), id, updates); err != nil {
 		slog.Error("mcp.update_server", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

@@ -205,7 +205,8 @@ func buildCustomToolWhere(opts store.CustomToolListOpts) (string, []any) {
 	}
 	if opts.Search != "" {
 		conditions = append(conditions, fmt.Sprintf("(name ILIKE $%d OR description ILIKE $%d)", argIdx, argIdx))
-		args = append(args, "%"+opts.Search+"%")
+		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
+		args = append(args, "%"+escaped+"%")
 	}
 
 	return " WHERE " + strings.Join(conditions, " AND "), args
