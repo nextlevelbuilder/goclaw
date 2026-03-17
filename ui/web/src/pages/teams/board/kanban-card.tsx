@@ -104,7 +104,7 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
         </span>
       </div>
 
-      {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && (
+      {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && !isTerminalStatus(task.status) && (
         <div className="mt-2 flex items-center gap-1.5">
           <div className="h-1.5 flex-1 rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${task.progress_percent}%` }} />

@@ -176,21 +176,6 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		ActorType: "agent",
 		ActorID:   agentKey,
 	})
-	t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
-		TeamID:        team.ID.String(),
-		TaskID:        task.ID.String(),
-		TaskNumber:    task.TaskNumber,
-		Subject:       task.Subject,
-		Status:        status,
-		OwnerAgentKey: t.manager.agentKeyFromID(ctx, assigneeID),
-		UserID:        store.UserIDFromContext(ctx),
-		Channel:       ToolChannelFromCtx(ctx),
-		ChatID:        chatID,
-		Timestamp:     task.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
-		ActorType:     "agent",
-		ActorID:       agentKey,
-	})
-
 	// Track for post-turn dispatch. If no post-turn hook (e.g. HTTP API), dispatch immediately.
 	if status == store.TeamTaskStatusPending {
 		if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil {

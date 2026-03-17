@@ -136,6 +136,8 @@ func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
 		TeamID:        team.ID.String(),
 		TaskID:        taskID.String(),
+		TaskNumber:    task.TaskNumber,
+		Subject:       task.Subject,
 		Status:        store.TeamTaskStatusInProgress,
 		OwnerAgentKey: t.manager.agentKeyFromID(ctx, *task.OwnerAgentID),
 		UserID:        store.UserIDFromContext(ctx),

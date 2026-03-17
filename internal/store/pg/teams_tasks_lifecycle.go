@@ -65,6 +65,7 @@ func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID
 	res, err := tx.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL,
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
+		 progress_percent = NULL,
 		 updated_at = $3
 		 WHERE id = $4 AND status = $5 AND team_id = $6`,
 		store.TeamTaskStatusCompleted, result, time.Now(),
@@ -98,6 +99,7 @@ func (s *PGTeamStore) CancelTask(ctx context.Context, taskID, teamID uuid.UUID, 
 	res, err := tx.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL,
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
+		 progress_percent = NULL,
 		 updated_at = $3
 		 WHERE id = $4 AND status NOT IN ($5, $1) AND team_id = $6`,
 		store.TeamTaskStatusCancelled, reason, now,
@@ -131,6 +133,7 @@ func (s *PGTeamStore) FailTask(ctx context.Context, taskID, teamID uuid.UUID, er
 	res, err := tx.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL,
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
+		 progress_percent = NULL,
 		 updated_at = $3
 		 WHERE id = $4 AND status = $5 AND team_id = $6`,
 		store.TeamTaskStatusFailed, "FAILED: "+errMsg, now,
@@ -163,7 +166,8 @@ func (s *PGTeamStore) FailPendingTask(ctx context.Context, taskID, teamID uuid.U
 
 	now := time.Now()
 	res, err := tx.ExecContext(ctx,
-		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL, updated_at = $3
+		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL,
+		 progress_percent = NULL, updated_at = $3
 		 WHERE id = $4 AND status IN ($5, $6) AND team_id = $7`,
 		store.TeamTaskStatusFailed, "FAILED: "+errMsg, now,
 		taskID, store.TeamTaskStatusPending, store.TeamTaskStatusBlocked, teamID,
@@ -230,6 +234,7 @@ func (s *PGTeamStore) ApproveTask(ctx context.Context, taskID, teamID uuid.UUID,
 	res, err := tx.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, locked_at = NULL, lock_expires_at = NULL,
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
+		 progress_percent = NULL,
 		 updated_at = $2
 		 WHERE id = $3 AND status = $4 AND team_id = $5`,
 		store.TeamTaskStatusCompleted, now,
@@ -263,6 +268,7 @@ func (s *PGTeamStore) RejectTask(ctx context.Context, taskID, teamID uuid.UUID, 
 	res, err := tx.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, result = $2, locked_at = NULL, lock_expires_at = NULL,
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
+		 progress_percent = NULL,
 		 updated_at = $3
 		 WHERE id = $4 AND status = $5 AND team_id = $6`,
 		store.TeamTaskStatusCancelled, reason, now,

@@ -121,7 +121,7 @@ export function TaskDetailDialog({
           )}
 
           {/* Progress bar (V2) */}
-          {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && (
+          {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && !isTerminalStatus(task.status) && (
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>{t("tasks.detail.progress")}</span>

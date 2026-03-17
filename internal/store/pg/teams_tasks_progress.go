@@ -180,7 +180,8 @@ func scanRecoveredTaskInfoRows(rows interface {
 func (s *PGTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uuid.UUID) error {
 	now := time.Now()
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE team_tasks SET status = $1, locked_at = NULL, lock_expires_at = NULL, result = NULL, updated_at = $2
+		`UPDATE team_tasks SET status = $1, locked_at = NULL, lock_expires_at = NULL, result = NULL,
+		 progress_percent = NULL, progress_step = NULL, updated_at = $2
 		 WHERE id = $3 AND team_id = $4 AND status IN ($5, $6)`,
 		store.TeamTaskStatusPending, now,
 		taskID, teamID, store.TeamTaskStatusStale, store.TeamTaskStatusFailed,
