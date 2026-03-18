@@ -5,10 +5,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { Trash2 } from "lucide-react";
+import { Trash2, Paperclip } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatFileSize } from "@/lib/format";
 import { toast } from "@/stores/use-toast-store";
+import { useAuthStore } from "@/stores/use-auth-store";
 import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
 import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
 
@@ -22,6 +23,7 @@ interface TaskDetailDialogProps {
     events: TeamTaskEvent[]; attachments: TeamTaskAttachment[];
   }>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
+  onAddComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
   taskLookup?: Map<string, string>;
   memberLookup?: Map<string, string>;
   emojiLookup?: Map<string, string>;
@@ -30,19 +32,24 @@ interface TaskDetailDialogProps {
 
 export function TaskDetailDialog({
   task, teamId, isTeamV2, onClose,
-  getTaskDetail, deleteTask, taskLookup, memberLookup, emojiLookup, onNavigateTask,
+  getTaskDetail, deleteTask, onAddComment, taskLookup, memberLookup, emojiLookup, onNavigateTask,
 }: TaskDetailDialogProps) {
   const { t } = useTranslation("teams");
+  const token = useAuthStore((s) => s.token);
   const [events, setEvents] = useState<TeamTaskEvent[]>([]);
   const [attachments, setAttachments] = useState<TeamTaskAttachment[]>([]);
+  const [comments, setComments] = useState<TeamTaskComment[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const loadDetail = useCallback(async () => {
     try {
       const res = await getTaskDetail(teamId, task.id);
       setEvents(res.events ?? []);
       setAttachments(res.attachments ?? []);
+      setComments(res.comments ?? []);
     } catch { /* partial data acceptable */ }
   }, [getTaskDetail, teamId, task.id]);
 
@@ -203,14 +210,83 @@ export function TaskDetailDialog({
           {/* Attachments (V2) */}
           {isTeamV2 && attachments.length > 0 && (
             <div className="rounded-md border p-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">{t("tasks.detail.attachments")}</p>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">{t("tasks.detail.attachments")} ({attachments.length})</p>
               <div className="space-y-1">
                 {attachments.map((a) => (
-                  <div key={a.id} className="flex items-center gap-2 text-sm">
-                    <span className="font-medium">{a.file_name || a.file_id}</span>
-                    <span className="text-xs text-muted-foreground">{formatDate(a.created_at)}</span>
+                  <div key={a.id} className="flex items-center justify-between gap-2 text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate font-medium">{a.path?.split("/").pop() || a.path}</span>
+                      {a.file_size > 0 && (
+                        <span className="text-xs text-muted-foreground">{formatFileSize(a.file_size)}</span>
+                      )}
+                    </div>
+                    <a
+                      href={`/v1/teams/${teamId}/attachments/${a.id}/download?token=${encodeURIComponent(token)}`}
+                      download
+                      className="shrink-0 text-xs text-primary hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {t("tasks.detail.download")}
+                    </a>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Comments (V2) */}
+          {isTeamV2 && comments.length > 0 && (
+            <div className="rounded-md border p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">{t("tasks.detail.comments")} ({comments.length})</p>
+              <div className="space-y-2">
+                {comments.map((c) => (
+                  <div key={c.id} className="text-sm">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {c.agent_key || (c.user_id ? "User" : "Unknown")}
+                      </span>
+                      <span>{formatDate(c.created_at)}</span>
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-wrap">{c.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Add Comment (V2) */}
+          {isTeamV2 && onAddComment && (
+            <div className="rounded-md border p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">{t("tasks.detail.addComment")}</p>
+              <div className="flex gap-2">
+                <textarea
+                  className="min-h-[60px] flex-1 resize-none rounded-md border bg-background px-3 py-2 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder={t("tasks.detail.commentPlaceholder")}
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  disabled={submitting}
+                />
+                <Button
+                  size="sm"
+                  className="self-end"
+                  disabled={submitting || newComment.trim() === ""}
+                  onClick={async () => {
+                    if (!newComment.trim()) return;
+                    setSubmitting(true);
+                    try {
+                      await onAddComment(teamId, task.id, newComment.trim());
+                      setNewComment("");
+                      await loadDetail();
+                    } catch {
+                      /* error handled by caller */
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                >
+                  {t("tasks.detail.addComment")}
+                </Button>
               </div>
             </div>
           )}

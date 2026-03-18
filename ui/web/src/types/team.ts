@@ -9,6 +9,9 @@ export interface TeamNotifyConfig {
   dispatched?: boolean;
   progress?: boolean;
   failed?: boolean;
+  completed?: boolean;
+  commented?: boolean;
+  new_task?: boolean;
   mode?: "direct" | "leader";
 }
 
@@ -25,6 +28,10 @@ export interface TeamAccessSettings {
   followup_max_reminders?: number;
   workspace_scope?: string;
   workspace_quota_mb?: number;
+  member_requests?: {
+    enabled?: boolean;
+    auto_dispatch?: boolean;
+  };
 }
 
 export interface TeamData {
@@ -98,6 +105,9 @@ export interface TeamTaskData {
   followup_message?: string;
   followup_channel?: string;
   followup_chat_id?: string;
+  // Count badges
+  comment_count?: number;
+  attachment_count?: number;
 }
 
 export interface TeamTaskComment {
@@ -128,8 +138,13 @@ export interface ScopeEntry {
 export interface TeamTaskAttachment {
   id: string;
   task_id: string;
-  file_id: string;
-  added_by?: string;
-  file_name?: string;
+  team_id: string;
+  chat_id?: string;
+  path: string;
+  file_size: number;
+  mime_type?: string;
+  created_by_agent_id?: string;
+  created_by_sender_id?: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 }

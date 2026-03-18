@@ -8,6 +8,8 @@ type TeamNotifyConfig struct {
 	Progress   bool   `json:"progress"`   // member updates progress
 	Failed     bool   `json:"failed"`     // task failed
 	Completed  bool   `json:"completed"`  // task completed
+	Commented  bool   `json:"commented"`  // task comment added
+	NewTask    bool   `json:"new_task"`   // new task created (human-initiated)
 	Mode       string `json:"mode"`       // "direct" (outbound) or "leader" (through leader agent)
 }
 
@@ -18,6 +20,8 @@ func DefaultTeamNotifyConfig() TeamNotifyConfig {
 		Progress:   true,
 		Failed:     true,
 		Completed:  true,
+		Commented:  true,
+		NewTask:    true,
 		Mode:       "direct",
 	}
 }
@@ -35,6 +39,8 @@ func ParseTeamNotifyConfig(settings json.RawMessage) TeamNotifyConfig {
 			Progress   *bool  `json:"progress"`
 			Failed     *bool  `json:"failed"`
 			Completed  *bool  `json:"completed"`
+			Commented  *bool  `json:"commented"`
+			NewTask    *bool  `json:"new_task"`
 			Mode       string `json:"mode"`
 		} `json:"notifications"`
 	}
@@ -53,6 +59,12 @@ func ParseTeamNotifyConfig(settings json.RawMessage) TeamNotifyConfig {
 	}
 	if n.Completed != nil {
 		cfg.Completed = *n.Completed
+	}
+	if n.Commented != nil {
+		cfg.Commented = *n.Commented
+	}
+	if n.NewTask != nil {
+		cfg.NewTask = *n.NewTask
 	}
 	if n.Mode == "leader" {
 		cfg.Mode = "leader"

@@ -19,7 +19,29 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
-	if err := t.manager.requireLead(ctx, team, agentID); err != nil {
+
+	// Determine if caller is a lead or a member.
+	isLead := agentID == team.LeadAgentID
+	channel := ToolChannelFromCtx(ctx)
+	if channel == ChannelTeammate || channel == ChannelSystem {
+		isLead = true // system/teammate channels act on behalf of the lead
+	}
+
+	taskType, _ := args["task_type"].(string)
+	if taskType == "" {
+		taskType = "general"
+	}
+
+	if !isLead {
+		// Members may only create "request" tasks when the feature is enabled.
+		memberCfg := ParseMemberRequestConfig(team.Settings)
+		if !memberCfg.Enabled {
+			return ErrorResult("Members cannot create tasks. Use team_tasks(action=\"comment\") to communicate.")
+		}
+		if taskType != "request" {
+			return ErrorResult("Members can only create task_type=\"request\". Use team_tasks(action=\"comment\") to communicate.")
+		}
+	} else if err := t.manager.requireLead(ctx, team, agentID); err != nil {
 		return ErrorResult(err.Error())
 	}
 
@@ -106,6 +128,10 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	// Assigned tasks without blockers stay pending — dispatched after the turn
 	// ends via post-turn processing (avoids race with blocked_by setup).
 
+	// Member requests without auto_dispatch stay pending for leader review.
+	memberCfgForDispatch := ParseMemberRequestConfig(team.Settings)
+	skipAutoDispatch := !isLead && taskType == "request" && !memberCfgForDispatch.AutoDispatch
+
 	chatID := ToolChatIDFromCtx(ctx)
 
 	// Shared workspace: scope by teamID only. Isolated (default): scope by chatID too.
@@ -179,12 +205,21 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		Priority:         priority,
 		UserID:           store.UserIDFromContext(ctx),
 		Channel:          ToolChannelFromCtx(ctx),
-		TaskType:         "general",
+		TaskType:         taskType,
 		CreatedByAgentID: &agentID,
 		ChatID:           chatID,
 		Metadata:         taskMeta,
 	}
 	task.OwnerAgentID = &assigneeID
+
+	// Auto-link member request to the member's current task as parent.
+	if !isLead && taskType == "request" {
+		if parentIDStr := TeamTaskIDFromCtx(ctx); parentIDStr != "" {
+			if parentUUID, err := uuid.Parse(parentIDStr); err == nil {
+				task.ParentID = &parentUUID
+			}
+		}
+	}
 
 	if err := t.manager.teamStore.CreateTask(ctx, task); err != nil {
 		return ErrorResult("failed to create task: " + err.Error())
@@ -204,7 +239,8 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		ActorID:   agentKey,
 	})
 	// Track for post-turn dispatch. If no post-turn hook (e.g. HTTP API), dispatch immediately.
-	if status == store.TeamTaskStatusPending {
+	// Member requests with auto_dispatch=false stay pending for leader review — skip dispatch.
+	if status == store.TeamTaskStatusPending && !skipAutoDispatch {
 		if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil {
 			ptd.Add(team.ID, task.ID)
 		} else {
@@ -354,13 +390,9 @@ func (t *TeamTasksTool) executeAttach(ctx context.Context, args map[string]any) 
 		return ErrorResult(err.Error())
 	}
 
-	fileIDStr, _ := args["file_id"].(string)
-	if fileIDStr == "" {
-		return ErrorResult("file_id is required for attach action")
-	}
-	fileID, err := uuid.Parse(fileIDStr)
-	if err != nil {
-		return ErrorResult("invalid file_id")
+	filePath, _ := args["path"].(string)
+	if filePath == "" {
+		return ErrorResult("path is required for attach action")
 	}
 
 	// Verify task belongs to team.
@@ -372,10 +404,13 @@ func (t *TeamTasksTool) executeAttach(ctx context.Context, args map[string]any) 
 		return ErrorResult("task does not belong to your team")
 	}
 
+	chatID := ToolChatIDFromCtx(ctx)
 	if err := t.manager.teamStore.AttachFileToTask(ctx, &store.TeamTaskAttachmentData{
-		TaskID:  taskID,
-		FileID:  fileID,
-		AddedBy: &agentID,
+		TaskID:           taskID,
+		TeamID:           team.ID,
+		ChatID:           chatID,
+		Path:             filePath,
+		CreatedByAgentID: &agentID,
 	}); err != nil {
 		return ErrorResult("failed to attach file: " + err.Error())
 	}

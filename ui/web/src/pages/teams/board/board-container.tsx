@@ -38,6 +38,7 @@ interface BoardContainerProps {
   getTaskLight: (teamId: string, taskId: string) => Promise<TeamTaskData>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
+  addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
   onWorkspace?: () => void;
 }
 
@@ -60,7 +61,7 @@ function taskMatchesFilter(task: TeamTaskData, sf: StatusFilter, scope: ScopeEnt
 
 export const BoardContainer = memo(function BoardContainer({
   teamId, members, scopes, isTeamV2,
-  getTeamTasks, getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, onWorkspace,
+  getTeamTasks, getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment, onWorkspace,
 }: BoardContainerProps) {
   const { t } = useTranslation("teams");
   const viewMode = useBoardStore((s) => s.viewMode);
@@ -276,6 +277,7 @@ export const BoardContainer = memo(function BoardContainer({
             getTaskDetail={getTaskDetail}
             deleteTask={deleteTask}
             deleteTasksBulk={deleteTasksBulk}
+            addTaskComment={addTaskComment}
           />
         )}
       </div>

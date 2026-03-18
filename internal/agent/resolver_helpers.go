@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // buildTeamMD generates compact TEAM.md content for an agent that is part of a team.
@@ -79,6 +80,8 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		if isV2 {
 			sb.WriteString("Delegate work to team members using `team_tasks` with `assignee`.\n\n")
 			sb.WriteString("```\nteam_tasks(action=\"create\", subject=\"...\", description=\"...\", assignee=\"agent-key\")\n```\n\n")
+			sb.WriteString("Use this structure for task descriptions:\n\n")
+			sb.WriteString("```\n## Objectives\n- Primary goal\n\n## Requirements\n- Specific requirements\n\n## Checklist\n- [ ] Step 1\n- [ ] Step 2\n\n## Context\nAdditional context\n```\n\n")
 			sb.WriteString("The system auto-dispatches to the assigned member and auto-completes when done.\n")
 			sb.WriteString("Do NOT use `spawn` for team delegation — `spawn` is only for self-clone subagent work.\n\n")
 			sb.WriteString("Rules:\n")
@@ -141,25 +144,24 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		sb.WriteString("- For long tasks, report progress: `team_tasks(action=\"progress\", percent=50, text=\"status\")`\n")
 		sb.WriteString("- The task_id is auto-resolved — you don't need to specify it\n")
 		sb.WriteString("- Task completion is automatic when your run finishes\n")
+
+		memberCfg := tools.ParseMemberRequestConfig(team.Settings)
+		if memberCfg.Enabled {
+			sb.WriteString("\n## Requesting Help\n\n")
+			sb.WriteString("Need help from another teammate? Create a request:\n")
+			sb.WriteString("```\nteam_tasks(action=\"create\", task_type=\"request\", subject=\"...\", assignee=\"agent-key\")\n```\n")
+		} else {
+			sb.WriteString("\n## Communication\n\n")
+			sb.WriteString("Use `team_tasks(action=\"comment\")` to report issues or ask questions on your current task.\n")
+		}
 	}
 
 	return sb.String()
 }
 
-// agentToolPolicyForTeam denies team_message for team leads.
-// Leads should use spawn (which auto-announces results back) instead of team_message
-// (one-way notification that leaks raw responses to the output channel).
-func agentToolPolicyForTeam(policy *config.ToolPolicySpec, isLead bool) *config.ToolPolicySpec {
-	if !isLead {
-		return policy
-	}
-	if policy == nil {
-		policy = &config.ToolPolicySpec{}
-	}
-	if slices.Contains(policy.Deny, "team_message") {
-		return policy
-	}
-	policy.Deny = append(policy.Deny, "team_message")
+// agentToolPolicyForTeam applies team-specific tool policy adjustments.
+// Currently a no-op — team_message tool was removed; members communicate via task comments.
+func agentToolPolicyForTeam(policy *config.ToolPolicySpec, _ bool) *config.ToolPolicySpec {
 	return policy
 }
 

@@ -258,15 +258,12 @@ func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any)
 		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
 
-	// Inject message to lead agent via mailbox
-	msg := fmt.Sprintf("Task '%s' (id=%s) has been approved by the user (status: %s).", task.Subject, task.ID, newStatus)
-	_ = t.manager.teamStore.SendMessage(ctx, &store.TeamMessageData{
-		TeamID:      team.ID,
-		FromAgentID: team.LeadAgentID,
-		ToAgentID:   &team.LeadAgentID,
-		Content:     msg,
-		MessageType: store.TeamMessageTypeChat,
-		TaskID:      &taskID,
+	// Record approval as a task comment for audit trail.
+	approveMsg := fmt.Sprintf("Task approved (status: %s).", newStatus)
+	_ = t.manager.teamStore.AddTaskComment(ctx, &store.TeamTaskCommentData{
+		TaskID:  taskID,
+		AgentID: &agentID,
+		Content: approveMsg,
 	})
 
 	return NewResult(fmt.Sprintf("Task %s approved (status: %s).", taskID, newStatus))
@@ -330,15 +327,12 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
 
-	// Inject message to lead agent via mailbox
-	leadMsg := fmt.Sprintf("Task '%s' (id=%s) was rejected by the user. Reason: %s", task.Subject, task.ID, reason)
-	_ = t.manager.teamStore.SendMessage(ctx, &store.TeamMessageData{
-		TeamID:      team.ID,
-		FromAgentID: team.LeadAgentID,
-		ToAgentID:   &team.LeadAgentID,
-		Content:     leadMsg,
-		MessageType: store.TeamMessageTypeChat,
-		TaskID:      &taskID,
+	// Record rejection as a task comment for audit trail.
+	rejectMsg := fmt.Sprintf("Task rejected. Reason: %s", reason)
+	_ = t.manager.teamStore.AddTaskComment(ctx, &store.TeamTaskCommentData{
+		TaskID:  taskID,
+		AgentID: &agentID,
+		Content: rejectMsg,
 	})
 
 	return NewResult(fmt.Sprintf("Task %s rejected. Dependent tasks have been unblocked.", taskID))

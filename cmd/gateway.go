@@ -325,6 +325,9 @@ func runGateway() {
 	if teamEventsH != nil {
 		server.SetTeamEventsHandler(teamEventsH)
 	}
+	if pgStores != nil && pgStores.Teams != nil {
+		server.SetTeamAttachmentsHandler(httpapi.NewTeamAttachmentsHandler(pgStores.Teams, cfg.Gateway.Token, dataDir))
+	}
 	if builtinToolsH != nil {
 		server.SetBuiltinToolsHandler(builtinToolsH)
 	}
@@ -564,6 +567,14 @@ func runGateway() {
 				notifyType = "progress"
 			case protocol.EventTeamTaskCompleted:
 				notifyType = "completed"
+			case protocol.EventTeamTaskCommented:
+				notifyType = "commented"
+			case protocol.EventTeamTaskCreated:
+				// Only notify for human-created tasks (agent-created go through dispatch).
+				if payload.ActorType != "human" {
+					return
+				}
+				notifyType = "new_task"
 			default:
 				return
 			}
@@ -594,6 +605,14 @@ func runGateway() {
 				}
 			case "completed":
 				if !cfg.Completed {
+					return
+				}
+			case "commented":
+				if !cfg.Commented {
+					return
+				}
+			case "new_task":
+				if !cfg.NewTask {
 					return
 				}
 			}
@@ -646,6 +665,14 @@ func runGateway() {
 					reason = reason[:200] + "..."
 				}
 				content = fmt.Sprintf("❌ Task #%d \"%s\" failed: %s", payload.TaskNumber, payload.Subject, reason)
+			case protocol.EventTeamTaskCommented:
+				actor := payload.ActorID
+				if actor == "" {
+					actor = "unknown"
+				}
+				content = fmt.Sprintf("💬 Task #%d \"%s\": comment from %s", payload.TaskNumber, payload.Subject, actor)
+			case protocol.EventTeamTaskCreated:
+				content = fmt.Sprintf("📋 New task #%d \"%s\" created", payload.TaskNumber, payload.Subject)
 			}
 
 			// In leader mode, require resolved agent key for routing.

@@ -225,7 +225,7 @@ func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
 const ctxTeamID toolContextKey = "tool_team_id"
 
 // WithToolTeamID injects the dispatching team's ID into context so team
-// tools (team_tasks, team_message) and the WorkspaceInterceptor resolve
+// tools (team_tasks) and the WorkspaceInterceptor resolve
 // the correct team when the agent belongs to multiple teams.
 func WithToolTeamID(ctx context.Context, teamID string) context.Context {
 	return context.WithValue(ctx, ctxTeamID, teamID)

@@ -105,7 +105,6 @@ var coreToolSummaries = map[string]string{
 	"create_audio":            "Generate music or sound effects from text descriptions using AI",
 	"knowledge_graph_search":  "Find people, projects, and their connections — use for relationship questions (who works with whom, project dependencies) that memory_search may miss",
 	"team_tasks":              "Team task board — track progress, manage dependencies (spawn auto-creates delegation tasks)",
-	"team_message":            "Send messages to teammates (progress updates, questions)",
 
 	// Legacy tool aliases — kept for backward compatibility with older clients
 	"edit_file":      "Alias for edit — Edit a file by replacing exact text matches",

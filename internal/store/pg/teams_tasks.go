@@ -23,6 +23,7 @@ const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.o
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
 		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
+		 COALESCE(t.comment_count,0), COALESCE(t.attachment_count,0),
 		 t.created_at, t.updated_at,
 		 COALESCE(a.agent_key, '') AS owner_agent_key,
 		 COALESCE(ca.agent_key, '') AS created_by_agent_key`
@@ -333,6 +334,7 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,
 			&chatID, &metadataJSON, &lockedAt, &lockExpiresAt, &d.ProgressPercent, &progressStep,
 			&followupAt, &followupCount, &followupMax, &followupMessage, &followupChannel, &followupChatID,
+			&d.CommentCount, &d.AttachmentCount,
 			&d.CreatedAt, &d.UpdatedAt,
 			&d.OwnerAgentKey,
 			&d.CreatedByAgentKey,
