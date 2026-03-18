@@ -56,7 +56,7 @@ func contactWhereClause(opts store.ContactListOpts) (string, []any, int) {
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
 		pattern := "%" + escaped + "%"
 		conditions = append(conditions, fmt.Sprintf(
-			"(display_name ILIKE $%d OR username ILIKE $%d OR sender_id ILIKE $%d)",
+			"(display_name ILIKE $%d ESCAPE '\\' OR username ILIKE $%d ESCAPE '\\' OR sender_id ILIKE $%d ESCAPE '\\')",
 			argIdx, argIdx, argIdx,
 		))
 		args = append(args, pattern)

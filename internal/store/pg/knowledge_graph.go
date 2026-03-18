@@ -128,7 +128,7 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 		       properties, source_id, confidence, created_at, updated_at
 		FROM kg_entities
-		WHERE %s AND (name ILIKE $%d OR description ILIKE $%d)
+		WHERE %s AND (name ILIKE $%d ESCAPE '\' OR description ILIKE $%d ESCAPE '\')
 		ORDER BY confidence DESC, updated_at DESC LIMIT $%d`, where, idx, idx, idx+1)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)

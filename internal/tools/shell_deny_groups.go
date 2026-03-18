@@ -72,7 +72,7 @@ var DenyGroupRegistry = map[string]*DenyGroup{
 		Default:     true,
 		Patterns: []*regexp.Regexp{
 			regexp.MustCompile(`\beval\s*\$`),
-			regexp.MustCompile(`\bbase64\s+(-d|--decode)\b.*\|\s*(ba)?sh\b`),
+			regexp.MustCompile(`\bbase64\s+(-d\w*|--decode)\b.*\|\s*(ba)?sh\b`),
 		},
 	},
 	"privilege_escalation": {

@@ -1,6 +1,9 @@
 package http
 
-import "regexp"
+import (
+	"log/slog"
+	"regexp"
+)
 
 var slugRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
@@ -17,6 +20,8 @@ func filterAllowedKeys(updates map[string]any, allowed map[string]bool) map[stri
 	for k, v := range updates {
 		if allowed[k] {
 			filtered[k] = v
+		} else {
+			slog.Warn("security.filtered_unknown_field", "field", k)
 		}
 	}
 	return filtered
