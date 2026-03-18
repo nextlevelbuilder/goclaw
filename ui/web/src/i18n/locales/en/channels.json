@@ -180,7 +180,7 @@
     "allow_from": { "label": "Allowed Users" },
     "block_reply": { "label": "Block Reply", "help": "Deliver intermediate text during tool iterations" },
     "domain": { "label": "Domain" },
-    "connection_mode": { "label": "Connection Mode", "help": "Lark Global only supports Webhook" },
+    "connection_mode": { "label": "Connection Mode", "help": "WebSocket needs no public IP — outbound connection only" },
     "webhook_port": { "label": "Webhook Port", "help": "0 = share main gateway port (recommended)" },
     "webhook_path": { "label": "Webhook Path", "help": "Path on main server for Lark events" },
     "webhook_url": { "label": "Webhook URL" },
@@ -219,12 +219,12 @@
       "full": "Full"
     },
     "domain": {
-      "lark": "Lark (global) — webhook only",
+      "lark": "Lark (Global)",
       "feishu": "Feishu (China)"
     },
     "connection_mode": {
       "webhook": "Webhook",
-      "websocket": "WebSocket (Feishu only)"
+      "websocket": "WebSocket (recommended)"
     },
     "topic_session_mode": {
       "disabled": "Disabled",

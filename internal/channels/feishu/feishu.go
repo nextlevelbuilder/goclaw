@@ -212,7 +212,7 @@ func (a *wsEventAdapter) HandleEvent(ctx context.Context, payload []byte) error 
 	var event MessageEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		slog.Debug("feishu ws: parse event failed", "error", err)
-		return nil
+		return fmt.Errorf("parse event: %w", err)
 	}
 	if event.Header.EventType == "im.message.receive_v1" {
 		a.ch.handleMessageEvent(ctx, &event)
