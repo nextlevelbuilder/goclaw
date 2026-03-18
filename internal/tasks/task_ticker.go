@@ -194,7 +194,7 @@ func (t *TaskTicker) notifyLeaders(ctx context.Context, tasks []store.RecoveredT
 		// Route using task's channel directly (from RETURNING); fallback to dashboard.
 		channel := scope.Channel
 		chatID := scope.ChatID
-		if channel == "" || channel == "system" || channel == "delegate" {
+		if channel == "" || channel == "system" || channel == "teammate" {
 			channel = "dashboard"
 			chatID = scope.TeamID.String()
 		}

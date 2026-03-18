@@ -46,6 +46,7 @@ func (m *TeamsMethods) parseTaskParams(ctx context.Context, client *gateway.Clie
 // RegisterTasks registers teams.tasks.* RPC handlers.
 func (m *TeamsMethods) RegisterTasks(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsTaskGet, m.handleTaskGet)
+	router.Register(protocol.MethodTeamsTaskGetLight, m.handleTaskGetLight)
 	router.Register(protocol.MethodTeamsTaskApprove, m.handleTaskApprove)
 	router.Register(protocol.MethodTeamsTaskReject, m.handleTaskReject)
 	router.Register(protocol.MethodTeamsTaskComment, m.handleTaskComment)
@@ -108,6 +109,47 @@ func (m *TeamsMethods) handleTaskGet(ctx context.Context, client *gateway.Client
 		"comments":    comments,
 		"events":      events,
 		"attachments": attachments,
+	}))
+}
+
+// --- Task Get Light (task only, no comments/events/attachments) ---
+
+func (m *TeamsMethods) handleTaskGetLight(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params taskGetParams
+	locale, ok := m.parseTaskParams(ctx, client, req, &params)
+	if !ok {
+		return
+	}
+
+	teamID, err := uuid.Parse(params.TeamID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "teamId")))
+		return
+	}
+	taskID, err := uuid.Parse(params.TaskID)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "taskId")))
+		return
+	}
+
+	task, err := m.teamStore.GetTask(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, store.ErrTaskNotFound) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		} else {
+			slog.Warn("teams.tasks.get-light failed", "task_id", taskID, "error", err)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		}
+		return
+	}
+
+	if task.TeamID != teamID {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		return
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"task": task,
 	}))
 }
 
@@ -487,7 +529,8 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 			TaskID:    task.ID.String(),
 			Status:    store.TeamTaskStatusPending,
 			UserID:    client.UserID(),
-			Channel:   "dashboard",
+			Channel:   ch,
+			ChatID:    cid,
 			Timestamp: taskNowUTC(),
 			ActorType: "human",
 			ActorID:   client.UserID(),
@@ -500,7 +543,8 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 				Status:        store.TeamTaskStatusInProgress,
 				OwnerAgentKey: autoAssignedAgentID.String(),
 				UserID:        client.UserID(),
-				Channel:       "dashboard",
+				Channel:       ch,
+				ChatID:        cid,
 				Timestamp:     taskNowUTC(),
 				ActorType:     "human",
 				ActorID:       client.UserID(),
@@ -573,7 +617,8 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 			TaskID:    taskID.String(),
 			Status:    store.TeamTaskStatusInProgress,
 			UserID:    client.UserID(),
-			Channel:   "dashboard",
+			Channel:   task.Channel,
+			ChatID:    task.ChatID,
 			Timestamp: taskNowUTC(),
 			ActorType: "human",
 			ActorID:   client.UserID(),

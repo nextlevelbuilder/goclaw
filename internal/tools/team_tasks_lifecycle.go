@@ -43,10 +43,11 @@ func (t *TeamTasksTool) executeClaim(ctx context.Context, args map[string]any) *
 }
 
 func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any) *Result {
-	// Delegate agents cannot complete tasks — autoCompleteTeamTask handles it.
-	if ToolChannelFromCtx(ctx) == ChannelDelegate {
-		return ErrorResult("delegate agents cannot complete team tasks directly — results are auto-completed when delegation finishes")
-	}
+	// TODO: Enable when reviewer workflow is implemented — teammate agents should
+	// not complete tasks directly when a reviewer is required.
+	// if ToolChannelFromCtx(ctx) == ChannelTeammate {
+	// 	return ErrorResult("teammate agents cannot complete team tasks directly — results are auto-completed when delegation finishes")
+	// }
 
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {
@@ -73,9 +74,19 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	}
 
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
+	// Fetch task for TaskNumber/Subject needed by notification subscriber.
+	completedTask, _ := t.manager.teamStore.GetTask(ctx, taskID)
+	var taskNumber int
+	var taskSubject string
+	if completedTask != nil {
+		taskNumber = completedTask.TaskNumber
+		taskSubject = completedTask.Subject
+	}
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCompleted, protocol.TeamTaskEventPayload{
 		TeamID:           team.ID.String(),
 		TaskID:           taskID.String(),
+		TaskNumber:       taskNumber,
+		Subject:          taskSubject,
 		Status:           store.TeamTaskStatusCompleted,
 		OwnerAgentKey:    ownerKey,
 		OwnerDisplayName: t.manager.agentDisplayName(ctx, ownerKey),
@@ -95,10 +106,11 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 }
 
 func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) *Result {
-	// Delegate agents cannot cancel tasks — only lead/user-facing agents can.
-	if ToolChannelFromCtx(ctx) == ChannelDelegate {
-		return ErrorResult("delegate agents cannot cancel team tasks directly")
-	}
+	// TODO: Enable when reviewer workflow is implemented — teammate agents should
+	// not cancel tasks directly when a reviewer is required.
+	// if ToolChannelFromCtx(ctx) == ChannelTeammate {
+	// 	return ErrorResult("teammate agents cannot cancel team tasks directly")
+	// }
 
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {
@@ -187,10 +199,11 @@ func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) 
 }
 
 func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any) *Result {
-	// Delegate agents cannot approve tasks — approval requires user authority.
-	if ToolChannelFromCtx(ctx) == ChannelDelegate {
-		return ErrorResult("delegate agents cannot approve team tasks")
-	}
+	// TODO: Enable when reviewer workflow is implemented — teammate agents should
+	// not approve tasks directly when a reviewer is required.
+	// if ToolChannelFromCtx(ctx) == ChannelTeammate {
+	// 	return ErrorResult("teammate agents cannot approve team tasks")
+	// }
 
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {
@@ -260,10 +273,11 @@ func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any)
 }
 
 func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) *Result {
-	// Delegate agents cannot reject tasks.
-	if ToolChannelFromCtx(ctx) == ChannelDelegate {
-		return ErrorResult("delegate agents cannot reject team tasks")
-	}
+	// TODO: Enable when reviewer workflow is implemented — teammate agents should
+	// not reject tasks directly when a reviewer is required.
+	// if ToolChannelFromCtx(ctx) == ChannelTeammate {
+	// 	return ErrorResult("teammate agents cannot reject team tasks")
+	// }
 
 	team, agentID, err := t.manager.resolveTeam(ctx)
 	if err != nil {

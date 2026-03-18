@@ -137,7 +137,7 @@ func (rc *StatusReactionController) SetStatus(ctx context.Context, status string
 
 		emoji := resolveReactionEmoji(rc.lastStatus, nil)
 		if emoji != "" {
-			rc.applyReaction(ctx, emoji)
+			rc.applyReaction(context.Background(), emoji)
 		}
 	})
 }
@@ -180,7 +180,7 @@ func (rc *StatusReactionController) applyReaction(ctx context.Context, emoji str
 }
 
 // resetStallTimer resets the stall detection timer (must hold mu lock).
-func (rc *StatusReactionController) resetStallTimer(ctx context.Context) {
+func (rc *StatusReactionController) resetStallTimer(_ context.Context) {
 	rc.cancelStall()
 
 	rc.stallTimer = time.AfterFunc(stallSoftMs, func() {
@@ -193,7 +193,7 @@ func (rc *StatusReactionController) resetStallTimer(ctx context.Context) {
 
 		emoji := resolveReactionEmoji("stallSoft", nil)
 		if emoji != "" {
-			rc.applyReaction(ctx, emoji)
+			rc.applyReaction(context.Background(), emoji)
 		}
 
 		// Schedule hard stall
@@ -207,7 +207,7 @@ func (rc *StatusReactionController) resetStallTimer(ctx context.Context) {
 
 			emoji := resolveReactionEmoji("stallHard", nil)
 			if emoji != "" {
-				rc.applyReaction(ctx, emoji)
+				rc.applyReaction(context.Background(), emoji)
 			}
 		})
 	})
@@ -258,7 +258,10 @@ func (c *Channel) OnReactionEvent(ctx context.Context, chatID string, messageID 
 	// Key by messageID so concurrent runs in the same chat don't clash.
 	key := fmt.Sprintf("%s:%s", chatID, messageID)
 	val, _ := c.reactions.LoadOrStore(key, newStatusReactionController(c.bot, id, msgID))
-	rc := val.(*StatusReactionController)
+	rc, ok := val.(*StatusReactionController)
+	if !ok {
+		return nil
+	}
 
 	rc.SetStatus(ctx, status)
 
@@ -285,8 +288,9 @@ func (c *Channel) ClearReaction(ctx context.Context, chatID string, messageID st
 	// Stop and remove controller if exists
 	key := fmt.Sprintf("%s:%s", chatID, messageID)
 	if val, ok := c.reactions.LoadAndDelete(key); ok {
-		rc := val.(*StatusReactionController)
-		rc.Stop()
+		if rc, ok := val.(*StatusReactionController); ok {
+			rc.Stop()
+		}
 	}
 
 	// Clear reaction on the message

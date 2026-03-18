@@ -161,8 +161,20 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 		model = task.Model
 	}
 
+	// Determine provider (cascading priority):
+	// 1. Parent agent's provider (inherit so model/provider combo stays valid)
+	// 2. SubagentManager default provider (system-wide fallback)
+	activeProvider := sm.provider
+	if sm.providerReg != nil {
+		if parentProviderName := ParentProviderFromCtx(ctx); parentProviderName != "" {
+			if p, err := sm.providerReg.Get(parentProviderName); err == nil {
+				activeProvider = p
+			}
+		}
+	}
+
 	// Emit running subagent root span (after model resolution so span has correct model).
-	sm.emitSubagentSpanStart(traceCtx, subRootSpanID, taskStart, task, model)
+	sm.emitSubagentSpanStart(traceCtx, subRootSpanID, taskStart, task, model, activeProvider.Name())
 
 	// Build subagent system prompt (matching TS buildSubagentSystemPrompt pattern).
 	workspace := ToolWorkspaceFromCtx(ctx)
@@ -199,8 +211,8 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task *SubagentTask) 
 		}
 
 		llmStart := time.Now().UTC()
-		llmSpanID := sm.emitLLMSpanStart(subTraceCtx, llmStart, iteration, model, messages)
-		resp, err := sm.provider.Chat(ctx, chatReq)
+		llmSpanID := sm.emitLLMSpanStart(subTraceCtx, llmStart, iteration, model, activeProvider.Name(), messages)
+		resp, err := activeProvider.Chat(ctx, chatReq)
 		sm.emitLLMSpanEnd(subTraceCtx, llmSpanID, llmStart, resp, err)
 
 		if err != nil {

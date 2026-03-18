@@ -92,6 +92,17 @@ export function useTeams() {
     [ws],
   );
 
+  const getTaskLight = useCallback(
+    async (teamId: string, taskId: string) => {
+      const res = await ws.call<{ task: TeamTaskData }>(
+        Methods.TEAMS_TASK_GET_LIGHT,
+        { teamId, taskId },
+      );
+      return res.task;
+    },
+    [ws],
+  );
+
   const approveTask = useCallback(
     async (teamId: string, taskId: string, comment?: string) => {
       await ws.call(Methods.TEAMS_TASK_APPROVE, { teamId, taskId, comment });
@@ -202,7 +213,7 @@ export function useTeams() {
 
   return {
     teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, getTeamScopes,
-    getTaskDetail, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
+    getTaskDetail, getTaskLight, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
     createTask, deleteTask, deleteTasksBulk, assignTask,
     addMember, removeMember, updateTeamSettings, getKnownUsers,
   };

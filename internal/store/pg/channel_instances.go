@@ -250,8 +250,9 @@ func buildChannelInstanceWhere(opts store.ChannelInstanceListOpts) (string, []an
 	argIdx := 1
 
 	if opts.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(name ILIKE $%d OR display_name ILIKE $%d OR channel_type ILIKE $%d)", argIdx, argIdx, argIdx))
-		args = append(args, "%"+opts.Search+"%")
+		conditions = append(conditions, fmt.Sprintf("(name ILIKE $%d ESCAPE '\\' OR display_name ILIKE $%d ESCAPE '\\' OR channel_type ILIKE $%d ESCAPE '\\')", argIdx, argIdx, argIdx))
+		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
+		args = append(args, "%"+escaped+"%")
 	}
 
 	where := ""

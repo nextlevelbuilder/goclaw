@@ -201,6 +201,9 @@ func (h *ChannelInstancesHandler) handleUpdate(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Allowlist: only permit known channel instance columns.
+	updates = filterAllowedKeys(updates, channelInstanceAllowedFields)
+
 	if err := h.store.Update(r.Context(), id, updates); err != nil {
 		slog.Error("channel_instances.update", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

@@ -13,6 +13,7 @@ import (
 // hasReadImageProvider checks if the read_image builtin tool has a dedicated provider configured.
 // When true, images should NOT be attached inline to the main LLM — instead the agent
 // uses the read_image tool which routes to the configured vision provider.
+// Supports both legacy flat format {"provider":"X"} and chain format {"providers":[...]}.
 func (l *Loop) hasReadImageProvider() bool {
 	if l.builtinToolSettings == nil {
 		return false
@@ -21,14 +22,31 @@ func (l *Loop) hasReadImageProvider() bool {
 	if !ok || len(raw) == 0 {
 		return false
 	}
-	// Check if provider field is set (non-empty JSON with provider key).
-	var cfg struct {
+
+	// Try chain format first: {"providers":[{"provider":"X",...}]}
+	var chain struct {
+		Providers []struct {
+			Provider string `json:"provider"`
+			Enabled  *bool  `json:"enabled,omitempty"`
+		} `json:"providers"`
+	}
+	if json.Unmarshal(raw, &chain) == nil && len(chain.Providers) > 0 {
+		for _, p := range chain.Providers {
+			if p.Provider != "" && (p.Enabled == nil || *p.Enabled) {
+				return true
+			}
+		}
+	}
+
+	// Fallback: legacy flat format {"provider":"X"}
+	var legacy struct {
 		Provider string `json:"provider"`
 	}
-	if err := json.Unmarshal(raw, &cfg); err != nil || cfg.Provider == "" {
-		return false
+	if json.Unmarshal(raw, &legacy) == nil && legacy.Provider != "" {
+		return true
 	}
-	return true
+
+	return false
 }
 
 // loadHistoricalImagesForTool collects image MediaRefs from historical messages

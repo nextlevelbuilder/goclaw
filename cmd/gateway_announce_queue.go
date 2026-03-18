@@ -19,9 +19,10 @@ import (
 
 // announceEntry holds one teammate completion result waiting to be announced.
 type announceEntry struct {
-	MemberAgent string
-	Content     string
-	Media       []agent.MediaResult
+	MemberAgent        string // agent key (e.g. "researcher")
+	MemberDisplayName  string // display name (e.g. "Nhà Nghiên Cứu"), empty if not set
+	Content            string
+	Media              []agent.MediaResult
 }
 
 // announceQueueState tracks the per-session announce queue.
@@ -198,17 +199,27 @@ func processAnnounceLoop(
 	}
 }
 
+// memberLabel returns a display-friendly name for announce messages.
+// Uses "DisplayName (agent_key)" if display name is set, otherwise just agent_key.
+func memberLabel(e announceEntry) string {
+	if e.MemberDisplayName != "" {
+		return fmt.Sprintf("%s (%s)", e.MemberDisplayName, e.MemberAgent)
+	}
+	return e.MemberAgent
+}
+
 // buildMergedAnnounceContent creates the announce message for one or more completed/failed tasks.
 func buildMergedAnnounceContent(entries []announceEntry, taskBoardSnapshot, teamWorkspace string) string {
 	var sb strings.Builder
 
 	if len(entries) == 1 {
 		e := entries[0]
+		label := memberLabel(e)
 		if strings.HasPrefix(e.Content, "[FAILED]") {
-			fmt.Fprintf(&sb, "[System Message] Team member %q failed to complete task.\n\nError: %s", e.MemberAgent, strings.TrimPrefix(e.Content, "[FAILED] "))
+			fmt.Fprintf(&sb, "[System Message] Team member %q failed to complete task.\n\nError: %s", label, strings.TrimPrefix(e.Content, "[FAILED] "))
 			sb.WriteString("\n\nInform the user about the failure. You may suggest retrying with team_tasks(action=\"retry\", task_id=\"...\") if appropriate.")
 		} else {
-			fmt.Fprintf(&sb, "[System Message] Team member %q completed task.\n\nResult:\n%s", e.MemberAgent, e.Content)
+			fmt.Fprintf(&sb, "[System Message] Team member %q completed task.\n\nResult:\n%s", label, e.Content)
 		}
 	} else {
 		// Count successes vs failures for header.
@@ -228,10 +239,11 @@ func buildMergedAnnounceContent(entries []announceEntry, taskBoardSnapshot, team
 			fmt.Fprintf(&sb, "[System Message] %d team tasks completed.\n", succeeded)
 		}
 		for _, e := range entries {
+			label := memberLabel(e)
 			if strings.HasPrefix(e.Content, "[FAILED]") {
-				fmt.Fprintf(&sb, "\n--- FAILED: %q ---\nError: %s\n", e.MemberAgent, strings.TrimPrefix(e.Content, "[FAILED] "))
+				fmt.Fprintf(&sb, "\n--- FAILED: %q ---\nError: %s\n", label, strings.TrimPrefix(e.Content, "[FAILED] "))
 			} else {
-				fmt.Fprintf(&sb, "\n--- Result from %q ---\n%s\n", e.MemberAgent, e.Content)
+				fmt.Fprintf(&sb, "\n--- Result from %q ---\n%s\n", label, e.Content)
 			}
 		}
 		if failed > 0 {

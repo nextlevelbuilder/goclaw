@@ -3,10 +3,14 @@ package tools
 import (
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
+
+// toolGroupsMu protects toolGroups from concurrent access.
+var toolGroupsMu sync.RWMutex
 
 // Tool groups map group names to tool names.
 var toolGroups = map[string][]string{
@@ -36,12 +40,16 @@ var toolGroups = map[string][]string{
 // RegisterToolGroup adds or replaces a dynamic tool group.
 // Used by the MCP manager to register "mcp" and "mcp:{serverName}" groups.
 func RegisterToolGroup(name string, members []string) {
+	toolGroupsMu.Lock()
 	toolGroups[name] = members
+	toolGroupsMu.Unlock()
 }
 
 // UnregisterToolGroup removes a dynamic tool group.
 func UnregisterToolGroup(name string) {
+	toolGroupsMu.Lock()
 	delete(toolGroups, name)
+	toolGroupsMu.Unlock()
 }
 
 // Tool profiles define preset allow sets.
@@ -239,6 +247,9 @@ func (pe *PolicyEngine) applyProfile(allTools []string, profile string) []string
 // expandSpec expands a spec list (which may contain "group:xxx") into concrete tool names,
 // filtered against available tools.
 func expandSpec(available []string, spec []string) []string {
+	toolGroupsMu.RLock()
+	defer toolGroupsMu.RUnlock()
+
 	expanded := make(map[string]bool)
 	for _, s := range spec {
 		if after, ok := strings.CutPrefix(s, "group:"); ok {
@@ -264,6 +275,9 @@ func expandSpec(available []string, spec []string) []string {
 
 // intersectWithSpec keeps only tools in `current` that match the spec (with group expansion).
 func intersectWithSpec(current []string, spec []string) []string {
+	toolGroupsMu.RLock()
+	defer toolGroupsMu.RUnlock()
+
 	expanded := make(map[string]bool)
 	for _, s := range spec {
 		if after, ok := strings.CutPrefix(s, "group:"); ok {
@@ -289,6 +303,9 @@ func intersectWithSpec(current []string, spec []string) []string {
 
 // subtractSpec removes tools matching the spec (with group expansion) from current.
 func subtractSpec(current []string, spec []string) []string {
+	toolGroupsMu.RLock()
+	defer toolGroupsMu.RUnlock()
+
 	denied := make(map[string]bool)
 	for _, s := range spec {
 		if after, ok := strings.CutPrefix(s, "group:"); ok {
@@ -362,6 +379,9 @@ func (pe *PolicyEngine) IsDenied(name string, agentPolicy *config.ToolPolicySpec
 
 // matchDenySpec returns true if name matches any entry in the deny spec (with group expansion).
 func matchDenySpec(name string, spec []string) bool {
+	toolGroupsMu.RLock()
+	defer toolGroupsMu.RUnlock()
+
 	for _, s := range spec {
 		if after, ok := strings.CutPrefix(s, "group:"); ok {
 			if members, ok := toolGroups[after]; ok {

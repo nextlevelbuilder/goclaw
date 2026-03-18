@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // mcpToolDescMaxLen is the max character length for MCP tool descriptions
@@ -376,4 +377,31 @@ func buildTeamWorkspaceSection(teamWsPath string) []string {
 		"Do NOT create, retry, reassign, or modify tasks based on these updates.",
 		"",
 	}
+}
+
+// buildTeamMembersSection lists team members so the agent knows who to assign tasks to.
+func buildTeamMembersSection(members []store.TeamMemberData) []string {
+	lines := []string{
+		"## Team Members",
+		"",
+		"Your team (use agent_key as assignee in team_tasks):",
+	}
+	for _, m := range members {
+		entry := fmt.Sprintf("- %s (%s) [%s]", m.AgentKey, m.DisplayName, m.Role)
+		if m.Frontmatter != "" {
+			fm := m.Frontmatter
+			if len([]rune(fm)) > 80 {
+				fm = string([]rune(fm)[:80]) + "…"
+			}
+			entry += " — " + fm
+		}
+		lines = append(lines, entry)
+	}
+	lines = append(lines,
+		"",
+		"When creating tasks with team_tasks, set assignee to the agent_key of the best-suited member.",
+		"Do NOT invent agent keys — only use the keys listed above.",
+		"",
+	)
+	return lines
 }

@@ -2,6 +2,7 @@ package skills
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -32,7 +33,6 @@ func CheckRuntimes() *RuntimeStatus {
 		{"pip3", "pip3", "--version", true},
 		{"node", "node", "--version", false},
 		{"npm", "npm", "--version", false},
-		{"doas", "doas", "", false},
 	}
 
 	status := &RuntimeStatus{Ready: true}
@@ -54,6 +54,14 @@ func CheckRuntimes() *RuntimeStatus {
 
 		status.Runtimes = append(status.Runtimes, info)
 	}
+
+	// Check pkg-helper socket availability (not a binary, but a Unix socket).
+	pkgInfo := RuntimeInfo{Name: "pkg-helper"}
+	if fi, err := os.Stat(pkgHelperSocket); err == nil && fi.Mode().Type()&os.ModeSocket != 0 {
+		pkgInfo.Available = true
+		pkgInfo.Version = "socket"
+	}
+	status.Runtimes = append(status.Runtimes, pkgInfo)
 
 	return status
 }

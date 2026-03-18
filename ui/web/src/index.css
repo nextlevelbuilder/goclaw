@@ -276,11 +276,22 @@
 
 /* Links */
 .md-render :where(a):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
-  color: var(--primary);
-  text-decoration: none;
+  color: oklch(0.55 0.2 250);
+  text-decoration: underline;
+  text-decoration-color: oklch(0.55 0.2 250 / 0.4);
+  text-underline-offset: 2px;
 }
 .md-render :where(a):not(:where([class~="not-prose"],[class~="not-prose"] *)):hover {
-  text-decoration: underline;
+  color: oklch(0.48 0.22 250);
+  text-decoration-color: oklch(0.48 0.22 250 / 0.8);
+}
+:is(.dark) .md-render :where(a):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  color: oklch(0.72 0.18 250);
+  text-decoration-color: oklch(0.72 0.18 250 / 0.4);
+}
+:is(.dark) .md-render :where(a):not(:where([class~="not-prose"],[class~="not-prose"] *)):hover {
+  color: oklch(0.80 0.16 250);
+  text-decoration-color: oklch(0.80 0.16 250 / 0.8);
 }
 
 /* Strong & emphasis */

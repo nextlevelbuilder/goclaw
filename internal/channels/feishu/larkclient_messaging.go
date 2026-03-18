@@ -30,7 +30,9 @@ func (c *LarkClient) SendMessage(ctx context.Context, receiveIDType, receiveID, 
 		return nil, fmt.Errorf("send message: code=%d msg=%s", resp.Code, resp.Msg)
 	}
 	var data SendMessageResp
-	json.Unmarshal(resp.Data, &data)
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
 	return &data, nil
 }
 
@@ -55,7 +57,9 @@ func (c *LarkClient) UploadImage(ctx context.Context, data io.Reader) (string, e
 	var result struct {
 		ImageKey string `json:"image_key"`
 	}
-	json.Unmarshal(resp.Data, &result)
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
 	return result.ImageKey, nil
 }
 
@@ -79,7 +83,9 @@ func (c *LarkClient) UploadFile(ctx context.Context, data io.Reader, fileName, f
 	var result struct {
 		FileKey string `json:"file_key"`
 	}
-	json.Unmarshal(resp.Data, &result)
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
 	return result.FileKey, nil
 }
 
@@ -106,7 +112,9 @@ func (c *LarkClient) CreateCard(ctx context.Context, cardType, data string) (str
 	var result struct {
 		CardID string `json:"card_id"`
 	}
-	json.Unmarshal(resp.Data, &result)
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
 	return result.CardID, nil
 }
 
@@ -165,7 +173,9 @@ func (c *LarkClient) AddMessageReaction(ctx context.Context, messageID, emojiTyp
 	var result struct {
 		ReactionID string `json:"reaction_id"`
 	}
-	json.Unmarshal(resp.Data, &result)
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
 	return result.ReactionID, nil
 }
 
@@ -200,7 +210,9 @@ func (c *LarkClient) GetBotInfo(ctx context.Context) (string, error) {
 			OpenID string `json:"open_id"`
 		} `json:"bot"`
 	}
-	json.Unmarshal(resp.Data, &result)
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
 	return result.Bot.OpenID, nil
 }
 
@@ -220,6 +232,8 @@ func (c *LarkClient) GetUser(ctx context.Context, userID, userIDType string) (st
 			Name string `json:"name"`
 		} `json:"user"`
 	}
-	json.Unmarshal(resp.Data, &result)
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
 	return result.User.Name, nil
 }

@@ -24,7 +24,7 @@ export function useContactSearch(search: string) {
       const params: Record<string, string> = { limit: "20" };
       if (debouncedSearch) params.search = debouncedSearch;
       const res = await http.get<{ contacts: ChannelContact[] }>("/v1/contacts", params);
-      return res.contacts ?? [];
+      return Array.isArray(res.contacts) ? res.contacts : [];
     },
     enabled: debouncedSearch.length >= 2,
     staleTime: 30_000,

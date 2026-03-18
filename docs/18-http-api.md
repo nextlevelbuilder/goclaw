@@ -413,7 +413,7 @@ Team activity and audit trail.
 
 ## 16. Secure CLI Credentials
 
-CLI authentication credentials for secure command execution.
+CLI authentication credentials for secure command execution. Requires **admin role** (full gateway token or empty gateway token in dev/single-user mode).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -427,7 +427,107 @@ CLI authentication credentials for secure command execution.
 
 ---
 
-## 17. Traces & Costs
+## 17. Runtime & Packages Management
+
+Manage system (apk), Python (pip), and Node (npm) package installation in the runtime container. Requires authentication. When `GOCLAW_GATEWAY_TOKEN` is empty (dev/single-user mode), all users get admin role and can manage packages.
+
+### List Installed Packages
+
+```
+GET /v1/packages
+```
+
+Returns all installed packages grouped by category.
+
+**Response:**
+
+```json
+{
+  "system": [
+    {"name": "github-cli", "version": "2.72.0-r6"},
+    {"name": "curl", "version": "8.9.1-r1"}
+  ],
+  "pip": [
+    {"name": "pandas", "version": "2.0.0"},
+    {"name": "requests", "version": "2.31.0"}
+  ],
+  "npm": [
+    {"name": "typescript", "version": "5.1.0"},
+    {"name": "docx", "version": "8.12.0"}
+  ]
+}
+```
+
+### Install Package
+
+```
+POST /v1/packages/install
+```
+
+**Request:**
+
+```json
+{
+  "package": "github-cli"
+}
+```
+
+Package name can optionally include prefix: `"pip:pandas"` or `"npm:typescript"`. Without prefix, defaults to system (apk).
+
+**Validation:** Package names must match `^[a-zA-Z0-9@][a-zA-Z0-9._+\-/@]*$` (max 4096 bytes). Names starting with `-` are rejected to prevent argument injection.
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "error": ""
+}
+```
+
+| Category | Manager | Behavior |
+|----------|---------|----------|
+| System (apk) | root-privileged pkg-helper | Sent to `/tmp/pkg.sock`, persisted to `/app/data/.runtime/apk-packages` for container recreates |
+| Python (pip) | direct install | Installs to `$PIP_TARGET` (writable runtime dir) with `PIP_BREAK_SYSTEM_PACKAGES=1` |
+| Node (npm) | direct install | Installs globally to `$NPM_CONFIG_PREFIX` (writable runtime dir) |
+
+### Uninstall Package
+
+```
+POST /v1/packages/uninstall
+```
+
+Same format as install. System packages are removed from persist file and container state.
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "error": ""
+}
+```
+
+### Check Runtime Availability
+
+```
+GET /v1/packages/runtimes
+```
+
+Check if Python and Node runtimes are available in the container.
+
+**Response:**
+
+```json
+{
+  "python": true,
+  "node": true
+}
+```
+
+---
+
+## 18. Traces & Costs
 
 LLM call tracing and cost analysis.
 
@@ -449,7 +549,7 @@ LLM call tracing and cost analysis.
 
 ---
 
-## 18. Usage & Analytics
+## 19. Usage & Analytics
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -463,7 +563,7 @@ LLM call tracing and cost analysis.
 
 ---
 
-## 19. Activity & Audit
+## 20. Activity & Audit
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -471,7 +571,7 @@ LLM call tracing and cost analysis.
 
 ---
 
-## 20. Storage
+## 21. Storage
 
 Workspace file management.
 
@@ -490,7 +590,7 @@ Workspace file management.
 
 ---
 
-## 21. Media
+## 22. Media
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -499,7 +599,7 @@ Workspace file management.
 
 ---
 
-## 22. Files
+## 23. Files
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -509,7 +609,7 @@ Auth via Bearer token or `?token=` query param (for `<img>` tags). MIME type aut
 
 ---
 
-## 23. API Keys
+## 24. API Keys
 
 Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth](20-api-keys-auth.md) for the full authentication and authorization model.
 
@@ -547,7 +647,7 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 
 ---
 
-## 24. OAuth
+## 25. OAuth
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -558,7 +658,7 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 
 ---
 
-## 25. System
+## 26. System
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -577,7 +677,7 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 
 ---
 
-## 26. MCP Bridge
+## 27. MCP Bridge
 
 Exposes GoClaw tools to Claude CLI via streamable HTTP at `/mcp/bridge`. Only listens on localhost. Protected by gateway token with HMAC-signed context headers.
 
@@ -656,9 +756,12 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 | `internal/http/delegations.go` | Delegation history API |
 | `internal/http/team_events.go` | Team event history API |
 | `internal/http/secure_cli.go` | CLI credential management |
+| `internal/http/packages.go` | Runtime package management (apk/pip/npm) |
 | `internal/http/pending_messages.go` | Pending message groups + compaction |
 | `internal/http/oauth.go` | OAuth authentication flows |
 | `internal/http/openapi.go` | OpenAPI spec + Swagger UI |
 | `internal/http/auth.go` | Authentication helpers |
 | `internal/gateway/server.go` | HTTP mux and route wiring |
 | `cmd/gateway.go` | Handler instantiation and wiring |
+| `cmd/pkg-helper/main.go` | Root-privileged system package helper (apk add/del) |
+| `internal/skills/package_lister.go` | Query installed packages from apk/pip3/npm |

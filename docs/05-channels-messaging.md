@@ -64,8 +64,8 @@ The consumer routes system messages based on sender ID prefixes:
 | Prefix | Route | Scheduler Lane |
 |--------|-------|:-:|
 | `subagent:` | Parent session queue | subagent |
-| `delegate:` | Parent agent's original session | delegate |
-| `teammate:` | Target agent session | delegate |
+| `delegate:` | Parent agent's original session (legacy session key format) | team |
+| `teammate:` | Target agent session | team |
 
 ---
 

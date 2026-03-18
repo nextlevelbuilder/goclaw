@@ -17,7 +17,7 @@ func makeSchedulerRunFunc(agents *agent.Router, cfg *config.Config) scheduler.Ru
 		// Extract agentID from session key.
 		// Supported formats:
 		//   agent:{agentId}:{rest}
-		//   delegate:{sourceUUID8}:{targetAgentKey}:{delegationId}
+		//   delegate:{sourceUUID8}:{targetAgentKey}:{delegationId}  (legacy, kept for existing sessions)
 		agentID := cfg.ResolveDefaultAgentID()
 		if parts := strings.SplitN(req.SessionKey, ":", 4); len(parts) >= 2 {
 			switch parts[0] {

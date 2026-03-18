@@ -41,6 +41,15 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// deniedFilePrefixes blocks access to sensitive system directories.
+// Defense-in-depth: the auth token is the primary barrier, but restricting
+// known-sensitive paths limits damage if a token leaks.
+var deniedFilePrefixes = []string{
+	"/etc/", "/proc/", "/sys/", "/dev/",
+	"/root/", "/boot/", "/run/",
+	"/var/run/", "/var/log/",
+}
+
 func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 	urlPath := r.PathValue("path")
@@ -58,6 +67,15 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 
 	// URL path is the absolute path with leading "/" stripped (e.g. "app/.goclaw/workspace/file.png")
 	absPath := filepath.Clean("/" + urlPath)
+
+	// Block access to sensitive system directories
+	for _, prefix := range deniedFilePrefixes {
+		if strings.HasPrefix(absPath, prefix) {
+			slog.Warn("security.files_denied_path", "path", absPath)
+			http.Error(w, i18n.T(locale, i18n.MsgInvalidPath), http.StatusForbidden)
+			return
+		}
+	}
 
 	info, err := os.Stat(absPath)
 	if err != nil || info.IsDir() {

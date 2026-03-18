@@ -26,5 +26,7 @@ type Stores struct {
 	Activity         ActivityStore
 	Snapshots        SnapshotStore
 	SecureCLI        SecureCLIStore
-	APIKeys          APIKeyStore
+	APIKeys           APIKeyStore
+	Heartbeats        HeartbeatStore
+	ConfigPermissions ConfigPermissionStore
 }

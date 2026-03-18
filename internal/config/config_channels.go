@@ -235,6 +235,47 @@ type ProviderConfig struct {
 	APIBase string `json:"api_base,omitempty"`
 }
 
+// APIBaseForType returns the config-level api_base for a given provider type.
+// Used as a fallback when DB providers have no api_base set.
+func (p *ProvidersConfig) APIBaseForType(providerType string) string {
+	switch providerType {
+	case "anthropic_native":
+		return p.Anthropic.APIBase
+	case "openai", "openai_compat":
+		return p.OpenAI.APIBase
+	case "openrouter":
+		return p.OpenRouter.APIBase
+	case "groq":
+		return p.Groq.APIBase
+	case "deepseek":
+		return p.DeepSeek.APIBase
+	case "gemini_native":
+		return p.Gemini.APIBase
+	case "mistral":
+		return p.Mistral.APIBase
+	case "xai":
+		return p.XAI.APIBase
+	case "minimax_native":
+		return p.MiniMax.APIBase
+	case "cohere":
+		return p.Cohere.APIBase
+	case "perplexity":
+		return p.Perplexity.APIBase
+	case "dashscope":
+		return p.DashScope.APIBase
+	case "bailian":
+		return p.Bailian.APIBase
+	case "zai":
+		return p.Zai.APIBase
+	case "zai_coding":
+		return p.ZaiCoding.APIBase
+	case "ollama_cloud":
+		return p.OllamaCloud.APIBase
+	default:
+		return ""
+	}
+}
+
 // HasAnyProvider returns true if at least one provider has an API key or CLI configured.
 func (c *Config) HasAnyProvider() bool {
 	p := c.Providers

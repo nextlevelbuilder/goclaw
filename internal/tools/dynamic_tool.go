@@ -43,8 +43,8 @@ func (t *DynamicTool) Execute(ctx context.Context, args map[string]any) *Result 
 	// Render command template with shell-escaped args
 	command := renderCommand(t.def.Command, args)
 
-	// Check deny patterns (same package — direct access to DefaultDenyPatterns)
-	for _, pattern := range DefaultDenyPatterns {
+	// Check deny patterns (uses all defaults for dynamic tools — no per-agent override)
+	for _, pattern := range DefaultDenyPatterns() {
 		if pattern.MatchString(command) {
 			return ErrorResult(fmt.Sprintf("command denied by safety policy: matches pattern %s", pattern.String()))
 		}

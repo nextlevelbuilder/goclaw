@@ -22,21 +22,31 @@ interface ChannelFieldsProps {
   onChange: (key: string, value: unknown) => void;
   idPrefix: string;
   isEdit?: boolean; // for credentials: show "leave blank to keep" hint
+  /** Extra values for showWhen checks (e.g. config values visible to credential fields) */
+  contextValues?: Record<string, unknown>;
 }
 
-export function ChannelFields({ fields, values, onChange, idPrefix, isEdit }: ChannelFieldsProps) {
+export function ChannelFields({ fields, values, onChange, idPrefix, isEdit, contextValues }: ChannelFieldsProps) {
+  const allValues = contextValues ? { ...contextValues, ...values } : values;
   return (
     <div className="grid gap-3">
-      {fields.map((field) => (
-        <FieldRenderer
-          key={field.key}
-          field={field}
-          value={values[field.key]}
-          onChange={(v) => onChange(field.key, v)}
-          id={`${idPrefix}-${field.key}`}
-          isEdit={isEdit}
-        />
-      ))}
+      {fields.map((field) => {
+        // Conditional visibility: skip field if showWhen condition is not met
+        if (field.showWhen) {
+          const depValue = allValues[field.showWhen.key] ?? fields.find((f) => f.key === field.showWhen!.key)?.defaultValue;
+          if (String(depValue) !== field.showWhen.value) return null;
+        }
+        return (
+          <FieldRenderer
+            key={field.key}
+            field={field}
+            value={values[field.key]}
+            onChange={(v) => onChange(field.key, v)}
+            id={`${idPrefix}-${field.key}`}
+            isEdit={isEdit}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -248,7 +258,7 @@ function FieldRenderer({
             id={id}
             value={Array.isArray(value) ? (value as string[]).join("\n") : ""}
             onChange={(e) => {
-              const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean);
+              const lines = e.target.value.split(/[\n,]/).map((l) => l.trim()).filter(Boolean);
               onChange(lines.length > 0 ? lines : undefined);
             }}
             placeholder={field.placeholder ?? t("groupOverrides.fields.allowedUsersPlaceholder")}

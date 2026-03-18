@@ -24,6 +24,7 @@ import (
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
+	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
@@ -103,7 +104,7 @@ func runGateway() {
 	// Register providers from DB (overrides config providers).
 	if pgStores.Providers != nil {
 		dbGatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
-		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP)
+		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP, cfg)
 	}
 
 	setupMemoryEmbeddings(cfg, pgStores, providerRegistry)
@@ -171,6 +172,12 @@ func runGateway() {
 	// Cron tool (agent-facing, matching TS cron-tool.ts)
 	toolsReg.Register(tools.NewCronTool(pgStores.Cron))
 	slog.Info("cron tool registered")
+
+	// Heartbeat tool (agent-facing)
+	heartbeatTool := tools.NewHeartbeatTool(pgStores.Heartbeats, pgStores.ConfigPermissions)
+	heartbeatTool.SetAgentStore(pgStores.Agents)
+	toolsReg.Register(heartbeatTool)
+	slog.Info("heartbeat tool registered")
 
 	// Session tools (list, status, history, send)
 	toolsReg.Register(tools.NewSessionsListTool())
@@ -288,6 +295,9 @@ func runGateway() {
 		mcpToolLister = mcpMgr
 	}
 	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH := wireHTTP(pgStores, cfg.Gateway.Token, cfg.Agents.Defaults.Workspace, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	if providersH != nil {
+		providersH.SetAPIBaseFallback(cfg.Providers.APIBaseForType)
+	}
 	if agentsH != nil {
 		server.SetAgentsHandler(agentsH)
 	}
@@ -344,6 +354,9 @@ func runGateway() {
 		server.SetUsageHandler(httpapi.NewUsageHandler(pgStores.Snapshots, pgStores.DB, cfg.Gateway.Token))
 	}
 
+	// Runtime package management (install/uninstall system/pip/npm packages)
+	server.SetPackagesHandler(httpapi.NewPackagesHandler(cfg.Gateway.Token))
+
 	// API key management
 	// API documentation (OpenAPI spec + Swagger UI at /docs)
 	server.SetDocsHandler(httpapi.NewDocsHandler(cfg.Gateway.Token))
@@ -395,7 +408,7 @@ func runGateway() {
 
 	// Register all RPC methods
 	server.SetLogTee(logTee)
-	pairingMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee)
+	pairingMethods, heartbeatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats)
 
 	// Wire pairing event broadcasts to all WS clients.
 	pairingMethods.SetBroadcaster(server.BroadcastEvent)
@@ -542,15 +555,18 @@ func runGateway() {
 			if !ok || payload.TeamID == "" || payload.Channel == "" {
 				return
 			}
-			// Only forward assigned/failed/progress events (completed handled by announce-back).
 			var notifyType string
 			switch evt.Name {
-			case protocol.EventTeamTaskAssigned:
+			case protocol.EventTeamTaskDispatched:
 				notifyType = "dispatched"
+			case protocol.EventTeamTaskAssigned:
+				notifyType = "dispatched" // same config flag — human assign also notifies
 			case protocol.EventTeamTaskFailed:
 				notifyType = "failed"
 			case protocol.EventTeamTaskProgress:
 				notifyType = "progress"
+			case protocol.EventTeamTaskCompleted:
+				notifyType = "completed"
 			default:
 				return
 			}
@@ -579,10 +595,28 @@ func runGateway() {
 				if !cfg.Progress {
 					return
 				}
+			case "completed":
+				if !cfg.Completed {
+					return
+				}
 			}
 
 			// Skip internal channels.
-			if payload.Channel == tools.ChannelSystem || payload.Channel == tools.ChannelDelegate {
+			if payload.Channel == tools.ChannelSystem || payload.Channel == tools.ChannelTeammate {
+				return
+			}
+
+			// Resolve lead agent key (needed for leader mode routing + completed-by-leader skip).
+			var leadAgentKey string
+			if notifyAgentStore != nil {
+				if la, err := notifyAgentStore.GetByID(context.Background(), team.LeadAgentID); err == nil {
+					leadAgentKey = la.AgentKey
+				}
+			}
+
+			// Skip completed notification if task was completed by the leader
+			// (leader is already talking to the user, notification would be redundant).
+			if notifyType == "completed" && payload.OwnerAgentKey == leadAgentKey {
 				return
 			}
 
@@ -592,16 +626,24 @@ func runGateway() {
 			if payload.OwnerDisplayName != "" {
 				agentName = payload.OwnerDisplayName
 			}
-			switch notifyType {
-			case "dispatched":
+			switch evt.Name {
+			case protocol.EventTeamTaskDispatched:
+				if payload.ActorID == "dispatch_unblocked" {
+					content = fmt.Sprintf("▶️ Task #%d \"%s\" → unblocked, dispatched to %s", payload.TaskNumber, payload.Subject, agentName)
+				} else {
+					content = fmt.Sprintf("📋 Task #%d \"%s\" → dispatched to %s", payload.TaskNumber, payload.Subject, agentName)
+				}
+			case protocol.EventTeamTaskAssigned:
 				content = fmt.Sprintf("📋 Task #%d \"%s\" → assigned to %s", payload.TaskNumber, payload.Subject, agentName)
-			case "progress":
+			case protocol.EventTeamTaskCompleted:
+				content = fmt.Sprintf("✅ Task #%d \"%s\" completed", payload.TaskNumber, payload.Subject)
+			case protocol.EventTeamTaskProgress:
 				if payload.ProgressStep != "" {
 					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%% — %s", payload.TaskNumber, payload.Subject, payload.ProgressPercent, payload.ProgressStep)
 				} else {
 					content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%%", payload.TaskNumber, payload.Subject, payload.ProgressPercent)
 				}
-			case "failed":
+			case protocol.EventTeamTaskFailed:
 				reason := payload.Reason
 				if len(reason) > 200 {
 					reason = reason[:200] + "..."
@@ -609,17 +651,9 @@ func runGateway() {
 				content = fmt.Sprintf("❌ Task #%d \"%s\" failed: %s", payload.TaskNumber, payload.Subject, reason)
 			}
 
-			// Resolve leader agent for leader mode routing.
-			var leadAgent string
-			if cfg.Mode == "leader" {
-				if notifyAgentStore != nil {
-					if la, err := notifyAgentStore.GetByID(context.Background(), team.LeadAgentID); err == nil {
-						leadAgent = la.AgentKey
-					}
-				}
-				if leadAgent == "" {
-					return
-				}
+			// In leader mode, require resolved agent key for routing.
+			if cfg.Mode == "leader" && leadAgentKey == "" {
+				return
 			}
 
 			batchKey := payload.TeamID + ":" + payload.ChatID
@@ -628,7 +662,7 @@ func runGateway() {
 				Channel:   payload.Channel,
 				ChatID:    payload.ChatID,
 				UserID:    payload.UserID,
-				LeadAgent: leadAgent,
+				LeadAgent: leadAgentKey,
 			})
 		})
 		slog.Info("team progress notification subscriber registered")
@@ -674,6 +708,31 @@ func runGateway() {
 	})
 	if err := pgStores.Cron.Start(); err != nil {
 		slog.Warn("cron service failed to start", "error", err)
+	}
+
+	// Start heartbeat ticker (routes through scheduler's cron lane)
+	heartbeatTicker := heartbeat.NewTicker(heartbeat.TickerConfig{
+		Store:    pgStores.Heartbeats,
+		Agents:   pgStores.Agents,
+		Sessions: pgStores.Sessions,
+		MsgBus:   msgBus,
+		Sched:    sched,
+		RunAgent: makeHeartbeatRunFn(sched),
+	})
+	heartbeatTicker.SetOnEvent(func(event store.HeartbeatEvent) {
+		server.BroadcastEvent(*protocol.NewEvent(protocol.EventHeartbeat, event))
+	})
+	heartbeatTicker.Start()
+
+	// Wire heartbeat wake function to tool + RPC + cron wakeMode
+	heartbeatTool.SetWakeFn(heartbeatTicker.Wake)
+	heartbeatMethods.SetWakeFn(heartbeatTicker.Wake)
+	heartbeatMethods.SetAgentStore(pgStores.Agents)
+	heartbeatMethods.SetProviderStore(pgStores.Providers)
+	cronHeartbeatWakeFn = func(agentID string) {
+		if id, err := uuid.Parse(agentID); err == nil {
+			heartbeatTicker.Wake(id)
+		}
 	}
 
 	// Adaptive throttle: reduce per-session concurrency when nearing the summary threshold.
@@ -818,9 +877,10 @@ func runGateway() {
 		// Broadcast shutdown event
 		server.BroadcastEvent(*protocol.NewEvent(protocol.EventShutdown, nil))
 
-		// Stop channels, cron, and task ticker
+		// Stop channels, cron, heartbeat, and task ticker
 		channelMgr.StopAll(context.Background())
 		pgStores.Cron.Stop()
+		heartbeatTicker.Stop()
 		if taskTicker != nil {
 			taskTicker.Stop()
 		}
@@ -889,6 +949,8 @@ func teamTaskEventType(eventName string) string {
 		return "claimed"
 	case protocol.EventTeamTaskAssigned:
 		return "assigned"
+	case protocol.EventTeamTaskDispatched:
+		return "dispatched"
 	case protocol.EventTeamTaskCompleted:
 		return "completed"
 	case protocol.EventTeamTaskFailed:

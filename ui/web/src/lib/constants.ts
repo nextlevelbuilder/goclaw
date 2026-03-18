@@ -36,6 +36,7 @@ export const ROUTES = {
   KNOWLEDGE_GRAPH: "/knowledge-graph",
   ACTIVITY: "/activity",
   API_KEYS: "/api-keys",
+  PACKAGES: "/packages",
   SETUP: "/setup",
 } as const;
 

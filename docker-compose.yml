@@ -40,9 +40,13 @@ services:
       - goclaw-workspace:/app/workspace
     security_opt:
       - no-new-privileges:true
+    init: true
     cap_drop:
       - ALL
-    read_only: true
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
     deploy:

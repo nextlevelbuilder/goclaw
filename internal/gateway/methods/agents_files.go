@@ -20,6 +20,7 @@ import (
 var allowedAgentFiles = []string{
 	bootstrap.AgentsFile, bootstrap.SoulFile, bootstrap.IdentityFile,
 	bootstrap.UserFile, bootstrap.UserPredefinedFile, bootstrap.BootstrapFile, bootstrap.MemoryJSONFile,
+	bootstrap.HeartbeatFile,
 }
 
 // --- agents.files.list ---

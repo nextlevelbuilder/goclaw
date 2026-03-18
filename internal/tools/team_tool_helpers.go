@@ -24,8 +24,8 @@ func (m *TeamToolManager) broadcastTeamEvent(name string, payload any) {
 }
 
 // resolveTeamRole returns the calling agent's role in the team.
-// Unlike requireLead(), this does NOT bypass for delegate channel —
-// workspace RBAC must respect actual roles even during delegation.
+// Unlike requireLead(), this does NOT bypass for teammate channel —
+// workspace RBAC must respect actual roles even for teammate agents.
 func (m *TeamToolManager) resolveTeamRole(ctx context.Context, team *store.TeamData, agentID uuid.UUID) (string, error) {
 	if agentID == team.LeadAgentID {
 		return store.TeamRoleLead, nil

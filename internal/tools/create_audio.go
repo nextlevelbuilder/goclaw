@@ -158,7 +158,13 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("failed to save generated audio: %v", err))
 	}
 
-	slog.Info("create_audio: audio saved", "path", audioPath, "provider", providerName, "type", audioType)
+	// Verify file was persisted.
+	if fi, err := os.Stat(audioPath); err != nil {
+		slog.Warn("create_audio: file missing immediately after write", "path", audioPath, "error", err)
+		return ErrorResult(fmt.Sprintf("generated audio file missing after write: %v", err))
+	} else {
+		slog.Info("create_audio: file saved", "path", audioPath, "size", fi.Size(), "data_len", len(audioBytes), "provider", providerName, "type", audioType)
+	}
 
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s", audioPath)}
 	result.Media = []bus.MediaFile{{Path: audioPath, MimeType: "audio/mpeg"}}

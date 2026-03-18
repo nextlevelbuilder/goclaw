@@ -14,6 +14,7 @@ import (
 	"github.com/mymmrac/telego"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 const (
@@ -227,7 +228,32 @@ func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int
 		downloadURL = fmt.Sprintf("https://api.telegram.org/file/bot%s/%s", c.config.Token, file.FilePath)
 	}
 
-	resp, err := http.Get(downloadURL)
+	// SSRF Protection: check the resolved URL before connecting.
+	// We skip the check IF the host is our explicitly configured (trusted) API server.
+	isTrusted := c.config.APIServer != "" && strings.HasPrefix(downloadURL, c.config.APIServer)
+	if !isTrusted {
+		if err := tools.CheckSSRF(downloadURL); err != nil {
+			return "", fmt.Errorf("SSRF protection: %w", err)
+		}
+	}
+
+	// Use a generous timeout for media downloads (large files via local Bot API
+	// can be up to 200 MB). The shared httpClient has a 30s timeout suited for
+	// API calls, so we override per-request with a dedicated context.
+	dlCtx, dlCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer dlCancel()
+
+	req, err := http.NewRequestWithContext(dlCtx, "GET", downloadURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create download request: %w", err)
+	}
+
+	// Clone the shared client without the 30s Timeout so the per-request
+	// context (5 min) governs the download duration instead.
+	dlClient := *c.httpClient
+	dlClient.Timeout = 0
+
+	resp, err := dlClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download file: %w", err)
 	}

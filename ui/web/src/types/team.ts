@@ -75,6 +75,7 @@ export interface TeamTaskData {
   priority: number;
   result?: string;
   user_id?: string;
+  channel?: string;
   created_at?: string;
   updated_at?: string;
   // V2 fields

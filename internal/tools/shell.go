@@ -16,169 +16,64 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// Dangerous command patterns to deny by default.
-// Defense-in-depth: these patterns complement Docker hardening (cap-drop ALL,
-// read-only rootfs, no-new-privileges, pids-limit, memory limit).
+// Dangerous command patterns organized into configurable deny groups.
+// Defense-in-depth: patterns complement Docker hardening (cap-drop ALL,
+// no-new-privileges, pids-limit, memory limit).
 // Sources: OWASP Agentic AI Top 10, Claude Code CVE-2025-66032, MITRE ATT&CK,
 // PayloadsAllTheThings, Trail of Bits prompt-injection-to-RCE research.
-// DefaultDenyPatterns contains dangerous command patterns to deny by default.
-var DefaultDenyPatterns = []*regexp.Regexp{
-	// ── Destructive file operations ──
-	regexp.MustCompile(`\brm\s+-[rf]{1,2}\b`),
-	regexp.MustCompile(`\brm\s+.*--recursive`),
-	regexp.MustCompile(`\brm\s+.*--force`),
-	regexp.MustCompile(`\bdel\s+/[fq]\b`),
-	regexp.MustCompile(`\brmdir\s+/s\b`),
-	regexp.MustCompile(`\b(mkfs|diskpart)\b|\bformat\s`),
-	regexp.MustCompile(`\bdd\s+if=`),
-	regexp.MustCompile(`>\s*/dev/sd[a-z]\b`),
-	regexp.MustCompile(`\b(shutdown|reboot|poweroff)\b`),
-	regexp.MustCompile(`:\(\)\s*\{.*\};\s*:`), // fork bomb
+// Groups and patterns defined in shell_deny_groups.go.
 
-	// ── Data exfiltration ──
-	regexp.MustCompile(`\bcurl\b.*\|\s*(ba)?sh\b`),                                              // curl | sh
-	regexp.MustCompile(`\bcurl\b.*(-d\b|-F\b|--data|--upload|--form|-T\b|-X\s*P(UT|OST|ATCH))`), // curl POST/PUT
-	regexp.MustCompile(`\bwget\b.*-O\s*-\s*\|\s*(ba)?sh\b`),                                     // wget | sh
-	regexp.MustCompile(`\bwget\b.*--post-(data|file)`),                                          // wget POST
-	regexp.MustCompile(`\b(nslookup|dig|host)\b`),                                               // DNS exfiltration
-	regexp.MustCompile(`/dev/tcp/`),                                                             // bash tcp redirect
-
-	// ── Reverse shells ──
-	regexp.MustCompile(`\b(nc|ncat|netcat)\b.*-[el]\b`),
-	regexp.MustCompile(`\bsocat\b`),
-	regexp.MustCompile(`\bopenssl\b.*s_client`),
-	regexp.MustCompile(`\btelnet\b.*\d+`),
-	regexp.MustCompile(`\bpython[23]?\b.*\bimport\s+(socket|http\.client|urllib|requests)\b`),
-	regexp.MustCompile(`\bperl\b.*-e\s*.*\b[Ss]ocket\b`),
-	regexp.MustCompile(`\bruby\b.*-e\s*.*\b(TCPSocket|Socket)\b`),
-	regexp.MustCompile(`\bnode\b.*-e\s*.*\b(net\.connect|child_process)\b`),
-	regexp.MustCompile(`\bawk\b.*/inet/`), // awk built-in networking
-	regexp.MustCompile(`\bmkfifo\b`),      // named pipes for shell redirection
-
-	// ── Dangerous eval / code injection ──
-	regexp.MustCompile(`\beval\s*\$`),
-	regexp.MustCompile(`\bbase64\s+-d\b.*\|\s*(ba)?sh\b`),
-
-	// ── Privilege escalation ──
-	regexp.MustCompile(`\bsudo\b`),
-	regexp.MustCompile(`\bsu\s+-`),
-	regexp.MustCompile(`\bnsenter\b`),
-	regexp.MustCompile(`\bunshare\b`),
-	regexp.MustCompile(`\b(mount|umount)\b`),
-	regexp.MustCompile(`\b(capsh|setcap|getcap)\b`),
-
-	// ── Dangerous path operations ──
-	regexp.MustCompile(`\bchmod\s+[0-7]{3,4}\s+/`),
-	regexp.MustCompile(`\bchown\b.*\s+/`),
-	regexp.MustCompile(`\bchmod\b.*\+x.*/tmp/`), // make tmpfs executable
-	regexp.MustCompile(`\bchmod\b.*\+x.*/var/tmp/`),
-	regexp.MustCompile(`\bchmod\b.*\+x.*/dev/shm/`),
-
-	// ── Environment variable injection ──
-	regexp.MustCompile(`\bLD_PRELOAD\s*=`),
-	regexp.MustCompile(`\bDYLD_INSERT_LIBRARIES\s*=`),
-	regexp.MustCompile(`\bLD_LIBRARY_PATH\s*=`),
-	regexp.MustCompile(`/etc/ld\.so\.preload`),
-	regexp.MustCompile(`\bGIT_EXTERNAL_DIFF\s*=`), // git diff arbitrary code exec
-	regexp.MustCompile(`\bGIT_DIFF_OPTS\s*=`),     // git diff behavior injection
-	regexp.MustCompile(`\bBASH_ENV\s*=`),          // shell init injection
-	regexp.MustCompile(`\bENV\s*=.*\bsh\b`),       // sh init injection
-
-	// ── Container escape ──
-	regexp.MustCompile(`/var/run/docker\.sock|docker\.(sock|socket)`),
-	regexp.MustCompile(`/proc/sys/(kernel|fs|net)/`),      // proc writes
-	regexp.MustCompile(`/sys/(kernel|fs|class|devices)/`), // sysfs manipulation
-
-	// ── Crypto mining ──
-	regexp.MustCompile(`\b(xmrig|cpuminer|minerd|cgminer|bfgminer|ethminer|nbminer|t-rex|phoenixminer|lolminer|gminer|claymore)\b`),
-	regexp.MustCompile(`stratum\+tcp://|stratum\+ssl://`),
-
-	// ── Filter bypass (Claude Code CVE-2025-66032) ──
-	regexp.MustCompile(`\bsed\b.*['"]/e\b`),                               // sed /e command execution
-	regexp.MustCompile(`\bsort\b.*--compress-program`),                    // sort arbitrary exec
-	regexp.MustCompile(`\bgit\b.*(--upload-pack|--receive-pack|--exec)=`), // git exec flags
-	regexp.MustCompile(`\b(rg|grep)\b.*--pre=`),                           // preprocessor execution
-	regexp.MustCompile(`\bman\b.*--html=`),                                // man command injection
-	regexp.MustCompile(`\bhistory\b.*-[saw]\b`),                           // history file injection
-	regexp.MustCompile(`\$\{[^}]*@[PpEeAaKk]\}`),                          // ${var@P} parameter expansion
-
-	// ── Network abuse / reconnaissance ──
-	regexp.MustCompile(`\b(nmap|masscan|zmap|rustscan)\b`),
-	regexp.MustCompile(`\b(ssh|scp|sftp)\b.*@`),                               // outbound SSH
-	regexp.MustCompile(`\b(chisel|frp|ngrok|cloudflared|bore|localtunnel)\b`), // tunneling tools
-
-	// ── Persistence ──
-	regexp.MustCompile(`\bcrontab\b`),
-	regexp.MustCompile(`>\s*~/?\.(bashrc|bash_profile|profile|zshrc)`), // shell RC injection
-	regexp.MustCompile(`\btee\b.*\.(bashrc|bash_profile|profile|zshrc)`),
-
-	// ── Process manipulation ──
-	regexp.MustCompile(`\bkill\s+-9\s`),
-	regexp.MustCompile(`\b(killall|pkill)\b`),
-
-	// ── Environment variable dumping ──
-	// Bare env/printenv/set/export dumps all vars including secrets (API keys, DSN, encryption keys).
-	// 'env VAR=val cmd' (env with assignment before command) is still allowed.
-	regexp.MustCompile(`^\s*env\s*$`),                                 // bare 'env'
-	regexp.MustCompile(`^\s*env\s*\|`),                                // 'env | ...' (piped)
-	regexp.MustCompile(`^\s*env\s*>\s`),                               // 'env > file'
-	regexp.MustCompile(`\bprintenv\b`),                                // any printenv usage
-	regexp.MustCompile(`^\s*(set|export\s+-p|declare\s+-x)\s*($|\|)`), // shell var dumps
-	regexp.MustCompile(`\bcompgen\s+-e\b`),                            // bash env completion dump
-	regexp.MustCompile(`/proc/[^/]+/environ`),                         // /proc/PID/environ (leaks all env vars)
-	regexp.MustCompile(`/proc/self/environ`),                          // /proc/self/environ
-	regexp.MustCompile(`(?i)\bstrings\b.*/proc/`),                     // strings on /proc files (binary env dump)
+// DefaultDenyPatterns returns all patterns from groups where Default=true.
+// Backward-compatible wrapper for code that doesn't use per-agent overrides.
+func DefaultDenyPatterns() []*regexp.Regexp {
+	return ResolveDenyPatterns(nil)
 }
 
 // ExecTool executes shell commands, optionally inside a sandbox container.
 type ExecTool struct {
-	workingDir     string
-	timeout        time.Duration
-	denyPatterns   []*regexp.Regexp
-	denyExemptions []string // substrings that exempt a command from deny (e.g. ".goclaw/skills-store/")
-	restrict       bool
-	sandboxMgr     sandbox.Manager      // nil = no sandbox, execute on host
-	approvalMgr    *ExecApprovalManager // nil = no approval needed
-	agentID        string               // for approval request context
-	secureCLIStore store.SecureCLIStore  // nil = no credentialed exec
+	workingDir       string
+	timeout          time.Duration
+	pathDenyPatterns []*regexp.Regexp     // always-on path-based denials (DenyPaths)
+	denyExemptions   []string             // substrings that exempt a command from deny
+	restrict         bool
+	sandboxMgr       sandbox.Manager      // nil = no sandbox, execute on host
+	approvalMgr      *ExecApprovalManager // nil = no approval needed
+	agentID          string               // for approval request context
+	secureCLIStore   store.SecureCLIStore  // nil = no credentialed exec
 }
 
 // NewExecTool creates an exec tool that runs commands directly on the host.
 func NewExecTool(workingDir string, restrict bool) *ExecTool {
 	return &ExecTool{
-		workingDir:   workingDir,
-		timeout:      60 * time.Second,
-		denyPatterns: DefaultDenyPatterns,
-		restrict:     restrict,
+		workingDir: workingDir,
+		timeout:    60 * time.Second,
+		restrict:   restrict,
 	}
 }
 
 // NewSandboxedExecTool creates an exec tool that routes commands through a sandbox container.
 func NewSandboxedExecTool(workingDir string, restrict bool, mgr sandbox.Manager) *ExecTool {
 	return &ExecTool{
-		workingDir:   workingDir,
-		timeout:      300 * time.Second, // sandbox allows longer timeout
-		denyPatterns: DefaultDenyPatterns,
-		restrict:     restrict,
-		sandboxMgr:   mgr,
+		workingDir: workingDir,
+		timeout:    300 * time.Second, // sandbox allows longer timeout
+		restrict:   restrict,
+		sandboxMgr: mgr,
 	}
 }
 
 // SetSandboxKey is a no-op; sandbox key is now read from ctx (thread-safe).
 func (t *ExecTool) SetSandboxKey(key string) {}
 
-// DenyPaths adds dynamic deny patterns that block commands referencing the given paths.
-// Used to prevent exec from reading/copying files from sensitive directories (e.g. data dir, .goclaw).
+// DenyPaths adds always-on deny patterns that block commands referencing the given paths.
+// These are NOT configurable via deny groups — they always apply regardless of group config.
 func (t *ExecTool) DenyPaths(paths ...string) {
 	for _, p := range paths {
 		escaped := regexp.QuoteMeta(p)
-		t.denyPatterns = append(t.denyPatterns, regexp.MustCompile(escaped))
+		t.pathDenyPatterns = append(t.pathDenyPatterns, regexp.MustCompile(escaped))
 	}
 }
 
 // AllowPathExemptions adds substrings that exempt a command from deny pattern matches.
-// E.g. AllowPathExemptions(".goclaw/skills-store/") lets commands referencing
-// skills-store pass even though ".goclaw/" is denied.
 func (t *ExecTool) AllowPathExemptions(substrings ...string) {
 	t.denyExemptions = append(t.denyExemptions, substrings...)
 }
@@ -190,7 +85,6 @@ func (t *ExecTool) SetApprovalManager(mgr *ExecApprovalManager, agentID string) 
 }
 
 // SetSecureCLIStore sets the credential store for credentialed exec.
-// When set, commands matching a configured binary use Direct Exec Mode.
 func (t *ExecTool) SetSecureCLIStore(s store.SecureCLIStore) {
 	t.secureCLIStore = s
 }
@@ -220,8 +114,23 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return ErrorResult("command is required")
 	}
 
-	// Check for dangerous commands (applies to both host and sandbox)
-	for _, pattern := range t.denyPatterns {
+	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
+	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
+	groupPatterns := ResolveDenyPatterns(denyOverrides)
+
+	// Also resolve package_install patterns separately for approval routing.
+	var pkgInstallPatterns []*regexp.Regexp
+	if pkgGroup, ok := DenyGroupRegistry["package_install"]; ok && IsGroupDenied(denyOverrides, "package_install") {
+		pkgInstallPatterns = pkgGroup.Patterns
+	}
+
+	// Combine group-based patterns + always-on path denials.
+	allPatterns := make([]*regexp.Regexp, 0, len(groupPatterns)+len(t.pathDenyPatterns))
+	allPatterns = append(allPatterns, groupPatterns...)
+	allPatterns = append(allPatterns, t.pathDenyPatterns...)
+
+	// Check for dangerous commands (applies to both host and sandbox).
+	for _, pattern := range allPatterns {
 		if pattern.MatchString(command) {
 			// Check if any exemption applies (e.g. skills-store within .goclaw)
 			exempt := false
@@ -231,9 +140,26 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 					break
 				}
 			}
-			if !exempt {
-				return ErrorResult(fmt.Sprintf("command denied by safety policy: matches pattern %s", pattern.String()))
+			if exempt {
+				continue
 			}
+
+			// Package install commands: route through approval flow instead of hard deny.
+			// This lets agents "request permission" from admin to install packages.
+			if t.approvalMgr != nil && matchesAny(command, pkgInstallPatterns) {
+				slog.Info("exec: package install requires approval", "command", truncateCmd(command, 100), "agent", t.agentID)
+				decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute)
+				if err != nil {
+					return ErrorResult(fmt.Sprintf("package install approval: %v", err))
+				}
+				if decision == ApprovalDeny {
+					return ErrorResult("package installation denied by admin")
+				}
+				// Approved — skip deny, continue to execution.
+				continue
+			}
+
+			return ErrorResult(fmt.Sprintf("command denied by safety policy: matches pattern %s", pattern.String()))
 		}
 	}
 
@@ -300,6 +226,16 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	return t.executeOnHost(ctx, command, cwd)
 }
 
+// matchesAny checks if a command matches any pattern in the list.
+func matchesAny(command string, patterns []*regexp.Regexp) bool {
+	for _, p := range patterns {
+		if p.MatchString(command) {
+			return true
+		}
+	}
+	return false
+}
+
 // executeOnHost runs a command directly on the host (original behavior).
 func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Result {
 	ctx, cancel := context.WithTimeout(ctx, t.timeout)
@@ -308,9 +244,11 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = cwd
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	// Limit output to 1MB to prevent OOM from runaway commands.
+	stdout := &limitedBuffer{max: 1 << 20}
+	stderr := &limitedBuffer{max: 1 << 20}
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	err := cmd.Run()
 
@@ -349,12 +287,13 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)
 		}
-		// Docker unavailable (binary missing, daemon down) → fallback to host
-		slog.Warn("sandbox unavailable, falling back to host exec",
+		// Docker unavailable (binary missing, daemon down) → fail closed.
+		// Do NOT silently fallback to host — that defeats the purpose of sandboxing.
+		slog.Warn("security.sandbox_unavailable",
 			"error", err,
 			"command", truncateCmd(command, 80),
 		)
-		return t.executeOnHost(ctx, command, cwd)
+		return ErrorResult(fmt.Sprintf("sandbox unavailable: %v (will not fall back to unsandboxed host execution)", err))
 	}
 
 	// Map host workdir to container workdir
@@ -391,3 +330,37 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 
 	return SilentResult(output)
 }
+
+// limitedBuffer caps output to prevent OOM from runaway commands.
+type limitedBuffer struct {
+	buf       bytes.Buffer
+	max       int
+	truncated bool
+}
+
+func (lb *limitedBuffer) Write(p []byte) (int, error) {
+	if lb.truncated {
+		return len(p), nil
+	}
+	remaining := lb.max - lb.buf.Len()
+	if remaining <= 0 {
+		lb.truncated = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		lb.buf.Write(p[:remaining])
+		lb.truncated = true
+		return len(p), nil
+	}
+	return lb.buf.Write(p)
+}
+
+func (lb *limitedBuffer) String() string {
+	s := lb.buf.String()
+	if lb.truncated {
+		s += "\n[output truncated at 1MB]"
+	}
+	return s
+}
+
+func (lb *limitedBuffer) Len() int { return lb.buf.Len() }

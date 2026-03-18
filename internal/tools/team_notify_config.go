@@ -4,9 +4,10 @@ import "encoding/json"
 
 // TeamNotifyConfig controls which team task events are forwarded to chat channels.
 type TeamNotifyConfig struct {
-	Dispatched bool   `json:"dispatched"` // task assigned to member
+	Dispatched bool   `json:"dispatched"` // task dispatched to member
 	Progress   bool   `json:"progress"`   // member updates progress
 	Failed     bool   `json:"failed"`     // task failed
+	Completed  bool   `json:"completed"`  // task completed
 	Mode       string `json:"mode"`       // "direct" (outbound) or "leader" (through leader agent)
 }
 
@@ -16,6 +17,7 @@ func DefaultTeamNotifyConfig() TeamNotifyConfig {
 		Dispatched: true,
 		Progress:   true,
 		Failed:     true,
+		Completed:  true,
 		Mode:       "direct",
 	}
 }
@@ -28,15 +30,30 @@ func ParseTeamNotifyConfig(settings json.RawMessage) TeamNotifyConfig {
 		return cfg
 	}
 	var s struct {
-		Notifications *TeamNotifyConfig `json:"notifications"`
+		Notifications *struct {
+			Dispatched *bool  `json:"dispatched"`
+			Progress   *bool  `json:"progress"`
+			Failed     *bool  `json:"failed"`
+			Completed  *bool  `json:"completed"`
+			Mode       string `json:"mode"`
+		} `json:"notifications"`
 	}
 	if json.Unmarshal(settings, &s) != nil || s.Notifications == nil {
 		return cfg
 	}
 	n := s.Notifications
-	cfg.Dispatched = n.Dispatched
-	cfg.Progress = n.Progress
-	cfg.Failed = n.Failed
+	if n.Dispatched != nil {
+		cfg.Dispatched = *n.Dispatched
+	}
+	if n.Progress != nil {
+		cfg.Progress = *n.Progress
+	}
+	if n.Failed != nil {
+		cfg.Failed = *n.Failed
+	}
+	if n.Completed != nil {
+		cfg.Completed = *n.Completed
+	}
 	if n.Mode == "leader" {
 		cfg.Mode = "leader"
 	}

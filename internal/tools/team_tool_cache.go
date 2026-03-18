@@ -78,10 +78,10 @@ func (m *TeamToolManager) resolveTeam(ctx context.Context) (*store.TeamData, uui
 }
 
 // requireLead checks if the calling agent is the team lead.
-// Delegate/system channels bypass this check (they act on behalf of the lead).
+// Teammate/system channels bypass this check (they act on behalf of the lead).
 func (m *TeamToolManager) requireLead(ctx context.Context, team *store.TeamData, agentID uuid.UUID) error {
 	channel := ToolChannelFromCtx(ctx)
-	if channel == ChannelDelegate || channel == ChannelSystem {
+	if channel == ChannelTeammate || channel == ChannelSystem {
 		return nil
 	}
 	if agentID != team.LeadAgentID {

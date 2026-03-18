@@ -187,6 +187,10 @@ func (c *Channel) processUpdate(update zaloUpdate) {
 
 func (c *Channel) handleTextMessage(msg *zaloMessage) {
 	senderID := msg.From.ID
+	if senderID == "" {
+		slog.Warn("zalo: dropping text message with empty sender ID", "message_id", msg.MessageID)
+		return
+	}
 	chatID := msg.Chat.ID
 	if chatID == "" {
 		chatID = senderID
@@ -218,6 +222,10 @@ func (c *Channel) handleTextMessage(msg *zaloMessage) {
 
 func (c *Channel) handleImageMessage(msg *zaloMessage) {
 	senderID := msg.From.ID
+	if senderID == "" {
+		slog.Warn("zalo: dropping image message with empty sender ID", "message_id", msg.MessageID)
+		return
+	}
 	chatID := msg.Chat.ID
 	if chatID == "" {
 		chatID = senderID

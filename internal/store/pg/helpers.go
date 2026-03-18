@@ -5,11 +5,17 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// validColumnName matches safe SQL identifiers (letters, digits, underscores).
+// Defense-in-depth: prevents column name injection in execMapUpdate.
+var validColumnName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // --- Nullable helpers ---
 
@@ -88,14 +94,22 @@ func jsonOrNull(data json.RawMessage) any {
 // --- PostgreSQL array helpers ---
 
 // pqStringArray converts a Go string slice to a PostgreSQL text[] literal.
+// Each element is double-quoted and escaped to prevent array literal injection.
 func pqStringArray(arr []string) any {
 	if arr == nil {
 		return nil
 	}
-	return "{" + strings.Join(arr, ",") + "}"
+	quoted := make([]string, len(arr))
+	for i, s := range arr {
+		escaped := strings.ReplaceAll(s, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+		quoted[i] = `"` + escaped + `"`
+	}
+	return "{" + strings.Join(quoted, ",") + "}"
 }
 
 // scanStringArray parses a PostgreSQL text[] column (scanned as []byte) into a Go string slice.
+// Handles both quoted and unquoted elements in PostgreSQL array literal format.
 func scanStringArray(data []byte, dest *[]string) {
 	if data == nil || len(data) == 0 {
 		return
@@ -106,12 +120,50 @@ func scanStringArray(data []byte, dest *[]string) {
 	if s == "" {
 		return
 	}
-	*dest = strings.Split(s, ",")
+
+	// Parse PostgreSQL array format: {val1,"quoted,val",val3}
+	var result []string
+	i := 0
+	for i < len(s) {
+		if s[i] == '"' {
+			// Quoted element: find closing quote (handle escaped quotes)
+			i++ // skip opening quote
+			var elem strings.Builder
+			for i < len(s) {
+				if s[i] == '\\' && i+1 < len(s) {
+					elem.WriteByte(s[i+1])
+					i += 2
+				} else if s[i] == '"' {
+					i++ // skip closing quote
+					break
+				} else {
+					elem.WriteByte(s[i])
+					i++
+				}
+			}
+			result = append(result, elem.String())
+		} else {
+			// Unquoted element: read until comma
+			j := strings.IndexByte(s[i:], ',')
+			if j < 0 {
+				result = append(result, s[i:])
+				break
+			}
+			result = append(result, s[i:i+j])
+			i += j
+		}
+		// Skip comma separator
+		if i < len(s) && s[i] == ',' {
+			i++
+		}
+	}
+	*dest = result
 }
 
 // --- Dynamic UPDATE helper ---
 
 // execMapUpdate builds and runs a dynamic UPDATE from a column→value map.
+// Column names are validated against a strict identifier regex to prevent SQL injection.
 func execMapUpdate(ctx context.Context, db *sql.DB, table string, id uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
@@ -120,6 +172,10 @@ func execMapUpdate(ctx context.Context, db *sql.DB, table string, id uuid.UUID, 
 	var args []any
 	i := 1
 	for col, val := range updates {
+		if !validColumnName.MatchString(col) {
+			slog.Warn("security.invalid_column_name", "table", table, "column", col)
+			return fmt.Errorf("invalid column name: %q", col)
+		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i))
 		args = append(args, val)
 		i++

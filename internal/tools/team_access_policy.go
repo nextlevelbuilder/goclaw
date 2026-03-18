@@ -23,7 +23,7 @@ type teamAccessSettings struct {
 
 // checkTeamAccess validates whether a user/channel combination is authorized
 // for team operations. Returns nil if access is allowed.
-// System channels (ChannelDelegate, ChannelSystem) always pass.
+// System channels (ChannelTeammate, ChannelSystem) always pass.
 // Empty settings = open access (no restrictions).
 func checkTeamAccess(settings json.RawMessage, userID, channel string) error {
 	if len(settings) == 0 || string(settings) == "{}" {
@@ -35,7 +35,7 @@ func checkTeamAccess(settings json.RawMessage, userID, channel string) error {
 	}
 
 	// System/internal access always allowed
-	if channel == ChannelDelegate || channel == ChannelSystem {
+	if channel == ChannelTeammate || channel == ChannelSystem {
 		return nil
 	}
 

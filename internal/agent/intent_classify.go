@@ -141,7 +141,7 @@ func formatToolLabel(tool string) string {
 		return "code execution"
 	case tool == "browser":
 		return "browser"
-	case tool == "spawn" || tool == "delegate":
+	case tool == "spawn":
 		return "delegation"
 	case strings.HasPrefix(tool, "memory"):
 		return "memory"

@@ -376,6 +376,7 @@ func scanAgentRows(rows *sql.Rows) ([]store.AgentData, error) {
 
 // execMapUpdateWhere is like execMapUpdate but with a custom WHERE clause.
 // The whereClause should use $IDX as placeholder for the ID (will be replaced with the next arg index).
+// Column names are validated against a strict identifier regex to prevent SQL injection.
 func execMapUpdateWhere(ctx context.Context, db *sql.DB, table string, updates map[string]any, whereClause string, id uuid.UUID) error {
 	if len(updates) == 0 {
 		return nil
@@ -384,6 +385,10 @@ func execMapUpdateWhere(ctx context.Context, db *sql.DB, table string, updates m
 	var args []any
 	i := 1
 	for col, val := range updates {
+		if !validColumnName.MatchString(col) {
+			slog.Warn("security.invalid_column_name", "table", table, "column", col)
+			return fmt.Errorf("invalid column name: %q", col)
+		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i))
 		args = append(args, val)
 		i++

@@ -237,7 +237,7 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	if !deliver {
 		if ctxChannel := ToolChannelFromCtx(ctx); ctxChannel != "" {
 			switch ctxChannel {
-			case "cli", "system", "subagent", "cron", "delegate":
+			case "cli", "system", "subagent", "cron", "teammate":
 				// internal channels — don't auto-deliver
 			default:
 				deliver = true
@@ -265,6 +265,14 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	job, err := t.cronStore.AddJob(name, schedule, message, deliver, channel, to, agentID, userID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create cron job: %v", err))
+	}
+
+	// Set wake_heartbeat if requested (triggers heartbeat after cron job completes)
+	if wh, _ := jobObj["wake_heartbeat"].(bool); wh {
+		wakeTrue := true
+		if updated, uErr := t.cronStore.UpdateJob(job.ID, store.CronJobPatch{WakeHeartbeat: &wakeTrue}); uErr == nil {
+			job = updated
+		}
 	}
 
 	data, _ := json.MarshalIndent(map[string]any{"job": job}, "", "  ")

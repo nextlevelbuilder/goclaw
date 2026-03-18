@@ -316,7 +316,8 @@ type TeamStore interface {
 	// statusFilter: "" = non-completed (default), "completed", "all".
 	// userID: if non-empty, filter to tasks created by this user.
 	// channel+chatID: if either is non-empty, filter to that exact scope.
-	ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, offset int) ([]TeamTaskData, error)
+	// limit: max rows to return; 0 uses the default (30).
+	ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, limit int, offset int) ([]TeamTaskData, error)
 	// GetTask returns a single task by ID with joined agent info.
 	GetTask(ctx context.Context, taskID uuid.UUID) (*TeamTaskData, error)
 	// GetTasksByIDs returns multiple tasks by IDs in a single query.

@@ -232,16 +232,7 @@ The board displays these snapshots in a visual timeline, allowing users to revie
 
 ### Delegate Agent Restrictions
 
-Delegate agents (members executing delegated work) have restrictions to prevent lifecycle corruption:
-
-- **Cannot complete directly**: Results are auto-completed when delegation finishes
-  - Error: `"delegate agents cannot complete team tasks directly — results are auto-completed when delegation finishes"`
-- **Cannot cancel tasks**: Only the lead can cancel
-  - Error: `"delegate agents cannot cancel team tasks directly"`
-- **Cannot approve/reject**: Only lead and dashboard users can approve/reject
-  - Error: `"delegate agents cannot reject team tasks"` (for reject)
-
-This ensures task state transitions are controlled and audit-trail integrity is maintained.
+Guards that previously prevented delegate agents from directly completing, cancelling, or approving/rejecting tasks are currently commented out (reserved for a future reviewer workflow). At this time, these restrictions are not enforced at runtime. A future implementation may re-enable them when a structured reviewer/approval flow is introduced.
 
 ### Assignee is Mandatory
 
@@ -264,7 +255,7 @@ This is safe because the claim is atomic — only one agent can succeed.
 
 ### User & Channel Scoping
 
-- **System/delegate channels**: See all tasks for the team
+- **System/teammate channels**: See all tasks for the team
 - **Regular user channels**: Filter to tasks they triggered (filtered by user ID)
 - **Scope discovery**: `teams.scopes` lists all unique channel+chatID scopes across tasks
 - **Known users**: `teams.known_users` lists distinct user IDs from team member sessions (UI user select)
@@ -318,7 +309,7 @@ When a team message is sent, it flows through the message bus with a `"teammate:
 [Team message from {sender_key}]: {message text}
 ```
 
-The receiving agent processes this as an inbound message, routed through the delegate scheduler lane. The response is published back to the originating channel so the user (and lead) can see it.
+The receiving agent processes this as an inbound message, routed through the team scheduler lane. The response is published back to the originating channel so the user (and lead) can see it.
 
 ### Use Cases
 
@@ -388,7 +379,7 @@ flowchart TD
     LEAD["Lead receives user request"] --> CREATE["1. Create task on board<br/>team_tasks action=create<br/>→ returns task_id"]
     CREATE --> SPAWN["2. Delegate to member<br/>spawn agent=member,<br/>team_task_id=task_id"]
     SPAWN --> INJECT["Inject team workspace context<br/>WithToolTeamID<br/>WithToolTeamWorkspace<br/>WithTeamTaskID"]
-    INJECT --> LANE["Scheduled through<br/>delegate lane"]
+    INJECT --> LANE["Scheduled through<br/>team lane"]
     LANE --> MEMBER["Member agent executes<br/>in isolated session<br/>with workspace access"]
     MEMBER --> COMPLETE["3. Task auto-completed<br/>with delegation result"]
     COMPLETE --> DISPATCH["Files auto-linked to task<br/>Comments/events recorded"]
@@ -427,7 +418,7 @@ When a delegation finishes (success or failure):
 
 When the lead delegates to multiple members simultaneously:
 
-- Each delegation runs independently in the delegate lane
+- Each delegation runs independently in the team lane
 - Intermediate completions accumulate their results (artifacts)
 - When the **last** sibling delegation finishes, all accumulated results are collected
 - A single combined announcement is delivered to the lead with all results
@@ -496,8 +487,8 @@ Team messages flow through the message bus with specific routing rules.
 ```mermaid
 flowchart TD
     subgraph "Inbound (Team Member Execution)"
-        LEAD_SPAWN["Lead: spawn agent=member,<br/>team_task_id=X"] --> BUS_IN["Message Bus<br/>SenderID: 'delegate:{id}'"]
-        BUS_IN --> CONSUMER["Consumer routes to<br/>delegate lane"]
+        LEAD_SPAWN["Lead: spawn agent=member,<br/>team_task_id=X"] --> BUS_IN["Message Bus<br/>SenderID: 'delegate:{id}' (legacy format)"]
+        BUS_IN --> CONSUMER["Consumer routes to<br/>team lane"]
         CONSUMER --> MEMBER["Member agent runs<br/>in isolated session"]
     end
 
@@ -506,7 +497,7 @@ flowchart TD
         RESULT --> CHECK{"Last sibling?"}
         CHECK -->|"No"| ACCUMULATE["Accumulate artifacts"]
         CHECK -->|"Yes"| COLLECT["Collect all artifacts"]
-        COLLECT --> ANNOUNCE["Publish to parent session<br/>SenderID: 'delegate:{id}'"]
+        COLLECT --> ANNOUNCE["Publish to parent session<br/>SenderID: 'delegate:{id}' (legacy format)"]
         ANNOUNCE --> LEAD_SESSION["Lead processes in<br/>original user session"]
     end
 
@@ -521,8 +512,8 @@ flowchart TD
 
 | Prefix | Source | Destination | Scheduler Lane |
 |--------|--------|-------------|----------------|
-| `delegate:` | Delegation completion | Parent agent's original session | delegate |
-| `teammate:` | Team mailbox message | Target agent's session | delegate |
+| `delegate:` | Delegation completion (legacy session key format) | Parent agent's original session | team |
+| `teammate:` | Team mailbox message | Target agent's session | team |
 
 ### Session Context Preservation
 
@@ -556,7 +547,7 @@ Teams support fine-grained access control through team settings.
 | `escalation_mode` | String | How to escalate stale tasks: "notify_lead", "fail_task" |
 | `escalation_actions` | String list | Actions to take on escalation |
 
-System channels (`delegate`, `system`) always pass access checks. Empty settings mean open access.
+System channels (`teammate`, `system`) always pass access checks. Empty settings mean open access.
 
 ### Link-Level Settings
 
@@ -652,7 +643,7 @@ Teams emit events for real-time UI updates and observability.
 | `internal/store/team_store.go` | TeamStore interface (~40 methods), data types: TeamData, TeamTaskData, TeamMessageData, TeamTaskCommentData, etc. |
 | `internal/store/pg/teams.go` | PostgreSQL implementation: teams CRUD, members, tasks, messages, events, attachments |
 | `cmd/gateway_managed.go` | Team tool wiring, cache invalidation subscription |
-| `cmd/gateway_consumer.go` | Message routing for delegate/teammate prefixes, task dispatch to agents |
+| `cmd/gateway_consumer.go` | Message routing for teammate/delegate (legacy) prefixes, task dispatch to agents |
 
 ---
 
@@ -660,7 +651,7 @@ Teams emit events for real-time UI updates and observability.
 
 | Document | Relevant Content |
 |----------|-----------------|
-| [03-tools-system.md](./03-tools-system.md) | Delegation system, agent links, quality gates |
+| [03-tools-system.md](./03-tools-system.md) | Delegation system, agent links |
 | [06-store-data-model.md](./06-store-data-model.md) | Team tables schema, delegation_history |
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | Delegate scheduler lane (concurrency 100), cron |
-| [09-security.md](./09-security.md) | Delegation security, hook recursion prevention |
+| [09-security.md](./09-security.md) | Delegation security |

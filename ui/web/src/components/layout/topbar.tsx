@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { useIsMobile } from "@/hooks/use-media-query";
 import { usePendingPairingsCount } from "@/hooks/use-pending-pairings-count";
 import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, TIMEZONE_OPTIONS, type Language } from "@/lib/constants";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function Topbar() {
   const { t } = useTranslation("topbar");
@@ -28,10 +29,6 @@ export function Topbar() {
   const handleSidebarToggle = isMobile
     ? () => setMobileSidebarOpen(true)
     : toggleSidebar;
-
-  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setLanguage(e.target.value as Language);
-  };
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-background px-4 landscape-compact">
@@ -63,31 +60,35 @@ export function Topbar() {
           )}
         </button>
 
-        <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("language")}>
-          <Globe className="h-4 w-4 shrink-0" />
-          <select
-            value={language}
-            onChange={handleLanguageChange}
-            className="cursor-pointer bg-transparent text-xs outline-none"
+        <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
+          <SelectTrigger
+            title={t("language")}
+            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
           >
+            <Globe className="h-4 w-4 shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
             {SUPPORTED_LANGUAGES.map((lang) => (
-              <option key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</option>
+              <SelectItem key={lang} value={lang}>{LANGUAGE_LABELS[lang]}</SelectItem>
             ))}
-          </select>
-        </div>
+          </SelectContent>
+        </Select>
 
-        <div className="flex items-center gap-1 rounded-md px-2 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground" title={t("timezone")}>
-          <Clock className="h-4 w-4 shrink-0" />
-          <select
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            className="cursor-pointer bg-transparent text-xs outline-none"
+        <Select value={timezone} onValueChange={setTimezone}>
+          <SelectTrigger
+            title={t("timezone")}
+            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
           >
+            <Clock className="h-4 w-4 shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
             {TIMEZONE_OPTIONS.map((tz) => (
-              <option key={tz.value} value={tz.value}>{tz.label}</option>
+              <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
             ))}
-          </select>
-        </div>
+          </SelectContent>
+        </Select>
 
         <button
           onClick={() => setTheme(isDark ? "light" : "dark")}

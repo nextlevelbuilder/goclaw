@@ -109,6 +109,14 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("failed to save generated image: %v", err))
 	}
 
+	// Verify file was persisted (diagnostic for disappearing files).
+	if fi, err := os.Stat(imagePath); err != nil {
+		slog.Warn("create_image: file missing immediately after write", "path", imagePath, "error", err)
+		return ErrorResult(fmt.Sprintf("generated image file missing after write: %v", err))
+	} else {
+		slog.Info("create_image: file saved", "path", imagePath, "size", fi.Size(), "data_len", len(chainResult.Data))
+	}
+
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s", imagePath)}
 	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png"}}
 	result.Deliverable = fmt.Sprintf("[Generated image: %s]\nPrompt: %s", filepath.Base(imagePath), prompt)

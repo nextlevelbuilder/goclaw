@@ -1,15 +1,21 @@
 package skills
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os/exec"
 	"strings"
 	"time"
 )
 
 const installTimeout = 5 * time.Minute
+
+// pkgHelperSocket is the Unix socket path for the root-privileged pkg-helper.
+const pkgHelperSocket = "/tmp/pkg.sock"
 
 // InstallResult holds per-category install outcomes.
 type InstallResult struct {
@@ -45,24 +51,32 @@ func InstallSingleDep(ctx context.Context, dep string) (bool, string) {
 
 	slog.Info("skills: installing dep", "dep", dep)
 
-	var cmd *exec.Cmd
 	switch {
 	case strings.HasPrefix(dep, "pip:"):
 		pkg := strings.TrimPrefix(dep, "pip:")
-		cmd = exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
+		cmd := exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
+			slog.Error("skills: dep install failed", "dep", dep, "error", msg)
+			return false, msg
+		}
 	case strings.HasPrefix(dep, "npm:"):
 		pkg := strings.TrimPrefix(dep, "npm:")
-		cmd = exec.CommandContext(ctx, "npm", "install", "-g", pkg)
+		cmd := exec.CommandContext(ctx, "npm", "install", "-g", pkg)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
+			slog.Error("skills: dep install failed", "dep", dep, "error", msg)
+			return false, msg
+		}
 	default:
-		// System binary via apk
-		cmd = exec.CommandContext(ctx, "doas", "apk", "add", "--no-cache", dep)
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
-		slog.Error("skills: dep install failed", "dep", dep, "error", msg)
-		return false, msg
+		// System package via pkg-helper (root-privileged Unix socket).
+		// pkg-helper handles persist to apk-packages file.
+		ok, errMsg := apkViaHelper(ctx, "install", dep)
+		if !ok {
+			return false, errMsg
+		}
 	}
 
 	slog.Info("skills: dep installed", "dep", dep)
@@ -90,15 +104,19 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 		}
 	}
 
+	// System packages: install one by one via pkg-helper.
 	if len(sysPkgs) > 0 {
 		slog.Info("skills: installing system packages", "pkgs", sysPkgs)
-		args := append([]string{"apk", "add", "--no-cache"}, sysPkgs...)
-		cmd := exec.CommandContext(ctx, "doas", args...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("apk: %s (%v)", strings.TrimSpace(string(out)), err))
-		} else {
-			result.System = sysPkgs
+		var successful []string
+		for _, pkg := range sysPkgs {
+			ok, errMsg := apkViaHelper(ctx, "install", pkg)
+			if !ok {
+				result.Errors = append(result.Errors, fmt.Sprintf("apk %s: %s", pkg, errMsg))
+			} else {
+				successful = append(successful, pkg)
+			}
 		}
+		result.System = successful
 	}
 
 	if len(pipPkgs) > 0 {
@@ -127,8 +145,84 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 	return result, nil
 }
 
+// UninstallPackage removes one package (format: "pip:pkg", "npm:pkg", or plain apk name).
+// Returns (ok, errorMessage).
+func UninstallPackage(ctx context.Context, dep string) (bool, string) {
+	ctx, cancel := context.WithTimeout(ctx, installTimeout)
+	defer cancel()
+
+	slog.Info("skills: uninstalling package", "dep", dep)
+
+	switch {
+	case strings.HasPrefix(dep, "pip:"):
+		pkg := strings.TrimPrefix(dep, "pip:")
+		cmd := exec.CommandContext(ctx, "pip3", "uninstall", "-y", pkg)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
+			slog.Error("skills: uninstall failed", "dep", dep, "error", msg)
+			return false, msg
+		}
+	case strings.HasPrefix(dep, "npm:"):
+		pkg := strings.TrimPrefix(dep, "npm:")
+		cmd := exec.CommandContext(ctx, "npm", "uninstall", "-g", pkg)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
+			slog.Error("skills: uninstall failed", "dep", dep, "error", msg)
+			return false, msg
+		}
+	default:
+		// System package via pkg-helper. Helper handles persist file removal.
+		ok, errMsg := apkViaHelper(ctx, "uninstall", dep)
+		if !ok {
+			return false, errMsg
+		}
+	}
+
+	slog.Info("skills: package uninstalled", "dep", dep)
+	return true, ""
+}
+
+// apkViaHelper sends an install/uninstall request to the root-privileged pkg-helper
+// via Unix socket. The helper runs apk add/del as root and manages the persist file.
+func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
+	conn, err := net.DialTimeout("unix", pkgHelperSocket, 5*time.Second)
+	if err != nil {
+		return false, fmt.Sprintf("pkg-helper unavailable: %v", err)
+	}
+	defer conn.Close()
+
+	// Set deadline from context.
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetDeadline(deadline) //nolint:errcheck
+	}
+
+	// Send request as JSON line.
+	req := map[string]string{"action": action, "package": pkg}
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
+		return false, fmt.Sprintf("pkg-helper send failed: %v", err)
+	}
+
+	// Read response.
+	scanner := bufio.NewScanner(conn)
+	if !scanner.Scan() {
+		return false, "pkg-helper: no response"
+	}
+
+	var resp struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(scanner.Bytes(), &resp); err != nil {
+		return false, fmt.Sprintf("pkg-helper: invalid response: %v", err)
+	}
+
+	return resp.OK, resp.Error
+}
+
 // cleanCaches removes pip and npm caches to save disk space.
 func cleanCaches(ctx context.Context) {
-	exec.CommandContext(ctx, "pip3", "cache", "purge").Run()           //nolint:errcheck
-	exec.CommandContext(ctx, "rm", "-rf", "/tmp/npm-*").Run()          //nolint:errcheck
+	exec.CommandContext(ctx, "pip3", "cache", "purge").Run()          //nolint:errcheck
+	exec.CommandContext(ctx, "sh", "-c", "rm -rf /tmp/npm-*").Run()  //nolint:errcheck
 }

@@ -18,14 +18,15 @@ import (
 
 // ProvidersHandler handles LLM provider CRUD endpoints.
 type ProvidersHandler struct {
-	store       store.ProviderStore
-	secretStore store.ConfigSecretsStore
-	token       string
-	providerReg *providers.Registry
-	gatewayAddr string                    // for injecting MCP bridge into Claude CLI providers
-	mcpLookup   providers.MCPServerLookup // optional: resolves per-agent MCP servers
-	cliMu       sync.Mutex                // serializes Claude CLI provider create to prevent duplicates
-	msgBus      *bus.MessageBus
+	store           store.ProviderStore
+	secretStore     store.ConfigSecretsStore
+	token           string
+	providerReg     *providers.Registry
+	gatewayAddr     string                         // for injecting MCP bridge into Claude CLI providers
+	mcpLookup       providers.MCPServerLookup       // optional: resolves per-agent MCP servers
+	apiBaseFallback func(providerType string) string // optional: config/env fallback for api_base
+	cliMu           sync.Mutex                      // serializes Claude CLI provider create to prevent duplicates
+	msgBus          *bus.MessageBus
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -43,6 +44,23 @@ func (h *ProvidersHandler) SetMessageBus(msgBus *bus.MessageBus) {
 // Must be called before serving requests (not thread-safe).
 func (h *ProvidersHandler) SetMCPServerLookup(lookup providers.MCPServerLookup) {
 	h.mcpLookup = lookup
+}
+
+// SetAPIBaseFallback sets a function that returns config/env api_base by provider type.
+// Used as fallback when DB providers have no api_base set.
+func (h *ProvidersHandler) SetAPIBaseFallback(fn func(providerType string) string) {
+	h.apiBaseFallback = fn
+}
+
+// resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
+func (h *ProvidersHandler) resolveAPIBase(p *store.LLMProviderData) string {
+	if p.APIBase != "" {
+		return p.APIBase
+	}
+	if h.apiBaseFallback != nil {
+		return h.apiBaseFallback(p.ProviderType)
+	}
+	return ""
 }
 
 // emitProviderCacheInvalidate broadcasts a provider cache invalidation event.
@@ -117,23 +135,24 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	if p.APIKey == "" {
 		return
 	}
+	apiBase := h.resolveAPIBase(p)
 	switch p.ProviderType {
 	case store.ProviderChatGPTOAuth:
 		ts := oauth.NewDBTokenSource(h.store, h.secretStore, p.Name)
-		h.providerReg.Register(providers.NewCodexProvider(p.Name, ts, p.APIBase, ""))
+		h.providerReg.Register(providers.NewCodexProvider(p.Name, ts, apiBase, ""))
 	case store.ProviderAnthropicNative:
 		h.providerReg.Register(providers.NewAnthropicProvider(p.APIKey,
-			providers.WithAnthropicBaseURL(p.APIBase)))
+			providers.WithAnthropicBaseURL(apiBase)))
 	case store.ProviderDashScope:
-		h.providerReg.Register(providers.NewDashScopeProvider(p.Name, p.APIKey, p.APIBase, ""))
+		h.providerReg.Register(providers.NewDashScopeProvider(p.Name, p.APIKey, apiBase, ""))
 	case store.ProviderBailian:
-		base := p.APIBase
+		base := apiBase
 		if base == "" {
 			base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 		}
 		h.providerReg.Register(providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus"))
 	default:
-		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
+		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
 		if p.ProviderType == store.ProviderMiniMax {
 			prov.WithChatPath("/text/chatcompletion_v2")
 		}
@@ -270,9 +289,8 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	// Prevent updating immutable fields
-	delete(updates, "id")
-	delete(updates, "created_at")
+	// Allowlist: only permit known provider columns.
+	updates = filterAllowedKeys(updates, providerAllowedFields)
 
 	// Track old name before update for registry cleanup
 	var oldName string

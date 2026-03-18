@@ -1,0 +1,43 @@
+{
+  "title": "Runtime & Packages",
+  "description": "Manage system runtimes and installed packages",
+  "runtimes": {
+    "title": "Runtimes",
+    "available": "Available",
+    "missing": "Missing"
+  },
+  "system": {
+    "title": "System Packages",
+    "placeholder": "Package name (e.g. github-cli)"
+  },
+  "pip": {
+    "title": "Python Packages",
+    "placeholder": "Package name (e.g. pandas)"
+  },
+  "npm": {
+    "title": "Node Packages",
+    "placeholder": "Package name (e.g. typescript)"
+  },
+  "actions": {
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "installing": "Installing...",
+    "uninstalling": "Removing..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} installed successfully",
+    "installError": "Failed to install {{name}}",
+    "uninstallSuccess": "{{name}} removed successfully",
+    "uninstallError": "Failed to remove {{name}}"
+  },
+  "confirmUninstall": {
+    "title": "Confirm Uninstall",
+    "description": "Are you sure you want to remove {{name}}? This action cannot be undone."
+  },
+  "table": {
+    "name": "Name",
+    "version": "Version",
+    "actions": "Actions",
+    "empty": "No packages installed"
+  }
+}

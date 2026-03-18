@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,6 +120,32 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if teamWsDir, err := WorkspaceDir(t.manager.dataDir, team.ID, wsChat); err == nil {
 		taskMeta["team_workspace"] = teamWsDir
 	}
+	// Auto-collect media files from current run to team workspace.
+	// When leader received files from user and creates a task, copy those
+	// files to the team workspace so members can access them via read_file.
+	// Also rewrite any media paths in the description to point to the workspace copy,
+	// since members can't access the original .media/ paths outside their workspace.
+	if mediaPaths := RunMediaPathsFromCtx(ctx); len(mediaPaths) > 0 {
+		if wsDir, _ := taskMeta["team_workspace"].(string); wsDir != "" {
+			nameMap := RunMediaNamesFromCtx(ctx)
+			if copiedPaths := copyMediaToWorkspace(mediaPaths, wsDir, nameMap); len(copiedPaths) > 0 {
+				// Store as []any so type assertion works both before and after JSON round-trip.
+				files := make([]any, len(copiedPaths))
+				for i, p := range copiedPaths {
+					files[i] = p
+				}
+				taskMeta["attached_files"] = files
+
+				// Rewrite media paths in description so members see workspace paths.
+				for i, src := range mediaPaths {
+					if i < len(copiedPaths) {
+						description = strings.ReplaceAll(description, src, copiedPaths[i])
+					}
+				}
+			}
+		}
+	}
+
 	// Preserve original blocked_by list for blocker-result forwarding when task unblocks.
 	if len(blockedBy) > 0 {
 		ids := make([]string, len(blockedBy))
@@ -185,7 +212,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 			if err := t.manager.teamStore.AssignTask(ctx, task.ID, assigneeID, team.ID); err != nil {
 				slog.Warn("executeCreate: fallback assign failed", "task_id", task.ID, "error", err)
 			} else {
-				t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+				t.manager.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
 					TeamID:        team.ID.String(),
 					TaskID:        task.ID.String(),
 					TaskNumber:    task.TaskNumber,
@@ -203,7 +230,11 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		}
 	}
 
-	return NewResult(fmt.Sprintf("Task created: %s (id=%s, identifier=%s, status=%s)", subject, task.ID, task.Identifier, status))
+	assigneeName := t.manager.agentDisplayName(ctx, t.manager.agentKeyFromID(ctx, assigneeID))
+	if assigneeName == "" {
+		assigneeName = t.manager.agentKeyFromID(ctx, assigneeID)
+	}
+	return NewResult(fmt.Sprintf("Task created: %s (id=%s, task_number=%d, status=%s, assignee=%s)", subject, task.ID, task.TaskNumber, status, assigneeName))
 }
 
 func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any) *Result {

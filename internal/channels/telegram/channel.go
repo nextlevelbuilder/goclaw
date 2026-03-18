@@ -23,6 +23,7 @@ type Channel struct {
 	*channels.BaseChannel
 	bot              *telego.Bot
 	config           config.TelegramConfig
+	httpClient       *http.Client
 	pairingService   store.PairingStore
 	agentStore       store.AgentStore // for group file writer management (nil if not configured)
 	teamStore        store.TeamStore  // for /tasks, /task_detail commands (nil if not configured)
@@ -61,17 +62,20 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		opts = append(opts, telego.WithAPIServer(cfg.APIServer))
 	}
 
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
 	if cfg.Proxy != "" {
 		proxyURL, parseErr := url.Parse(cfg.Proxy)
 		if parseErr != nil {
 			return nil, fmt.Errorf("invalid proxy URL %q: %w", cfg.Proxy, parseErr)
 		}
-		opts = append(opts, telego.WithHTTPClient(&http.Client{
-			Transport: &http.Transport{
-				Proxy: http.ProxyURL(proxyURL),
-			},
-		}))
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = http.ProxyURL(proxyURL)
+		httpClient.Transport = transport
 	}
+	opts = append(opts, telego.WithHTTPClient(httpClient))
 
 	bot, err := telego.NewBot(cfg.Token, opts...)
 	if err != nil {
@@ -95,6 +99,7 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		BaseChannel:    base,
 		bot:            bot,
 		config:         cfg,
+		httpClient:     httpClient,
 		pairingService: pairingSvc,
 		agentStore:     agentStore,
 		teamStore:      teamStore,

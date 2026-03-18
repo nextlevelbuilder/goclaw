@@ -105,6 +105,7 @@ func NewWebhookHandler(verificationToken, encryptKey string, onMessage func(even
 		}
 
 		// Handle encrypted events
+		eventBody := body
 		if envelope.Encrypt != "" && encryptKey != "" {
 			decrypted, err := decryptEvent(envelope.Encrypt, encryptKey)
 			if err != nil {
@@ -112,6 +113,7 @@ func NewWebhookHandler(verificationToken, encryptKey string, onMessage func(even
 				http.Error(w, "decrypt failed", http.StatusBadRequest)
 				return
 			}
+			eventBody = decrypted
 			// Re-parse decrypted content
 			if err := json.Unmarshal(decrypted, &envelope); err != nil {
 				http.Error(w, "invalid decrypted json", http.StatusBadRequest)
@@ -128,14 +130,6 @@ func NewWebhookHandler(verificationToken, encryptKey string, onMessage func(even
 
 		// Parse as message event
 		var event MessageEvent
-		// Re-unmarshal the original (or decrypted) body as a full event
-		eventBody := body
-		if envelope.Encrypt != "" && encryptKey != "" {
-			decrypted, _ := decryptEvent(envelope.Encrypt, encryptKey)
-			if decrypted != nil {
-				eventBody = decrypted
-			}
-		}
 
 		if err := json.Unmarshal(eventBody, &event); err != nil {
 			slog.Debug("feishu webhook parse event failed", "error", err)

@@ -45,11 +45,11 @@ func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any)
 	channel := task.Channel
 	chatID := task.ChatID
 	ctxChannel := ToolChannelFromCtx(ctx)
-	if channel == "" || channel == ChannelDelegate || channel == ChannelSystem || channel == ChannelDashboard {
+	if channel == "" || channel == ChannelTeammate || channel == ChannelSystem || channel == ChannelDashboard {
 		channel = ctxChannel
 		chatID = ToolChatIDFromCtx(ctx)
 	}
-	if channel == "" || channel == ChannelDelegate || channel == ChannelSystem || channel == ChannelDashboard {
+	if channel == "" || channel == ChannelTeammate || channel == ChannelSystem || channel == ChannelDashboard {
 		return ErrorResult("cannot set follow-up: no valid channel found (task has no origin channel and context channel is internal)")
 	}
 
@@ -133,7 +133,7 @@ func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *
 		return ErrorResult("failed to retry task: " + err.Error())
 	}
 
-	t.manager.broadcastTeamEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
+	t.manager.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
 		TeamID:        team.ID.String(),
 		TaskID:        taskID.String(),
 		TaskNumber:    task.TaskNumber,

@@ -319,19 +319,32 @@ func (m *Manager) ActivateTools(names []string) {
 // Returns true if the tool is now in the registry.
 // Used by the Registry's deferredActivator callback for lazy tool activation.
 func (m *Manager) ActivateToolIfDeferred(name string) bool {
-	m.mu.RLock()
+	m.mu.Lock()
 	_, isDeferred := m.deferredTools[name]
 	_, isActivated := m.activatedTools[name]
-	m.mu.RUnlock()
 	if isActivated {
+		m.mu.Unlock()
 		return true // already activated by a concurrent call
 	}
 	if !isDeferred {
+		m.mu.Unlock()
 		return false
 	}
-	m.ActivateTools([]string{name})
-	_, ok := m.registry.Get(name)
-	return ok
+	// Mark as activated under lock to prevent concurrent ActivateTools races.
+	m.activatedTools[name] = struct{}{}
+	bt := m.deferredTools[name]
+	delete(m.deferredTools, name)
+	activeNames := make([]string, 0, len(m.activatedTools))
+	for n := range m.activatedTools {
+		activeNames = append(activeNames, n)
+	}
+	m.mu.Unlock()
+
+	// Register in registry outside lock (registry has its own sync).
+	m.registry.Register(bt)
+	tools.RegisterToolGroup("mcp", activeNames)
+	slog.Info("mcp.tools.activated", "tools", []string{name})
+	return true
 }
 
 // Stop shuts down all MCP server connections and unregisters tools.

@@ -34,6 +34,7 @@ var contextFileSet = map[string]bool{
 	bootstrap.UserFile:           true,
 	bootstrap.UserPredefinedFile: true,
 	bootstrap.BootstrapFile:      true, // first-run file (deleted after completion)
+	bootstrap.HeartbeatFile:      true, // agent-level heartbeat checklist
 }
 
 // isContextFile checks if a path refers to a workspace-root context file.
@@ -149,7 +150,7 @@ func (b *ContextFileInterceptor) ReadFile(ctx context.Context, path string) (str
 	// Predefined agent: block reads of shared identity files (SOUL.md, IDENTITY.md, AGENTS.md).
 	// These are already injected into the system prompt — allowing read_file would let the
 	// agent echo their full contents to users, leaking persona configuration.
-	if agentType == store.AgentTypePredefined && fileName != bootstrap.UserFile && fileName != bootstrap.BootstrapFile {
+	if agentType == store.AgentTypePredefined && fileName != bootstrap.UserFile && fileName != bootstrap.BootstrapFile && fileName != bootstrap.HeartbeatFile {
 		return "", true, fmt.Errorf(
 			"this file (%s) is already loaded into your context. You don't need to read it again — refer to your system instructions instead.",
 			fileName,
@@ -241,9 +242,9 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 		return true, err
 	}
 
-	// Predefined agent: block writes to shared files (only USER.md allowed per-user).
+	// Predefined agent: block writes to shared files (only USER.md + HEARTBEAT.md allowed).
 	// Exception: SOUL.md is allowed when self_evolve is enabled (style/tone evolution).
-	if agentType == store.AgentTypePredefined && fileName != bootstrap.UserFile {
+	if agentType == store.AgentTypePredefined && fileName != bootstrap.UserFile && fileName != bootstrap.HeartbeatFile {
 		allowSoulEvolve := fileName == bootstrap.SoulFile && store.SelfEvolveFromContext(ctx)
 		if !allowSoulEvolve {
 			return true, fmt.Errorf(

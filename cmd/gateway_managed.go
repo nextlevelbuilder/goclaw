@@ -358,6 +358,34 @@ func wireExtras(
 		})
 	}
 
+	// Heartbeat cache: invalidate due cache on config changes
+	if hi, ok := stores.Heartbeats.(store.CacheInvalidatable); ok {
+		msgBus.Subscribe(bus.TopicCacheHeartbeat, func(event bus.Event) {
+			if event.Name != protocol.EventCacheInvalidate {
+				return
+			}
+			payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+			if !ok || payload.Kind != bus.CacheKindHeartbeat {
+				return
+			}
+			hi.InvalidateCache()
+		})
+	}
+
+	// Config permissions cache: invalidate on grant/revoke changes
+	if pi, ok := stores.ConfigPermissions.(store.CacheInvalidatable); ok {
+		msgBus.Subscribe(bus.TopicCacheConfigPerms, func(event bus.Event) {
+			if event.Name != protocol.EventCacheInvalidate {
+				return
+			}
+			payload, ok := event.Payload.(bus.CacheInvalidatePayload)
+			if !ok || payload.Kind != bus.CacheKindConfigPerms {
+				return
+			}
+			pi.InvalidateCache()
+		})
+	}
+
 	// Custom tools cache: reload global tools on create/update/delete
 	if dynamicLoader != nil {
 		msgBus.Subscribe(bus.TopicCacheCustomTools, func(event bus.Event) {

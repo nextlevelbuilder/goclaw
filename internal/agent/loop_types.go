@@ -91,6 +91,9 @@ type Loop struct {
 	sandboxContainerDir    string
 	sandboxWorkspaceAccess string
 
+	// Shell deny group overrides from agent other_config (nil = all defaults)
+	shellDenyGroups map[string]bool
+
 	// Event callback for broadcasting agent events (run.started, chunk, tool.call, etc.)
 	onEvent func(event AgentEvent)
 
@@ -199,6 +202,9 @@ type LoopConfig struct {
 	SandboxEnabled         bool
 	SandboxContainerDir    string // e.g. "/workspace"
 	SandboxWorkspaceAccess string // "none", "ro", "rw"
+
+	// Shell deny group overrides (nil = all defaults)
+	ShellDenyGroups map[string]bool
 
 	// Agent UUID for context propagation to tools
 	AgentUUID uuid.UUID
@@ -319,6 +325,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		sandboxEnabled:         cfg.SandboxEnabled,
 		sandboxContainerDir:    cfg.SandboxContainerDir,
 		sandboxWorkspaceAccess: cfg.SandboxWorkspaceAccess,
+		shellDenyGroups:        cfg.ShellDenyGroups,
 		traceCollector:         cfg.TraceCollector,
 		inputGuard:             guard,
 		injectionAction:        action,
@@ -363,6 +370,8 @@ type RunRequest struct {
 	TraceName         string          // override trace name (default: "chat <agentID>")
 	TraceTags         []string        // additional tags for the trace (e.g. "cron")
 	MaxIterations     int             // per-request override (0 = use agent default, must be lower)
+	ModelOverride     string          // per-request model override (heartbeat uses cheaper model)
+	LightContext      bool            // skip loading context files (only inject ExtraSystemPrompt)
 
 	// Run classification
 	RunKind       string // "delegation", "announce" — empty for user-initiated runs

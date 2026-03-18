@@ -142,9 +142,9 @@ func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult 
 			slog.Warn("security.http_pairing_auth_failed", "sender_id", senderID, "ip", r.RemoteAddr)
 		}
 	}
-	// No auth configured → operator (backward compat)
+	// No auth configured → admin (no token = dev/single-user mode, full access)
 	if gatewayToken == "" {
-		return authResult{Role: permissions.RoleOperator, Authenticated: true}
+		return authResult{Role: permissions.RoleAdmin, Authenticated: true}
 	}
 	return authResult{}
 }

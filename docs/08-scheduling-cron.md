@@ -29,7 +29,7 @@ flowchart TD
         S3["..."]
     end
 
-    subgraph "Lane: delegate (concurrency = 100)"
+    subgraph "Lane: team (concurrency = 100)"
         D1["Delegation 1"]
         D2["Delegation 2"]
         D3["..."]
@@ -53,7 +53,7 @@ flowchart TD
 |------|:-----------:|-------------|---------|
 | `main` | 30 | `GOCLAW_LANE_MAIN` | Primary user chat sessions |
 | `subagent` | 50 | `GOCLAW_LANE_SUBAGENT` | Sub-agents spawned by the main agent |
-| `delegate` | 100 | `GOCLAW_LANE_DELEGATE` | Agent delegation executions |
+| `team` | 100 | `GOCLAW_LANE_TEAM` | Agent team/delegation executions |
 | `cron` | 30 | `GOCLAW_LANE_CRON` | Scheduled cron jobs (per-session serialization prevents same-job races) |
 
 `GetOrCreate()` allows creating new lanes on demand with custom concurrency. All lane concurrency values are configurable via environment variables.

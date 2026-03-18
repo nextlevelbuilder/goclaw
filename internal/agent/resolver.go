@@ -348,6 +348,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SkillEvolve:            ag.AgentType == "predefined" && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),
 			WorkspaceSharing:       ag.ParseWorkspaceSharing(),
+			ShellDenyGroups:        ag.ParseShellDenyGroups(),
 			GroupWriterCache:       deps.GroupWriterCache,
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,

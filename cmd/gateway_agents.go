@@ -157,7 +157,7 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 		return reg
 	}
 
-	return tools.NewSubagentManager(provider, agentCfg.Model, msgBus, toolsFactory, subCfg)
+	return tools.NewSubagentManager(provider, providerReg, agentCfg.Model, msgBus, toolsFactory, subCfg)
 }
 
 // setupTTS creates the TTS manager from config and registers providers.

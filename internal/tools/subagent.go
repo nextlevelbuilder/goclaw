@@ -68,12 +68,13 @@ type SubagentTask struct {
 
 // SubagentManager manages the lifecycle of spawned subagents.
 type SubagentManager struct {
-	mu       sync.RWMutex
-	tasks    map[string]*SubagentTask
-	config   SubagentConfig
-	provider providers.Provider
-	model    string
-	msgBus   *bus.MessageBus
+	mu          sync.RWMutex
+	tasks       map[string]*SubagentTask
+	config      SubagentConfig
+	provider    providers.Provider   // default provider (fallback)
+	providerReg *providers.Registry  // registry for resolving parent's provider
+	model       string
+	msgBus      *bus.MessageBus
 
 	// createTools builds a tool registry for subagents (without spawn/subagent tools).
 	createTools   func() *Registry
@@ -83,6 +84,7 @@ type SubagentManager struct {
 // NewSubagentManager creates a new subagent manager.
 func NewSubagentManager(
 	provider providers.Provider,
+	providerReg *providers.Registry,
 	model string,
 	msgBus *bus.MessageBus,
 	createTools func() *Registry,
@@ -92,6 +94,7 @@ func NewSubagentManager(
 		tasks:       make(map[string]*SubagentTask),
 		config:      cfg,
 		provider:    provider,
+		providerReg: providerReg,
 		model:       model,
 		msgBus:      msgBus,
 		createTools: createTools,

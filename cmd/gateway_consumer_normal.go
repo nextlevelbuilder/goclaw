@@ -142,7 +142,7 @@ func processNormalMessage(
 
 	// Auto-clear followup reminders when user sends a message on a real channel.
 	// Fire-and-forget: don't block message processing.
-	if teamStore != nil && msg.Channel != tools.ChannelSystem && msg.Channel != tools.ChannelDelegate && msg.Channel != tools.ChannelDashboard {
+	if teamStore != nil && msg.Channel != tools.ChannelSystem && msg.Channel != tools.ChannelTeammate && msg.Channel != tools.ChannelDashboard {
 		go func(ch, cid string) {
 			if n, err := teamStore.ClearFollowupByScope(ctx, ch, cid); err != nil {
 				slog.Warn("auto-clear followup failed", "channel", ch, "chat_id", cid, "error", err)
@@ -409,7 +409,7 @@ func processNormalMessage(
 		msgBus.PublishOutbound(outMsg)
 
 		// Auto-set followup when lead agent replies on a real channel with in_progress tasks.
-		if teamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelDelegate && channel != tools.ChannelDashboard {
+		if teamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelTeammate && channel != tools.ChannelDashboard {
 			go autoSetFollowup(ctx, teamStore, agentStore, agentKey, channel, chatID, outcome.Result.Content)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, outMeta, blockReply, ptd)

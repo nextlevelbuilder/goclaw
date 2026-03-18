@@ -1,0 +1,43 @@
+{
+  "title": "Runtime & Gói phần mềm",
+  "description": "Quản lý runtime hệ thống và các gói đã cài đặt",
+  "runtimes": {
+    "title": "Runtimes",
+    "available": "Sẵn sàng",
+    "missing": "Chưa cài"
+  },
+  "system": {
+    "title": "Gói hệ thống",
+    "placeholder": "Tên gói (vd: github-cli)"
+  },
+  "pip": {
+    "title": "Gói Python",
+    "placeholder": "Tên gói (vd: pandas)"
+  },
+  "npm": {
+    "title": "Gói Node",
+    "placeholder": "Tên gói (vd: typescript)"
+  },
+  "actions": {
+    "install": "Cài đặt",
+    "uninstall": "Gỡ bỏ",
+    "installing": "Đang cài...",
+    "uninstalling": "Đang gỡ..."
+  },
+  "messages": {
+    "installSuccess": "Đã cài {{name}} thành công",
+    "installError": "Cài {{name}} thất bại",
+    "uninstallSuccess": "Đã gỡ {{name}} thành công",
+    "uninstallError": "Gỡ {{name}} thất bại"
+  },
+  "confirmUninstall": {
+    "title": "Xác nhận gỡ bỏ",
+    "description": "Bạn có chắc muốn gỡ {{name}}? Thao tác này không thể hoàn tác."
+  },
+  "table": {
+    "name": "Tên",
+    "version": "Phiên bản",
+    "actions": "Thao tác",
+    "empty": "Chưa có gói nào được cài"
+  }
+}

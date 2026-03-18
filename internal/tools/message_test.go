@@ -21,8 +21,13 @@ func TestResolveMediaPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Normalize paths to canonical form (resolves macOS /var/folders → /private/var/folders symlink).
+	// The resolvePath function uses filepath.EvalSymlinks, so test expectations must too.
+	testFileCanonical, _ := filepath.EvalSymlinks(testFile)
+	workspaceCanonical, _ := filepath.EvalSymlinks(workspace)
+
 	t.Run("restricted", func(t *testing.T) {
-		tool := NewMessageTool(workspace, true)
+		tool := NewMessageTool(workspaceCanonical, true)
 		ctx := context.Background()
 
 		tests := []struct {
@@ -36,8 +41,8 @@ func TestResolveMediaPath(t *testing.T) {
 			{"valid nested temp", "MEDIA:" + filepath.Join(tmpDir, "sub", "file.txt"), filepath.Join(tmpDir, "sub", "file.txt"), true},
 
 			// Workspace files allowed
-			{"workspace absolute", "MEDIA:" + testFile, testFile, true},
-			{"workspace relative", "MEDIA:docs/report.pdf", testFile, true},
+			{"workspace absolute", "MEDIA:" + testFileCanonical, testFileCanonical, true},
+			{"workspace relative", "MEDIA:docs/report.pdf", testFileCanonical, true},
 
 			// Not a MEDIA: message
 			{"no prefix", filepath.Join(tmpDir, "test.png"), "", false},
@@ -48,7 +53,7 @@ func TestResolveMediaPath(t *testing.T) {
 
 			// Outside workspace + outside /tmp/ → blocked
 			{"outside workspace", "MEDIA:/etc/passwd", "", false},
-			{"traversal attack", "MEDIA:" + filepath.Join(workspace, "..", "etc", "passwd"), "", false},
+			{"traversal attack", "MEDIA:" + filepath.Join(workspaceCanonical, "..", "etc", "passwd"), "", false},
 		}
 
 		for _, tt := range tests {
@@ -91,14 +96,14 @@ func TestResolveMediaPath(t *testing.T) {
 	t.Run("context workspace override", func(t *testing.T) {
 		// Tool has no workspace, but context provides one.
 		tool := NewMessageTool("", true)
-		ctx := WithToolWorkspace(context.Background(), workspace)
+		ctx := WithToolWorkspace(context.Background(), workspaceCanonical)
 
 		got, ok := tool.resolveMediaPath(ctx, "MEDIA:docs/report.pdf")
 		if !ok {
 			t.Fatal("expected ok=true for workspace-relative path with context workspace")
 		}
-		if got != testFile {
-			t.Errorf("got %q, want %q", got, testFile)
+		if got != testFileCanonical {
+			t.Errorf("got %q, want %q", got, testFileCanonical)
 		}
 	})
 }

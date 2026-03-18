@@ -70,6 +70,10 @@ export const queryKeys = {
     all: ["memory"] as const,
     list: (params: Record<string, unknown>) => ["memory", params] as const,
   },
+  packages: {
+    all: ["packages"] as const,
+    runtimes: ["packages", "runtimes"] as const,
+  },
   kg: {
     all: ["kg"] as const,
     list: (params: Record<string, unknown>) => ["kg", params] as const,

@@ -127,6 +127,14 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("failed to save generated video: %v", err))
 	}
 
+	// Verify file was persisted.
+	if fi, err := os.Stat(videoPath); err != nil {
+		slog.Warn("create_video: file missing immediately after write", "path", videoPath, "error", err)
+		return ErrorResult(fmt.Sprintf("generated video file missing after write: %v", err))
+	} else {
+		slog.Info("create_video: file saved", "path", videoPath, "size", fi.Size(), "data_len", len(chainResult.Data))
+	}
+
 	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s", videoPath)}
 	result.Media = []bus.MediaFile{{Path: videoPath, MimeType: "video/mp4"}}
 	result.Deliverable = fmt.Sprintf("[Generated video: %s]\nPrompt: %s", filepath.Base(videoPath), prompt)

@@ -139,10 +139,18 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			}
 		}
 		if !mentioned {
+			// Collect media file paths for group history context.
+			var mediaPaths []string
+			for _, mf := range mediaFiles {
+				if mf.Path != "" {
+					mediaPaths = append(mediaPaths, mf.Path)
+				}
+			}
 			c.groupHistory.Record(channelID, channels.HistoryEntry{
 				Sender:    senderName,
 				SenderID:  senderID,
 				Body:      content,
+				Media:     mediaPaths,
 				Timestamp: m.Timestamp,
 				MessageID: m.ID,
 			}, c.historyLimit)
@@ -205,6 +213,12 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			finalContent = c.groupHistory.BuildContext(channelID, annotated, c.historyLimit)
 		} else {
 			finalContent = annotated
+		}
+		// Collect media from pending history entries (sent before this @mention).
+		if histMediaPaths := c.groupHistory.CollectMedia(channelID); len(histMediaPaths) > 0 {
+			for _, p := range histMediaPaths {
+				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p})
+			}
 		}
 	}
 

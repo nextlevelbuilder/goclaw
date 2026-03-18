@@ -232,6 +232,21 @@ func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
 	return cfg.WS
 }
 
+// ParseShellDenyGroups extracts shell_deny_groups from other_config JSONB.
+// Returns nil if not configured (all defaults apply).
+func (a *AgentData) ParseShellDenyGroups() map[string]bool {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var cfg struct {
+		ShellDenyGroups map[string]bool `json:"shell_deny_groups"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil || len(cfg.ShellDenyGroups) == 0 {
+		return nil
+	}
+	return cfg.ShellDenyGroups
+}
+
 // AgentShareData represents an agent share grant.
 type AgentShareData struct {
 	BaseModel

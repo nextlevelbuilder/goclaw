@@ -302,7 +302,7 @@ export function ChannelInstanceFormDialog({
                     {t("form.credentials")}
                     {instance && <span className="text-xs font-normal text-muted-foreground ml-1">{t("form.credentialsHint")}</span>}
                   </legend>
-                  <ChannelFields fields={credsFields} values={credsValues} onChange={handleCredsChange} idPrefix="ci-cred" isEdit={!!instance} />
+                  <ChannelFields fields={credsFields} values={credsValues} onChange={handleCredsChange} idPrefix="ci-cred" isEdit={!!instance} contextValues={configValues} />
                   <p className="text-xs text-muted-foreground">{t("form.credentialsEncrypted")}</p>
                 </fieldset>
               )}

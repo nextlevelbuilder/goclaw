@@ -26,34 +26,38 @@ type blockerSummary struct {
 // Excludes UUIDs (owner_agent_id, created_by_agent_id) and task_number — model uses
 // agent keys and identifier instead.
 type taskListItem struct {
-	ID                uuid.UUID        `json:"id"`
-	Identifier        string           `json:"identifier"`
-	Subject           string           `json:"subject"`
-	Status            string           `json:"status"`
-	OwnerAgentKey     string           `json:"owner_agent_key,omitempty"`
-	CreatedByAgentKey string           `json:"created_by_agent_key,omitempty"`
-	ProgressPercent   int              `json:"progress_percent,omitempty"`
-	ProgressStep      string           `json:"progress_step,omitempty"`
-	BlockedBy         []blockerSummary `json:"blocked_by,omitempty"`
-	CreatedAt         time.Time        `json:"created_at"`
+	ID                   uuid.UUID        `json:"id"`
+	Identifier           string           `json:"identifier"`
+	Subject              string           `json:"subject"`
+	Status               string           `json:"status"`
+	OwnerAgentKey        string           `json:"owner_agent_key,omitempty"`
+	OwnerDisplayName     string           `json:"owner_display_name,omitempty"`
+	CreatedByAgentKey    string           `json:"created_by_agent_key,omitempty"`
+	CreatedByDisplayName string           `json:"created_by_display_name,omitempty"`
+	ProgressPercent      int              `json:"progress_percent,omitempty"`
+	ProgressStep         string           `json:"progress_step,omitempty"`
+	BlockedBy            []blockerSummary `json:"blocked_by,omitempty"`
+	CreatedAt            time.Time        `json:"created_at"`
 }
 
 // taskDetailItem is the slim view returned by the get action.
 type taskDetailItem struct {
-	ID                uuid.UUID        `json:"id"`
-	Identifier        string           `json:"identifier"`
-	Subject           string           `json:"subject"`
-	Description       string           `json:"description,omitempty"`
-	Status            string           `json:"status"`
-	Result            *string          `json:"result,omitempty"`
-	OwnerAgentKey     string           `json:"owner_agent_key,omitempty"`
-	CreatedByAgentKey string           `json:"created_by_agent_key,omitempty"`
-	ProgressPercent   int              `json:"progress_percent,omitempty"`
-	ProgressStep      string           `json:"progress_step,omitempty"`
-	BlockedBy         []blockerSummary `json:"blocked_by,omitempty"`
-	Priority          int              `json:"priority"`
-	CreatedAt         time.Time        `json:"created_at"`
-	UpdatedAt         time.Time        `json:"updated_at"`
+	ID                   uuid.UUID        `json:"id"`
+	Identifier           string           `json:"identifier"`
+	Subject              string           `json:"subject"`
+	Description          string           `json:"description,omitempty"`
+	Status               string           `json:"status"`
+	Result               *string          `json:"result,omitempty"`
+	OwnerAgentKey        string           `json:"owner_agent_key,omitempty"`
+	OwnerDisplayName     string           `json:"owner_display_name,omitempty"`
+	CreatedByAgentKey    string           `json:"created_by_agent_key,omitempty"`
+	CreatedByDisplayName string           `json:"created_by_display_name,omitempty"`
+	ProgressPercent      int              `json:"progress_percent,omitempty"`
+	ProgressStep         string           `json:"progress_step,omitempty"`
+	BlockedBy            []blockerSummary `json:"blocked_by,omitempty"`
+	Priority             int              `json:"priority"`
+	CreatedAt            time.Time        `json:"created_at"`
+	UpdatedAt            time.Time        `json:"updated_at"`
 }
 
 // slimComment is the slim comment view for get response.
@@ -102,35 +106,39 @@ func (t *TeamTasksTool) resolveBlockers(ctx context.Context, blockedBy []uuid.UU
 
 func (t *TeamTasksTool) toListItem(ctx context.Context, task store.TeamTaskData) taskListItem {
 	return taskListItem{
-		ID:                task.ID,
-		Identifier:        task.Identifier,
-		Subject:           task.Subject,
-		Status:            task.Status,
-		OwnerAgentKey:     task.OwnerAgentKey,
-		CreatedByAgentKey: task.CreatedByAgentKey,
-		ProgressPercent:   task.ProgressPercent,
-		ProgressStep:      task.ProgressStep,
-		BlockedBy:         t.resolveBlockers(ctx, task.BlockedBy),
-		CreatedAt:         task.CreatedAt,
+		ID:                   task.ID,
+		Identifier:           task.Identifier,
+		Subject:              task.Subject,
+		Status:               task.Status,
+		OwnerAgentKey:        task.OwnerAgentKey,
+		OwnerDisplayName:     t.manager.agentDisplayName(ctx, task.OwnerAgentKey),
+		CreatedByAgentKey:    task.CreatedByAgentKey,
+		CreatedByDisplayName: t.manager.agentDisplayName(ctx, task.CreatedByAgentKey),
+		ProgressPercent:      task.ProgressPercent,
+		ProgressStep:         task.ProgressStep,
+		BlockedBy:            t.resolveBlockers(ctx, task.BlockedBy),
+		CreatedAt:            task.CreatedAt,
 	}
 }
 
 func (t *TeamTasksTool) toDetailItem(ctx context.Context, task *store.TeamTaskData) taskDetailItem {
 	return taskDetailItem{
-		ID:                task.ID,
-		Identifier:        task.Identifier,
-		Subject:           task.Subject,
-		Description:       task.Description,
-		Status:            task.Status,
-		Result:            task.Result,
-		OwnerAgentKey:     task.OwnerAgentKey,
-		CreatedByAgentKey: task.CreatedByAgentKey,
-		ProgressPercent:   task.ProgressPercent,
-		ProgressStep:      task.ProgressStep,
-		BlockedBy:         t.resolveBlockers(ctx, task.BlockedBy),
-		Priority:          task.Priority,
-		CreatedAt:         task.CreatedAt,
-		UpdatedAt:         task.UpdatedAt,
+		ID:                   task.ID,
+		Identifier:           task.Identifier,
+		Subject:              task.Subject,
+		Description:          task.Description,
+		Status:               task.Status,
+		Result:               task.Result,
+		OwnerAgentKey:        task.OwnerAgentKey,
+		OwnerDisplayName:     t.manager.agentDisplayName(ctx, task.OwnerAgentKey),
+		CreatedByAgentKey:    task.CreatedByAgentKey,
+		CreatedByDisplayName: t.manager.agentDisplayName(ctx, task.CreatedByAgentKey),
+		ProgressPercent:      task.ProgressPercent,
+		ProgressStep:         task.ProgressStep,
+		BlockedBy:            t.resolveBlockers(ctx, task.BlockedBy),
+		Priority:             task.Priority,
+		CreatedAt:            task.CreatedAt,
+		UpdatedAt:            task.UpdatedAt,
 	}
 }
 
@@ -148,10 +156,10 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 	}
 	offset := (page - 1) * listPageSize
 
-	// Delegate/system channels see all tasks; end users only see their own.
+	// Teammate/system channels see all tasks; end users only see their own.
 	filterUserID := ""
 	channel := ToolChannelFromCtx(ctx)
-	if channel != ChannelDelegate && channel != ChannelSystem {
+	if channel != ChannelTeammate && channel != ChannelSystem {
 		filterUserID = store.UserIDFromContext(ctx)
 	}
 	chatID := ToolChatIDFromCtx(ctx)
@@ -169,7 +177,7 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 		ptd.MarkListed()
 	}
 
-	tasks, err := t.manager.teamStore.ListTasks(ctx, team.ID, "priority", statusFilter, filterUserID, "", listChatID, offset)
+	tasks, err := t.manager.teamStore.ListTasks(ctx, team.ID, "priority", statusFilter, filterUserID, "", listChatID, 0, offset)
 	if err != nil {
 		return ErrorResult("failed to list tasks: " + err.Error())
 	}
@@ -304,10 +312,10 @@ func (t *TeamTasksTool) executeSearch(ctx context.Context, args map[string]any) 
 		return ErrorResult("query is required for search action")
 	}
 
-	// Delegate/system channels see all tasks; end users only see their own.
+	// Teammate/system channels see all tasks; end users only see their own.
 	filterUserID := ""
 	channel := ToolChannelFromCtx(ctx)
-	if channel != ChannelDelegate && channel != ChannelSystem {
+	if channel != ChannelTeammate && channel != ChannelSystem {
 		filterUserID = store.UserIDFromContext(ctx)
 	}
 

@@ -148,7 +148,7 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 	}
 
 	// Update payload JSONB — fetch current, merge patch fields, re-serialize
-	needsPayloadUpdate := patch.Message != "" || patch.Deliver != nil || patch.Channel != nil || patch.To != nil
+	needsPayloadUpdate := patch.Message != "" || patch.Deliver != nil || patch.Channel != nil || patch.To != nil || patch.WakeHeartbeat != nil
 	if needsPayloadUpdate {
 		var payloadJSON []byte
 		if scanErr := s.db.QueryRow("SELECT payload FROM cron_jobs WHERE id = $1", id).Scan(&payloadJSON); scanErr == nil {
@@ -166,6 +166,9 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 			}
 			if patch.To != nil {
 				payload.To = *patch.To
+			}
+			if patch.WakeHeartbeat != nil {
+				payload.WakeHeartbeat = *patch.WakeHeartbeat
 			}
 
 			merged, _ := json.Marshal(payload)

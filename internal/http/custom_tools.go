@@ -180,6 +180,9 @@ func (h *CustomToolsHandler) handleUpdate(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	// Allowlist: only permit known custom tool columns.
+	updates = filterAllowedKeys(updates, customToolAllowedFields)
+
 	if err := h.store.Update(r.Context(), id, updates); err != nil {
 		slog.Error("custom_tools.update", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

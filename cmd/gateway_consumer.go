@@ -98,9 +98,6 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 		if handleSubagentAnnounce(ctx, msg, cfg, sched, channelMgr, msgBus, getAnnounceMu) {
 			continue
 		}
-		if handleDelegateAnnounce(ctx, msg, cfg, sched, channelMgr, msgBus, getAnnounceMu) {
-			continue
-		}
 		if handleTeammateMessage(ctx, msg, cfg, sched, channelMgr, teamStore, agentStore, msgBus, postTurn, &taskRunSessions) {
 			continue
 		}

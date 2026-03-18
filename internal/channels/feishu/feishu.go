@@ -212,7 +212,7 @@ func (a *wsEventAdapter) HandleEvent(ctx context.Context, payload []byte) error 
 	var event MessageEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		slog.Debug("feishu ws: parse event failed", "error", err)
-		return nil
+		return fmt.Errorf("parse event: %w", err)
 	}
 	if event.Header.EventType == "im.message.receive_v1" {
 		a.ch.handleMessageEvent(ctx, &event)
@@ -440,10 +440,9 @@ func shouldUseCard(text string) bool {
 func (c *Channel) isDuplicate(messageID string) bool {
 	_, loaded := c.dedup.LoadOrStore(messageID, struct{}{})
 	if !loaded {
-		go func() {
-			time.Sleep(5 * time.Minute)
+		time.AfterFunc(5*time.Minute, func() {
 			c.dedup.Delete(messageID)
-		}()
+		})
 	}
 	return loaded
 }

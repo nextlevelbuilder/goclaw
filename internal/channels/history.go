@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ type HistoryEntry struct {
 	Sender    string
 	SenderID  string
 	Body      string
+	Media     []string // temp file paths for images/attachments (RAM-only, not persisted to DB)
 	Timestamp time.Time
 	MessageID string
 }
@@ -122,6 +124,8 @@ func (ph *PendingHistory) Record(historyKey string, entry HistoryEntry, limit in
 	existing = append(existing, entry)
 	count = len(existing) // capture pre-trim count so MaybeCompact sees threshold exceeded
 	if len(existing) > limit {
+		trimmed := existing[:len(existing)-limit]
+		go cleanupMedia(trimmed)
 		existing = existing[len(existing)-limit:]
 	}
 	ph.entries[historyKey] = existing
@@ -254,9 +258,13 @@ func (ph *PendingHistory) Clear(historyKey string) {
 	}
 
 	ph.mu.Lock()
+	toClean := ph.entries[historyKey]
 	delete(ph.entries, historyKey)
 	ph.removeFromOrder(historyKey)
 	ph.mu.Unlock()
+
+	// Clean up any remaining media temp files (after CollectMedia took what it needed).
+	go cleanupMedia(toClean)
 
 	if ph.store != nil {
 		// Remove pending flushes for this key
@@ -285,6 +293,34 @@ func (ph *PendingHistory) evictOldKeys() {
 	for len(ph.order) > maxHistoryKeys {
 		oldest := ph.order[0]
 		ph.order = ph.order[1:]
+		evicted := ph.entries[oldest]
 		delete(ph.entries, oldest)
+		go cleanupMedia(evicted)
+	}
+}
+
+// CollectMedia returns all media file paths from pending entries for a history key
+// and removes them from the entries to prevent double-cleanup by Clear().
+func (ph *PendingHistory) CollectMedia(historyKey string) []string {
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+
+	entries := ph.entries[historyKey]
+	var paths []string
+	for i := range entries {
+		paths = append(paths, entries[i].Media...)
+		entries[i].Media = nil // prevent double-cleanup
+	}
+	return paths
+}
+
+// cleanupMedia removes temp files from history entries. Best-effort, logs warnings.
+func cleanupMedia(entries []HistoryEntry) {
+	for _, e := range entries {
+		for _, path := range e.Media {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				slog.Warn("pending_history: media cleanup failed", "path", path, "error", err)
+			}
+		}
 	}
 }

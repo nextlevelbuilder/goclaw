@@ -18,7 +18,8 @@ import (
 // ---------------------------------------------------------------------------
 
 // emitLLMSpanStart emits a "running" LLM span before the subagent LLM call.
-func (sm *SubagentManager) emitLLMSpanStart(ctx context.Context, start time.Time, iteration int, model string, messages []providers.Message) uuid.UUID {
+// providerName is the resolved provider (may differ from sm.provider for inherited providers).
+func (sm *SubagentManager) emitLLMSpanStart(ctx context.Context, start time.Time, iteration int, model, providerName string, messages []providers.Message) uuid.UUID {
 	collector := tracing.CollectorFromContext(ctx)
 	traceID := tracing.TraceIDFromContext(ctx)
 	if collector == nil || traceID == uuid.Nil {
@@ -30,12 +31,12 @@ func (sm *SubagentManager) emitLLMSpanStart(ctx context.Context, start time.Time
 		ID:        spanID,
 		TraceID:   traceID,
 		SpanType:  store.SpanTypeLLMCall,
-		Name:      fmt.Sprintf("%s/%s #%d", sm.provider.Name(), model, iteration),
+		Name:      fmt.Sprintf("%s/%s #%d", providerName, model, iteration),
 		StartTime: start,
 		Status:    store.SpanStatusRunning,
 		Level:     store.SpanLevelDefault,
 		Model:     model,
-		Provider:  sm.provider.Name(),
+		Provider:  providerName,
 		CreatedAt: start,
 	}
 	if parentID := tracing.ParentSpanIDFromContext(ctx); parentID != uuid.Nil {
@@ -168,7 +169,8 @@ func (sm *SubagentManager) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID
 // ---------------------------------------------------------------------------
 
 // emitSubagentSpanStart emits a "running" root subagent span at task start.
-func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uuid.UUID, start time.Time, task *SubagentTask, model string) {
+// providerName is the resolved provider (may differ from sm.provider for inherited providers).
+func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uuid.UUID, start time.Time, task *SubagentTask, model, providerName string) {
 	collector := tracing.CollectorFromContext(ctx)
 	traceID := tracing.TraceIDFromContext(ctx)
 	if collector == nil || traceID == uuid.Nil {
@@ -188,7 +190,7 @@ func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uui
 		Status:       store.SpanStatusRunning,
 		Level:        store.SpanLevelDefault,
 		Model:        model,
-		Provider:     sm.provider.Name(),
+		Provider:     providerName,
 		InputPreview: truncate(task.Task, previewLimit),
 		CreatedAt:    start,
 	}

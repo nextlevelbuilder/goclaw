@@ -95,9 +95,31 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			}
 		}
 
-		// Update identity in DB bootstrap
+		// Update identity in DB bootstrap — preserve existing fields not being changed.
 		if params.Avatar != "" || params.Name != "" {
-			content := buildIdentityContent(params.Name, "", params.Avatar)
+			// Read existing identity to preserve emoji and other fields.
+			existingEmoji, existingAvatar, existingName := "", "", ""
+			if dbFiles, err := m.agentStore.GetAgentContextFiles(ctx, ag.ID); err == nil {
+				for _, f := range dbFiles {
+					if f.FileName == "IDENTITY.md" {
+						if identity := parseIdentityContent(f.Content); identity != nil {
+							existingEmoji = identity["Emoji"]
+							existingAvatar = identity["Avatar"]
+							existingName = identity["Name"]
+						}
+						break
+					}
+				}
+			}
+			name := params.Name
+			if name == "" {
+				name = existingName
+			}
+			avatar := params.Avatar
+			if avatar == "" {
+				avatar = existingAvatar
+			}
+			content := buildIdentityContent(name, existingEmoji, avatar)
 			if err := m.agentStore.SetAgentContextFile(ctx, ag.ID, "IDENTITY.md", content); err != nil {
 				slog.Warn("failed to update IDENTITY.md", "agent", params.AgentID, "error", err)
 			}

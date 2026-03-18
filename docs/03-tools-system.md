@@ -112,9 +112,7 @@ Context keys ensure each tool call receives the correct per-call values without 
 
 ### Delegation (group: `delegation`)
 
-| Tool | Description |
-|------|-------------|
-| `delegate` | Delegate task to another agent (actions: delegate, cancel, list, history) |
+> The `delegate` tool has been removed. Delegation is now handled via agent teams using `team_tasks` and `team_message`.
 
 ### Teams (group: `teams`)
 
@@ -368,7 +366,7 @@ flowchart TD
 | `knowledge` | `knowledge_graph_search`, `skill_search` |
 | `automation` | `cron`, `datetime` |
 | `messaging` | `message`, `create_forum_topic` |
-| `delegation` | `delegate` |
+| `delegation` | ~~`delegate`~~ (removed) |
 | `teams` | `team_tasks`, `team_message` |
 | `media_gen` | `create_image`, `create_audio`, `create_video`, `tts` |
 | `media_read` | `read_image`, `read_audio`, `read_document`, `read_video` |
@@ -437,11 +435,13 @@ Results are announced back to the parent agent via the message bus, optionally b
 
 ## 7. Delegation System
 
+> **Note:** The `delegate` tool has been removed. The `DelegateManager` described below is deprecated/removed. Delegation is now handled via agent teams: leads create tasks on the shared board (`team_tasks`) and spawn member agents explicitly. See [11-agent-teams.md](11-agent-teams.md) for the current model.
+
 Delegation allows named agents to delegate tasks to other fully independent agents (each with its own identity, tools, provider, model, and context files). Unlike subagents (anonymous clones), delegation crosses agent boundaries via explicit permission links.
 
-### DelegateManager
+### DelegateManager (Removed)
 
-The subagent system in `internal/tools/subagent_spawn_tool.go` orchestrates all delegation operations:
+The `delegate` tool and its `DelegateManager` in `internal/tools/subagent_spawn_tool.go` have been removed. Previously supported actions:
 
 | Action | Mode | Behavior |
 |--------|------|----------|
@@ -528,48 +528,6 @@ Only the lead gets `TEAM.md` in its system prompt. Teammates discover context on
 ### Message Routing
 
 Teammate results route through the message bus with a `"teammate:"` prefix. The consumer publishes the outbound response so the lead (and ultimately the user) sees the result.
-
----
-
-## 9. Quality Gates (Hook System)
-
-A general-purpose hook system for validating agent output before it reaches the user. Located in `internal/hooks/`.
-
-### Evaluator Types
-
-| Type | How it works | Example |
-|------|-------------|---------|
-| **command** | Run a shell command. Exit 0 = pass. Stderr = feedback. | `npm test`, `eslint --stdin` |
-| **agent** | Delegate to a reviewer agent. Parse "APPROVED" or "REJECTED: feedback". | QA reviewer checks tone/accuracy |
-
-### Configuration
-
-Quality gates live in the source agent's `other_config` JSON:
-
-```json
-{
-  "quality_gates": [
-    {
-      "event": "delegation.completed",
-      "type": "agent",
-      "agent": "qa-reviewer",
-      "block_on_failure": true,
-      "max_retries": 2
-    }
-  ]
-}
-```
-
-When `block_on_failure` is true and retries remain, the system re-runs the target agent with the evaluator's feedback injected as a revision prompt.
-
-### Recursion Prevention
-
-Quality gates with agent evaluators can cause infinite recursion (gate delegates to reviewer → reviewer completes → gate fires again). The fix is a context flag: `hooks.WithSkipHooks(ctx, true)`. Three places set it:
-1. **Agent evaluator** -- when delegating to the reviewer
-2. **Evaluate loop** -- for all internal generator/evaluator delegations
-3. **Agent eval callback in cmd layer** -- when the hook engine itself triggers delegation
-
-`DelegateManager.Delegate()` checks `hooks.SkipHooksFromContext(ctx)` before applying gates. If set, gates are skipped.
 
 ---
 
@@ -793,8 +751,7 @@ The tool registry supports per-session rate limiting via `ToolRateLimiter`. When
 | `internal/tools/{dynamic_loader,dynamic_tool}.go` | Dynamic/custom tool loading and execution |
 | `internal/tools/openai_compat_call.go` | OpenAI-compatible endpoint calling utilities |
 
-### Hooks, MCP & Infrastructure
+### MCP & Infrastructure
 | File | Purpose |
 |------|---------|
-| `internal/hooks/{engine,command_evaluator,agent_evaluator,context}.go` | Hook engine, evaluators, context |
 | `internal/mcp/{manager,bridge_tool}.go` | MCP server connections, bridge tool |

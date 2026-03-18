@@ -16,7 +16,8 @@ import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/ch
 
 /** Check if a message is an internal system message (subagent results, cron, etc.) */
 function isSystemMessage(msg: ChatMessage): boolean {
-  return msg.content?.trimStart().startsWith("[System Message]") ?? false;
+  const c = msg.content?.trimStart() ?? "";
+  return c.startsWith("[System Message]") || c.startsWith("[System]");
 }
 
 /** Check if a message should be displayed */
