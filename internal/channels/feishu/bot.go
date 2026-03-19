@@ -143,13 +143,18 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		metadata["sender_open_id"] = sender.SenderID.OpenID
 	}
 
-	// Build final content with group context (pending history + sender annotation).
-	if mc.ChatType == "group" && senderName != "" {
-		annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
-		if c.historyLimit > 0 {
-			content = c.groupHistory.BuildContext(chatID, annotated, c.historyLimit)
+	// Annotate content with sender identity so the agent knows who is messaging.
+	if senderName != "" {
+		if mc.ChatType == "group" {
+			annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
+			if c.historyLimit > 0 {
+				content = c.groupHistory.BuildContext(chatID, annotated, c.historyLimit)
+			} else {
+				content = annotated
+			}
 		} else {
-			content = annotated
+			// DM: annotate with sender identity so the agent knows who is messaging.
+			content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
 		}
 	}
 
