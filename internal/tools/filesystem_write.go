@@ -129,6 +129,18 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 			if mwr.KGTriggered {
 				msg += "\n\n[Knowledge graph extraction triggered in background. The knowledge system may take a moment to fully update with new entities and relationships.]"
 			}
+			if mwr.PreviousContent != "" {
+				prev := mwr.PreviousContent
+				if len(prev) > 4000 {
+					prev = prev[:4000] + "\n... (truncated, full backup at memory/.prev/)"
+				}
+				msg += fmt.Sprintf("\n\n⚠️ WARNING: This file had existing content (%d chars) that was replaced. "+
+					"A backup was saved to memory/.prev/. "+
+					"If the old content below contains information not present in your new version, "+
+					"please re-write the file to merge both.\n\n"+
+					"--- PREVIOUS CONTENT ---\n%s\n--- END PREVIOUS CONTENT ---",
+					len(mwr.PreviousContent), prev)
+			}
 			return SilentResult(msg)
 		}
 	}
