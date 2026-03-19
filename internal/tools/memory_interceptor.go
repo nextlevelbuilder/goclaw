@@ -129,32 +129,14 @@ func (m *MemoryInterceptor) ReadFile(ctx context.Context, path string) (string, 
 type MemoryWriteResult struct {
 	Handled         bool
 	KGTriggered     bool
-	PreviousContent string // non-empty if an existing document was overwritten
-}
-
-// prevBackupPath computes the .prev/ backup path for a memory file.
-// "memory/2026-03-19.md" → "memory/.prev/2026-03-19.md"
-// "MEMORY.md" → "memory/.prev/MEMORY.md"
-func prevBackupPath(relPath string) string {
-	dir := filepath.Dir(relPath)
-	base := filepath.Base(relPath)
-	if dir == "." || dir == "" {
-		return filepath.Join("memory", ".prev", base)
-	}
-	trimmed := strings.TrimPrefix(relPath, "memory/")
-	return filepath.Join("memory", ".prev", trimmed)
-}
-
-// isPrevPath checks if a path is a .prev/ backup path.
-func isPrevPath(relPath string) bool {
-	return strings.Contains(relPath, "/.prev/") || strings.HasPrefix(relPath, ".prev/")
+	PreviousContent string // non-empty if an existing document was overwritten (non-append)
 }
 
 // WriteFile attempts to write a memory file to the DB (+ re-index chunks for .md files).
-// Non-.md files are stored but NOT indexed/chunked/embedded,
-// matching TS behavior where only .md files are indexed.
-// Returns MemoryWriteResult with Handled=true if this was a memory path, KGTriggered=true if KG extraction was started.
-func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string) (MemoryWriteResult, error) {
+// When appendMode is true, new content is appended to the existing document with a separator.
+// When appendMode is false and an existing document is overwritten with different content,
+// PreviousContent is populated in the result to allow callers to warn the agent.
+func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string, appendMode bool) (MemoryWriteResult, error) {
 	ws := effectiveWorkspace(ctx, m.workspace)
 	if !isMemoryPath(path, ws) {
 		return MemoryWriteResult{}, nil
@@ -171,16 +153,19 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 	userID := store.MemoryUserID(ctx)
 	agentStr := agentID.String()
 
-	// Backup existing content before overwrite (best-effort).
 	var previousContent string
-	if !isPrevPath(relPath) {
+
+	if appendMode {
+		// Append: read existing content and merge with separator.
+		existing, err := m.memStore.GetDocument(ctx, agentStr, userID, relPath)
+		if err == nil && existing != "" {
+			content = existing + "\n\n---\n\n" + content
+		}
+	} else {
+		// Replace: capture previous content for overwrite warning.
 		oldContent, err := m.memStore.GetDocument(ctx, agentStr, userID, relPath)
 		if err == nil && oldContent != "" && oldContent != content {
 			previousContent = oldContent
-			prevPath := prevBackupPath(relPath)
-			if putErr := m.memStore.PutDocument(ctx, agentStr, userID, prevPath, oldContent); putErr != nil {
-				slog.Warn("memory interceptor: failed to save backup", "path", relPath, "prevPath", prevPath, "error", putErr)
-			}
 		}
 	}
 
@@ -189,8 +174,8 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string)
 		return MemoryWriteResult{Handled: true}, err
 	}
 
-	// Only index .md files (chunk + embed) that are not backups.
-	if strings.HasSuffix(relPath, ".md") && !isPrevPath(relPath) {
+	// Only index .md files (chunk + embed).
+	if strings.HasSuffix(relPath, ".md") {
 		if err := m.memStore.IndexDocument(ctx, agentStr, userID, relPath); err != nil {
 			slog.Warn("memory interceptor: index failed after write", "path", path, "error", err)
 			// Non-fatal: document was saved, indexing will catch up
@@ -232,9 +217,6 @@ func (m *MemoryInterceptor) ListFiles(ctx context.Context, path string) (string,
 
 	var sb strings.Builder
 	for _, doc := range docs {
-		if isPrevPath(doc.Path) {
-			continue
-		}
 		fmt.Fprintf(&sb, "[FILE] %s\n", doc.Path)
 	}
 	return sb.String(), true, nil

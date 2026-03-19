@@ -137,7 +137,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if result != nil {
 				return result
 			}
-			mwr, err := t.memIntc.WriteFile(ctx, path, newContent)
+			mwr, err := t.memIntc.WriteFile(ctx, path, newContent, false)
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to write memory file: %v", err))
 			}
