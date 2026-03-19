@@ -6,6 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"log/slog"
+
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
@@ -22,10 +24,11 @@ type ChatMethods struct {
 	agents      *agent.Router
 	sessions    store.SessionStore
 	rateLimiter *gateway.RateLimiter
+	eventBus    bus.EventPublisher
 }
 
-func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter) *ChatMethods {
-	return &ChatMethods{agents: agents, sessions: sess, rateLimiter: rl}
+func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
+	return &ChatMethods{agents: agents, sessions: sess, rateLimiter: rl, eventBus: eventBus}
 }
 
 // Register adds chat methods to the router.
@@ -204,6 +207,28 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			}
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 			return
+		}
+
+		// Auto-generate conversation title on first message (label empty = never titled).
+		if label := m.sessions.GetLabel(sessionKey); label == "" {
+			agentProvider := loop.Provider()
+			agentModel := loop.Model()
+			userMsg := params.Message
+			go func() {
+				title := agent.GenerateTitle(context.Background(), agentProvider, agentModel, userMsg)
+				if title == "" {
+					return
+				}
+				m.sessions.SetLabel(sessionKey, title)
+				if err := m.sessions.Save(sessionKey); err != nil {
+					slog.Warn("failed to save session title", "sessionKey", sessionKey, "error", err)
+					return
+				}
+				m.eventBus.Broadcast(bus.Event{
+					Name:    protocol.EventSessionUpdated,
+					Payload: map[string]string{"sessionKey": sessionKey, "label": title},
+				})
+			}()
 		}
 
 		resp := map[string]any{

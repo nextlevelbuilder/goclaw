@@ -47,7 +47,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
       {isToolOnly ? (
         /* Compact tool-only card — no bubble wrapper, full width */
-        <div className="flex-1 min-w-0 rounded-md border bg-muted/30 divide-y divide-border">
+        <div className="flex-1 min-w-0 rounded-md border bg-muted divide-y divide-border">
           {hasThinking && (
             <div className="px-2 py-1.5">
               <ThinkingBlock text={message.thinking!} />
@@ -70,7 +70,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </div>
           )}
           {hasToolDetails && (
-            <div className="mb-2 rounded-md border bg-muted/30 divide-y divide-border">
+            <div className="mb-2 rounded-md border bg-muted divide-y divide-border">
               {message.toolDetails!.map((entry) => (
                 <ToolCallCard key={entry.toolCallId} entry={entry} compact />
               ))}

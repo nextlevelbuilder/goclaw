@@ -17,7 +17,17 @@ func collapseToolCallsWithoutSig(msgs []Message) []Message {
 			continue
 		}
 		for _, tc := range m.ToolCalls {
-			if tc.Metadata["thought_signature"] == "" {
+			// If meta is nil or signature is empty/whitespace, collapse the whole message's tool cycle.
+			// Checks both snake_case and camelCase for cross-proxy reliability.
+			sig := ""
+			if tc.Metadata != nil {
+				sig = tc.Metadata["thought_signature"]
+				if sig == "" {
+					sig = tc.Metadata["thoughtSignature"]
+				}
+			}
+
+			if strings.TrimSpace(sig) == "" {
 				for _, tc2 := range m.ToolCalls {
 					collapseIDs[tc2.ID] = true
 				}

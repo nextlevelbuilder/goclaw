@@ -31,7 +31,7 @@ export function ToolCallCard({ entry, compact }: ToolCallCardProps) {
   const displayName = skill ? `skill: ${(entry.arguments?.name as string) || "unknown"}` : entry.name;
 
   return (
-    <div className={compact ? "" : "rounded-md border bg-muted/30"}>
+    <div className={compact ? "" : "rounded-md border bg-muted"}>
       <button
         type="button"
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"

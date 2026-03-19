@@ -82,3 +82,30 @@ func (l *Loop) ProviderName() string {
 	}
 	return l.provider.Name()
 }
+
+// uniquifyToolCallIDs ensures all tool call IDs are globally unique across the
+// transcript by appending a short run-ID prefix and iteration index.
+// Returns a new slice (does not mutate the input).
+//
+// Some OpenAI-compatible APIs (OpenRouter, vLLM, DeepSeek) return duplicate IDs
+// within a single response or reuse IDs from earlier turns, causing HTTP 400.
+// Using the run UUID guarantees cross-turn uniqueness without history rewriting.
+func uniquifyToolCallIDs(calls []providers.ToolCall, runID string, iteration int) []providers.ToolCall {
+	if len(calls) == 0 {
+		return calls
+	}
+	short := runID
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	out := make([]providers.ToolCall, len(calls))
+	copy(out, calls)
+	for i := range out {
+		if out[i].ID == "" {
+			out[i].ID = fmt.Sprintf("call_%s_%d_%d", short, iteration, i)
+		} else {
+			out[i].ID = fmt.Sprintf("%s_%s_%d_%d", out[i].ID, short, iteration, i)
+		}
+	}
+	return out
+}

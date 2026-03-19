@@ -9,6 +9,17 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { useIsTablet } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
+/**
+ * Returns a stable key for pages that handle their own sub-navigation
+ * (e.g. /chat/:sessionKey, /sessions/:key). Prevents ErrorBoundary from
+ * remounting the entire page when only the dynamic param changes.
+ */
+function stableErrorBoundaryKey(pathname: string): string {
+  // Strip dynamic segments: /chat/anything → /chat
+  const base = pathname.replace(/^(\/[^/]+)\/.*$/, "$1");
+  return base;
+}
+
 export function AppLayout() {
   const { t } = useTranslation("common");
   const location = useLocation();
@@ -51,7 +62,7 @@ export function AppLayout() {
           </div>
         )}
         <main className="flex-1 overflow-y-auto">
-          <ErrorBoundary key={location.pathname}>
+          <ErrorBoundary key={stableErrorBoundaryKey(location.pathname)}>
             <Outlet />
           </ErrorBoundary>
         </main>

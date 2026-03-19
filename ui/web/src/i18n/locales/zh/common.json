@@ -45,6 +45,7 @@
   "manage": "管理",
   "messages": "条消息",
   "model": "模型",
+  "useCustomModel": "使用自定义:",
   "modelTip": "要使用的模型 ID。",
   "modelVerified": "模型已验证",
   "name": "名称",

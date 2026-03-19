@@ -13,6 +13,7 @@ interface ChatSidebarProps {
   sessionsLoading: boolean;
   activeSessionKey: string;
   onSessionSelect: (key: string) => void;
+  onDeleteSession?: (key: string) => void;
   onNewChat: () => void;
 }
 
@@ -23,6 +24,7 @@ export const ChatSidebar = memo(function ChatSidebar({
   sessionsLoading,
   activeSessionKey,
   onSessionSelect,
+  onDeleteSession,
   onNewChat,
 }: ChatSidebarProps) {
   const { t } = useTranslation("chat");
@@ -51,6 +53,7 @@ export const ChatSidebar = memo(function ChatSidebar({
           sessions={sessions}
           activeKey={activeSessionKey}
           onSelect={onSessionSelect}
+          onDelete={onDeleteSession}
           loading={sessionsLoading}
         />
       </div>

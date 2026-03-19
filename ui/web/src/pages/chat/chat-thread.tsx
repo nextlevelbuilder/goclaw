@@ -83,15 +83,14 @@ export const ChatThread = memo(function ChatThread({
 
   const displayItems = useMemo(() => buildDisplayItems(messages), [messages]);
 
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-      </div>
-    );
-  }
-
   if (messages.length === 0 && !isRunning) {
+    if (loading) {
+      return (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        </div>
+      );
+    }
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
         <p className="text-lg font-medium">{t("empty.title")}</p>

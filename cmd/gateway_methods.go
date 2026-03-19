@@ -16,7 +16,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	router := server.Router()
 
 	// Phase 1: Core methods
-	methods.NewChatMethods(agents, sessStore, server.RateLimiter()).Register(router)
+	methods.NewChatMethods(agents, sessStore, server.RateLimiter(), msgBus).Register(router)
 	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
 	methods.NewSessionsMethods(sessStore, msgBus).Register(router)
 	methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus).Register(router)

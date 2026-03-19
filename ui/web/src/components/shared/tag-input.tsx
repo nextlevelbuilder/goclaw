@@ -73,7 +73,7 @@ export function TagInput({
         onKeyDown={handleKeyDown}
         onBlur={() => { if (input.trim()) addTag(input); }}
         placeholder={value.length === 0 ? (placeholder ?? t("typeAndPressEnter")) : ""}
-        className="placeholder:text-muted-foreground min-w-[80px] flex-1 bg-transparent py-0.5 text-sm outline-none"
+        className="placeholder:text-muted-foreground min-w-[80px] flex-1 bg-transparent py-0.5 text-base md:text-sm outline-none"
       />
     </div>
   );

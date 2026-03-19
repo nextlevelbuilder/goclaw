@@ -200,7 +200,7 @@ export function EventsPage() {
           <select
             value={teamFilter}
             onChange={(e) => setTeamFilter(e.target.value)}
-            className="h-7 rounded-md border bg-background px-2 text-xs"
+            className="h-7 rounded-md border bg-background px-2 text-base md:text-xs"
           >
             <option value="all">{t("filters.allTeams")}</option>
             {uniqueTeams.map((id) => (
@@ -215,7 +215,7 @@ export function EventsPage() {
         <select
           value={userFilter}
           onChange={(e) => setUserFilter(e.target.value)}
-          className="h-7 rounded-md border bg-background px-2 text-xs"
+          className="h-7 rounded-md border bg-background px-2 text-base md:text-xs"
         >
           <option value="all">{t("filters.allUsers")}</option>
           {uniqueUsers.map((uid) => (
@@ -229,7 +229,7 @@ export function EventsPage() {
         <select
           value={chatFilter}
           onChange={(e) => setChatFilter(e.target.value)}
-          className="h-7 rounded-md border bg-background px-2 text-xs"
+          className="h-7 rounded-md border bg-background px-2 text-base md:text-xs"
         >
           <option value="all">{t("filters.allChats")}</option>
           {uniqueChats.map((cid) => (

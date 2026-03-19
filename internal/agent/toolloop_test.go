@@ -102,6 +102,122 @@ func TestStableJSON(t *testing.T) {
 	}
 }
 
+// --- Read-only streak detection ---
+
+func TestReadOnlyStreak_Warning(t *testing.T) {
+	var s toolLoopState
+	for range readOnlyStreakWarning {
+		s.recordMutation("read_file")
+	}
+	level, _ := s.detectReadOnlyStreak()
+	if level != "warning" {
+		t.Fatalf("expected warning after %d read-only calls, got %q", readOnlyStreakWarning, level)
+	}
+}
+
+func TestReadOnlyStreak_Critical(t *testing.T) {
+	var s toolLoopState
+	for range readOnlyStreakCritical {
+		s.recordMutation("list_files")
+	}
+	level, _ := s.detectReadOnlyStreak()
+	if level != "critical" {
+		t.Fatalf("expected critical after %d read-only calls, got %q", readOnlyStreakCritical, level)
+	}
+}
+
+func TestReadOnlyStreak_ResetByMutation(t *testing.T) {
+	var s toolLoopState
+	// 7 read-only calls → below warning
+	for range 7 {
+		s.recordMutation("read_file")
+	}
+	// 1 edit resets streak
+	s.recordMutation("edit")
+	if s.readOnlyStreak != 0 {
+		t.Fatalf("expected streak 0 after edit, got %d", s.readOnlyStreak)
+	}
+	// 7 more reads → streak = 7, still below warning
+	for range 7 {
+		s.recordMutation("read_file")
+	}
+	level, _ := s.detectReadOnlyStreak()
+	if level != "" {
+		t.Fatalf("expected no detection at streak 7, got %q", level)
+	}
+}
+
+func TestReadOnlyStreak_ExecNeutral(t *testing.T) {
+	var s toolLoopState
+	// 5 reads → streak = 5
+	for range 5 {
+		s.recordMutation("read_file")
+	}
+	// exec does not reset or increment
+	s.recordMutation("exec")
+	if s.readOnlyStreak != 5 {
+		t.Fatalf("expected streak 5 after exec, got %d", s.readOnlyStreak)
+	}
+	// 5 more reads → streak = 10
+	for range 5 {
+		s.recordMutation("list_files")
+	}
+	if s.readOnlyStreak != 10 {
+		t.Fatalf("expected streak 10, got %d", s.readOnlyStreak)
+	}
+	level, _ := s.detectReadOnlyStreak()
+	if level != "warning" {
+		t.Fatalf("expected warning at streak 10, got %q", level)
+	}
+}
+
+// --- Same-result cross-args detection ---
+
+func TestSameResult_Warning(t *testing.T) {
+	var s toolLoopState
+	sameResult := "directory listing output"
+	for i := range sameResultWarning {
+		args := map[string]any{"path": string(rune('a' + i))}
+		h := s.record("list_files", args)
+		s.recordResult(h, sameResult)
+	}
+	rh := hashResult(sameResult)
+	level, _ := s.detectSameResult("list_files", rh)
+	if level != "warning" {
+		t.Fatalf("expected warning after %d same-result calls, got %q", sameResultWarning, level)
+	}
+}
+
+func TestSameResult_Critical(t *testing.T) {
+	var s toolLoopState
+	sameResult := "directory listing output"
+	for i := range sameResultCritical {
+		args := map[string]any{"path": string(rune('a' + i))}
+		h := s.record("list_files", args)
+		s.recordResult(h, sameResult)
+	}
+	rh := hashResult(sameResult)
+	level, _ := s.detectSameResult("list_files", rh)
+	if level != "critical" {
+		t.Fatalf("expected critical after %d same-result calls, got %q", sameResultCritical, level)
+	}
+}
+
+func TestSameResult_DifferentResults(t *testing.T) {
+	var s toolLoopState
+	// Same tool, same args pattern, but different results each time → no detection
+	for i := range 8 {
+		args := map[string]any{"path": string(rune('a' + i))}
+		h := s.record("list_files", args)
+		s.recordResult(h, "result "+string(rune('a'+i)))
+	}
+	rh := hashResult("result a") // check against the first result
+	level, _ := s.detectSameResult("list_files", rh)
+	if level != "" {
+		t.Fatalf("expected no detection for different results, got %q", level)
+	}
+}
+
 func TestHashToolCall(t *testing.T) {
 	// Same input → same hash
 	h1 := hashToolCall("list_files", map[string]any{"path": "."})

@@ -207,6 +207,15 @@ func (s *PGSessionStore) SetSummary(key, summary string) {
 	}
 }
 
+func (s *PGSessionStore) GetLabel(key string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if data, ok := s.cache[key]; ok {
+		return data.Label
+	}
+	return ""
+}
+
 func (s *PGSessionStore) SetLabel(key, label string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -12,7 +12,7 @@ export function ThinkingBlock({ text, isStreaming = false }: ThinkingBlockProps)
   const [expanded, setExpanded] = useState(isStreaming);
 
   return (
-    <div className="rounded-lg border border-muted bg-muted/30 text-sm">
+    <div className="rounded-lg border border-muted bg-muted text-sm">
       <button
         type="button"
         className="flex w-full items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"

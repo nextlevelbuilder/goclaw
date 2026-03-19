@@ -322,6 +322,7 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		if output == "" {
 			output = fmt.Sprintf("command exited with code %d", result.ExitCode)
 		}
+		output += MaybeSandboxHint(result.ExitCode, output)
 		return ErrorResult(output)
 	}
 	if output == "" {

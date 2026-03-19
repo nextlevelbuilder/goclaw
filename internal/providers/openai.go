@@ -259,8 +259,9 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	inputMessages := req.Messages
 
 	// Compute provider capability once: does this endpoint support Google's thought_signature?
-	// We check name, apiBase, and the model string (which covers OpenRouter/LiteLLM routing to Gemini).
-	supportsThoughtSignature := strings.Contains(strings.ToLower(p.name), "gemini") ||
+	// We check providerType, name, apiBase, and the model string (robust detection for proxies/OpenRouter).
+	supportsThoughtSignature := strings.Contains(strings.ToLower(p.providerType), "gemini") ||
+		strings.Contains(strings.ToLower(p.name), "gemini") ||
 		strings.Contains(strings.ToLower(p.apiBase), "generativelanguage") ||
 		strings.Contains(strings.ToLower(model), "gemini")
 

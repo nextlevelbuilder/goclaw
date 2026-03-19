@@ -1,4 +1,6 @@
 {
+  "deleteChat": "Delete chat",
+  "deleteChatConfirm": "This will permanently delete this conversation and all its messages.",
   "newChat": "New Chat",
   "openSessions": "Open sessions",
   "readOnly": "Read-only — this session belongs to another user",

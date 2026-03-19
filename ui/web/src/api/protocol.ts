@@ -224,6 +224,9 @@ export const Events = {
   AGENT_LINK_UPDATED: "agent_link.updated",
   AGENT_LINK_DELETED: "agent_link.deleted",
 
+  // Session lifecycle
+  SESSION_UPDATED: "session.updated",
+
   // Trace lifecycle
   TRACE_UPDATED: "trace.updated",
 

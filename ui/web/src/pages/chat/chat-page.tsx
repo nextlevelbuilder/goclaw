@@ -24,6 +24,10 @@ export function ChatPage() {
   const userId = useAuthStore((s) => s.userId);
 
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  const [files, setFiles] = useState<AttachedFile[]>([]);
+
+  // sessionKey derived from URL — single source of truth, no separate state
+  const sessionKey = urlSessionKey ?? "";
 
   const [agentId, setAgentId] = useState(() => {
     if (urlSessionKey) {
@@ -32,13 +36,13 @@ export function ChatPage() {
     }
     return "default";
   });
-  const [sessionKey, setSessionKey] = useState(urlSessionKey ?? "");
 
   const {
     sessions,
     loading: sessionsLoading,
     refresh: refreshSessions,
     buildNewSessionKey,
+    deleteSession,
   } = useChatSessions(agentId);
 
   const {
@@ -54,13 +58,6 @@ export function ChatPage() {
     expectRun,
     addLocalMessage,
   } = useChatMessages(sessionKey, agentId);
-
-  // Sync URL param to state
-  useEffect(() => {
-    if (urlSessionKey && urlSessionKey !== sessionKey) {
-      setSessionKey(urlSessionKey);
-    }
-  }, [urlSessionKey, sessionKey]);
 
   // Refresh sessions when run completes
   const prevIsRunningRef = useRef(false);
@@ -87,48 +84,56 @@ export function ChatPage() {
   });
 
   const handleNewChat = useCallback(() => {
-    const newKey = buildNewSessionKey();
-    setSessionKey(newKey);
-    navigate(`/chat/${encodeURIComponent(newKey)}`);
+    navigate(`/chat/${encodeURIComponent(buildNewSessionKey())}`);
   }, [buildNewSessionKey, navigate]);
 
   const handleSessionSelect = useCallback(
     (key: string) => {
-      // Sync agentId from session key to ensure correct routing
       const { agentId: parsed } = parseSessionKey(key);
       if (parsed && parsed !== agentId) {
         setAgentId(parsed);
       }
-      setSessionKey(key);
       navigate(`/chat/${encodeURIComponent(key)}`);
     },
     [navigate, agentId],
   );
 
+  const handleDeleteSession = useCallback(async (key: string) => {
+    await deleteSession(key);
+    if (key === sessionKey) {
+      const next = sessions.find((s) => s.key !== key);
+      if (next) {
+        handleSessionSelect(next.key);
+      } else {
+        handleNewChat();
+      }
+    }
+  }, [deleteSession, sessionKey, sessions, handleSessionSelect, handleNewChat]);
+
   const handleAgentChange = useCallback(
     (newAgentId: string) => {
       setAgentId(newAgentId);
-      const newKey = `agent:${newAgentId}:ws:direct:${crypto.randomUUID()}`;
-      setSessionKey(newKey);
-      navigate(`/chat/${encodeURIComponent(newKey)}`);
+      navigate(`/chat/${encodeURIComponent(`agent:${newAgentId}:ws:direct:${crypto.randomUUID()}`)}`);
     },
     [navigate],
   );
 
   const handleSend = useCallback(
-    (message: string, files?: AttachedFile[]) => {
+    (message: string, sendFiles?: AttachedFile[]) => {
       let key = sessionKey;
       if (!key) {
         key = buildNewSessionKey();
-        setSessionKey(key);
-        navigate(`/chat/${encodeURIComponent(key)}`);
+        navigate(`/chat/${encodeURIComponent(key)}`, { replace: true });
       }
-      // Pass key directly so send() doesn't use a stale closure value
-      send(message, key, files);
+      send(message, key, sendFiles);
       setScrollTrigger((n) => n + 1);
     },
     [sessionKey, send, buildNewSessionKey, navigate],
   );
+
+  const handleDropFiles = useCallback((dropped: File[]) => {
+    setFiles((prev) => [...prev, ...dropped.map((f) => ({ file: f }))]);
+  }, []);
 
   const handleAbort = useCallback(() => {
     abort(sessionKey);
@@ -175,6 +180,7 @@ export function ChatPage() {
               sessionsLoading={sessionsLoading}
               activeSessionKey={sessionKey}
               onSessionSelect={handleSessionSelectMobile}
+              onDeleteSession={handleDeleteSession}
               onNewChat={handleNewChatMobile}
             />
           </div>
@@ -187,6 +193,7 @@ export function ChatPage() {
           sessionsLoading={sessionsLoading}
           activeSessionKey={sessionKey}
           onSessionSelect={handleSessionSelect}
+          onDeleteSession={handleDeleteSession}
           onNewChat={handleNewChat}
         />
       )}
@@ -213,7 +220,7 @@ export function ChatPage() {
           </div>
         )}
 
-        <DropZone onDrop={() => { /* TODO: wire to chat input */ }}>
+        <DropZone onDrop={handleDropFiles}>
           <ChatThread
             messages={messages}
             streamText={streamText}
@@ -233,6 +240,8 @@ export function ChatPage() {
               onAbort={handleAbort}
               isRunning={isRunning}
               disabled={!connected}
+              files={files}
+              onFilesChange={setFiles}
             />
           ) : (
             <div className="mx-3 mb-3 flex items-center gap-2 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground shadow-sm">

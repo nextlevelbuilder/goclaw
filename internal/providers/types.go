@@ -92,13 +92,14 @@ type MediaRef struct {
 
 // Message represents a conversation message.
 type Message struct {
-	Role       string         `json:"role"` // "system", "user", "assistant", "tool"
-	Content    string         `json:"content"`
-	Thinking   string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
-	Images     []ImageContent `json:"images,omitempty"`     // vision: base64 images (runtime only, not persisted)
-	MediaRefs  []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
-	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
-	ToolCallID string         `json:"tool_call_id,omitempty"` // for role="tool" responses
+	Role            string         `json:"role"` // "system", "user", "assistant", "tool"
+	Content         string         `json:"content"`
+	Thinking        string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
+	Images          []ImageContent `json:"images,omitempty"`     // vision: base64 images (runtime only, not persisted)
+	MediaRefs       []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
+	ToolCalls       []ToolCall     `json:"tool_calls,omitempty"`
+	ToolCallID      string         `json:"tool_call_id,omitempty"`      // for role="tool" responses
+	IsError         bool           `json:"is_error,omitempty"`          // for role="tool" responses
 
 	// Phase is a Codex-specific field (gpt-5.3-codex) indicating message purpose.
 	// Values: "commentary" (intermediate), "final_answer" (closeout), or "" (unset).

@@ -9,7 +9,7 @@ export function TeamActivityPanel({ tasks }: TeamActivityPanelProps) {
   if (tasks.length === 0) return null;
 
   return (
-    <div className="rounded-lg border bg-muted/30 px-3 py-2">
+    <div className="rounded-lg border bg-muted px-3 py-2">
       <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Users className="h-3.5 w-3.5" />
         <span>

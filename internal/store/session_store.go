@@ -96,6 +96,7 @@ type SessionStore interface {
 	GetSummary(key string) string
 	SetSummary(key, summary string)
 	GetNumericID(key string) int64
+	GetLabel(key string) string
 	SetLabel(key, label string)
 	SetAgentInfo(key string, agentUUID uuid.UUID, userID string)
 	UpdateMetadata(key, model, provider, channel string)
