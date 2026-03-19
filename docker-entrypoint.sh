@@ -4,14 +4,17 @@ set -e
 # Set up writable runtime directories for agent-installed packages.
 # Rootfs is read-only; /app/data is a writable Docker volume.
 RUNTIME_DIR="/app/data/.runtime"
-mkdir -p "$RUNTIME_DIR/pip" "$RUNTIME_DIR/npm-global/lib"
+# Non-fatal: on first start with a fresh volume the directory may not be
+# writable yet (volume initialisation race on some Docker runtimes).
+# The app starts fine without .runtime; package installs will fail gracefully.
+mkdir -p "$RUNTIME_DIR/pip" "$RUNTIME_DIR/npm-global/lib" || true
 
 # Python: allow agent to pip install to writable target dir
 export PYTHONPATH="$RUNTIME_DIR/pip:${PYTHONPATH:-}"
 export PIP_TARGET="$RUNTIME_DIR/pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
 export PIP_CACHE_DIR="$RUNTIME_DIR/pip-cache"
-mkdir -p "$RUNTIME_DIR/pip-cache"
+mkdir -p "$RUNTIME_DIR/pip-cache" || true
 
 # Node.js: allow agent to npm install -g to writable prefix
 # NODE_PATH includes both pre-installed system globals and runtime-installed globals.
