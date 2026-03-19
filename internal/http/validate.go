@@ -38,6 +38,7 @@ var agentAllowedFields = map[string]bool{
 	"workspace": true, "restrict_to_workspace": true,
 	"frontmatter": true, "compaction_config": true,
 	"memory_config": true, "other_config": true, "tools_config": true,
+	"is_default": true, "budget_monthly_cents": true, "subagents_config": true,
 }
 
 var providerAllowedFields = map[string]bool{

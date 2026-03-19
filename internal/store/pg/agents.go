@@ -164,6 +164,17 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 	if len(updates) == 0 {
 		return nil
 	}
+
+	// If setting this agent as default, unset any existing default first.
+	if v, ok := updates["is_default"]; ok {
+		if isDefault, _ := v.(bool); isDefault {
+			if _, err := s.db.ExecContext(ctx,
+				"UPDATE agents SET is_default = false WHERE is_default = true AND id != $1 AND deleted_at IS NULL", id); err != nil {
+				slog.Warn("agents.unset_default", "error", err)
+			}
+		}
+	}
+
 	updates["updated_at"] = time.Now()
 	err := execMapUpdateWhere(ctx, s.db, "agents", updates, "id = $IDX AND deleted_at IS NULL", id)
 	if err != nil {
