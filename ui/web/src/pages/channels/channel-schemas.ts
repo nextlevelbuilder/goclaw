@@ -182,6 +182,7 @@ export const requiredScopes: Partial<Record<string, ScopeEntry[]>> = {
     { scope: "contact:user.employee_id:readonly", note: "Range: All members" },
     { scope: "event:ip_list" },
     { scope: "im:chat.members:bot_access" },
+    { scope: "im:chat.members:read", note: "Required for list_group_members tool" },
     { scope: "im:message" },
     { scope: "im:message.group_at_msg:readonly" },
     { scope: "im:message.p2p_msg:readonly" },

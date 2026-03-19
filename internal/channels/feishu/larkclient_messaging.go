@@ -252,6 +252,57 @@ func (c *LarkClient) GetBotInfo(ctx context.Context) (string, error) {
 	return result.Bot.OpenID, nil
 }
 
+// --- IM API: Chat Members ---
+
+// ChatMember represents a member of a Lark group chat.
+type ChatMember struct {
+	MemberID     string `json:"member_id"`
+	MemberIDType string `json:"member_id_type"`
+	Name         string `json:"name"`
+	TenantKey    string `json:"tenant_key"`
+}
+
+// ListChatMembers returns all members of a group chat, handling pagination automatically.
+// Lark API: GET /open-apis/im/v1/chats/{chat_id}/members
+// Requires scope: im:chat.members:read
+func (c *LarkClient) ListChatMembers(ctx context.Context, chatID string) ([]ChatMember, error) {
+	var all []ChatMember
+	pageToken := ""
+
+	for {
+		path := fmt.Sprintf("/open-apis/im/v1/chats/%s/members?member_id_type=open_id&page_size=100", chatID)
+		if pageToken != "" {
+			path += "&page_token=" + pageToken
+		}
+
+		resp, err := c.doJSON(ctx, "GET", path, nil)
+		if err != nil {
+			return nil, err
+		}
+		if resp.Code != 0 {
+			return nil, fmt.Errorf("list chat members: code=%d msg=%s", resp.Code, resp.Msg)
+		}
+
+		var result struct {
+			Items     []ChatMember `json:"items"`
+			PageToken string       `json:"page_token"`
+			HasMore   bool         `json:"has_more"`
+		}
+		if err := json.Unmarshal(resp.Data, &result); err != nil {
+			return nil, fmt.Errorf("unmarshal response: %w", err)
+		}
+
+		all = append(all, result.Items...)
+
+		if !result.HasMore || result.PageToken == "" {
+			break
+		}
+		pageToken = result.PageToken
+	}
+
+	return all, nil
+}
+
 // --- Contact API ---
 
 func (c *LarkClient) GetUser(ctx context.Context, userID, userIDType string) (string, error) {
