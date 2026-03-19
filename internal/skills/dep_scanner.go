@@ -42,6 +42,8 @@ func scanScriptsDir(scriptsDir string) *SkillManifest {
 	binaries := make(map[string]bool)
 	// Track subdirectory names — these are local modules and must never be reported as missing.
 	localModules := make(map[string]bool)
+	// The scripts directory itself can be referenced as a module (e.g. "from scripts import utils").
+	localModules[filepath.Base(scriptsDir)] = true
 
 	for _, e := range entries {
 		if e.IsDir() {
@@ -53,6 +55,19 @@ func scanScriptsDir(scriptsDir string) *SkillManifest {
 			}
 			for _, se := range subEntries {
 				if se.IsDir() {
+					// Track nested subdirs as local modules too (e.g. office/helpers, office/validators)
+					// so intra-package imports like "from helpers import ..." don't get falsely reported.
+					localModules[se.Name()] = true
+					// Scan files inside nested subdirs
+					nestedEntries, err := os.ReadDir(filepath.Join(scriptsDir, e.Name(), se.Name()))
+					if err != nil {
+						continue
+					}
+					for _, ne := range nestedEntries {
+						if !ne.IsDir() {
+							scanFile(filepath.Join(scriptsDir, e.Name(), se.Name(), ne.Name()), pyImports, nodeImports, binaries)
+						}
+					}
 					continue
 				}
 				scanFile(filepath.Join(scriptsDir, e.Name(), se.Name()), pyImports, nodeImports, binaries)
