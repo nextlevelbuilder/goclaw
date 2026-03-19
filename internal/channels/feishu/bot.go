@@ -110,6 +110,13 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		content = "[empty message]"
 	}
 
+	// 7b. Fetch reply context if this is a reply to another message
+	if mc.ParentID != "" {
+		if replyCtx := c.fetchReplyContext(ctx, mc.ParentID); replyCtx != "" {
+			content += "\n\n" + replyCtx
+		}
+	}
+
 	// 8. Topic session
 	chatID := mc.ChatID
 	if mc.RootID != "" && c.cfg.TopicSessionMode == "enabled" {
@@ -257,4 +264,36 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if mc.ChatType == "group" {
 		c.groupHistory.Clear(chatID)
 	}
+}
+
+const replyContextMaxLen = 500
+
+// fetchReplyContext fetches the parent message content and returns a formatted
+// reply context string, similar to Telegram's [Replying to ...] format.
+func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) string {
+	resp, err := c.client.GetMessage(ctx, parentID)
+	if err != nil {
+		slog.Debug("feishu: failed to fetch parent message", "parent_id", parentID, "error", err)
+		return ""
+	}
+	if len(resp.Items) == 0 {
+		return ""
+	}
+
+	item := &resp.Items[0]
+	body := parseMessageContent(item.Body.Content, item.MsgType)
+	if body == "" {
+		return ""
+	}
+
+	// Resolve sender name
+	senderName := "unknown"
+	if item.Sender.ID != "" {
+		if name := c.resolveSenderName(ctx, item.Sender.ID); name != "" {
+			senderName = name
+		}
+	}
+
+	body = channels.Truncate(body, replyContextMaxLen)
+	return fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", senderName, body)
 }

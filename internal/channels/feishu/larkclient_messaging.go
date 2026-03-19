@@ -89,6 +89,42 @@ func (c *LarkClient) UploadFile(ctx context.Context, data io.Reader, fileName, f
 	return result.FileKey, nil
 }
 
+// --- IM API: Get Message ---
+
+// GetMessageResp holds the response from GET /open-apis/im/v1/messages/{message_id}.
+type GetMessageResp struct {
+	Items []struct {
+		MessageID   string `json:"message_id"`
+		MsgType     string `json:"msg_type"`
+		Body        struct {
+			Content string `json:"content"`
+		} `json:"body"`
+		Sender struct {
+			ID         string `json:"id"`
+			IDType     string `json:"id_type"`
+			SenderType string `json:"sender_type"`
+		} `json:"sender"`
+	} `json:"items"`
+}
+
+// GetMessage retrieves a message by ID.
+// Lark API: GET /open-apis/im/v1/messages/{message_id}
+func (c *LarkClient) GetMessage(ctx context.Context, messageID string) (*GetMessageResp, error) {
+	path := fmt.Sprintf("/open-apis/im/v1/messages/%s", messageID)
+	resp, err := c.doJSON(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("get message: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	var data GetMessageResp
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal get message: %w", err)
+	}
+	return &data, nil
+}
+
 // --- IM API: Message Resources ---
 
 func (c *LarkClient) DownloadMessageResource(ctx context.Context, messageID, fileKey, resourceType string) ([]byte, string, error) {
