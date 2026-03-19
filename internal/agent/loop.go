@@ -223,7 +223,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Security: truncate oversized user messages gracefully (feed truncation notice into LLM)
 	maxChars := l.maxMessageChars
 	if maxChars <= 0 {
-		maxChars = 32_000 // default ~8-10K tokens
+		maxChars = config.DefaultMaxMessageChars
 	}
 	if len(req.Message) > maxChars {
 		originalLen := len(req.Message)
@@ -596,7 +596,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 		// Bootstrap mode: restrict API tool definitions to write_file only (open agents).
 		// Predefined agents keep all tools — BOOTSTRAP.md guides behavior.
-		if hadBootstrap && l.agentType != "predefined" {
+		if hadBootstrap && l.agentType != store.AgentTypePredefined {
 			var bootstrapDefs []providers.ToolDefinition
 			for _, td := range toolDefs {
 				if bootstrapToolAllowlist[td.Function.Name] {
@@ -630,7 +630,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			Model:    model,
 			Options: map[string]any{
 				providers.OptMaxTokens:   l.effectiveMaxTokens(),
-				providers.OptTemperature: 0.7,
+				providers.OptTemperature: config.DefaultTemperature,
 				providers.OptSessionKey:  req.SessionKey,
 				providers.OptAgentID:     l.agentUUID.String(),
 				providers.OptUserID:      req.UserID,
@@ -716,7 +716,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		// but applied to in-memory messages during the run. Prevents context overflow for
 		// long-running agents (e.g. delegated research tasks that accumulate many tool results).
 		if !midLoopCompacted && l.contextWindow > 0 {
-			historyShare := 0.75
+			historyShare := config.DefaultHistoryShare
 			if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 				historyShare = l.compactionCfg.MaxHistoryShare
 			}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -154,7 +155,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 
 	// Bootstrap DM mode: only restrict tools for open agents (identity being created).
 	// Predefined agents keep full capabilities — BOOTSTRAP.md guides behavior.
-	if hadBootstrap && l.agentType != "predefined" {
+	if hadBootstrap && l.agentType != store.AgentTypePredefined {
 		toolNames = filterBootstrapTools(toolNames)
 		mcpToolDescs = nil
 	}
@@ -197,7 +198,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		ShellDenyGroups:        l.shellDenyGroups,
 		SelfEvolve:             l.selfEvolve,
 		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
-		IsBootstrap:            hadBootstrap && l.agentType != "predefined",
+		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
 	})
 
 	messages = append(messages, providers.Message{
@@ -449,7 +450,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	tokenEstimate := EstimateTokensWithCalibration(history, lastPT, lastMC)
 
 	// Resolve compaction thresholds from config with sensible defaults.
-	historyShare := 0.75
+	historyShare := config.DefaultHistoryShare
 	if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 		historyShare = l.compactionCfg.MaxHistoryShare
 	}

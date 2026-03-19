@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 const (
@@ -52,7 +51,7 @@ func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProv
 		apiKey:       apiKey,
 		baseURL:      anthropicAPIBase,
 		defaultModel: defaultClaudeModel,
-		client:       &http.Client{Timeout: 300 * time.Second},
+		client:       &http.Client{Timeout: DefaultHTTPTimeout},
 		retryConfig:  DefaultRetryConfig(),
 	}
 	for _, o := range opts {

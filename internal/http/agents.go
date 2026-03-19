@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -123,10 +124,10 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.AgentType = store.AgentTypeOpen
 	}
 	if req.ContextWindow <= 0 {
-		req.ContextWindow = 200000
+		req.ContextWindow = config.DefaultContextWindow
 	}
 	if req.MaxToolIterations <= 0 {
-		req.MaxToolIterations = 20
+		req.MaxToolIterations = config.DefaultMaxIterations
 	}
 	if req.Workspace == "" {
 		req.Workspace = fmt.Sprintf("%s/%s", h.defaultWorkspace, req.AgentKey)

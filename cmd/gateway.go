@@ -745,7 +745,7 @@ func runGateway() {
 		tokens := agent.EstimateTokensWithCalibration(history, lastPT, lastMC)
 		cw := pgStores.Sessions.GetContextWindow(sessionKey)
 		if cw <= 0 {
-			cw = 200000 // fallback for sessions not yet processed
+			cw = config.DefaultContextWindow
 		}
 		return tokens, cw
 	})

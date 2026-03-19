@@ -163,7 +163,7 @@ func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.Session
 		s.model, s.provider, s.input_tokens, s.output_tokens,
 		COALESCE(a.display_name, ''),
 		octet_length(s.messages::text) / 4 + 12000,
-		COALESCE(a.context_window, 200000),
+		COALESCE(a.context_window, 200000), -- config.DefaultContextWindow
 		s.compaction_count`
 
 	if opts.AgentID != "" {

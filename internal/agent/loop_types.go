@@ -256,7 +256,7 @@ type LoopConfig struct {
 	TracingStore       store.TracingStore
 }
 
-const defaultMaxTokens = 8192
+const defaultMaxTokens = config.DefaultMaxTokens
 
 // effectiveMaxTokens returns the configured max output tokens, defaulting to 8192.
 func (l *Loop) effectiveMaxTokens() int {
@@ -268,10 +268,10 @@ func (l *Loop) effectiveMaxTokens() int {
 
 func NewLoop(cfg LoopConfig) *Loop {
 	if cfg.MaxIterations <= 0 {
-		cfg.MaxIterations = 20
+		cfg.MaxIterations = config.DefaultMaxIterations
 	}
 	if cfg.ContextWindow <= 0 {
-		cfg.ContextWindow = 200000
+		cfg.ContextWindow = config.DefaultContextWindow
 	}
 
 	// Normalize injection action (default: "warn")
