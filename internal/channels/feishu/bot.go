@@ -131,6 +131,11 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		peerKind = "group"
 	}
 
+	// Collect contact for processed messages (DM + group-mentioned).
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", peerKind)
+	}
+
 	metadata := map[string]string{
 		"message_id":    messageID,
 		"chat_type":     mc.ChatType,

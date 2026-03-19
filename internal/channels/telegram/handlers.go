@@ -482,6 +482,11 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		}
 	}
 
+	// Collect contact for processed messages (DM + group-mentioned).
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, user.FirstName, user.Username, peerKind)
+	}
+
 	c.Bus().PublishInbound(bus.InboundMessage{
 		Channel:      c.Name(),
 		SenderID:     senderID,

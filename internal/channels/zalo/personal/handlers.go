@@ -59,6 +59,11 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 
 	c.startTyping(threadID, protocol.ThreadTypeUser)
 
+	// Collect contact for DM messages.
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, "", "direct")
+	}
+
 	metadata := map[string]string{
 		"message_id": msg.Data.MsgID,
 		"platform":   channels.TypeZaloPersonal,
@@ -130,6 +135,11 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	// Must come after BuildContext — CollectMedia nulls out Media fields to prevent double-cleanup.
 	histMedia := c.groupHistory.CollectMedia(threadID)
 	allMedia := append(histMedia, media...)
+
+	// Collect contact for group-mentioned messages.
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
+	}
 
 	metadata := map[string]string{
 		"message_id": msg.Data.MsgID,
