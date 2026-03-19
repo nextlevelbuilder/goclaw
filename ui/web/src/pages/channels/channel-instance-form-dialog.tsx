@@ -23,6 +23,7 @@ import type { AgentData } from "@/types/agent";
 import { slugify, isValidSlug } from "@/lib/slug";
 import { credentialsSchema, configSchema, wizardConfig, type FieldDef } from "./channel-schemas";
 import { ChannelFields } from "./channel-fields";
+import { ChannelScopesInfo } from "./channel-scopes-info";
 import { wizardAuthSteps, wizardConfigSteps, wizardEditConfigs } from "./channel-wizard-registry";
 import { TelegramGroupOverrides } from "./telegram-group-overrides";
 import { CHANNEL_TYPES } from "@/constants/channels";
@@ -306,6 +307,8 @@ export function ChannelInstanceFormDialog({
                   <p className="text-xs text-muted-foreground">{t("form.credentialsEncrypted")}</p>
                 </fieldset>
               )}
+
+              <ChannelScopesInfo channelType={channelType} />
 
               {/* Auth status indicator (edit mode, channels with auth wizard step) */}
               {instance && wizard?.steps.includes("auth") && (

@@ -69,7 +69,7 @@ export function useTtsConfig() {
       setSaving(true);
       setError(null);
       try {
-        await ws.call(Methods.CONFIG_PATCH, { tts: updates });
+        await ws.call(Methods.CONFIG_PATCH, { raw: JSON.stringify({ tts: updates }) });
         await invalidate();
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to save TTS config";

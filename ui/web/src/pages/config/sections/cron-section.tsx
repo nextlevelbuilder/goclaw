@@ -6,29 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InfoLabel } from "@/components/shared/info-label";
-
-const TIMEZONES = [
-  { value: "UTC", label: "UTC" },
-  { value: "Asia/Ho_Chi_Minh", label: "Asia/Ho_Chi_Minh (UTC+7)" },
-  { value: "Asia/Bangkok", label: "Asia/Bangkok (UTC+7)" },
-  { value: "Asia/Shanghai", label: "Asia/Shanghai (UTC+8)" },
-  { value: "Asia/Tokyo", label: "Asia/Tokyo (UTC+9)" },
-  { value: "Asia/Seoul", label: "Asia/Seoul (UTC+9)" },
-  { value: "Asia/Singapore", label: "Asia/Singapore (UTC+8)" },
-  { value: "Asia/Kolkata", label: "Asia/Kolkata (UTC+5:30)" },
-  { value: "Asia/Dubai", label: "Asia/Dubai (UTC+4)" },
-  { value: "Europe/London", label: "Europe/London (UTC+0)" },
-  { value: "Europe/Paris", label: "Europe/Paris (UTC+1)" },
-  { value: "Europe/Berlin", label: "Europe/Berlin (UTC+1)" },
-  { value: "Europe/Moscow", label: "Europe/Moscow (UTC+3)" },
-  { value: "America/New_York", label: "America/New_York (UTC-5)" },
-  { value: "America/Chicago", label: "America/Chicago (UTC-6)" },
-  { value: "America/Denver", label: "America/Denver (UTC-7)" },
-  { value: "America/Los_Angeles", label: "America/Los_Angeles (UTC-8)" },
-  { value: "America/Sao_Paulo", label: "America/Sao_Paulo (UTC-3)" },
-  { value: "Australia/Sydney", label: "Australia/Sydney (UTC+11)" },
-  { value: "Pacific/Auckland", label: "Pacific/Auckland (UTC+13)" },
-];
+import { IANA_TIMEZONES } from "@/lib/constants";
 
 interface CronData {
   max_retries?: number;
@@ -80,7 +58,7 @@ export function CronSection({ data, onSave, saving }: Props) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__system__">{t("cron.defaultTimezonePlaceholder")}</SelectItem>
-              {TIMEZONES.map((tz) => (
+              {IANA_TIMEZONES.map((tz) => (
                 <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
               ))}
             </SelectContent>

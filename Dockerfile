@@ -60,6 +60,7 @@ RUN set -eux; \
     else \
         if [ "$ENABLE_PYTHON" = "true" ]; then \
             apk add --no-cache python3 py3-pip; \
+            pip3 install --no-cache-dir --break-system-packages edge-tts; \
         fi; \
         if [ "$ENABLE_NODE" = "true" ]; then \
             apk add --no-cache nodejs npm; \

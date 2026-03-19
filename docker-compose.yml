@@ -19,8 +19,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        ENABLE_OTEL: "false"
-        ENABLE_PYTHON: "true"
+        ENABLE_OTEL: "${ENABLE_OTEL:-false}"
+        ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
+        ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
     ports:
       - "${GOCLAW_PORT:-18790}:18790"
     env_file:

@@ -163,6 +163,34 @@ export const groupOverrideSchema: FieldDef[] = [
   { key: "system_prompt", label: "System Prompt", type: "textarea", placeholder: "Additional system prompt for this group..." },
 ];
 
+// --- Required API scopes per channel type ---
+// Displayed as a help reference when creating/configuring a channel.
+
+export interface ScopeEntry {
+  scope: string;
+  note?: string; // e.g. "Range: All members"
+}
+
+export const requiredScopes: Partial<Record<string, ScopeEntry[]>> = {
+  feishu: [
+    { scope: "application:application:self_manage" },
+    { scope: "application:bot.menu:write" },
+    { scope: "cardkit:card:read" },
+    { scope: "cardkit:card:write" },
+    { scope: "contact:contact.base:readonly", note: "Range: All members" },
+    { scope: "contact:user.base:readonly", note: "Range: All members" },
+    { scope: "contact:user.employee_id:readonly", note: "Range: All members" },
+    { scope: "event:ip_list" },
+    { scope: "im:chat.members:bot_access" },
+    { scope: "im:message" },
+    { scope: "im:message.group_at_msg:readonly" },
+    { scope: "im:message.p2p_msg:readonly" },
+    { scope: "im:message:readonly" },
+    { scope: "im:message:send_as_bot" },
+    { scope: "im:resource" },
+  ],
+};
+
 // --- Post-create wizard configuration ---
 // Channels with multi-step create flows (e.g. auth then config).
 // Channels not listed here use the default single-step create.

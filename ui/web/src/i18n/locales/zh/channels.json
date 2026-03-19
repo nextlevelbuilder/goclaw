@@ -278,6 +278,11 @@
       "formBanner": "创建后，您将通过二维码进行认证并配置允许的用户。"
     }
   },
+  "scopes": {
+    "title": "所需API权限",
+    "description": "您的 Lark/飞书 应用需要在开发者控制台启用这些权限。添加权限后请发布新版本。",
+    "publishReminder": "添加权限后，将通讯录范围设置为「全部成员」，并发布新版本使更改生效。"
+  },
   "toast": {
     "created": "Channel已创建",
     "createdDesc": "{{name}} 已添加",
