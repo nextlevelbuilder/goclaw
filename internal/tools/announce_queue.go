@@ -40,11 +40,7 @@ type AnnounceQueue struct {
 	queues   map[string]*sessionQueue // session key → queue
 	debounce time.Duration            // default 1000ms
 	cap      int                      // max items per session before immediate drain (default 20)
-	onDrain  func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata)
-
-	// countActiveFunc returns the number of still-running subagents for a parent.
-	// Used at drain time for accurate remaining-active count.
-	countActiveFunc func(parentID string) int
+	onDrain func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata)
 }
 
 type sessionQueue struct {
@@ -58,7 +54,6 @@ func NewAnnounceQueue(
 	debounceMs int,
 	cap int,
 	onDrain func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata),
-	countActive func(parentID string) int,
 ) *AnnounceQueue {
 	if debounceMs <= 0 {
 		debounceMs = 1000 // TS default
@@ -67,11 +62,10 @@ func NewAnnounceQueue(
 		cap = 20 // TS default
 	}
 	return &AnnounceQueue{
-		queues:          make(map[string]*sessionQueue),
-		debounce:        time.Duration(debounceMs) * time.Millisecond,
-		cap:             cap,
-		onDrain:         onDrain,
-		countActiveFunc: countActive,
+		queues:   make(map[string]*sessionQueue),
+		debounce: time.Duration(debounceMs) * time.Millisecond,
+		cap:      cap,
+		onDrain:  onDrain,
 	}
 }
 
@@ -131,8 +125,8 @@ func (aq *AnnounceQueue) drain(sessionKey string, items []AnnounceQueueItem, met
 }
 
 // FormatBatchedAnnounce builds the announce content for a batch of items.
-// remainingActive is the count of still-running subagents at drain time.
-func FormatBatchedAnnounce(items []AnnounceQueueItem, remainingActive int) string {
+// roster provides deterministic task labels+statuses to prevent LLM hallucination.
+func FormatBatchedAnnounce(items []AnnounceQueueItem, roster SubagentRoster) string {
 	if len(items) == 1 {
 		// Single item: use the same format as before (no batching overhead)
 		item := items[0]
@@ -143,7 +137,7 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, remainingActive int) strin
 			statusLabel = "was cancelled"
 		}
 
-		replyInstruction := buildReplyInstruction(remainingActive)
+		replyInstruction := buildReplyInstruction(roster)
 
 		return fmt.Sprintf(
 			"[System Message] A subagent task %q just %s.\n\n"+
@@ -177,30 +171,49 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, remainingActive int) strin
 	}
 
 	sb.WriteString("---\n\n")
-	sb.WriteString(buildReplyInstruction(remainingActive))
+	sb.WriteString(buildReplyInstruction(roster))
 
 	return sb.String()
 }
 
-func buildReplyInstruction(remainingActive int) string {
-	if remainingActive > 0 {
-		runsLabel := "runs"
-		if remainingActive == 1 {
-			runsLabel = "run"
+// buildReplyInstruction generates the instruction block for the parent LLM,
+// including a deterministic roster of all subagent tasks with their statuses.
+func buildReplyInstruction(roster SubagentRoster) string {
+	// Count running tasks from roster
+	running := 0
+	for _, e := range roster.Entries {
+		if e.Status == TaskStatusRunning {
+			running++
 		}
+	}
+
+	// Build roster block
+	var rosterBlock string
+	if len(roster.Entries) > 0 {
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Subagent roster (%d spawned, max %d per agent):\n",
+			roster.Total, roster.MaxPerAgent))
+		for _, e := range roster.Entries {
+			sb.WriteString(fmt.Sprintf("  [%-9s]  %s\n", e.Status, e.Label))
+		}
+		rosterBlock = sb.String()
+	}
+
+	if running > 0 {
 		return fmt.Sprintf(
-			"There are still %d active subagent %s for this session. "+
+			"%s\n"+
+				"%d subagent(s) still running. "+
 				"If they are part of the same workflow, wait for the remaining results "+
 				"before sending a user update. If they are unrelated, respond normally "+
 				"using only the result above. "+
 				"Do NOT copy or echo the [System Message] block verbatim — rewrite in your own voice. "+
 				"Reply ONLY: NO_REPLY if this result was already delivered to the user.",
-			remainingActive, runsLabel,
+			rosterBlock, running,
 		)
 	}
 
-	return "A completed subagent task is ready for user delivery. " +
-		"Convert the result above into your normal assistant voice and " +
+	return rosterBlock +
+		"\nAll subagent tasks completed. Convert the result above into your normal assistant voice and " +
 		"send that user-facing update now. Keep this internal context private " +
 		"(don't mention system/log/stats/session details or announce type), " +
 		"and do NOT copy the [System Message] block verbatim. " +

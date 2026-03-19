@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -164,8 +165,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Auto-resolve team workspace for agents not dispatched via team task.
 	// Lead agents default to team workspace (primary job is team coordination).
 	// Non-lead members keep own workspace; team workspace is accessible via absolute path.
+	// resolvedTeamSettings caches team settings from workspace resolution
+	// to avoid re-querying when checking slow_tool notification config.
+	var resolvedTeamSettings json.RawMessage
 	if req.TeamWorkspace == "" && l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
+			resolvedTeamSettings = team.Settings
 			// Shared workspace: scope by teamID only. Isolated (default): scope by chatID too.
 			wsChat := req.ChatID
 			if wsChat == "" {
@@ -223,7 +228,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Security: truncate oversized user messages gracefully (feed truncation notice into LLM)
 	maxChars := l.maxMessageChars
 	if maxChars <= 0 {
-		maxChars = 32_000 // default ~8-10K tokens
+		maxChars = config.DefaultMaxMessageChars
 	}
 	if len(req.Message) > maxChars {
 		originalLen := len(req.Message)
@@ -242,6 +247,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if l.sessions.GetContextWindow(req.SessionKey) <= 0 {
 		l.sessions.SetContextWindow(req.SessionKey, l.contextWindow)
 	}
+
+	// 0b. Load adaptive tool timing from session metadata.
+	toolTiming := ParseToolTiming(l.sessions.GetSessionMetadata(req.SessionKey))
+
+	// Resolve slow_tool notification config from already-loaded team settings (no extra DB query).
+	slowToolEnabled := tools.ParseTeamNotifyConfig(resolvedTeamSettings).SlowTool
 
 	// 1. Build messages from session history
 	history := l.sessions.GetHistory(req.SessionKey)
@@ -596,7 +607,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 		// Bootstrap mode: restrict API tool definitions to write_file only (open agents).
 		// Predefined agents keep all tools — BOOTSTRAP.md guides behavior.
-		if hadBootstrap && l.agentType != "predefined" {
+		if hadBootstrap && l.agentType != store.AgentTypePredefined {
 			var bootstrapDefs []providers.ToolDefinition
 			for _, td := range toolDefs {
 				if bootstrapToolAllowlist[td.Function.Name] {
@@ -618,6 +629,22 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			toolDefs = filtered
 		}
 
+		// Hide channel-specific tools when channel type doesn't match.
+		if req.ChannelType != "" {
+			filtered := toolDefs[:0:0]
+			for _, td := range toolDefs {
+				if tool, ok := l.tools.Get(td.Function.Name); ok {
+					if ca, ok := tool.(tools.ChannelAware); ok {
+						if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
+							continue
+						}
+					}
+				}
+				filtered = append(filtered, td)
+			}
+			toolDefs = filtered
+		}
+
 		// Use per-request model override if set (e.g. heartbeat uses cheaper model).
 		model := l.model
 		if req.ModelOverride != "" {
@@ -630,7 +657,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			Model:    model,
 			Options: map[string]any{
 				providers.OptMaxTokens:   l.effectiveMaxTokens(),
-				providers.OptTemperature: 0.7,
+				providers.OptTemperature: config.DefaultTemperature,
 				providers.OptSessionKey:  req.SessionKey,
 				providers.OptAgentID:     l.agentUUID.String(),
 				providers.OptUserID:      req.UserID,
@@ -716,7 +743,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		// but applied to in-memory messages during the run. Prevents context overflow for
 		// long-running agents (e.g. delegated research tasks that accumulate many tool results).
 		if !midLoopCompacted && l.contextWindow > 0 {
-			historyShare := 0.75
+			historyShare := config.DefaultHistoryShare
 			if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 				historyShare = l.compactionCfg.MaxHistoryShare
 			}
@@ -869,6 +896,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 			toolSpanStart := time.Now().UTC()
 			toolSpanID := l.emitToolSpanStart(ctx, toolSpanStart, tc.Name, tc.ID, string(argsJSON))
+
+			stopSlowTimer := toolTiming.StartSlowTimer(tc.Name, l.id, req.RunID, slowToolEnabled, emitRun)
 			var result *tools.Result
 			if allowedTools != nil && !allowedTools[tc.Name] {
 				// Attempt lazy activation: deferred MCP tools can be activated on first call
@@ -890,8 +919,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			if result == nil {
 				result = l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 			}
+			stopSlowTimer()
 
 			l.emitToolSpanEnd(ctx, toolSpanID, toolSpanStart, result)
+
+			// Record tool execution time for adaptive thresholds.
+			toolTiming.Record(tc.Name, time.Since(toolSpanStart).Milliseconds())
 
 			// Record result for loop detection.
 			loopDetector.recordResult(argsHash, result.ForLLM)
@@ -1009,6 +1042,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					// Emit running span inside goroutine — goroutine-safe (channel send only).
 					// End is also emitted here to prevent orphans on ctx cancellation.
 					spanID := l.emitToolSpanStart(ctx, spanStart, tc.Name, tc.ID, string(argsJSON))
+
+					stopSlowTimer := toolTiming.StartSlowTimer(tc.Name, l.id, req.RunID, slowToolEnabled, emitRun)
 					var result *tools.Result
 					if allowedTools != nil && !allowedTools[tc.Name] {
 						// Attempt lazy activation for deferred MCP tools.
@@ -1030,6 +1065,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					if result == nil {
 						result = l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 					}
+					stopSlowTimer()
 					l.emitToolSpanEnd(ctx, spanID, spanStart, result)
 					resultCh <- indexedResult{idx: idx, tc: tc, result: result, argsJSON: string(argsJSON), spanStart: spanStart}
 				}(i, tc)
@@ -1053,6 +1089,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			// Note: tool span start/end already emitted inside goroutines above.
 			var loopStuck bool
 			for _, r := range collected {
+				// Record tool execution time for adaptive thresholds.
+				toolTiming.Record(r.tc.Name, time.Since(r.spanStart).Milliseconds())
 
 				// Record for loop detection.
 				argsHash := loopDetector.record(r.tc.Name, r.tc.Arguments)
@@ -1220,6 +1258,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// This ensures concurrent runs never see each other's in-progress messages.
 	for _, msg := range pendingMsgs {
 		l.sessions.AddMessage(req.SessionKey, msg)
+	}
+
+	// Persist adaptive tool timing to session metadata.
+	if serialized := toolTiming.Serialize(); serialized != "" {
+		l.sessions.SetSessionMetadata(req.SessionKey, map[string]string{"tool_timing": serialized})
 	}
 
 	// Write session metadata (matching TS session entry updates)

@@ -147,7 +147,7 @@ export function Combobox({
         onFocus={() => options.length > 0 && setOpen(true)}
         placeholder={placeholder}
         className={cn(
-          "border-input placeholder:text-muted-foreground dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 pr-8 text-sm shadow-xs outline-none transition-[color,box-shadow]",
+          "border-input placeholder:text-muted-foreground dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 pr-8 text-base md:text-sm shadow-xs outline-none transition-[color,box-shadow]",
           "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
         )}
       />

@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,8 +10,7 @@ import (
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 
-	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleWriterCommand handles /addwriter and /removewriter commands.
@@ -29,7 +29,7 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 		return
 	}
 
-	if c.agentStore == nil {
+	if c.configPermStore == nil {
 		send("File writer management is not available.")
 		return
 	}
@@ -45,7 +45,7 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 	senderNumericID := strings.SplitN(senderID, "|", 2)[0]
 
 	// Check if sender is an existing writer (only writers can manage the list)
-	isWriter, err := c.agentStore.IsGroupFileWriter(ctx, agentID, groupID, senderNumericID)
+	isWriter, err := c.configPermStore.CheckPermission(ctx, agentID, groupID, "file_writer", senderNumericID)
 	if err != nil {
 		slog.Warn("writer check failed", "error", err, "sender", senderNumericID)
 		send("Failed to check permissions. Please try again.")
@@ -75,34 +75,34 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 
 	switch action {
 	case "add":
-		if err := c.agentStore.AddGroupFileWriter(ctx, agentID, groupID, targetID, targetUser.FirstName, targetUser.Username); err != nil {
+		meta, _ := json.Marshal(map[string]string{"displayName": targetUser.FirstName, "username": targetUser.Username})
+		if err := c.configPermStore.Grant(ctx, &store.ConfigPermission{
+			AgentID:    agentID,
+			Scope:      groupID,
+			ConfigType: "file_writer",
+			UserID:     targetID,
+			Permission: "allow",
+			Metadata:   meta,
+		}); err != nil {
 			slog.Warn("add writer failed", "error", err, "target", targetID)
 			send("Failed to add writer. Please try again.")
 			return
 		}
 		send(fmt.Sprintf("Added %s as a file writer.", targetName))
-		c.Bus().Broadcast(bus.Event{
-			Name:    protocol.EventCacheInvalidate,
-			Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindGroupFileWriters, Key: groupID},
-		})
 
 	case "remove":
 		// Prevent removing the last writer
-		writers, _ := c.agentStore.ListGroupFileWriters(ctx, agentID, groupID)
+		writers, _ := c.configPermStore.List(ctx, agentID, "file_writer", groupID)
 		if len(writers) <= 1 {
 			send("Cannot remove the last file writer.")
 			return
 		}
-		if err := c.agentStore.RemoveGroupFileWriter(ctx, agentID, groupID, targetID); err != nil {
+		if err := c.configPermStore.Revoke(ctx, agentID, groupID, "file_writer", targetID); err != nil {
 			slog.Warn("remove writer failed", "error", err, "target", targetID)
 			send("Failed to remove writer. Please try again.")
 			return
 		}
 		send(fmt.Sprintf("Removed %s from file writers.", targetName))
-		c.Bus().Broadcast(bus.Event{
-			Name:    protocol.EventCacheInvalidate,
-			Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindGroupFileWriters, Key: groupID},
-		})
 	}
 }
 
@@ -121,7 +121,7 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 		return
 	}
 
-	if c.agentStore == nil {
+	if c.configPermStore == nil {
 		send("File writer management is not available.")
 		return
 	}
@@ -135,7 +135,7 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 
 	groupID := fmt.Sprintf("group:%s:%s", c.Name(), chatIDStr)
 
-	writers, err := c.agentStore.ListGroupFileWriters(ctx, agentID, groupID)
+	writers, err := c.configPermStore.List(ctx, agentID, "file_writer", groupID)
 	if err != nil {
 		slog.Warn("list writers failed", "error", err)
 		send("Failed to list writers. Please try again.")
@@ -147,14 +147,21 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 		return
 	}
 
+	type fwMeta struct {
+		DisplayName string `json:"displayName"`
+		Username    string `json:"username"`
+	}
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("File writers for this group (%d):\n", len(writers)))
 	for i, w := range writers {
+		var meta fwMeta
+		_ = json.Unmarshal(w.Metadata, &meta)
 		label := w.UserID
-		if w.Username != nil && *w.Username != "" {
-			label = "@" + *w.Username
-		} else if w.DisplayName != nil && *w.DisplayName != "" {
-			label = *w.DisplayName
+		if meta.Username != "" {
+			label = "@" + meta.Username
+		} else if meta.DisplayName != "" {
+			label = meta.DisplayName
 		}
 		sb.WriteString(fmt.Sprintf("%d. %s (ID: %s)\n", i+1, label, w.UserID))
 	}

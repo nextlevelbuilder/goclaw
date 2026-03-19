@@ -1,0 +1,1 @@
+function e(n){const s=n.split(":");return s.length>=3&&s[0]==="agent"?{agentId:s[1],scope:s.slice(2).join(":")}:{agentId:"",scope:n}}function i(n,s){if(!s)return!1;const{scope:t}=e(n);return t.startsWith(`ws-${s}-`)}export{i,e as p};

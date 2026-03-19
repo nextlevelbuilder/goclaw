@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
 import { ChatInput, type AttachedFile } from "@/components/chat/chat-input";
+import { ChatTopBar } from "@/components/chat/chat-top-bar";
+import { DropZone } from "@/components/chat/drop-zone";
 import { useChatSessions } from "./hooks/use-chat-sessions";
 import { useChatMessages } from "./hooks/use-chat-messages";
 import { useChatSend } from "./hooks/use-chat-send";
@@ -46,6 +48,9 @@ export function ChatPage() {
     toolStream,
     isRunning,
     loading: messagesLoading,
+    activity,
+    blockReplies,
+    teamTasks,
     expectRun,
     addLocalMessage,
   } = useChatMessages(sessionKey, agentId);
@@ -103,11 +108,11 @@ export function ChatPage() {
   const handleAgentChange = useCallback(
     (newAgentId: string) => {
       setAgentId(newAgentId);
-      const newKey = `agent:${newAgentId}:ws-${userId}-${Date.now().toString(36)}`;
+      const newKey = `agent:${newAgentId}:ws:direct:${crypto.randomUUID()}`;
       setSessionKey(newKey);
       navigate(`/chat/${encodeURIComponent(newKey)}`);
     },
-    [navigate, userId],
+    [navigate],
   );
 
   const handleSend = useCallback(
@@ -200,35 +205,42 @@ export function ChatPage() {
           </div>
         )}
 
+        <ChatTopBar agentId={agentId} isRunning={isRunning} activity={activity} />
+
         {sendError && (
           <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
             {sendError}
           </div>
         )}
 
-        <ChatThread
-          messages={messages}
-          streamText={streamText}
-          thinkingText={thinkingText}
-          toolStream={toolStream}
-          isRunning={isRunning}
-          loading={messagesLoading}
-          scrollTrigger={scrollTrigger}
-        />
-
-        {isOwn ? (
-          <ChatInput
-            onSend={handleSend}
-            onAbort={handleAbort}
+        <DropZone onDrop={() => { /* TODO: wire to chat input */ }}>
+          <ChatThread
+            messages={messages}
+            streamText={streamText}
+            thinkingText={thinkingText}
+            toolStream={toolStream}
+            blockReplies={blockReplies}
+            activity={activity}
+            teamTasks={teamTasks}
             isRunning={isRunning}
-            disabled={!connected}
+            loading={messagesLoading}
+            scrollTrigger={scrollTrigger}
           />
-        ) : (
-          <div className="flex items-center gap-2 border-t bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-            <Eye className="h-4 w-4" />
-            {t("readOnly")}
-          </div>
-        )}
+
+          {isOwn ? (
+            <ChatInput
+              onSend={handleSend}
+              onAbort={handleAbort}
+              isRunning={isRunning}
+              disabled={!connected}
+            />
+          ) : (
+            <div className="mx-3 mb-3 flex items-center gap-2 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground shadow-sm">
+              <Eye className="h-4 w-4" />
+              {t("readOnly")}
+            </div>
+          )}
+        </DropZone>
       </div>
     </div>
   );

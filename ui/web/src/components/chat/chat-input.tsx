@@ -69,7 +69,7 @@ export function ChatInput({ onSend, onAbort, isRunning, disabled }: ChatInputPro
 
   return (
     <div
-      className="border-t bg-background safe-bottom"
+      className="mx-3 mb-3 rounded-xl border bg-background/95 backdrop-blur-sm shadow-sm safe-bottom"
       style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px))` }}
     >
       {/* Attached files preview */}

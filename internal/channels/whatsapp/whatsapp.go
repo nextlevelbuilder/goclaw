@@ -267,6 +267,11 @@ func (c *Channel) handleIncomingMessage(msg map[string]any) {
 		"preview", channels.Truncate(content, 50),
 	)
 
+	// Collect contact for processed messages.
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, metadata["user_name"], "", peerKind)
+	}
+
 	c.HandleMessage(senderID, chatID, content, media, metadata, peerKind)
 }
 

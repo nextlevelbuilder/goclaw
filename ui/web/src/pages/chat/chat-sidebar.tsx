@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ interface ChatSidebarProps {
   onNewChat: () => void;
 }
 
-export function ChatSidebar({
+export const ChatSidebar = memo(function ChatSidebar({
   agentId,
   onAgentChange,
   sessions,
@@ -55,4 +56,4 @@ export function ChatSidebar({
       </div>
     </div>
   );
-}
+});

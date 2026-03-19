@@ -1,0 +1,1 @@
+function a(e){return e.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"d").toLowerCase().replace(/[^a-z0-9-]/g,"-").replace(/-{2,}/g,"-").replace(/^-+/g,"")}function r(e){return/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(e)}export{r as i,a as s};

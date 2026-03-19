@@ -455,8 +455,13 @@ func handleTeammateMessage(
 			origPeerKind = string(sessions.PeerDirect)
 		}
 		origLocalKey := inMeta["origin_local_key"]
-		leadSessionKey := sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
-		leadSessionKey = overrideSessionKeyFromLocalKey(leadSessionKey, origLocalKey, leadAgent, origCh, origChatID, origPeerKind)
+		// Use exact origin session key if available (WS uses non-standard format).
+		leadSessionKey := inMeta["origin_session_key"]
+		if leadSessionKey == "" {
+			// Fallback: rebuild session key from origin metadata (works for Telegram, Discord, etc.)
+			leadSessionKey = sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+			leadSessionKey = overrideSessionKeyFromLocalKey(leadSessionKey, origLocalKey, leadAgent, origCh, origChatID, origPeerKind)
+		}
 
 		// Extract trace context for announce linking.
 		var parentTraceID, parentRootSpanID uuid.UUID

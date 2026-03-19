@@ -85,7 +85,9 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("- Always specify `assignee` — match member expertise from the list above\n")
 			sb.WriteString("- **Check task board first** — ALWAYS call `team_tasks(action=\"list\")` before creating tasks. The system blocks creation if you skip this step\n")
 			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
-			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
+			sb.WriteString("- Do NOT say \"done\", \"xong\", \"finished\", or any completion language after delegating — delegation is NOT completion. Only report completion when ALL task results have been delivered to the user\n")
+			sb.WriteString("- Do NOT phrase delegation as a question or request (\"nha?\", \"nhé?\", \"okay?\"). State it declaratively: \"Đã giao X cho Y\" not \"Để em giao cho Y nha anh\"\n")
+			sb.WriteString("- After creating tasks, briefly announce what was delegated and to whom — then STOP. Do not add filler, confirmations, or closing remarks\n")
 			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
 			sb.WriteString("- **Prefer delegation** — if the user asks to involve the team, delegate tasks immediately. Do NOT do the work yourself first then hand off to members\n")
 			sb.WriteString("- **Do NOT block on completed tasks** — if a dependency task is already done, pass its result in the new task's description instead of using blocked_by\n")
@@ -113,7 +115,6 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("The system auto-dispatches blocked tasks when their dependencies complete.\n")
 			sb.WriteString("Do NOT wait for results to create follow-up tasks — plan the full pipeline ahead.\n\n")
 			sb.WriteString("After results: present to user (if done) or continue orchestrating.\n")
-			sb.WriteString("Vary announcement phrasing between delegation rounds.\n")
 
 			sb.WriteString("\n## Follow-up Reminders\n\n")
 			sb.WriteString("When you need user input/decision: create+claim task, then `ask_user` with text=<question>. ONLY use when you have a question for the user — NOT for waiting on teammates or status updates.\n")
@@ -125,7 +126,8 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("Rules:\n")
 			sb.WriteString("- Always specify `assignee` when creating tasks\n")
 			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
-			sb.WriteString("- Do NOT add confirmations (\"Done!\", \"Got it!\") — just state what was assigned\n")
+			sb.WriteString("- Do NOT say \"done\", \"xong\", \"finished\", or any completion language after delegating — delegation is NOT completion\n")
+			sb.WriteString("- Do NOT phrase delegation as a question or request (\"nha?\", \"nhé?\", \"okay?\"). State it declaratively\n")
 			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
 		}
 

@@ -40,11 +40,11 @@ export interface HeartbeatLog {
   status: string;
   summary?: string;
   error?: string;
-  duration_ms?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  skip_reason?: string;
-  ran_at: string;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  skipReason?: string;
+  ranAt: string;
 }
 
 /** Return type of useAgentHeartbeat, for passing as props. */

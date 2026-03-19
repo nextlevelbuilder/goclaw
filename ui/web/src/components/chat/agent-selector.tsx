@@ -11,6 +11,11 @@ interface AgentSelectorProps {
   onChange: (agentId: string) => void;
 }
 
+/** Extract emoji from agent's other_config JSONB */
+function agentEmoji(agent: AgentData): string | undefined {
+  return (agent.other_config?.emoji as string) || undefined;
+}
+
 export function AgentSelector({ value, onChange }: AgentSelectorProps) {
   const { t } = useTranslation("common");
   const http = useHttp();
@@ -28,7 +33,6 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
       .then((res) => {
         const active = (res.agents ?? []).filter((a) => a.status === "active");
         setAgents(active);
-        // Auto-select first agent if current value doesn't match any active agent
         if (active.length > 0 && !active.some((a) => a.agent_key === value)) {
           onChange(active[0]!.agent_key);
         }
@@ -36,7 +40,6 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
       .catch(() => {});
   }, [http, connected]);
 
-  // Compute dropdown position for portal rendering
   useLayoutEffect(() => {
     if (!open || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -49,7 +52,6 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
     });
   }, [open]);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -66,6 +68,7 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
   }, [open]);
 
   const selected = agents.find((a) => a.agent_key === value);
+  const selectedEmoji = selected ? agentEmoji(selected) : undefined;
 
   return (
     <div ref={containerRef} className="relative">
@@ -74,8 +77,12 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm hover:bg-accent"
       >
-        <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 truncate text-left">
+        {selectedEmoji ? (
+          <span className="text-base shrink-0">{selectedEmoji}</span>
+        ) : (
+          <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="flex-1 truncate text-left font-medium">
           {selected?.display_name ?? selected?.agent_key ?? (value || t("selectAgent"))}
         </span>
         <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -85,35 +92,39 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         <div
           ref={dropdownRef}
           style={dropdownStyle}
-          className="max-h-60 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md"
+          className="pointer-events-auto max-h-60 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md"
         >
           {agents.length === 0 && (
             <div className="px-3 py-2 text-sm text-muted-foreground">
               {t("noAgentsAvailable")}
             </div>
           )}
-          {agents.map((agent) => (
-            <button
-              key={agent.agent_key}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onChange(agent.agent_key);
-                setOpen(false);
-              }}
-              className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent ${
-                agent.agent_key === value ? "bg-accent" : ""
-              }`}
-            >
-              <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="flex-1 truncate text-left">
-                {agent.display_name || agent.agent_key}
-              </span>
-              {agent.is_default && (
-                <span className="text-xs text-muted-foreground">{t("default")}</span>
-              )}
-            </button>
-          ))}
+          {agents.map((agent) => {
+            const emoji = agentEmoji(agent);
+            return (
+              <button
+                key={agent.agent_key}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onChange(agent.agent_key); setOpen(false); }}
+                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent ${
+                  agent.agent_key === value ? "bg-accent" : ""
+                }`}
+              >
+                {emoji ? (
+                  <span className="text-base shrink-0">{emoji}</span>
+                ) : (
+                  <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+                <span className="flex-1 truncate text-left">
+                  {agent.display_name || agent.agent_key}
+                </span>
+                {agent.is_default && (
+                  <span className="text-xs text-muted-foreground">{t("default")}</span>
+                )}
+              </button>
+            );
+          })}
         </div>,
         document.body,
       )}

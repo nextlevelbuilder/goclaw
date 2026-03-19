@@ -12,17 +12,17 @@ import (
 // CronTool lets agents manage Gateway cron jobs.
 // Matching OpenClaw src/agents/tools/cron-tool.ts.
 type CronTool struct {
-	cronStore        store.CronStore
-	groupWriterCache *store.GroupWriterCache // nil = no group restriction
+	cronStore store.CronStore
+	permStore store.ConfigPermissionStore // nil = no group restriction
 }
 
 func NewCronTool(cronStore store.CronStore) *CronTool {
 	return &CronTool{cronStore: cronStore}
 }
 
-// SetGroupWriterCache enables group cron mutation restriction.
-func (t *CronTool) SetGroupWriterCache(c *store.GroupWriterCache) {
-	t.groupWriterCache = c
+// SetConfigPermStore enables group cron mutation restriction.
+func (t *CronTool) SetConfigPermStore(s store.ConfigPermissionStore) {
+	t.permStore = s
 }
 
 func (t *CronTool) Name() string { return "cron" }
@@ -60,13 +60,12 @@ SCHEDULE TYPES (schedule.kind):
   { "kind": "cron", "expr": "<5-field cron expression>", "tz": "<optional IANA timezone, e.g. Asia/Ho_Chi_Minh; omit to use gateway default>" }
 
 CRITICAL CONSTRAINTS:
-- name must be a valid slug (lowercase letters, numbers, hyphens only)
-- message is required for add action
-- schedule is required for add action
+- "name" must be a valid slug (lowercase letters, numbers, hyphens only)
+- For action="add": send the job inside "job", "message" is required and "schedule" is required
+- For action="update", send changes inside "patch"
 - Default: jobs run as isolated agent turns with the specified message
 - Before creating or updating a scheduled job, call the datetime tool first to get the precise current time and unix_ms timestamp. Do NOT guess or estimate timestamps.
-
-Use jobId as the canonical identifier; id is accepted for compatibility.`
+- Use "jobId" as the canonical identifier; "id" is accepted for compatibility.`
 }
 
 func (t *CronTool) Parameters() map[string]any {
@@ -117,8 +116,8 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	// Group write permission check for mutation actions
-	if t.groupWriterCache != nil && (action == "add" || action == "update" || action == "remove") {
-		if err := store.CheckGroupWritePermission(ctx, t.groupWriterCache); err != nil {
+	if t.permStore != nil && (action == "add" || action == "update" || action == "remove") {
+		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
 			return ErrorResult("permission denied: only file writers can manage cron jobs in group chats")
 		}
 	}

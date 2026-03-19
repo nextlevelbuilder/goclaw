@@ -1,0 +1,1 @@
+import{q as w,r as s}from"./index-lg_2p7da.js";function C(e){const r=w(),[u,n]=s.useState(null),[c,a]=s.useState(!1),[o,l]=s.useState(null),f=s.useCallback(async p=>{a(!0),l(null);try{const t=await r.call(e,p);return n(t),t}catch(t){throw l(t),t}finally{a(!1)}},[r,e]),i=s.useCallback(()=>{n(null),l(null),a(!1)},[]);return{data:u,loading:c,error:o,call:f,reset:i}}export{C as u};

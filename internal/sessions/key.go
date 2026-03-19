@@ -183,6 +183,19 @@ func IsHeartbeatSession(key string) bool {
 	return strings.HasPrefix(rest, "heartbeat")
 }
 
+// BuildWSSessionKey builds the canonical WS session key for a web conversation.
+//
+//	agent:{agentId}:ws:direct:{conversationId}
+func BuildWSSessionKey(agentID, conversationID string) string {
+	return BuildSessionKey(agentID, "ws", PeerDirect, conversationID)
+}
+
+// IsWSSession checks if a session key is a WS session (new or legacy format).
+func IsWSSession(key string) bool {
+	_, rest := ParseSessionKey(key)
+	return strings.HasPrefix(rest, "ws:") || strings.HasPrefix(rest, "ws-")
+}
+
 // PeerKindFromGroup returns PeerGroup if isGroup is true, PeerDirect otherwise.
 func PeerKindFromGroup(isGroup bool) PeerKind {
 	if isGroup {

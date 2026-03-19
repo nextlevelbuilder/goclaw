@@ -189,6 +189,8 @@
     "notifyProgressHint": "Thông báo khi thành viên cập nhật tiến trình.",
     "notifyFailed": "Thất bại",
     "notifyFailedHint": "Thông báo khi nhiệm vụ thất bại.",
+    "notifySlowTool": "Cảnh báo tool chạy lâu",
+    "notifySlowToolHint": "Thông báo hệ thống khi tool chạy lâu bất thường. Luôn gửi trực tiếp — không qua leader.",
     "notifyMode": "Chế độ gửi",
     "notifyModeHint": "Cách thông báo được gửi đến kênh chat.",
     "notifyModeDirect": "Trực tiếp",

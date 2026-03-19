@@ -40,6 +40,7 @@
   "delete": {
     "title": "删除Agent",
     "description": "永久删除此Agent及其所有上下文文件、Session和配置。此操作无法撤销。",
+    "deleteWarning": "此操作将永久删除代理及所有相关数据，包括：会话、消息、定时任务、心跳检测、记忆、知识图谱、技能、渠道配置、团队、工作区文件和权限。此操作不可撤销。",
     "detailDescription": "确定要删除「{{name}}」吗？所有上下文文件、Session和配置将被永久删除。",
     "confirmLabel": "删除",
     "defaultCannotDelete": "默认Agent无法删除。"
@@ -88,7 +89,8 @@
       "shares": "共享",
       "links": "链接",
       "skills": "Skill",
-      "instances": "用户实例"
+      "instances": "用户实例",
+      "permissions": "权限"
     },
     "summonFailed": "召唤失败",
     "evolving": "进化中",
@@ -467,6 +469,33 @@
     "refresh": "刷新",
     "noLogs": "暂无心跳日志。",
     "logsPagination": "{{from}}–{{to}} / 共 {{total}}"
+  },
+  "permissions": {
+    "title": "权限管理",
+    "description": "控制谁可以修改代理配置和文件。所有者始终拥有完全访问权限。",
+    "addRule": "添加规则",
+    "fileWriters": "文件编辑者",
+    "configPerms": "配置权限",
+    "noRules": "暂无权限规则。所有者默认拥有完全访问权限。",
+    "userIdPlaceholder": "搜索联系人或输入ID...",
+    "scopePlaceholder": "选择或输入范围...",
+    "types": {
+      "file_writer": "文件编辑",
+      "file_writer_desc": "控制谁可以在群聊中编辑文件和管理定时任务。首位用户自动添加。",
+      "heartbeat": "心跳检测",
+      "heartbeat_desc": "控制谁可以通过聊天配置心跳检测计划和设置。",
+      "cron": "定时任务",
+      "cron_desc": "控制谁可以通过聊天创建和管理定时任务。",
+      "context_files": "上下文文件",
+      "context_files_desc": "控制谁可以通过聊天修改代理身份文件（SOUL.md等）。",
+      "all": "全部 (*)",
+      "all_desc": "所有配置类型的完全访问权限。"
+    },
+    "scopes": {
+      "agent": "代理（私聊）",
+      "group_all": "所有群组",
+      "global": "全局"
+    }
   },
   "toast": {
     "created": "代理已创建",

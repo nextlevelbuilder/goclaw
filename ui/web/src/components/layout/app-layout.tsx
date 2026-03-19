@@ -6,7 +6,7 @@ import { Topbar } from "./topbar";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAuthStore } from "@/stores/use-auth-store";
-import { useIsMobile } from "@/hooks/use-media-query";
+import { useIsTablet } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function AppLayout() {
@@ -16,7 +16,7 @@ export function AppLayout() {
   const mobileSidebarOpen = useUiStore((s) => s.mobileSidebarOpen);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const connected = useAuthStore((s) => s.connected);
-  const isMobile = useIsMobile();
+  const isMobile = useIsTablet();
 
   return (
     <div className="flex h-dvh overflow-hidden safe-top">

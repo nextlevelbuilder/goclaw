@@ -119,11 +119,14 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	runID := uuid.NewString()
 	sessionKey := params.SessionKey
 	if sessionKey == "" {
-		sessionKey = sessions.SessionKey(params.AgentID, "ws-"+client.ID())
+		sessionKey = sessions.BuildWSSessionKey(params.AgentID, uuid.NewString())
 	}
 
-	// Inject user_id into context for downstream stores/tools
-	runCtxBase := ctx
+	// Detach from HTTP request context so agent runs survive page navigation/reconnect.
+	// WithoutCancel preserves all context values (locale, user ID, etc.)
+	// but HTTP request cancellation no longer propagates.
+	// Explicit abort via chat.abort still works through the per-run cancel().
+	runCtxBase := context.WithoutCancel(ctx)
 	if userID != "" {
 		runCtxBase = store.WithUserID(runCtxBase, userID)
 	}
@@ -187,7 +190,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			Message:    message,
 			Media:      mediaFiles,
 			Channel:    "ws",
-			ChatID:     client.ID(),
+			ChatID:     userID, // use stable userID for team/workspace isolation (not ephemeral client.ID())
 			RunID:      runID,
 			UserID:     userID,
 			Stream:     params.Stream,
@@ -234,7 +237,7 @@ func (m *ChatMethods) handleHistory(ctx context.Context, client *gateway.Client,
 
 	sessionKey := params.SessionKey
 	if sessionKey == "" {
-		sessionKey = sessions.SessionKey(params.AgentID, "ws-"+client.ID())
+		sessionKey = sessions.BuildWSSessionKey(params.AgentID, uuid.NewString())
 	}
 
 	history := m.sessions.GetFullHistory(sessionKey)

@@ -51,8 +51,8 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 			sm.announceQueue.Enqueue(sessionKey, item, meta)
 		} else {
 			// Direct publish (no batching)
-			remainingActive := sm.CountRunningForParent(task.ParentID)
-			announceContent := FormatBatchedAnnounce([]AnnounceQueueItem{item}, remainingActive)
+			roster := sm.RosterForParent(task.ParentID)
+			announceContent := FormatBatchedAnnounce([]AnnounceQueueItem{item}, roster)
 
 			announceMeta := map[string]string{
 				"origin_channel":      task.OriginChannel,

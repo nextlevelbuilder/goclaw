@@ -162,6 +162,11 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if lk := ToolLocalKeyFromCtx(ctx); lk != "" {
 		taskMeta["local_key"] = lk
 	}
+	// Store origin session key so deferred dispatches route announces correctly.
+	// WS sessions use non-standard key format that BuildScopedSessionKey() cannot reproduce.
+	if sk := ToolSessionKeyFromCtx(ctx); sk != "" {
+		taskMeta["origin_session_key"] = sk
+	}
 	// Store leader's trace context so unblocked dispatch links back to the leader's trace.
 	if traceID := tracing.TraceIDFromContext(ctx); traceID != uuid.Nil {
 		taskMeta["origin_trace_id"] = traceID.String()

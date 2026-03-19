@@ -119,8 +119,8 @@ type Loop struct {
 	skillEvolve        bool
 	skillNudgeInterval int // nudge every N tool calls (0 = disabled, 15 = default)
 
-	// Group writer cache for system prompt injection
-	groupWriterCache *store.GroupWriterCache
+	// Config permission store for group file writer checks
+	configPermStore store.ConfigPermissionStore
 
 	// Team store for cross-session pending task detection
 	teamStore store.TeamStore
@@ -236,8 +236,8 @@ type LoopConfig struct {
 	SkillEvolve        bool
 	SkillNudgeInterval int // 0 = disabled, 15 = default
 
-	// Group writer cache for system prompt injection
-	GroupWriterCache *store.GroupWriterCache
+	// Config permission store for group file writer checks
+	ConfigPermStore store.ConfigPermissionStore
 
 	// Team store for cross-session pending task detection
 	TeamStore store.TeamStore
@@ -256,7 +256,7 @@ type LoopConfig struct {
 	TracingStore       store.TracingStore
 }
 
-const defaultMaxTokens = 8192
+const defaultMaxTokens = config.DefaultMaxTokens
 
 // effectiveMaxTokens returns the configured max output tokens, defaulting to 8192.
 func (l *Loop) effectiveMaxTokens() int {
@@ -268,10 +268,10 @@ func (l *Loop) effectiveMaxTokens() int {
 
 func NewLoop(cfg LoopConfig) *Loop {
 	if cfg.MaxIterations <= 0 {
-		cfg.MaxIterations = 20
+		cfg.MaxIterations = config.DefaultMaxIterations
 	}
 	if cfg.ContextWindow <= 0 {
-		cfg.ContextWindow = 200000
+		cfg.ContextWindow = config.DefaultContextWindow
 	}
 
 	// Normalize injection action (default: "warn")
@@ -335,7 +335,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
-		groupWriterCache:       cfg.GroupWriterCache,
+		configPermStore:        cfg.ConfigPermStore,
 		teamStore:              cfg.TeamStore,
 		secureCLIStore:         cfg.SecureCLIStore,
 		mediaStore:             cfg.MediaStore,

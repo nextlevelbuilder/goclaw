@@ -33,19 +33,16 @@ func initRedisClient(cfg *config.Config) any {
 func makeCaches(raw any) (
 	agentCtxCache cache.Cache[[]store.AgentContextFileData],
 	userCtxCache cache.Cache[[]store.AgentContextFileData],
-	groupWriterCache cache.Cache[[]store.GroupFileWriterData],
 ) {
 	client, _ := raw.(*redis.Client)
 	if client == nil {
 		slog.Info("cache backend: in-memory (Redis not connected)")
 		return cache.NewInMemoryCache[[]store.AgentContextFileData](),
-			cache.NewInMemoryCache[[]store.AgentContextFileData](),
-			cache.NewInMemoryCache[[]store.GroupFileWriterData]()
+			cache.NewInMemoryCache[[]store.AgentContextFileData]()
 	}
 	slog.Info("cache backend: redis")
 	return cache.NewRedisCache[[]store.AgentContextFileData](client, "ctx:agent"),
-		cache.NewRedisCache[[]store.AgentContextFileData](client, "ctx:user"),
-		cache.NewRedisCache[[]store.GroupFileWriterData](client, "grp:writers")
+		cache.NewRedisCache[[]store.AgentContextFileData](client, "ctx:user")
 }
 
 // shutdownRedis closes the Redis client connection.

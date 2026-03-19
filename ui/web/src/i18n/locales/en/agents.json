@@ -40,6 +40,7 @@
   "delete": {
     "title": "Delete Agent",
     "description": "Permanently delete this agent, all its context files, sessions, and configuration. This action cannot be undone.",
+    "deleteWarning": "This will permanently delete the agent and ALL related data including: sessions, messages, cron jobs, heartbeats, memories, knowledge graph, skills, channel configurations, teams, workspace files, and permissions. This action cannot be undone.",
     "detailDescription": "Are you sure you want to delete \"{{name}}\"? All context files, sessions, and configuration will be permanently removed.",
     "confirmLabel": "Delete",
     "defaultCannotDelete": "The default agent cannot be deleted."
@@ -88,7 +89,8 @@
       "shares": "Shares",
       "links": "Links",
       "skills": "Skills",
-      "instances": "Instances"
+      "instances": "Instances",
+      "permissions": "Permissions"
     },
     "summonFailed": "Summon Failed",
     "evolving": "Evolving",
@@ -467,6 +469,33 @@
     "refresh": "Refresh",
     "noLogs": "No heartbeat logs yet.",
     "logsPagination": "{{from}}–{{to}} of {{total}}"
+  },
+  "permissions": {
+    "title": "Permissions",
+    "description": "Control who can modify agent config and files. Owner always has full access.",
+    "addRule": "Add Rule",
+    "fileWriters": "File Writers",
+    "configPerms": "Config Permissions",
+    "noRules": "No permission rules. Owner has implicit full access.",
+    "userIdPlaceholder": "Search contacts or type ID...",
+    "scopePlaceholder": "Select or type scope...",
+    "types": {
+      "file_writer": "File Writer",
+      "file_writer_desc": "Controls who can edit files and manage cron in group chats. First user auto-added.",
+      "heartbeat": "Heartbeat",
+      "heartbeat_desc": "Controls who can configure heartbeat schedule and settings via chat.",
+      "cron": "Cron",
+      "cron_desc": "Controls who can create and manage scheduled cron jobs via chat.",
+      "context_files": "Context Files",
+      "context_files_desc": "Controls who can modify agent identity files (SOUL.md, etc.) via chat.",
+      "all": "All (*)",
+      "all_desc": "Full access to all configuration types."
+    },
+    "scopes": {
+      "agent": "Agent (DM only)",
+      "group_all": "All Groups",
+      "global": "Global (all contexts)"
+    }
   },
   "toast": {
     "created": "Agent created",

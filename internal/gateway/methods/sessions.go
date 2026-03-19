@@ -31,6 +31,7 @@ func (m *SessionsMethods) Register(router *gateway.MethodRouter) {
 
 type sessionsListParams struct {
 	AgentID string `json:"agentId"`
+	Channel string `json:"channel"` // optional: filter by channel prefix ("ws", "telegram")
 	Limit   int    `json:"limit"`
 	Offset  int    `json:"offset"`
 }
@@ -45,11 +46,19 @@ func (m *SessionsMethods) handleList(_ context.Context, client *gateway.Client, 
 		params.Limit = 20
 	}
 
-	result := m.sessions.ListPagedRich(store.SessionListOpts{
+	opts := store.SessionListOpts{
 		AgentID: params.AgentID,
+		Channel: params.Channel,
 		Limit:   params.Limit,
 		Offset:  params.Offset,
-	})
+	}
+	// Only filter by UserID when a channel filter is specified (e.g. chat sidebar sends channel="ws").
+	// Sessions admin page omits channel → sees all sessions unfiltered.
+	if params.Channel != "" {
+		opts.UserID = client.UserID()
+	}
+
+	result := m.sessions.ListPagedRich(opts)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"sessions": result.Sessions,
 		"total":    result.Total,

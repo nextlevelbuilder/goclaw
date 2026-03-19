@@ -2,8 +2,12 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
@@ -48,7 +52,7 @@ func NewReadImageTool(registry *providers.Registry) *ReadImageTool {
 func (t *ReadImageTool) Name() string { return "read_image" }
 
 func (t *ReadImageTool) Description() string {
-	return "Analyze images sent by the user in the current message. Only use when you see <media:image> tags in the conversation — do NOT use for workspace files or generated images."
+	return "Analyze images using vision AI. Works with: (1) images sent by the user (<media:image> tags), (2) workspace/generated image files (pass a file path)."
 }
 
 func (t *ReadImageTool) Parameters() map[string]any {
@@ -59,10 +63,17 @@ func (t *ReadImageTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "What you want to know about the image(s). E.g. 'Describe this image in detail' or 'What text is in this image?'",
 			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Optional file path to an image in the workspace. Use this for generated images or attachments. If omitted, analyzes images from the conversation.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
 }
+
+// maxImageFileBytes is the max size for loading workspace images (10MB).
+const maxImageFileBytes = 10 * 1024 * 1024
 
 func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Result {
 	prompt, _ := args["prompt"].(string)
@@ -70,9 +81,18 @@ func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Resul
 		prompt = "Describe this image in detail."
 	}
 
+	// If path is provided, load image from workspace file
 	images := MediaImagesFromCtx(ctx)
+	if imgPath, _ := args["path"].(string); imgPath != "" {
+		fileImages, err := t.loadImageFromPath(ctx, imgPath)
+		if err != nil {
+			return ErrorResult(err.Error())
+		}
+		images = fileImages
+	}
+
 	if len(images) == 0 {
-		return ErrorResult("No images available in this conversation. The user may not have sent an image.")
+		return ErrorResult("No images available. Either send an image in the chat or provide a file path with the 'path' parameter.")
 	}
 
 	chain := ResolveMediaProviderChain(ctx, "read_image", "", "",
@@ -131,4 +151,48 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 	}
 
 	return []byte(resp.Content), resp.Usage, nil
+}
+
+// loadImageFromPath reads an image file from the workspace and returns it as ImageContent.
+func (t *ReadImageTool) loadImageFromPath(ctx context.Context, path string) ([]providers.ImageContent, error) {
+	// Infer MIME type from extension
+	ext := strings.ToLower(filepath.Ext(path))
+	mimeTypes := map[string]string{
+		".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+		".png": "image/png", ".gif": "image/gif",
+		".webp": "image/webp", ".bmp": "image/bmp",
+	}
+	mime, ok := mimeTypes[ext]
+	if !ok {
+		return nil, fmt.Errorf("unsupported image format: %s (supported: jpg, png, gif, webp, bmp)", ext)
+	}
+
+	// Resolve path within workspace (respect workspace restriction).
+	workspace := ToolWorkspaceFromCtx(ctx)
+	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, true), allowedWithTeamWorkspace(ctx, nil))
+	if err != nil {
+		return nil, fmt.Errorf("invalid image path: %w", err)
+	}
+	if err := checkDeniedPath(resolved, workspace, nil); err != nil {
+		return nil, err
+	}
+
+	// Pre-check file size before loading into memory.
+	fi, err := os.Stat(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat image file: %w", err)
+	}
+	if fi.Size() > maxImageFileBytes {
+		return nil, fmt.Errorf("image file too large (%d bytes, max %d)", fi.Size(), maxImageFileBytes)
+	}
+
+	data, err := os.ReadFile(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image file: %w", err)
+	}
+
+	return []providers.ImageContent{{
+		MimeType: mime,
+		Data:     base64.StdEncoding.EncodeToString(data),
+	}}, nil
 }

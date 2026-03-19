@@ -88,6 +88,9 @@ export function HeartbeatCard({ heartbeat }: HeartbeatCardProps) {
             {config.channel && (
               <span>{config.channel}{config.chatId ? `/${config.chatId}` : ""}</span>
             )}
+            {config.model && (
+              <span className="text-violet-600 dark:text-violet-400">{config.model}</span>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-x-3 gap-y-0.5">
@@ -106,6 +109,9 @@ export function HeartbeatCard({ heartbeat }: HeartbeatCardProps) {
             <span>{t("heartbeat.runs")}: {config.runCount}</span>
             <span>{t("heartbeat.suppressed")}: {config.suppressCount}</span>
           </div>
+          {config.lastError && config.lastStatus === "error" && (
+            <p className="text-xs text-destructive truncate">{config.lastError}</p>
+          )}
         </div>
 
         <div className="flex gap-2 pt-1">

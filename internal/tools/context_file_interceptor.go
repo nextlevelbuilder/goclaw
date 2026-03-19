@@ -78,7 +78,7 @@ type ContextFileInterceptor struct {
 	agentCache       cache.Cache[[]store.AgentContextFileData] // agent-level files, keyed by agentID.String()
 	userCache        cache.Cache[[]store.AgentContextFileData] // user-level files, keyed by "agentID:userID"
 	ttl              time.Duration
-	groupWriterCache *store.GroupWriterCache // nil = use direct DB call (backward compat)
+	permStore store.ConfigPermissionStore // nil = no group write restriction
 }
 
 // NewContextFileInterceptor creates an interceptor backed by the given agent store.
@@ -97,9 +97,9 @@ func NewContextFileInterceptor(
 	}
 }
 
-// SetGroupWriterCache sets the shared cache for group writer permission checks (defense-in-depth).
-func (b *ContextFileInterceptor) SetGroupWriterCache(c *store.GroupWriterCache) {
-	b.groupWriterCache = c
+// SetConfigPermStore sets the config permission store for group writer permission checks.
+func (b *ContextFileInterceptor) SetConfigPermStore(s store.ConfigPermissionStore) {
+	b.permStore = s
 }
 
 // ReadFile attempts to read a context file from the DB (with cache).
@@ -210,24 +210,18 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 		}
 		if !skipCheck {
 			senderID := store.SenderIDFromContext(ctx)
-			if senderID != "" {
+			if senderID != "" && b.permStore != nil {
 				numericID := strings.SplitN(senderID, "|", 2)[0]
-				var isWriter bool
-				var err error
-				if b.groupWriterCache != nil {
-					isWriter, err = b.groupWriterCache.IsWriter(ctx, agentID, userID, numericID)
-				} else {
-					isWriter, err = b.agentStore.IsGroupFileWriter(ctx, agentID, userID, numericID)
-				}
+				allowed, err := b.permStore.CheckPermission(ctx, agentID, userID, "file_writer", numericID)
 				if err != nil {
 					slog.Warn("security.group_file_writer_check_failed",
 						"error", err, "sender", numericID, "file", fileName, "group", userID)
-					// fail open: allow write if DB check fails
-				} else if !isWriter {
+					// fail open: allow write if check fails
+				} else if !allowed {
 					return true, fmt.Errorf("permission denied: you are not authorized to modify %s in this group. Ask a group file writer to add you with /addwriter", fileName)
 				}
 			}
-			// senderID empty = system context (cron, subagent) → fail open
+			// senderID empty or no permStore = system context (cron, subagent) → fail open
 		}
 	}
 

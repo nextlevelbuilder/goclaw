@@ -1,0 +1,1 @@
+import{l as o,a as c,x as i,r as l,y as m}from"./index-lg_2p7da.js";function d(){const s=o(),t=c(a=>a.connected),{data:n,isPending:r,refetch:e}=i({queryKey:m.skills.runtimes,queryFn:()=>s.get("/v1/skills/runtimes"),staleTime:12e4,enabled:t}),u=l.useCallback(()=>{e()},[e]);return{runtimes:n,loading:r,refresh:u}}export{d as u};

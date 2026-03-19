@@ -54,10 +54,13 @@ func isRetryableNetworkErr(err error) bool {
 // retrySend wraps a Telegram send call with retry logic for transient network errors.
 // Parse errors are NOT retried (handled by caller's HTML fallback).
 // resetFn is called before each retry (e.g. to seek file handles back to start). Can be nil.
-func retrySend(ctx context.Context, name string, resetFn func(), fn func() error) error {
+func (c *Channel) retrySend(ctx context.Context, name string, resetFn func(), fn func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, sendOverallTimeout)
+	defer cancel()
+
 	var err error
 	for attempt := 1; attempt <= sendMaxRetries; attempt++ {
-		err = fn()
+		err = fn(ctx)
 		if err == nil {
 			return nil
 		}
@@ -68,6 +71,14 @@ func retrySend(ctx context.Context, name string, resetFn func(), fn func() error
 		if !isRetryableNetworkErr(err) || attempt == sendMaxRetries {
 			return err
 		}
+
+		// If we hit a network-level connectivity issue (likely IPv6 routing),
+		// arm sticky IPv4 fallback. Only triggers on "unreachable" — not timeouts
+		// (which can be rate-limiting) or DNS errors (unrelated to IPv6).
+		if strings.Contains(err.Error(), "unreachable") {
+			c.enableIPv4Only()
+		}
+
 		slog.Warn("telegram send retry",
 			"func", name, "attempt", attempt, "max", sendMaxRetries, "error", err)
 		if resetFn != nil {
@@ -290,7 +301,7 @@ func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlConte
 		}
 	}
 
-	err := retrySend(ctx, "sendMessage", nil, func() error {
+	err := c.retrySend(ctx, "sendMessage", nil, func(ctx context.Context) error {
 		_, e := c.bot.SendMessage(ctx, tgMsg)
 		return e
 	})
@@ -382,7 +393,7 @@ func (c *Channel) sendPhoto(ctx context.Context, chatID telego.ChatID, filePath,
 		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
-	err = retrySend(ctx, "sendPhoto", func() { file.Seek(0, 0) }, func() error {
+	err = c.retrySend(ctx, "sendPhoto", func() { file.Seek(0, 0) }, func(ctx context.Context) error {
 		_, e := c.bot.SendPhoto(ctx, params)
 		return e
 	})
@@ -425,7 +436,7 @@ func (c *Channel) sendVideo(ctx context.Context, chatID telego.ChatID, filePath,
 		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
-	err = retrySend(ctx, "sendVideo", func() { file.Seek(0, 0) }, func() error {
+	err = c.retrySend(ctx, "sendVideo", func() { file.Seek(0, 0) }, func(ctx context.Context) error {
 		_, e := c.bot.SendVideo(ctx, params)
 		return e
 	})
@@ -468,7 +479,7 @@ func (c *Channel) sendAudio(ctx context.Context, chatID telego.ChatID, filePath,
 		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
-	err = retrySend(ctx, "sendAudio", func() { file.Seek(0, 0) }, func() error {
+	err = c.retrySend(ctx, "sendAudio", func() { file.Seek(0, 0) }, func(ctx context.Context) error {
 		_, e := c.bot.SendAudio(ctx, params)
 		return e
 	})
@@ -511,7 +522,7 @@ func (c *Channel) sendDocument(ctx context.Context, chatID telego.ChatID, filePa
 		params.ReplyParameters = &telego.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}
 
-	err = retrySend(ctx, "sendDocument", func() { file.Seek(0, 0) }, func() error {
+	err = c.retrySend(ctx, "sendDocument", func() { file.Seek(0, 0) }, func(ctx context.Context) error {
 		_, e := c.bot.SendDocument(ctx, params)
 		return e
 	})

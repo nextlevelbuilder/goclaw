@@ -1,0 +1,1 @@
+import{r}from"./index-Bn3i8JXX.js";function f(t,s=600){const[u,c]=r.useState(t),e=r.useRef(null),i=r.useRef(u);return i.current=u,r.useEffect(()=>(t?(e.current&&clearTimeout(e.current),c(!0)):i.current&&(e.current=setTimeout(()=>c(!1),s)),()=>{e.current&&clearTimeout(e.current)}),[t,s]),u}export{f as u};

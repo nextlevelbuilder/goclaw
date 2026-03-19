@@ -14,7 +14,7 @@ export function useContactSearch(search: string) {
 
   // Simple debounce via timeout
   useMemo(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    const timer = setTimeout(() => setDebouncedSearch(search), 150);
     return () => clearTimeout(timer);
   }, [search]);
 

@@ -1,0 +1,1 @@
+import{r}from"./index-lg_2p7da.js";function o(t,u=2e3){const e=r.useRef(null),c=r.useRef(t);return c.current=t,r.useEffect(()=>()=>{e.current&&clearTimeout(e.current)},[]),r.useCallback(()=>{e.current&&clearTimeout(e.current),e.current=setTimeout(()=>{e.current=null,c.current()},u)},[u])}export{o as u};

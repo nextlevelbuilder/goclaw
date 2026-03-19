@@ -63,7 +63,7 @@ function TeamUpdatedCard({ payload: p }: { payload: TeamUpdatedPayload }) {
       <span>Team </span>
       <span className="font-medium">{p.team_name}</span>
       <span> updated</span>
-      {p.changes.length > 0 && (
+      {p.changes?.length > 0 && (
         <span className="ml-1 text-xs text-muted-foreground">({p.changes.join(", ")})</span>
       )}
     </div>
@@ -120,7 +120,7 @@ function LinkUpdatedCard({ payload: p, resolveAgent }: { payload: AgentLinkUpdat
       <span className="font-medium">
         {resolveAgent(p.source_agent_key)} &rarr; {resolveAgent(p.target_agent_key)}
       </span>
-      {p.changes.length > 0 && (
+      {p.changes?.length > 0 && (
         <span className="ml-1 text-xs text-muted-foreground">({p.changes.join(", ")})</span>
       )}
     </div>

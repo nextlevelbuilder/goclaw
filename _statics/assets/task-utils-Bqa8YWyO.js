@@ -1,0 +1,1 @@
+function r(e){switch(e){case"pending":return"outline";case"pending_approval":return"default";case"in_progress":return"info";case"completed":return"success";case"blocked":return"warning";case"failed":return"destructive";case"in_review":return"secondary";case"cancelled":return"outline";default:return"outline"}}export{r as t};

@@ -12,4 +12,10 @@ const (
 
 	// pairingReplyDebounce is the minimum interval between pairing replies to the same user.
 	pairingReplyDebounce = 60 * time.Second
+
+	// sendOverallTimeout is the maximum duration for a multi-retry send sequence.
+	sendOverallTimeout = 60 * time.Second
+
+	// probeOverallTimeout is the maximum duration for initial bot status check and command sync.
+	probeOverallTimeout = 60 * time.Second
 )

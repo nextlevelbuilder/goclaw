@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Image,
@@ -8,10 +8,16 @@ import {
   Forward,
   Reply,
   MapPin,
-  ChevronDown,
+  Download,
   ChevronRight,
 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // --- Patterns to detect special blocks ---
 
@@ -166,29 +172,64 @@ function ReplyQuote({ sender, body }: { sender: string; body: string }) {
   );
 }
 
+/** Whether file content should be rendered as markdown (vs raw code) */
+function isMarkdownFile(name: string, mime: string): boolean {
+  return /\.(md|mdx|markdown)$/i.test(name) || mime.startsWith("text/markdown");
+}
+
 function FileBlock({ name, mime, content }: { name: string; mime: string; content: string }) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const handleDownload = useCallback(() => {
+    const blob = new Blob([content], { type: mime || "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [content, mime, name]);
+
+  const renderMarkdown = isMarkdownFile(name, mime);
 
   return (
-    <div className="rounded-md border bg-muted/30">
+    <>
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium hover:bg-muted/50"
+        onClick={() => setOpen(true)}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-left text-xs font-medium hover:bg-muted/50"
       >
-        {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>{name}</span>
+        <span className="flex-1 truncate">{name}</span>
         <span className="text-muted-foreground font-normal">{mime}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
-      {expanded && (
-        <div className="border-t px-3 py-2">
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs">
-            <code>{content}</code>
-          </pre>
-        </div>
-      )}
-    </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-row items-center justify-between gap-2">
+            <DialogTitle className="truncate text-base">{name}</DialogTitle>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="mr-8 flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </button>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border bg-muted/20 p-4">
+            {renderMarkdown ? (
+              <MarkdownRenderer content={content} />
+            ) : (
+              <pre className="whitespace-pre-wrap text-xs font-mono">
+                <code>{content}</code>
+              </pre>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
