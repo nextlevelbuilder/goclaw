@@ -93,12 +93,12 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 
 	case "/reset":
 		// In group chats, only file writers can reset conversation history.
-		if isGroup && c.agentStore != nil {
+		if isGroup && c.configPermStore != nil {
 			agentID, err := c.resolveAgentUUID(ctx)
 			if err == nil {
 				groupID := fmt.Sprintf("group:%s:%s", c.Name(), chatIDStr)
 				senderNumericID := strings.SplitN(senderID, "|", 2)[0]
-				isWriter, err := c.agentStore.IsGroupFileWriter(ctx, agentID, groupID, senderNumericID)
+				isWriter, err := c.configPermStore.CheckPermission(ctx, agentID, groupID, "file_writer", senderNumericID)
 				if err != nil {
 					slog.Warn("security.reset_writer_check_failed", "error", err, "sender", senderNumericID)
 					// fail-open: allow reset if DB check fails

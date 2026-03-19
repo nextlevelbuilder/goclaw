@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
-	"time"
 )
 
 // OpenAIProvider implements Provider for OpenAI-compatible APIs
@@ -38,7 +40,7 @@ func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvid
 		apiBase:      apiBase,
 		chatPath:     "/chat/completions",
 		defaultModel: defaultModel,
-		client:       &http.Client{Timeout: 300 * time.Second},
+		client:       &http.Client{Timeout: DefaultHTTPTimeout},
 		retryConfig:  DefaultRetryConfig(),
 	}
 }
@@ -79,7 +81,25 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 	model := p.resolveModel(req.Model)
 	body := p.buildRequestBody(model, req, false)
 
-	return RetryDo(ctx, p.retryConfig, func() (*ChatResponse, error) {
+	chatFn := p.chatRequestFn(ctx, body)
+
+	resp, err := RetryDo(ctx, p.retryConfig, chatFn)
+
+	// Auto-clamp max_tokens and retry once if the model rejects the value
+	if err != nil {
+		if clamped := clampMaxTokensFromError(err, body); clamped {
+			slog.Info("max_tokens clamped, retrying", "model", model, "limit", clampedLimit(body))
+			return RetryDo(ctx, p.retryConfig, chatFn)
+		}
+	}
+
+	return resp, err
+}
+
+// chatRequestFn returns a closure that performs a single non-streaming chat request.
+// Shared between initial attempt and post-clamp retry to avoid duplication.
+func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any) func() (*ChatResponse, error) {
+	return func() (*ChatResponse, error) {
 		respBody, err := p.doRequest(ctx, body)
 		if err != nil {
 			return nil, err
@@ -92,7 +112,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 		}
 
 		return p.parseResponse(&oaiResp), nil
-	})
+	}
 }
 
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
@@ -103,6 +123,16 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
 		return p.doRequest(ctx, body)
 	})
+
+	// Auto-clamp max_tokens and retry once if the model rejects the value
+	if err != nil {
+		if clamped := clampMaxTokensFromError(err, body); clamped {
+			slog.Info("max_tokens clamped, retrying stream", "model", model, "limit", clampedLimit(body))
+			respBody, err = RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
+				return p.doRequest(ctx, body)
+			})
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +142,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	accumulators := make(map[int]*toolCallAccumulator)
 
 	scanner := bufio.NewScanner(respBody)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max line for large tool call / thinking chunks
+	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data:") {
@@ -437,4 +467,45 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 	}
 
 	return result
+}
+
+// maxTokensLimitRe matches "supports at most N completion tokens" from OpenAI 400 errors.
+var maxTokensLimitRe = regexp.MustCompile(`supports at most (\d+) completion tokens`)
+
+// clampMaxTokensFromError checks if an error is a 400 "max_tokens is too large" rejection.
+// If so, it parses the model's stated limit, clamps the body's max_tokens/max_completion_tokens,
+// and returns true so the caller can retry.
+func clampMaxTokensFromError(err error, body map[string]any) bool {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) || httpErr.Status != http.StatusBadRequest {
+		return false
+	}
+	if !strings.Contains(httpErr.Body, "max_tokens") || !strings.Contains(httpErr.Body, "too large") {
+		return false
+	}
+
+	matches := maxTokensLimitRe.FindStringSubmatch(httpErr.Body)
+	if len(matches) < 2 {
+		return false
+	}
+	limit, parseErr := strconv.Atoi(matches[1])
+	if parseErr != nil || limit <= 0 {
+		return false
+	}
+
+	// Clamp whichever key is present
+	if _, ok := body["max_completion_tokens"]; ok {
+		body["max_completion_tokens"] = limit
+	} else {
+		body["max_tokens"] = limit
+	}
+	return true
+}
+
+// clampedLimit returns the clamped max_tokens or max_completion_tokens value for logging.
+func clampedLimit(body map[string]any) any {
+	if v, ok := body["max_completion_tokens"]; ok {
+		return v
+	}
+	return body["max_tokens"]
 }

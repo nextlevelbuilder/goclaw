@@ -87,21 +87,6 @@ func (s *seedStubStore) SetUserOverride(_ context.Context, _ *store.UserAgentOve
 func (s *seedStubStore) GetOrCreateUserProfile(_ context.Context, _ uuid.UUID, _, _, _ string) (bool, string, error) {
 	return false, "", nil
 }
-func (s *seedStubStore) IsGroupFileWriter(_ context.Context, _ uuid.UUID, _, _ string) (bool, error) {
-	return false, nil
-}
-func (s *seedStubStore) AddGroupFileWriter(_ context.Context, _ uuid.UUID, _, _, _, _ string) error {
-	return nil
-}
-func (s *seedStubStore) RemoveGroupFileWriter(_ context.Context, _ uuid.UUID, _, _ string) error {
-	return nil
-}
-func (s *seedStubStore) ListGroupFileWriters(_ context.Context, _ uuid.UUID, _ string) ([]store.GroupFileWriterData, error) {
-	return nil, nil
-}
-func (s *seedStubStore) ListGroupFileWriterGroups(_ context.Context, _ uuid.UUID) ([]store.GroupWriterGroupInfo, error) {
-	return nil, nil
-}
 func (s *seedStubStore) ListUserInstances(_ context.Context, _ uuid.UUID) ([]store.UserInstanceData, error) {
 	return nil, nil
 }

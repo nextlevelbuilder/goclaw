@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/tts"
@@ -15,12 +16,20 @@ import (
 // Implements Tool + ContextualTool interfaces.
 // Per-call channel is read from ctx for thread-safety.
 type TtsTool struct {
+	mu      sync.RWMutex
 	manager *tts.Manager
 }
 
 // NewTtsTool creates a TTS tool backed by the given manager.
 func NewTtsTool(mgr *tts.Manager) *TtsTool {
 	return &TtsTool{manager: mgr}
+}
+
+// UpdateManager swaps the underlying TTS manager (used on config reload).
+func (t *TtsTool) UpdateManager(mgr *tts.Manager) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.manager = mgr
 }
 
 func (t *TtsTool) Name() string { return "tts" }
@@ -62,6 +71,11 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	voice, _ := args["voice"].(string)
 	providerName, _ := args["provider"].(string)
 
+	// Snapshot manager pointer under read lock so config reloads don't race.
+	t.mu.RLock()
+	mgr := t.manager
+	t.mu.RUnlock()
+
 	// Determine format based on channel (read from ctx — thread-safe)
 	channel := ToolChannelFromCtx(ctx)
 	opts := tts.Options{Voice: voice}
@@ -74,13 +88,13 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	if providerName != "" {
 		// Use specific provider
-		p, ok := t.manager.GetProvider(providerName)
+		p, ok := mgr.GetProvider(providerName)
 		if !ok {
 			return &Result{ForLLM: fmt.Sprintf("error: tts provider not found: %s", providerName), IsError: true}
 		}
 		result, err = p.Synthesize(ctx, text, opts)
 	} else {
-		result, err = t.manager.SynthesizeWithFallback(ctx, text, opts)
+		result, err = mgr.SynthesizeWithFallback(ctx, text, opts)
 	}
 
 	if err != nil {

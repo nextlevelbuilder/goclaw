@@ -97,6 +97,7 @@ type SessionStore interface {
 	GetCompactionCount(key string) int
 	GetMemoryFlushCompactionCount(key string) int
 	SetMemoryFlushDone(key string)
+	GetSessionMetadata(key string) map[string]string
 	SetSessionMetadata(key string, metadata map[string]string)
 	SetSpawnInfo(key, spawnedBy string, depth int)
 	SetContextWindow(key string, cw int)

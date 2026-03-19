@@ -75,6 +75,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [notifyDispatched, setNotifyDispatched] = useState(initNotify.dispatched ?? true);
   const [notifyProgress, setNotifyProgress] = useState(initNotify.progress ?? true);
   const [notifyFailed, setNotifyFailed] = useState(initNotify.failed ?? true);
+  const [notifySlowTool, setNotifySlowTool] = useState(initNotify.slow_tool ?? true);
   const [notifyMode, setNotifyMode] = useState<"direct" | "leader">(initNotify.mode ?? "direct");
   const [escalationMode, setEscalationMode] = useState<EscalationMode | "">(initial.escalation_mode ?? "");
   const [escalationActions, setEscalationActions] = useState<EscalationAction[]>(initial.escalation_actions ?? []);
@@ -105,6 +106,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setNotifyDispatched(sn.dispatched ?? true);
     setNotifyProgress(sn.progress ?? true);
     setNotifyFailed(sn.failed ?? true);
+    setNotifySlowTool(sn.slow_tool ?? true);
     setNotifyMode(sn.mode ?? "direct");
     setEscalationMode(s.escalation_mode ?? "");
     setEscalationActions(s.escalation_actions ?? []);
@@ -129,6 +131,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
         dispatched: notifyDispatched,
         progress: notifyProgress,
         failed: notifyFailed,
+        slow_tool: notifySlowTool,
         mode: notifyMode,
       };
       if (escalationMode) {
@@ -148,7 +151,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     } finally {
       setSaving(false);
     }
-  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyMode, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
+  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifySlowTool, notifyMode, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
@@ -234,6 +237,13 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
                   <p className="text-xs text-muted-foreground">{t("settings.notifyFailedHint")}</p>
                 </div>
                 <Switch checked={notifyFailed} onCheckedChange={setNotifyFailed} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold">{t("settings.notifySlowTool")}</span>
+                  <p className="text-xs text-muted-foreground">{t("settings.notifySlowToolHint")}</p>
+                </div>
+                <Switch checked={notifySlowTool} onCheckedChange={setNotifySlowTool} />
               </div>
               <div className="border-t pt-3 space-y-2">
                 <span className="text-sm font-semibold">{t("settings.notifyMode")}</span>

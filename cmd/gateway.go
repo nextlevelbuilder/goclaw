@@ -24,6 +24,7 @@ import (
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
+	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
@@ -78,7 +79,7 @@ func runGateway() {
 	// Detect server IPs for output scrubbing (prevents IP leaks via web_fetch, exec, etc.)
 	tools.DetectServerIPs(context.Background())
 
-	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
+	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
 	if browserMgr != nil {
 		defer browserMgr.Close()
 	}
@@ -103,7 +104,7 @@ func runGateway() {
 	// Register providers from DB (overrides config providers).
 	if pgStores.Providers != nil {
 		dbGatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
-		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP)
+		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP, cfg)
 	}
 
 	setupMemoryEmbeddings(cfg, pgStores, providerRegistry)
@@ -116,8 +117,8 @@ func runGateway() {
 		// Wire announce queue for batched subagent result delivery (matching TS debounce pattern)
 		announceQueue := tools.NewAnnounceQueue(1000, 20,
 			func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
-				remainingActive := subagentMgr.CountRunningForParent(meta.ParentAgent)
-				content := tools.FormatBatchedAnnounce(items, remainingActive)
+				roster := subagentMgr.RosterForParent(meta.ParentAgent)
+				content := tools.FormatBatchedAnnounce(items, roster)
 				senderID := fmt.Sprintf("subagent:batch-%d", len(items))
 				label := items[0].Label
 				if len(items) > 1 {
@@ -152,9 +153,6 @@ func runGateway() {
 					Media:    batchMedia,
 				})
 			},
-			func(parentID string) int {
-				return subagentMgr.CountRunningForParent(parentID)
-			},
 		)
 		subagentMgr.SetAnnounceQueue(announceQueue)
 
@@ -172,6 +170,12 @@ func runGateway() {
 	toolsReg.Register(tools.NewCronTool(pgStores.Cron))
 	slog.Info("cron tool registered")
 
+	// Heartbeat tool (agent-facing)
+	heartbeatTool := tools.NewHeartbeatTool(pgStores.Heartbeats, pgStores.ConfigPermissions)
+	heartbeatTool.SetAgentStore(pgStores.Agents)
+	toolsReg.Register(heartbeatTool)
+	slog.Info("heartbeat tool registered")
+
 	// Session tools (list, status, history, send)
 	toolsReg.Register(tools.NewSessionsListTool())
 	toolsReg.Register(tools.NewSessionStatusTool())
@@ -180,6 +184,8 @@ func runGateway() {
 
 	// Message tool (send to channels)
 	toolsReg.Register(tools.NewMessageTool(workspace, agentCfg.RestrictToWorkspace))
+	// Group members tool (list members in group chats)
+	toolsReg.Register(tools.NewListGroupMembersTool())
 	slog.Info("session + message tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
@@ -288,6 +294,9 @@ func runGateway() {
 		mcpToolLister = mcpMgr
 	}
 	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH := wireHTTP(pgStores, cfg.Gateway.Token, cfg.Agents.Defaults.Workspace, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	if providersH != nil {
+		providersH.SetAPIBaseFallback(cfg.Providers.APIBaseForType)
+	}
 	if agentsH != nil {
 		server.SetAgentsHandler(agentsH)
 	}
@@ -398,7 +407,7 @@ func runGateway() {
 
 	// Register all RPC methods
 	server.SetLogTee(logTee)
-	pairingMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee)
+	pairingMethods, heartbeatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions)
 
 	// Wire pairing event broadcasts to all WS clients.
 	pairingMethods.SetBroadcaster(server.BroadcastEvent)
@@ -419,6 +428,12 @@ func runGateway() {
 			cs.SetChannelSender(channelMgr.SendToChannel)
 		}
 	}
+	// Wire group member lister on list_group_members tool
+	if t, ok := toolsReg.Get("list_group_members"); ok {
+		if gl, ok := t.(tools.GroupMemberListerAware); ok {
+			gl.SetGroupMemberLister(channelMgr.ListGroupMembers)
+		}
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader
@@ -426,7 +441,7 @@ func runGateway() {
 		instanceLoader = channels.NewInstanceLoader(pgStores.ChannelInstances, pgStores.Agents, channelMgr, msgBus, pgStores.Pairing)
 		instanceLoader.SetProviderRegistry(providerRegistry)
 		instanceLoader.SetPendingCompactionConfig(cfg.Channels.PendingCompaction)
-		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStores(pgStores.Agents, pgStores.Teams, pgStores.PendingMessages))
+		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStores(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeZaloOA, zalo.Factory)
@@ -700,6 +715,31 @@ func runGateway() {
 		slog.Warn("cron service failed to start", "error", err)
 	}
 
+	// Start heartbeat ticker (routes through scheduler's cron lane)
+	heartbeatTicker := heartbeat.NewTicker(heartbeat.TickerConfig{
+		Store:    pgStores.Heartbeats,
+		Agents:   pgStores.Agents,
+		Sessions: pgStores.Sessions,
+		MsgBus:   msgBus,
+		Sched:    sched,
+		RunAgent: makeHeartbeatRunFn(sched),
+	})
+	heartbeatTicker.SetOnEvent(func(event store.HeartbeatEvent) {
+		server.BroadcastEvent(*protocol.NewEvent(protocol.EventHeartbeat, event))
+	})
+	heartbeatTicker.Start()
+
+	// Wire heartbeat wake function to tool + RPC + cron wakeMode
+	heartbeatTool.SetWakeFn(heartbeatTicker.Wake)
+	heartbeatMethods.SetWakeFn(heartbeatTicker.Wake)
+	heartbeatMethods.SetAgentStore(pgStores.Agents)
+	heartbeatMethods.SetProviderStore(pgStores.Providers)
+	cronHeartbeatWakeFn = func(agentID string) {
+		if id, err := uuid.Parse(agentID); err == nil {
+			heartbeatTicker.Wake(id)
+		}
+	}
+
 	// Adaptive throttle: reduce per-session concurrency when nearing the summary threshold.
 	// This prevents concurrent runs from racing with summarization.
 	// Uses calibrated token estimation (actual prompt tokens from last LLM call)
@@ -710,7 +750,7 @@ func runGateway() {
 		tokens := agent.EstimateTokensWithCalibration(history, lastPT, lastMC)
 		cw := pgStores.Sessions.GetContextWindow(sessionKey)
 		if cw <= 0 {
-			cw = 200000 // fallback for sessions not yet processed
+			cw = config.DefaultContextWindow
 		}
 		return tokens, cw
 	})
@@ -752,6 +792,9 @@ func runGateway() {
 			}
 		}
 	})
+
+	// Slow tool notification subscriber — direct outbound when tool exceeds adaptive threshold.
+	wireSlowToolNotifySubscriber(msgBus)
 
 	// Start inbound message consumer (channel → scheduler → agent → channel)
 	consumerTeamStore := pgStores.Teams
@@ -819,6 +862,23 @@ func runGateway() {
 		webFetchTool.UpdatePolicy(updatedCfg.Tools.WebFetch.Policy, updatedCfg.Tools.WebFetch.AllowedDomains, updatedCfg.Tools.WebFetch.BlockedDomains)
 	})
 
+	// Reload TTS providers on config changes via pub/sub.
+	msgBus.Subscribe("tts-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+		newMgr := setupTTS(updatedCfg)
+		if newMgr == nil {
+			return
+		}
+		ttsTool.UpdateManager(newMgr)
+		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
+	})
+
 	// Contact collector: auto-collect user info from channels with in-memory dedup cache.
 	var contactCollector *store.ContactCollector
 	if pgStores.Contacts != nil {
@@ -842,9 +902,10 @@ func runGateway() {
 		// Broadcast shutdown event
 		server.BroadcastEvent(*protocol.NewEvent(protocol.EventShutdown, nil))
 
-		// Stop channels, cron, and task ticker
+		// Stop channels, cron, heartbeat, and task ticker
 		channelMgr.StopAll(context.Background())
 		pgStores.Cron.Stop()
+		heartbeatTicker.Stop()
 		if taskTicker != nil {
 			taskTicker.Stop()
 		}

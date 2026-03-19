@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,6 +120,32 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if teamWsDir, err := WorkspaceDir(t.manager.dataDir, team.ID, wsChat); err == nil {
 		taskMeta["team_workspace"] = teamWsDir
 	}
+	// Auto-collect media files from current run to team workspace.
+	// When leader received files from user and creates a task, copy those
+	// files to the team workspace so members can access them via read_file.
+	// Also rewrite any media paths in the description to point to the workspace copy,
+	// since members can't access the original .media/ paths outside their workspace.
+	if mediaPaths := RunMediaPathsFromCtx(ctx); len(mediaPaths) > 0 {
+		if wsDir, _ := taskMeta["team_workspace"].(string); wsDir != "" {
+			nameMap := RunMediaNamesFromCtx(ctx)
+			if copiedPaths := copyMediaToWorkspace(mediaPaths, wsDir, nameMap); len(copiedPaths) > 0 {
+				// Store as []any so type assertion works both before and after JSON round-trip.
+				files := make([]any, len(copiedPaths))
+				for i, p := range copiedPaths {
+					files[i] = p
+				}
+				taskMeta["attached_files"] = files
+
+				// Rewrite media paths in description so members see workspace paths.
+				for i, src := range mediaPaths {
+					if i < len(copiedPaths) {
+						description = strings.ReplaceAll(description, src, copiedPaths[i])
+					}
+				}
+			}
+		}
+	}
+
 	// Preserve original blocked_by list for blocker-result forwarding when task unblocks.
 	if len(blockedBy) > 0 {
 		ids := make([]string, len(blockedBy))

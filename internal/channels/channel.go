@@ -330,6 +330,17 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 	c.bus.PublishInbound(msg)
 }
 
+// GroupMember represents a member of a group chat.
+type GroupMember struct {
+	MemberID string `json:"member_id"`
+	Name     string `json:"name"`
+}
+
+// GroupMemberProvider is optionally implemented by channels that can list group members.
+type GroupMemberProvider interface {
+	ListGroupMembers(ctx context.Context, chatID string) ([]GroupMember, error)
+}
+
 // PendingCompactable is optionally implemented by channels that have a PendingHistory
 // supporting LLM-based compaction. InstanceLoader uses this to wire compaction config
 // after channel creation.

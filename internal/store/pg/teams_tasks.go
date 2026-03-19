@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -89,10 +90,11 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 		return fmt.Errorf("lock team: %w", err)
 	}
 
+	// Scope task_number per (team_id, chat_id) so each conversation starts from 1.
 	var taskNumber int
 	err = tx.QueryRowContext(ctx,
-		`SELECT COALESCE(MAX(task_number), 0) + 1 FROM team_tasks WHERE team_id = $1`,
-		task.TeamID,
+		`SELECT COALESCE(MAX(task_number), 0) + 1 FROM team_tasks WHERE team_id = $1 AND COALESCE(chat_id, '') = $2`,
+		task.TeamID, task.ChatID,
 	).Scan(&taskNumber)
 	if err != nil {
 		return fmt.Errorf("compute task_number: %w", err)
@@ -238,12 +240,35 @@ func (s *PGTeamStore) SearchTasks(ctx context.Context, teamID uuid.UUID, query s
 	if limit <= 0 {
 		limit = 20
 	}
+	// Split query into words and join with OR for broader matching
+	words := strings.Fields(query)
+	if len(words) == 0 {
+		return nil, nil
+	}
+	var sanitized []string
+	for _, w := range words {
+		w = strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
+				return r
+			}
+			return -1
+		}, w)
+		w = strings.TrimSpace(w)
+		if w != "" {
+			sanitized = append(sanitized, w)
+		}
+	}
+	if len(sanitized) == 0 {
+		return nil, nil
+	}
+	tsq := strings.Join(sanitized, " | ")
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
-		 WHERE t.team_id = $1 AND t.tsv @@ plainto_tsquery('simple', $2) AND ($4 = '' OR t.user_id = $4)
-		 ORDER BY ts_rank(t.tsv, plainto_tsquery('simple', $2)) DESC
-		 LIMIT $3`, teamID, query, limit, userID)
+		 WHERE t.team_id = $1 AND t.tsv @@ to_tsquery('simple', $2) AND ($4 = '' OR t.user_id = $4)
+		 ORDER BY ts_rank(t.tsv, to_tsquery('simple', $2)) DESC
+		 LIMIT $3`, teamID, tsq, limit, userID)
 	if err != nil {
 		return nil, err
 	}

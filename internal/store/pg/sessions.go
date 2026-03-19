@@ -142,6 +142,17 @@ func (s *PGSessionStore) SetLabel(key, label string) {
 	}
 }
 
+func (s *PGSessionStore) GetSessionMetadata(key string) map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if data, ok := s.cache[key]; ok && data.Metadata != nil {
+		out := make(map[string]string, len(data.Metadata))
+		maps.Copy(out, data.Metadata)
+		return out
+	}
+	return nil
+}
+
 func (s *PGSessionStore) SetSessionMetadata(key string, metadata map[string]string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

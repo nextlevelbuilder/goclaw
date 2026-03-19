@@ -17,16 +17,17 @@ import (
 
 // ChannelInstancesHandler handles channel instance CRUD endpoints.
 type ChannelInstancesHandler struct {
-	store        store.ChannelInstanceStore
-	agentStore   store.AgentStore
-	contactStore store.ContactStore
-	token        string
-	msgBus       *bus.MessageBus
+	store           store.ChannelInstanceStore
+	agentStore      store.AgentStore
+	configPermStore store.ConfigPermissionStore
+	contactStore    store.ContactStore
+	token           string
+	msgBus          *bus.MessageBus
 }
 
 // NewChannelInstancesHandler creates a handler for channel instance management endpoints.
-func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, contactStore store.ContactStore, token string, msgBus *bus.MessageBus) *ChannelInstancesHandler {
-	return &ChannelInstancesHandler{store: s, agentStore: agentStore, contactStore: contactStore, token: token, msgBus: msgBus}
+func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, contactStore store.ContactStore, token string, msgBus *bus.MessageBus) *ChannelInstancesHandler {
+	return &ChannelInstancesHandler{store: s, agentStore: agentStore, configPermStore: configPermStore, contactStore: contactStore, token: token, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all channel instance routes on the given mux.
@@ -44,7 +45,7 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	}
 
 	// Group file writers (nested under channel instances)
-	if h.agentStore != nil {
+	if h.configPermStore != nil {
 		mux.HandleFunc("GET /v1/channels/instances/{id}/writers/groups", h.auth(h.handleWriterGroups))
 		mux.HandleFunc("GET /v1/channels/instances/{id}/writers", h.auth(h.handleListWriters))
 		mux.HandleFunc("POST /v1/channels/instances/{id}/writers", h.auth(h.handleAddWriter))
@@ -303,15 +304,27 @@ func (h *ChannelInstancesHandler) handleWriterGroups(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	groups, err := h.agentStore.ListGroupFileWriterGroups(r.Context(), agentID)
+	perms, err := h.configPermStore.List(r.Context(), agentID, "file_writer", "")
 	if err != nil {
 		slog.Error("channel_instances.writer_groups", "error", err)
 		locale := store.LocaleFromContext(r.Context())
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "writer groups")})
 		return
 	}
-	if groups == nil {
-		groups = []store.GroupWriterGroupInfo{}
+	// Group by scope
+	counts := make(map[string]int)
+	for _, p := range perms {
+		if p.Permission == "allow" {
+			counts[p.Scope]++
+		}
+	}
+	type groupInfo struct {
+		GroupID     string `json:"group_id"`
+		WriterCount int    `json:"writer_count"`
+	}
+	groups := make([]groupInfo, 0, len(counts))
+	for scope, count := range counts {
+		groups = append(groups, groupInfo{GroupID: scope, WriterCount: count})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
@@ -327,14 +340,36 @@ func (h *ChannelInstancesHandler) handleListWriters(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "group_id")})
 		return
 	}
-	writers, err := h.agentStore.ListGroupFileWriters(r.Context(), agentID, groupID)
+	perms, err := h.configPermStore.List(r.Context(), agentID, "file_writer", groupID)
 	if err != nil {
 		slog.Error("channel_instances.list_writers", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "writers")})
 		return
 	}
-	if writers == nil {
-		writers = []store.GroupFileWriterData{}
+	type writerData struct {
+		UserID      string  `json:"user_id"`
+		DisplayName *string `json:"display_name,omitempty"`
+		Username    *string `json:"username,omitempty"`
+	}
+	writers := make([]writerData, 0, len(perms))
+	for _, p := range perms {
+		if p.Permission != "allow" {
+			continue
+		}
+		wd := writerData{UserID: p.UserID}
+		var meta struct {
+			DisplayName string `json:"displayName"`
+			Username    string `json:"username"`
+		}
+		if json.Unmarshal(p.Metadata, &meta) == nil {
+			if meta.DisplayName != "" {
+				wd.DisplayName = &meta.DisplayName
+			}
+			if meta.Username != "" {
+				wd.Username = &meta.Username
+			}
+		}
+		writers = append(writers, wd)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"writers": writers})
 }
@@ -359,7 +394,15 @@ func (h *ChannelInstancesHandler) handleAddWriter(w http.ResponseWriter, r *http
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "group_id and user_id")})
 		return
 	}
-	if err := h.agentStore.AddGroupFileWriter(r.Context(), agentID, body.GroupID, body.UserID, body.DisplayName, body.Username); err != nil {
+	meta, _ := json.Marshal(map[string]string{"displayName": body.DisplayName, "username": body.Username})
+	if err := h.configPermStore.Grant(r.Context(), &store.ConfigPermission{
+		AgentID:    agentID,
+		Scope:      body.GroupID,
+		ConfigType: "file_writer",
+		UserID:     body.UserID,
+		Permission: "allow",
+		Metadata:   meta,
+	}); err != nil {
 		slog.Error("channel_instances.add_writer", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToCreate, "writer", err.Error())})
 		return
@@ -379,7 +422,19 @@ func (h *ChannelInstancesHandler) handleRemoveWriter(w http.ResponseWriter, r *h
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "group_id and userId")})
 		return
 	}
-	if err := h.agentStore.RemoveGroupFileWriter(r.Context(), agentID, groupID, userID); err != nil {
+	// Prevent removing the last writer (same guard as Telegram /removewriter)
+	writers, _ := h.configPermStore.List(r.Context(), agentID, "file_writer", groupID)
+	allowCount := 0
+	for _, p := range writers {
+		if p.Permission == "allow" {
+			allowCount++
+		}
+	}
+	if allowCount <= 1 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "cannot remove the last file writer"})
+		return
+	}
+	if err := h.configPermStore.Revoke(r.Context(), agentID, groupID, "file_writer", userID); err != nil {
 		slog.Error("channel_instances.remove_writer", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToDelete, "writer", err.Error())})
 		return

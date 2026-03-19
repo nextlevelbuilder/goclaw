@@ -59,9 +59,11 @@ export function ChatThread({
       className="flex-1 overflow-y-auto overscroll-contain px-4 py-4"
     >
       <div className="mx-auto max-w-3xl space-y-4">
-        {messages.map((msg, i) => (
-          <MessageBubble key={`${msg.role}-${i}`} message={msg} />
-        ))}
+        {messages
+          .filter((msg) => !(msg.role === "user" && typeof msg.content === "string" && msg.content.startsWith("[System]")))
+          .map((msg, i) => (
+            <MessageBubble key={`${msg.role}-${i}`} message={msg} />
+          ))}
 
         {/* Tool stream during active run */}
         {toolStream.length > 0 && (

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,15 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	// Hint: tell the agent it's on a team task and where the shared workspace is.
 	if ws := taskTeamWorkspace(task); ws != "" {
 		content += fmt.Sprintf("\n\n[Team workspace: %s — use read_file/write_file/list_files to access shared files. All files you write are visible to the team lead and other members.]", ws)
+	}
+	// List attached files so member knows what's available to read.
+	if files, ok := task.Metadata["attached_files"].([]any); ok && len(files) > 0 {
+		content += "\n\n[Attached files in team workspace — use read_file to access:]"
+		for _, f := range files {
+			if path, ok := f.(string); ok {
+				content += "\n- attachments/" + filepath.Base(path)
+			}
+		}
 	}
 
 	// Use task's stored channel/chat as primary source for routing.

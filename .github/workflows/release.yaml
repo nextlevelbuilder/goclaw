@@ -6,6 +6,11 @@ on:
 
 permissions:
   contents: write
+  packages: write
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  DOCKERHUB_IMAGE: digitop/goclaw
 
 jobs:
   release:
@@ -67,10 +72,172 @@ jobs:
             "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
             --clobber
 
-  # Notify Discord on new release
-  notify-discord:
-    needs: [release, build-binaries]
+  # Build and push Docker images to GHCR + Docker Hub
+  docker-images:
+    needs: release
     if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - variant: latest
+            suffix: ""
+            enable_otel: "false"
+            enable_tsnet: "false"
+            enable_redis: "false"
+            enable_node: "false"
+            enable_python: "false"
+            enable_full_skills: "false"
+          - variant: node
+            suffix: "-node"
+            enable_otel: "false"
+            enable_tsnet: "false"
+            enable_redis: "false"
+            enable_node: "true"
+            enable_python: "false"
+            enable_full_skills: "false"
+          - variant: python
+            suffix: "-python"
+            enable_otel: "false"
+            enable_tsnet: "false"
+            enable_redis: "false"
+            enable_node: "false"
+            enable_python: "true"
+            enable_full_skills: "false"
+          - variant: full
+            suffix: "-full"
+            enable_otel: "false"
+            enable_tsnet: "false"
+            enable_redis: "false"
+            enable_node: "true"
+            enable_python: "true"
+            enable_full_skills: "true"
+          - variant: otel
+            suffix: "-otel"
+            enable_otel: "true"
+            enable_tsnet: "false"
+            enable_redis: "false"
+            enable_node: "false"
+            enable_python: "false"
+            enable_full_skills: "false"
+          - variant: tsnet
+            suffix: "-tsnet"
+            enable_otel: "false"
+            enable_tsnet: "true"
+            enable_redis: "false"
+            enable_node: "false"
+            enable_python: "false"
+            enable_full_skills: "false"
+          - variant: redis
+            suffix: "-redis"
+            enable_otel: "false"
+            enable_tsnet: "false"
+            enable_redis: "true"
+            enable_node: "false"
+            enable_python: "false"
+            enable_full_skills: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=raw,value=v${{ needs.release.outputs.version }},suffix=${{ matrix.suffix }}
+            type=raw,value=latest,enable=${{ matrix.suffix == '' }},suffix=
+            type=raw,value=${{ matrix.variant }},enable=${{ matrix.suffix != '' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ENABLE_OTEL=${{ matrix.enable_otel }}
+            ENABLE_TSNET=${{ matrix.enable_tsnet }}
+            ENABLE_REDIS=${{ matrix.enable_redis }}
+            ENABLE_NODE=${{ matrix.enable_node }}
+            ENABLE_PYTHON=${{ matrix.enable_python }}
+            ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
+            VERSION=v${{ needs.release.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+
+  # Build and push web UI Docker image
+  docker-web:
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}-web
+            ${{ env.DOCKERHUB_IMAGE }}-web
+          tags: |
+            type=raw,value=v${{ needs.release.outputs.version }}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ui/web
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  # Notify Discord on new release (runs even if docker jobs fail)
+  notify-discord:
+    needs: [release, build-binaries, docker-images, docker-web]
+    if: always() && needs.release.outputs.released == 'true' && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Send Discord notification

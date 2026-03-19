@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -188,6 +189,21 @@ func (m *Manager) ChannelTypeForName(name string) string {
 		return ch.Type()
 	}
 	return ""
+}
+
+// ListGroupMembers delegates to the channel's GroupMemberProvider if available.
+func (m *Manager) ListGroupMembers(ctx context.Context, channelName, chatID string) ([]GroupMember, error) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("channel %q not found", channelName)
+	}
+	gmp, ok := ch.(GroupMemberProvider)
+	if !ok {
+		return nil, fmt.Errorf("channel %q does not support listing group members", channelName)
+	}
+	return gmp.ListGroupMembers(ctx, chatID)
 }
 
 // UnregisterChannel removes a channel from the manager.

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -64,12 +66,12 @@ func (l *Loop) buildMCPToolDescs(toolNames []string) map[string]string {
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
-func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, peerKind, userID string, historyLimit int, skillFilter []string) ([]providers.Message, bool) {
+func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
 	// Build full system prompt using the new builder (matching TS buildAgentSystemPrompt)
 	mode := PromptFull
-	if bootstrap.IsSubagentSession(sessionKey) || bootstrap.IsCronSession(sessionKey) {
+	if bootstrap.IsSubagentSession(sessionKey) || bootstrap.IsCronSession(sessionKey) || bootstrap.IsHeartbeatSession(sessionKey) {
 		mode = PromptMinimal
 	}
 
@@ -96,7 +98,11 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	// Resolve context files once — also detect BOOTSTRAP.md presence.
-	contextFiles := l.resolveContextFiles(ctx, userID)
+	// lightContext: skip loading context files, only inject ExtraSystemPrompt (heartbeat checklist).
+	var contextFiles []bootstrap.ContextFile
+	if !lightContext {
+		contextFiles = l.resolveContextFiles(ctx, userID)
+	}
 	hadBootstrap := false
 	for _, cf := range contextFiles {
 		if cf.Path == bootstrap.BootstrapFile {
@@ -120,7 +126,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	// Group writer restrictions: filter context files + inject prompt
-	if l.groupWriterCache != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
+	if l.configPermStore != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
 		senderID := store.SenderIDFromContext(ctx)
 		writerPrompt, filtered := l.buildGroupWriterPrompt(ctx, userID, senderID, contextFiles)
 		contextFiles = filtered
@@ -150,9 +156,17 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 
 	// Bootstrap DM mode: only restrict tools for open agents (identity being created).
 	// Predefined agents keep full capabilities — BOOTSTRAP.md guides behavior.
-	if hadBootstrap && l.agentType != "predefined" {
+	if hadBootstrap && l.agentType != store.AgentTypePredefined {
 		toolNames = filterBootstrapTools(toolNames)
 		mcpToolDescs = nil
+	}
+
+	// Resolve team members so agent knows who to assign tasks to.
+	var teamMembers []store.TeamMemberData
+	if hasTeamTools && l.teamStore != nil && l.agentUUID != uuid.Nil {
+		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
+			teamMembers, _ = l.teamStore.ListMembers(ctx, team.ID)
+		}
 	}
 
 	systemPrompt := BuildSystemPrompt(SystemPromptConfig{
@@ -170,6 +184,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		HasSpawn:               l.tools != nil && hasSpawn,
 		HasTeam:                hasTeamTools,
 		TeamWorkspace:          tools.ToolTeamWorkspaceFromCtx(ctx),
+		TeamMembers:            teamMembers,
 		HasSkillSearch:         hasSkillSearch,
 		HasSkillManage:         l.skillEvolve && hasSkillManage,
 		HasMCPToolSearch:       hasMCPToolSearch,
@@ -181,9 +196,10 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SandboxEnabled:         l.sandboxEnabled,
 		SandboxContainerDir:    l.sandboxContainerDir,
 		SandboxWorkspaceAccess: l.sandboxWorkspaceAccess,
+		ShellDenyGroups:        l.shellDenyGroups,
 		SelfEvolve:             l.selfEvolve,
 		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
-		IsBootstrap:            hadBootstrap && l.agentType != "predefined",
+		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
 	})
 
 	messages = append(messages, providers.Message{
@@ -435,7 +451,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	tokenEstimate := EstimateTokensWithCalibration(history, lastPT, lastMC)
 
 	// Resolve compaction thresholds from config with sensible defaults.
-	historyShare := 0.75
+	historyShare := config.DefaultHistoryShare
 	if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 		historyShare = l.compactionCfg.MaxHistoryShare
 	}
@@ -546,7 +562,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 // buildGroupWriterPrompt builds the system prompt section for group file writer restrictions.
 // For non-writers: injects refusal instructions + removes SOUL.md/AGENTS.md from context files.
 func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID string, files []bootstrap.ContextFile) (string, []bootstrap.ContextFile) {
-	writers, err := l.groupWriterCache.ListWriters(ctx, l.agentUUID, groupID)
+	writers, err := l.configPermStore.ListFileWriters(ctx, l.agentUUID, groupID)
 	if err != nil || len(writers) == 0 {
 		return "", files // fail-open
 	}
@@ -571,13 +587,19 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 		}
 	}
 
-	// Build writer display names
+	// Build writer display names from metadata JSON
+	type fwMeta struct {
+		DisplayName string `json:"displayName"`
+		Username    string `json:"username"`
+	}
 	var names []string
 	for _, w := range writers {
-		if w.Username != nil && *w.Username != "" {
-			names = append(names, "@"+*w.Username)
-		} else if w.DisplayName != nil && *w.DisplayName != "" {
-			names = append(names, *w.DisplayName)
+		var meta fwMeta
+		_ = json.Unmarshal(w.Metadata, &meta)
+		if meta.Username != "" {
+			names = append(names, "@"+meta.Username)
+		} else if meta.DisplayName != "" {
+			names = append(names, meta.DisplayName)
 		}
 	}
 

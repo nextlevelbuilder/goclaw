@@ -10,6 +10,8 @@ export interface FieldDef {
   defaultValue?: string | number | boolean | string[];
   options?: { value: string; label: string }[];
   help?: string;
+  /** Only show this field when another field has a specific value */
+  showWhen?: { key: string; value: string };
 }
 
 // --- Shared option lists ---
@@ -51,8 +53,8 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
   feishu: [
     { key: "app_id", label: "App ID", type: "text", required: true, placeholder: "cli_xxxxx" },
     { key: "app_secret", label: "App Secret", type: "password", required: true },
-    { key: "encrypt_key", label: "Encrypt Key", type: "password", help: "For webhook mode" },
-    { key: "verification_token", label: "Verification Token", type: "password", help: "For webhook mode" },
+    { key: "encrypt_key", label: "Encrypt Key", type: "password", help: "For webhook event decryption", showWhen: { key: "connection_mode", value: "webhook" } },
+    { key: "verification_token", label: "Verification Token", type: "password", help: "For webhook event verification", showWhen: { key: "connection_mode", value: "webhook" } },
   ],
   zalo_oa: [
     { key: "token", label: "OA Access Token", type: "password", required: true },
@@ -107,10 +109,10 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   feishu: [
-    { key: "domain", label: "Domain", type: "select", options: [{ value: "lark", label: "Lark (global) — webhook only" }, { value: "feishu", label: "Feishu (China)" }], defaultValue: "lark" },
-    { key: "connection_mode", label: "Connection Mode", type: "select", options: [{ value: "webhook", label: "Webhook" }, { value: "websocket", label: "WebSocket (Feishu only)" }], defaultValue: "webhook", help: "Lark Global only supports Webhook" },
-    { key: "webhook_port", label: "Webhook Port", type: "number", defaultValue: 0, help: "0 = share main gateway port (recommended)" },
-    { key: "webhook_path", label: "Webhook Path", type: "text", defaultValue: "/feishu/events", help: "Path on main server for Lark events" },
+    { key: "domain", label: "Domain", type: "select", options: [{ value: "lark", label: "Lark (Global)" }, { value: "feishu", label: "Feishu (China)" }], defaultValue: "lark" },
+    { key: "connection_mode", label: "Connection Mode", type: "select", options: [{ value: "websocket", label: "WebSocket (recommended)" }, { value: "webhook", label: "Webhook (requires public endpoint)" }], defaultValue: "websocket", help: "WebSocket needs no public IP — outbound connection only" },
+    { key: "webhook_port", label: "Webhook Port", type: "number", defaultValue: 0, help: "0 = share main gateway port (recommended)", showWhen: { key: "connection_mode", value: "webhook" } },
+    { key: "webhook_path", label: "Webhook Path", type: "text", defaultValue: "/feishu/events", help: "Path on main server for Lark events", showWhen: { key: "connection_mode", value: "webhook" } },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
@@ -160,6 +162,35 @@ export const groupOverrideSchema: FieldDef[] = [
   { key: "tools", label: "Tool Allowlist", type: "tool-select", help: "Restrict which tools the agent can use in this group" },
   { key: "system_prompt", label: "System Prompt", type: "textarea", placeholder: "Additional system prompt for this group..." },
 ];
+
+// --- Required API scopes per channel type ---
+// Displayed as a help reference when creating/configuring a channel.
+
+export interface ScopeEntry {
+  scope: string;
+  note?: string; // e.g. "Range: All members"
+}
+
+export const requiredScopes: Partial<Record<string, ScopeEntry[]>> = {
+  feishu: [
+    { scope: "application:application:self_manage" },
+    { scope: "application:bot.menu:write" },
+    { scope: "cardkit:card:read" },
+    { scope: "cardkit:card:write" },
+    { scope: "contact:contact.base:readonly", note: "Range: All members" },
+    { scope: "contact:user.base:readonly", note: "Range: All members" },
+    { scope: "contact:user.employee_id:readonly", note: "Range: All members" },
+    { scope: "event:ip_list" },
+    { scope: "im:chat.members:bot_access" },
+    { scope: "im:chat.members:read", note: "Required for list_group_members tool" },
+    { scope: "im:message" },
+    { scope: "im:message.group_at_msg:readonly" },
+    { scope: "im:message.p2p_msg:readonly" },
+    { scope: "im:message:readonly" },
+    { scope: "im:message:send_as_bot" },
+    { scope: "im:resource" },
+  ],
+};
 
 // --- Post-create wizard configuration ---
 // Channels with multi-step create flows (e.g. auth then config).

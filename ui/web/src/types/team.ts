@@ -9,6 +9,7 @@ export interface TeamNotifyConfig {
   dispatched?: boolean;
   progress?: boolean;
   failed?: boolean;
+  slow_tool?: boolean;
   mode?: "direct" | "leader";
 }
 

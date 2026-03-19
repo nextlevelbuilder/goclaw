@@ -24,6 +24,7 @@ package sessions
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // PeerKind distinguishes DM from group conversations.
@@ -163,6 +164,23 @@ func IsSubagentSession(key string) bool {
 func IsCronSession(key string) bool {
 	_, rest := ParseSessionKey(key)
 	return strings.HasPrefix(strings.ToLower(rest), "cron:")
+}
+
+// BuildHeartbeatSessionKey builds the session key for a heartbeat run.
+//
+//	isolated=true:  agent:{agentId}:heartbeat:{unix_ms}
+//	isolated=false: agent:{agentId}:heartbeat
+func BuildHeartbeatSessionKey(agentID string, isolated bool) string {
+	if isolated {
+		return fmt.Sprintf("agent:%s:heartbeat:%d", agentID, time.Now().UnixMilli())
+	}
+	return fmt.Sprintf("agent:%s:heartbeat", agentID)
+}
+
+// IsHeartbeatSession checks if a session key indicates a heartbeat session.
+func IsHeartbeatSession(key string) bool {
+	_, rest := ParseSessionKey(key)
+	return strings.HasPrefix(rest, "heartbeat")
 }
 
 // PeerKindFromGroup returns PeerGroup if isGroup is true, PeerDirect otherwise.

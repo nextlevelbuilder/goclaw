@@ -189,6 +189,8 @@
     "notifyProgressHint": "成员更新进度时通知。",
     "notifyFailed": "任务失败",
     "notifyFailedHint": "任务失败时通知。",
+    "notifySlowTool": "工具慢速警报",
+    "notifySlowToolHint": "工具调用异常耗时时发送系统警报。始终直接发送，不通过 leader。",
     "notifyMode": "发送方式",
     "notifyModeHint": "通知如何发送到聊天频道。",
     "notifyModeDirect": "直接发送",

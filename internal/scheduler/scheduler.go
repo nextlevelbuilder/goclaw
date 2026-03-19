@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -141,6 +142,20 @@ func (s *Scheduler) CancelOneSession(sessionKey string) bool {
 func (s *Scheduler) Stop() {
 	s.MarkDraining()
 	s.lanes.StopAll()
+}
+
+// HasActiveSessionsForAgent checks if any session queue for the given agent has active runs.
+// Used by heartbeat ticker to skip agents currently processing other requests.
+func (s *Scheduler) HasActiveSessionsForAgent(agentID string) bool {
+	prefix := "agent:" + agentID + ":"
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for key, sq := range s.sessions {
+		if strings.HasPrefix(key, prefix) && sq.IsActive() {
+			return true
+		}
+	}
+	return false
 }
 
 // LaneStats returns utilization metrics for all lanes.

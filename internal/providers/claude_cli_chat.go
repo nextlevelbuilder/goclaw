@@ -138,7 +138,7 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	// Parse stream-json line-by-line
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 256*1024), 10*1024*1024) // 256KB initial, 10MB max
+	scanner.Buffer(make([]byte, 0, StdioScanBufInit), StdioScanBufMax)
 
 	var finalResp ChatResponse
 	var contentBuf strings.Builder

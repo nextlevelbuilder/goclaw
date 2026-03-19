@@ -63,7 +63,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 
 	switch p.ProviderType {
 	case "anthropic_native":
-		models, err = fetchAnthropicModels(ctx, p.APIKey, p.APIBase)
+		models, err = fetchAnthropicModels(ctx, p.APIKey, h.resolveAPIBase(p))
 	case "gemini_native":
 		models, err = fetchGeminiModels(ctx, p.APIKey)
 	case "bailian":
@@ -76,7 +76,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models = sunoModels()
 	default:
 		// All other types use OpenAI-compatible /models endpoint
-		apiBase := strings.TrimRight(p.APIBase, "/")
+		apiBase := strings.TrimRight(h.resolveAPIBase(p), "/")
 		if apiBase == "" {
 			apiBase = "https://api.openai.com/v1"
 		}

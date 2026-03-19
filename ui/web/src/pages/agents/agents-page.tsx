@@ -10,7 +10,7 @@ import { CardSkeleton } from "@/components/shared/loading-skeleton";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import {
   Select,
   SelectContent,
@@ -38,7 +38,7 @@ export function AgentsPage() {
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [ownerFilter, setOwnerFilter] = useState<string | undefined>();
   const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [summoningAgent, setSummoningAgent] = useState<{ id: string; name: string } | null>(null);
 
   // Collect unique owner IDs for filter + contact resolution
@@ -192,7 +192,7 @@ export function AgentsPage() {
                       agent={agent}
                       onClick={() => handleClick(agent)}
                       onResummon={() => handleResummon(agent)}
-                      onDelete={() => setDeleteTarget(agent.id)}
+                      onDelete={() => setDeleteTarget({ id: agent.id, name: agent.display_name || agent.agent_key })}
                     />
                   ))}
                 </div>
@@ -205,7 +205,7 @@ export function AgentsPage() {
                       ownerName={resolveOwnerName(agent.owner_id)}
                       onClick={() => handleClick(agent)}
                       onResummon={() => handleResummon(agent)}
-                      onDelete={() => setDeleteTarget(agent.id)}
+                      onDelete={() => setDeleteTarget({ id: agent.id, name: agent.display_name || agent.agent_key })}
                     />
                   ))}
                 </div>
@@ -238,16 +238,15 @@ export function AgentsPage() {
         }}
       />
 
-      <ConfirmDialog
+      <ConfirmDeleteDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
         title={t("delete.title")}
-        description={t("delete.description")}
-        confirmLabel={t("delete.confirmLabel")}
-        variant="destructive"
+        description={t("delete.deleteWarning")}
+        confirmValue={deleteTarget?.name ?? ""}
         onConfirm={async () => {
           if (deleteTarget) {
-            await deleteAgent(deleteTarget);
+            await deleteAgent(deleteTarget.id);
             setDeleteTarget(null);
           }
         }}

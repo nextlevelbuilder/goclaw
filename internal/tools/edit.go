@@ -20,7 +20,7 @@ type EditTool struct {
 	sandboxMgr       sandbox.Manager
 	contextFileIntc  *ContextFileInterceptor
 	memIntc          *MemoryInterceptor
-	groupWriterCache *store.GroupWriterCache // nil = no group write restriction
+	permStore store.ConfigPermissionStore // nil = no group write restriction
 }
 
 // DenyPaths adds path prefixes that edit must reject.
@@ -36,9 +36,9 @@ func (t *EditTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 	t.memIntc = intc
 }
 
-// SetGroupWriterCache enables group write permission checks.
-func (t *EditTool) SetGroupWriterCache(c *store.GroupWriterCache) {
-	t.groupWriterCache = c
+// SetConfigPermStore enables group write permission checks.
+func (t *EditTool) SetConfigPermStore(s store.ConfigPermissionStore) {
+	t.permStore = s
 }
 
 func NewEditTool(workspace string, restrict bool) *EditTool {
@@ -98,8 +98,8 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	// Group write permission check
-	if t.groupWriterCache != nil {
-		if err := store.CheckGroupWritePermission(ctx, t.groupWriterCache); err != nil {
+	if t.permStore != nil {
+		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
 			return ErrorResult(err.Error())
 		}
 	}
@@ -137,7 +137,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 			if result != nil {
 				return result
 			}
-			mwr, err := t.memIntc.WriteFile(ctx, path, newContent)
+			mwr, err := t.memIntc.WriteFile(ctx, path, newContent, false)
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to write memory file: %v", err))
 			}

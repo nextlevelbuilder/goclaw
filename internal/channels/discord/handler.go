@@ -247,6 +247,11 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		}
 	}
 
+	// Collect contact for processed messages (DM + group-mentioned).
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, peerKind)
+	}
+
 	// Publish directly to bus (to preserve MediaFile MIME types)
 	c.Bus().PublishInbound(bus.InboundMessage{
 		Channel:  c.Name(),

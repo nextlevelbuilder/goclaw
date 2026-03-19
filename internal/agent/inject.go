@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -49,7 +50,7 @@ func (l *Loop) processInjectedMessage(injected InjectedMessage, emitRun func(Age
 	content := injected.Content
 	maxChars := l.maxMessageChars
 	if maxChars <= 0 {
-		maxChars = 32000
+		maxChars = config.DefaultMaxMessageChars
 	}
 	if len(content) > maxChars {
 		content = content[:maxChars] + "\n[Message truncated]"

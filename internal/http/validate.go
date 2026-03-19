@@ -38,12 +38,14 @@ var agentAllowedFields = map[string]bool{
 	"workspace": true, "restrict_to_workspace": true,
 	"frontmatter": true, "compaction_config": true,
 	"memory_config": true, "other_config": true, "tools_config": true,
+	"is_default": true, "budget_monthly_cents": true, "subagents_config": true,
 }
 
 var providerAllowedFields = map[string]bool{
 	"name": true, "provider_type": true, "api_key": true,
-	"base_url": true, "default_model": true, "extra_headers": true,
-	"config": true, "enabled": true, "display_order": true,
+	"api_base": true, "base_url": true, "default_model": true,
+	"extra_headers": true, "config": true, "enabled": true,
+	"display_name": true, "display_order": true, "settings": true,
 }
 
 var customToolAllowedFields = map[string]bool{

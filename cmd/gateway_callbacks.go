@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 
@@ -9,15 +10,13 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
-	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
-	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // buildEnsureUserFiles creates the per-user file seeding callback.
 // Seeds per-user context files on first chat (new user profile).
-func buildEnsureUserFiles(as store.AgentStore, msgBus *bus.MessageBus) agent.EnsureUserFilesFunc {
+func buildEnsureUserFiles(as store.AgentStore, configPermStore store.ConfigPermissionStore) agent.EnsureUserFilesFunc {
 	return func(ctx context.Context, agentID uuid.UUID, userID, agentType, workspace, channel string) (string, error) {
 		isNew, effectiveWs, err := as.GetOrCreateUserProfile(ctx, agentID, userID, workspace, channel)
 		if err != nil {
@@ -28,7 +27,7 @@ func buildEnsureUserFiles(as store.AgentStore, msgBus *bus.MessageBus) agent.Ens
 		}
 
 		// Auto-add first group member as a file writer (bootstrap the allowlist).
-		if strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:") {
+		if configPermStore != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
 			senderID := store.SenderIDFromContext(ctx)
 			if senderID != "" {
 				parts := strings.SplitN(senderID, "|", 2)
@@ -37,14 +36,18 @@ func buildEnsureUserFiles(as store.AgentStore, msgBus *bus.MessageBus) agent.Ens
 				if len(parts) > 1 {
 					senderUsername = parts[1]
 				}
-				if addErr := as.AddGroupFileWriter(ctx, agentID, userID, numericID, "", senderUsername); addErr != nil {
+				meta, _ := json.Marshal(map[string]string{"displayName": "", "username": senderUsername})
+				if addErr := configPermStore.Grant(ctx, &store.ConfigPermission{
+					AgentID:    agentID,
+					Scope:      userID,
+					ConfigType: "file_writer",
+					UserID:     numericID,
+					Permission: "allow",
+					Metadata:   meta,
+				}); addErr != nil {
 					slog.Warn("failed to auto-add group file writer", "error", addErr, "sender", numericID, "group", userID)
-				} else if msgBus != nil {
-					msgBus.Broadcast(bus.Event{
-						Name:    protocol.EventCacheInvalidate,
-						Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindGroupFileWriters, Key: userID},
-					})
 				}
+				// No bus broadcast needed — Grant already invalidates cache
 			}
 		}
 

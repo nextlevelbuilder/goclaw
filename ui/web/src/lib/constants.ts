@@ -74,3 +74,27 @@ export const TIMEZONE_OPTIONS = [
   { value: "Asia/Singapore", label: "Singapore (SGT)" },
   { value: "Australia/Sydney", label: "Sydney (AEST)" },
 ] as const;
+
+/** IANA timezones for server-side scheduling (cron, heartbeat). */
+export const IANA_TIMEZONES = [
+  { value: "UTC", label: "UTC" },
+  { value: "Asia/Ho_Chi_Minh", label: "Asia/Ho_Chi_Minh (UTC+7)" },
+  { value: "Asia/Bangkok", label: "Asia/Bangkok (UTC+7)" },
+  { value: "Asia/Shanghai", label: "Asia/Shanghai (UTC+8)" },
+  { value: "Asia/Tokyo", label: "Asia/Tokyo (UTC+9)" },
+  { value: "Asia/Seoul", label: "Asia/Seoul (UTC+9)" },
+  { value: "Asia/Singapore", label: "Asia/Singapore (UTC+8)" },
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (UTC+5:30)" },
+  { value: "Asia/Dubai", label: "Asia/Dubai (UTC+4)" },
+  { value: "Europe/London", label: "Europe/London (UTC+0)" },
+  { value: "Europe/Paris", label: "Europe/Paris (UTC+1)" },
+  { value: "Europe/Berlin", label: "Europe/Berlin (UTC+1)" },
+  { value: "Europe/Moscow", label: "Europe/Moscow (UTC+3)" },
+  { value: "America/New_York", label: "America/New_York (UTC-5)" },
+  { value: "America/Chicago", label: "America/Chicago (UTC-6)" },
+  { value: "America/Denver", label: "America/Denver (UTC-7)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (UTC-8)" },
+  { value: "America/Sao_Paulo", label: "America/Sao_Paulo (UTC-3)" },
+  { value: "Australia/Sydney", label: "Australia/Sydney (UTC+11)" },
+  { value: "Pacific/Auckland", label: "Pacific/Auckland (UTC+13)" },
+] as const;

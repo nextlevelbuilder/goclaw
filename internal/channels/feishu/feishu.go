@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -212,7 +213,7 @@ func (a *wsEventAdapter) HandleEvent(ctx context.Context, payload []byte) error 
 	var event MessageEvent
 	if err := json.Unmarshal(payload, &event); err != nil {
 		slog.Debug("feishu ws: parse event failed", "error", err)
-		return nil
+		return fmt.Errorf("parse event: %w", err)
 	}
 	if event.Header.EventType == "im.message.receive_v1" {
 		a.ch.handleMessageEvent(ctx, &event)
@@ -395,21 +396,65 @@ func resolveReceiveIDType(id string) string {
 
 // --- Content builders ---
 
+// mentionRe matches @ou_xxx patterns (Lark open_id) for outbound mention conversion.
+var mentionRe = regexp.MustCompile(`@(ou_[a-zA-Z0-9_]+)`)
+
+// hasMentions checks if text contains @ou_xxx patterns.
+func hasMentions(text string) bool {
+	return mentionRe.MatchString(text)
+}
+
+// buildPostContent creates a Lark "post" message body.
+// If the text contains @ou_xxx patterns, they are converted to native "at" elements
+// so Lark renders real @mentions with notifications.
 func buildPostContent(text string) string {
+	var elements []map[string]any
+
+	if hasMentions(text) {
+		// Split text around @ou_xxx patterns → alternating md + at elements.
+		matches := mentionRe.FindAllStringIndex(text, -1)
+		prev := 0
+		for _, loc := range matches {
+			// Text before the mention
+			if loc[0] > prev {
+				elements = append(elements, map[string]any{
+					"tag":  "md",
+					"text": text[prev:loc[0]],
+				})
+			}
+			// The mention itself: extract ou_xxx from "@ou_xxx"
+			userID := text[loc[0]+1 : loc[1]] // skip "@"
+			elements = append(elements, map[string]any{
+				"tag":     "at",
+				"user_id": userID,
+			})
+			prev = loc[1]
+		}
+		// Remaining text after last mention
+		if prev < len(text) {
+			elements = append(elements, map[string]any{
+				"tag":  "md",
+				"text": text[prev:],
+			})
+		}
+	} else {
+		elements = []map[string]any{{"tag": "md", "text": text}}
+	}
+
 	content := map[string]any{
 		"zh_cn": map[string]any{
-			"content": [][]map[string]any{
-				{
-					{
-						"tag":  "md",
-						"text": text,
-					},
-				},
-			},
+			"content": [][]map[string]any{elements},
 		},
 	}
 	data, _ := json.Marshal(content)
 	return string(data)
+}
+
+// convertMentionsForCard replaces @ou_xxx in text with Lark card markdown mention tags.
+// e.g. "@ou_abc123" → "<at id=ou_abc123></at>"
+// This syntax works in interactive card markdown content.
+func convertMentionsForCard(text string) string {
+	return mentionRe.ReplaceAllString(text, `<at id=$1></at>`)
 }
 
 func buildMarkdownCard(text string) map[string]any {
@@ -422,7 +467,7 @@ func buildMarkdownCard(text string) map[string]any {
 			"elements": []map[string]any{
 				{
 					"tag":     "markdown",
-					"content": text,
+					"content": convertMentionsForCard(text),
 				},
 			},
 		},
@@ -507,7 +552,30 @@ func (c *Channel) removeTypingReaction(ctx context.Context, chatID string) error
 	return nil
 }
 
-// Ensure Channel implements the channels.Channel, WebhookChannel, and ReactionChannel interfaces at compile time.
+// ListGroupMembers returns all members of a Lark group chat.
+// Also syncs discovered members into the contact store (if available).
+func (c *Channel) ListGroupMembers(ctx context.Context, chatID string) ([]channels.GroupMember, error) {
+	members, err := c.client.ListChatMembers(ctx, chatID)
+	if err != nil {
+		slog.Warn("feishu.list_group_members", "chat_id", chatID, "error", err)
+		return nil, err
+	}
+	result := make([]channels.GroupMember, len(members))
+	for i, m := range members {
+		result[i] = channels.GroupMember{
+			MemberID: m.MemberID,
+			Name:     m.Name,
+		}
+		// Auto-sync member into contact store
+		if cc := c.ContactCollector(); cc != nil {
+			cc.EnsureContact(ctx, channels.TypeFeishu, c.Name(), m.MemberID, m.MemberID, m.Name, "", "group")
+		}
+	}
+	return result, nil
+}
+
+// Ensure Channel implements the channels.Channel, WebhookChannel, ReactionChannel, and GroupMemberProvider interfaces at compile time.
 var _ channels.Channel = (*Channel)(nil)
 var _ channels.WebhookChannel = (*Channel)(nil)
 var _ channels.ReactionChannel = (*Channel)(nil)
+var _ channels.GroupMemberProvider = (*Channel)(nil)

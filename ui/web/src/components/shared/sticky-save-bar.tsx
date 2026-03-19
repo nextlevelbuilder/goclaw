@@ -7,6 +7,7 @@ interface StickySaveBarProps {
   saving: boolean;
   saved: boolean;
   error?: string | null;
+  disabled?: boolean;
   label?: string;
   savingLabel?: string;
   savedLabel?: string;
@@ -18,6 +19,7 @@ export function StickySaveBar({
   saving,
   saved,
   error,
+  disabled,
   label,
   savingLabel,
   savedLabel,
@@ -40,7 +42,7 @@ export function StickySaveBar({
             <Check className="h-3.5 w-3.5" /> {resolvedSavedLabel}
           </span>
         )}
-        <Button onClick={onSave} disabled={saving}>
+        <Button onClick={onSave} disabled={saving || disabled}>
           {!saving && <Save className="h-4 w-4" />}
           {saving ? resolvedSavingLabel : resolvedLabel}
         </Button>

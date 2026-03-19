@@ -180,7 +180,7 @@
     "allow_from": { "label": "允许的用户" },
     "block_reply": { "label": "分块回复", "help": "在工具迭代期间发送中间文本" },
     "domain": { "label": "域名" },
-    "connection_mode": { "label": "连接模式", "help": "Lark 国际版仅支持 Webhook" },
+    "connection_mode": { "label": "连接模式", "help": "WebSocket 无需公网 IP — 仅需出站连接" },
     "webhook_port": { "label": "Webhook 端口", "help": "0 = 共享主网关端口（推荐）" },
     "webhook_path": { "label": "Webhook 路径", "help": "主服务器上 Lark 事件的路径" },
     "webhook_url": { "label": "Webhook URL" },
@@ -219,12 +219,12 @@
       "full": "全部"
     },
     "domain": {
-      "lark": "Lark（国际版）— 仅 Webhook",
+      "lark": "Lark（国际版）",
       "feishu": "飞书（中国版）"
     },
     "connection_mode": {
       "webhook": "Webhook",
-      "websocket": "WebSocket（仅飞书）"
+      "websocket": "WebSocket（推荐）"
     },
     "topic_session_mode": {
       "disabled": "禁用",
@@ -277,6 +277,11 @@
       "createLabel": "创建并认证",
       "formBanner": "创建后，您将通过二维码进行认证并配置允许的用户。"
     }
+  },
+  "scopes": {
+    "title": "所需API权限",
+    "description": "您的 Lark/飞书 应用需要在开发者控制台启用这些权限。添加权限后请发布新版本。",
+    "publishReminder": "添加权限后，将通讯录范围设置为「全部成员」，并发布新版本使更改生效。"
   },
   "toast": {
     "created": "Channel已创建",

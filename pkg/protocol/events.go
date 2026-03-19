@@ -6,6 +6,7 @@ const (
 	EventChat               = "chat"
 	EventHealth             = "health"
 	EventCron               = "cron"
+	EventHeartbeat          = "heartbeat"
 	EventExecApprovalReq    = "exec.approval.requested"
 	EventExecApprovalRes    = "exec.approval.resolved"
 	EventPresence           = "presence"

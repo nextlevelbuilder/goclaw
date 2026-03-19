@@ -204,6 +204,21 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return *cfg.SkillNudgeInterval
 }
 
+// ParseStripAssistantPrefill extracts strip_assistant_prefill from other_config JSONB.
+// When true, trailing assistant messages are removed before LLM call (for proxy providers).
+func (a *AgentData) ParseStripAssistantPrefill() bool {
+	if len(a.OtherConfig) == 0 {
+		return false
+	}
+	var cfg struct {
+		StripAssistantPrefill bool `json:"strip_assistant_prefill"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
+		return false
+	}
+	return cfg.StripAssistantPrefill
+}
+
 // WorkspaceSharingConfig controls per-user workspace isolation.
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.
@@ -230,6 +245,21 @@ func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
 		return nil
 	}
 	return cfg.WS
+}
+
+// ParseShellDenyGroups extracts shell_deny_groups from other_config JSONB.
+// Returns nil if not configured (all defaults apply).
+func (a *AgentData) ParseShellDenyGroups() map[string]bool {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var cfg struct {
+		ShellDenyGroups map[string]bool `json:"shell_deny_groups"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil || len(cfg.ShellDenyGroups) == 0 {
+		return nil
+	}
+	return cfg.ShellDenyGroups
 }
 
 // AgentShareData represents an agent share grant.
@@ -298,12 +328,6 @@ type AgentStore interface {
 	ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]UserInstanceData, error)
 	UpdateUserProfileMetadata(ctx context.Context, agentID uuid.UUID, userID string, metadata map[string]string) error
 
-	// Group file writers (allowlist for protected file edits in group chats)
-	IsGroupFileWriter(ctx context.Context, agentID uuid.UUID, groupID, userID string) (bool, error)
-	AddGroupFileWriter(ctx context.Context, agentID uuid.UUID, groupID, userID, displayName, username string) error
-	RemoveGroupFileWriter(ctx context.Context, agentID uuid.UUID, groupID, userID string) error
-	ListGroupFileWriters(ctx context.Context, agentID uuid.UUID, groupID string) ([]GroupFileWriterData, error)
-	ListGroupFileWriterGroups(ctx context.Context, agentID uuid.UUID) ([]GroupWriterGroupInfo, error)
 }
 
 // UserInstanceData represents a user instance for a predefined agent.
@@ -315,15 +339,3 @@ type UserInstanceData struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
-// GroupFileWriterData represents a group file writer entry.
-type GroupFileWriterData struct {
-	UserID      string  `json:"user_id"`
-	DisplayName *string `json:"display_name,omitempty"`
-	Username    *string `json:"username,omitempty"`
-}
-
-// GroupWriterGroupInfo represents a group that has writers configured.
-type GroupWriterGroupInfo struct {
-	GroupID     string `json:"group_id"`
-	WriterCount int    `json:"writer_count"`
-}

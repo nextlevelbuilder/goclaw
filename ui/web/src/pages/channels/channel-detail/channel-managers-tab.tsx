@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, RefreshCw, Users, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Loader2, RefreshCw, Users, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,19 +37,12 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
   const { t } = useTranslation("channels");
   const [formGroupId, setFormGroupId] = useState("");
   const [userId, setUserId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [username, setUsername] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const { options: contactOptions, searchContacts, getContact, clearOptions } = useContactPicker(listContacts);
 
   const handleUserIdChange = (val: string) => {
     setUserId(val);
-    const contact = getContact(val);
-    if (contact) {
-      setDisplayName(contact.display_name ?? "");
-      setUsername(contact.username ?? "");
-    }
     searchContacts(val);
   };
 
@@ -63,10 +56,12 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
     setAdding(true);
     setError("");
     try {
-      await onAdd(gid, uid, displayName.trim(), username.trim());
+      // Auto-fill display name and username from selected contact
+      const contact = getContact(uid);
+      const displayName = contact?.display_name ?? "";
+      const username = contact?.username ?? "";
+      await onAdd(gid, uid, displayName, username);
       setUserId("");
-      setDisplayName("");
-      setUsername("");
       clearOptions();
       if (!groupId) setFormGroupId("");
     } catch (err) {
@@ -81,89 +76,50 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
       <fieldset className="rounded-md border p-4 space-y-3">
         <legend className="px-1 text-sm font-medium">{t("detail.managers.addForm.title")}</legend>
         <p className="text-xs text-muted-foreground">{t("detail.managers.addForm.hint")}</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="grid gap-1.5 flex-1 min-w-[180px]">
             <Label className="text-xs">{t("detail.managers.addForm.groupId")}</Label>
             <Input
               value={formGroupId}
               onChange={(e) => setFormGroupId(e.target.value)}
               placeholder={t("detail.managers.addForm.groupIdPlaceholder")}
-              className="text-sm"
+              className="text-base md:text-sm"
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid gap-1.5 flex-1 min-w-[180px]">
             <Label className="text-xs">{t("detail.managers.addForm.userId")}</Label>
             <Combobox
               value={userId}
               onChange={handleUserIdChange}
               options={contactOptions}
               placeholder={t("detail.managers.addForm.userIdPlaceholder")}
-              className="text-sm"
             />
           </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs">{t("detail.managers.addForm.displayName")}</Label>
-            <Input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={t("detail.managers.addForm.optional")}
-              className="text-sm"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label className="text-xs">{t("detail.managers.addForm.username")}</Label>
-            <Input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder={t("detail.managers.addForm.usernameWithout")}
-              className="text-sm"
-            />
-          </div>
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex justify-end">
           <Button
             onClick={handleSubmit}
             disabled={adding || !formGroupId.trim() || !userId.trim()}
             size="sm"
-            className="gap-1"
+            className="h-9 gap-1 shrink-0"
           >
-            <Plus className="h-3.5 w-3.5" />
-            {adding ? t("detail.managers.addForm.adding") : t("detail.managers.addForm.addManager")}
+            {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            {t("detail.managers.addForm.addManager")}
           </Button>
         </div>
+        {error && <p className="text-sm text-destructive mt-1">{error}</p>}
       </fieldset>
     );
   }
 
   return (
     <div className="flex items-end gap-2">
-      <div className="grid gap-1 flex-1">
+      <div className="grid gap-1 flex-1 min-w-[140px]">
         <Label className="text-xs text-muted-foreground">{t("detail.managers.addForm.userId")}</Label>
         <Combobox
           value={userId}
           onChange={handleUserIdChange}
           options={contactOptions}
           placeholder={t("detail.managers.addForm.userIdPlaceholder")}
-          className="h-8 text-sm"
-        />
-      </div>
-      <div className="grid gap-1 flex-1">
-        <Label className="text-xs text-muted-foreground">{t("detail.managers.addForm.displayName")}</Label>
-        <Input
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          placeholder={t("detail.managers.addForm.optional")}
-          className="h-8 text-sm"
-        />
-      </div>
-      <div className="grid gap-1 flex-1">
-        <Label className="text-xs text-muted-foreground">{t("detail.managers.addForm.username")}</Label>
-        <Input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder={t("detail.managers.addForm.optional")}
-          className="h-8 text-sm"
+          className="h-8"
         />
       </div>
       <Button
@@ -172,7 +128,7 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
         onClick={handleSubmit}
         disabled={adding || !userId.trim()}
       >
-        <Plus className="h-3.5 w-3.5" />
+        {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
         {t("detail.managers.addForm.add")}
       </Button>
       {error && <p className="text-xs text-destructive mt-1">{error}</p>}
@@ -277,7 +233,10 @@ export function ChannelManagersTab({
             )}
           </h3>
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={refreshGroups} disabled={loadingGroups}>
-            <RefreshCw className={"h-3.5 w-3.5" + (loadingGroups ? " animate-spin" : "")} />
+            {loadingGroups
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <RefreshCw className="h-3.5 w-3.5" />
+            }
           </Button>
         </div>
 

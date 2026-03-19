@@ -30,6 +30,7 @@ const (
 	DelegationFile   = "DELEGATION.md"
 	TeamFile         = "TEAM.md"
 	AvailabilityFile = "AVAILABILITY.md"
+	HeartbeatFile  = "HEARTBEAT.md"
 	MemoryFile     = "MEMORY.md"
 	MemoryAltFile  = "memory.md"
 	MemoryJSONFile = "MEMORY.json"
@@ -93,7 +94,7 @@ func LoadWorkspaceFiles(workspaceDir string) []File {
 // Normal sessions get all files. Subagent and cron sessions get only
 // AGENTS.md and TOOLS.md (minimal mode), matching TS filterBootstrapFilesForSession().
 func FilterForSession(files []File, sessionKey string) []File {
-	if !IsSubagentSession(sessionKey) && !IsCronSession(sessionKey) {
+	if !IsSubagentSession(sessionKey) && !IsCronSession(sessionKey) && !IsHeartbeatSession(sessionKey) {
 		return files
 	}
 
@@ -120,6 +121,12 @@ func IsSubagentSession(sessionKey string) bool {
 func IsCronSession(sessionKey string) bool {
 	rest := sessionRest(sessionKey)
 	return strings.HasPrefix(strings.ToLower(rest), "cron:")
+}
+
+// IsHeartbeatSession checks if a session key indicates a heartbeat session.
+func IsHeartbeatSession(sessionKey string) bool {
+	rest := sessionRest(sessionKey)
+	return strings.HasPrefix(rest, "heartbeat")
 }
 
 // IsTeamSession checks if a session key indicates a team-dispatched task session.

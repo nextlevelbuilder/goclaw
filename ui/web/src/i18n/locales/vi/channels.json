@@ -180,7 +180,7 @@
     "allow_from": { "label": "Người dùng được phép" },
     "block_reply": { "label": "Phản hồi khối", "help": "Gửi văn bản trung gian trong quá trình lặp công cụ" },
     "domain": { "label": "Tên miền" },
-    "connection_mode": { "label": "Chế độ kết nối", "help": "Lark Global chỉ hỗ trợ Webhook" },
+    "connection_mode": { "label": "Chế độ kết nối", "help": "WebSocket không cần IP công khai — chỉ kết nối ra ngoài" },
     "webhook_port": { "label": "Cổng webhook", "help": "0 = chia sẻ cổng gateway chính (khuyến nghị)" },
     "webhook_path": { "label": "Đường dẫn webhook", "help": "Đường dẫn trên máy chủ chính cho sự kiện Lark" },
     "webhook_url": { "label": "URL Webhook" },
@@ -219,12 +219,12 @@
       "full": "Đầy đủ"
     },
     "domain": {
-      "lark": "Lark (quốc tế) — chỉ webhook",
+      "lark": "Lark (Quốc tế)",
       "feishu": "Feishu (Trung Quốc)"
     },
     "connection_mode": {
       "webhook": "Webhook",
-      "websocket": "WebSocket (chỉ Feishu)"
+      "websocket": "WebSocket (khuyên dùng)"
     },
     "topic_session_mode": {
       "disabled": "Tắt",
@@ -277,6 +277,11 @@
       "createLabel": "Tạo & Xác thực",
       "formBanner": "Sau khi tạo, bạn sẽ xác thực bằng mã QR và cấu hình người dùng được phép."
     }
+  },
+  "scopes": {
+    "title": "Quyền API cần thiết",
+    "description": "Ứng dụng Lark/Feishu cần bật các scope này trong Developer Console. Publish phiên bản mới sau khi thêm quyền.",
+    "publishReminder": "Sau khi thêm scope, đặt Contact Range thành \"All members\" và publish phiên bản mới để thay đổi có hiệu lực."
   },
   "toast": {
     "created": "Đã tạo channel",
