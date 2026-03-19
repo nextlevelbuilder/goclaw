@@ -278,6 +278,11 @@
       "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
     }
   },
+  "scopes": {
+    "title": "Required API Permissions",
+    "description": "Your Lark/Feishu app must have these scopes enabled in the Developer Console. Publish a new app version after adding permissions.",
+    "publishReminder": "After adding scopes, set Contact Range to \"All members\" and publish a new app version for changes to take effect."
+  },
   "toast": {
     "created": "Channel created",
     "createdDesc": "{{name}} has been added",

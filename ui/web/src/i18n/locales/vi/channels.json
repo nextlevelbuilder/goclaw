@@ -278,6 +278,11 @@
       "formBanner": "Sau khi tạo, bạn sẽ xác thực bằng mã QR và cấu hình người dùng được phép."
     }
   },
+  "scopes": {
+    "title": "Quyền API cần thiết",
+    "description": "Ứng dụng Lark/Feishu cần bật các scope này trong Developer Console. Publish phiên bản mới sau khi thêm quyền.",
+    "publishReminder": "Sau khi thêm scope, đặt Contact Range thành \"All members\" và publish phiên bản mới để thay đổi có hiệu lực."
+  },
   "toast": {
     "created": "Đã tạo channel",
     "createdDesc": "{{name}} đã được thêm",
