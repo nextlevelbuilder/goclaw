@@ -134,7 +134,7 @@ export function MemoryPage() {
             id="mem-agent"
             value={agentId}
             onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); setPage(1); }}
-            className="h-9 rounded-md border bg-background px-3 text-sm"
+            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
           >
             <option value="">{t("filters.allAgents")}</option>
             {agents.map((a) => (
@@ -150,7 +150,7 @@ export function MemoryPage() {
             id="mem-scope"
             value={userIdFilter}
             onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
-            className="h-9 rounded-md border bg-background px-3 text-sm min-w-[180px]"
+            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm min-w-[180px]"
           >
             <option value="">{t("filters.allScope")}</option>
             {userIds.map((uid) => (

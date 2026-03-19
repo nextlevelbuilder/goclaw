@@ -72,7 +72,7 @@ export function ContactInsertSearch({ onInsert }: ContactInsertSearchProps) {
           onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
           onFocus={() => search.length >= 2 && setOpen(true)}
           placeholder={t("files.insertContact")}
-          className="h-8 w-full max-w-sm rounded-md border bg-transparent pl-7 pr-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          className="h-8 w-full max-w-sm rounded-md border bg-transparent pl-7 pr-2 text-base md:text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       {open && search.length >= 2 && contacts.length > 0 && createPortal(

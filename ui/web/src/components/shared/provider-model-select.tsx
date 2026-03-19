@@ -148,6 +148,8 @@ export function ProviderModelSelect({
               onChange={onModelChange}
               options={models.map((m) => ({ value: m.id, label: m.name }))}
               placeholder={modelsLoading ? t("loadingModels") : (modelPlaceholder ?? t("enterOrSelectModel"))}
+              allowCustom
+              customLabel={t("useCustomModel")}
             />
           </div>
           {shouldShowVerify && (

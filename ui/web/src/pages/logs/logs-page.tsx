@@ -70,7 +70,7 @@ export function LogsPage() {
                 <select
                   value={level}
                   onChange={(e) => startTail(e.target.value as LogLevel)}
-                  className="h-8 cursor-pointer rounded-md border bg-background px-2 text-xs"
+                  className="h-8 cursor-pointer rounded-md border bg-background px-2 text-base md:text-xs"
                   title={t("logLevelTitle")}
                 >
                   {levels.map((l) => (
@@ -110,7 +110,7 @@ export function LogsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("filterPlaceholder")}
-            className="h-7 w-full rounded-md border bg-background pl-8 pr-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-7 w-full rounded-md border bg-background pl-8 pr-3 text-base md:text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
         <div className="flex gap-0.5">

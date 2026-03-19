@@ -49,7 +49,7 @@ export function KnowledgeGraphPage() {
           id="kg-agent"
           value={agentId}
           onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); }}
-          className="h-8 rounded-md border bg-background px-2 text-sm"
+          className="h-8 rounded-md border bg-background px-2 text-base md:text-sm"
         >
           <option value="">{t("filters.selectAgent")}</option>
           {agents.map((a) => (
@@ -63,7 +63,7 @@ export function KnowledgeGraphPage() {
             id="kg-scope"
             value={userIdFilter}
             onChange={(e) => setUserIdFilter(e.target.value)}
-            className="h-8 rounded-md border bg-background px-2 text-sm max-w-[240px]"
+            className="h-8 rounded-md border bg-background px-2 text-base md:text-sm max-w-[240px]"
           >
             <option value="">{t("filters.allScope")}</option>
             {scopeOptions.map((o) => (
@@ -84,7 +84,7 @@ export function KnowledgeGraphPage() {
               <select
                 value={agentId}
                 onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); }}
-                className="mt-2 h-9 rounded-md border bg-background px-3 text-sm"
+                className="mt-2 h-9 rounded-md border bg-background px-3 text-base md:text-sm"
               >
                 <option value="">{t("filters.selectAgent")}</option>
                 {agents.map((a) => (

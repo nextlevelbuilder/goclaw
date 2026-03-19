@@ -45,6 +45,7 @@
   "manage": "Quản lý",
   "messages": "tin nhắn",
   "model": "Model",
+  "useCustomModel": "Dùng tuỳ chỉnh:",
   "modelTip": "ID model để sử dụng.",
   "modelVerified": "Model đã được xác minh",
   "name": "Tên",

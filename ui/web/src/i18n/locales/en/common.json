@@ -99,6 +99,7 @@
   "model": "Model",
   "selectProvider": "Select provider",
   "enterOrSelectModel": "Enter or select model",
+  "useCustomModel": "Use custom:",
   "providerTip": "LLM provider name. Must match a configured provider.",
   "modelTip": "Model ID to use.",
   "check": "Check",
