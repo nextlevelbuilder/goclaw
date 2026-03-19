@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -624,6 +625,22 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				if td.Function.Name != "skill_manage" {
 					filtered = append(filtered, td)
 				}
+			}
+			toolDefs = filtered
+		}
+
+		// Hide channel-specific tools when channel type doesn't match.
+		if req.ChannelType != "" {
+			filtered := toolDefs[:0:0]
+			for _, td := range toolDefs {
+				if tool, ok := l.tools.Get(td.Function.Name); ok {
+					if ca, ok := tool.(tools.ChannelAware); ok {
+						if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
+							continue
+						}
+					}
+				}
+				filtered = append(filtered, td)
 			}
 			toolDefs = filtered
 		}

@@ -557,6 +557,7 @@ func (c *Channel) removeTypingReaction(ctx context.Context, chatID string) error
 func (c *Channel) ListGroupMembers(ctx context.Context, chatID string) ([]channels.GroupMember, error) {
 	members, err := c.client.ListChatMembers(ctx, chatID)
 	if err != nil {
+		slog.Warn("feishu.list_group_members", "chat_id", chatID, "error", err)
 		return nil, err
 	}
 	result := make([]channels.GroupMember, len(members))

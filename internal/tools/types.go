@@ -99,6 +99,12 @@ type ChannelSenderAware interface {
 	SetChannelSender(ChannelSender)
 }
 
+// ChannelAware is optionally implemented by tools that only work on specific channel types.
+// Tools implementing this are filtered out when the current channel type doesn't match.
+type ChannelAware interface {
+	RequiredChannelTypes() []string
+}
+
 // ToProviderDef converts a Tool to a providers.ToolDefinition for LLM APIs.
 func ToProviderDef(t Tool) providers.ToolDefinition {
 	return providers.ToolDefinition{

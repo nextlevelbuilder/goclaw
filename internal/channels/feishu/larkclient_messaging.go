@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"strconv"
 )
 
@@ -270,9 +271,9 @@ func (c *LarkClient) ListChatMembers(ctx context.Context, chatID string) ([]Chat
 	pageToken := ""
 
 	for {
-		path := fmt.Sprintf("/open-apis/im/v1/chats/%s/members?member_id_type=open_id&page_size=100", chatID)
+		path := fmt.Sprintf("/open-apis/im/v1/chats/%s/members?member_id_type=open_id&page_size=100", url.PathEscape(chatID))
 		if pageToken != "" {
-			path += "&page_token=" + pageToken
+			path += "&page_token=" + url.QueryEscape(pageToken)
 		}
 
 		resp, err := c.doJSON(ctx, "GET", path, nil)

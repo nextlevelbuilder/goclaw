@@ -28,6 +28,8 @@ func NewListGroupMembersTool() *ListGroupMembersTool {
 
 func (t *ListGroupMembersTool) SetGroupMemberLister(l GroupMemberLister) { t.lister = l }
 
+func (t *ListGroupMembersTool) RequiredChannelTypes() []string { return []string{"feishu"} }
+
 func (t *ListGroupMembersTool) Name() string { return "list_group_members" }
 func (t *ListGroupMembersTool) Description() string {
 	return "List all members of the current group chat. Returns member IDs (open_id) and display names. Only works in group conversations on supported channels (Lark/Feishu). Use this to find out who is in the group, check attendance, or identify members. To @mention a member in a message, use @member_id (e.g. @ou_abc123) — it will be converted to a native mention with notification."
