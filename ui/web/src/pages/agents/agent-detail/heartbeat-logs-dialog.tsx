@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import type { HeartbeatLog } from "@/pages/agents/hooks/use-agent-heartbeat";
-import { formatRelativeTime, formatDate } from "@/lib/format";
+import { formatRelativeTime, formatDate, formatDuration } from "@/lib/format";
 
 const PAGE_SIZE = 20;
 
@@ -69,8 +69,8 @@ export function HeartbeatLogsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[95vw] sm:max-w-3xl flex flex-col gap-0 p-0">
-        <DialogHeader className="px-4 pt-4 pb-3 sm:px-6 sm:pt-6 flex-row items-center justify-between gap-2">
+      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-3xl">
+        <DialogHeader className="flex-row items-center justify-between gap-2 pr-8">
           <DialogTitle>{t("heartbeat.logsTitle")}</DialogTitle>
           <Button
             variant="outline"
@@ -84,7 +84,7 @@ export function HeartbeatLogsDialog({
           </Button>
         </DialogHeader>
 
-        <div className="overflow-y-auto min-h-0 max-h-[60vh] -mx-0 px-4 sm:px-6 overscroll-contain">
+        <div className="overflow-y-auto min-h-0 max-h-[60vh] -mx-4 px-4 sm:-mx-6 sm:px-6 overscroll-contain">
           {fetching && logs.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
@@ -98,13 +98,18 @@ export function HeartbeatLogsDialog({
               {logs.map((log) => (
                 <div key={log.id} className="rounded-md border p-3 text-sm space-y-1">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground" title={formatDate(log.ran_at)}>
-                      {formatRelativeTime(log.ran_at)}
+                    <span className="text-xs text-muted-foreground" title={formatDate(log.ranAt)}>
+                      {formatRelativeTime(log.ranAt)}
                     </span>
-                    <div className="flex items-center gap-2">
-                      {log.duration_ms != null && (
-                        <span className="text-xs text-muted-foreground">
-                          {log.duration_ms}ms
+                    <div className="flex items-center gap-1.5">
+                      {(log.inputTokens != null || log.outputTokens != null) && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {log.inputTokens ?? 0}↓ {log.outputTokens ?? 0}↑
+                        </span>
+                      )}
+                      {log.durationMs != null && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDuration(log.durationMs)}
                         </span>
                       )}
                       <Badge variant={statusVariant(log.status)} className="text-[10px]">
@@ -115,8 +120,8 @@ export function HeartbeatLogsDialog({
                   {log.summary && (
                     <p className="text-xs text-muted-foreground line-clamp-2">{log.summary}</p>
                   )}
-                  {log.skip_reason && (
-                    <p className="text-xs text-muted-foreground italic">{log.skip_reason}</p>
+                  {log.skipReason && (
+                    <p className="text-xs text-muted-foreground italic">{log.skipReason}</p>
                   )}
                   {log.error && (
                     <p className="text-xs text-destructive">{log.error}</p>
@@ -128,7 +133,7 @@ export function HeartbeatLogsDialog({
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between gap-2 px-4 py-3 sm:px-6 border-t text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
           <span>
             {total > 0
               ? t("heartbeat.logsPagination", {

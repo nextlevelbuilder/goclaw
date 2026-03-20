@@ -7,6 +7,7 @@ import type { AgentData } from "@/types/agent";
 import type { HeartbeatConfig } from "@/pages/agents/hooks/use-agent-heartbeat";
 import { useCountdown } from "@/hooks/use-countdown";
 import { agentDisplayName, agentKeyDisplay } from "./agent-display-utils";
+import { cn } from "@/lib/utils";
 
 interface AgentHeaderProps {
   agent: AgentData;
@@ -51,21 +52,29 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
             {agent.is_default && (
               <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" />
             )}
-            <Badge
-              variant={
-                agent.status === "active"
-                  ? "success"
-                  : agent.status === "summon_failed"
-                    ? "destructive"
-                    : "secondary"
-              }
-              className="text-[10px]"
-            >
-              {agent.status === "summon_failed" ? t("detail.summonFailed") : agent.status}
-            </Badge>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className="text-[10px]">{agent.agent_type}</Badge>
+                <span
+                  className={cn(
+                    "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
+                    agent.status === "active"
+                      ? "bg-emerald-500"
+                      : agent.status === "summon_failed"
+                        ? "bg-destructive"
+                        : "bg-muted-foreground/50",
+                  )}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                {agent.status === "summon_failed" ? t("detail.summonFailed") : agent.status}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="text-[10px]">
+                  <span className="hidden sm:inline">{agent.agent_type}</span>
+                  <span className="sm:hidden">{agent.agent_type === "predefined" ? "P" : "O"}</span>
+                </Badge>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[260px] text-xs">
                 {agent.agent_type === "predefined" ? t("card.predefinedTooltip") : t("card.openTooltip")}
@@ -78,8 +87,8 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
                     variant={selfEvolve ? "default" : "outline"}
                     className={`text-[10px] ${selfEvolve ? "bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300" : "text-muted-foreground"}`}
                   >
-                    <Sparkles className="mr-0.5 h-2.5 w-2.5" />
-                    {selfEvolve ? t("detail.evolving") : t("detail.static")}
+                    <Sparkles className="h-2.5 w-2.5 sm:mr-0.5" />
+                    <span className="hidden sm:inline">{selfEvolve ? t("detail.evolving") : t("detail.static")}</span>
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-[240px] text-xs">

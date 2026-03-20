@@ -2,6 +2,9 @@ import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
+import { userFriendlyError } from "@/lib/error-utils";
 
 export interface UserInstance {
   user_id: string;
@@ -51,6 +54,10 @@ export function useAgentInstances(agentId: string) {
           { content },
         );
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.instances(agentId) });
+        toast.success(i18n.t("agents:toast.updated"));
+      } catch (err) {
+        toast.error(i18n.t("agents:toast.updateFailed"), userFriendlyError(err));
+        throw err;
       } finally {
         setSaving(false);
       }

@@ -32,6 +32,7 @@ export interface Message {
   thinking?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  is_error?: boolean;
 }
 
 export interface ToolCall {

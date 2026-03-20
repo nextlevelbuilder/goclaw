@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -124,7 +126,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	}
 
 	// Group writer restrictions: filter context files + inject prompt
-	if l.groupWriterCache != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
+	if l.configPermStore != nil && (strings.HasPrefix(userID, "group:") || strings.HasPrefix(userID, "guild:")) {
 		senderID := store.SenderIDFromContext(ctx)
 		writerPrompt, filtered := l.buildGroupWriterPrompt(ctx, userID, senderID, contextFiles)
 		contextFiles = filtered
@@ -154,7 +156,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 
 	// Bootstrap DM mode: only restrict tools for open agents (identity being created).
 	// Predefined agents keep full capabilities — BOOTSTRAP.md guides behavior.
-	if hadBootstrap && l.agentType != "predefined" {
+	if hadBootstrap && l.agentType != store.AgentTypePredefined {
 		toolNames = filterBootstrapTools(toolNames)
 		mcpToolDescs = nil
 	}
@@ -197,7 +199,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		ShellDenyGroups:        l.shellDenyGroups,
 		SelfEvolve:             l.selfEvolve,
 		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
-		IsBootstrap:            hadBootstrap && l.agentType != "predefined",
+		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
 	})
 
 	messages = append(messages, providers.Message{
@@ -368,7 +370,8 @@ func limitHistoryTurns(msgs []providers.Message, limit int) []providers.Message 
 //   - Orphaned tool messages at start of history (after truncation)
 //   - tool_result without matching tool_use in preceding assistant message
 //   - assistant with tool_calls but missing tool_results
-// sanitizeHistory repairs tool_use/tool_result pairing in session history.
+//   - Duplicate tool call IDs across turns (legacy sessions before uniquifyToolCallIDs)
+//
 // Returns the cleaned messages and the number of messages that were dropped or synthesized.
 func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 	if len(msgs) == 0 {
@@ -391,15 +394,36 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 	}
 
 	// 2. Walk through messages ensuring tool_result follows matching tool_use.
+	// Also dedup tool call IDs across the transcript for legacy sessions that
+	// may have persisted duplicates before the live uniquify fix was deployed.
 	var result []providers.Message
+	globalSeen := make(map[string]bool) // tracks IDs seen across entire transcript
+
 	for i := start; i < len(msgs); i++ {
 		msg := msgs[i]
 
 		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
-			// Collect expected tool call IDs
+			// Deep-copy ToolCalls to avoid mutating the original session history.
+			oldCalls := msg.ToolCalls
+			msg.ToolCalls = make([]providers.ToolCall, len(oldCalls))
+			copy(msg.ToolCalls, oldCalls)
+
+			// Dedup: rewrite any ID that was already seen in an earlier turn or
+			// within the same turn. Uses a queue per original ID so multiple tool
+			// results with the same raw ID pair correctly in encounter order.
+			idQueue := make(map[string][]string, len(msg.ToolCalls)) // origID → []newID
 			expectedIDs := make(map[string]bool, len(msg.ToolCalls))
-			for _, tc := range msg.ToolCalls {
-				expectedIDs[tc.ID] = true
+			for j := range msg.ToolCalls {
+				origID := msg.ToolCalls[j].ID
+				newID := origID
+				if globalSeen[origID] {
+					newID = fmt.Sprintf("%s_dedup_%d", origID, j)
+					slog.Debug("sanitizeHistory: dedup tool call ID", "orig", origID, "new", newID)
+				}
+				msg.ToolCalls[j].ID = newID
+				globalSeen[newID] = true
+				idQueue[origID] = append(idQueue[origID], newID)
+				expectedIDs[newID] = true
 			}
 
 			result = append(result, msg)
@@ -408,9 +432,12 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 			for i+1 < len(msgs) && msgs[i+1].Role == "tool" {
 				i++
 				toolMsg := msgs[i]
-				if expectedIDs[toolMsg.ToolCallID] {
+				if queue, ok := idQueue[toolMsg.ToolCallID]; ok && len(queue) > 0 {
+					newID := queue[0]
+					idQueue[toolMsg.ToolCallID] = queue[1:]
+					toolMsg.ToolCallID = newID
 					result = append(result, toolMsg)
-					delete(expectedIDs, toolMsg.ToolCallID)
+					delete(expectedIDs, newID)
 				} else {
 					slog.Debug("sanitizeHistory: dropping mismatched tool result",
 						"tool_call_id", toolMsg.ToolCallID)
@@ -419,14 +446,16 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 			}
 
 			// Synthesize missing tool results
-			for id := range expectedIDs {
-				slog.Debug("sanitizeHistory: synthesizing missing tool result", "tool_call_id", id)
-				result = append(result, providers.Message{
-					Role:       "tool",
-					Content:    "[Tool result missing — session was compacted]",
-					ToolCallID: id,
-				})
-				dropped++
+			for _, tc := range msg.ToolCalls {
+				if expectedIDs[tc.ID] {
+					slog.Debug("sanitizeHistory: synthesizing missing tool result", "tool_call_id", tc.ID)
+					result = append(result, providers.Message{
+						Role:       "tool",
+						Content:    "[Tool result missing — session was compacted]",
+						ToolCallID: tc.ID,
+					})
+					dropped++
+				}
 			}
 		} else if msg.Role == "tool" {
 			// Orphaned tool message mid-history (no preceding assistant with matching tool_calls)
@@ -449,7 +478,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	tokenEstimate := EstimateTokensWithCalibration(history, lastPT, lastMC)
 
 	// Resolve compaction thresholds from config with sensible defaults.
-	historyShare := 0.75
+	historyShare := config.DefaultHistoryShare
 	if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 		historyShare = l.compactionCfg.MaxHistoryShare
 	}
@@ -560,7 +589,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 // buildGroupWriterPrompt builds the system prompt section for group file writer restrictions.
 // For non-writers: injects refusal instructions + removes SOUL.md/AGENTS.md from context files.
 func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID string, files []bootstrap.ContextFile) (string, []bootstrap.ContextFile) {
-	writers, err := l.groupWriterCache.ListWriters(ctx, l.agentUUID, groupID)
+	writers, err := l.configPermStore.ListFileWriters(ctx, l.agentUUID, groupID)
 	if err != nil || len(writers) == 0 {
 		return "", files // fail-open
 	}
@@ -585,13 +614,19 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 		}
 	}
 
-	// Build writer display names
+	// Build writer display names from metadata JSON
+	type fwMeta struct {
+		DisplayName string `json:"displayName"`
+		Username    string `json:"username"`
+	}
 	var names []string
 	for _, w := range writers {
-		if w.Username != nil && *w.Username != "" {
-			names = append(names, "@"+*w.Username)
-		} else if w.DisplayName != nil && *w.DisplayName != "" {
-			names = append(names, *w.DisplayName)
+		var meta fwMeta
+		_ = json.Unmarshal(w.Metadata, &meta)
+		if meta.Username != "" {
+			names = append(names, "@"+meta.Username)
+		} else if meta.DisplayName != "" {
+			names = append(names, meta.DisplayName)
 		}
 	}
 

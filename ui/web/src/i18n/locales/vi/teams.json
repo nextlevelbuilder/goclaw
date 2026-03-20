@@ -190,6 +190,8 @@
     "notifyProgressHint": "Thông báo khi thành viên cập nhật tiến trình.",
     "notifyFailed": "Thất bại",
     "notifyFailedHint": "Thông báo khi nhiệm vụ thất bại.",
+    "notifySlowTool": "Cảnh báo tool chạy lâu",
+    "notifySlowToolHint": "Thông báo hệ thống khi tool chạy lâu bất thường. Luôn gửi trực tiếp — không qua leader.",
     "notifyMode": "Chế độ gửi",
     "notifyModeHint": "Cách thông báo được gửi đến kênh chat.",
     "notifyModeDirect": "Trực tiếp",
@@ -299,9 +301,17 @@
     "taskCreated": "Đã tạo nhiệm vụ",
     "taskDeleted": "Đã xoá task",
     "taskAssigned": "Đã gán nhiệm vụ",
+    "taskApproved": "Đã phê duyệt task",
+    "taskRejected": "Đã từ chối task",
+    "tasksBulkDeleted": "Đã xóa các task",
     "failedCreateTask": "Không thể tạo nhiệm vụ",
     "failedDeleteTask": "Xoá task thất bại",
-    "failedAssignTask": "Không thể gán nhiệm vụ"
+    "failedAssignTask": "Không thể gán nhiệm vụ",
+    "failedApproveTask": "Không thể phê duyệt task",
+    "failedRejectTask": "Không thể từ chối task",
+    "failedBulkDeleteTasks": "Không thể xóa các task",
+    "workspaceFileDeleted": "Đã xóa file",
+    "failedDeleteWorkspaceFile": "Không thể xóa file"
   },
   "board": {
     "kanban": "Bảng",

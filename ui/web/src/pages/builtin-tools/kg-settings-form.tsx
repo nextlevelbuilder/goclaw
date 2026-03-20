@@ -7,6 +7,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -49,6 +50,8 @@ export function KGSettingsForm({ initialSettings, onSave, onCancel }: Props) {
     setSaving(true);
     try {
       await onSave(settings as unknown as Record<string, unknown>);
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -110,6 +113,7 @@ export function KGSettingsForm({ initialSettings, onSave, onCancel }: Props) {
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>{t("builtin.kgSettings.cancel")}</Button>
         <Button onClick={handleSave} disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           {saving ? t("builtin.kgSettings.saving") : t("builtin.kgSettings.save")}
         </Button>
       </DialogFooter>

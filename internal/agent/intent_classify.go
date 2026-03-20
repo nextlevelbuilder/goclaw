@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -19,7 +20,7 @@ const (
 	IntentNewTask     IntentType = "new_task"
 )
 
-const intentClassifyTimeout = 5 * time.Second
+const intentClassifyTimeout = 10 * time.Second
 
 const intentSystemPrompt = `You are an intent classifier. The user has sent a message while the AI assistant is busy processing a previous request.
 
@@ -31,36 +32,59 @@ Classify the user's intent into exactly ONE of these categories:
 
 Respond with ONLY the category name, nothing else.`
 
-// intentPatterns provides regex-free fast-path detection for common keywords.
-// Avoids LLM call for obvious patterns, saving cost and latency.
-var statusKeywords = []string{
-	"status", "progress", "đang làm gì", "bao giờ xong", "做什么", "进度",
-	"what are you doing", "how far", "?",
-}
+// cancelKeywords for fast-path detection of obvious cancel intents.
+// Only matched on very short messages (≤ 15 runes) to avoid false positives
+// like "làm đơn giản thôi" matching "thôi".
 var cancelKeywords = []string{
 	"stop", "cancel", "abort", "thôi", "dừng", "hủy", "取消", "停",
 	"nevermind", "never mind",
 }
 
-// quickClassify attempts keyword-based classification before calling the LLM.
+// quickClassify attempts keyword-based classification for ultra-short messages
+// before calling the LLM. Only messages ≤ 15 runes are fast-pathed; longer
+// messages always go to LLM for proper context understanding.
+// Cancel keywords require a whole-word match to avoid false positives (e.g. "nonstop").
 // Returns (intent, true) if a match is found, or ("", false) to fall through to LLM.
 func quickClassify(msg string) (IntentType, bool) {
 	lower := strings.ToLower(strings.TrimSpace(msg))
-	// Short messages (< 30 chars) are more likely to be simple intents.
-	if len(lower) > 60 {
+	if utf8.RuneCountInString(lower) > 15 {
 		return "", false
 	}
+	// Exact "?" → status query
+	if lower == "?" {
+		return IntentStatusQuery, true
+	}
 	for _, kw := range cancelKeywords {
-		if strings.Contains(lower, kw) {
+		if containsWholeWord(lower, kw) {
 			return IntentCancel, true
 		}
 	}
-	for _, kw := range statusKeywords {
-		if strings.Contains(lower, kw) {
-			return IntentStatusQuery, true
+	return "", false
+}
+
+// containsWholeWord checks if s contains kw as a whole word (not a substring
+// of a larger word). Word boundaries are: start/end of string, spaces, punctuation.
+func containsWholeWord(s, kw string) bool {
+	idx := strings.Index(s, kw)
+	if idx < 0 {
+		return false
+	}
+	// Check left boundary: must be start of string or non-letter
+	if idx > 0 {
+		r, _ := utf8.DecodeLastRuneInString(s[:idx])
+		if isWordChar(r) {
+			return false
 		}
 	}
-	return "", false
+	// Check right boundary: must be end of string or non-letter
+	end := idx + len(kw)
+	if end < len(s) {
+		r, _ := utf8.DecodeRuneInString(s[end:])
+		if isWordChar(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // ClassifyIntent determines the intent of a user message sent while the agent is busy.

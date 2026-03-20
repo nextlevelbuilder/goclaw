@@ -18,12 +18,10 @@ func initRedisClient(_ *config.Config) any { return nil }
 func makeCaches(_ any) (
 	agentCtxCache cache.Cache[[]store.AgentContextFileData],
 	userCtxCache cache.Cache[[]store.AgentContextFileData],
-	groupWriterCache cache.Cache[[]store.GroupFileWriterData],
 ) {
 	slog.Info("cache backend: in-memory")
 	return cache.NewInMemoryCache[[]store.AgentContextFileData](),
-		cache.NewInMemoryCache[[]store.AgentContextFileData](),
-		cache.NewInMemoryCache[[]store.GroupFileWriterData]()
+		cache.NewInMemoryCache[[]store.AgentContextFileData]()
 }
 
 // shutdownRedis is a no-op when built without the "redis" tag.

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,26 @@ const (
 	// sttTranscribeEndpoint is the path appended to STTProxyURL.
 	sttTranscribeEndpoint = "/transcribe_audio"
 )
+
+var (
+	sttClient     *http.Client
+	sttClientOnce sync.Once
+	sttSem        = make(chan struct{}, 4) // max 4 concurrent STT calls
+)
+
+// getSTTClient returns a shared HTTP client with connection pooling for STT requests.
+func getSTTClient() *http.Client {
+	sttClientOnce.Do(func() {
+		sttClient = &http.Client{
+			Timeout: 60 * time.Second, // defensive cap in case caller context has no deadline
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: 4,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		}
+	})
+	return sttClient
+}
 
 // STTConfig holds configuration for the Speech-to-Text proxy service.
 type STTConfig struct {
@@ -95,8 +116,15 @@ func TranscribeAudio(ctx context.Context, cfg STTConfig, filePath string) (strin
 
 	slog.Debug("stt: calling proxy", "url", url, "file", filepath.Base(filePath))
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	// Acquire concurrency slot (blocks if 4 calls already in-flight).
+	select {
+	case sttSem <- struct{}{}:
+		defer func() { <-sttSem }()
+	case <-reqCtx.Done():
+		return "", fmt.Errorf("stt: context cancelled waiting for concurrency slot: %w", reqCtx.Err())
+	}
+
+	resp, err := getSTTClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("stt: request to %q failed: %w", url, err)
 	}

@@ -30,6 +30,11 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 		mediaFiles = append(mediaFiles, bus.MediaFile{Path: p})
 	}
 
+	// Collect contact for processed messages (DM + group-mentioned).
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(context.Background(), c.Type(), c.Name(), userID, userID, metadata["username"], "", peerKind)
+	}
+
 	c.Bus().PublishInbound(bus.InboundMessage{
 		Channel:  c.Name(),
 		SenderID: senderID,

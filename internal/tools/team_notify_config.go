@@ -10,6 +10,7 @@ type TeamNotifyConfig struct {
 	Completed  bool   `json:"completed"`  // task completed
 	Commented  bool   `json:"commented"`  // task comment added
 	NewTask    bool   `json:"new_task"`   // new task created (human-initiated)
+	SlowTool   bool   `json:"slow_tool"`  // system alert when tool call exceeds adaptive threshold
 	Mode       string `json:"mode"`       // "direct" (outbound) or "leader" (through leader agent)
 }
 
@@ -22,6 +23,7 @@ func DefaultTeamNotifyConfig() TeamNotifyConfig {
 		Completed:  true,
 		Commented:  true,
 		NewTask:    true,
+		SlowTool:   true,
 		Mode:       "direct",
 	}
 }
@@ -41,6 +43,7 @@ func ParseTeamNotifyConfig(settings json.RawMessage) TeamNotifyConfig {
 			Completed  *bool  `json:"completed"`
 			Commented  *bool  `json:"commented"`
 			NewTask    *bool  `json:"new_task"`
+			SlowTool   *bool  `json:"slow_tool"`
 			Mode       string `json:"mode"`
 		} `json:"notifications"`
 	}
@@ -65,6 +68,9 @@ func ParseTeamNotifyConfig(settings json.RawMessage) TeamNotifyConfig {
 	}
 	if n.NewTask != nil {
 		cfg.NewTask = *n.NewTask
+	}
+	if n.SlowTool != nil {
+		cfg.SlowTool = *n.SlowTool
 	}
 	if n.Mode == "leader" {
 		cfg.Mode = "leader"

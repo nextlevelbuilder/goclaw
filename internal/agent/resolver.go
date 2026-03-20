@@ -75,8 +75,8 @@ type ResolverDeps struct {
 	// Skill access store — for per-agent skill visibility filtering
 	SkillAccessStore store.SkillAccessStore
 
-	// Group file writer cache
-	GroupWriterCache *store.GroupWriterCache
+	// Config permission store for group file writer checks
+	ConfigPermStore store.ConfigPermissionStore
 
 	// Persistent media storage for cross-turn image/document access
 	MediaStore *media.Store
@@ -180,11 +180,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 
 		contextWindow := ag.ContextWindow
 		if contextWindow <= 0 {
-			contextWindow = 200000
+			contextWindow = config.DefaultContextWindow
 		}
 		maxIter := ag.MaxToolIterations
 		if maxIter <= 0 {
-			maxIter = 20
+			maxIter = config.DefaultMaxIterations
 		}
 
 		// Per-agent config overrides (fallback to global defaults from config.json)
@@ -345,11 +345,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			BuiltinToolSettings:    builtinSettings,
 			ThinkingLevel:          ag.ParseThinkingLevel(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
-			SkillEvolve:            ag.AgentType == "predefined" && ag.ParseSkillEvolve(),
+			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),
 			WorkspaceSharing:       ag.ParseWorkspaceSharing(),
 			ShellDenyGroups:        ag.ParseShellDenyGroups(),
-			GroupWriterCache:       deps.GroupWriterCache,
+			ConfigPermStore:        deps.ConfigPermStore,
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,
 			MediaStore:             deps.MediaStore,

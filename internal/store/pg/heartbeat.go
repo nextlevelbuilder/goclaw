@@ -199,6 +199,9 @@ func (s *PGHeartbeatStore) UpdateState(ctx context.Context, id uuid.UUID, state 
 		id, state.NextRunAt, state.LastRunAt, state.LastStatus, state.LastError,
 		state.RunCount, state.SuppressCount,
 	)
+	if err == nil {
+		s.InvalidateCache() // ensure ListDue picks up new next_run_at immediately
+	}
 	return err
 }
 

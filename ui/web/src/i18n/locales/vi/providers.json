@@ -19,6 +19,15 @@
     "oauthToken": "OAuth Token",
     "notSet": "Chưa thiết lập"
   },
+  "card": {
+    "apiKeySet": "Đã đặt API key",
+    "authenticated": "Đã xác thực",
+    "oauthLinked": "Đã liên kết OAuth"
+  },
+  "detail": {
+    "title": "Chi tiết Provider",
+    "advanced": "Nâng cao"
+  },
   "form": {
     "createTitle": "Thêm provider",
     "editTitle": "Chỉnh sửa provider",
@@ -123,6 +132,26 @@
     "notAuthenticated": "Chưa xác thực",
     "runOnServer": "Chạy trên terminal máy chủ:",
     "recheckButton": "Kiểm tra lại"
+  },
+  "detail": {
+    "advanced": "Nâng cao",
+    "identity": "Danh tính",
+    "identityDesc": "Nhận dạng provider",
+    "connection": "Kết nối",
+    "connectionDesc": "Cấu hình endpoint API",
+    "acpConfig": "Cấu hình ACP",
+    "acpConfigDesc": "Cài đặt tiến trình con agent",
+    "cliConfig": "Claude CLI",
+    "cliConfigDesc": "Xác thực CLI cục bộ",
+    "oauthConfig": "OAuth",
+    "oauthConfigDesc": "Xác thực OAuth ChatGPT",
+    "nameReadonly": "Định danh provider, không thể thay đổi",
+    "providerType": "Loại provider",
+    "apiKeySection": "API Key",
+    "apiKeySectionDesc": "Thông tin xác thực",
+    "statusSection": "Trạng thái",
+    "statusSectionDesc": "Tình trạng hoạt động của provider",
+    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent"
   },
   "toast": {
     "created": "Đã tạo provider",

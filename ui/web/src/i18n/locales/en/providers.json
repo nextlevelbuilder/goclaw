@@ -19,6 +19,15 @@
     "oauthToken": "OAuth Token",
     "notSet": "Not set"
   },
+  "card": {
+    "apiKeySet": "API key set",
+    "authenticated": "Authenticated",
+    "oauthLinked": "OAuth linked"
+  },
+  "detail": {
+    "title": "Provider Details",
+    "advanced": "Advanced"
+  },
   "form": {
     "createTitle": "Add Provider",
     "editTitle": "Edit Provider",
@@ -123,6 +132,26 @@
     "notAuthenticated": "Not authenticated",
     "runOnServer": "Run on the server terminal:",
     "recheckButton": "Re-check"
+  },
+  "detail": {
+    "advanced": "Advanced",
+    "identity": "Identity",
+    "identityDesc": "Provider identification",
+    "connection": "Connection",
+    "connectionDesc": "API endpoint configuration",
+    "acpConfig": "ACP Configuration",
+    "acpConfigDesc": "Agent subprocess settings",
+    "cliConfig": "Claude CLI",
+    "cliConfigDesc": "Local CLI authentication",
+    "oauthConfig": "OAuth",
+    "oauthConfigDesc": "ChatGPT OAuth authentication",
+    "nameReadonly": "Provider identifier, cannot be changed",
+    "providerType": "Provider Type",
+    "apiKeySection": "API Key",
+    "apiKeySectionDesc": "Authentication credentials",
+    "statusSection": "Status",
+    "statusSectionDesc": "Provider availability",
+    "enabledDesc": "Provider is active and available for agents"
   },
   "toast": {
     "created": "Provider created",

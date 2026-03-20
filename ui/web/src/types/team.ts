@@ -12,6 +12,7 @@ export interface TeamNotifyConfig {
   completed?: boolean;
   commented?: boolean;
   new_task?: boolean;
+  slow_tool?: boolean;
   mode?: "direct" | "leader";
 }
 

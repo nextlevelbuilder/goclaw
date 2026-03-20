@@ -74,6 +74,20 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "advanced": "Advanced",
+    "advancedTitle": "Advanced Settings",
+    "policies": "Policies",
+    "policiesDesc": "Message handling policies",
+    "network": "Network",
+    "networkDesc": "Server and proxy configuration",
+    "limits": "Limits",
+    "limitsDesc": "Message and media constraints",
+    "streaming": "Streaming",
+    "streamingDesc": "Real-time message streaming options",
+    "behavior": "Behavior",
+    "behaviorDesc": "Response behavior configuration",
+    "accessControl": "Access Control",
+    "accessControlDesc": "User access restrictions",
     "tabs": {
       "general": "General",
       "config": "Config",
@@ -82,6 +96,7 @@
       "managers": "Managers"
     },
     "general": {
+      "identity": "Identity",
       "name": "Name",
       "nameHint": "Unique slug (read-only)",
       "channelType": "Channel Type",
@@ -180,7 +195,7 @@
     "allow_from": { "label": "Allowed Users" },
     "block_reply": { "label": "Block Reply", "help": "Deliver intermediate text during tool iterations" },
     "domain": { "label": "Domain" },
-    "connection_mode": { "label": "Connection Mode", "help": "Lark Global only supports Webhook" },
+    "connection_mode": { "label": "Connection Mode", "help": "WebSocket needs no public IP — outbound connection only" },
     "webhook_port": { "label": "Webhook Port", "help": "0 = share main gateway port (recommended)" },
     "webhook_path": { "label": "Webhook Path", "help": "Path on main server for Lark events" },
     "webhook_url": { "label": "Webhook URL" },
@@ -219,12 +234,12 @@
       "full": "Full"
     },
     "domain": {
-      "lark": "Lark (global) — webhook only",
+      "lark": "Lark (Global)",
       "feishu": "Feishu (China)"
     },
     "connection_mode": {
       "webhook": "Webhook",
-      "websocket": "WebSocket (Feishu only)"
+      "websocket": "WebSocket (recommended)"
     },
     "topic_session_mode": {
       "disabled": "Disabled",
@@ -277,6 +292,11 @@
       "createLabel": "Create & Authenticate",
       "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
     }
+  },
+  "scopes": {
+    "title": "Required API Permissions",
+    "description": "Your Lark/Feishu app must have these scopes enabled in the Developer Console. Publish a new app version after adding permissions.",
+    "publishReminder": "After adding scopes, set Contact Range to \"All members\" and publish a new app version for changes to take effect."
   },
   "toast": {
     "created": "Channel created",

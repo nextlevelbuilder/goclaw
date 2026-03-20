@@ -104,14 +104,14 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		},
 		Model: req.Model,
 		Options: map[string]any{
-			"max_tokens": 1,
+			// Use a small but safe value — reasoning models need headroom beyond 1 token.
+			"max_tokens": 50,
 		},
 	})
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": friendlyVerifyError(err)})
 		return
 	}
-
 	writeJSON(w, http.StatusOK, map[string]any{"valid": true})
 }
 

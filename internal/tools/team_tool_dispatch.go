@@ -136,6 +136,17 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	if localKey != "" {
 		meta["origin_local_key"] = localKey
 	}
+	// Resolve origin session key from context; fallback to task metadata for deferred dispatches.
+	// WS sessions use non-standard key format that BuildScopedSessionKey() cannot reproduce.
+	originSessionKey := ToolSessionKeyFromCtx(ctx)
+	if originSessionKey == "" {
+		if sk, ok := task.Metadata["origin_session_key"].(string); ok {
+			originSessionKey = sk
+		}
+	}
+	if originSessionKey != "" {
+		meta["origin_session_key"] = originSessionKey
+	}
 	// Pass the team workspace dir so member agents write files to the shared folder.
 	if ws := taskTeamWorkspace(task); ws != "" {
 		meta["team_workspace"] = ws

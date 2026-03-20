@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Wrench, Check, AlertTriangle, Loader2, ChevronDown, ChevronRight, Zap } from "lucide-react";
+import { Wrench, AlertTriangle, Loader2, ChevronDown, ChevronRight, Zap } from "lucide-react";
 import type { ToolStreamEntry } from "@/types/chat";
 
 const isSkillTool = (name: string) => name === "use_skill";
@@ -10,65 +10,63 @@ function buildToolSummary(entry: ToolStreamEntry): string | null {
   if (!entry.arguments) return null;
   const args = entry.arguments;
   const key = args.path ?? args.command ?? args.query ?? args.url ?? args.name;
-  if (typeof key === "string") return key.length > 60 ? key.slice(0, 57) + "..." : key;
+  if (typeof key === "string") return key.length > 80 ? key.slice(0, 77) + "..." : key;
   return null;
 }
 
 interface ToolCallCardProps {
   entry: ToolStreamEntry;
+  /** Compact mode — less padding, used inside merged groups */
+  compact?: boolean;
 }
 
-export function ToolCallCard({ entry }: ToolCallCardProps) {
+export function ToolCallCard({ entry, compact }: ToolCallCardProps) {
   const { t } = useTranslation("common");
   const hasDetails = entry.arguments || entry.result;
   const hasError = entry.phase === "error" && !!entry.errorContent;
   const canExpand = hasDetails || hasError;
   const [expanded, setExpanded] = useState(false);
   const summary = buildToolSummary(entry);
+  const skill = isSkillTool(entry.name);
+  const displayName = skill ? `skill: ${(entry.arguments?.name as string) || "unknown"}` : entry.name;
 
   return (
-    <div className="my-1 rounded-md border bg-muted/50 text-sm">
+    <div className={compact ? "" : "rounded-md border bg-muted"}>
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs"
         onClick={() => canExpand && setExpanded((v) => !v)}
         disabled={!canExpand}
       >
-        <ToolIcon phase={entry.phase} isSkill={isSkillTool(entry.name)} />
-        <span className="font-medium shrink-0">
-          {isSkillTool(entry.name)
-            ? `skill: ${(entry.arguments?.name as string) || "unknown"}`
-            : entry.name}
-        </span>
-        {summary && (
-          <span className="truncate text-xs text-muted-foreground">{summary}</span>
-        )}
-        <span className="ml-auto flex items-center gap-2 shrink-0">
-          <PhaseLabel phase={entry.phase} isSkill={isSkillTool(entry.name)} />
+        <ToolIcon phase={entry.phase} isSkill={skill} />
+        <span className="font-medium shrink-0">{displayName}</span>
+        {summary && <span className="truncate text-muted-foreground ml-1">{summary}</span>}
+        <span className="ml-auto flex items-center gap-1 shrink-0">
+          <PhaseLabel phase={entry.phase} isSkill={skill} />
           {canExpand && (
             expanded
-              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              : <ChevronRight className="h-3 w-3 text-muted-foreground" />
           )}
         </span>
       </button>
       {expanded && canExpand && (
-        <div className="border-t border-muted px-3 py-2 space-y-2">
+        <div className="border-t border-muted px-2 py-1.5 space-y-1.5">
           {hasError && (
-            <pre className="text-red-500 whitespace-pre-wrap">{entry.errorContent}</pre>
+            <pre className="text-red-500 whitespace-pre-wrap text-xs">{entry.errorContent}</pre>
           )}
           {entry.arguments && Object.keys(entry.arguments).length > 0 && (
             <div>
-              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">{t("toolArguments")}</div>
-              <pre className="whitespace-pre-wrap text-xs font-mono bg-background rounded p-2 max-h-48 overflow-y-auto">
+              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">{t("toolArguments")}</div>
+              <pre className="whitespace-pre-wrap text-[11px] font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto">
                 {JSON.stringify(entry.arguments, null, 2)}
               </pre>
             </div>
           )}
           {entry.result && (
             <div>
-              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">{t("toolResult")}</div>
-              <pre className="whitespace-pre-wrap text-xs font-mono bg-background rounded p-2 max-h-48 overflow-y-auto">
+              <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-0.5">{t("toolResult")}</div>
+              <pre className="whitespace-pre-wrap text-[11px] font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto">
                 {entry.result}
               </pre>
             </div>
@@ -80,27 +78,20 @@ export function ToolCallCard({ entry }: ToolCallCardProps) {
 }
 
 function ToolIcon({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSkill?: boolean }) {
+  const cls = "h-3.5 w-3.5";
   if (isSkill) {
     switch (phase) {
-      case "calling":
-        return <Zap className="h-4 w-4 animate-pulse text-amber-500" />;
-      case "completed":
-        return <Zap className="h-4 w-4 text-amber-500" />;
-      case "error":
-        return <AlertTriangle className="h-4 w-4 text-red-500" />;
-      default:
-        return <Zap className="h-4 w-4 text-muted-foreground" />;
+      case "calling": return <Zap className={`${cls} animate-pulse text-amber-500`} />;
+      case "completed": return <Zap className={`${cls} text-amber-500`} />;
+      case "error": return <AlertTriangle className={`${cls} text-red-500`} />;
+      default: return <Zap className={`${cls} text-muted-foreground`} />;
     }
   }
   switch (phase) {
-    case "calling":
-      return <Loader2 className="h-4 w-4 animate-spin text-blue-500" />;
-    case "completed":
-      return <Check className="h-4 w-4 text-green-500" />;
-    case "error":
-      return <AlertTriangle className="h-4 w-4 text-red-500" />;
-    default:
-      return <Wrench className="h-4 w-4 text-muted-foreground" />;
+    case "calling": return <Loader2 className={`${cls} animate-spin text-blue-500`} />;
+    case "completed": return <Wrench className={`${cls} text-blue-500`} />;
+    case "error": return <AlertTriangle className={`${cls} text-red-500`} />;
+    default: return <Wrench className={`${cls} text-muted-foreground`} />;
   }
 }
 
@@ -111,12 +102,8 @@ function PhaseLabel({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSki
     : { calling: t("toolRunning"), completed: t("toolDone"), error: t("toolFailed") };
   const colors: Record<string, string> = {
     calling: "text-blue-500",
-    completed: "text-green-500",
+    completed: "text-blue-500",
     error: "text-red-500",
   };
-  return (
-    <span className={`text-xs ${colors[phase] ?? "text-muted-foreground"}`}>
-      {labels[phase] ?? phase}
-    </span>
-  );
+  return <span className={`text-[11px] ${colors[phase] ?? "text-muted-foreground"}`}>{labels[phase] ?? phase}</span>;
 }

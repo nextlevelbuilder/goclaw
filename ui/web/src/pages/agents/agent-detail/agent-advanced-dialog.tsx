@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Settings } from "lucide-react";
+import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -63,11 +63,9 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   }, [open]);
 
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveError(null);
     try {
       // Only send the keys this dialog owns to avoid overwriting keys managed by
       // the overview tab. The backend does a full column replace, so we must read
@@ -92,8 +90,8 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         other_config: otherBase,
       });
       onOpenChange(false);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("config.failedToSave"));
+    } catch {
+      // toast shown by hook — keep dialog open
     } finally {
       setSaving(false);
     }
@@ -143,19 +141,14 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col gap-2 pt-4 border-t shrink-0">
-          {saveError && (
-            <p className="text-sm text-destructive">{saveError}</p>
-          )}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              {t("create.cancel")}
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {!saving && <Save className="h-4 w-4" />}
-              {saving ? t("config.saving") : t("config.saveConfig")}
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-2 pt-4 border-t shrink-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            {t("create.cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? t("config.saving") : t("config.saveConfig")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

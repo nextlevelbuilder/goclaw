@@ -220,6 +220,12 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	var result *agent.RunResult
 	maxAttempts := hb.MaxRetries + 1
 
+	// Model override: use heartbeat-specific model if configured.
+	var modelOverride string
+	if hb.Model != nil && *hb.Model != "" {
+		modelOverride = *hb.Model
+	}
+
 	for attempt := range maxAttempts {
 		outCh := t.runAgent(ctx, agent.RunRequest{
 			SessionKey:        sessionKey,
@@ -229,6 +235,7 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 			RunID:             fmt.Sprintf("heartbeat:%s", agentIDStr),
 			Stream:            false,
 			ExtraSystemPrompt: extraSystem,
+			ModelOverride:     modelOverride,
 			LightContext:      hb.LightContext,
 			TraceName:         fmt.Sprintf("Heartbeat [%s]", agentKey),
 			TraceTags:         []string{"heartbeat"},

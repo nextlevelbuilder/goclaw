@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,16 +13,18 @@ interface ChatSidebarProps {
   sessionsLoading: boolean;
   activeSessionKey: string;
   onSessionSelect: (key: string) => void;
+  onDeleteSession?: (key: string) => void;
   onNewChat: () => void;
 }
 
-export function ChatSidebar({
+export const ChatSidebar = memo(function ChatSidebar({
   agentId,
   onAgentChange,
   sessions,
   sessionsLoading,
   activeSessionKey,
   onSessionSelect,
+  onDeleteSession,
   onNewChat,
 }: ChatSidebarProps) {
   const { t } = useTranslation("chat");
@@ -50,9 +53,10 @@ export function ChatSidebar({
           sessions={sessions}
           activeKey={activeSessionKey}
           onSelect={onSessionSelect}
+          onDelete={onDeleteSession}
           loading={sessionsLoading}
         />
       </div>
     </div>
   );
-}
+});

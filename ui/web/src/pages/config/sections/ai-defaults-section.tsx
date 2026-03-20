@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
+import { Save, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,13 +25,11 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
   const { t } = useTranslation("config");
   const [draft, setDraft] = useState<AgentsData>(data ?? DEFAULT);
   const [dirty, setDirty] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [openSubs, setOpenSubs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setDraft(data ?? DEFAULT);
     setDirty(false);
-    setSaveError(null);
   }, [data]);
 
   const defaults = draft.defaults ?? {};
@@ -246,19 +244,13 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           </div>
         </SubSection>
 
-        {saveError && (
-          <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {saveError}
-          </div>
-        )}
         {dirty && (
           <div className="flex justify-end pt-2">
             <Button size="sm" onClick={async () => {
-              setSaveError(null);
-              try { await onSave(draft); } catch (err) { setSaveError(err instanceof Error ? err.message : t("agents.saveError")); }
+              try { await onSave(draft); } catch { /* toast shown by hook */ }
             }} disabled={saving} className="gap-1.5">
-              <Save className="h-3.5 w-3.5" /> {saving ? t("saving") : t("save")}
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              {saving ? t("saving") : t("save")}
             </Button>
           </div>
         )}

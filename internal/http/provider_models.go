@@ -63,7 +63,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 
 	switch p.ProviderType {
 	case "anthropic_native":
-		models, err = fetchAnthropicModels(ctx, p.APIKey, p.APIBase)
+		models, err = fetchAnthropicModels(ctx, p.APIKey, h.resolveAPIBase(p))
 	case "gemini_native":
 		models, err = fetchGeminiModels(ctx, p.APIKey)
 	case "bailian":
@@ -76,7 +76,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models = sunoModels()
 	default:
 		// All other types use OpenAI-compatible /models endpoint
-		apiBase := strings.TrimRight(p.APIBase, "/")
+		apiBase := strings.TrimRight(h.resolveAPIBase(p), "/")
 		if apiBase == "" {
 			apiBase = "https://api.openai.com/v1"
 		}
@@ -195,6 +195,7 @@ func minimaxModels() []ModelInfo {
 		// Chat / text
 		{ID: "MiniMax-Text-01", Name: "MiniMax Text 01"},
 		{ID: "MiniMax-M1", Name: "MiniMax M1"},
+		{ID: "MiniMax-M2.7", Name: "MiniMax M2.7"},
 		{ID: "MiniMax-M2.5", Name: "MiniMax M2.5"},
 		// Image generation
 		{ID: "image-01", Name: "Image 01"},

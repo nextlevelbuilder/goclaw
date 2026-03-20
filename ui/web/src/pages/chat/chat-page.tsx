@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { ChatSidebar } from "./chat-sidebar";
 import { ChatThread } from "./chat-thread";
 import { ChatInput, type AttachedFile } from "@/components/chat/chat-input";
+import { ChatTopBar } from "@/components/chat/chat-top-bar";
+import { DropZone } from "@/components/chat/drop-zone";
 import { useChatSessions } from "./hooks/use-chat-sessions";
 import { useChatMessages } from "./hooks/use-chat-messages";
 import { useChatSend } from "./hooks/use-chat-send";
@@ -22,6 +24,10 @@ export function ChatPage() {
   const userId = useAuthStore((s) => s.userId);
 
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  const [files, setFiles] = useState<AttachedFile[]>([]);
+
+  // sessionKey derived from URL — single source of truth, no separate state
+  const sessionKey = urlSessionKey ?? "";
 
   const [agentId, setAgentId] = useState(() => {
     if (urlSessionKey) {
@@ -30,13 +36,13 @@ export function ChatPage() {
     }
     return "default";
   });
-  const [sessionKey, setSessionKey] = useState(urlSessionKey ?? "");
 
   const {
     sessions,
     loading: sessionsLoading,
     refresh: refreshSessions,
     buildNewSessionKey,
+    deleteSession,
   } = useChatSessions(agentId);
 
   const {
@@ -46,16 +52,12 @@ export function ChatPage() {
     toolStream,
     isRunning,
     loading: messagesLoading,
+    activity,
+    blockReplies,
+    teamTasks,
     expectRun,
     addLocalMessage,
   } = useChatMessages(sessionKey, agentId);
-
-  // Sync URL param to state
-  useEffect(() => {
-    if (urlSessionKey && urlSessionKey !== sessionKey) {
-      setSessionKey(urlSessionKey);
-    }
-  }, [urlSessionKey, sessionKey]);
 
   // Refresh sessions when run completes
   const prevIsRunningRef = useRef(false);
@@ -82,48 +84,56 @@ export function ChatPage() {
   });
 
   const handleNewChat = useCallback(() => {
-    const newKey = buildNewSessionKey();
-    setSessionKey(newKey);
-    navigate(`/chat/${encodeURIComponent(newKey)}`);
+    navigate(`/chat/${encodeURIComponent(buildNewSessionKey())}`);
   }, [buildNewSessionKey, navigate]);
 
   const handleSessionSelect = useCallback(
     (key: string) => {
-      // Sync agentId from session key to ensure correct routing
       const { agentId: parsed } = parseSessionKey(key);
       if (parsed && parsed !== agentId) {
         setAgentId(parsed);
       }
-      setSessionKey(key);
       navigate(`/chat/${encodeURIComponent(key)}`);
     },
     [navigate, agentId],
   );
 
+  const handleDeleteSession = useCallback(async (key: string) => {
+    await deleteSession(key);
+    if (key === sessionKey) {
+      const next = sessions.find((s) => s.key !== key);
+      if (next) {
+        handleSessionSelect(next.key);
+      } else {
+        handleNewChat();
+      }
+    }
+  }, [deleteSession, sessionKey, sessions, handleSessionSelect, handleNewChat]);
+
   const handleAgentChange = useCallback(
     (newAgentId: string) => {
       setAgentId(newAgentId);
-      const newKey = `agent:${newAgentId}:ws-${userId}-${Date.now().toString(36)}`;
-      setSessionKey(newKey);
-      navigate(`/chat/${encodeURIComponent(newKey)}`);
+      navigate(`/chat/${encodeURIComponent(`agent:${newAgentId}:ws:direct:${crypto.randomUUID()}`)}`);
     },
-    [navigate, userId],
+    [navigate],
   );
 
   const handleSend = useCallback(
-    (message: string, files?: AttachedFile[]) => {
+    (message: string, sendFiles?: AttachedFile[]) => {
       let key = sessionKey;
       if (!key) {
         key = buildNewSessionKey();
-        setSessionKey(key);
-        navigate(`/chat/${encodeURIComponent(key)}`);
+        navigate(`/chat/${encodeURIComponent(key)}`, { replace: true });
       }
-      // Pass key directly so send() doesn't use a stale closure value
-      send(message, key, files);
+      send(message, key, sendFiles);
       setScrollTrigger((n) => n + 1);
     },
     [sessionKey, send, buildNewSessionKey, navigate],
   );
+
+  const handleDropFiles = useCallback((dropped: File[]) => {
+    setFiles((prev) => [...prev, ...dropped.map((f) => ({ file: f }))]);
+  }, []);
 
   const handleAbort = useCallback(() => {
     abort(sessionKey);
@@ -170,6 +180,7 @@ export function ChatPage() {
               sessionsLoading={sessionsLoading}
               activeSessionKey={sessionKey}
               onSessionSelect={handleSessionSelectMobile}
+              onDeleteSession={handleDeleteSession}
               onNewChat={handleNewChatMobile}
             />
           </div>
@@ -182,6 +193,7 @@ export function ChatPage() {
           sessionsLoading={sessionsLoading}
           activeSessionKey={sessionKey}
           onSessionSelect={handleSessionSelect}
+          onDeleteSession={handleDeleteSession}
           onNewChat={handleNewChat}
         />
       )}
@@ -200,35 +212,44 @@ export function ChatPage() {
           </div>
         )}
 
+        <ChatTopBar agentId={agentId} isRunning={isRunning} activity={activity} />
+
         {sendError && (
           <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
             {sendError}
           </div>
         )}
 
-        <ChatThread
-          messages={messages}
-          streamText={streamText}
-          thinkingText={thinkingText}
-          toolStream={toolStream}
-          isRunning={isRunning}
-          loading={messagesLoading}
-          scrollTrigger={scrollTrigger}
-        />
-
-        {isOwn ? (
-          <ChatInput
-            onSend={handleSend}
-            onAbort={handleAbort}
+        <DropZone onDrop={handleDropFiles}>
+          <ChatThread
+            messages={messages}
+            streamText={streamText}
+            thinkingText={thinkingText}
+            toolStream={toolStream}
+            blockReplies={blockReplies}
+            activity={activity}
+            teamTasks={teamTasks}
             isRunning={isRunning}
-            disabled={!connected}
+            loading={messagesLoading}
+            scrollTrigger={scrollTrigger}
           />
-        ) : (
-          <div className="flex items-center gap-2 border-t bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-            <Eye className="h-4 w-4" />
-            {t("readOnly")}
-          </div>
-        )}
+
+          {isOwn ? (
+            <ChatInput
+              onSend={handleSend}
+              onAbort={handleAbort}
+              isRunning={isRunning}
+              disabled={!connected}
+              files={files}
+              onFilesChange={setFiles}
+            />
+          ) : (
+            <div className="mx-3 mb-3 flex items-center gap-2 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground shadow-sm">
+              <Eye className="h-4 w-4" />
+              {t("readOnly")}
+            </div>
+          )}
+        </DropZone>
       </div>
     </div>
   );

@@ -408,7 +408,7 @@ function ToolMultiSelect({
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={value.length === 0 ? placeholder : ""}
-          className="placeholder:text-muted-foreground min-w-[80px] flex-1 bg-transparent py-0.5 text-sm outline-none"
+          className="placeholder:text-muted-foreground min-w-[80px] flex-1 bg-transparent py-0.5 text-base md:text-sm outline-none"
         />
         <ChevronDownIcon
           className="text-muted-foreground size-4 shrink-0 cursor-pointer opacity-50"

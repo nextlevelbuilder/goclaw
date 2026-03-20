@@ -190,6 +190,8 @@
     "notifyProgressHint": "Notify when a member updates task progress.",
     "notifyFailed": "Task failed",
     "notifyFailedHint": "Notify when a task fails.",
+    "notifySlowTool": "Slow tool alert",
+    "notifySlowToolHint": "System alert when a tool call takes abnormally long. Always direct — never through leader.",
     "notifyMode": "Delivery mode",
     "notifyModeHint": "How notifications are delivered to the chat channel.",
     "notifyModeDirect": "Direct",
@@ -299,9 +301,17 @@
     "taskCreated": "Task created",
     "taskDeleted": "Task deleted",
     "taskAssigned": "Task assigned",
+    "taskApproved": "Task approved",
+    "taskRejected": "Task rejected",
+    "tasksBulkDeleted": "Tasks deleted",
     "failedCreateTask": "Failed to create task",
     "failedDeleteTask": "Failed to delete task",
-    "failedAssignTask": "Failed to assign task"
+    "failedAssignTask": "Failed to assign task",
+    "failedApproveTask": "Failed to approve task",
+    "failedRejectTask": "Failed to reject task",
+    "failedBulkDeleteTasks": "Failed to delete tasks",
+    "workspaceFileDeleted": "File deleted",
+    "failedDeleteWorkspaceFile": "Failed to delete file"
   },
   "board": {
     "kanban": "Board",

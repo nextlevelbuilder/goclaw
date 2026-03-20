@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -16,12 +17,12 @@ import (
 )
 
 const (
-	defaultPingInterval   = 120 * time.Second
-	defaultReconnectNonce = 30 // seconds max jitter
-	defaultReconnectWait  = 120 * time.Second
-	frameTypeControl      = 0
-	frameTypeData         = 1
-	fragmentBufferTTL     = 5 * time.Second
+	defaultPingInterval      = 120 * time.Second
+	defaultReconnectNonce    = 30 // seconds max jitter
+	defaultReconnectInterval = 5 * time.Second
+	frameTypeControl         = 0
+	frameTypeData            = 1
+	fragmentBufferTTL        = 5 * time.Second
 )
 
 // WSEventHandler processes incoming WebSocket events.
@@ -38,11 +39,13 @@ type WSClient struct {
 	baseURL   string
 	handler   WSEventHandler
 
-	conn         *websocket.Conn
-	connMu       sync.Mutex
-	serviceID    int32
-	pingInterval time.Duration
-	reconnectMax int // -1 = infinite
+	conn               *websocket.Conn
+	connMu             sync.Mutex
+	serviceID          int32
+	pingInterval       time.Duration
+	reconnectMax       int           // -1 = infinite
+	reconnectInterval  time.Duration // wait between retries
+	reconnectNonce     int           // max jitter seconds
 
 	stopCh  chan struct{}
 	stopped bool
@@ -76,13 +79,15 @@ type wsEndpointResp struct {
 // NewWSClient creates a native Lark WebSocket client.
 func NewWSClient(appID, appSecret, baseURL string, handler WSEventHandler) *WSClient {
 	return &WSClient{
-		appID:        appID,
-		appSecret:    appSecret,
-		baseURL:      baseURL,
-		handler:      handler,
-		pingInterval: defaultPingInterval,
-		reconnectMax: -1, // infinite
-		fragments:    make(map[string]*fragmentBuffer),
+		appID:             appID,
+		appSecret:         appSecret,
+		baseURL:           baseURL,
+		handler:           handler,
+		pingInterval:      defaultPingInterval,
+		reconnectMax:      -1, // infinite
+		reconnectInterval: defaultReconnectInterval,
+		reconnectNonce:    defaultReconnectNonce,
+		fragments:         make(map[string]*fragmentBuffer),
 	}
 }
 
@@ -204,7 +209,7 @@ func (c *WSClient) getWSEndpoint(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("ws endpoint error: code=%d msg=%s", result.Code, result.Msg)
 	}
 
-	// Apply config
+	// Apply config from server
 	cfg := result.Data.ClientConfig
 	if cfg.PingInterval > 0 {
 		c.pingInterval = time.Duration(cfg.PingInterval) * time.Second
@@ -212,14 +217,32 @@ func (c *WSClient) getWSEndpoint(ctx context.Context) (string, error) {
 	if cfg.ReconnectCount != 0 {
 		c.reconnectMax = cfg.ReconnectCount
 	}
-	c.serviceID = 0 // will be set from endpoint metadata if available
+	if cfg.ReconnectInterval > 0 {
+		c.reconnectInterval = time.Duration(cfg.ReconnectInterval) * time.Second
+	}
+	if cfg.ReconnectNonce > 0 {
+		c.reconnectNonce = cfg.ReconnectNonce
+	}
+
+	// Parse service_id from WS URL query params
+	if u, err := url.Parse(result.Data.URL); err == nil {
+		if sid := u.Query().Get("service_id"); sid != "" {
+			if v, err := strconv.ParseInt(sid, 10, 32); err == nil {
+				c.serviceID = int32(v)
+			}
+		}
+	}
 
 	return result.Data.URL, nil
 }
 
 func (c *WSClient) waitReconnect() {
-	jitter := time.Duration(rand.Intn(defaultReconnectNonce*1000)) * time.Millisecond
-	wait := defaultReconnectWait + jitter
+	nonce := c.reconnectNonce
+	if nonce <= 0 {
+		nonce = defaultReconnectNonce
+	}
+	jitter := time.Duration(rand.Intn(nonce*1000)) * time.Millisecond
+	wait := c.reconnectInterval + jitter
 	slog.Info("lark ws: reconnecting", "wait", wait)
 
 	select {
@@ -269,17 +292,37 @@ func (c *WSClient) handleFrame(ctx context.Context, f *wsFrame) {
 
 	switch {
 	case f.Method == frameTypeControl && frameType == "pong":
-		// Pong — optionally update config from payload
+		// Pong — update all config values from payload
 		if len(f.Payload) > 0 {
 			var cfg struct {
-				PingInterval int `json:"PingInterval"`
+				PingInterval      int `json:"PingInterval"`
+				ReconnectCount    int `json:"ReconnectCount"`
+				ReconnectInterval int `json:"ReconnectInterval"`
+				ReconnectNonce    int `json:"ReconnectNonce"`
 			}
-			if json.Unmarshal(f.Payload, &cfg) == nil && cfg.PingInterval > 0 {
-				c.pingInterval = time.Duration(cfg.PingInterval) * time.Second
+			if json.Unmarshal(f.Payload, &cfg) == nil {
+				if cfg.PingInterval > 0 {
+					c.pingInterval = time.Duration(cfg.PingInterval) * time.Second
+				}
+				if cfg.ReconnectCount != 0 {
+					c.reconnectMax = cfg.ReconnectCount
+				}
+				if cfg.ReconnectInterval > 0 {
+					c.reconnectInterval = time.Duration(cfg.ReconnectInterval) * time.Second
+				}
+				if cfg.ReconnectNonce > 0 {
+					c.reconnectNonce = cfg.ReconnectNonce
+				}
 			}
 		}
 
 	case f.Method == frameTypeData:
+		// Only process "event" type frames; ignore card, etc.
+		if frameType != "" && frameType != "event" {
+			slog.Debug("lark ws: ignoring non-event data frame", "type", frameType)
+			return
+		}
+
 		msgID := headers["message_id"]
 		sumStr := headers["sum"]
 		seqStr := headers["seq"]
@@ -297,28 +340,37 @@ func (c *WSClient) handleFrame(ctx context.Context, f *wsFrame) {
 			}
 		}
 
-		// Dispatch event
+		// Dispatch event and measure processing time
+		start := time.Now()
+		var handlerErr error
 		if c.handler != nil {
-			if err := c.handler.HandleEvent(ctx, payload); err != nil {
-				slog.Debug("lark ws: event handler error", "error", err)
+			handlerErr = c.handler.HandleEvent(ctx, payload)
+			if handlerErr != nil {
+				slog.Debug("lark ws: event handler error", "error", handlerErr)
 			}
 		}
+		elapsed := time.Since(start)
 
-		// Send response
-		c.sendResponse(f, headers)
+		// Send response with actual processing time and status
+		c.sendResponse(f, headers, elapsed, handlerErr)
 	}
 }
 
-func (c *WSClient) sendResponse(original *wsFrame, headers map[string]string) {
+func (c *WSClient) sendResponse(original *wsFrame, headers map[string]string, elapsed time.Duration, handlerErr error) {
 	respHeaders := make([]wsHeader, 0, len(original.Headers)+1)
 	for _, h := range original.Headers {
 		respHeaders = append(respHeaders, h)
 	}
-	respHeaders = append(respHeaders, wsHeader{Key: "biz_rt", Value: "0"})
+	// biz_rt = negative elapsed ms (Lark SDK convention: startTime - endTime)
+	bizRT := strconv.FormatInt(-elapsed.Milliseconds(), 10)
+	respHeaders = append(respHeaders, wsHeader{Key: "biz_rt", Value: bizRT})
 
+	code := http.StatusOK
+	if handlerErr != nil {
+		code = http.StatusInternalServerError
+	}
 	respPayload, _ := json.Marshal(map[string]any{
-		"code": http.StatusOK,
-		"msg":  "success",
+		"code": code,
 	})
 
 	resp := &wsFrame{

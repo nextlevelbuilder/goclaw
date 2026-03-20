@@ -13,5 +13,9 @@
     "undone": " This action cannot be undone.",
     "deleting": "Deleting...",
     "confirmLabel": "Delete"
+  },
+  "toast": {
+    "deleted": "File deleted",
+    "deleteFailed": "Failed to delete file"
   }
 }

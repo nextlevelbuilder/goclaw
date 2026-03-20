@@ -110,6 +110,13 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		content = "[empty message]"
 	}
 
+	// 7b. Fetch reply context if this is a reply to another message
+	if mc.ParentID != "" {
+		if replyCtx := c.fetchReplyContext(ctx, mc.ParentID); replyCtx != "" {
+			content += "\n\n" + replyCtx
+		}
+	}
+
 	// 8. Topic session
 	chatID := mc.ChatID
 	if mc.RootID != "" && c.cfg.TopicSessionMode == "enabled" {
@@ -131,6 +138,11 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		peerKind = "group"
 	}
 
+	// Collect contact for processed messages (DM + group-mentioned).
+	if cc := c.ContactCollector(); cc != nil {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", peerKind)
+	}
+
 	metadata := map[string]string{
 		"message_id":    messageID,
 		"chat_type":     mc.ChatType,
@@ -143,13 +155,18 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		metadata["sender_open_id"] = sender.SenderID.OpenID
 	}
 
-	// Build final content with group context (pending history + sender annotation).
-	if mc.ChatType == "group" && senderName != "" {
-		annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
-		if c.historyLimit > 0 {
-			content = c.groupHistory.BuildContext(chatID, annotated, c.historyLimit)
+	// Annotate content with sender identity so the agent knows who is messaging.
+	if senderName != "" {
+		if mc.ChatType == "group" {
+			annotated := fmt.Sprintf("[From: %s]\n%s", senderName, content)
+			if c.historyLimit > 0 {
+				content = c.groupHistory.BuildContext(chatID, annotated, c.historyLimit)
+			} else {
+				content = annotated
+			}
 		} else {
-			content = annotated
+			// DM: annotate with sender identity so the agent knows who is messaging.
+			content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
 		}
 	}
 
@@ -247,4 +264,36 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	if mc.ChatType == "group" {
 		c.groupHistory.Clear(chatID)
 	}
+}
+
+const replyContextMaxLen = 500
+
+// fetchReplyContext fetches the parent message content and returns a formatted
+// reply context string, similar to Telegram's [Replying to ...] format.
+func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) string {
+	resp, err := c.client.GetMessage(ctx, parentID)
+	if err != nil {
+		slog.Debug("feishu: failed to fetch parent message", "parent_id", parentID, "error", err)
+		return ""
+	}
+	if len(resp.Items) == 0 {
+		return ""
+	}
+
+	item := &resp.Items[0]
+	body := parseMessageContent(item.Body.Content, item.MsgType)
+	if body == "" {
+		return ""
+	}
+
+	// Resolve sender name
+	senderName := "unknown"
+	if item.Sender.ID != "" {
+		if name := c.resolveSenderName(ctx, item.Sender.ID); name != "" {
+			senderName = name
+		}
+	}
+
+	body = channels.Truncate(body, replyContextMaxLen)
+	return fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", senderName, body)
 }

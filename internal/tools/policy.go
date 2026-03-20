@@ -21,7 +21,7 @@ var toolGroups = map[string][]string{
 	"sessions":   {"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status"},
 	"ui":         {"browser"},
 	"automation": {"cron"},
-	"messaging":  {"message", "create_forum_topic"},
+	"messaging":  {"message", "create_forum_topic", "list_group_members"},
 	"team": {"team_tasks"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
@@ -29,7 +29,7 @@ var toolGroups = map[string][]string{
 		"web_search", "web_fetch", "browser",
 		"memory_search", "memory_get",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
-		"cron", "message", "create_forum_topic",
+		"cron", "message", "create_forum_topic", "list_group_members",
 		"read_image", "read_document", "read_audio", "read_video",
 		"create_image", "create_video",
 		"skill_search", "mcp_tool_search", "tts",
@@ -396,6 +396,39 @@ func matchDenySpec(name string, spec []string) bool {
 		}
 	}
 	return false
+}
+
+// StripToolPrefix removes a prefix pattern from a tool name returned by the LLM.
+// The template uses {tool_name} as placeholder. Example: template "proxy_{tool_name}"
+// strips "proxy_" from "proxy_exec" → "exec".
+// If template has no {tool_name}, it's treated as a literal prefix to strip.
+func StripToolPrefix(tmpl, name string) string {
+	const placeholder = "{tool_name}"
+	if strings.Contains(tmpl, placeholder) {
+		parts := strings.SplitN(tmpl, placeholder, 2)
+		prefix, suffix := parts[0], parts[1]
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) {
+			result := name[len(prefix):]
+			if suffix != "" {
+				result = result[:len(result)-len(suffix)]
+			}
+			if result != "" {
+				return result
+			}
+		}
+		return name
+	}
+	// Plain prefix: strip literal prefix and any leading underscore separator
+	stripped := strings.TrimPrefix(name, tmpl)
+	if stripped == name {
+		return name // prefix didn't match
+	}
+	stripped = strings.TrimPrefix(stripped, "_")
+	if stripped == "" {
+		return name // nothing left after stripping
+	}
+	slog.Debug("tool_prefix.stripped", "from", name, "to", stripped, "template", tmpl)
+	return stripped
 }
 
 func resolveAlias(name string) string {

@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { GripVertical, Trash2, ChevronDown, ChevronUp, Plus, Loader2 } from "lucide-react";
 import { uniqueId } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -415,6 +415,8 @@ export function MediaProviderChainForm({
     try {
       const serialized = entries.map(({ id: _id, ...rest }) => rest);
       await onSave({ providers: serialized });
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -464,6 +466,7 @@ export function MediaProviderChainForm({
           {t("builtin.mediaChain.cancel")}
         </Button>
         <Button onClick={handleSave} disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           {saving ? t("builtin.mediaChain.saving") : t("builtin.mediaChain.save")}
         </Button>
       </DialogFooter>

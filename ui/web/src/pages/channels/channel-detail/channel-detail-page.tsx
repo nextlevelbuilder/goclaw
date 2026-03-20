@@ -1,26 +1,25 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Radio } from "lucide-react";
 import { useChannelDetail } from "../hooks/use-channel-detail";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
+import { ChannelHeader } from "./channel-header";
 import { ChannelGeneralTab } from "./channel-general-tab";
 import { ChannelCredentialsTab } from "./channel-credentials-tab";
-import { ChannelConfigTab } from "./channel-config-tab";
 import { ChannelGroupsTab } from "./channel-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
+import { ChannelAdvancedDialog } from "./channel-advanced-dialog";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
-import { channelTypeLabels } from "../channels-status-view";
 import { useChannels } from "../hooks/use-channels";
 
 interface ChannelDetailPageProps {
   instanceId: string;
   onBack: () => void;
+  onDelete?: (instance: { id: string; name: string }) => void;
 }
 
-export function ChannelDetailPage({ instanceId, onBack }: ChannelDetailPageProps) {
+export function ChannelDetailPage({ instanceId, onBack, onDelete }: ChannelDetailPageProps) {
   const { t } = useTranslation("channels");
   const {
     instance,
@@ -35,6 +34,8 @@ export function ChannelDetailPage({ instanceId, onBack }: ChannelDetailPageProps
   const { agents } = useAgents();
   const { channels } = useChannels();
   const [activeTab, setActiveTab] = useState("general");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (loading || !instance) {
     return <DetailPageSkeleton tabs={4} />;
@@ -48,100 +49,92 @@ export function ChannelDetailPage({ instanceId, onBack }: ChannelDetailPageProps
 
   const isTelegram = instance.channel_type === "telegram";
 
+  const handleDelete = () => {
+    if (onDelete) {
+      setDeleteOpen(true);
+    }
+  };
+
   return (
-    <div className="p-4 sm:p-6">
-      {/* Header */}
-      <div className="mb-6 flex items-start gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack} className="mt-0.5 shrink-0">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Radio className="h-6 w-6" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate text-xl font-semibold">
-              {instance.display_name || instance.name}
-            </h2>
-            <Badge variant={instance.enabled ? "success" : "secondary"}>
-              {instance.enabled ? t("enabled") : t("disabled")}
-            </Badge>
-            {status && (
-              <Badge variant={status.running ? "success" : "secondary"}>
-                {status.running ? t("status.running") : t("status.stopped")}
-              </Badge>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-            {instance.display_name && (
-              <>
-                <span className="font-mono text-xs">{instance.name}</span>
-                <span className="text-border">|</span>
-              </>
-            )}
-            <Badge variant="outline" className="text-[11px]">
-              {channelTypeLabels[instance.channel_type] || instance.channel_type}
-            </Badge>
-            <span className="text-border">|</span>
-            <span>{t("detail.agent", { name: agentName })}</span>
-          </div>
-        </div>
-      </div>
+    <div>
+      <ChannelHeader
+        instance={instance}
+        status={status}
+        agentName={agentName}
+        onBack={onBack}
+        onAdvanced={() => setAdvancedOpen(true)}
+        onDelete={handleDelete}
+      />
 
-      {/* Tabs */}
-      <div className="max-w-4xl rounded-xl border bg-card p-3 shadow-sm sm:p-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
-            <TabsTrigger value="general">{t("detail.tabs.general")}</TabsTrigger>
-            <TabsTrigger value="credentials">{t("detail.tabs.credentials")}</TabsTrigger>
-            <TabsTrigger value="config">{t("detail.tabs.config")}</TabsTrigger>
-            {isTelegram && <TabsTrigger value="groups">{t("detail.tabs.groups")}</TabsTrigger>}
-            <TabsTrigger value="managers">{t("detail.tabs.managers")}</TabsTrigger>
-          </TabsList>
+      <div className="p-3 sm:p-4">
+        <div className="max-w-4xl">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
+              <TabsTrigger value="general">{t("detail.tabs.general")}</TabsTrigger>
+              <TabsTrigger value="credentials">{t("detail.tabs.credentials")}</TabsTrigger>
+              {isTelegram && <TabsTrigger value="groups">{t("detail.tabs.groups")}</TabsTrigger>}
+              <TabsTrigger value="managers">{t("detail.tabs.managers")}</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="general" className="mt-4">
-            <ChannelGeneralTab
-              instance={instance}
-              agents={agents}
-              onUpdate={updateInstance}
-            />
-          </TabsContent>
-
-          <TabsContent value="credentials" className="mt-4">
-            <ChannelCredentialsTab
-              instance={instance}
-              onUpdate={updateInstance}
-            />
-          </TabsContent>
-
-          <TabsContent value="config" className="mt-4">
-            <ChannelConfigTab
-              instance={instance}
-              onUpdate={updateInstance}
-            />
-          </TabsContent>
-
-          {isTelegram && (
-            <TabsContent value="groups" className="mt-4">
-              <ChannelGroupsTab
+            <TabsContent value="general" className="mt-4">
+              <ChannelGeneralTab
                 instance={instance}
+                agents={agents}
                 onUpdate={updateInstance}
-                listManagerGroups={listManagerGroups}
               />
             </TabsContent>
-          )}
 
-          <TabsContent value="managers" className="mt-4">
-            <ChannelManagersTab
-              listManagerGroups={listManagerGroups}
-              listManagers={listManagers}
-              addManager={addManager}
-              removeManager={removeManager}
-              listContacts={listContacts}
-            />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="credentials" className="mt-4">
+              <ChannelCredentialsTab
+                instance={instance}
+                onUpdate={updateInstance}
+              />
+            </TabsContent>
+
+            {isTelegram && (
+              <TabsContent value="groups" className="mt-4">
+                <ChannelGroupsTab
+                  instance={instance}
+                  onUpdate={updateInstance}
+                  listManagerGroups={listManagerGroups}
+                />
+              </TabsContent>
+            )}
+
+            <TabsContent value="managers" className="mt-4">
+              <ChannelManagersTab
+                listManagerGroups={listManagerGroups}
+                listManagers={listManagers}
+                addManager={addManager}
+                removeManager={removeManager}
+                listContacts={listContacts}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
+
+      <ChannelAdvancedDialog
+        open={advancedOpen}
+        onOpenChange={setAdvancedOpen}
+        instance={instance}
+        onUpdate={updateInstance}
+      />
+
+      {onDelete && (
+        <ConfirmDeleteDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          title={t("delete.title")}
+          description={t("delete.description", { name: instance.display_name || instance.name })}
+          confirmValue={instance.display_name || instance.name}
+          confirmLabel={t("delete.confirmLabel")}
+          onConfirm={async () => {
+            onDelete({ id: instance.id, name: instance.display_name || instance.name });
+            setDeleteOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

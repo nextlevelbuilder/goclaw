@@ -2,16 +2,50 @@
 
 import type { Message } from "./session";
 
+/** Activity phase tracking during agent run */
+export interface RunActivity {
+  phase: "thinking" | "tool_exec" | "streaming" | "compacting" | "retrying";
+  tool?: string;
+  tools?: string[];
+  iteration?: number;
+  retryAttempt?: number;
+  retryMax?: number;
+}
+
+/** Team task tracking from team.task.* events */
+export interface ActiveTeamTask {
+  taskId: string;
+  taskNumber: number;
+  subject: string;
+  status: string;
+  ownerAgentKey?: string;
+  ownerDisplayName?: string;
+  progressPercent?: number;
+  progressStep?: string;
+}
+
+/** Media item for gallery display */
+export interface MediaItem {
+  path: string;
+  mimeType: string;
+  fileName?: string;
+  kind: "image" | "video" | "audio" | "document" | "code";
+}
+
 /** Extended message with UI-specific fields */
 export interface ChatMessage extends Message {
   timestamp?: number;
   isStreaming?: boolean;
   toolDetails?: ToolStreamEntry[];
+  isBlockReply?: boolean;
+  isNotification?: boolean;
+  notificationType?: string;
+  mediaItems?: MediaItem[];
 }
 
 /** Agent event payload from WS event "agent" */
 export interface AgentEventPayload {
-  type: string; // "run.started" | "run.completed" | "run.failed" | "chunk" | "tool.call" | "tool.result"
+  type: string; // "run.started" | "run.completed" | "run.failed" | "chunk" | "tool.call" | "tool.result" | "activity" | "block.reply" | "run.retrying"
   agentId: string;
   runId: string;
   runKind?: string; // "delegation" | "announce" — omitted for user-initiated runs
@@ -23,6 +57,14 @@ export interface AgentEventPayload {
     error?: string;
     arguments?: Record<string, unknown>;
     result?: string;
+    // activity event fields
+    phase?: string;
+    tool?: string;
+    tools?: string[];
+    iteration?: number;
+    // run.retrying event fields
+    attempt?: number;
+    maxAttempts?: number;
   };
 }
 

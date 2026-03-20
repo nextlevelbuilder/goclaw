@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "@/stores/use-toast-store";
+import { userFriendlyError } from "@/lib/error-utils";
 import { useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 
@@ -11,6 +12,8 @@ export interface HeartbeatConfig {
   intervalSec: number;
   ackMaxChars: number;
   maxRetries: number;
+  providerId?: string;
+  model?: string;
   isolatedSession: boolean;
   lightContext: boolean;
   activeHoursStart?: string;
@@ -38,11 +41,11 @@ export interface HeartbeatLog {
   status: string;
   summary?: string;
   error?: string;
-  duration_ms?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  skip_reason?: string;
-  ran_at: string;
+  durationMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  skipReason?: string;
+  ranAt: string;
 }
 
 /** Return type of useAgentHeartbeat, for passing as props. */
@@ -66,7 +69,7 @@ export function useAgentHeartbeat(agentId: string) {
       );
       setConfig(res.heartbeat);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load heartbeat";
+      const msg = userFriendlyError(err);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -123,7 +126,7 @@ export function useAgentHeartbeat(agentId: string) {
         // Wait for backend to compute nextRunAt, then refresh.
         setTimeout(() => refresh(), 2000);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to toggle heartbeat";
+        const msg = userFriendlyError(err);
         toast.error(msg);
       } finally {
         setSaving(false);
@@ -146,7 +149,7 @@ export function useAgentHeartbeat(agentId: string) {
         // Delayed refresh to pick up any backend-computed state (e.g. nextRunAt).
         setTimeout(() => refresh(), 2000);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to save heartbeat";
+        const msg = userFriendlyError(err);
         setError(msg);
         toast.error(msg);
         throw err;
@@ -164,7 +167,7 @@ export function useAgentHeartbeat(agentId: string) {
       await ws.call(Methods.HEARTBEAT_TEST, { agentId });
       toast.success("Test run triggered");
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to trigger test";
+      const msg = userFriendlyError(err);
       toast.error(msg);
     } finally {
       setSaving(false);

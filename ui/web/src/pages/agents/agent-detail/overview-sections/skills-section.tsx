@@ -32,7 +32,7 @@ export function SkillsSection({ agentId }: SkillsSectionProps) {
       s.description.toLowerCase().includes(search.toLowerCase()),
     )
     .sort((a, b) => {
-      const rank = (s: typeof a) => s.granted ? 0 : s.is_system ? 1 : 2;
+      const rank = (s: typeof a) => s.granted ? 2 : s.is_system ? 1 : 0;
       return rank(a) - rank(b);
     });
 

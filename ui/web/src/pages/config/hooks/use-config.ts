@@ -6,6 +6,7 @@ import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
+import { userFriendlyError } from "@/lib/error-utils";
 
 interface ConfigData {
   config: Record<string, unknown>;
@@ -54,7 +55,7 @@ export function useConfig() {
         await invalidate();
         toast.success(i18n.t("config:toast.saved"));
       } catch (err) {
-        const msg = err instanceof Error ? err.message : i18n.t("config:toast.saveFailed");
+        const msg = userFriendlyError(err);
         setError(msg);
         toast.error(i18n.t("config:toast.saveFailed"), msg);
         throw err;
@@ -78,7 +79,7 @@ export function useConfig() {
         await invalidate();
         toast.success(i18n.t("config:toast.saved"));
       } catch (err) {
-        const msg = err instanceof Error ? err.message : i18n.t("config:toast.saveFailed");
+        const msg = userFriendlyError(err);
         setError(msg);
         toast.error(i18n.t("config:toast.saveFailed"), msg);
         throw err;

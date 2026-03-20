@@ -21,14 +21,15 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
+	"github.com/nextlevelbuilder/goclaw/internal/tts"
 	"github.com/nextlevelbuilder/goclaw/pkg/browser"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // setupToolRegistry creates the tool registry and registers all tools.
 // Returns the registry, exec approval manager, MCP manager, sandbox manager,
-// browser manager (caller must defer Close), web fetch tool, permission policy engine,
-// tool policy engine, data directory, and resolved agent defaults.
+// browser manager (caller must defer Close), web fetch tool, TTS tool,
+// permission policy engine, tool policy engine, data directory, and resolved agent defaults.
 func setupToolRegistry(
 	cfg *config.Config,
 	workspace string,
@@ -40,6 +41,7 @@ func setupToolRegistry(
 	sandboxMgr sandbox.Manager,
 	browserMgr *browser.Manager,
 	webFetchTool *tools.WebFetchTool,
+	ttsTool *tools.TtsTool,
 	permPE *permissions.PolicyEngine,
 	toolPE *tools.PolicyEngine,
 	dataDir string,
@@ -124,10 +126,14 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewCreateAudioTool(providerRegistry,
 		cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL))
 
-	// TTS (text-to-speech) system
+	// TTS (text-to-speech) system — always create TtsTool so config reload can populate it later
 	ttsMgr := setupTTS(cfg)
-	if ttsMgr != nil {
-		toolsReg.Register(tools.NewTtsTool(ttsMgr))
+	if ttsMgr == nil {
+		ttsMgr = tts.NewManager(tts.ManagerConfig{})
+	}
+	ttsTool = tools.NewTtsTool(ttsMgr)
+	toolsReg.Register(ttsTool)
+	if ttsMgr.HasProviders() {
 		slog.Info("tts enabled", "provider", ttsMgr.PrimaryProvider(), "auto", string(ttsMgr.AutoMode()))
 	}
 

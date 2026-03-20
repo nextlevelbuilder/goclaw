@@ -45,6 +45,7 @@
   "manage": "管理",
   "messages": "条消息",
   "model": "模型",
+  "useCustomModel": "使用自定义:",
   "modelTip": "要使用的模型 ID。",
   "modelVerified": "模型已验证",
   "name": "名称",
@@ -115,5 +116,10 @@
   "failedToLoadImage": "图片加载失败",
   "deleteFolder": "删除文件夹",
   "deleteFile": "删除文件",
-  "loadMore": "加载更多..."
+  "loadMore": "加载更多...",
+  "viewCard": "卡片视图",
+  "viewList": "列表视图",
+  "errors": {
+    "serverError": "出了点问题，请稍后重试。"
+  }
 }

@@ -3,6 +3,7 @@ package pg
 import (
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"maps"
 	"strings"
 	"sync"
@@ -26,9 +27,34 @@ type PGSessionStore struct {
 }
 
 func NewPGSessionStore(db *sql.DB) *PGSessionStore {
-	return &PGSessionStore{
+	s := &PGSessionStore{
 		db:    db,
 		cache: make(map[string]*store.SessionData),
+	}
+	s.migrateLegacyWSKeys()
+	return s
+}
+
+// migrateLegacyWSKeys renames old WS session keys from non-canonical format
+// (agent:X:ws-userId-ts) to canonical format (agent:X:ws:direct:ts).
+// The last hyphen-delimited segment is the base36 timestamp used as convId.
+// Idempotent — no-op if no legacy keys exist.
+func (s *PGSessionStore) migrateLegacyWSKeys() {
+	res, err := s.db.Exec(`
+		UPDATE sessions
+		SET session_key = regexp_replace(
+			session_key,
+			'^(agent:[^:]+):ws-.+-([^-]+)$',
+			'\1:ws:direct:\2'
+		)
+		WHERE session_key ~ '^agent:[^:]+:ws-'
+	`)
+	if err != nil {
+		slog.Warn("sessions.migrate_legacy_ws_keys", "error", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("sessions.migrate_legacy_ws_keys", "migrated", n)
 	}
 }
 
@@ -133,6 +159,15 @@ func (s *PGSessionStore) SetSummary(key, summary string) {
 	}
 }
 
+func (s *PGSessionStore) GetLabel(key string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if data, ok := s.cache[key]; ok {
+		return data.Label
+	}
+	return ""
+}
+
 func (s *PGSessionStore) SetLabel(key, label string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -140,6 +175,17 @@ func (s *PGSessionStore) SetLabel(key, label string) {
 		data.Label = label
 		data.Updated = time.Now()
 	}
+}
+
+func (s *PGSessionStore) GetSessionMetadata(key string) map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if data, ok := s.cache[key]; ok && data.Metadata != nil {
+		out := make(map[string]string, len(data.Metadata))
+		maps.Copy(out, data.Metadata)
+		return out
+	}
+	return nil
 }
 
 func (s *PGSessionStore) SetSessionMetadata(key string, metadata map[string]string) {

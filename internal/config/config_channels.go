@@ -41,6 +41,7 @@ type TelegramConfig struct {
 	MediaMaxBytes  int64               `json:"media_max_bytes,omitempty"` // max media download size in bytes (default 20MB)
 	LinkPreview    *bool               `json:"link_preview,omitempty"`    // enable URL previews in messages (default true)
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	ForceIPv4      bool                `json:"force_ipv4,omitempty"`      // force IPv4 for all Telegram API requests (use when IPv6 routing is broken)
 
 	// Optional STT (Speech-to-Text) pipeline for voice/audio inbound messages.
 	// When stt_proxy_url is set, audio/voice messages are transcribed before being forwarded to the agent.
@@ -52,6 +53,12 @@ type TelegramConfig struct {
 	// Optional audio-aware routing: when set, voice/audio inbound messages are routed to this
 	// agent instead of the default channel agent. Requires the named agent to exist in the config.
 	VoiceAgentID string `json:"voice_agent_id,omitempty"` // agent ID to route voice inbound to (e.g. "speaking-agent")
+
+	// Audio guard: intercept technical errors in voice agent replies and replace with friendly fallbacks.
+	// Only active when VoiceAgentID is set. Custom error markers replace built-in defaults when provided.
+	AudioGuardFallbackTranscript   string   `json:"audio_guard_fallback_transcript,omitempty"`    // fallback with %s for transcript (e.g. "I heard: \"%s\". Try again!")
+	AudioGuardFallbackNoTranscript string   `json:"audio_guard_fallback_no_transcript,omitempty"` // fallback when no transcript available
+	AudioGuardErrorMarkers         []string `json:"audio_guard_error_markers,omitempty"`          // custom error detection markers (replaces defaults)
 
 	// Per-group (and per-topic) overrides. Key is chat ID string (e.g. "-100123456") or "*" for wildcard.
 	// TS ref: channels.telegram.groups in src/config/types.telegram.ts.
@@ -235,6 +242,47 @@ type ProviderConfig struct {
 	APIBase string `json:"api_base,omitempty"`
 }
 
+// APIBaseForType returns the config-level api_base for a given provider type.
+// Used as a fallback when DB providers have no api_base set.
+func (p *ProvidersConfig) APIBaseForType(providerType string) string {
+	switch providerType {
+	case "anthropic_native":
+		return p.Anthropic.APIBase
+	case "openai", "openai_compat":
+		return p.OpenAI.APIBase
+	case "openrouter":
+		return p.OpenRouter.APIBase
+	case "groq":
+		return p.Groq.APIBase
+	case "deepseek":
+		return p.DeepSeek.APIBase
+	case "gemini_native":
+		return p.Gemini.APIBase
+	case "mistral":
+		return p.Mistral.APIBase
+	case "xai":
+		return p.XAI.APIBase
+	case "minimax_native":
+		return p.MiniMax.APIBase
+	case "cohere":
+		return p.Cohere.APIBase
+	case "perplexity":
+		return p.Perplexity.APIBase
+	case "dashscope":
+		return p.DashScope.APIBase
+	case "bailian":
+		return p.Bailian.APIBase
+	case "zai":
+		return p.Zai.APIBase
+	case "zai_coding":
+		return p.ZaiCoding.APIBase
+	case "ollama_cloud":
+		return p.OllamaCloud.APIBase
+	default:
+		return ""
+	}
+}
+
 // HasAnyProvider returns true if at least one provider has an API key or CLI configured.
 func (c *Config) HasAnyProvider() bool {
 	p := c.Providers
@@ -358,6 +406,7 @@ type ToolPolicySpec struct {
 	Deny       []string                   `json:"deny,omitempty"`
 	AlsoAllow  []string                   `json:"alsoAllow,omitempty"`
 	ByProvider map[string]*ToolPolicySpec `json:"byProvider,omitempty"`
+	ToolCallPrefix string `json:"toolCallPrefix,omitempty"` // prefix to strip from model's tool call names before registry lookup
 }
 
 type WebToolsConfig struct {

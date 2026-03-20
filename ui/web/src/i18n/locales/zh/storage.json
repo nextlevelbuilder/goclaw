@@ -13,5 +13,9 @@
     "undone": " 此操作不可撤销。",
     "deleting": "删除中...",
     "confirmLabel": "删除"
+  },
+  "toast": {
+    "deleted": "文件已删除",
+    "deleteFailed": "删除文件失败"
   }
 }

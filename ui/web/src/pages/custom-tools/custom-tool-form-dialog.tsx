@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -83,8 +84,8 @@ export function CustomToolFormDialog({ open, onOpenChange, tool, onSubmit }: Cus
         enabled,
       });
       onOpenChange(false);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("custom.form.saving"));
+    } catch {
+      // toast shown by hook — keep dialog open
     } finally {
       setLoading(false);
     }
@@ -160,6 +161,7 @@ export function CustomToolFormDialog({ open, onOpenChange, tool, onSubmit }: Cus
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>{t("custom.form.cancel")}</Button>
           <Button onClick={handleSubmit} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             {loading ? t("custom.form.saving") : tool ? t("custom.form.update") : t("custom.form.create")}
           </Button>
         </DialogFooter>

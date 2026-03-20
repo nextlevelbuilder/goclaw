@@ -4,6 +4,9 @@ import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 
 export interface TtsProviderConfig {
   api_key?: string;
@@ -69,11 +72,13 @@ export function useTtsConfig() {
       setSaving(true);
       setError(null);
       try {
-        await ws.call(Methods.CONFIG_PATCH, { tts: updates });
+        await ws.call(Methods.CONFIG_PATCH, { raw: JSON.stringify({ tts: updates }) });
         await invalidate();
+        toast.success(i18next.t("config:toast.saved"));
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to save TTS config";
         setError(msg);
+        toast.error(i18next.t("config:toast.saveFailed"), userFriendlyError(err));
         throw err;
       } finally {
         setSaving(false);

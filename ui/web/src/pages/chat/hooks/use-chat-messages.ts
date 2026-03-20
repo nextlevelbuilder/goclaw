@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useWs } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { Methods, Events } from "@/api/protocol";
 import type { Message } from "@/types/session";
-import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/chat";
+import type { ChatMessage, AgentEventPayload, ToolStreamEntry, RunActivity, ActiveTeamTask } from "@/types/chat";
 
 /**
  * Manages chat message history and real-time streaming for a session.
@@ -20,6 +20,9 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   const [toolStream, setToolStream] = useState<ToolStreamEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [activity, setActivity] = useState<RunActivity | null>(null);
+  const [blockReplies, setBlockReplies] = useState<ChatMessage[]>([]);
+  const [teamTasks, setTeamTasks] = useState<ActiveTeamTask[]>([]);
 
   // Use refs for values accessed inside the event handler to avoid stale closures.
   const runIdRef = useRef<string | null>(null);
@@ -29,24 +32,31 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   const toolStreamRef = useRef<ToolStreamEntry[]>([]);
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
+  const activityRef = useRef<RunActivity | null>(null);
+  const blockRepliesRef = useRef<ChatMessage[]>([]);
 
-  // Synchronously clear state during render when session changes.
-  // This prevents a flash of old messages before the useEffect fires.
-  const [prevKey, setPrevKey] = useState(sessionKey);
-  if (sessionKey !== prevKey) {
-    setPrevKey(sessionKey);
-    setMessages([]);
+  // Reset streaming/run state when session changes.
+  // Messages are NOT cleared here — loadHistory() will replace them atomically.
+  // loading is NOT set to true — avoids full-page flash while history loads.
+  const prevKeyRef = useRef(sessionKey);
+  useEffect(() => {
+    if (sessionKey === prevKeyRef.current) return;
+    prevKeyRef.current = sessionKey;
     setStreamText(null);
     setThinkingText(null);
     setToolStream([]);
     setIsRunning(false);
-    setLoading(true);
+    setActivity(null);
+    setBlockReplies([]);
+    setTeamTasks([]);
     runIdRef.current = null;
     expectingRunRef.current = false;
     streamRef.current = "";
     thinkingRef.current = "";
     toolStreamRef.current = [];
-  }
+    activityRef.current = null;
+    blockRepliesRef.current = [];
+  }, [sessionKey]);
 
   // Load history (no loading spinner — the empty state placeholder is shown instead)
   const loadHistory = useCallback(async () => {
@@ -80,7 +90,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
               toolCallId: tc.id,
               runId: "",
               name: tc.name,
-              phase: (toolMsg ? "completed" : "calling") as ToolStreamEntry["phase"],
+              phase: (toolMsg ? (toolMsg.is_error ? "error" : "completed") : "calling") as ToolStreamEntry["phase"],
               startedAt: 0,
               updatedAt: 0,
               arguments: tc.arguments,
@@ -188,6 +198,45 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream(toolStreamRef.current);
           break;
         }
+        case "block.reply": {
+          const content = event.payload?.content ?? "";
+          if (content) {
+            const blockMsg: ChatMessage = {
+              role: "assistant",
+              content,
+              timestamp: Date.now(),
+              isBlockReply: true,
+            };
+            blockRepliesRef.current = [...blockRepliesRef.current, blockMsg];
+            setBlockReplies(blockRepliesRef.current);
+          }
+          break;
+        }
+        case "activity": {
+          const phase = event.payload?.phase as RunActivity["phase"];
+          if (phase) {
+            const newActivity: RunActivity = {
+              phase,
+              tool: event.payload?.tool as string | undefined,
+              tools: event.payload?.tools as string[] | undefined,
+              iteration: event.payload?.iteration as number | undefined,
+            };
+            activityRef.current = newActivity;
+            setActivity(newActivity);
+          }
+          break;
+        }
+        case "run.retrying": {
+          const attempt = Number(event.payload?.attempt) || 0;
+          const maxAttempts = Number(event.payload?.maxAttempts) || 0;
+          activityRef.current = {
+            phase: "retrying",
+            retryAttempt: attempt,
+            retryMax: maxAttempts,
+          };
+          setActivity(activityRef.current);
+          break;
+        }
         case "run.completed": {
           setIsRunning(false);
           runIdRef.current = null;
@@ -204,6 +253,10 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           streamRef.current = "";
           thinkingRef.current = "";
           toolStreamRef.current = [];
+          activityRef.current = null;
+          setActivity(null);
+          blockRepliesRef.current = [];
+          setBlockReplies([]);
 
           if (streamed && !hadTools) {
             setMessages((prev) => [
@@ -223,6 +276,10 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream([]);
           streamRef.current = "";
           thinkingRef.current = "";
+          activityRef.current = null;
+          setActivity(null);
+          blockRepliesRef.current = [];
+          setBlockReplies([]);
           setMessages((prev) => [
             ...prev,
             {
@@ -240,6 +297,115 @@ export function useChatMessages(sessionKey: string, agentId: string) {
 
   useWsEvent(Events.AGENT, handleAgentEvent);
 
+  // Team task event handler (curried by event name)
+  const handleTeamTaskEvent = useCallback(
+    (eventName: string) => (payload: unknown) => {
+      const event = payload as {
+        team_id?: string;
+        task_id?: string;
+        task_number?: number;
+        subject?: string;
+        status?: string;
+        owner_agent_key?: string;
+        owner_display_name?: string;
+        progress_percent?: number;
+        progress_step?: string;
+        reason?: string;
+      };
+      if (!event?.team_id) return;
+
+      setTeamTasks((prev) => {
+        const existing = prev.find((t) => t.taskId === event.task_id);
+
+        if (eventName === "team.task.dispatched" || eventName === "team.task.assigned") {
+          if (existing) {
+            return prev.map((t) =>
+              t.taskId === event.task_id
+                ? { ...t, status: event.status ?? "in_progress", ownerAgentKey: event.owner_agent_key, ownerDisplayName: event.owner_display_name }
+                : t,
+            );
+          }
+          return [
+            ...prev,
+            {
+              taskId: event.task_id ?? "",
+              taskNumber: event.task_number ?? 0,
+              subject: event.subject ?? "",
+              status: event.status ?? "in_progress",
+              ownerAgentKey: event.owner_agent_key,
+              ownerDisplayName: event.owner_display_name,
+            },
+          ];
+        }
+
+        if (eventName === "team.task.progress" && existing) {
+          return prev.map((t) =>
+            t.taskId === event.task_id
+              ? { ...t, progressPercent: event.progress_percent, progressStep: event.progress_step }
+              : t,
+          );
+        }
+
+        if (
+          eventName === "team.task.completed" ||
+          eventName === "team.task.failed" ||
+          eventName === "team.task.cancelled"
+        ) {
+          return prev.filter((t) => t.taskId !== event.task_id);
+        }
+
+        return prev;
+      });
+
+      // Add inline notification message for key events
+      if (
+        eventName === "team.task.dispatched" ||
+        eventName === "team.task.completed" ||
+        eventName === "team.task.failed"
+      ) {
+        let icon = "📋";
+        let text = "";
+        if (eventName === "team.task.completed") {
+          icon = "✅";
+          text = `Task #${event.task_number} "${event.subject}" completed`;
+        } else if (eventName === "team.task.failed") {
+          icon = "❌";
+          text = `Task #${event.task_number} "${event.subject}" failed${event.reason ? ": " + event.reason : ""}`;
+        } else {
+          icon = "📋";
+          text = `Task #${event.task_number} "${event.subject}" → ${event.owner_display_name || event.owner_agent_key}`;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant" as const,
+            content: `${icon} ${text}`,
+            timestamp: Date.now(),
+            isNotification: true,
+            notificationType: eventName,
+          },
+        ]);
+      }
+    },
+    [],
+  );
+
+  // Memoize bound handlers so useWsEvent doesn't re-register on every render.
+  const onTaskDispatched = useMemo(() => handleTeamTaskEvent("team.task.dispatched"), [handleTeamTaskEvent]);
+  const onTaskCompleted = useMemo(() => handleTeamTaskEvent("team.task.completed"), [handleTeamTaskEvent]);
+  const onTaskFailed = useMemo(() => handleTeamTaskEvent("team.task.failed"), [handleTeamTaskEvent]);
+  const onTaskCancelled = useMemo(() => handleTeamTaskEvent("team.task.cancelled"), [handleTeamTaskEvent]);
+  const onTaskProgress = useMemo(() => handleTeamTaskEvent("team.task.progress"), [handleTeamTaskEvent]);
+  const onTaskAssigned = useMemo(() => handleTeamTaskEvent("team.task.assigned"), [handleTeamTaskEvent]);
+
+  useWsEvent(Events.TEAM_TASK_DISPATCHED, onTaskDispatched);
+  useWsEvent(Events.TEAM_TASK_COMPLETED, onTaskCompleted);
+  useWsEvent(Events.TEAM_TASK_FAILED, onTaskFailed);
+  useWsEvent(Events.TEAM_TASK_CANCELLED, onTaskCancelled);
+  useWsEvent(Events.TEAM_TASK_PROGRESS, onTaskProgress);
+  useWsEvent(Events.TEAM_TASK_ASSIGNED, onTaskAssigned);
+
   // Add a local message optimistically (shown immediately, replaced on next loadHistory)
   const addLocalMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
@@ -252,6 +418,9 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     toolStream,
     isRunning,
     loading,
+    activity,
+    blockReplies,
+    teamTasks,
     expectRun,
     loadHistory,
     addLocalMessage,

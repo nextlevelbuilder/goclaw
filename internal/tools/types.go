@@ -50,9 +50,9 @@ type InterceptorAware interface {
 	SetMemoryInterceptor(*MemoryInterceptor)
 }
 
-// GroupWriterAware tools receive a GroupWriterCache for group permission checks.
-type GroupWriterAware interface {
-	SetGroupWriterCache(*store.GroupWriterCache)
+// ConfigPermAware tools receive a ConfigPermissionStore for group permission checks.
+type ConfigPermAware interface {
+	SetConfigPermStore(store.ConfigPermissionStore)
 }
 
 // WorkspaceInterceptorAware tools can receive a WorkspaceInterceptor for team workspace validation.
@@ -97,6 +97,12 @@ type ChannelSender func(ctx context.Context, channel, chatID, content string) er
 // ChannelSenderAware tools can receive a channel sender function.
 type ChannelSenderAware interface {
 	SetChannelSender(ChannelSender)
+}
+
+// ChannelAware is optionally implemented by tools that only work on specific channel types.
+// Tools implementing this are filtered out when the current channel type doesn't match.
+type ChannelAware interface {
+	RequiredChannelTypes() []string
 }
 
 // ToProviderDef converts a Tool to a providers.ToolDefinition for LLM APIs.

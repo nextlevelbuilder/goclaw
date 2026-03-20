@@ -46,6 +46,21 @@
       "saving": "保存中...",
       "title": "知识图谱设置"
     },
+    "extractorChain": {
+      "title": "Web Fetch — 提取器链",
+      "description": "有序内容提取器列表。每个 URL 从上到下依次尝试，直到某个提取器返回高质量内容。",
+      "timeout": "超时",
+      "baseUrl": "基础 URL",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "extractors": {
+        "defuddle": "Defuddle（Cloudflare Worker）",
+        "defuddleDesc": "通过 fetch.goclaw.sh 使用 Defuddle 库提取干净的 Markdown。",
+        "html-to-markdown": "内置 HTML→Markdown",
+        "html-to-markdownDesc": "进程内基于 DOM 的转换器，具备隐藏元素检测功能。"
+      }
+    },
     "mediaChain": {
       "addProvider": "添加Provider",
       "cancel": "取消",

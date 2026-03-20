@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
-import { X, Save, Check, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
+import { X, Save, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import type { TeamData, TeamAccessSettings, TeamNotifyConfig, EscalationMode, EscalationAction } from "@/types/team";
@@ -78,6 +78,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [notifyCompleted, setNotifyCompleted] = useState(initNotify.completed ?? true);
   const [notifyCommented, setNotifyCommented] = useState(initNotify.commented ?? true);
   const [notifyNewTask, setNotifyNewTask] = useState(initNotify.new_task ?? true);
+  const [notifySlowTool, setNotifySlowTool] = useState(initNotify.slow_tool ?? true);
   const [notifyMode, setNotifyMode] = useState<"direct" | "leader">(initNotify.mode ?? "direct");
   const initMemberRequests = initial.member_requests ?? {};
   const [memberRequestsEnabled, setMemberRequestsEnabled] = useState(initMemberRequests.enabled ?? false);
@@ -90,8 +91,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const isTeamV2 = version >= 2;
 
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [versionModalOpen, setVersionModalOpen] = useState(false);
 
   // Load known users for combobox
@@ -114,6 +113,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setNotifyCompleted(sn.completed ?? false);
     setNotifyCommented(sn.commented ?? false);
     setNotifyNewTask(sn.new_task ?? false);
+    setNotifySlowTool(sn.slow_tool ?? true);
     setNotifyMode(sn.mode ?? "direct");
     const smr = s.member_requests ?? {};
     setMemberRequestsEnabled(smr.enabled ?? false);
@@ -123,14 +123,10 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setFollowupInterval(s.followup_interval_minutes ?? 30);
     setFollowupMaxReminders(s.followup_max_reminders ?? 0);
     setWorkspaceScope(s.workspace_scope ?? "isolated");
-    setSaved(false);
-    setError(null);
   }, [team]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
-    setError(null);
-    setSaved(false);
     try {
       const settings: TeamAccessSettings = {};
       if (allowUserIds.length > 0) settings.allow_user_ids = allowUserIds;
@@ -141,6 +137,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
         dispatched: notifyDispatched,
         progress: notifyProgress,
         failed: notifyFailed,
+        slow_tool: notifySlowTool,
         mode: notifyMode,
       };
       notifications.completed = notifyCompleted;
@@ -162,15 +159,12 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       settings.workspace_scope = workspaceScope || "isolated";
       if (version >= 2) settings.version = version;
       await updateTeamSettings(teamId, settings);
-      setSaved(true);
       onSaved();
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("settings.failedSave"));
+    } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
-  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyCompleted, notifyCommented, notifyNewTask, notifyMode, memberRequestsEnabled, memberRequestsAutoDispatch, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
+  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyCompleted, notifyCommented, notifyNewTask, notifySlowTool, notifyMode, memberRequestsEnabled, memberRequestsAutoDispatch, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
@@ -274,6 +268,13 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
                   <span className="text-sm font-semibold">{t("settings.notifyNewTask")}</span>
                 </div>
                 <Switch checked={notifyNewTask} onCheckedChange={setNotifyNewTask} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold">{t("settings.notifySlowTool")}</span>
+                  <p className="text-xs text-muted-foreground">{t("settings.notifySlowToolHint")}</p>
+                </div>
+                <Switch checked={notifySlowTool} onCheckedChange={setNotifySlowTool} />
               </div>
               <div className="border-t pt-3 space-y-2">
                 <span className="text-sm font-semibold">{t("settings.notifyMode")}</span>
@@ -511,21 +512,9 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       {/* Save button */}
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
-          {saving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" /> {t("settings.saving")}
-            </>
-          ) : saved ? (
-            <>
-              <Check className="h-4 w-4" /> {t("settings.saved")}
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" /> {t("settings.save")}
-            </>
-          )}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? t("settings.saving") : t("settings.save")}
         </Button>
-        {error && <span className="text-sm text-destructive">{error}</span>}
       </div>
 
       <TeamVersionModal open={versionModalOpen} onOpenChange={setVersionModalOpen} />

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Play, Loader2, ChevronDown, Heart, Clock, Send, FileText } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Play, Loader2, ChevronDown, Heart, Clock, Send, FileText, Cpu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/select";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useChannels } from "@/pages/channels/hooks/use-channels";
+import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useUiStore } from "@/stores/use-ui-store";
+import { ProviderModelSelect } from "@/components/shared/provider-model-select";
+import { IANA_TIMEZONES } from "@/lib/constants";
 import type { HeartbeatConfig, DeliveryTarget } from "@/pages/agents/hooks/use-agent-heartbeat";
 
 interface HeartbeatConfigDialogProps {
@@ -23,19 +26,25 @@ interface HeartbeatConfigDialogProps {
   onOpenChange: (open: boolean) => void;
   config: HeartbeatConfig | null;
   saving: boolean;
-  update: (params: Partial<HeartbeatConfig>) => Promise<void>;
+  update: (params: Partial<HeartbeatConfig> & { providerName?: string }) => Promise<void>;
   test: () => Promise<void>;
   getChecklist: () => Promise<string>;
   setChecklist: (content: string) => Promise<void>;
   fetchTargets: () => Promise<DeliveryTarget[]>;
   refresh: () => Promise<void>;
+  /** Agent's current provider name (used as default for heartbeat). */
+  agentProvider?: string;
+  /** Agent's current model (used as default for heartbeat). */
+  agentModel?: string;
 }
 
 export function HeartbeatConfigDialog({
   open, onOpenChange, config, saving, update, test, getChecklist, setChecklist, fetchTargets, refresh,
+  agentProvider, agentModel,
 }: HeartbeatConfigDialogProps) {
   const { t } = useTranslation("agents");
   const { channels: availableChannels } = useChannels();
+  const { providers } = useProviders();
   const channelNames = Object.keys(availableChannels);
   const userTz = useUiStore((s) => s.timezone);
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -46,13 +55,15 @@ export function HeartbeatConfigDialog({
   const [intervalMin, setIntervalMin] = useState(30);
   const [ackMaxChars, setAckMaxChars] = useState(300);
   const [maxRetries, setMaxRetries] = useState(2);
-  const [isolatedSession, setIsolatedSession] = useState(true);
+  const [isolatedSession, setIsolatedSession] = useState(false);
   const [lightContext, setLightContext] = useState(false);
   const [activeHoursStart, setActiveHoursStart] = useState("");
   const [activeHoursEnd, setActiveHoursEnd] = useState("");
   const [timezone, setTimezone] = useState("");
   const [channel, setChannel] = useState("");
   const [chatId, setChatId] = useState("");
+  const [hbProvider, setHbProvider] = useState("");
+  const [hbModel, setHbModel] = useState("");
   const [checklist, setChecklistState] = useState("");
   const [originalChecklist, setOriginalChecklist] = useState("");
   const [checklistLoading, setChecklistLoading] = useState(false);
@@ -73,6 +84,13 @@ export function HeartbeatConfigDialog({
     }
   }, [getChecklist]);
 
+  // Map providerId UUID → provider name for the select component.
+  const providerNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of providers) map[p.id] = p.name;
+    return map;
+  }, [providers]);
+
   // Sync form state only when dialog opens (false→true).
   useEffect(() => {
     if (!open) return;
@@ -88,9 +106,14 @@ export function HeartbeatConfigDialog({
       setTimezone(config.timezone || defaultTz);
       setChannel(config.channel ?? "");
       setChatId(config.chatId ?? "");
+      // Map stored providerId UUID → name for the select
+      setHbProvider(config.providerId ? (providerNameById[config.providerId] ?? "") : "");
+      setHbModel(config.model ?? "");
     } else {
       // First-time setup defaults
       setTimezone(defaultTz);
+      setHbProvider("");
+      setHbModel("");
     }
     setShowAdvanced(false);
     loadChecklist();
@@ -104,26 +127,32 @@ export function HeartbeatConfigDialog({
   };
 
   const handleSave = async () => {
-    const clampedMin = Math.max(5, intervalMin);
-    await update({
-      enabled,
-      intervalSec: clampedMin * 60,
-      ackMaxChars: ackMaxChars,
-      maxRetries: maxRetries,
-      isolatedSession: isolatedSession,
-      lightContext: lightContext,
-      activeHoursStart: activeHoursStart || undefined,
-      activeHoursEnd: activeHoursEnd || undefined,
-      timezone: timezone || undefined,
-      channel: channel || undefined,
-      chatId: chatId || undefined,
-    });
-    if (checklist !== originalChecklist) {
-      await setChecklist(checklist);
-      setOriginalChecklist(checklist);
+    try {
+      const clampedMin = Math.max(5, intervalMin);
+      await update({
+        enabled,
+        intervalSec: clampedMin * 60,
+        ackMaxChars: ackMaxChars,
+        maxRetries: maxRetries,
+        isolatedSession: isolatedSession,
+        lightContext: lightContext,
+        activeHoursStart: activeHoursStart || undefined,
+        activeHoursEnd: activeHoursEnd || undefined,
+        timezone: timezone || undefined,
+        channel: channel || undefined,
+        chatId: chatId || undefined,
+        model: hbModel || undefined,
+        providerName: hbProvider || undefined,
+      });
+      if (checklist !== originalChecklist) {
+        await setChecklist(checklist);
+        setOriginalChecklist(checklist);
+      }
+      await refresh();
+      onOpenChange(false);
+    } catch {
+      // toast shown by hook — keep dialog open
     }
-    await refresh();
-    onOpenChange(false);
   };
 
   return (
@@ -158,10 +187,31 @@ export function HeartbeatConfigDialog({
                 min={5}
                 value={intervalMin}
                 onChange={(e) => setIntervalMin(Math.max(5, Number(e.target.value) || 5))}
-                className="w-16 text-center text-base md:text-sm"
+                className="w-[4.5rem] text-center text-base md:text-sm"
               />
               <span className="text-xs text-muted-foreground">min</span>
             </div>
+          </div>
+
+          {/* ── Provider / Model override ── */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Cpu className="h-3.5 w-3.5 text-violet-500" />
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("heartbeat.sectionModel")}
+              </h4>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("heartbeat.modelHint")}</p>
+            <ProviderModelSelect
+              provider={hbProvider}
+              onProviderChange={setHbProvider}
+              model={hbModel}
+              onModelChange={setHbModel}
+              allowEmpty
+              showVerify={!!(hbProvider && hbModel)}
+              providerPlaceholder={agentProvider ? `(${agentProvider})` : "(agent default)"}
+              modelPlaceholder={agentModel ? `(${agentModel})` : "(agent default)"}
+            />
           </div>
 
           {/* ── Delivery — WHERE it sends ── */}
@@ -253,8 +303,8 @@ export function HeartbeatConfigDialog({
                 {t("heartbeat.sectionSchedule")}
               </h4>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="space-y-1">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1 w-24">
                 <Label htmlFor="hb-start" className="text-xs">{t("heartbeat.activeHoursStart")}</Label>
                 <Input
                   id="hb-start"
@@ -264,7 +314,7 @@ export function HeartbeatConfigDialog({
                   className="text-base md:text-sm"
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 w-24">
                 <Label htmlFor="hb-end" className="text-xs">{t("heartbeat.activeHoursEnd")}</Label>
                 <Input
                   id="hb-end"
@@ -274,43 +324,22 @@ export function HeartbeatConfigDialog({
                   className="text-base md:text-sm"
                 />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="hb-tz" className="text-xs">{t("heartbeat.timezone")}</Label>
-                <Input
-                  id="hb-tz"
-                  placeholder="Asia/Ho_Chi_Minh"
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="text-base md:text-sm"
-                />
+              <div className="space-y-1 flex-1 min-w-[160px]">
+                <Label className="text-xs">{t("heartbeat.timezone")}</Label>
+                <Select value={timezone || "__auto__"} onValueChange={(v) => setTimezone(v === "__auto__" ? "" : v)}>
+                  <SelectTrigger className="text-base md:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__auto__">{defaultTz}</SelectItem>
+                    {IANA_TIMEZONES.map((tz) => (
+                      <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">{t("heartbeat.scheduleHint")}</p>
-          </div>
-
-          {/* ── Checklist — WHAT the agent does ── */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <FileText className="h-3.5 w-3.5 text-emerald-500" />
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("heartbeat.checklist")}
-              </h4>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("heartbeat.checklistHint")}</p>
-            {checklistLoading ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {t("heartbeat.checklistLoading")}
-              </div>
-            ) : (
-              <Textarea
-                value={checklist}
-                onChange={(e) => setChecklistState(e.target.value)}
-                placeholder={t("heartbeat.checklistPlaceholder")}
-                rows={15}
-                className="text-base md:text-sm font-mono resize-y min-h-[200px] sm:min-h-[400px]"
-              />
-            )}
           </div>
 
           {/* ── Advanced (collapsible) ── */}
@@ -367,6 +396,31 @@ export function HeartbeatConfigDialog({
                   <Switch checked={lightContext} onCheckedChange={setLightContext} />
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* ── Checklist — WHAT the agent does ── */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 text-emerald-500" />
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("heartbeat.checklist")}
+              </h4>
+            </div>
+            <p className="text-xs text-muted-foreground">{t("heartbeat.checklistHint")}</p>
+            {checklistLoading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground py-4 justify-center">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {t("heartbeat.checklistLoading")}
+              </div>
+            ) : (
+              <Textarea
+                value={checklist}
+                onChange={(e) => setChecklistState(e.target.value)}
+                placeholder={t("heartbeat.checklistPlaceholder")}
+                rows={8}
+                className="text-base md:text-sm font-mono resize-y min-h-[120px] sm:min-h-[200px]"
+              />
             )}
           </div>
 

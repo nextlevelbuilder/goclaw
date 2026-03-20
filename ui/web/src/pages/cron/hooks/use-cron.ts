@@ -149,5 +149,19 @@ export function useCron() {
     [ws],
   );
 
-  return { jobs, loading, refreshing, refresh: invalidate, createJob, toggleJob, deleteJob, runJob, getRunLog };
+  const updateJob = useCallback(
+    async (jobId: string, params: Record<string, unknown>) => {
+      try {
+        await ws.call(Methods.CRON_UPDATE, { jobId, ...params });
+        await invalidate();
+        toast.success(i18next.t("cron:toast.updated"));
+      } catch (err) {
+        toast.error(i18next.t("cron:toast.failedUpdate"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [ws, invalidate],
+  );
+
+  return { jobs, loading, refreshing, refresh: invalidate, createJob, toggleJob, deleteJob, runJob, getRunLog, updateJob };
 }

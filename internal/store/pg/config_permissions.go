@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,23 +28,39 @@ type permRow struct {
 	Permission string
 }
 
+// fwCacheEntry holds cached file_writer ConfigPermission rows for a scope.
+type fwCacheEntry struct {
+	rows    []store.ConfigPermission
+	fetched time.Time
+}
+
 // PGConfigPermissionStore implements store.ConfigPermissionStore backed by Postgres.
 // Includes a TTL cache for CheckPermission to avoid per-request DB queries.
 type PGConfigPermissionStore struct {
-	db    *sql.DB
-	mu    sync.RWMutex
-	cache map[string]permCacheEntry // key: "agentID:userID"
+	db      *sql.DB
+	mu      sync.RWMutex
+	cache   map[string]permCacheEntry // key: "agentID:userID"
+	fwMu    sync.RWMutex
+	fwCache map[string]fwCacheEntry // key: "agentID:scope"
 }
 
 func NewPGConfigPermissionStore(db *sql.DB) *PGConfigPermissionStore {
-	return &PGConfigPermissionStore{db: db, cache: make(map[string]permCacheEntry)}
+	return &PGConfigPermissionStore{
+		db:      db,
+		cache:   make(map[string]permCacheEntry),
+		fwCache: make(map[string]fwCacheEntry),
+	}
 }
 
 // InvalidateCache clears all cached permission entries.
 func (s *PGConfigPermissionStore) InvalidateCache() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.cache = make(map[string]permCacheEntry)
+	s.mu.Unlock()
+
+	s.fwMu.Lock()
+	s.fwCache = make(map[string]fwCacheEntry)
+	s.fwMu.Unlock()
 }
 
 // CheckPermission evaluates deny-first, allow-second permission with Go-level wildcard matching.
@@ -155,14 +172,18 @@ func (s *PGConfigPermissionStore) Revoke(ctx context.Context, agentID uuid.UUID,
 	return err
 }
 
-func (s *PGConfigPermissionStore) List(ctx context.Context, agentID uuid.UUID, configType string) ([]store.ConfigPermission, error) {
+func (s *PGConfigPermissionStore) List(ctx context.Context, agentID uuid.UUID, configType, scope string) ([]store.ConfigPermission, error) {
 	query := `SELECT id, agent_id, scope, config_type, user_id, permission, granted_by, metadata, created_at, updated_at
 	          FROM agent_config_permissions WHERE agent_id = $1`
 	args := []any{agentID}
 
 	if configType != "" {
-		query += ` AND config_type = $2`
 		args = append(args, configType)
+		query += ` AND config_type = $` + itoa(len(args))
+	}
+	if scope != "" {
+		args = append(args, scope)
+		query += ` AND scope = $` + itoa(len(args))
 	}
 	query += ` ORDER BY created_at`
 
@@ -172,6 +193,46 @@ func (s *PGConfigPermissionStore) List(ctx context.Context, agentID uuid.UUID, c
 	}
 	defer rows.Close()
 
+	return scanConfigPermissions(rows)
+}
+
+// ListFileWriters returns cached file_writer allow permissions for a given agentID+scope.
+// Hot-path: called during system prompt injection for every group message.
+func (s *PGConfigPermissionStore) ListFileWriters(ctx context.Context, agentID uuid.UUID, scope string) ([]store.ConfigPermission, error) {
+	cacheKey := agentID.String() + ":" + scope
+
+	s.fwMu.RLock()
+	if entry, ok := s.fwCache[cacheKey]; ok && time.Since(entry.fetched) < permCacheTTL {
+		s.fwMu.RUnlock()
+		return entry.rows, nil
+	}
+	s.fwMu.RUnlock()
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, agent_id, scope, config_type, user_id, permission, granted_by, metadata, created_at, updated_at
+		 FROM agent_config_permissions
+		 WHERE agent_id = $1 AND config_type = 'file_writer' AND scope = $2 AND permission = 'allow'
+		 ORDER BY created_at`,
+		agentID, scope,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	perms, err := scanConfigPermissions(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	s.fwMu.Lock()
+	s.fwCache[cacheKey] = fwCacheEntry{rows: perms, fetched: time.Now()}
+	s.fwMu.Unlock()
+
+	return perms, nil
+}
+
+func scanConfigPermissions(rows *sql.Rows) ([]store.ConfigPermission, error) {
 	var perms []store.ConfigPermission
 	for rows.Next() {
 		var p store.ConfigPermission
@@ -188,4 +249,9 @@ func (s *PGConfigPermissionStore) List(ctx context.Context, agentID uuid.UUID, c
 		return nil, err
 	}
 	return perms, nil
+}
+
+// itoa converts an int to its decimal string representation.
+func itoa(n int) string {
+	return strconv.Itoa(n)
 }

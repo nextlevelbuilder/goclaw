@@ -19,8 +19,8 @@ type WriteFileTool struct {
 	sandboxMgr       sandbox.Manager
 	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
 	memIntc          *MemoryInterceptor      // nil = no memory routing
-	groupWriterCache *store.GroupWriterCache // nil = no group write restriction
-	workspaceIntc    *WorkspaceInterceptor   // nil = no team workspace validation
+	permStore     store.ConfigPermissionStore // nil = no group write restriction
+	workspaceIntc *WorkspaceInterceptor      // nil = no team workspace validation
 }
 
 // DenyPaths adds path prefixes that write_file must reject.
@@ -38,9 +38,9 @@ func (t *WriteFileTool) SetMemoryInterceptor(intc *MemoryInterceptor) {
 	t.memIntc = intc
 }
 
-// SetGroupWriterCache enables group write permission checks.
-func (t *WriteFileTool) SetGroupWriterCache(c *store.GroupWriterCache) {
-	t.groupWriterCache = c
+// SetConfigPermStore enables group write permission checks.
+func (t *WriteFileTool) SetConfigPermStore(s store.ConfigPermissionStore) {
+	t.permStore = s
 }
 
 // SetWorkspaceInterceptor enables team workspace validation and event broadcasting.
@@ -103,8 +103,8 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 
 	// Group write permission check
-	if t.groupWriterCache != nil {
-		if err := store.CheckGroupWritePermission(ctx, t.groupWriterCache); err != nil {
+	if t.permStore != nil {
+		if err := store.CheckFileWriterPermission(ctx, t.permStore); err != nil {
 			return ErrorResult(err.Error())
 		}
 	}
@@ -121,13 +121,25 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	// Virtual FS: route memory files to DB
 	if t.memIntc != nil {
-		if mwr, err := t.memIntc.WriteFile(ctx, path, content); mwr.Handled {
+		if mwr, err := t.memIntc.WriteFile(ctx, path, content, appendMode); mwr.Handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to write memory file: %v", err))
 			}
 			msg := fmt.Sprintf("Memory file written: %s (%d bytes)", path, len(content))
 			if mwr.KGTriggered {
 				msg += "\n\n[Knowledge graph extraction triggered in background. The knowledge system may take a moment to fully update with new entities and relationships.]"
+			}
+			if mwr.PreviousContent != "" {
+				prev := mwr.PreviousContent
+				prevRunes := []rune(prev)
+				if len(prevRunes) > 4000 {
+					prev = string(prevRunes[:4000]) + "\n... (truncated)"
+				}
+				msg += fmt.Sprintf("\n\n⚠️ WARNING: This file had existing content (%d chars) that was replaced. "+
+					"If the old content below contains information not present in your new version, "+
+					"please re-write the file to merge both.\n\n"+
+					"--- PREVIOUS CONTENT ---\n%s\n--- END PREVIOUS CONTENT ---",
+					len([]rune(mwr.PreviousContent)), prev)
 			}
 			return SilentResult(msg)
 		}
@@ -212,8 +224,14 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	if err := bridge.WriteFile(ctx, path, content); err != nil {
-		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
+	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	containerPath := ResolveSandboxPath(path, containerCwd)
+
+	if err := bridge.WriteFile(ctx, containerPath, content); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to write file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
 	msg := fmt.Sprintf("File written: %s (%d bytes)", path, len(content))
@@ -239,5 +257,5 @@ func (t *WriteFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*sa
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
 }

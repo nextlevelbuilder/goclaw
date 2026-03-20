@@ -16,6 +16,14 @@
   "running": "运行中...",
   "runHistory": "运行历史",
   "defaultAgent": "默认",
+  "searchPlaceholder": "搜索定时任务...",
+  "noMatchTitle": "未找到匹配任务",
+  "noMatchDescription": "请尝试其他关键词。",
+  "card": {
+    "nextRun": "下次: {{time}}",
+    "noNextRun": "无下次运行",
+    "defaultAgent": "默认代理"
+  },
   "create": {
     "title": "创建定时任务",
     "name": "名称",
@@ -81,11 +89,43 @@
       "timezone": "时区",
       "nextRun": "下次运行",
       "lastRun": "上次运行",
+      "lastStatus": "最后状态",
       "created": "创建时间",
       "updated": "更新时间",
       "autoDelete": "自动删除",
       "autoDeleteValue": "是（一次性）"
-    }
+    },
+    "tabs": {
+      "overview": "概览",
+      "history": "运行历史"
+    },
+    "advanced": "高级",
+    "saveFailed": "保存失败",
+    "schedule": "计划",
+    "scheduleDesc": "时间配置",
+    "messageSection": "消息",
+    "messageSectionDesc": "Agent应执行的内容",
+    "agentStatus": "Agent & 状态",
+    "agentStatusDesc": "Agent分配和任务状态",
+    "info": "信息",
+    "infoDesc": "任务元数据",
+    "scheduling": "调度",
+    "schedulingDesc": "时区配置",
+    "delivery": "投递",
+    "deliveryDesc": "将任务输出路由到频道或用户",
+    "deliverToChannel": "投递到频道",
+    "channelLabel": "频道",
+    "channelPlaceholder": "#general",
+    "toLabel": "至（用户）",
+    "toPlaceholder": "user-id",
+    "wakeHeartbeat": "运行时唤醒心跳",
+    "wakeHeartbeatDesc": "任务运行时触发Agent心跳",
+    "lifecycle": "生命周期",
+    "lifecycleDesc": "任务生命周期设置",
+    "deleteAfterRun": "运行后删除",
+    "deleteAfterRunDesc": "首次成功运行后自动删除此任务",
+    "timezone": "时区",
+    "timezoneDesc": "Cron表达式的时区"
   },
   "toast": {
     "created": "定时任务已创建",
@@ -97,6 +137,8 @@
     "failedCreate": "创建定时任务失败",
     "failedToggle": "切换定时任务失败",
     "failedDelete": "删除定时任务失败",
-    "failedRun": "运行定时任务失败"
+    "failedRun": "运行定时任务失败",
+    "updated": "任务已更新",
+    "failedUpdate": "更新任务失败"
   }
 }

@@ -138,9 +138,15 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	output, err := bridge.ListDir(ctx, path)
+	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	containerPath := ResolveSandboxPath(path, containerCwd)
+
+	output, err := bridge.ListDir(ctx, containerPath)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to list directory: %v", err))
+		return ErrorResult(fmt.Sprintf("failed to list directory: %v", err) + MaybeFsBridgeHint(err))
 	}
 
 	return SilentResult(output)
@@ -151,5 +157,5 @@ func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey string) (*sa
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
 }

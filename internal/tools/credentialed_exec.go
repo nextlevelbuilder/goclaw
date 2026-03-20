@@ -112,7 +112,11 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	// Step 2: Resolve binary to absolute path and verify against config
 	absPath, err := resolveAndMatchBinary(binary, cred.BinaryPath)
 	if err != nil {
-		return credentialedPathError(binary, err)
+		r := credentialedPathError(binary, err)
+		if t.sandboxMgr != nil && sandboxKey != "" {
+			r.ForLLM += hintBinaryNotFound
+		}
+		return r
 	}
 
 	// Step 3: Per-binary deny check (deny_args)
@@ -177,7 +181,7 @@ func (t *ExecTool) executeCredentialedHost(ctx context.Context, absPath string, 
 func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath string, args []string,
 	cwd string, sandboxKey string, envMap map[string]string, timeout time.Duration) *Result {
 
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workingDir, SandboxConfigFromCtx(ctx))
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		slog.Warn("security.credentialed_exec_sandbox_unavailable",
 			"binary", absPath, "error", err)
@@ -199,7 +203,8 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 		output += "STDERR:\n" + result.Stderr
 	}
 	if result.ExitCode != 0 {
-		return credentialedExecFailError(absPath, args, result.ExitCode, ScrubCredentials(output))
+		scrubbed := ScrubCredentials(output)
+		return credentialedExecFailError(absPath, args, result.ExitCode, scrubbed+MaybeSandboxHint(result.ExitCode, scrubbed))
 	}
 	if output == "" {
 		output = "(command completed with no output)"

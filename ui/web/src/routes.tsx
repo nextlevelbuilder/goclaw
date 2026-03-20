@@ -137,7 +137,6 @@ export function AppRoutes() {
           <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
           <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
           <Route path={ROUTES.CHAT} element={<ChatPage />} />
-          <Route path={ROUTES.CHAT_SESSION} element={<ChatPage />} />
           <Route path={ROUTES.AGENTS} element={<AgentsPage key="list" />} />
           <Route path={ROUTES.AGENT_DETAIL} element={<AgentsPage key="detail" />} />
           <Route path={ROUTES.TEAMS} element={<TeamsPage key="list" />} />
@@ -160,7 +159,8 @@ export function AppRoutes() {
           <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
           <Route path={ROUTES.NODES} element={<NodesPage />} />
           <Route path={ROUTES.LOGS} element={<LogsPage />} />
-          <Route path={ROUTES.PROVIDERS} element={<ProvidersPage />} />
+          <Route path={ROUTES.PROVIDERS} element={<ProvidersPage key="list" />} />
+          <Route path={ROUTES.PROVIDER_DETAIL} element={<ProvidersPage key="detail" />} />
           <Route path={ROUTES.CUSTOM_TOOLS} element={<CustomToolsPage />} />
           <Route path={ROUTES.BUILTIN_TOOLS} element={<BuiltinToolsPage />} />
           <Route path={ROUTES.MCP} element={<MCPPage />} />

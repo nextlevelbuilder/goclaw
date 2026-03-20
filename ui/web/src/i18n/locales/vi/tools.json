@@ -132,6 +132,21 @@
       "save": "Lưu",
       "saving": "Đang lưu..."
     },
+    "extractorChain": {
+      "title": "Web Fetch — Chuỗi bộ trích xuất",
+      "description": "Danh sách bộ trích xuất nội dung theo thứ tự. Mỗi URL được thử từ trên xuống cho đến khi một bộ trả về nội dung chất lượng.",
+      "timeout": "Thời gian chờ",
+      "baseUrl": "URL cơ sở",
+      "save": "Lưu",
+      "saving": "Đang lưu…",
+      "cancel": "Hủy",
+      "extractors": {
+        "defuddle": "Defuddle (Cloudflare Worker)",
+        "defuddleDesc": "Trích xuất markdown sạch qua fetch.goclaw.sh sử dụng thư viện Defuddle.",
+        "html-to-markdown": "HTML→Markdown tích hợp",
+        "html-to-markdownDesc": "Bộ chuyển đổi dựa trên DOM trong tiến trình với khả năng phát hiện phần tử ẩn."
+      }
+    },
     "mediaChain": {
       "providerChainSuffix": "— Chuỗi provider",
       "description": "Cấu hình và sắp xếp các provider dự phòng. Kéo để sắp xếp lại — provider đầu tiên được thử trước.",

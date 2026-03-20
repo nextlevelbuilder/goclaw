@@ -1,31 +1,78 @@
+import { memo, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Circle } from "lucide-react";
+import { Bot } from "lucide-react";
 import { MessageBubble } from "@/components/chat/message-bubble";
-import { StreamingText } from "@/components/chat/streaming-text";
+import { ActiveRunZone } from "@/components/chat/active-run-zone";
+import { SystemNotification } from "@/components/chat/system-notification";
+import { TeamActivityPanel } from "@/components/chat/team-activity-panel";
 import { ToolCallCard } from "@/components/chat/tool-call-card";
-import { ThinkingIndicator } from "@/components/chat/thinking-indicator";
 import { ThinkingBlock } from "@/components/chat/thinking-block";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
-import type { ChatMessage, ToolStreamEntry } from "@/types/chat";
+import type { ChatMessage, ToolStreamEntry, RunActivity, ActiveTeamTask } from "@/types/chat";
 
 interface ChatThreadProps {
   messages: ChatMessage[];
   streamText: string | null;
   thinkingText: string | null;
   toolStream: ToolStreamEntry[];
+  blockReplies: ChatMessage[];
+  activity: RunActivity | null;
+  teamTasks: ActiveTeamTask[];
   isRunning: boolean;
   loading?: boolean;
   scrollTrigger?: number;
 }
 
-export function ChatThread({
-  messages,
-  streamText,
-  thinkingText,
-  toolStream,
-  isRunning,
-  loading,
-  scrollTrigger = 0,
+/** Check if a message is tool-only (no user-visible text content) */
+function isToolOnlyMsg(msg: ChatMessage): boolean {
+  if (msg.role !== "assistant") return false;
+  const hasContent = !!msg.content?.trim();
+  const hasTools = (msg.toolDetails && msg.toolDetails.length > 0) || (msg.tool_calls && msg.tool_calls.length > 0);
+  return !hasContent && !!hasTools;
+}
+
+type DisplayItem =
+  | { kind: "message"; msg: ChatMessage; idx: number }
+  | { kind: "notification"; msg: ChatMessage; idx: number }
+  | { kind: "merged-tools"; msgs: ChatMessage[]; idx: number };
+
+/** Merge consecutive tool-only assistant messages into single groups */
+function buildDisplayItems(messages: ChatMessage[]): DisplayItem[] {
+  const filtered = messages.filter(
+    (msg) => !(msg.role === "user" && typeof msg.content === "string" && msg.content.startsWith("[System]")),
+  );
+
+  const items: DisplayItem[] = [];
+  let toolGroup: ChatMessage[] = [];
+  let groupStartIdx = 0;
+
+  const flushToolGroup = () => {
+    if (toolGroup.length > 0) {
+      items.push({ kind: "merged-tools", msgs: toolGroup, idx: groupStartIdx });
+      toolGroup = [];
+    }
+  };
+
+  filtered.forEach((msg, i) => {
+    if (msg.isNotification) {
+      flushToolGroup();
+      items.push({ kind: "notification", msg, idx: i });
+    } else if (isToolOnlyMsg(msg)) {
+      if (toolGroup.length === 0) groupStartIdx = i;
+      toolGroup.push(msg);
+    } else {
+      flushToolGroup();
+      items.push({ kind: "message", msg, idx: i });
+    }
+  });
+  flushToolGroup();
+
+  return items;
+}
+
+export const ChatThread = memo(function ChatThread({
+  messages, streamText, thinkingText, toolStream, blockReplies,
+  activity, teamTasks, isRunning, loading, scrollTrigger = 0,
 }: ChatThreadProps) {
   const { t } = useTranslation("chat");
   const { ref, onScroll } = useAutoScroll<HTMLDivElement>(
@@ -34,16 +81,16 @@ export function ChatThread({
     scrollTrigger,
   );
 
-  // Show spinner while loading history for a different session
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-      </div>
-    );
-  }
+  const displayItems = useMemo(() => buildDisplayItems(messages), [messages]);
 
   if (messages.length === 0 && !isRunning) {
+    if (loading) {
+      return (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        </div>
+      );
+    }
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
         <p className="text-lg font-medium">{t("empty.title")}</p>
@@ -57,51 +104,58 @@ export function ChatThread({
       ref={ref}
       onScroll={onScroll}
       className="flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+      style={{
+        backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
+        backgroundSize: "24px 24px",
+      }}
     >
-      <div className="mx-auto max-w-3xl space-y-4">
-        {messages
-          .filter((msg) => !(msg.role === "user" && typeof msg.content === "string" && msg.content.startsWith("[System]")))
-          .map((msg, i) => (
-            <MessageBubble key={`${msg.role}-${i}`} message={msg} />
-          ))}
+      <div className="mx-auto max-w-3xl space-y-3">
+        {displayItems.map((item) => {
+          switch (item.kind) {
+            case "notification":
+              return <SystemNotification key={`notif-${item.idx}`} message={item.msg} />;
+            case "message":
+              return <MessageBubble key={`msg-${item.idx}`} message={item.msg} />;
+            case "merged-tools":
+              return <MergedToolGroup key={`tools-${item.idx}`} msgs={item.msgs} />;
+          }
+        })}
 
-        {/* Tool stream during active run */}
-        {toolStream.length > 0 && (
-          <div className="space-y-1">
-            {toolStream.map((entry) => (
-              <ToolCallCard key={entry.toolCallId} entry={entry} />
-            ))}
+        {teamTasks.length > 0 && <TeamActivityPanel tasks={teamTasks} />}
+
+        <ActiveRunZone
+          isRunning={isRunning}
+          activity={activity}
+          thinkingText={thinkingText}
+          streamText={streamText}
+          toolStream={toolStream}
+          blockReplies={blockReplies}
+        />
+      </div>
+    </div>
+  );
+});
+
+/** Renders multiple consecutive tool-only messages as a single compact card */
+function MergedToolGroup({ msgs }: { msgs: ChatMessage[] }) {
+  // Collect all tool details from all messages
+  const allTools = msgs.flatMap((msg) => msg.toolDetails ?? []);
+  const allThinking = msgs.map((m) => m.thinking).filter(Boolean);
+
+  return (
+    <div className="flex gap-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background">
+        <Bot className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0 rounded-md border bg-muted/30 divide-y divide-border">
+        {allThinking.length > 0 && (
+          <div className="px-2 py-1.5">
+            <ThinkingBlock text={allThinking.join("\n\n")} />
           </div>
         )}
-
-        {/* Thinking block (extended thinking / reasoning) */}
-        {isRunning && thinkingText && (
-          <ThinkingBlock text={thinkingText} isStreaming={streamText === null} />
-        )}
-
-        {/* Streaming text */}
-        {isRunning && streamText !== null && (
-          <div className="flex gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background">
-              <Circle className="h-4 w-4" />
-            </div>
-            <div className="max-w-[80%] rounded-lg bg-muted px-4 py-2">
-              <StreamingText text={streamText} />
-            </div>
-          </div>
-        )}
-
-        {/* Thinking indicator when running but no stream yet */}
-        {isRunning && streamText === null && !thinkingText && toolStream.length === 0 && (
-          <div className="flex gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border bg-background">
-              <Circle className="h-4 w-4" />
-            </div>
-            <div className="rounded-lg bg-muted px-4 py-2">
-              <ThinkingIndicator />
-            </div>
-          </div>
-        )}
+        {allTools.map((entry) => (
+          <ToolCallCard key={entry.toolCallId} entry={entry} compact />
+        ))}
       </div>
     </div>
   );

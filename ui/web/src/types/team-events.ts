@@ -14,6 +14,9 @@ export interface TeamTaskEventPayload {
   channel: string;
   chat_id: string;
   timestamp: string;
+  task_number?: number;
+  progress_percent?: number;
+  progress_step?: string;
 }
 
 // --- Team message events ---

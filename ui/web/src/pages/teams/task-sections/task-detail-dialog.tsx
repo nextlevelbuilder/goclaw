@@ -66,10 +66,9 @@ export function TaskDetailDialog({
     setDeleting(true);
     try {
       await deleteTask(teamId, task.id);
-      toast.success(t("toast.taskDeleted"));
       onClose();
     } catch {
-      toast.error(t("toast.failedDeleteTask"));
+      // toast handled by hook
     } finally {
       setDeleting(false);
       setConfirmDelete(false);

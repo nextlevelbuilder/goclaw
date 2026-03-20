@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -73,9 +74,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if l.subagentsCfg != nil {
 		ctx = tools.WithSubagentConfig(ctx, l.subagentsCfg)
 	}
-	// Pass the agent's model so subagents inherit it instead of the system default.
+	// Pass the agent's model and provider so subagents inherit the correct combo.
 	if l.model != "" {
 		ctx = tools.WithParentModel(ctx, l.model)
+	}
+	if l.provider != nil {
+		ctx = tools.WithParentProvider(ctx, l.provider.Name())
 	}
 	if l.memoryCfg != nil {
 		ctx = tools.WithMemoryConfig(ctx, l.memoryCfg)
@@ -161,8 +165,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Auto-resolve team workspace for agents not dispatched via team task.
 	// Lead agents default to team workspace (primary job is team coordination).
 	// Non-lead members keep own workspace; team workspace is accessible via absolute path.
+	// resolvedTeamSettings caches team settings from workspace resolution
+	// to avoid re-querying when checking slow_tool notification config.
+	var resolvedTeamSettings json.RawMessage
 	if req.TeamWorkspace == "" && l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
+			resolvedTeamSettings = team.Settings
 			// Shared workspace: scope by teamID only. Isolated (default): scope by chatID too.
 			wsChat := req.ChatID
 			if wsChat == "" {
@@ -220,7 +228,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Security: truncate oversized user messages gracefully (feed truncation notice into LLM)
 	maxChars := l.maxMessageChars
 	if maxChars <= 0 {
-		maxChars = 32_000 // default ~8-10K tokens
+		maxChars = config.DefaultMaxMessageChars
 	}
 	if len(req.Message) > maxChars {
 		originalLen := len(req.Message)
@@ -239,6 +247,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if l.sessions.GetContextWindow(req.SessionKey) <= 0 {
 		l.sessions.SetContextWindow(req.SessionKey, l.contextWindow)
 	}
+
+	// 0b. Load adaptive tool timing from session metadata.
+	toolTiming := ParseToolTiming(l.sessions.GetSessionMetadata(req.SessionKey))
+
+	// Resolve slow_tool notification config from already-loaded team settings (no extra DB query).
+	slowToolEnabled := tools.ParseTeamNotifyConfig(resolvedTeamSettings).SlowTool
 
 	// 1. Build messages from session history
 	history := l.sessions.GetHistory(req.SessionKey)
@@ -593,7 +607,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 		// Bootstrap mode: restrict API tool definitions to write_file only (open agents).
 		// Predefined agents keep all tools — BOOTSTRAP.md guides behavior.
-		if hadBootstrap && l.agentType != "predefined" {
+		if hadBootstrap && l.agentType != store.AgentTypePredefined {
 			var bootstrapDefs []providers.ToolDefinition
 			for _, td := range toolDefs {
 				if bootstrapToolAllowlist[td.Function.Name] {
@@ -615,13 +629,35 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			toolDefs = filtered
 		}
 
+		// Hide channel-specific tools when channel type doesn't match.
+		if req.ChannelType != "" {
+			filtered := toolDefs[:0:0]
+			for _, td := range toolDefs {
+				if tool, ok := l.tools.Get(td.Function.Name); ok {
+					if ca, ok := tool.(tools.ChannelAware); ok {
+						if !slices.Contains(ca.RequiredChannelTypes(), req.ChannelType) {
+							continue
+						}
+					}
+				}
+				filtered = append(filtered, td)
+			}
+			toolDefs = filtered
+		}
+
+		// Use per-request model override if set (e.g. heartbeat uses cheaper model).
+		model := l.model
+		if req.ModelOverride != "" {
+			model = req.ModelOverride
+		}
+
 		chatReq := providers.ChatRequest{
 			Messages: messages,
 			Tools:    toolDefs,
-			Model:    l.model,
+			Model:    model,
 			Options: map[string]any{
 				providers.OptMaxTokens:   l.effectiveMaxTokens(),
-				providers.OptTemperature: 0.7,
+				providers.OptTemperature: config.DefaultTemperature,
 				providers.OptSessionKey:  req.SessionKey,
 				providers.OptAgentID:     l.agentUUID.String(),
 				providers.OptUserID:      req.UserID,
@@ -707,7 +743,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		// but applied to in-memory messages during the run. Prevents context overflow for
 		// long-running agents (e.g. delegated research tasks that accumulate many tool results).
 		if !midLoopCompacted && l.contextWindow > 0 {
-			historyShare := 0.75
+			historyShare := config.DefaultHistoryShare
 			if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 				historyShare = l.compactionCfg.MaxHistoryShare
 			}
@@ -772,6 +808,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			break
 		}
 
+		// Ensure globally unique tool call IDs (OpenAI-compatible APIs return 400 on duplicates).
+		// Skip if raw content is present (Anthropic thinking passback) to avoid desync.
+		if resp.RawAssistantContent == nil {
+			resp.ToolCalls = uniquifyToolCallIDs(resp.ToolCalls, req.RunID, iteration)
+		}
+
 		// Build assistant message with tool calls
 		assistantMsg := providers.Message{
 			Role:                "assistant",
@@ -803,7 +845,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		// Track team_tasks create for orphan detection (argument-based, pre-execution).
 		// Spawn counting is done post-execution so failed spawns don't get counted.
 		for _, tc := range resp.ToolCalls {
-			if tc.Name == "team_tasks" {
+			if l.resolveToolCallName(tc.Name) == "team_tasks" {
 				if action, _ := tc.Arguments["action"].(string); action == "create" {
 					teamTaskCreates++
 				}
@@ -856,36 +898,44 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			argsJSON, _ := json.Marshal(tc.Arguments)
 			slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
 
-			argsHash := loopDetector.record(tc.Name, tc.Arguments)
+			registryName := l.resolveToolCallName(tc.Name)
+			argsHash := loopDetector.record(registryName, tc.Arguments)
 
 			toolSpanStart := time.Now().UTC()
 			toolSpanID := l.emitToolSpanStart(ctx, toolSpanStart, tc.Name, tc.ID, string(argsJSON))
+
+			stopSlowTimer := toolTiming.StartSlowTimer(tc.Name, l.id, req.RunID, slowToolEnabled, emitRun)
 			var result *tools.Result
-			if allowedTools != nil && !allowedTools[tc.Name] {
+			if allowedTools != nil && !allowedTools[registryName] {
 				// Attempt lazy activation: deferred MCP tools can be activated on first call
 				// so the LLM can call them by name directly without mcp_tool_search.
-				if l.tools.TryActivateDeferred(tc.Name) {
+				if l.tools.TryActivateDeferred(registryName) {
 					// Verify tool isn't explicitly denied by policy before allowing.
-					if l.toolPolicy != nil && l.toolPolicy.IsDenied(tc.Name, l.agentToolPolicy) {
-						slog.Warn("security.tool_policy_denied_lazy", "agent", l.id, "tool", tc.Name)
+					if l.toolPolicy != nil && l.toolPolicy.IsDenied(registryName, l.agentToolPolicy) {
+						slog.Warn("security.tool_policy_denied_lazy", "agent", l.id, "tool", tc.Name, "resolved", registryName)
 						result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
 					} else {
-						allowedTools[tc.Name] = true
-						slog.Info("mcp.tool.lazy_activated", "agent", l.id, "tool", tc.Name)
+						allowedTools[registryName] = true
+						slog.Info("mcp.tool.lazy_activated", "agent", l.id, "tool", tc.Name, "resolved", registryName)
 					}
 				} else {
-					slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name)
+					slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name, "resolved", registryName)
 					result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
 				}
 			}
 			if result == nil {
-				result = l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+				result = l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 			}
+			stopSlowTimer()
 
 			l.emitToolSpanEnd(ctx, toolSpanID, toolSpanStart, result)
 
+			// Record tool execution time for adaptive thresholds.
+			toolTiming.Record(tc.Name, time.Since(toolSpanStart).Milliseconds())
+
 			// Record result for loop detection.
 			loopDetector.recordResult(argsHash, result.ForLLM)
+			loopDetector.recordMutation(registryName)
 
 			if result.Async {
 				asyncToolCalls = append(asyncToolCalls, tc.Name)
@@ -900,12 +950,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			}
 
 			// Count successful spawn calls for orphan detection (post-execution).
-			if tc.Name == "spawn" && !result.IsError {
+			if registryName == "spawn" && !result.IsError {
 				if tid, _ := tc.Arguments["team_task_id"].(string); tid != "" {
 					teamTaskSpawns++
 				}
 			}
-			if hadBootstrap && bootstrapToolAllowlist[tc.Name] {
+			if hadBootstrap && bootstrapToolAllowlist[registryName] {
 				bootstrapWriteDetected = true
 			}
 
@@ -949,31 +999,59 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				Role:       "tool",
 				Content:    result.ForLLM,
 				ToolCallID: tc.ID,
+				IsError:    result.IsError,
 			}
 			messages = append(messages, toolMsg)
 			pendingMsgs = append(pendingMsgs, toolMsg)
 
 			// Check for tool call loop after recording result.
-			if level, msg := loopDetector.detect(tc.Name, argsHash); level != "" {
+			if level, msg := loopDetector.detect(registryName, argsHash); level != "" {
 				if level == "critical" {
-					slog.Warn("tool loop critical", "agent", l.id, "tool", tc.Name, "message", msg)
-					finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + tc.Name + " without making progress. Please try rephrasing your request."
+					slog.Warn("tool loop critical", "agent", l.id, "tool", registryName, "message", msg)
+					finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + registryName + " without making progress. Please try rephrasing your request."
 					break
 				}
 				// Warning: inject message so model knows to change strategy.
-				slog.Warn("tool loop warning", "agent", l.id, "tool", tc.Name, "message", msg)
+				slog.Warn("tool loop warning", "agent", l.id, "tool", registryName, "message", msg)
 				messages = append(messages, providers.Message{Role: "user", Content: msg})
+			}
+
+			// Check for read-only streak (no write/edit actions).
+			if level, msg := loopDetector.detectReadOnlyStreak(); level != "" {
+				if level == "critical" {
+					slog.Warn("tool loop critical: read-only streak",
+						"streak", loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
+					finalContent = msg
+					break
+				}
+				slog.Warn("tool loop warning: read-only streak",
+					"streak", loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
+				messages = append(messages, providers.Message{Role: "user", Content: msg})
+			}
+
+			// Check for same tool returning identical results with different args.
+			if rh := hashResult(result.ForLLM); rh != "" {
+				if level, msg := loopDetector.detectSameResult(registryName, rh); level != "" {
+					if level == "critical" {
+						slog.Warn("tool loop critical: same result",
+							"tool", registryName, "agent", l.id, "run", req.RunID)
+						finalContent = msg
+						break
+					}
+					messages = append(messages, providers.Message{Role: "user", Content: msg})
+				}
 			}
 		} else {
 			// Multiple tools: parallel execution via goroutines.
 			// Tool instances are immutable (context-based) so concurrent access is safe.
 			// Results are collected then processed sequentially for deterministic ordering.
 			type indexedResult struct {
-				idx       int
-				tc        providers.ToolCall
-				result    *tools.Result
-				argsJSON  string
-				spanStart time.Time
+				idx          int
+				tc           providers.ToolCall
+				registryName string
+				result       *tools.Result
+				argsJSON     string
+				spanStart    time.Time
 			}
 
 			// 1. Emit all tool.call events upfront (client sees all calls starting)
@@ -997,32 +1075,36 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					argsJSON, _ := json.Marshal(tc.Arguments)
 					slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON), "parallel", true)
 					spanStart := time.Now().UTC()
+					registryName := l.resolveToolCallName(tc.Name)
 					// Emit running span inside goroutine — goroutine-safe (channel send only).
 					// End is also emitted here to prevent orphans on ctx cancellation.
 					spanID := l.emitToolSpanStart(ctx, spanStart, tc.Name, tc.ID, string(argsJSON))
+
+					stopSlowTimer := toolTiming.StartSlowTimer(tc.Name, l.id, req.RunID, slowToolEnabled, emitRun)
 					var result *tools.Result
-					if allowedTools != nil && !allowedTools[tc.Name] {
+					if allowedTools != nil && !allowedTools[registryName] {
 						// Attempt lazy activation for deferred MCP tools.
 						// Note: don't write back to allowedTools — concurrent goroutines share
 						// the map and writes would race. TryActivateDeferred is idempotent.
-						if l.tools.TryActivateDeferred(tc.Name) {
+						if l.tools.TryActivateDeferred(registryName) {
 							// Verify tool isn't explicitly denied by policy before allowing.
-							if l.toolPolicy != nil && l.toolPolicy.IsDenied(tc.Name, l.agentToolPolicy) {
-								slog.Warn("security.tool_policy_denied_lazy", "agent", l.id, "tool", tc.Name)
+							if l.toolPolicy != nil && l.toolPolicy.IsDenied(registryName, l.agentToolPolicy) {
+								slog.Warn("security.tool_policy_denied_lazy", "agent", l.id, "tool", tc.Name, "resolved", registryName)
 								result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
 							} else {
-								slog.Info("mcp.tool.lazy_activated", "agent", l.id, "tool", tc.Name)
+								slog.Info("mcp.tool.lazy_activated", "agent", l.id, "tool", tc.Name, "resolved", registryName)
 							}
 						} else {
-							slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name)
+							slog.Warn("security.tool_policy_blocked", "agent", l.id, "tool", tc.Name, "resolved", registryName)
 							result = tools.ErrorResult("tool not allowed by policy: " + tc.Name)
 						}
 					}
 					if result == nil {
-						result = l.tools.ExecuteWithContext(ctx, tc.Name, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+						result = l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 					}
+					stopSlowTimer()
 					l.emitToolSpanEnd(ctx, spanID, spanStart, result)
-					resultCh <- indexedResult{idx: idx, tc: tc, result: result, argsJSON: string(argsJSON), spanStart: spanStart}
+					resultCh <- indexedResult{idx: idx, tc: tc, registryName: registryName, result: result, argsJSON: string(argsJSON), spanStart: spanStart}
 				}(i, tc)
 			}
 
@@ -1044,10 +1126,13 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			// Note: tool span start/end already emitted inside goroutines above.
 			var loopStuck bool
 			for _, r := range collected {
+				// Record tool execution time for adaptive thresholds.
+				toolTiming.Record(r.tc.Name, time.Since(r.spanStart).Milliseconds())
 
 				// Record for loop detection.
-				argsHash := loopDetector.record(r.tc.Name, r.tc.Arguments)
+				argsHash := loopDetector.record(r.registryName, r.tc.Arguments)
 				loopDetector.recordResult(argsHash, r.result.ForLLM)
+				loopDetector.recordMutation(r.registryName)
 
 				if r.result.Async {
 					asyncToolCalls = append(asyncToolCalls, r.tc.Name)
@@ -1062,12 +1147,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 
 				// Count successful spawn calls for orphan detection (post-execution).
-				if r.tc.Name == "spawn" && !r.result.IsError {
+				if r.registryName == "spawn" && !r.result.IsError {
 					if tid, _ := r.tc.Arguments["team_task_id"].(string); tid != "" {
 						teamTaskSpawns++
 					}
 				}
-				if hadBootstrap && bootstrapToolAllowlist[r.tc.Name] {
+				if hadBootstrap && bootstrapToolAllowlist[r.registryName] {
 					bootstrapWriteDetected = true
 				}
 
@@ -1111,22 +1196,54 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 					Role:       "tool",
 					Content:    r.result.ForLLM,
 					ToolCallID: r.tc.ID,
+					IsError:    r.result.IsError,
 				}
 				messages = append(messages, toolMsg)
 				pendingMsgs = append(pendingMsgs, toolMsg)
 
 				// Check for tool call loop.
-				if level, msg := loopDetector.detect(r.tc.Name, argsHash); level != "" {
+				if level, msg := loopDetector.detect(r.registryName, argsHash); level != "" {
 					if level == "critical" {
-						slog.Warn("tool loop critical", "agent", l.id, "tool", r.tc.Name, "message", msg)
-						finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + r.tc.Name + " without making progress. Please try rephrasing your request."
+						slog.Warn("tool loop critical", "agent", l.id, "tool", r.registryName, "message", msg)
+						finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + r.registryName + " without making progress. Please try rephrasing your request."
 						loopStuck = true
 						break
 					}
-					slog.Warn("tool loop warning", "agent", l.id, "tool", r.tc.Name, "message", msg)
+					slog.Warn("tool loop warning", "agent", l.id, "tool", r.registryName, "message", msg)
 					messages = append(messages, providers.Message{Role: "user", Content: msg})
 				}
+
+				// Check for same tool returning identical results with different args.
+				if rh := hashResult(r.result.ForLLM); rh != "" {
+					if level, msg := loopDetector.detectSameResult(r.registryName, rh); level != "" {
+						if level == "critical" {
+							slog.Warn("tool loop critical: same result",
+								"tool", r.registryName, "agent", l.id, "run", req.RunID)
+							finalContent = msg
+							loopStuck = true
+							break
+						}
+						messages = append(messages, providers.Message{Role: "user", Content: msg})
+					}
+				}
 			}
+
+			// Check read-only streak after processing all parallel results.
+			if !loopStuck {
+				if level, msg := loopDetector.detectReadOnlyStreak(); level != "" {
+					if level == "critical" {
+						slog.Warn("tool loop critical: read-only streak",
+							"streak", loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
+						finalContent = msg
+						loopStuck = true
+					} else {
+						slog.Warn("tool loop warning: read-only streak",
+							"streak", loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
+						messages = append(messages, providers.Message{Role: "user", Content: msg})
+					}
+				}
+			}
+
 			if loopStuck {
 				break
 			}
@@ -1213,6 +1330,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		l.sessions.AddMessage(req.SessionKey, msg)
 	}
 
+	// Persist adaptive tool timing to session metadata.
+	if serialized := toolTiming.Serialize(); serialized != "" {
+		l.sessions.SetSessionMetadata(req.SessionKey, map[string]string{"tool_timing": serialized})
+	}
+
 	// Write session metadata (matching TS session entry updates)
 	l.sessions.UpdateMetadata(req.SessionKey, l.model, l.provider.Name(), req.Channel)
 	l.sessions.AccumulateTokens(req.SessionKey, int64(totalUsage.PromptTokens), int64(totalUsage.CompletionTokens))
@@ -1282,7 +1404,16 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}, nil
 }
 
-// truncateToolArgs returns a copy of arguments with string values truncated to maxLen.
+// resolveToolCallName strips the configured tool call prefix from a name
+// returned by the model, returning the original registry name.
+// Example: prefix "proxy_" + model calls "proxy_exec" → returns "exec".
+func (l *Loop) resolveToolCallName(name string) string {
+	if l.agentToolPolicy != nil && l.agentToolPolicy.ToolCallPrefix != "" {
+		return tools.StripToolPrefix(l.agentToolPolicy.ToolCallPrefix, name)
+	}
+	return name
+}
+
 func truncateToolArgs(args map[string]any, maxLen int) map[string]any {
 	out := make(map[string]any, len(args))
 	for k, v := range args {

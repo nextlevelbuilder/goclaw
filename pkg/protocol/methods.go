@@ -95,6 +95,13 @@ const (
 	MethodHeartbeatTargets      = "heartbeat.targets"
 )
 
+// Config permissions
+const (
+	MethodConfigPermissionsList   = "config.permissions.list"
+	MethodConfigPermissionsGrant  = "config.permissions.grant"
+	MethodConfigPermissionsRevoke = "config.permissions.revoke"
+)
+
 // Channel instances management
 const (
 	MethodChannelInstancesList   = "channels.instances.list"

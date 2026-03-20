@@ -231,7 +231,8 @@ func jsonToStringMap(data json.RawMessage) map[string]string {
 // DB providers are registered after config providers, so they take precedence (overwrite).
 // gatewayAddr is used to inject GoClaw MCP bridge for Claude CLI providers.
 // mcpStore is optional; when provided, per-agent MCP servers are injected into CLI config.
-func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, secretStore store.ConfigSecretsStore, gatewayAddr, gatewayToken string, mcpStore store.MCPServerStore) {
+// cfg provides fallback api_base values from config/env when DB providers have none set.
+func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, secretStore store.ConfigSecretsStore, gatewayAddr, gatewayToken string, mcpStore store.MCPServerStore, cfg *config.Config) {
 	ctx := context.Background()
 	dbProviders, err := provStore.ListProviders(ctx)
 	if err != nil {
@@ -286,6 +287,13 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 
 		if p.APIKey == "" {
 			continue
+		}
+		// Fall back to config/env api_base when DB provider has none set.
+		if p.APIBase == "" && cfg != nil {
+			if base := cfg.Providers.APIBaseForType(p.ProviderType); base != "" {
+				p.APIBase = base
+				slog.Info("provider api_base inherited from config", "name", p.Name, "api_base", base)
+			}
 		}
 		switch p.ProviderType {
 		case store.ProviderChatGPTOAuth:

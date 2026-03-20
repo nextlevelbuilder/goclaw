@@ -19,10 +19,11 @@ import (
 
 // HeartbeatMethods handles heartbeat.get/set/toggle/test/logs/checklist RPC methods.
 type HeartbeatMethods struct {
-	hbStore    store.HeartbeatStore
-	agentStore store.AgentStore
-	eventBus   bus.EventPublisher
-	wakeFn     func(uuid.UUID) // triggers immediate heartbeat run
+	hbStore       store.HeartbeatStore
+	agentStore    store.AgentStore
+	providerStore store.ProviderStore
+	eventBus      bus.EventPublisher
+	wakeFn        func(uuid.UUID) // triggers immediate heartbeat run
 }
 
 func NewHeartbeatMethods(hb store.HeartbeatStore, eventBus bus.EventPublisher) *HeartbeatMethods {
@@ -32,6 +33,11 @@ func NewHeartbeatMethods(hb store.HeartbeatStore, eventBus bus.EventPublisher) *
 // SetAgentStore sets the agent store for HEARTBEAT.md read/write via RPC.
 func (m *HeartbeatMethods) SetAgentStore(as store.AgentStore) {
 	m.agentStore = as
+}
+
+// SetProviderStore sets the provider store for resolving provider names to UUIDs.
+func (m *HeartbeatMethods) SetProviderStore(ps store.ProviderStore) {
+	m.providerStore = ps
 }
 
 // SetWakeFn sets the function called when "heartbeat.test" triggers an immediate run.
@@ -89,6 +95,7 @@ func (m *HeartbeatMethods) handleSet(ctx context.Context, client *gateway.Client
 		Enabled         *bool   `json:"enabled"`
 		IntervalSec     *int    `json:"intervalSec"`
 		Prompt          *string `json:"prompt"`
+		ProviderName    *string `json:"providerName"`
 		Model           *string `json:"model"`
 		IsolatedSession *bool   `json:"isolatedSession"`
 		LightContext    *bool   `json:"lightContext"`
@@ -143,8 +150,24 @@ func (m *HeartbeatMethods) handleSet(ctx context.Context, client *gateway.Client
 	if params.Prompt != nil {
 		hb.Prompt = params.Prompt
 	}
+	if params.ProviderName != nil {
+		if *params.ProviderName == "" {
+			hb.ProviderID = nil // clear override
+		} else if m.providerStore != nil {
+			prov, err := m.providerStore.GetProviderByName(ctx, *params.ProviderName)
+			if err != nil {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "provider not found: "+*params.ProviderName))
+				return
+			}
+			hb.ProviderID = &prov.ID
+		}
+	}
 	if params.Model != nil {
-		hb.Model = params.Model
+		if *params.Model == "" {
+			hb.Model = nil // clear override
+		} else {
+			hb.Model = params.Model
+		}
 	}
 	if params.IsolatedSession != nil {
 		hb.IsolatedSession = *params.IsolatedSession

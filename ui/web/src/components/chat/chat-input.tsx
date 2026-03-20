@@ -14,12 +14,13 @@ interface ChatInputProps {
   onAbort: () => void;
   isRunning: boolean;
   disabled?: boolean;
+  files: AttachedFile[];
+  onFilesChange: (files: AttachedFile[]) => void;
 }
 
-export function ChatInput({ onSend, onAbort, isRunning, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, onAbort, isRunning, disabled, files, onFilesChange }: ChatInputProps) {
   const { t } = useTranslation("common");
   const [value, setValue] = useState("");
-  const [files, setFiles] = useState<AttachedFile[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,11 +28,11 @@ export function ChatInput({ onSend, onAbort, isRunning, disabled }: ChatInputPro
     if ((!value.trim() && files.length === 0) || disabled) return;
     onSend(value, files.length > 0 ? files : undefined);
     setValue("");
-    setFiles([]);
+    onFilesChange([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
-  }, [value, files, onSend, disabled]);
+  }, [value, files, onSend, onFilesChange, disabled]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -58,18 +59,18 @@ export function ChatInput({ onSend, onAbort, isRunning, disabled }: ChatInputPro
     const selected = e.target.files;
     if (!selected) return;
     const newFiles: AttachedFile[] = Array.from(selected).map((f) => ({ file: f }));
-    setFiles((prev) => [...prev, ...newFiles]);
+    onFilesChange([...files, ...newFiles]);
     // Reset input so the same file can be re-selected
     e.target.value = "";
-  }, []);
+  }, [files, onFilesChange]);
 
   const removeFile = useCallback((index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+    onFilesChange(files.filter((_, i) => i !== index));
+  }, [files, onFilesChange]);
 
   return (
     <div
-      className="border-t bg-background safe-bottom"
+      className="mx-3 mb-3 rounded-xl border bg-background/95 backdrop-blur-sm shadow-sm safe-bottom"
       style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px))` }}
     >
       {/* Attached files preview */}

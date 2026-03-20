@@ -194,6 +194,21 @@ func ParentModelFromCtx(ctx context.Context) string {
 	return v
 }
 
+// --- Parent agent provider (for subagent inheritance) ---
+
+const ctxParentProvider toolContextKey = "tool_parent_provider"
+
+// WithParentProvider sets the parent agent's provider name in context so subagents inherit it.
+func WithParentProvider(ctx context.Context, providerName string) context.Context {
+	return context.WithValue(ctx, ctxParentProvider, providerName)
+}
+
+// ParentProviderFromCtx returns the parent agent's provider name from context.
+func ParentProviderFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxParentProvider).(string)
+	return v
+}
+
 // --- Per-agent subagent config override ---
 
 const ctxSubagentCfg toolContextKey = "tool_subagent_config"

@@ -132,6 +132,21 @@
       "save": "Save",
       "saving": "Saving..."
     },
+    "extractorChain": {
+      "title": "Web Fetch — Extractor Chain",
+      "description": "Ordered list of content extractors. Each URL is tried top-to-bottom until one returns quality content.",
+      "timeout": "Timeout",
+      "baseUrl": "Base URL",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "extractors": {
+        "defuddle": "Defuddle (Cloudflare Worker)",
+        "defuddleDesc": "Extracts clean markdown via fetch.goclaw.sh using the Defuddle library.",
+        "html-to-markdown": "Built-in HTML→Markdown",
+        "html-to-markdownDesc": "In-process DOM-based converter with hidden element detection."
+      }
+    },
     "mediaChain": {
       "providerChainSuffix": "— Provider Chain",
       "description": "Configure and order provider fallbacks. Drag to reorder — the first enabled provider is tried first.",

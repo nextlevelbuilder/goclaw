@@ -21,11 +21,13 @@ export function buildSessionKey(agentId: string, scope: string): string {
 
 /**
  * Check if a session belongs to the current web user.
- * Web sessions have scope format: "ws-{userId}-{timestamp}".
+ * New format: "ws:direct:{convId}" — API already filters by userId, so all WS sessions are own.
+ * Legacy format: "ws-{userId}-{timestamp}".
  * Sessions from other channels (telegram, discord, etc.) are foreign.
  */
 export function isOwnSession(sessionKey: string, userId: string): boolean {
   if (!userId) return false;
   const { scope } = parseSessionKey(sessionKey);
+  if (scope.startsWith("ws:direct:")) return true;
   return scope.startsWith(`ws-${userId}-`);
 }

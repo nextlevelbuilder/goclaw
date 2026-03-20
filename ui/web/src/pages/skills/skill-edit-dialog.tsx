@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,6 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
   const [tags, setTags] = useState<string[]>(skill.tags ?? []);
   const [tagInput, setTagInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     setName(skill.name);
@@ -60,12 +59,11 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
   const handleSave = async () => {
     if (!skill.id) return;
     setLoading(true);
-    setError("");
     try {
       await onSave(skill.id, { name, description, visibility, tags });
       onClose();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("edit.save"));
+    } catch {
+      // toast shown by hook — keep dialog open
     } finally {
       setLoading(false);
     }
@@ -143,13 +141,12 @@ export function SkillEditDialog({ skill, onClose, onSave }: SkillEditDialogProps
           </div>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={loading}>
             {t("edit.cancel")}
           </Button>
           <Button onClick={handleSave} disabled={loading || !name.trim()}>
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             {loading ? t("edit.saving") : t("edit.save")}
           </Button>
         </DialogFooter>
