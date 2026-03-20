@@ -73,9 +73,9 @@ func (s *PGSkillStore) DeleteSkill(id uuid.UUID) error {
 		return fmt.Errorf("delete skill user grants: %w", err)
 	}
 
-	// Soft-delete the skill itself
-	if _, err := tx.Exec("UPDATE skills SET status = 'archived' WHERE id = $1", id); err != nil {
-		return fmt.Errorf("archive skill: %w", err)
+	// Soft-delete the skill (use 'deleted' status, distinct from 'archived' which means missing deps)
+	if _, err := tx.Exec("UPDATE skills SET status = 'deleted' WHERE id = $1", id); err != nil {
+		return fmt.Errorf("delete skill: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
