@@ -12,11 +12,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore) (*methods.PairingMethods, *methods.HeartbeatMethods) {
+func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
 	router := server.Router()
 
 	// Phase 1: Core methods
-	methods.NewChatMethods(agents, sessStore, server.RateLimiter(), msgBus).Register(router)
+	chatMethods := methods.NewChatMethods(agents, sessStore, server.RateLimiter(), msgBus)
+	chatMethods.Register(router)
 	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
 	methods.NewSessionsMethods(sessStore, msgBus).Register(router)
 	methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus).Register(router)
@@ -61,5 +62,5 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 		"phase2", []string{"skills", "cron", "heartbeat", "pairing", "usage", "exec_approval", "send"},
 	)
 
-	return pairingMethods, heartbeatMethods
+	return pairingMethods, heartbeatMethods, chatMethods
 }

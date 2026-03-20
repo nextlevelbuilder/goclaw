@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -381,6 +382,27 @@ func WithPendingTeamDispatch(ctx context.Context, ptd *PendingTeamDispatch) cont
 func PendingTeamDispatchFromCtx(ctx context.Context) *PendingTeamDispatch {
 	v, _ := ctx.Value(ctxPendingDispatch).(*PendingTeamDispatch)
 	return v
+}
+
+// InjectTeamDispatch creates a fresh PendingTeamDispatch context for a direct
+// loop.Run() call (WS chat.send, HTTP API, etc.) and returns a drain function
+// that must be called after the run completes. The drain function dispatches
+// any pending team tasks via the provided PostTurnProcessor. It is safe to
+// call even if no tasks were created. Pass nil postTurn if not available.
+func InjectTeamDispatch(ctx context.Context, postTurn PostTurnProcessor) (context.Context, func()) {
+	ptd := NewPendingTeamDispatch()
+	ctx = WithPendingTeamDispatch(ctx, ptd)
+	drain := func() {
+		ptd.ReleaseTeamLock()
+		if postTurn != nil {
+			for teamID, taskIDs := range ptd.Drain() {
+				if err := postTurn.ProcessPendingTasks(context.Background(), teamID, taskIDs); err != nil {
+					slog.Warn("post_turn: dispatch failed", "team_id", teamID, "error", err)
+				}
+			}
+		}
+	}
+	return ctx, drain
 }
 
 // --- Run media file paths (for team workspace auto-collect) ---

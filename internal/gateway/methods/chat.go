@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -25,10 +26,16 @@ type ChatMethods struct {
 	sessions    store.SessionStore
 	rateLimiter *gateway.RateLimiter
 	eventBus    bus.EventPublisher
+	postTurn    tools.PostTurnProcessor
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
 	return &ChatMethods{agents: agents, sessions: sess, rateLimiter: rl, eventBus: eventBus}
+}
+
+// SetPostTurnProcessor sets the post-turn processor for team task dispatch.
+func (m *ChatMethods) SetPostTurnProcessor(pt tools.PostTurnProcessor) {
+	m.postTurn = pt
 }
 
 // Register adds chat methods to the router.
@@ -150,6 +157,10 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		// Fallback: injection failed (channel full), proceed with new run
 	}
 
+	// Inject team dispatch tracker: gates team_tasks create (must search/list first)
+	// and defers task dispatch to post-turn.
+	runCtxBase, drainTeamDispatch := tools.InjectTeamDispatch(runCtxBase, m.postTurn)
+
 	// Create cancellable context for abort support (matching TS AbortController pattern).
 	runCtx, cancel := context.WithCancel(runCtxBase)
 	injectCh := m.agents.RegisterRun(runID, sessionKey, params.AgentID, cancel)
@@ -158,6 +169,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	go func() {
 		defer m.agents.UnregisterRun(runID)
 		defer cancel()
+		defer drainTeamDispatch() // dispatch pending team tasks + release lock (even on panic)
 
 		// Parse media items (supports both legacy string paths and new {path,filename} objects).
 		items := params.parseMedia()
