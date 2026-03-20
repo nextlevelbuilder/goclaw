@@ -58,7 +58,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Search query for action=search",
+				"description": "Search query for action=search (supports keyword AND semantic matching). Use search before create to check for duplicates.",
 			},
 			"priority": map[string]any{
 				"type":        "number",

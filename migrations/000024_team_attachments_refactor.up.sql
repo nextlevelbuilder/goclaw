@@ -35,3 +35,7 @@ CREATE INDEX idx_tta_team ON team_task_attachments(team_id);
 -- 6. Denormalized count columns for dashboard performance
 ALTER TABLE team_tasks ADD COLUMN IF NOT EXISTS comment_count INT NOT NULL DEFAULT 0;
 ALTER TABLE team_tasks ADD COLUMN IF NOT EXISTS attachment_count INT NOT NULL DEFAULT 0;
+
+-- 7. Vector embedding for semantic task search (subject only)
+ALTER TABLE team_tasks ADD COLUMN IF NOT EXISTS embedding vector(1536);
+CREATE INDEX IF NOT EXISTS idx_tt_embedding ON team_tasks USING hnsw (embedding vector_cosine_ops);

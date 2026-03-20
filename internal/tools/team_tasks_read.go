@@ -12,7 +12,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-const listPageSize = 30
+const listPageSize    = 30
+const searchPageSize  = 5
 
 // blockerSummary is a compact view of a blocker task for blocked_by resolution.
 type blockerSummary struct {
@@ -328,7 +329,7 @@ func (t *TeamTasksTool) executeSearch(ctx context.Context, args map[string]any) 
 		ptd.MarkListed()
 	}
 
-	tasks, err := t.manager.teamStore.SearchTasks(ctx, team.ID, query, listPageSize, filterUserID)
+	tasks, err := t.manager.teamStore.SearchTasks(ctx, team.ID, query, searchPageSize, filterUserID)
 	if err != nil {
 		return ErrorResult("failed to search tasks: " + err.Error())
 	}

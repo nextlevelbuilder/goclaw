@@ -14,7 +14,13 @@ import (
 
 // PGTeamStore implements store.TeamStore backed by Postgres.
 type PGTeamStore struct {
-	db *sql.DB
+	db          *sql.DB
+	embProvider store.EmbeddingProvider
+}
+
+// SetEmbeddingProvider sets the embedding provider for semantic task search.
+func (s *PGTeamStore) SetEmbeddingProvider(p store.EmbeddingProvider) {
+	s.embProvider = p
 }
 
 func NewPGTeamStore(db *sql.DB) *PGTeamStore {

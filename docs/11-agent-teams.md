@@ -240,8 +240,8 @@ When creating a task via `team_tasks(action="create")`, the `assignee` field is 
 
 ### Concurrent Creation Guard
 
-Agents must list existing tasks before creating new ones. This prevents duplicate task creation in concurrent sessions. When an agent calls `create` without first checking the board:
-- Error: `"You must check existing tasks first. Call team_tasks(action='list') to review the current task board before creating new tasks — this prevents duplicates in concurrent sessions."`
+Agents must check existing tasks before creating new ones. This prevents duplicate task creation in concurrent sessions. The preferred method is `team_tasks(action="search", query="<keywords>")` which uses semantic + keyword matching and saves tokens vs listing all. Alternatively `action="list"` shows the full board. When an agent calls `create` without first checking:
+- Error: `"You must check existing tasks first. Call team_tasks(action='search', query='<keywords>') to check for similar tasks before creating — this saves tokens vs listing all."`
 
 ### Auto-Claiming Behavior
 
