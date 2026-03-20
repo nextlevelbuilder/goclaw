@@ -55,14 +55,10 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
 
   // Save state
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [llmSaveBlocked, setLlmSaveBlocked] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveError(null);
-    setSaved(false);
     try {
       const updatedOtherConfig = {
         ...otherCfg,
@@ -89,10 +85,8 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
           ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
           : {},
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("general.failedToSave"));
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -163,12 +157,9 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
       <StickySaveBar
         onSave={handleSave}
         saving={saving}
-        saved={saved}
-        error={saveError}
         disabled={llmSaveBlocked}
         label={t("general.saveChanges")}
         savingLabel={t("general.saving")}
-        savedLabel={t("general.saved")}
       />
     </div>
   );

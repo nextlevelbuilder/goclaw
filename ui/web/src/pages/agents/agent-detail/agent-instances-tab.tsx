@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
-import { Save, Check, AlertCircle, Users, FileText, Search, UserPlus } from "lucide-react";
+import { Save, Loader2, Users, FileText, Search, UserPlus } from "lucide-react";
+import { toast } from "@/stores/use-toast-store";
+import { userFriendlyError } from "@/lib/error-utils";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,14 +22,11 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
   const [content, setContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [loadingFiles, setLoadingFiles] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selected) return;
     let cancelled = false;
     setLoadingFiles(true);
-    setError(null);
     getFiles(selected).then((files) => {
       if (cancelled) return;
       const userFile = files.find((f) => f.file_name === "USER.md");
@@ -35,7 +34,7 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
       setContent(c);
       setOriginalContent(c);
     }).catch((err) => {
-      if (!cancelled) setError(err instanceof Error ? err.message : t("instances.loading"));
+      if (!cancelled) toast.error(t("instances.loading"), userFriendlyError(err));
     }).finally(() => {
       if (!cancelled) setLoadingFiles(false);
     });
@@ -44,15 +43,11 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
 
   const handleSave = async () => {
     if (!selected) return;
-    setError(null);
-    setSaved(false);
     try {
       await setFile(selected, "USER.md", content);
       setOriginalContent(content);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("instances.saving"));
+    } catch {
+      // toast shown by hook
     }
   };
 
@@ -127,20 +122,9 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
               placeholder="(empty)"
               style={{ minHeight: 300 }}
             />
-            {error && (
-              <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                {error}
-              </div>
-            )}
             <div className="flex items-center justify-end gap-2">
-              {saved && (
-                <span className="flex items-center gap-1 text-sm text-success">
-                  <Check className="h-3.5 w-3.5" /> {t("instances.saved")}
-                </span>
-              )}
               <Button onClick={handleSave} disabled={saving || !isDirty} size="sm">
-                {!saving && <Save className="h-4 w-4" />}
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {saving ? t("instances.saving") : t("instances.save")}
               </Button>
             </div>

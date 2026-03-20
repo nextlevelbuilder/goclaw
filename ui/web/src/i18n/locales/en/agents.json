@@ -506,6 +506,10 @@
     "updateFailed": "Failed to update agent",
     "deleted": "Agent deleted",
     "deleteFailed": "Failed to delete agent",
-    "unknownError": "Unknown error"
+    "unknownError": "Unknown error",
+    "skillGranted": "Skill granted",
+    "skillGrantFailed": "Failed to grant skill",
+    "skillRevoked": "Skill revoked",
+    "skillRevokeFailed": "Failed to revoke skill"
   }
 }

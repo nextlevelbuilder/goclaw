@@ -3,6 +3,9 @@ import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import type { TeamData, TeamMemberData, TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment, TeamAccessSettings, ScopeEntry } from "@/types/team";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 
 export function useTeams() {
   const ws = useWs();
@@ -32,16 +35,28 @@ export function useTeams() {
       members: string[];
       description?: string;
     }) => {
-      await ws.call(Methods.TEAMS_CREATE, params);
-      load();
+      try {
+        await ws.call(Methods.TEAMS_CREATE, params);
+        load();
+        toast.success(i18next.t("teams:toast.created"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedCreate"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws, load],
   );
 
   const deleteTeam = useCallback(
     async (teamId: string) => {
-      await ws.call(Methods.TEAMS_DELETE, { teamId });
-      load();
+      try {
+        await ws.call(Methods.TEAMS_DELETE, { teamId });
+        load();
+        toast.success(i18next.t("teams:toast.deleted"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedDelete"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws, load],
   );
@@ -105,14 +120,26 @@ export function useTeams() {
 
   const approveTask = useCallback(
     async (teamId: string, taskId: string, comment?: string) => {
-      await ws.call(Methods.TEAMS_TASK_APPROVE, { teamId, taskId, comment });
+      try {
+        await ws.call(Methods.TEAMS_TASK_APPROVE, { teamId, taskId, comment });
+        toast.success(i18next.t("teams:toast.taskApproved"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedApproveTask"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const rejectTask = useCallback(
     async (teamId: string, taskId: string, reason?: string) => {
-      await ws.call(Methods.TEAMS_TASK_REJECT, { teamId, taskId, reason });
+      try {
+        await ws.call(Methods.TEAMS_TASK_REJECT, { teamId, taskId, reason });
+        toast.success(i18next.t("teams:toast.taskRejected"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedRejectTask"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
@@ -148,54 +175,96 @@ export function useTeams() {
 
   const createTask = useCallback(
     async (teamId: string, params: { subject: string; description?: string; priority?: number; taskType?: string; assignTo?: string; channel?: string; chatId?: string }) => {
-      const res = await ws.call<{ task: TeamTaskData }>(
-        Methods.TEAMS_TASK_CREATE,
-        { teamId, ...params },
-      );
-      return res.task;
+      try {
+        const res = await ws.call<{ task: TeamTaskData }>(
+          Methods.TEAMS_TASK_CREATE,
+          { teamId, ...params },
+        );
+        toast.success(i18next.t("teams:toast.taskCreated"));
+        return res.task;
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedCreateTask"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const deleteTask = useCallback(
     async (teamId: string, taskId: string) => {
-      await ws.call(Methods.TEAMS_TASK_DELETE, { teamId, taskId });
+      try {
+        await ws.call(Methods.TEAMS_TASK_DELETE, { teamId, taskId });
+        toast.success(i18next.t("teams:toast.taskDeleted"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedDeleteTask"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const deleteTasksBulk = useCallback(
     async (teamId: string, taskIds: string[]) => {
-      const res = await ws.call<{ deleted: number }>(Methods.TEAMS_TASK_DELETE_BULK, { teamId, taskIds });
-      return res.deleted;
+      try {
+        const res = await ws.call<{ deleted: number }>(Methods.TEAMS_TASK_DELETE_BULK, { teamId, taskIds });
+        toast.success(i18next.t("teams:toast.tasksBulkDeleted"));
+        return res.deleted;
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedBulkDeleteTasks"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const assignTask = useCallback(
     async (teamId: string, taskId: string, agentId: string) => {
-      await ws.call(Methods.TEAMS_TASK_ASSIGN, { teamId, taskId, agentId });
+      try {
+        await ws.call(Methods.TEAMS_TASK_ASSIGN, { teamId, taskId, agentId });
+        toast.success(i18next.t("teams:toast.taskAssigned"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedAssignTask"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const addMember = useCallback(
     async (teamId: string, agent: string, role?: string) => {
-      await ws.call(Methods.TEAMS_MEMBERS_ADD, { teamId, agent, role });
+      try {
+        await ws.call(Methods.TEAMS_MEMBERS_ADD, { teamId, agent, role });
+        toast.success(i18next.t("teams:toast.memberAdded"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedAddMember"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const removeMember = useCallback(
     async (teamId: string, agentId: string) => {
-      await ws.call(Methods.TEAMS_MEMBERS_REMOVE, { teamId, agentId });
+      try {
+        await ws.call(Methods.TEAMS_MEMBERS_REMOVE, { teamId, agentId });
+        toast.success(i18next.t("teams:toast.memberRemoved"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedRemoveMember"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );
 
   const updateTeamSettings = useCallback(
     async (teamId: string, settings: TeamAccessSettings) => {
-      await ws.call(Methods.TEAMS_UPDATE, { teamId, settings });
+      try {
+        await ws.call(Methods.TEAMS_UPDATE, { teamId, settings });
+        toast.success(i18next.t("teams:toast.updated"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedUpdate"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );

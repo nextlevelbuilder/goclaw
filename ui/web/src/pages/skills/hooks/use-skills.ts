@@ -4,6 +4,9 @@ import { useWs, useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 import type { SkillInfo, SkillFile, SkillVersions } from "@/types/skill";
 
 export type { SkillInfo, SkillFile, SkillVersions };
@@ -59,18 +62,30 @@ export function useSkills() {
 
   const updateSkill = useCallback(
     async (id: string, updates: Record<string, unknown>) => {
-      const res = await http.put<{ ok: string }>(`/v1/skills/${id}`, updates);
-      await invalidate();
-      return res;
+      try {
+        const res = await http.put<{ ok: string }>(`/v1/skills/${id}`, updates);
+        await invalidate();
+        toast.success(i18next.t("skills:toast.updated"));
+        return res;
+      } catch (err) {
+        toast.error(i18next.t("skills:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [http, invalidate],
   );
 
   const deleteSkill = useCallback(
     async (id: string) => {
-      const res = await http.delete<{ ok: string }>(`/v1/skills/${id}`);
-      await invalidate();
-      return res;
+      try {
+        const res = await http.delete<{ ok: string }>(`/v1/skills/${id}`);
+        await invalidate();
+        toast.success(i18next.t("skills:toast.deleted"));
+        return res;
+      } catch (err) {
+        toast.error(i18next.t("skills:toast.deleteFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [http, invalidate],
   );

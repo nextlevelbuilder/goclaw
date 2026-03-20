@@ -13,5 +13,9 @@
     "undone": " Hành động này không thể hoàn tác.",
     "deleting": "Đang xóa...",
     "confirmLabel": "Xóa"
+  },
+  "toast": {
+    "deleted": "Đã xóa file",
+    "deleteFailed": "Không thể xóa file"
   }
 }

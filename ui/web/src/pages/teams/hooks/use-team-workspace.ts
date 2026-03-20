@@ -2,6 +2,9 @@ import { useState, useCallback } from "react";
 import { useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import type { TeamWorkspaceFile } from "@/types/team";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 
 export function useTeamWorkspace() {
   const ws = useWs();
@@ -40,11 +43,17 @@ export function useTeamWorkspace() {
 
   const deleteFile = useCallback(
     async (teamId: string, fileName: string, chatId?: string) => {
-      await ws.call(Methods.TEAMS_WORKSPACE_DELETE, {
-        team_id: teamId,
-        file_name: fileName,
-        chat_id: chatId ?? "",
-      });
+      try {
+        await ws.call(Methods.TEAMS_WORKSPACE_DELETE, {
+          team_id: teamId,
+          file_name: fileName,
+          chat_id: chatId ?? "",
+        });
+        toast.success(i18next.t("teams:toast.workspaceFileDeleted"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedDeleteWorkspaceFile"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws],
   );

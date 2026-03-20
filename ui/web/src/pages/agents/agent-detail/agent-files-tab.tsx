@@ -79,6 +79,8 @@ export function AgentFilesTab({
     try {
       await onSetFile(selectedFile, content);
       setDirty(false);
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }

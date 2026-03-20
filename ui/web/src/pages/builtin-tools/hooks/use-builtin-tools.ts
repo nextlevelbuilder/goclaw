@@ -2,6 +2,9 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 
 export interface BuiltinToolData {
   name: string;
@@ -36,8 +39,14 @@ export function useBuiltinTools() {
 
   const updateTool = useCallback(
     async (name: string, data: { enabled?: boolean; settings?: Record<string, unknown> }) => {
-      await http.put(`/v1/tools/builtin/${name}`, data);
-      await invalidate();
+      try {
+        await http.put(`/v1/tools/builtin/${name}`, data);
+        await invalidate();
+        toast.success(i18next.t("tools:builtin.settingsDialog.toast.saved"));
+      } catch (err) {
+        toast.error(i18next.t("tools:builtin.settingsDialog.toast.failed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [http, invalidate],
   );

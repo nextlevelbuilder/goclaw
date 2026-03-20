@@ -37,13 +37,9 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
 
   // Save state
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveError(null);
-    setSaved(false);
     try {
       const data: ProviderInput = {
         name: provider.name,
@@ -56,10 +52,8 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
         data.api_key = apiKey;
       }
       await onUpdate(provider.id, data);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("toast.failedUpdate"));
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -143,8 +137,6 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       <StickySaveBar
         onSave={handleSave}
         saving={saving}
-        saved={saved}
-        error={saveError}
       />
     </div>
   );

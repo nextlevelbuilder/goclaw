@@ -9,6 +9,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import type { BuiltinToolData } from "./hooks/use-builtin-tools";
 import { MEDIA_TOOLS } from "./media-provider-params-schema";
@@ -110,14 +111,20 @@ function JsonSettingsForm({
 
   const handleSave = async () => {
     if (!tool) return;
+    let parsed: Record<string, unknown>;
     try {
-      const parsed = JSON.parse(json);
-      setSaving(true);
-      setError("");
+      parsed = JSON.parse(json);
+    } catch {
+      setError(t("builtin.jsonDialog.invalidJson"));
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
       await onSave(tool.name, parsed);
       onOpenChange(false);
-    } catch (e) {
-      setError(e instanceof SyntaxError ? t("builtin.jsonDialog.invalidJson") : String(e));
+    } catch {
+      // toast shown by hook — keep dialog open
     } finally {
       setSaving(false);
     }
@@ -151,6 +158,7 @@ function JsonSettingsForm({
           {t("builtin.jsonDialog.cancel")}
         </Button>
         <Button onClick={handleSave} disabled={saving || !validJson}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           {saving ? t("builtin.jsonDialog.saving") : t("builtin.jsonDialog.save")}
         </Button>
       </DialogFooter>

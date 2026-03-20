@@ -4,7 +4,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { useTranslation } from "react-i18next";
-import { toast } from "@/stores/use-toast-store";
 import type { TeamTaskData, TeamMemberData, ScopeEntry } from "@/types/team";
 
 interface CreateTaskDialogProps {
@@ -44,13 +43,12 @@ export function CreateTaskDialog({
         channel: selectedScope?.channel || undefined,
         chatId: selectedScope?.chat_id || undefined,
       });
-      toast.success(t("toast.taskCreated"));
       setSubject(""); setDescription(""); setPriority(0);
       setTaskType("general"); setAssignTo("");
       onOpenChange(false);
       onCreated();
     } catch {
-      toast.error(t("toast.failedCreateTask"));
+      // toast handled by hook
     } finally {
       setCreating(false);
     }

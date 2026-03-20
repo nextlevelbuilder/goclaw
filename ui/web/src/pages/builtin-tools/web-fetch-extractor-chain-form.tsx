@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Loader2 } from "lucide-react";
 import { uniqueId } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -198,6 +198,8 @@ export function WebFetchExtractorChainForm({ initialSettings, onSave, onCancel }
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const serialized = entries.map(({ id: _id, ...rest }) => rest);
       await onSave({ extractors: serialized });
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -231,6 +233,7 @@ export function WebFetchExtractorChainForm({ initialSettings, onSave, onCancel }
           {t("builtin.extractorChain.cancel")}
         </Button>
         <Button onClick={handleSave} disabled={saving}>
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
           {saving ? t("builtin.extractorChain.saving") : t("builtin.extractorChain.save")}
         </Button>
       </DialogFooter>

@@ -1,6 +1,6 @@
 import { type ReactNode, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Save } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { FILE_DESCRIPTIONS } from "./file-utils";
@@ -90,7 +90,7 @@ export function FileEditor({
           {headerActions}
           {canEdit && (
             <Button size="sm" onClick={onSave} disabled={!dirty || saving}>
-              {!saving && <Save className="h-3.5 w-3.5" />}
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
               {saving ? t("files.saving") : t("files.save")}
             </Button>
           )}

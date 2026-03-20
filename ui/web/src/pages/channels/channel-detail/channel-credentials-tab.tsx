@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Save, Check, AlertCircle } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChannelInstanceData } from "@/types/channel";
 import { credentialsSchema } from "../channel-schemas";
@@ -15,8 +15,6 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
   const { t } = useTranslation("channels");
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const fields = credentialsSchema[instance.channel_type] ?? [];
 
@@ -28,20 +26,12 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
     const cleanCreds = Object.fromEntries(
       Object.entries(values).filter(([, v]) => v !== undefined && v !== "" && v !== null),
     );
-    if (Object.keys(cleanCreds).length === 0) {
-      setSaveError(t("detail.credentials.noCredentials"));
-      return;
-    }
+    if (Object.keys(cleanCreds).length === 0) return;
     setSaving(true);
-    setSaveError(null);
-    setSaved(false);
     try {
       await onUpdate({ credentials: cleanCreds });
-      setSaved(true);
       setValues({});
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("detail.credentials.failedSave"));
+    } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -71,20 +61,9 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
         isEdit
       />
 
-      {saveError && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {saveError}
-        </div>
-      )}
       <div className="flex items-center justify-end gap-2">
-        {saved && (
-          <span className="flex items-center gap-1 text-sm text-success">
-            <Check className="h-3.5 w-3.5" /> {t("detail.credentials.saved")}
-          </span>
-        )}
         <Button onClick={handleSave} disabled={saving}>
-          {!saving && <Save className="h-4 w-4" />}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? t("detail.credentials.saving") : t("detail.credentials.updateCredentials")}
         </Button>
       </div>

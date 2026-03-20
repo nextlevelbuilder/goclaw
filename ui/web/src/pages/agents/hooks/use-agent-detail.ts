@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp, useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
+import i18n from "@/i18n";
+import { userFriendlyError } from "@/lib/error-utils";
 import type { AgentData, BootstrapFile } from "@/types/agent";
 
 interface AgentDetailData {
@@ -70,8 +73,14 @@ export function useAgentDetail(agentId: string | undefined) {
   const updateAgent = useCallback(
     async (updates: Record<string, unknown>) => {
       if (!agentId) return;
-      await http.put(`/v1/agents/${agentId}`, updates);
-      await invalidate();
+      try {
+        await http.put(`/v1/agents/${agentId}`, updates);
+        await invalidate();
+        toast.success(i18n.t("agents:toast.updated"));
+      } catch (err) {
+        toast.error(i18n.t("agents:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [agentId, http, invalidate],
   );
@@ -91,12 +100,18 @@ export function useAgentDetail(agentId: string | undefined) {
   const setFile = useCallback(
     async (name: string, content: string) => {
       if (!agent || !ws.isConnected) return;
-      await ws.call(Methods.AGENTS_FILES_SET, {
-        agentId: agent.agent_key,
-        name,
-        content,
-      });
-      await invalidate();
+      try {
+        await ws.call(Methods.AGENTS_FILES_SET, {
+          agentId: agent.agent_key,
+          name,
+          content,
+        });
+        await invalidate();
+        toast.success(i18n.t("agents:toast.updated"));
+      } catch (err) {
+        toast.error(i18n.t("agents:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [agent, ws, invalidate],
   );

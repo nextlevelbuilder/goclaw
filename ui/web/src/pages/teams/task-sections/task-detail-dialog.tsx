@@ -8,7 +8,6 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatDate } from "@/lib/format";
-import { toast } from "@/stores/use-toast-store";
 import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
 import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
 
@@ -59,10 +58,9 @@ export function TaskDetailDialog({
     setDeleting(true);
     try {
       await deleteTask(teamId, task.id);
-      toast.success(t("toast.taskDeleted"));
       onClose();
     } catch {
-      toast.error(t("toast.failedDeleteTask"));
+      // toast handled by hook
     } finally {
       setDeleting(false);
       setConfirmDelete(false);

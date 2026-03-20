@@ -506,6 +506,10 @@
     "updateFailed": "Không thể cập nhật agent",
     "deleted": "Đã xóa agent",
     "deleteFailed": "Không thể xóa agent",
-    "unknownError": "Lỗi không xác định"
+    "unknownError": "Lỗi không xác định",
+    "skillGranted": "Đã cấp skill",
+    "skillGrantFailed": "Không thể cấp skill",
+    "skillRevoked": "Đã thu hồi skill",
+    "skillRevokeFailed": "Không thể thu hồi skill"
   }
 }

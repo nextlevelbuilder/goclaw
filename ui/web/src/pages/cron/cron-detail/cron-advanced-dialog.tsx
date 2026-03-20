@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Settings } from "lucide-react";
+import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +41,6 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
   const [wakeHeartbeat, setWakeHeartbeat] = useState(init.wakeHeartbeat);
   const [deleteAfterRun, setDeleteAfterRun] = useState(init.deleteAfterRun);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Re-sync when dialog opens
   useEffect(() => {
@@ -62,7 +61,6 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
       return;
     }
     setSaving(true);
-    setSaveError(null);
     try {
       await onUpdate(job.id, {
         schedule: {
@@ -76,8 +74,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
         deleteAfterRun,
       });
       onOpenChange(false);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : tc("save"));
+    } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -179,19 +176,14 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col gap-2 pt-4 border-t shrink-0">
-          {saveError && (
-            <p className="text-sm text-destructive">{saveError}</p>
-          )}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              {tc("cancel")}
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {!saving && <Save className="h-4 w-4" />}
-              {saving ? tc("saving") : tc("save")}
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-2 pt-4 border-t shrink-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            {tc("cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? tc("saving") : tc("save")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

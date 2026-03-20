@@ -5,6 +5,9 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 import { queryKeys } from "@/lib/query-keys";
 import type { SessionInfo, SessionPreview, Message } from "@/types/session";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 
 interface UseSessionsOptions {
   agentFilter?: string;
@@ -58,8 +61,14 @@ export function useSessions(opts: UseSessionsOptions = {}) {
   const deleteSession = useCallback(
     async (key: string) => {
       if (!ws.isConnected) return;
-      await ws.call(Methods.SESSIONS_DELETE, { key });
-      await invalidate();
+      try {
+        await ws.call(Methods.SESSIONS_DELETE, { key });
+        await invalidate();
+        toast.success(i18next.t("sessions:toast.deleted"));
+      } catch (err) {
+        toast.error(i18next.t("sessions:toast.deleteFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws, invalidate],
   );
@@ -67,8 +76,14 @@ export function useSessions(opts: UseSessionsOptions = {}) {
   const resetSession = useCallback(
     async (key: string) => {
       if (!ws.isConnected) return;
-      await ws.call(Methods.SESSIONS_RESET, { key });
-      await invalidate();
+      try {
+        await ws.call(Methods.SESSIONS_RESET, { key });
+        await invalidate();
+        toast.success(i18next.t("sessions:toast.reset"));
+      } catch (err) {
+        toast.error(i18next.t("sessions:toast.resetFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws, invalidate],
   );
@@ -76,8 +91,14 @@ export function useSessions(opts: UseSessionsOptions = {}) {
   const patchSession = useCallback(
     async (key: string, updates: { label?: string; model?: string; metadata?: Record<string, string> }) => {
       if (!ws.isConnected) return;
-      await ws.call(Methods.SESSIONS_PATCH, { key, ...updates });
-      await invalidate();
+      try {
+        await ws.call(Methods.SESSIONS_PATCH, { key, ...updates });
+        await invalidate();
+        toast.success(i18next.t("sessions:toast.updated"));
+      } catch (err) {
+        toast.error(i18next.t("sessions:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [ws, invalidate],
   );

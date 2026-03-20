@@ -102,5 +102,11 @@
     "version": "Phiên bản:",
     "current": "(hiện tại)",
     "noContent": "Không có nội dung."
+  },
+  "toast": {
+    "updated": "Đã cập nhật skill",
+    "updateFailed": "Không thể cập nhật skill",
+    "deleted": "Đã xóa skill",
+    "deleteFailed": "Không thể xóa skill"
   }
 }
