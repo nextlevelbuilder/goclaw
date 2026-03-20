@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Un port Go al [OpenClaw](https://github.com/openclaw/openclaw) cu securitate îmbunătățită, PostgreSQL multi-tenant și observabilitate la nivel de producție.
 
 🌐 **Limbi:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Un port Go al [OpenClaw](https://github.com/openclaw/openclaw) cu securitate îm
 ## Arhitectură
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Pornire Rapidă
@@ -151,7 +151,7 @@ GoClaw suportă echipe de agenți și delegare inter-agent — fiecare agent rul
 ### Delegare Agent
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Mod | Cum funcționează | Ideal pentru |
@@ -164,7 +164,7 @@ Agenții comunică prin **linkuri de permisiune** explicite cu control direcțio
 ### Echipe de Agenți
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Panou de sarcini partajat** — Creează, revendică, finalizează, caută sarcini cu dependențe `blocked_by`

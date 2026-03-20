@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,38 +33,16 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Un portage Go de [OpenClaw](https://github.com/openclaw/openclaw) avec une sécurité renforcée, PostgreSQL multi-tenant, et une observabilité de niveau production.
 
 🌐 **Langues :**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·
-[🇵🇭 Tagalog](README.tl.md) ·
 [🇪🇸 Español](README.es.md) ·
 [🇧🇷 Português](README.pt.md) ·
-[🇮🇹 Italiano](README.it.md) ·
-[🇩🇪 Deutsch](README.de.md) ·
 [🇫🇷 Français](README.fr.md) ·
-[🇸🇦 العربية](README.ar.md) ·
-[🇮🇳 हिन्दी](README.hi.md) ·
-[🇷🇺 Русский](README.ru.md) ·
-[🇧🇩 বাংলা](README.bn.md) ·
-[🇮🇱 עברית](README.he.md) ·
-[🇵🇱 Polski](README.pl.md) ·
-[🇨🇿 Čeština](README.cs.md) ·
-[🇳🇱 Nederlands](README.nl.md) ·
-[🇹🇷 Türkçe](README.tr.md) ·
-[🇺🇦 Українська](README.uk.md) ·
-[🇮🇩 Bahasa Indonesia](README.id.md) ·
-[🇹🇭 ไทย](README.th.md) ·
-[🇵🇰 اردو](README.ur.md) ·
-[🇷🇴 Română](README.ro.md) ·
-[🇸🇪 Svenska](README.sv.md) ·
-[🇬🇷 Ελληνικά](README.el.md) ·
-[🇭🇺 Magyar](README.hu.md) ·
-[🇫🇮 Suomi](README.fi.md) ·
-[🇩🇰 Dansk](README.da.md) ·
-[🇳🇴 Norsk](README.nb.md)
-
+[🇩🇪 Deutsch](README.de.md) ·
+[🇷🇺 Русский](README.ru.md)
 ## Ce qui le différencie
 
 - **Équipes d'agents et orchestration** — Équipes avec tableaux de tâches partagés, délégation inter-agents (sync/async), et découverte hybride d'agents
@@ -110,7 +88,7 @@ Un portage Go de [OpenClaw](https://github.com/openclaw/openclaw) avec une sécu
 ## Architecture
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Démarrage rapide
@@ -151,7 +129,7 @@ GoClaw prend en charge les équipes d'agents et la délégation inter-agents —
 ### Délégation d'agents
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Mode | Fonctionnement | Idéal pour |
@@ -164,7 +142,7 @@ Les agents communiquent via des **liens de permission** explicites avec contrôl
 ### Équipes d'agents
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Tableau de tâches partagé** — Créer, revendiquer, compléter, rechercher des tâches avec des dépendances `blocked_by`

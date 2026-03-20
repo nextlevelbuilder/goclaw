@@ -31,37 +31,36 @@ Single binary. Production-tested. Agents that orchestrate for you.
 A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced security, multi-tenant PostgreSQL, and production-grade observability.
 
 🌐 **Languages:**
-[🇺🇸 English](README.md) ·
-[🇨🇳 简体中文](README.zh-CN.md) ·
-[🇯🇵 日本語](README.ja.md) ·
-[🇰🇷 한국어](README.ko.md) ·
-[🇻🇳 Tiếng Việt](README.vi.md) ·
-[🇵🇭 Tagalog](README.tl.md) ·
-[🇪🇸 Español](README.es.md) ·
-[🇧🇷 Português](README.pt.md) ·
-[🇮🇹 Italiano](README.it.md) ·
-[🇩🇪 Deutsch](README.de.md) ·
-[🇫🇷 Français](README.fr.md) ·
-[🇸🇦 العربية](README.ar.md) ·
-[🇮🇳 हिन्दी](README.hi.md) ·
-[🇷🇺 Русский](README.ru.md) ·
-[🇧🇩 বাংলা](README.bn.md) ·
-[🇮🇱 עברית](README.he.md) ·
-[🇵🇱 Polski](README.pl.md) ·
-[🇨🇿 Čeština](README.cs.md) ·
-[🇳🇱 Nederlands](README.nl.md) ·
-[🇹🇷 Türkçe](README.tr.md) ·
-[🇺🇦 Українська](README.uk.md) ·
-[🇮🇩 Bahasa Indonesia](README.id.md) ·
-[🇹🇭 ไทย](README.th.md) ·
-[🇵🇰 اردو](README.ur.md) ·
-[🇷🇴 Română](README.ro.md) ·
-[🇸🇪 Svenska](README.sv.md) ·
-[🇬🇷 Ελληνικά](README.el.md) ·
-[🇭🇺 Magyar](README.hu.md) ·
-[🇫🇮 Suomi](README.fi.md) ·
-[🇩🇰 Dansk](README.da.md) ·
-[🇳🇴 Norsk](README.nb.md)
+[🇨🇳 简体中文](_readmes/README.zh-CN.md) ·
+[🇯🇵 日本語](_readmes/README.ja.md) ·
+[🇰🇷 한국어](_readmes/README.ko.md) ·
+[🇻🇳 Tiếng Việt](_readmes/README.vi.md) ·
+[🇵🇭 Tagalog](_readmes/README.tl.md) ·
+[🇪🇸 Español](_readmes/README.es.md) ·
+[🇧🇷 Português](_readmes/README.pt.md) ·
+[🇮🇹 Italiano](_readmes/README.it.md) ·
+[🇩🇪 Deutsch](_readmes/README.de.md) ·
+[🇫🇷 Français](_readmes/README.fr.md) ·
+[🇸🇦 العربية](_readmes/README.ar.md) ·
+[🇮🇳 हिन्दी](_readmes/README.hi.md) ·
+[🇷🇺 Русский](_readmes/README.ru.md) ·
+[🇧🇩 বাংলা](_readmes/README.bn.md) ·
+[🇮🇱 עברית](_readmes/README.he.md) ·
+[🇵🇱 Polski](_readmes/README.pl.md) ·
+[🇨🇿 Čeština](_readmes/README.cs.md) ·
+[🇳🇱 Nederlands](_readmes/README.nl.md) ·
+[🇹🇷 Türkçe](_readmes/README.tr.md) ·
+[🇺🇦 Українська](_readmes/README.uk.md) ·
+[🇮🇩 Bahasa Indonesia](_readmes/README.id.md) ·
+[🇹🇭 ไทย](_readmes/README.th.md) ·
+[🇵🇰 اردو](_readmes/README.ur.md) ·
+[🇷🇴 Română](_readmes/README.ro.md) ·
+[🇸🇪 Svenska](_readmes/README.sv.md) ·
+[🇬🇷 Ελληνικά](_readmes/README.el.md) ·
+[🇭🇺 Magyar](_readmes/README.hu.md) ·
+[🇫🇮 Suomi](_readmes/README.fi.md) ·
+[🇩🇰 Dansk](_readmes/README.da.md) ·
+[🇳🇴 Norsk](_readmes/README.nb.md)
 
 ## What Makes It Different
 

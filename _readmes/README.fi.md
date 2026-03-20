@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Go-portti [OpenClaw](https://github.com/openclaw/openclaw)-projektista, jossa on parannettu turvallisuus, monivuokraaja-PostgreSQL ja tuotantotason observoitavuus.
 
 🌐 **Kielet:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Go-portti [OpenClaw](https://github.com/openclaw/openclaw)-projektista, jossa on
 ## Arkkitehtuuri
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Pikaopas
@@ -151,7 +151,7 @@ GoClaw tukee agenttiryhmiä ja agenttien välistä delegointia — jokainen agen
 ### Agentin delegointi
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Tila | Toimintaperiaate | Parhaiten sopii |
@@ -164,7 +164,7 @@ Agentit kommunikoivat eksplisiittisten **käyttöoikeuslinkkien** kautta suuntak
 ### Agenttiryhmät
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Jaettu tehtävätaulu** — Tehtävien luominen, varaaminen, viimeistely ja haku `blocked_by`-riippuvuuksilla

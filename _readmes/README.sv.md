@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 En Go-port av [OpenClaw](https://github.com/openclaw/openclaw) med förbättrad säkerhet, flertenants PostgreSQL och observerbarhet för produktionsmiljö.
 
 🌐 **Språk:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ En Go-port av [OpenClaw](https://github.com/openclaw/openclaw) med förbättrad 
 ## Arkitektur
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Snabbstart
@@ -151,7 +151,7 @@ GoClaw stöder agentteam och inter-agent-delegering — varje agent körs med si
 ### Agentdelegering
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Läge | Hur det fungerar | Passar bäst för |
@@ -164,7 +164,7 @@ Agenter kommunicerar via explicita **behörighetslänkar** med riktningskontroll
 ### Agentteam
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Delad uppgiftstavla** — Skapa, ta, slutföra och söka uppgifter med `blocked_by`-beroenden

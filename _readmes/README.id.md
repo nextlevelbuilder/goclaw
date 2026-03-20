@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Merupakan port Go dari [OpenClaw](https://github.com/openclaw/openclaw) dengan keamanan yang ditingkatkan, PostgreSQL multi-tenant, dan observabilitas kelas produksi.
 
 🌐 **Bahasa:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Merupakan port Go dari [OpenClaw](https://github.com/openclaw/openclaw) dengan k
 ## Arsitektur
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Mulai Cepat
@@ -151,7 +151,7 @@ GoClaw mendukung tim agen dan delegasi antar-agen — setiap agen berjalan denga
 ### Delegasi Agen
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Mode | Cara kerjanya | Terbaik untuk |
@@ -164,7 +164,7 @@ Agen berkomunikasi melalui **tautan izin** eksplisit dengan kontrol arah (`outbo
 ### Tim Agen
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Papan tugas bersama** — Buat, klaim, selesaikan, cari tugas dengan dependensi `blocked_by`

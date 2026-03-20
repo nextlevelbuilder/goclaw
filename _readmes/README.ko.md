@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,38 +33,16 @@ Single binary. Production-tested. Agents that orchestrate for you.
 향상된 보안, 멀티 테넌트 PostgreSQL, 프로덕션 수준의 관측 가능성을 갖춘 [OpenClaw](https://github.com/openclaw/openclaw)의 Go 포트입니다.
 
 🌐 **Languages:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·
-[🇵🇭 Tagalog](README.tl.md) ·
 [🇪🇸 Español](README.es.md) ·
 [🇧🇷 Português](README.pt.md) ·
-[🇮🇹 Italiano](README.it.md) ·
-[🇩🇪 Deutsch](README.de.md) ·
 [🇫🇷 Français](README.fr.md) ·
-[🇸🇦 العربية](README.ar.md) ·
-[🇮🇳 हिन्दी](README.hi.md) ·
-[🇷🇺 Русский](README.ru.md) ·
-[🇧🇩 বাংলা](README.bn.md) ·
-[🇮🇱 עברית](README.he.md) ·
-[🇵🇱 Polski](README.pl.md) ·
-[🇨🇿 Čeština](README.cs.md) ·
-[🇳🇱 Nederlands](README.nl.md) ·
-[🇹🇷 Türkçe](README.tr.md) ·
-[🇺🇦 Українська](README.uk.md) ·
-[🇮🇩 Bahasa Indonesia](README.id.md) ·
-[🇹🇭 ไทย](README.th.md) ·
-[🇵🇰 اردو](README.ur.md) ·
-[🇷🇴 Română](README.ro.md) ·
-[🇸🇪 Svenska](README.sv.md) ·
-[🇬🇷 Ελληνικά](README.el.md) ·
-[🇭🇺 Magyar](README.hu.md) ·
-[🇫🇮 Suomi](README.fi.md) ·
-[🇩🇰 Dansk](README.da.md) ·
-[🇳🇴 Norsk](README.nb.md)
-
+[🇩🇪 Deutsch](README.de.md) ·
+[🇷🇺 Русский](README.ru.md)
 ## 차별점
 
 - **에이전트 팀 & 오케스트레이션** — 공유 태스크 보드, 에이전트 간 위임(동기/비동기), 하이브리드 에이전트 디스커버리를 갖춘 팀
@@ -110,7 +88,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 ## 아키텍처
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## 빠른 시작
@@ -151,7 +129,7 @@ GoClaw는 에이전트 팀과 에이전트 간 위임을 지원합니다 — 각
 ### 에이전트 위임
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | 모드 | 동작 방식 | 적합한 경우 |
@@ -164,7 +142,7 @@ GoClaw는 에이전트 팀과 에이전트 간 위임을 지원합니다 — 각
 ### 에이전트 팀
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **공유 태스크 보드** — `blocked_by` 의존성이 있는 태스크 생성, 클레임, 완료, 검색

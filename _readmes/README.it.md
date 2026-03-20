@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Un port Go di [OpenClaw](https://github.com/openclaw/openclaw) con sicurezza migliorata, PostgreSQL multi-tenant e osservabilità di livello produzione.
 
 🌐 **Lingue:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Un port Go di [OpenClaw](https://github.com/openclaw/openclaw) con sicurezza mig
 ## Architettura
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Avvio Rapido
@@ -151,7 +151,7 @@ GoClaw supporta team di agenti e delega inter-agente — ogni agente opera con l
 ### Delega degli Agenti
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Modalità | Come funziona | Ideale per |
@@ -164,7 +164,7 @@ Gli agenti comunicano tramite **link di permesso** espliciti con controllo della
 ### Team di Agenti
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Bacheca delle attività condivisa** — Crea, prendi in carico, completa e cerca attività con dipendenze `blocked_by`

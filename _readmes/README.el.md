@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Μια μεταφορά σε Go του [OpenClaw](https://github.com/openclaw/openclaw) με ενισχυμένη ασφάλεια, PostgreSQL πολλαπλών μισθωτών και παρατηρησιμότητα παραγωγικού επιπέδου.
 
 🌐 **Γλώσσες:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 ## Αρχιτεκτονική
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Γρήγορη Εκκίνηση
@@ -151,7 +151,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
 ### Ανάθεση Πράκτορα
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Λειτουργία | Πώς λειτουργεί | Καλύτερο για |
@@ -164,7 +164,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
 ### Ομάδες Πρακτόρων
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Κοινόχρηστος πίνακας εργασιών** — Δημιουργία, ανάληψη, ολοκλήρωση, αναζήτηση εργασιών με εξαρτήσεις `blocked_by`

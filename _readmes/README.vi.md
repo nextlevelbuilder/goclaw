@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,38 +33,16 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Phiên bản Go của [OpenClaw](https://github.com/openclaw/openclaw) với bảo mật nâng cao, multi-tenant PostgreSQL, và observability cấp production.
 
 🌐 **Ngôn ngữ:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·
-[🇵🇭 Tagalog](README.tl.md) ·
 [🇪🇸 Español](README.es.md) ·
 [🇧🇷 Português](README.pt.md) ·
-[🇮🇹 Italiano](README.it.md) ·
-[🇩🇪 Deutsch](README.de.md) ·
 [🇫🇷 Français](README.fr.md) ·
-[🇸🇦 العربية](README.ar.md) ·
-[🇮🇳 हिन्दी](README.hi.md) ·
-[🇷🇺 Русский](README.ru.md) ·
-[🇧🇩 বাংলা](README.bn.md) ·
-[🇮🇱 עברית](README.he.md) ·
-[🇵🇱 Polski](README.pl.md) ·
-[🇨🇿 Čeština](README.cs.md) ·
-[🇳🇱 Nederlands](README.nl.md) ·
-[🇹🇷 Türkçe](README.tr.md) ·
-[🇺🇦 Українська](README.uk.md) ·
-[🇮🇩 Bahasa Indonesia](README.id.md) ·
-[🇹🇭 ไทย](README.th.md) ·
-[🇵🇰 اردو](README.ur.md) ·
-[🇷🇴 Română](README.ro.md) ·
-[🇸🇪 Svenska](README.sv.md) ·
-[🇬🇷 Ελληνικά](README.el.md) ·
-[🇭🇺 Magyar](README.hu.md) ·
-[🇫🇮 Suomi](README.fi.md) ·
-[🇩🇰 Dansk](README.da.md) ·
-[🇳🇴 Norsk](README.nb.md)
-
+[🇩🇪 Deutsch](README.de.md) ·
+[🇷🇺 Русский](README.ru.md)
 ## Điểm Khác Biệt
 
 - **Nhóm agent và điều phối** — Nhóm với bảng nhiệm vụ dùng chung, ủy quyền giữa các agent (đồng bộ/bất đồng bộ), và khám phá agent hỗn hợp
@@ -110,7 +88,7 @@ Phiên bản Go của [OpenClaw](https://github.com/openclaw/openclaw) với b�
 ## Kiến Trúc
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Bắt Đầu Nhanh
@@ -151,7 +129,7 @@ GoClaw hỗ trợ nhóm agent và ủy quyền giữa các agent — mỗi agent
 ### Ủy Quyền Giữa Các Agent
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Chế độ | Cách hoạt động | Phù hợp cho |
@@ -164,7 +142,7 @@ Các agent giao tiếp qua **permission link** với kiểm soát chiều (`outb
 ### Nhóm Agent
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Bảng nhiệm vụ dùng chung** — Tạo, nhận, hoàn thành, tìm kiếm nhiệm vụ với phụ thuộc `blocked_by`

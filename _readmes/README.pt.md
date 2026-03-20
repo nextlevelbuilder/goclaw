@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,38 +33,16 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Um port em Go do [OpenClaw](https://github.com/openclaw/openclaw) com segurança aprimorada, PostgreSQL multi-tenant e observabilidade de nível de produção.
 
 🌐 **Idiomas:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
 [🇻🇳 Tiếng Việt](README.vi.md) ·
-[🇵🇭 Tagalog](README.tl.md) ·
 [🇪🇸 Español](README.es.md) ·
 [🇧🇷 Português](README.pt.md) ·
-[🇮🇹 Italiano](README.it.md) ·
-[🇩🇪 Deutsch](README.de.md) ·
 [🇫🇷 Français](README.fr.md) ·
-[🇸🇦 العربية](README.ar.md) ·
-[🇮🇳 हिन्दी](README.hi.md) ·
-[🇷🇺 Русский](README.ru.md) ·
-[🇧🇩 বাংলা](README.bn.md) ·
-[🇮🇱 עברית](README.he.md) ·
-[🇵🇱 Polski](README.pl.md) ·
-[🇨🇿 Čeština](README.cs.md) ·
-[🇳🇱 Nederlands](README.nl.md) ·
-[🇹🇷 Türkçe](README.tr.md) ·
-[🇺🇦 Українська](README.uk.md) ·
-[🇮🇩 Bahasa Indonesia](README.id.md) ·
-[🇹🇭 ไทย](README.th.md) ·
-[🇵🇰 اردو](README.ur.md) ·
-[🇷🇴 Română](README.ro.md) ·
-[🇸🇪 Svenska](README.sv.md) ·
-[🇬🇷 Ελληνικά](README.el.md) ·
-[🇭🇺 Magyar](README.hu.md) ·
-[🇫🇮 Suomi](README.fi.md) ·
-[🇩🇰 Dansk](README.da.md) ·
-[🇳🇴 Norsk](README.nb.md)
-
+[🇩🇪 Deutsch](README.de.md) ·
+[🇷🇺 Русский](README.ru.md)
 ## O Que o Torna Diferente
 
 - **Equipes de Agentes e Orquestração** — Equipes com quadros de tarefas compartilhados, delegação entre agentes (síncrona/assíncrona) e descoberta híbrida de agentes
@@ -110,7 +88,7 @@ Um port em Go do [OpenClaw](https://github.com/openclaw/openclaw) com segurança
 ## Arquitetura
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Início Rápido
@@ -151,7 +129,7 @@ GoClaw suporta equipes de agentes e delegação entre agentes — cada agente ro
 ### Delegação de Agentes
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Modo | Como funciona | Melhor para |
@@ -164,7 +142,7 @@ Os agentes se comunicam por meio de **links de permissão** explícitos com cont
 ### Equipes de Agentes
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Quadro de tarefas compartilhado** — Criar, reivindicar, concluir e pesquisar tarefas com dependências `blocked_by`

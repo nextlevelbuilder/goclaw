@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 [OpenClaw](https://github.com/openclaw/openclaw)-এর একটি Go পোর্ট, উন্নত নিরাপত্তা, মাল্টি-টেন্যান্ট PostgreSQL এবং প্রোডাকশন-গ্রেড পর্যবেক্ষণযোগ্যতা সহ।
 
 🌐 **Languages:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 ## আর্কিটেকচার
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## দ্রুত শুরু
@@ -151,7 +151,7 @@ GoClaw এজেন্ট টিম এবং ইন্টার-এজেন্
 ### এজেন্ট ডেলিগেশন
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | মোড | কীভাবে কাজ করে | কোন ক্ষেত্রে সেরা |
@@ -164,7 +164,7 @@ GoClaw এজেন্ট টিম এবং ইন্টার-এজেন্
 ### এজেন্ট টিম
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **শেয়ারড টাস্ক বোর্ড** — `blocked_by` ডিপেন্ডেন্সি সহ টাস্ক তৈরি, দাবি, সম্পন্ন ও অনুসন্ধান করুন

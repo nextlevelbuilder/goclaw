@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ A **GoClaw** egy többügynökös AI átjáró, amely összeköti az LLM-eket az
 Az [OpenClaw](https://github.com/openclaw/openclaw) Go portja, fokozott biztonsággal, többbérlős PostgreSQL-lel és éles környezetre alkalmas megfigyelhetőséggel.
 
 🌐 **Nyelvek:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Az [OpenClaw](https://github.com/openclaw/openclaw) Go portja, fokozott biztons�
 ## Architektúra
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Gyors kezdés
@@ -151,7 +151,7 @@ A GoClaw támogatja az ügynökcsapatokat és az ügynökök közötti delegál�
 ### Ügynök delegálás
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Mód | Működése | Legjobb felhasználás |
@@ -164,7 +164,7 @@ Az ügynökök explicit **jogosultsági kapcsolatokon** keresztül kommunikálna
 ### Ügynökcsapatok
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Megosztott feladattábla** — Feladatok létrehozása, igénylése, befejezése, keresése `blocked_by` függőségekkel

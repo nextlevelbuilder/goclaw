@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Go port projektu [OpenClaw](https://github.com/openclaw/openclaw) s vylepšeným zabezpečením, multi-tenant PostgreSQL a produkční pozorovatelností.
 
 🌐 **Jazyky:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Go port projektu [OpenClaw](https://github.com/openclaw/openclaw) s vylepšeným
 ## Architektura
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Rychlý start
@@ -151,7 +151,7 @@ GoClaw podporuje týmy agentů a delegování mezi agenty — každý agent bě�
 ### Delegování agentů
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Režim | Jak funguje | Nejvhodnejší pro |
@@ -164,7 +164,7 @@ Agenti komunikují prostřednictvím explicitních **odkazů oprávnění** s ř
 ### Týmy agentů
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Sdílená nástěnka úkolů** — Vytváření, přiřazování, dokončování a vyhledávání úkolů se závislostmi `blocked_by`

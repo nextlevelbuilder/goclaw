@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="../_statics/goclaw.png" alt="GoClaw" />
 </p>
 
 <h1 align="center">GoClaw</h1>
@@ -33,7 +33,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 Port GoClaw w języku Go projektu [OpenClaw](https://github.com/openclaw/openclaw) z rozszerzonymi zabezpieczeniami, wielodostępnym PostgreSQL i obserwowalnością na poziomie produkcyjnym.
 
 🌐 **Języki:**
-[🇺🇸 English](README.md) ·
+[🇺🇸 English](../README.md) ·
 [🇨🇳 简体中文](README.zh-CN.md) ·
 [🇯🇵 日本語](README.ja.md) ·
 [🇰🇷 한국어](README.ko.md) ·
@@ -110,7 +110,7 @@ Port GoClaw w języku Go projektu [OpenClaw](https://github.com/openclaw/opencla
 ## Architektura
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="../_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
 </p>
 
 ## Szybki Start
@@ -151,7 +151,7 @@ GoClaw obsługuje zespoły agentów i delegowanie między agentami — każdy ag
 ### Delegowanie Agentów
 
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="../_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
 </p>
 
 | Tryb | Jak działa | Najlepsze zastosowanie |
@@ -164,7 +164,7 @@ Agenty komunikują się przez jawne **łącza uprawnień** z kontrolą kierunku 
 ### Zespoły Agentów
 
 <p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
+  <img src="../_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
 </p>
 
 - **Wspólna tablica zadań** — Tworzenie, przejmowanie, ukończenie i wyszukiwanie zadań z zależnościami `blocked_by`
