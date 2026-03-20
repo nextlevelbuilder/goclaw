@@ -15,8 +15,8 @@ const (
 	toolLoopCriticalThreshold = 5 // force stop the iteration loop
 
 	// Read-only streak: consecutive non-mutating tool calls without any write/edit.
-	readOnlyStreakWarning  = 8
-	readOnlyStreakCritical = 12
+	readOnlyStreakWarning  = 20
+	readOnlyStreakCritical = 30
 
 	// Same-result: same tool returning identical results with different args.
 	sameResultWarning  = 4
