@@ -81,14 +81,15 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		args = append(args, "--network", "none")
 	}
 
-	// Workspace mount
+	// Workspace mount — resolve host path for DooD (Docker-out-of-Docker) setups.
 	containerWorkdir := cfg.ContainerWorkdir()
 	if workspace != "" && cfg.WorkspaceAccess != AccessNone {
 		mountOpt := "rw"
 		if cfg.WorkspaceAccess == AccessRO {
 			mountOpt = "ro"
 		}
-		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", workspace, containerWorkdir, mountOpt))
+		hostPath := resolveHostWorkspacePath(ctx, workspace)
+		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, containerWorkdir, mountOpt))
 	}
 	args = append(args, "-w", containerWorkdir)
 

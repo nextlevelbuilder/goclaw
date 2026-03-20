@@ -74,6 +74,20 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "advanced": "Advanced",
+    "advancedTitle": "Advanced Settings",
+    "policies": "Policies",
+    "policiesDesc": "Message handling policies",
+    "network": "Network",
+    "networkDesc": "Server and proxy configuration",
+    "limits": "Limits",
+    "limitsDesc": "Message and media constraints",
+    "streaming": "Streaming",
+    "streamingDesc": "Real-time message streaming options",
+    "behavior": "Behavior",
+    "behaviorDesc": "Response behavior configuration",
+    "accessControl": "Access Control",
+    "accessControlDesc": "User access restrictions",
     "tabs": {
       "general": "General",
       "config": "Config",
@@ -82,6 +96,7 @@
       "managers": "Managers"
     },
     "general": {
+      "identity": "Identity",
       "name": "Name",
       "nameHint": "Unique slug (read-only)",
       "channelType": "Channel Type",

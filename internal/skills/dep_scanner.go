@@ -59,6 +59,11 @@ func scanScriptsDir(scriptsDir string) *SkillManifest {
 			}
 			continue
 		}
+		// Track sibling .py files as local modules so cross-file imports
+		// (e.g. "from extract_form_field_info import ...") are not reported as pip deps.
+		if strings.HasSuffix(e.Name(), ".py") {
+			localModules[strings.TrimSuffix(e.Name(), ".py")] = true
+		}
 		scanFile(filepath.Join(scriptsDir, e.Name()), pyImports, nodeImports, binaries)
 	}
 

@@ -319,7 +319,9 @@
       "alsoAllow": "Also Allow",
       "selectToolsAllow": "Select tools to allow...",
       "selectToolsDeny": "Select tools to deny...",
-      "selectToolsAlsoAllow": "Select additional tools..."
+      "selectToolsAlsoAllow": "Select additional tools...",
+      "toolCallPrefix": "Tool Call Prefix",
+      "toolCallPrefixHint": "Strips this prefix from model's tool call names before registry lookup."
     },
     "workspaceSharing": {
       "title": "Workspace Sharing",

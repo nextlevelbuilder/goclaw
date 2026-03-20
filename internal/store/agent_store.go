@@ -3,10 +3,26 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
+
+// sanitizeToolCallPrefix strips characters not in [a-z0-9_{}] from the prefix.
+// This matches the UI-side regex and prevents injection via direct API calls.
+func sanitizeToolCallPrefix(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '{' || r == '}' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 // Agent type constants.
 const (
@@ -61,6 +77,20 @@ func (a *AgentData) ParseToolsConfig() *config.ToolPolicySpec {
 	if json.Unmarshal(a.ToolsConfig, &c) != nil {
 		return nil
 	}
+	// Backward compat: migrate old "toolPrefix" key to "toolCallPrefix"
+	if c.ToolCallPrefix == "" {
+		var raw map[string]json.RawMessage
+		if json.Unmarshal(a.ToolsConfig, &raw) == nil {
+			if v, ok := raw["toolPrefix"]; ok {
+				var s string
+				if json.Unmarshal(v, &s) == nil && s != "" {
+					c.ToolCallPrefix = s
+				}
+			}
+		}
+	}
+	// Sanitize: only allow [a-z0-9_{}] to prevent injection via API bypass.
+	c.ToolCallPrefix = sanitizeToolCallPrefix(c.ToolCallPrefix)
 	return &c
 }
 

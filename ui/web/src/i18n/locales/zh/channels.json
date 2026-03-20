@@ -74,6 +74,20 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "advanced": "高级设置",
+    "advancedTitle": "高级配置",
+    "policies": "策略",
+    "policiesDesc": "消息处理策略",
+    "network": "网络",
+    "networkDesc": "服务器和代理配置",
+    "limits": "限制",
+    "limitsDesc": "消息和媒体限制",
+    "streaming": "流式传输",
+    "streamingDesc": "实时消息流选项",
+    "behavior": "行为",
+    "behaviorDesc": "响应行为配置",
+    "accessControl": "访问控制",
+    "accessControlDesc": "用户访问限制",
     "tabs": {
       "general": "基本信息",
       "config": "配置",
@@ -82,6 +96,7 @@
       "managers": "管理员"
     },
     "general": {
+      "identity": "身份信息",
       "name": "名称",
       "nameHint": "唯一标识（只读）",
       "channelType": "Channel类型",

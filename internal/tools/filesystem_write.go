@@ -224,8 +224,14 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	if err := bridge.WriteFile(ctx, path, content); err != nil {
-		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
+	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	containerPath := ResolveSandboxPath(path, containerCwd)
+
+	if err := bridge.WriteFile(ctx, containerPath, content); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to write file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
 	msg := fmt.Sprintf("File written: %s (%d bytes)", path, len(content))
@@ -251,5 +257,5 @@ func (t *WriteFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*sa
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
 }

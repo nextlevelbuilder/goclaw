@@ -22,6 +22,7 @@ export const ROUTES = {
   NODES: "/nodes",
   LOGS: "/logs",
   PROVIDERS: "/providers",
+  PROVIDER_DETAIL: "/providers/:id",
   TEAMS: "/teams",
   TEAM_DETAIL: "/teams/:id",
   CUSTOM_TOOLS: "/custom-tools",

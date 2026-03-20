@@ -3,6 +3,7 @@ import { ClipboardList, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { Pagination } from "@/components/shared/pagination";
 import { usePagination } from "@/hooks/use-pagination";
@@ -36,6 +37,8 @@ export function TaskList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [singleDeleting, setSingleDeleting] = useState(false);
   const taskLookup = useMemo(() => buildTaskLookup(tasks), [tasks]);
   const memberLookup = useMemo(() => buildMemberLookup(members), [members]);
   const { pageItems, pagination, setPage, setPageSize } = usePagination(tasks, { defaultPageSize: 20 });
@@ -107,9 +110,19 @@ export function TaskList({
   const handleDelete = (e: React.MouseEvent, taskId: string) => {
     e.stopPropagation();
     if (!deleteTask) return;
-    if (!window.confirm(t("tasks.deleteConfirm"))) return;
-    deleteTask(teamId, taskId);
+    setDeleteTargetId(taskId);
   };
+
+  const handleSingleDelete = useCallback(async () => {
+    if (!deleteTask || !deleteTargetId) return;
+    setSingleDeleting(true);
+    try {
+      await deleteTask(teamId, deleteTargetId);
+      setDeleteTargetId(null);
+    } finally {
+      setSingleDeleting(false);
+    }
+  }, [deleteTask, teamId, deleteTargetId]);
 
   const hasBulkDelete = !!deleteTasksBulk && pageTerminalIds.length > 0;
   const allPageSelected = pageTerminalIds.length > 0 && pageTerminalIds.every((id) => selectedIds.has(id));
@@ -254,6 +267,17 @@ export function TaskList({
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(v) => !v && setDeleteTargetId(null)}
+        title={t("tasks.delete")}
+        description={t("tasks.deleteConfirm")}
+        confirmLabel={t("tasks.delete")}
+        variant="destructive"
+        onConfirm={handleSingleDelete}
+        loading={singleDeleting}
+      />
 
       <ConfirmDeleteDialog
         open={confirmOpen}

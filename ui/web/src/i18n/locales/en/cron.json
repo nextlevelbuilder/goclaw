@@ -16,6 +16,14 @@
   "running": "Running...",
   "runHistory": "Run history",
   "defaultAgent": "default",
+  "searchPlaceholder": "Search cron jobs...",
+  "noMatchTitle": "No matching jobs",
+  "noMatchDescription": "Try a different search term.",
+  "card": {
+    "nextRun": "Next: {{time}}",
+    "noNextRun": "No next run",
+    "defaultAgent": "Default agent"
+  },
   "create": {
     "title": "Create Cron Job",
     "name": "Name",
@@ -81,11 +89,43 @@
       "timezone": "Timezone",
       "nextRun": "Next Run",
       "lastRun": "Last Run",
+      "lastStatus": "Last Status",
       "created": "Created",
       "updated": "Updated",
       "autoDelete": "Auto-delete",
       "autoDeleteValue": "Yes (one-time)"
-    }
+    },
+    "tabs": {
+      "overview": "Overview",
+      "history": "Run History"
+    },
+    "advanced": "Advanced",
+    "saveFailed": "Failed to save",
+    "schedule": "Schedule",
+    "scheduleDesc": "Timing configuration",
+    "messageSection": "Message",
+    "messageSectionDesc": "What the agent should do",
+    "agentStatus": "Agent & Status",
+    "agentStatusDesc": "Agent assignment and job status",
+    "info": "Information",
+    "infoDesc": "Job metadata",
+    "scheduling": "Scheduling",
+    "schedulingDesc": "Timezone configuration",
+    "delivery": "Delivery",
+    "deliveryDesc": "Route job output to a channel or user",
+    "deliverToChannel": "Deliver to channel",
+    "channelLabel": "Channel",
+    "channelPlaceholder": "#general",
+    "toLabel": "To (user)",
+    "toPlaceholder": "user-id",
+    "wakeHeartbeat": "Wake heartbeat on run",
+    "wakeHeartbeatDesc": "Trigger agent heartbeat when job runs",
+    "lifecycle": "Lifecycle",
+    "lifecycleDesc": "Job lifecycle settings",
+    "deleteAfterRun": "Delete after run",
+    "deleteAfterRunDesc": "Auto-delete this job after first successful run",
+    "timezone": "Timezone",
+    "timezoneDesc": "Timezone for cron expressions"
   },
   "toast": {
     "created": "Cron job created",
@@ -97,6 +137,8 @@
     "failedCreate": "Failed to create cron job",
     "failedToggle": "Failed to toggle cron job",
     "failedDelete": "Failed to delete cron job",
-    "failedRun": "Failed to run cron job"
+    "failedRun": "Failed to run cron job",
+    "updated": "Job updated",
+    "failedUpdate": "Failed to update job"
   }
 }

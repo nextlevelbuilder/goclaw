@@ -16,6 +16,14 @@
   "running": "Đang chạy...",
   "runHistory": "Lịch sử chạy",
   "defaultAgent": "mặc định",
+  "searchPlaceholder": "Tìm kiếm cron...",
+  "noMatchTitle": "Không tìm thấy tác vụ",
+  "noMatchDescription": "Thử từ khóa khác.",
+  "card": {
+    "nextRun": "Tiếp: {{time}}",
+    "noNextRun": "Không có lần chạy tiếp",
+    "defaultAgent": "Agent mặc định"
+  },
   "create": {
     "title": "Tạo tác vụ định kỳ",
     "name": "Tên",
@@ -81,11 +89,43 @@
       "timezone": "Múi giờ",
       "nextRun": "Lần chạy tiếp theo",
       "lastRun": "Lần chạy gần nhất",
+      "lastStatus": "Trạng thái",
       "created": "Đã tạo",
       "updated": "Đã cập nhật",
       "autoDelete": "Tự động xóa",
       "autoDeleteValue": "Có (một lần)"
-    }
+    },
+    "tabs": {
+      "overview": "Tổng quan",
+      "history": "Lịch sử chạy"
+    },
+    "advanced": "Nâng cao",
+    "saveFailed": "Lưu thất bại",
+    "schedule": "Lịch",
+    "scheduleDesc": "Cấu hình thời gian",
+    "messageSection": "Tin nhắn",
+    "messageSectionDesc": "Nội dung agent cần thực hiện",
+    "agentStatus": "Agent & Trạng thái",
+    "agentStatusDesc": "Gán agent và trạng thái công việc",
+    "info": "Thông tin",
+    "infoDesc": "Siêu dữ liệu công việc",
+    "scheduling": "Lên lịch",
+    "schedulingDesc": "Cấu hình múi giờ",
+    "delivery": "Giao nhận",
+    "deliveryDesc": "Chuyển kết quả công việc đến kênh hoặc người dùng",
+    "deliverToChannel": "Gửi đến kênh",
+    "channelLabel": "Kênh",
+    "channelPlaceholder": "#general",
+    "toLabel": "Đến (người dùng)",
+    "toPlaceholder": "user-id",
+    "wakeHeartbeat": "Kích hoạt heartbeat khi chạy",
+    "wakeHeartbeatDesc": "Kích hoạt heartbeat của agent khi công việc chạy",
+    "lifecycle": "Vòng đời",
+    "lifecycleDesc": "Cài đặt vòng đời công việc",
+    "deleteAfterRun": "Xóa sau khi chạy",
+    "deleteAfterRunDesc": "Tự động xóa công việc sau lần chạy thành công đầu tiên",
+    "timezone": "Múi giờ",
+    "timezoneDesc": "Múi giờ cho biểu thức cron"
   },
   "toast": {
     "created": "Đã tạo tác vụ định kỳ",
@@ -97,6 +137,8 @@
     "failedCreate": "Không thể tạo tác vụ định kỳ",
     "failedToggle": "Không thể chuyển đổi tác vụ định kỳ",
     "failedDelete": "Không thể xóa tác vụ định kỳ",
-    "failedRun": "Không thể chạy tác vụ định kỳ"
+    "failedRun": "Không thể chạy tác vụ định kỳ",
+    "updated": "Đã cập nhật job",
+    "failedUpdate": "Cập nhật job thất bại"
   }
 }

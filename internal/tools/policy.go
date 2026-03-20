@@ -398,6 +398,39 @@ func matchDenySpec(name string, spec []string) bool {
 	return false
 }
 
+// StripToolPrefix removes a prefix pattern from a tool name returned by the LLM.
+// The template uses {tool_name} as placeholder. Example: template "proxy_{tool_name}"
+// strips "proxy_" from "proxy_exec" → "exec".
+// If template has no {tool_name}, it's treated as a literal prefix to strip.
+func StripToolPrefix(tmpl, name string) string {
+	const placeholder = "{tool_name}"
+	if strings.Contains(tmpl, placeholder) {
+		parts := strings.SplitN(tmpl, placeholder, 2)
+		prefix, suffix := parts[0], parts[1]
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, suffix) {
+			result := name[len(prefix):]
+			if suffix != "" {
+				result = result[:len(result)-len(suffix)]
+			}
+			if result != "" {
+				return result
+			}
+		}
+		return name
+	}
+	// Plain prefix: strip literal prefix and any leading underscore separator
+	stripped := strings.TrimPrefix(name, tmpl)
+	if stripped == name {
+		return name // prefix didn't match
+	}
+	stripped = strings.TrimPrefix(stripped, "_")
+	if stripped == "" {
+		return name // nothing left after stripping
+	}
+	slog.Debug("tool_prefix.stripped", "from", name, "to", stripped, "template", tmpl)
+	return stripped
+}
+
 func resolveAlias(name string) string {
 	if canonical, ok := legacyToolAliases[name]; ok {
 		return canonical

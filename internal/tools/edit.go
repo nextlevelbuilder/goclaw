@@ -198,10 +198,16 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	bridge := sandbox.NewFsBridge(sb.ID(), "/workspace")
-	content, err := bridge.ReadFile(ctx, path)
+	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	containerPath := ResolveSandboxPath(path, containerCwd)
+
+	bridge := sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir)
+	content, err := bridge.ReadFile(ctx, containerPath)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))
+		return ErrorResult(fmt.Sprintf("failed to read file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
 	newContent, result := applyEdit(content, oldStr, newStr, replaceAll)
@@ -209,8 +215,8 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		return result
 	}
 
-	if err := bridge.WriteFile(ctx, path, newContent); err != nil {
-		return ErrorResult(fmt.Sprintf("failed to write file: %v", err))
+	if err := bridge.WriteFile(ctx, containerPath, newContent); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to write file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
 	count := strings.Count(content, oldStr)

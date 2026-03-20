@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import type { ToolPolicyConfig } from "@/types/agent";
 import { ConfigSection, InfoLabel } from "./config-section";
 import { ToolNameSelect } from "@/components/shared/tool-name-select";
@@ -41,6 +42,16 @@ export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPo
             <SelectItem value="minimal">minimal</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div className="space-y-2">
+        <InfoLabel tip="Strip prefix from tool call names returned by the model before registry lookup. Example: 'proxy_' strips prefix so 'proxy_exec' resolves to 'exec'. Supports {tool_name} placeholder.">{t(`${s}.toolCallPrefix`)}</InfoLabel>
+        <Input
+          value={value.toolCallPrefix ?? ""}
+          onChange={(e) => onChange({ ...value, toolCallPrefix: e.target.value.replace(/[^a-z0-9_{}/]/g, "") || undefined })}
+          placeholder="e.g. proxy_"
+          className="font-mono text-sm"
+        />
+        <p className="text-xs text-muted-foreground">{t(`${s}.toolCallPrefixHint`)}</p>
       </div>
       <div className="space-y-2">
         <InfoLabel tip="Explicit allowlist. Only these tools will be available (overrides profile). Leave empty to use profile defaults.">{t(`${s}.allow`)}</InfoLabel>

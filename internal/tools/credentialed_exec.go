@@ -114,7 +114,7 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	if err != nil {
 		r := credentialedPathError(binary, err)
 		if t.sandboxMgr != nil && sandboxKey != "" {
-			r.ForLLM += sandboxHint
+			r.ForLLM += hintBinaryNotFound
 		}
 		return r
 	}
@@ -181,7 +181,7 @@ func (t *ExecTool) executeCredentialedHost(ctx context.Context, absPath string, 
 func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath string, args []string,
 	cwd string, sandboxKey string, envMap map[string]string, timeout time.Duration) *Result {
 
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workingDir, SandboxConfigFromCtx(ctx))
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		slog.Warn("security.credentialed_exec_sandbox_unavailable",
 			"binary", absPath, "error", err)

@@ -19,6 +19,15 @@
     "oauthToken": "OAuth 令牌",
     "notSet": "未设置"
   },
+  "card": {
+    "apiKeySet": "已设置API密钥",
+    "authenticated": "已认证",
+    "oauthLinked": "已链接OAuth"
+  },
+  "detail": {
+    "title": "提供商详情",
+    "advanced": "高级"
+  },
   "form": {
     "createTitle": "添加Provider",
     "editTitle": "编辑Provider",
@@ -123,6 +132,26 @@
     "notAuthenticated": "未认证",
     "runOnServer": "在服务器终端运行：",
     "recheckButton": "重新检查"
+  },
+  "detail": {
+    "advanced": "高级设置",
+    "identity": "身份",
+    "identityDesc": "Provider标识",
+    "connection": "连接",
+    "connectionDesc": "API端点配置",
+    "acpConfig": "ACP配置",
+    "acpConfigDesc": "Agent子进程设置",
+    "cliConfig": "Claude CLI",
+    "cliConfigDesc": "本地CLI认证",
+    "oauthConfig": "OAuth",
+    "oauthConfigDesc": "ChatGPT OAuth认证",
+    "nameReadonly": "Provider标识符，无法更改",
+    "providerType": "Provider类型",
+    "apiKeySection": "API密钥",
+    "apiKeySectionDesc": "认证凭证",
+    "statusSection": "状态",
+    "statusSectionDesc": "Provider可用性",
+    "enabledDesc": "Provider已激活并可供Agent使用"
   },
   "toast": {
     "created": "Provider已创建",

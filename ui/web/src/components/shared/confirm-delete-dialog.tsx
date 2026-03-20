@@ -35,13 +35,16 @@ export function ConfirmDeleteDialog({
   const { t } = useTranslation("common");
   const [inputValue, setInputValue] = useState("");
 
+  const normalizeForCompare = (value: string) => value.normalize("NFC").trim().toLocaleLowerCase();
+  const confirmationTarget = confirmValue.trim() || confirmValue;
+
   useEffect(() => {
     if (!open) setInputValue("");
   }, [open]);
 
   const isMatch = confirmValue
-    ? inputValue.toLowerCase() === confirmValue.toLowerCase()
-    : inputValue.length > 0;
+    ? normalizeForCompare(inputValue) === normalizeForCompare(confirmValue)
+    : inputValue.trim().length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,12 +55,12 @@ export function ConfirmDeleteDialog({
         </DialogHeader>
         <div className="py-2">
           <p className="mb-2 text-sm text-muted-foreground">
-            {t("typeToConfirmPrefix")} <span className="font-semibold text-foreground">{confirmValue}</span> {t("typeToConfirmSuffix")}
+            {t("typeToConfirmPrefix")} <span className="font-semibold text-foreground">{confirmationTarget}</span> {t("typeToConfirmSuffix")}
           </p>
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={confirmValue}
+            placeholder={confirmationTarget}
             autoFocus
           />
         </div>

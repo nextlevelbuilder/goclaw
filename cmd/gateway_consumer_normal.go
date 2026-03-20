@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram/voiceguard"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -321,7 +322,7 @@ func processNormalMessage(
 	})
 
 	// Handle result asynchronously to not block the flush callback.
-	go func(agentKey, channel, chatID, session, rID string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch) {
+	go func(agentKey, channel, chatID, session, rID, peerKind, inboundContent string, meta map[string]string, blockReplyEnabled bool, ptd *tools.PendingTeamDispatch) {
 		outcome := <-outCh
 
 		// Release team create lock — tasks already visible in DB, other goroutines can list.
@@ -396,11 +397,20 @@ func processNormalMessage(
 			return
 		}
 
+		// Sanitize voice agent replies: replace technical errors with user-friendly fallback.
+		replyContent := voiceguard.SanitizeReply(
+			cfg.Channels.Telegram.VoiceAgentID, agentKey,
+			channel, peerKind, inboundContent, outcome.Result.Content,
+			cfg.Channels.Telegram.AudioGuardFallbackTranscript,
+			cfg.Channels.Telegram.AudioGuardFallbackNoTranscript,
+			cfg.Channels.Telegram.AudioGuardErrorMarkers,
+		)
+
 		// Publish response back to the channel
 		outMsg := bus.OutboundMessage{
 			Channel:  channel,
 			ChatID:   chatID,
-			Content:  outcome.Result.Content,
+			Content:  replyContent,
 			Metadata: meta,
 		}
 
@@ -410,7 +420,7 @@ func processNormalMessage(
 
 		// Auto-set followup when lead agent replies on a real channel with in_progress tasks.
 		if teamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelTeammate && channel != tools.ChannelDashboard {
-			go autoSetFollowup(ctx, teamStore, agentStore, agentKey, channel, chatID, outcome.Result.Content)
+			go autoSetFollowup(ctx, teamStore, agentStore, agentKey, channel, chatID, replyContent)
 		}
-	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, outMeta, blockReply, ptd)
+	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd)
 }

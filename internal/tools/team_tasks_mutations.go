@@ -322,6 +322,11 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		return ErrorResult("only the assigned task owner can update progress. As team lead, task results arrive automatically when members complete their work.")
 	}
 
+	// Prevent progress regression — keep the higher value.
+	if percent < task.ProgressPercent {
+		percent = task.ProgressPercent
+	}
+
 	if err := t.manager.teamStore.UpdateTaskProgress(ctx, taskID, team.ID, percent, step); err != nil {
 		return ErrorResult("failed to update progress: " + err.Error())
 	}

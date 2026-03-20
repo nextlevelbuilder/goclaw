@@ -74,6 +74,20 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "advanced": "Nâng cao",
+    "advancedTitle": "Cài đặt nâng cao",
+    "policies": "Chính sách",
+    "policiesDesc": "Chính sách xử lý tin nhắn",
+    "network": "Mạng",
+    "networkDesc": "Cấu hình máy chủ và proxy",
+    "limits": "Giới hạn",
+    "limitsDesc": "Giới hạn tin nhắn và media",
+    "streaming": "Streaming",
+    "streamingDesc": "Tùy chọn streaming tin nhắn thời gian thực",
+    "behavior": "Hành vi",
+    "behaviorDesc": "Cấu hình hành vi phản hồi",
+    "accessControl": "Kiểm soát truy cập",
+    "accessControlDesc": "Giới hạn truy cập người dùng",
     "tabs": {
       "general": "Chung",
       "config": "Cấu hình",
@@ -82,6 +96,7 @@
       "managers": "Quản lý"
     },
     "general": {
+      "identity": "Thông tin",
       "name": "Tên",
       "nameHint": "Slug duy nhất (chỉ đọc)",
       "channelType": "Loại channel",

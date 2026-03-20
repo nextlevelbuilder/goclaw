@@ -31,14 +31,12 @@ import { Loader2 } from "lucide-react";
 interface ProviderFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  provider: ProviderData | null; // null = create mode
   onSubmit: (data: ProviderInput) => Promise<unknown>;
   existingProviders?: ProviderData[];
 }
 
-export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, existingProviders = [] }: ProviderFormDialogProps) {
+export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProviders = [] }: ProviderFormDialogProps) {
   const { t } = useTranslation("providers");
-  const isEdit = !!provider;
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -56,8 +54,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
   const [acpPermMode, setAcpPermMode] = useState("approve-all");
   const [acpWorkDir, setAcpWorkDir] = useState("");
 
-  // Only one Claude CLI provider allowed per instance
-  const hasClaudeCLI = !isEdit && existingProviders.some((p) => p.provider_type === "claude_cli");
+  const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
 
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
@@ -66,37 +63,19 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
   useEffect(() => {
     if (open) {
       setError("");
-      if (provider) {
-        setName(provider.name);
-        setDisplayName(provider.display_name || "");
-        setProviderType(provider.provider_type);
-        setApiBase(provider.api_base || "");
-        setApiKey(provider.api_key || "");
-        setEnabled(provider.enabled);
-        // Load ACP settings from provider
-        if (provider.provider_type === "acp") {
-          const s = provider.settings as Record<string, unknown> | undefined;
-          setAcpBinary(provider.api_base || "");
-          setAcpArgs(Array.isArray(s?.args) ? (s.args as string[]).join(" ") : "");
-          setAcpIdleTTL((s?.idle_ttl as string) || "");
-          setAcpPermMode((s?.perm_mode as string) || "approve-all");
-          setAcpWorkDir((s?.work_dir as string) || "");
-        }
-      } else {
-        setName("");
-        setDisplayName("");
-        setProviderType("openai_compat");
-        setApiBase("");
-        setApiKey("");
-        setEnabled(true);
-        setAcpBinary("");
-        setAcpArgs("");
-        setAcpIdleTTL("");
-        setAcpPermMode("approve-all");
-        setAcpWorkDir("");
-      }
+      setName("");
+      setDisplayName("");
+      setProviderType("openai_compat");
+      setApiBase("");
+      setApiKey("");
+      setEnabled(true);
+      setAcpBinary("");
+      setAcpArgs("");
+      setAcpIdleTTL("");
+      setAcpPermMode("approve-all");
+      setAcpWorkDir("");
     }
-  }, [open, provider]);
+  }, [open]);
 
   const handleSubmit = async () => {
     if (!name.trim() || !providerType) return;
@@ -110,7 +89,6 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
         enabled,
       };
 
-      // ACP: serialize fields into api_base (binary) + settings JSON
       if (isACP) {
         data.api_base = acpBinary.trim() || undefined;
         const settings: Record<string, unknown> = {};
@@ -125,7 +103,6 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
         }
       }
 
-      // Only include api_key if it's a real value (not the mask)
       if (apiKey && apiKey !== "***") {
         data.api_key = apiKey;
       }
@@ -141,44 +118,41 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] flex flex-col">
+      <DialogContent className="flex max-h-[85vh] flex-col">
         <DialogHeader>
-          <DialogTitle>{isEdit ? t("form.editTitle") : t("form.createTitle")}</DialogTitle>
+          <DialogTitle>{t("form.createTitle")}</DialogTitle>
           <DialogDescription>{t("form.configure")}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
-          {/* Provider type selector — always shown in create mode */}
-          {!isEdit && (
-            <ProviderTypeSelect
-              value={providerType}
-              hasClaudeCLI={hasClaudeCLI}
-              alreadyAddedLabel={t("form.alreadyAdded")}
-              providerTypeLabel={t("form.providerType")}
-              onChange={(v) => {
-                setProviderType(v);
-                const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
-                setApiBase(preset?.apiBase || "");
-                if (v === "chatgpt_oauth") {
-                  setName("openai-codex");
-                  setDisplayName("ChatGPT (OAuth)");
-                } else {
-                  if (name === "openai-codex") setName("");
-                  if (displayName === "ChatGPT (OAuth)") setDisplayName("");
-                }
-              }}
-            />
-          )}
+        <div className="-mx-4 min-h-0 overflow-y-auto px-4 py-4 sm:-mx-6 sm:px-6 space-y-4">
+          <ProviderTypeSelect
+            value={providerType}
+            hasClaudeCLI={hasClaudeCLI}
+            alreadyAddedLabel={t("form.alreadyAdded")}
+            providerTypeLabel={t("form.providerType")}
+            onChange={(v) => {
+              setProviderType(v);
+              const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
+              setApiBase(preset?.apiBase || "");
+              if (v === "chatgpt_oauth") {
+                setName("openai-codex");
+                setDisplayName("ChatGPT (OAuth)");
+              } else {
+                if (name === "openai-codex") setName("");
+                if (displayName === "ChatGPT (OAuth)") setDisplayName("");
+              }
+            }}
+          />
 
           {isOAuth ? (
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>{t("form.nameFixed")}</Label>
-                  <Input value="openai-codex" disabled />
+                  <Input value="openai-codex" disabled className="text-base md:text-sm" />
                 </div>
                 <div className="space-y-2">
                   <Label>{t("form.displayName")}</Label>
-                  <Input value="ChatGPT (OAuth)" disabled />
+                  <Input value="ChatGPT (OAuth)" disabled className="text-base md:text-sm" />
                 </div>
               </div>
               <OAuthSection onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }} />
@@ -193,7 +167,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
                     value={name}
                     onChange={(e) => setName(slugify(e.target.value))}
                     placeholder={t("form.namePlaceholder")}
-                    disabled={isEdit}
+                    className="text-base md:text-sm"
                   />
                   <p className="text-xs text-muted-foreground">{t("form.nameHint")}</p>
                 </div>
@@ -204,32 +178,13 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder={t("form.displayNamePlaceholder")}
+                    className="text-base md:text-sm"
                   />
                 </div>
               </div>
 
-              {isEdit && (
-                <div className="space-y-2">
-                  <Label>{t("form.providerType")}</Label>
-                  <Select value={providerType} onValueChange={setProviderType}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROVIDER_TYPES.filter((pt) => pt.value !== "chatgpt_oauth").map((pt) => (
-                        <SelectItem key={pt.value} value={pt.value}>
-                          {pt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Claude CLI section */}
               {isCLI && <CLISection open={open} />}
 
-              {/* ACP section */}
               {isACP && (
                 <ACPSection
                   binary={acpBinary}
@@ -245,7 +200,6 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
                 />
               )}
 
-              {/* Standard provider fields (not shown for Claude CLI or ACP) */}
               {!isCLI && !isACP && (
                 <>
                   <div className="space-y-2">
@@ -255,6 +209,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
                       value={apiBase}
                       onChange={(e) => setApiBase(e.target.value)}
                       placeholder={PROVIDER_TYPES.find((pt) => pt.value === providerType)?.placeholder || PROVIDER_TYPES.find((pt) => pt.value === providerType)?.apiBase || "https://api.example.com/v1"}
+                      className="text-base md:text-sm"
                     />
                   </div>
 
@@ -265,13 +220,9 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
                       type="password"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={isEdit ? t("form.apiKeyEditPlaceholder") : t("form.apiKeyPlaceholder")}
+                      placeholder={t("form.apiKeyPlaceholder")}
+                      className="text-base md:text-sm"
                     />
-                    {isEdit && apiKey === "***" && (
-                      <p className="text-xs text-muted-foreground">
-                        {t("form.apiKeySetHint")}
-                      </p>
-                    )}
                   </div>
                 </>
               )}
@@ -297,9 +248,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
               className="gap-1"
             >
               {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {loading
-                ? (isEdit ? t("form.saving") : t("form.creating"))
-                : isEdit ? t("form.save") : t("form.create")}
+              {loading ? t("form.creating") : t("form.create")}
             </Button>
           )}
         </DialogFooter>
@@ -307,8 +256,6 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit, exi
     </Dialog>
   );
 }
-
-// --- Provider type select dropdown ---
 
 function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
   value: string;

@@ -116,5 +116,7 @@
   "failedToLoadImage": "图片加载失败",
   "deleteFolder": "删除文件夹",
   "deleteFile": "删除文件",
-  "loadMore": "加载更多..."
+  "loadMore": "加载更多...",
+  "viewCard": "卡片视图",
+  "viewList": "列表视图"
 }

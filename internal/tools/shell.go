@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -31,7 +30,7 @@ func DefaultDenyPatterns() []*regexp.Regexp {
 
 // ExecTool executes shell commands, optionally inside a sandbox container.
 type ExecTool struct {
-	workingDir       string
+	workspace       string
 	timeout          time.Duration
 	pathDenyPatterns []*regexp.Regexp     // always-on path-based denials (DenyPaths)
 	denyExemptions   []string             // substrings that exempt a command from deny
@@ -43,18 +42,18 @@ type ExecTool struct {
 }
 
 // NewExecTool creates an exec tool that runs commands directly on the host.
-func NewExecTool(workingDir string, restrict bool) *ExecTool {
+func NewExecTool(workspace string, restrict bool) *ExecTool {
 	return &ExecTool{
-		workingDir: workingDir,
+		workspace: workspace,
 		timeout:    60 * time.Second,
 		restrict:   restrict,
 	}
 }
 
 // NewSandboxedExecTool creates an exec tool that routes commands through a sandbox container.
-func NewSandboxedExecTool(workingDir string, restrict bool, mgr sandbox.Manager) *ExecTool {
+func NewSandboxedExecTool(workspace string, restrict bool, mgr sandbox.Manager) *ExecTool {
 	return &ExecTool{
-		workingDir: workingDir,
+		workspace: workspace,
 		timeout:    300 * time.Second, // sandbox allows longer timeout
 		restrict:   restrict,
 		sandboxMgr: mgr,
@@ -168,11 +167,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	if cred, binary, cmdArgs := t.lookupCredentialedBinary(ctx, command); cred != nil {
 		cwd := ToolWorkspaceFromCtx(ctx)
 		if cwd == "" {
-			cwd = t.workingDir
+			cwd = t.workspace
 		}
 		if wd, _ := args["working_dir"].(string); wd != "" {
 			if effectiveRestrict(ctx, t.restrict) {
-				if resolved, err := resolvePath(wd, t.workingDir, true); err == nil {
+				if resolved, err := resolvePath(wd, t.workspace, true); err == nil {
 					cwd = resolved
 				}
 			} else {
@@ -202,11 +201,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Use per-user workspace from context if available, fallback to struct field
 	cwd := ToolWorkspaceFromCtx(ctx)
 	if cwd == "" {
-		cwd = t.workingDir
+		cwd = t.workspace
 	}
 	if wd, _ := args["working_dir"].(string); wd != "" {
 		if effectiveRestrict(ctx, t.restrict) {
-			resolved, err := resolvePath(wd, t.workingDir, true)
+			resolved, err := resolvePath(wd, t.workspace, true)
 			if err != nil {
 				return ErrorResult(err.Error())
 			}
@@ -282,7 +281,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 
 // executeInSandbox routes a command through a Docker sandbox container.
 func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKey string) *Result {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workingDir, SandboxConfigFromCtx(ctx))
+	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, SandboxConfigFromCtx(ctx))
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)
@@ -296,13 +295,10 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		return ErrorResult(fmt.Sprintf("sandbox unavailable: %v (will not fall back to unsandboxed host execution)", err))
 	}
 
-	// Map host workdir to container workdir
-	containerCwd := "/workspace"
-	if cwd != t.workingDir {
-		rel, relErr := filepath.Rel(t.workingDir, cwd)
-		if relErr == nil {
-			containerCwd = filepath.Join("/workspace", rel)
-		}
+	// Map host workdir to container workdir via SandboxCwd helper.
+	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
 
 	result, err := sb.Exec(ctx, []string{"sh", "-c", command}, containerCwd) //nolint: no ExecOption for normal exec

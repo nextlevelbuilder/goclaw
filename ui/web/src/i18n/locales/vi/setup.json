@@ -18,6 +18,7 @@
   "provider": {
     "title": "Cấu hình provider LLM",
     "descriptionCli": "Kết nối bằng Claude CLI cục bộ. Không cần API key.",
+    "descriptionOauth": "Đăng nhập bằng tài khoản ChatGPT để dùng gói thuê bao qua OAuth. Không cần API key.",
     "description": "Kết nối với provider AI để cấp nguồn cho agent. Bạn cần có API key.",
     "providerType": "Loại provider",
     "providerTypeHint": "Dịch vụ LLM bạn muốn kết nối. Khuyến nghị dùng OpenRouter để truy cập nhiều model.",
@@ -31,6 +32,7 @@
     "create": "Tạo provider",
     "errors": {
       "apiKeyRequired": "API key là bắt buộc",
+      "oauthProviderNotFound": "Xác thực OAuth thành công nhưng không tìm thấy provider. Vui lòng thử lại.",
       "failedCreate": "Không thể tạo provider"
     }
   },

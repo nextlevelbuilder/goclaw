@@ -319,7 +319,9 @@
       "alsoAllow": "Cũng cho phép",
       "selectToolsAllow": "Chọn công cụ để cho phép...",
       "selectToolsDeny": "Chọn công cụ để từ chối...",
-      "selectToolsAlsoAllow": "Chọn công cụ bổ sung..."
+      "selectToolsAlsoAllow": "Chọn công cụ bổ sung...",
+      "toolCallPrefix": "Tiền tố Tool Call",
+      "toolCallPrefixHint": "Loại bỏ tiền tố này từ tên tool call của model trước khi tra cứu registry."
     },
     "workspaceSharing": {
       "title": "Chia sẻ Workspace",

@@ -18,6 +18,7 @@
   "provider": {
     "title": "Configure LLM Provider",
     "descriptionCli": "Connect using your local Claude CLI installation. No API key needed.",
+    "descriptionOauth": "Sign in with your ChatGPT account to use your subscription through OAuth. No API key needed.",
     "description": "Connect to an AI provider to power your agents. You'll need an API key.",
     "providerType": "Provider Type",
     "providerTypeHint": "The LLM service you want to connect. OpenRouter is recommended for access to multiple models.",
@@ -31,6 +32,7 @@
     "create": "Create Provider",
     "errors": {
       "apiKeyRequired": "API key is required",
+      "oauthProviderNotFound": "OAuth authentication succeeded, but the provider could not be found. Please try again.",
       "failedCreate": "Failed to create provider"
     }
   },

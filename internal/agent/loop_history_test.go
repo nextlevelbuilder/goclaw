@@ -243,6 +243,58 @@ func TestSanitizeHistory_DedupsDuplicateIDsAcrossTurns(t *testing.T) {
 	}
 }
 
+func TestSanitizeHistory_DedupsDuplicateIDsWithinTurn(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "do two things"},
+		{Role: "assistant", Content: "", ToolCalls: []providers.ToolCall{
+			{ID: "call_abc", Name: "read_file"},
+			{ID: "call_abc", Name: "write_file"}, // same ID within turn
+		}},
+		{Role: "tool", Content: "result1", ToolCallID: "call_abc"},
+		{Role: "tool", Content: "result2", ToolCallID: "call_abc"},
+		{Role: "assistant", Content: "done"},
+	}
+	got, dropped := sanitizeHistory(msgs)
+	if dropped != 0 {
+		t.Errorf("expected 0 dropped, got %d", dropped)
+	}
+
+	// Both tool results must be present and paired correctly
+	toolResults := 0
+	for _, m := range got {
+		if m.Role == "tool" {
+			toolResults++
+		}
+	}
+	if toolResults != 2 {
+		t.Errorf("expected 2 tool results, got %d", toolResults)
+	}
+
+	// All tool call IDs must be unique
+	seen := make(map[string]bool)
+	for _, m := range got {
+		for _, tc := range m.ToolCalls {
+			if seen[tc.ID] {
+				t.Errorf("duplicate tool call ID: %s", tc.ID)
+			}
+			seen[tc.ID] = true
+		}
+	}
+
+	// Each tool result ID must match a tool call ID
+	callIDs := make(map[string]bool)
+	for _, m := range got {
+		for _, tc := range m.ToolCalls {
+			callIDs[tc.ID] = true
+		}
+	}
+	for _, m := range got {
+		if m.Role == "tool" && !callIDs[m.ToolCallID] {
+			t.Errorf("tool result ID %s has no matching tool call", m.ToolCallID)
+		}
+	}
+}
+
 func TestSanitizeHistory_NoDedupWhenIDsUnique(t *testing.T) {
 	msgs := []providers.Message{
 		{Role: "user", Content: "hello"},

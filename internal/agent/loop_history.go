@@ -408,9 +408,10 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 			msg.ToolCalls = make([]providers.ToolCall, len(oldCalls))
 			copy(msg.ToolCalls, oldCalls)
 
-			// Dedup: rewrite any ID that was already seen in an earlier turn.
-			// Maps original ID → rewritten ID for pairing with tool results below.
-			idRemap := make(map[string]string, len(msg.ToolCalls))
+			// Dedup: rewrite any ID that was already seen in an earlier turn or
+			// within the same turn. Uses a queue per original ID so multiple tool
+			// results with the same raw ID pair correctly in encounter order.
+			idQueue := make(map[string][]string, len(msg.ToolCalls)) // origID → []newID
 			expectedIDs := make(map[string]bool, len(msg.ToolCalls))
 			for j := range msg.ToolCalls {
 				origID := msg.ToolCalls[j].ID
@@ -421,7 +422,7 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 				}
 				msg.ToolCalls[j].ID = newID
 				globalSeen[newID] = true
-				idRemap[origID] = newID
+				idQueue[origID] = append(idQueue[origID], newID)
 				expectedIDs[newID] = true
 			}
 
@@ -431,7 +432,9 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 			for i+1 < len(msgs) && msgs[i+1].Role == "tool" {
 				i++
 				toolMsg := msgs[i]
-				if newID, ok := idRemap[toolMsg.ToolCallID]; ok && expectedIDs[newID] {
+				if queue, ok := idQueue[toolMsg.ToolCallID]; ok && len(queue) > 0 {
+					newID := queue[0]
+					idQueue[toolMsg.ToolCallID] = queue[1:]
 					toolMsg.ToolCallID = newID
 					result = append(result, toolMsg)
 					delete(expectedIDs, newID)

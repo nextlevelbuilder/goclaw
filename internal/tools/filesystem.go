@@ -180,9 +180,15 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}
 
-	data, err := bridge.ReadFile(ctx, path)
+	containerCwd, cwdErr := SandboxCwd(ctx, t.workspace, sandbox.DefaultContainerWorkdir)
+	if cwdErr != nil {
+		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
+	}
+	containerPath := ResolveSandboxPath(path, containerCwd)
+
+	data, err := bridge.ReadFile(ctx, containerPath)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))
+		return ErrorResult(fmt.Sprintf("failed to read file: %v", err) + MaybeFsBridgeHint(err))
 	}
 
 	return SilentResult(data)
@@ -193,7 +199,7 @@ func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey string) (*san
 	if err != nil {
 		return nil, err
 	}
-	return sandbox.NewFsBridge(sb.ID(), "/workspace"), nil
+	return sandbox.NewFsBridge(sb.ID(), sandbox.DefaultContainerWorkdir), nil
 }
 
 // allowedWithTeamWorkspace returns the allowed prefixes with team workspace appended

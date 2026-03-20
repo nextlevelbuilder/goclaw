@@ -9,6 +9,7 @@ import { BoardToolbar } from "./board-toolbar";
 import { KanbanBoard } from "./kanban-board";
 import { TaskDetailDialog } from "../task-sections/task-detail-dialog";
 import { TaskList } from "../task-sections";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import type {
   TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment,
   TeamMemberData, ScopeEntry,
@@ -72,6 +73,8 @@ export const BoardContainer = memo(function BoardContainer({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedScope, setSelectedScope] = useState<ScopeEntry | null>(null);
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [singleDeleting, setSingleDeleting] = useState(false);
 
   // Lookups for name resolution
   const taskLookup = useMemo(() => buildTaskLookup(tasks), [tasks]);
@@ -227,16 +230,24 @@ export const BoardContainer = memo(function BoardContainer({
 
   const deleteTaskRef = useRef(deleteTask);
   deleteTaskRef.current = deleteTask;
-  const handleDeleteTask = useCallback(async (taskId: string) => {
+  const handleDeleteTask = useCallback((taskId: string) => {
     if (!deleteTaskRef.current) return;
-    if (!window.confirm(t("tasks.deleteConfirm"))) return;
+    setDeleteTargetId(taskId);
+  }, []);
+
+  const confirmDeleteTask = useCallback(async () => {
+    if (!deleteTaskRef.current || !deleteTargetId) return;
+    setSingleDeleting(true);
     try {
-      await deleteTaskRef.current(teamId, taskId);
+      await deleteTaskRef.current(teamId, deleteTargetId);
       toast.success(t("toast.taskDeleted"));
+      setDeleteTargetId(null);
     } catch {
       toast.error(t("toast.failedDeleteTask"));
+    } finally {
+      setSingleDeleting(false);
     }
-  }, [teamId, t]);
+  }, [teamId, deleteTargetId, t]);
 
   return (
     <div className="flex flex-1 flex-col gap-3 overflow-hidden p-3 sm:p-4">
@@ -279,6 +290,17 @@ export const BoardContainer = memo(function BoardContainer({
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={(v) => !v && setDeleteTargetId(null)}
+        title={t("tasks.delete")}
+        description={t("tasks.deleteConfirm")}
+        confirmLabel={t("tasks.delete")}
+        variant="destructive"
+        onConfirm={confirmDeleteTask}
+        loading={singleDeleting}
+      />
 
       {selectedTask && (
         <TaskDetailDialog

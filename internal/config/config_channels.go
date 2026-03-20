@@ -54,6 +54,12 @@ type TelegramConfig struct {
 	// agent instead of the default channel agent. Requires the named agent to exist in the config.
 	VoiceAgentID string `json:"voice_agent_id,omitempty"` // agent ID to route voice inbound to (e.g. "speaking-agent")
 
+	// Audio guard: intercept technical errors in voice agent replies and replace with friendly fallbacks.
+	// Only active when VoiceAgentID is set. Custom error markers replace built-in defaults when provided.
+	AudioGuardFallbackTranscript   string   `json:"audio_guard_fallback_transcript,omitempty"`    // fallback with %s for transcript (e.g. "I heard: \"%s\". Try again!")
+	AudioGuardFallbackNoTranscript string   `json:"audio_guard_fallback_no_transcript,omitempty"` // fallback when no transcript available
+	AudioGuardErrorMarkers         []string `json:"audio_guard_error_markers,omitempty"`          // custom error detection markers (replaces defaults)
+
 	// Per-group (and per-topic) overrides. Key is chat ID string (e.g. "-100123456") or "*" for wildcard.
 	// TS ref: channels.telegram.groups in src/config/types.telegram.ts.
 	Groups map[string]*TelegramGroupConfig `json:"groups,omitempty"`
@@ -400,6 +406,7 @@ type ToolPolicySpec struct {
 	Deny       []string                   `json:"deny,omitempty"`
 	AlsoAllow  []string                   `json:"alsoAllow,omitempty"`
 	ByProvider map[string]*ToolPolicySpec `json:"byProvider,omitempty"`
+	ToolCallPrefix string `json:"toolCallPrefix,omitempty"` // prefix to strip from model's tool call names before registry lookup
 }
 
 type WebToolsConfig struct {

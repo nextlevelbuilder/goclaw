@@ -78,9 +78,20 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
   const isStdio = transport === "stdio";
 
   const buildConnectionData = () => {
-    const parsedArgs = isStdio && args.trim()
-      ? args.split(",").map((a) => a.trim()).filter(Boolean)
-      : undefined;
+    let parsedArgs: string[] | undefined = undefined;
+    if (isStdio && args.trim()) {
+      // Split by spaces respecting quoted strings, including --flag="value" patterns.
+      const matches = args.match(/[^\s"']*"([^"]*)"|[^\s"']*'([^']*)'|[^\s]+/g);
+      if (matches) {
+        parsedArgs = matches.map((m) => {
+          // Strip surrounding quotes from standalone quoted args: "foo bar" → foo bar
+          if (m.startsWith('"') && m.endsWith('"')) return m.slice(1, -1);
+          if (m.startsWith("'") && m.endsWith("'")) return m.slice(1, -1);
+          // Strip quotes from --flag="value" patterns: --flag="foo bar" → --flag=foo bar
+          return m.replace(/"([^"]*)"/g, "$1").replace(/'([^']*)'/g, "$1");
+        });
+      }
+    }
     const parsedHeaders = !isStdio && Object.keys(headers).length > 0 ? headers : undefined;
     const parsedEnv = Object.keys(env).length > 0 ? env : undefined;
     return {
