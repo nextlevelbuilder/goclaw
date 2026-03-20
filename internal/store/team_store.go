@@ -297,6 +297,7 @@ type TeamStore interface {
 	// Task comments
 	AddTaskComment(ctx context.Context, comment *TeamTaskCommentData) error
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TeamTaskCommentData, error)
+	ListRecentTaskComments(ctx context.Context, taskID uuid.UUID, limit int) ([]TeamTaskCommentData, error)
 
 	// Audit events
 	RecordTaskEvent(ctx context.Context, event *TeamTaskEventData) error

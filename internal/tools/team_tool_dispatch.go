@@ -233,19 +233,13 @@ func truncatePreview(s string, maxRunes int) string {
 // tasks (after reject, retry, stale recovery) include relevant context like
 // rejection reasons or progress notes without mutating the task description.
 func (m *TeamToolManager) buildRecentCommentsSummary(ctx context.Context, taskID uuid.UUID) string {
-	comments, err := m.teamStore.ListTaskComments(ctx, taskID)
+	comments, err := m.teamStore.ListRecentTaskComments(ctx, taskID, 3)
 	if err != nil || len(comments) == 0 {
 		return ""
 	}
-	// Take the last 3 comments (ListTaskComments returns ASC order).
-	start := len(comments) - 3
-	if start < 0 {
-		start = 0
-	}
-	recent := comments[start:]
 
 	var parts []string
-	for _, c := range recent {
+	for _, c := range comments {
 		author := "system"
 		if c.AgentID != nil {
 			author = m.agentKeyFromID(ctx, *c.AgentID)

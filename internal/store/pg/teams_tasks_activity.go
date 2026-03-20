@@ -66,6 +66,46 @@ func (s *PGTeamStore) ListTaskComments(ctx context.Context, taskID uuid.UUID) ([
 	return comments, rows.Err()
 }
 
+// ListRecentTaskComments returns the N most recent comments for a task (DESC order).
+// Used by dispatch to include context without fetching all comments.
+func (s *PGTeamStore) ListRecentTaskComments(ctx context.Context, taskID uuid.UUID, limit int) ([]store.TeamTaskCommentData, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT c.id, c.task_id, c.agent_id, c.user_id, c.content, c.created_at,
+		 COALESCE(a.agent_key, '') AS agent_key
+		 FROM team_task_comments c
+		 LEFT JOIN agents a ON a.id = c.agent_id
+		 WHERE c.task_id = $1
+		 ORDER BY c.created_at DESC
+		 LIMIT $2`, taskID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var comments []store.TeamTaskCommentData
+	for rows.Next() {
+		var c store.TeamTaskCommentData
+		var agentID *uuid.UUID
+		var userID sql.NullString
+		if err := rows.Scan(&c.ID, &c.TaskID, &agentID, &userID, &c.Content, &c.CreatedAt, &c.AgentKey); err != nil {
+			return nil, err
+		}
+		c.AgentID = agentID
+		if userID.Valid {
+			c.UserID = userID.String
+		}
+		comments = append(comments, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Reverse to chronological order (ASC) for display.
+	for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
+		comments[i], comments[j] = comments[j], comments[i]
+	}
+	return comments, nil
+}
+
 // ============================================================
 // Audit events
 // ============================================================
