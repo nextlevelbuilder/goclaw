@@ -138,7 +138,7 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 			slog.Warn("skill_grants: scan error in ListAccessible", "error", err)
 			continue
 		}
-		result = append(result, buildSkillInfo("", name, slug, desc, version, s.baseDir))
+		result = append(result, buildSkillInfo("", name, slug, desc, version, s.baseDir, nil))
 	}
 	return result, rows.Err()
 }
