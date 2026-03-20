@@ -85,16 +85,25 @@ func (s *PGMemoryStore) PutDocument(ctx context.Context, agentID, userID, path, 
 
 func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, path string) error {
 	aid := mustParseUUID(agentID)
+	var res sql.Result
+	var err error
 	if userID == "" {
-		_, err := s.db.ExecContext(ctx,
+		res, err = s.db.ExecContext(ctx,
 			"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL",
 			aid, path)
+	} else {
+		res, err = s.db.ExecContext(ctx,
+			"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id = $3",
+			aid, path, userID)
+	}
+	if err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id = $3",
-		aid, path, userID)
-	return err
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("document not found: %s", path)
+	}
+	return nil
 }
 
 func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID string) ([]store.DocumentInfo, error) {
