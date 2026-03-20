@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 )
+
+// invalidFcIDChars matches characters not allowed in Responses API tool call IDs.
+var invalidFcIDChars = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
 // buildRequestBody converts internal ChatRequest to Responses API format.
 func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[string]any {
@@ -175,6 +179,6 @@ func toFcID(id string) string {
 		id = id[len("fc_"):]
 	}
 	// Replace invalid characters (e.g. colons from session keys) with underscores.
-	id = strings.ReplaceAll(id, ":", "_")
+	id = invalidFcIDChars.ReplaceAllString(id, "_")
 	return "fc_" + id
 }
