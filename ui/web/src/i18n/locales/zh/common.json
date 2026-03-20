@@ -118,5 +118,8 @@
   "deleteFile": "删除文件",
   "loadMore": "加载更多...",
   "viewCard": "卡片视图",
-  "viewList": "列表视图"
+  "viewList": "列表视图",
+  "errors": {
+    "serverError": "出了点问题，请稍后重试。"
+  }
 }

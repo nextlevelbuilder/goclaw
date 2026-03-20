@@ -102,5 +102,11 @@
     "version": "Version:",
     "current": "(current)",
     "noContent": "No content available."
+  },
+  "toast": {
+    "updated": "Skill updated",
+    "updateFailed": "Failed to update skill",
+    "deleted": "Skill deleted",
+    "deleteFailed": "Failed to delete skill"
   }
 }

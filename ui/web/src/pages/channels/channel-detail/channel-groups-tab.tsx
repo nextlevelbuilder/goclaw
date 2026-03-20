@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Check, AlertCircle } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChannelInstanceData } from "@/types/channel";
 import { TelegramGroupOverrides } from "../telegram-group-overrides";
@@ -25,8 +25,6 @@ export function ChannelGroupsTab({ instance, onUpdate, listManagerGroups }: Chan
     (config.groups as Record<string, GroupConfigWithTopics>) ?? {},
   );
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [knownGroups, setKnownGroups] = useState<GroupManagerGroupInfo[]>([]);
 
   const loadKnownGroups = useCallback(async () => {
@@ -47,14 +45,9 @@ export function ChannelGroupsTab({ instance, onUpdate, listManagerGroups }: Chan
     );
 
     setSaving(true);
-    setSaveError(null);
-    setSaved(false);
     try {
       await onUpdate({ config: Object.keys(cleanConfig).length > 0 ? cleanConfig : null });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -64,20 +57,9 @@ export function ChannelGroupsTab({ instance, onUpdate, listManagerGroups }: Chan
     <div className="space-y-6">
       <TelegramGroupOverrides groups={groups} onChange={(g) => setGroups(g)} knownGroups={knownGroups} />
 
-      {saveError && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {saveError}
-        </div>
-      )}
       <div className="flex items-center justify-end gap-2">
-        {saved && (
-          <span className="flex items-center gap-1 text-sm text-success">
-            <Check className="h-3.5 w-3.5" /> {t("detail.groups.saved")}
-          </span>
-        )}
         <Button onClick={handleSave} disabled={saving}>
-          {!saving && <Save className="h-4 w-4" />}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? t("detail.groups.saving") : t("detail.groups.saveGroups")}
         </Button>
       </div>

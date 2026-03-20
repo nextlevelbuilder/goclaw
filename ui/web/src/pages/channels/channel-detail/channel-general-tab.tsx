@@ -44,8 +44,6 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
   const [policyValues, setPolicyValues] = useState<Record<string, unknown>>(initialPolicyValues);
 
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
   const handlePolicyChange = useCallback((key: string, value: unknown) => {
     setPolicyValues((prev) => ({ ...prev, [key]: value }));
@@ -53,8 +51,6 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveError(null);
-    setSaved(false);
     try {
       // Merge policy values into existing config, preserving other keys (groups, advanced)
       const cleanPolicies = Object.fromEntries(
@@ -67,10 +63,8 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
         enabled,
         config: mergedConfig,
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("form.errors.failedSave"));
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -146,11 +140,8 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
       <StickySaveBar
         onSave={handleSave}
         saving={saving}
-        saved={saved}
-        error={saveError}
         label={t("detail.general.saveChanges")}
         savingLabel={t("detail.general.saving")}
-        savedLabel={t("detail.general.saved")}
       />
     </div>
   );

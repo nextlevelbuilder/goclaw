@@ -118,5 +118,8 @@
   "deleteFile": "Delete file",
   "loadMore": "Load more...",
   "viewCard": "Card view",
-  "viewList": "List view"
+  "viewList": "List view",
+  "errors": {
+    "serverError": "Something went wrong. Please try again later."
+  }
 }

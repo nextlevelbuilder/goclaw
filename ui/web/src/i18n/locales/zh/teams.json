@@ -292,9 +292,17 @@
     "taskCreated": "任务已创建",
     "taskDeleted": "任务已删除",
     "taskAssigned": "任务已分配",
+    "taskApproved": "任务已审批",
+    "taskRejected": "任务已拒绝",
+    "tasksBulkDeleted": "任务已批量删除",
     "failedCreateTask": "创建任务失败",
     "failedDeleteTask": "删除任务失败",
-    "failedAssignTask": "分配任务失败"
+    "failedAssignTask": "分配任务失败",
+    "failedApproveTask": "审批任务失败",
+    "failedRejectTask": "拒绝任务失败",
+    "failedBulkDeleteTasks": "批量删除任务失败",
+    "workspaceFileDeleted": "文件已删除",
+    "failedDeleteWorkspaceFile": "删除文件失败"
   },
   "board": {
     "kanban": "看板",

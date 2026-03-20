@@ -127,28 +127,32 @@ export function HeartbeatConfigDialog({
   };
 
   const handleSave = async () => {
-    const clampedMin = Math.max(5, intervalMin);
-    await update({
-      enabled,
-      intervalSec: clampedMin * 60,
-      ackMaxChars: ackMaxChars,
-      maxRetries: maxRetries,
-      isolatedSession: isolatedSession,
-      lightContext: lightContext,
-      activeHoursStart: activeHoursStart || undefined,
-      activeHoursEnd: activeHoursEnd || undefined,
-      timezone: timezone || undefined,
-      channel: channel || undefined,
-      chatId: chatId || undefined,
-      model: hbModel || undefined,
-      providerName: hbProvider || undefined,
-    });
-    if (checklist !== originalChecklist) {
-      await setChecklist(checklist);
-      setOriginalChecklist(checklist);
+    try {
+      const clampedMin = Math.max(5, intervalMin);
+      await update({
+        enabled,
+        intervalSec: clampedMin * 60,
+        ackMaxChars: ackMaxChars,
+        maxRetries: maxRetries,
+        isolatedSession: isolatedSession,
+        lightContext: lightContext,
+        activeHoursStart: activeHoursStart || undefined,
+        activeHoursEnd: activeHoursEnd || undefined,
+        timezone: timezone || undefined,
+        channel: channel || undefined,
+        chatId: chatId || undefined,
+        model: hbModel || undefined,
+        providerName: hbProvider || undefined,
+      });
+      if (checklist !== originalChecklist) {
+        await setChecklist(checklist);
+        setOriginalChecklist(checklist);
+      }
+      await refresh();
+      onOpenChange(false);
+    } catch {
+      // toast shown by hook — keep dialog open
     }
-    await refresh();
-    onOpenChange(false);
   };
 
   return (

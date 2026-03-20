@@ -240,10 +240,9 @@ export const BoardContainer = memo(function BoardContainer({
     setSingleDeleting(true);
     try {
       await deleteTaskRef.current(teamId, deleteTargetId);
-      toast.success(t("toast.taskDeleted"));
       setDeleteTargetId(null);
     } catch {
-      toast.error(t("toast.failedDeleteTask"));
+      // toast handled by hook
     } finally {
       setSingleDeleting(false);
     }

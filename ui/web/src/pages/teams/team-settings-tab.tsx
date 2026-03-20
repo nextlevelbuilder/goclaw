@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
-import { X, Save, Check, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
+import { X, Save, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import type { TeamData, TeamAccessSettings, EscalationMode, EscalationAction } from "@/types/team";
@@ -85,8 +85,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const isTeamV2 = version >= 2;
 
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [versionModalOpen, setVersionModalOpen] = useState(false);
 
   // Load known users for combobox
@@ -113,14 +111,10 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setFollowupInterval(s.followup_interval_minutes ?? 30);
     setFollowupMaxReminders(s.followup_max_reminders ?? 0);
     setWorkspaceScope(s.workspace_scope ?? "isolated");
-    setSaved(false);
-    setError(null);
   }, [team]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
-    setError(null);
-    setSaved(false);
     try {
       const settings: TeamAccessSettings = {};
       if (allowUserIds.length > 0) settings.allow_user_ids = allowUserIds;
@@ -143,15 +137,12 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       settings.workspace_scope = workspaceScope || "isolated";
       if (version >= 2) settings.version = version;
       await updateTeamSettings(teamId, settings);
-      setSaved(true);
       onSaved();
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("settings.failedSave"));
+    } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
-  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifySlowTool, notifyMode, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
+  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifySlowTool, notifyMode, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
@@ -458,21 +449,9 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       {/* Save button */}
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving} className="gap-2">
-          {saving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" /> {t("settings.saving")}
-            </>
-          ) : saved ? (
-            <>
-              <Check className="h-4 w-4" /> {t("settings.saved")}
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" /> {t("settings.save")}
-            </>
-          )}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? t("settings.saving") : t("settings.save")}
         </Button>
-        {error && <span className="text-sm text-destructive">{error}</span>}
       </div>
 
       <TeamVersionModal open={versionModalOpen} onOpenChange={setVersionModalOpen} />

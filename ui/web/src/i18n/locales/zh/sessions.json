@@ -33,5 +33,13 @@
     "hide": "隐藏",
     "systemMessage": "系统消息",
     "messages": "条消息"
+  },
+  "toast": {
+    "deleted": "Session已删除",
+    "deleteFailed": "删除Session失败",
+    "reset": "Session已重置",
+    "resetFailed": "重置Session失败",
+    "updated": "Session已更新",
+    "updateFailed": "更新Session失败"
   }
 }

@@ -334,34 +334,36 @@ func extractDocumentContent(filePath, fileName string) (string, error) {
 	return media.ExtractDocumentContent(filePath, fileName)
 }
 
-// lightweightMediaTags builds media placeholder tags from Telegram message metadata
+// lightweightMediaTags builds descriptive media placeholders from Telegram message metadata
 // without downloading any files. Used for pending history recording when bot is not mentioned.
+// Uses bracket notation (e.g. "[sent an image]") instead of XML tags to prevent LLMs from
+// confusing context-history media with actionable current-message media (<media:image>).
 func lightweightMediaTags(msg *telego.Message) string {
 	var tags []string
 	if msg.Photo != nil && len(msg.Photo) > 0 {
-		tags = append(tags, "<media:image>")
+		tags = append(tags, "[sent an image]")
 	}
 	if msg.Video != nil {
-		tags = append(tags, "<media:video>")
+		tags = append(tags, "[sent a video]")
 	}
 	if msg.VideoNote != nil {
-		tags = append(tags, "<media:video>")
+		tags = append(tags, "[sent a video]")
 	}
 	if msg.Animation != nil {
-		tags = append(tags, "<media:video>")
+		tags = append(tags, "[sent a video]")
 	}
 	if msg.Audio != nil {
-		tags = append(tags, "<media:audio>")
+		tags = append(tags, "[sent audio]")
 	}
 	if msg.Voice != nil {
-		tags = append(tags, "<media:voice>")
+		tags = append(tags, "[sent a voice message]")
 	}
 	if msg.Document != nil {
 		name := msg.Document.FileName
 		if name != "" {
-			tags = append(tags, fmt.Sprintf("<media:document name=%q>", name))
+			tags = append(tags, fmt.Sprintf("[sent a file: %s]", name))
 		} else {
-			tags = append(tags, "<media:document>")
+			tags = append(tags, "[sent a file]")
 		}
 	}
 	if len(tags) == 0 {

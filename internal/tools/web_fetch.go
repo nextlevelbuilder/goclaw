@@ -213,9 +213,40 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]any) *Result
 }
 
 func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, maxChars int, policy string) (string, error) {
+	// For markdown mode, use the extractor chain (Defuddle → InProcess waterfall)
+	// resolved from builtin_tools settings stored in context.
+	// InProcessExtractor delegates to fetchRawContent (same path as doDirectFetch),
+	// so no fallthrough is needed — it would just retry the same request.
+	if extractMode == "markdown" {
+		chain := ResolveExtractorChain(ctx, t)
+		if chain != nil {
+			result, err := chain.Extract(ctx, rawURL)
+			if err == nil {
+				return formatFetchResult(result.Content, result.Extractor, rawURL, maxChars, ctx), nil
+			}
+			return "", fmt.Errorf("all extractors failed: %w", err)
+		}
+	}
+
+	// Text mode or no chain available — use direct HTTP fetch.
+	return t.doDirectFetch(ctx, rawURL, extractMode, maxChars, policy)
+}
+
+// fetchRawResult holds the output from fetchRawContent.
+type fetchRawResult struct {
+	content    string
+	extractor  string
+	finalURL   string
+	statusCode int
+}
+
+// fetchRawContent performs HTTP GET with full security checks (SSRF, domain policy on
+// redirects) and routes content by type. Returns raw extracted content without formatting.
+// Used by both doDirectFetch (text mode) and InProcessExtractor (chain fallback).
+func (t *WebFetchTool) fetchRawContent(ctx context.Context, rawURL, extractMode string, maxChars int, policy string) (fetchRawResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return fetchRawResult{}, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("User-Agent", fetchUserAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -234,16 +265,13 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 			if redirectCount > defaultFetchMaxRedirect {
 				return fmt.Errorf("stopped after %d redirects", defaultFetchMaxRedirect)
 			}
-			// Check SSRF on redirect target
 			if err := CheckSSRF(req.URL.String()); err != nil {
 				return fmt.Errorf("redirect SSRF protection: %w", err)
 			}
-			// Check domain blocklist on redirect target
 			redirectHost := req.URL.Hostname()
 			if t.isDomainBlocked(redirectHost) {
 				return fmt.Errorf("redirect to %q blocked: domain is in blocklist", redirectHost)
 			}
-			// Check domain allowlist on redirect target
 			if policy == "allowlist" && !t.isDomainAllowed(redirectHost) {
 				return fmt.Errorf("redirect to %q blocked: domain not in allowlist", redirectHost)
 			}
@@ -253,16 +281,14 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return fetchRawResult{}, err
 	}
 	defer resp.Body.Close()
 
-	// Read enough HTML to reach <body> content — pages often have 30-50KB+ <head> sections.
 	readLimit := int64(max(maxChars*10, 512*1024))
-	limitReader := io.LimitReader(resp.Body, readLimit)
-	body, err := io.ReadAll(limitReader)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, readLimit))
 	if err != nil {
-		return "", fmt.Errorf("read body: %w", err)
+		return fetchRawResult{}, fmt.Errorf("read body: %w", err)
 	}
 
 	contentType := resp.Header.Get("Content-Type")
@@ -301,21 +327,49 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 		extractor = "raw"
 	}
 
-	// Format response metadata
+	return fetchRawResult{
+		content:    text,
+		extractor:  extractor,
+		finalURL:   finalURL,
+		statusCode: resp.StatusCode,
+	}, nil
+}
+
+// doDirectFetch wraps fetchRawContent with full HTTP metadata formatting.
+// Used for text mode extraction and as ultimate fallback.
+func (t *WebFetchTool) doDirectFetch(ctx context.Context, rawURL, extractMode string, maxChars int, policy string) (string, error) {
+	raw, err := t.fetchRawContent(ctx, rawURL, extractMode, maxChars, policy)
+	if err != nil {
+		return "", err
+	}
+
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("URL: %s\n", finalURL))
-	if finalURL != rawURL {
+	sb.WriteString(fmt.Sprintf("URL: %s\n", raw.finalURL))
+	if raw.finalURL != rawURL {
 		sb.WriteString(fmt.Sprintf("Redirected from: %s\n", rawURL))
 	}
-	sb.WriteString(fmt.Sprintf("Status: %d\n", resp.StatusCode))
-	sb.WriteString(fmt.Sprintf("Extractor: %s\n", extractor))
+	sb.WriteString(fmt.Sprintf("Status: %d\n", raw.statusCode))
+	sb.WriteString(fmt.Sprintf("Extractor: %s\n", raw.extractor))
+	appendContent(&sb, raw.content, maxChars, raw.finalURL, ctx)
 
-	// If content exceeds maxChars, save full content to a file in workspace
+	return sb.String(), nil
+}
+
+// formatFetchResult builds the metadata-prefixed response for chain-extracted content.
+func formatFetchResult(content, extractorName, rawURL string, maxChars int, ctx context.Context) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("URL: %s\n", rawURL))
+	sb.WriteString(fmt.Sprintf("Extractor: %s\n", extractorName))
+	appendContent(&sb, content, maxChars, rawURL, ctx)
+	return sb.String()
+}
+
+// appendContent writes content to the builder, handling truncation and temp file overflow.
+func appendContent(sb *strings.Builder, text string, maxChars int, sourceURL string, ctx context.Context) {
 	if len(text) > maxChars {
 		workspace := ToolWorkspaceFromCtx(ctx)
-		tmpPath, writeErr := writeWebFetchTempFile(workspace, text, finalURL)
+		tmpPath, writeErr := writeWebFetchTempFile(workspace, text, sourceURL)
 		if writeErr != nil {
-			// Fallback: truncate inline if temp file write fails
 			slog.Warn("web_fetch: failed to write temp file, falling back to truncation", "error", writeErr)
 			text = text[:maxChars]
 			sb.WriteString(fmt.Sprintf("Truncated: true (limit: %d chars)\n", maxChars))
@@ -336,8 +390,6 @@ func (t *WebFetchTool) doFetch(ctx context.Context, rawURL, extractMode string, 
 		sb.WriteString("\n")
 		sb.WriteString(text)
 	}
-
-	return sb.String(), nil
 }
 
 // writeWebFetchTempFile saves fetched content to a file with security sanitization.

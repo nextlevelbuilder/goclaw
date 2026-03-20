@@ -28,7 +28,9 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		{Name: "web_search", DisplayName: "Web Search", Description: "Search the web for information using a search engine (Brave or DuckDuckGo)", Category: "web", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Web Search"}`),
 		},
-		{Name: "web_fetch", DisplayName: "Web Fetch", Description: "Fetch a web page or API endpoint and extract its text content", Category: "web", Enabled: true},
+		{Name: "web_fetch", DisplayName: "Web Fetch", Description: "Fetch a web page or API endpoint and extract its text content", Category: "web", Enabled: true,
+			Settings: json.RawMessage(`{"extractors":[{"name":"defuddle","enabled":true,"base_url":"https://fetch.goclaw.sh/"},{"name":"html-to-markdown","enabled":true}]}`),
+		},
 
 		// memory
 		{Name: "memory_search", DisplayName: "Memory Search", Description: "Search through the agent's long-term memory using semantic similarity", Category: "memory", Enabled: true,
@@ -198,6 +200,25 @@ func migrateBuiltinToolSettings(ctx context.Context, bts store.BuiltinToolStore)
 	if migrated > 0 {
 		slog.Info("builtin_tools: migrated legacy settings to chain format", "count", migrated)
 	}
+}
+
+// backfillWebFetchSettings ensures the web_fetch tool has extractor chain settings.
+// Existing deployments may have a web_fetch row with null/empty settings from a prior seed.
+// This backfills the default chain so Defuddle is available out of the box.
+func backfillWebFetchSettings(ctx context.Context, bts store.BuiltinToolStore) {
+	t, err := bts.Get(ctx, "web_fetch")
+	if err != nil || t == nil {
+		return // not seeded yet, will be populated by next seed
+	}
+	if len(t.Settings) > 0 && string(t.Settings) != "{}" && string(t.Settings) != "null" {
+		return // already has settings, don't overwrite
+	}
+	defaultSettings := json.RawMessage(`{"extractors":[{"name":"defuddle","enabled":true,"base_url":"https://fetch.goclaw.sh/"},{"name":"html-to-markdown","enabled":true}]}`)
+	if err := bts.Update(ctx, "web_fetch", map[string]any{"settings": defaultSettings}); err != nil {
+		slog.Warn("builtin_tools: failed to backfill web_fetch settings", "error", err)
+		return
+	}
+	slog.Info("builtin_tools: backfilled web_fetch extractor chain settings")
 }
 
 // applyBuiltinToolDisables unregisters disabled builtin tools from the registry.

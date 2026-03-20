@@ -44,14 +44,10 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
   const [enabled, setEnabled] = useState(job.enabled);
 
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async () => {
     if (!onUpdate) return;
     setSaving(true);
-    setSaveError(null);
-    setSaved(false);
     try {
       let schedule;
       if (scheduleKind === "every") {
@@ -67,10 +63,8 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         agentId: agentId.trim() || undefined,
         enabled,
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("detail.saveFailed"));
+    } catch {
+      // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -216,8 +210,6 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         <StickySaveBar
           onSave={handleSave}
           saving={saving}
-          saved={saved}
-          error={saveError}
         />
       )}
     </div>

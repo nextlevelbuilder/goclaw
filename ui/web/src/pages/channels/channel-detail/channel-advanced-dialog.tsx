@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, Settings } from "lucide-react";
+import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,13 +60,11 @@ export function ChannelAdvancedDialog({
 
   const [values, setValues] = useState<Record<string, unknown>>(() => deriveInitialValues(instance));
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Re-sync local state when dialog opens
   useEffect(() => {
     if (!open) return;
     setValues(deriveInitialValues(instance));
-    setSaveError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -76,7 +74,6 @@ export function ChannelAdvancedDialog({
 
   const handleSave = async () => {
     setSaving(true);
-    setSaveError(null);
     try {
       const existingConfig = (instance.config ?? {}) as Record<string, unknown>;
       const cleanAdvanced = Object.fromEntries(
@@ -86,8 +83,7 @@ export function ChannelAdvancedDialog({
       const merged = { ...existingConfig, ...cleanAdvanced };
       await onUpdate({ config: merged });
       onOpenChange(false);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : t("form.errors.failedSaveConfig"));
+    } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
@@ -189,19 +185,14 @@ export function ChannelAdvancedDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col gap-2 pt-4 border-t shrink-0">
-          {saveError && (
-            <p className="text-sm text-destructive">{saveError}</p>
-          )}
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              {t("form.cancel")}
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {!saving && <Save className="h-4 w-4" />}
-              {saving ? t("form.saving") : t("detail.config.saveConfig")}
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-2 pt-4 border-t shrink-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            {t("form.cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? t("form.saving") : t("detail.config.saveConfig")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

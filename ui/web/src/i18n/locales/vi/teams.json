@@ -292,9 +292,17 @@
     "taskCreated": "Đã tạo nhiệm vụ",
     "taskDeleted": "Đã xoá task",
     "taskAssigned": "Đã gán nhiệm vụ",
+    "taskApproved": "Đã phê duyệt task",
+    "taskRejected": "Đã từ chối task",
+    "tasksBulkDeleted": "Đã xóa các task",
     "failedCreateTask": "Không thể tạo nhiệm vụ",
     "failedDeleteTask": "Xoá task thất bại",
-    "failedAssignTask": "Không thể gán nhiệm vụ"
+    "failedAssignTask": "Không thể gán nhiệm vụ",
+    "failedApproveTask": "Không thể phê duyệt task",
+    "failedRejectTask": "Không thể từ chối task",
+    "failedBulkDeleteTasks": "Không thể xóa các task",
+    "workspaceFileDeleted": "Đã xóa file",
+    "failedDeleteWorkspaceFile": "Không thể xóa file"
   },
   "board": {
     "kanban": "Bảng",

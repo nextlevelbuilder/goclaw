@@ -270,15 +270,15 @@ func processNormalMessage(
 					})
 				}
 				return
-			case agent.IntentSteer, agent.IntentNewTask:
-				// Mid-run injection: inject into the running loop instead of queueing.
+			case agent.IntentSteer:
+				// Steer: inject into running loop to redirect/add to current task.
 				injected := agents.InjectMessage(sessionKey, agent.InjectedMessage{
 					Content: msg.Content,
 					UserID:  userID,
 				})
 				if injected {
-					slog.Info("inbound: injected mid-run message",
-						"intent", string(intent), "session", sessionKey)
+					slog.Info("inbound: injected steer message",
+						"session", sessionKey)
 					msgBus.PublishOutbound(bus.OutboundMessage{
 						Channel:  msg.Channel,
 						ChatID:   msg.ChatID,
@@ -288,8 +288,12 @@ func processNormalMessage(
 					return
 				}
 				// Fallback: injection failed (channel full) → fall through to scheduler queue
-				slog.Info("inbound: injection failed, queueing as normal",
-					"intent", string(intent), "session", sessionKey)
+				slog.Info("inbound: steer injection failed, queueing as normal",
+					"session", sessionKey)
+			case agent.IntentNewTask:
+				// New unrelated request: fall through to scheduler queue
+				slog.Info("inbound: new task queued behind active run",
+					"session", sessionKey)
 			}
 		}
 	}

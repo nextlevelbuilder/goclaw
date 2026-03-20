@@ -506,6 +506,10 @@
     "updateFailed": "更新代理失败",
     "deleted": "代理已删除",
     "deleteFailed": "删除代理失败",
-    "unknownError": "未知错误"
+    "unknownError": "未知错误",
+    "skillGranted": "技能已授权",
+    "skillGrantFailed": "授权技能失败",
+    "skillRevoked": "技能已撤销",
+    "skillRevokeFailed": "撤销技能失败"
   }
 }

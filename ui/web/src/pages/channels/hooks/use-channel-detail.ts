@@ -2,6 +2,9 @@ import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import { userFriendlyError } from "@/lib/error-utils";
 import type { ChannelInstanceData } from "@/types/channel";
 import type { ChannelContact } from "@/types/contact";
 
@@ -40,8 +43,14 @@ export function useChannelDetail(instanceId: string | undefined) {
   const updateInstance = useCallback(
     async (updates: Record<string, unknown>) => {
       if (!instanceId) return;
-      await http.put(`/v1/channels/instances/${instanceId}`, updates);
-      await invalidate();
+      try {
+        await http.put(`/v1/channels/instances/${instanceId}`, updates);
+        await invalidate();
+        toast.success(i18next.t("channels:toast.updated"));
+      } catch (err) {
+        toast.error(i18next.t("channels:toast.failedUpdate"), userFriendlyError(err));
+        throw err;
+      }
     },
     [instanceId, http, invalidate],
   );

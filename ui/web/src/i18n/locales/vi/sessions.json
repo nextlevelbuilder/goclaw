@@ -33,5 +33,13 @@
     "hide": "ẩn",
     "systemMessage": "Tin nhắn hệ thống",
     "messages": "tin nhắn"
+  },
+  "toast": {
+    "deleted": "Đã xóa session",
+    "deleteFailed": "Không thể xóa session",
+    "reset": "Đã đặt lại session",
+    "resetFailed": "Không thể đặt lại session",
+    "updated": "Đã cập nhật session",
+    "updateFailed": "Không thể cập nhật session"
   }
 }
