@@ -216,7 +216,7 @@ export const BoardContainer = memo(function BoardContainer({
   useWsEvent(Events.TEAM_TASK_REJECTED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_ASSIGNED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_DISPATCHED, onFetchOne);
-  // TEAM_TASK_COMMENTED — no-op for list view
+  useWsEvent(Events.TEAM_TASK_COMMENTED, onFetchOne); // refresh comment_count badge
 
   // ── Callbacks for children ──
 

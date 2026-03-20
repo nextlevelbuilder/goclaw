@@ -330,12 +330,21 @@ func (m *TeamsMethods) handleTaskComment(ctx context.Context, client *gateway.Cl
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
+		commentPreview := params.Content
+		if runes := []rune(commentPreview); len(runes) > 500 {
+			commentPreview = string(runes[:500]) + "..."
+		}
 		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskCommented, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    taskID.String(),
-			UserID:    client.UserID(),
-			Channel:   "dashboard",
-			Timestamp: taskNowUTC(),
+			TeamID:      teamID.String(),
+			TaskID:      taskID.String(),
+			TaskNumber:  task.TaskNumber,
+			Subject:     task.Subject,
+			CommentText: commentPreview,
+			UserID:      client.UserID(),
+			Channel:     "dashboard",
+			Timestamp:   taskNowUTC(),
+			ActorType:   "human",
+			ActorID:     client.UserID(),
 		}))
 	}
 }

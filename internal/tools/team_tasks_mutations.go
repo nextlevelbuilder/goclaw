@@ -315,12 +315,17 @@ func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any)
 	}
 
 	t.manager.broadcastTeamEvent(protocol.EventTeamTaskCommented, protocol.TeamTaskEventPayload{
-		TeamID:    team.ID.String(),
-		TaskID:    taskID.String(),
-		UserID:    store.UserIDFromContext(ctx),
-		Channel:   ToolChannelFromCtx(ctx),
-		ChatID:    ToolChatIDFromCtx(ctx),
-		Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		TeamID:      team.ID.String(),
+		TaskID:      taskID.String(),
+		TaskNumber:  task.TaskNumber,
+		Subject:     task.Subject,
+		CommentText: truncatePreview(text, 500),
+		UserID:      store.UserIDFromContext(ctx),
+		Channel:     ToolChannelFromCtx(ctx),
+		ChatID:      ToolChatIDFromCtx(ctx),
+		Timestamp:   time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		ActorType:   "agent",
+		ActorID:     t.manager.agentKeyFromID(ctx, agentID),
 	})
 
 	return NewResult(fmt.Sprintf("Comment added to task %s.", taskID))

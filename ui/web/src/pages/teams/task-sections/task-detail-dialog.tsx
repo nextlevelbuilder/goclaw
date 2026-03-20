@@ -8,9 +8,11 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Trash2, Paperclip } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatDate, formatFileSize } from "@/lib/format";
-import { toast } from "@/stores/use-toast-store";
 import { useAuthStore } from "@/stores/use-auth-store";
+import { useWsEvent } from "@/hooks/use-ws-event";
+import { Events } from "@/api/protocol";
 import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
+import type { TeamTaskEventPayload } from "@/types/team-events";
 import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
 
 interface TaskDetailDialogProps {
@@ -54,6 +56,13 @@ export function TaskDetailDialog({
   }, [getTaskDetail, teamId, task.id]);
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
+
+  // Auto-refresh when a comment is added to this task (by another user/agent).
+  const onCommentEvent = useCallback((payload: unknown) => {
+    const p = payload as TeamTaskEventPayload;
+    if (p?.task_id === task.id) loadDetail();
+  }, [task.id, loadDetail]);
+  useWsEvent(Events.TEAM_TASK_COMMENTED, onCommentEvent);
 
   const resolveMember = (id?: string) =>
     (id && memberLookup?.get(id)) || undefined;

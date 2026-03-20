@@ -42,7 +42,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			},
 			"description": map[string]any{
 				"type":        "string",
-				"description": "Task description (for create or update)",
+				"description": "Task description with clear objectives and requirements. Include all context the assignee needs to complete the task independently.",
 			},
 			"result": map[string]any{
 				"type":        "string",
