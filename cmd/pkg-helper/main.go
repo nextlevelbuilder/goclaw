@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -61,6 +62,9 @@ func main() {
 	if err := os.Chmod(socketPath, 0660); err != nil {
 		slog.Warn("pkg-helper: chmod socket failed", "error", err)
 	}
+
+	// Ensure persist directory is writable by root (self-healing for upgrades).
+	ensurePersistDir()
 
 	// Graceful shutdown on SIGTERM/SIGINT.
 	sigCh := make(chan os.Signal, 1)
@@ -222,4 +226,30 @@ func apkListFile() string {
 		runtimeDir = "/app/data/.runtime"
 	}
 	return runtimeDir + "/apk-packages"
+}
+
+// ensurePersistDir ensures the apk persist file's parent directory is writable by root.
+// On existing volumes the directory may be goclaw-owned (from older images); fix ownership
+// using CAP_CHOWN so pkg-helper can create/write the persist file.
+func ensurePersistDir() {
+	dir := filepath.Dir(apkListFile())
+	fi, err := os.Stat(dir)
+	if err != nil {
+		// Directory doesn't exist — entrypoint should have created it.
+		return
+	}
+	if !fi.IsDir() {
+		return
+	}
+
+	// Try to fix ownership to root:goclaw (gid 1000) if not already root-owned.
+	// CAP_CHOWN is available even when CAP_DAC_OVERRIDE is dropped.
+	if stat, ok := fi.Sys().(*syscall.Stat_t); ok && stat.Uid != 0 {
+		if err := os.Chown(dir, 0, 1000); err != nil {
+			slog.Warn("pkg-helper: cannot fix persist dir ownership", "dir", dir, "error", err)
+		} else {
+			os.Chmod(dir, 0750) //nolint:errcheck
+			slog.Info("pkg-helper: fixed persist dir ownership", "dir", dir)
+		}
+	}
 }
