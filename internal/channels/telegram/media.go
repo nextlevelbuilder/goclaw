@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -28,15 +29,29 @@ const (
 
 	// downloadMaxRetries is the number of download retry attempts.
 	downloadMaxRetries = 3
+
+	// stallTimeout is how long a download can receive zero bytes before being aborted.
+	stallTimeout = 60 * time.Second
 )
+
+// errMediaTooLarge indicates a file exceeded the configured max download size.
+var errMediaTooLarge = errors.New("file exceeds max size")
+
+// MediaError records a media download failure with enough context for user/model feedback.
+type MediaError struct {
+	Type     string // "image", "video", "audio", "voice", "document", "animation"
+	Reason   string // human-readable reason
+	MaxBytes int64  // configured limit (0 if not a size error)
+}
 
 // MediaInfo is an alias for the shared media.MediaInfo type.
 type MediaInfo = media.MediaInfo
 
 // resolveMedia extracts and downloads media from a Telegram message.
-// Returns a list of MediaInfo for each media item found.
-func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []MediaInfo {
+// Returns successfully downloaded media and any download errors for feedback.
+func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) ([]MediaInfo, []MediaError) {
 	var results []MediaInfo
+	var mediaErrors []MediaError
 
 	maxBytes := c.config.MediaMaxBytes
 	if maxBytes == 0 {
@@ -53,6 +68,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, photo.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download photo", "file_id", photo.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("image", err, maxBytes))
 		} else {
 			// Pass raw file to agent loop — sanitization now happens at loop level.
 			results = append(results, MediaInfo{
@@ -70,6 +86,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, msg.Video.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download video", "file_id", msg.Video.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("video", err, maxBytes))
 		} else {
 			results = append(results, MediaInfo{
 				Type:        "video",
@@ -87,6 +104,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, msg.VideoNote.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download video note", "file_id", msg.VideoNote.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("video", err, maxBytes))
 		} else {
 			results = append(results, MediaInfo{
 				Type:        "video",
@@ -103,6 +121,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, msg.Animation.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download animation", "file_id", msg.Animation.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("animation", err, maxBytes))
 		} else {
 			results = append(results, MediaInfo{
 				Type:        "animation",
@@ -120,6 +139,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, msg.Audio.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download audio", "file_id", msg.Audio.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("audio", err, maxBytes))
 		} else {
 			results = append(results, MediaInfo{
 				Type:        "audio",
@@ -137,6 +157,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, msg.Voice.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download voice", "file_id", msg.Voice.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("voice", err, maxBytes))
 		} else {
 			results = append(results, MediaInfo{
 				Type:        "voice",
@@ -153,6 +174,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		filePath, err := c.downloadMedia(ctx, msg.Document.FileID, maxBytes)
 		if err != nil {
 			slog.Warn("failed to download document", "file_id", msg.Document.FileID, "error", err)
+			mediaErrors = append(mediaErrors, newMediaError("document", err, maxBytes))
 		} else {
 			results = append(results, MediaInfo{
 				Type:        "document",
@@ -165,7 +187,7 @@ func (c *Channel) resolveMedia(ctx context.Context, msg *telego.Message) []Media
 		}
 	}
 
-	return results
+	return results, mediaErrors
 }
 
 // downloadMedia downloads a file from Telegram by file_id with retry logic.
@@ -203,7 +225,7 @@ func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int
 
 	// Check file size before downloading (FileSize may be 0 for large files on local Bot API).
 	if file.FileSize > 0 && int64(file.FileSize) > maxBytes {
-		return "", fmt.Errorf("file too large: %d bytes (max %d)", file.FileSize, maxBytes)
+		return "", fmt.Errorf("%w: %d bytes (limit %d)", errMediaTooLarge, file.FileSize, maxBytes)
 	}
 
 	// Local Bot API (--local mode) returns absolute filesystem paths and does NOT
@@ -275,15 +297,19 @@ func (c *Channel) downloadMedia(ctx context.Context, fileID string, maxBytes int
 	}
 	defer tmpFile.Close()
 
+	// Wrap the response body with stall detection: abort if no data received for 60s.
+	progressBody := newProgressReader(resp.Body, dlCancel, stallTimeout)
+	defer progressBody.Stop()
+
 	// Copy with size limit
-	written, err := io.Copy(tmpFile, io.LimitReader(resp.Body, maxBytes+1))
+	written, err := io.Copy(tmpFile, io.LimitReader(progressBody, maxBytes+1))
 	if err != nil {
 		os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("save file: %w", err)
 	}
 	if written > maxBytes {
 		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("file exceeds max size during download: %d bytes", written)
+		return "", fmt.Errorf("%w: %d bytes (limit %d)", errMediaTooLarge, written, maxBytes)
 	}
 
 	return tmpFile.Name(), nil
@@ -302,7 +328,7 @@ func copyLocalFile(srcPath string, maxBytes int64) (string, error) {
 		return "", fmt.Errorf("stat local file: %w", err)
 	}
 	if info.Size() > maxBytes {
-		return "", fmt.Errorf("file too large: %d bytes (max %d)", info.Size(), maxBytes)
+		return "", fmt.Errorf("%w: %d bytes (limit %d)", errMediaTooLarge, info.Size(), maxBytes)
 	}
 
 	ext := filepath.Ext(srcPath)
@@ -370,4 +396,87 @@ func lightweightMediaTags(msg *telego.Message) string {
 		return ""
 	}
 	return strings.Join(tags, "\n")
+}
+
+// lightweightTagForType returns the single lightweight tag that matches a given media type
+// within a Telegram message. Used for targeted replacement when a specific media fails.
+func lightweightTagForType(mediaType string, msg *telego.Message) string {
+	switch mediaType {
+	case "image":
+		if msg.Photo != nil && len(msg.Photo) > 0 {
+			return "[sent an image]"
+		}
+	case "video":
+		if msg.Video != nil || msg.VideoNote != nil {
+			return "[sent a video]"
+		}
+	case "animation":
+		if msg.Animation != nil {
+			return "[sent a video]"
+		}
+	case "audio":
+		if msg.Audio != nil {
+			return "[sent audio]"
+		}
+	case "voice":
+		if msg.Voice != nil {
+			return "[sent a voice message]"
+		}
+	case "document":
+		if msg.Document != nil {
+			if msg.Document.FileName != "" {
+				return fmt.Sprintf("[sent a file: %s]", msg.Document.FileName)
+			}
+			return "[sent a file]"
+		}
+	}
+	return ""
+}
+
+// newMediaError builds a MediaError from a download error, detecting size-limit failures.
+func newMediaError(mediaType string, err error, maxBytes int64) MediaError {
+	me := MediaError{Type: mediaType}
+	if errors.Is(err, errMediaTooLarge) {
+		me.Reason = fmt.Sprintf("exceeds %d MB limit", maxBytes/(1024*1024))
+		me.MaxBytes = maxBytes
+	} else {
+		me.Reason = "download failed"
+	}
+	return me
+}
+
+// progressReader wraps an io.Reader and cancels a context if no data is
+// received within a specified timeout. Used to detect mid-stream stalls.
+type progressReader struct {
+	io.Reader
+	cancel context.CancelFunc
+	timer  *time.Timer
+	d      time.Duration
+}
+
+func newProgressReader(r io.Reader, cancel context.CancelFunc, d time.Duration) *progressReader {
+	pr := &progressReader{
+		Reader: r,
+		cancel: cancel,
+		d:      d,
+	}
+	pr.timer = time.AfterFunc(d, func() {
+		slog.Warn("telegram media: download stalled, aborting", "timeout", d)
+		cancel()
+	})
+	return pr
+}
+
+func (pr *progressReader) Read(p []byte) (n int, err error) {
+	n, err = pr.Reader.Read(p)
+	if n > 0 {
+		pr.timer.Reset(pr.d)
+	}
+	return n, err
+}
+
+func (pr *progressReader) Stop() {
+	if pr.timer != nil {
+		pr.timer.Stop()
+	}
 }

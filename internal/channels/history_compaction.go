@@ -15,7 +15,7 @@ import (
 
 // CompactionConfig configures LLM-based history compaction.
 type CompactionConfig struct {
-	Threshold  int                // trigger compaction when entries exceed this (default 50)
+	Threshold  int                // trigger compaction when entries exceed this (default 100)
 	KeepRecent int                // keep this many recent raw messages (default 15)
 	MaxTokens  int                // max output tokens for summarization (default 4096)
 	Provider   providers.Provider // LLM provider for summarization

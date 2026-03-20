@@ -19,6 +19,7 @@ interface ChatThreadProps {
   activity: RunActivity | null;
   teamTasks: ActiveTeamTask[];
   isRunning: boolean;
+  isBusy: boolean;
   loading?: boolean;
   scrollTrigger?: number;
 }
@@ -72,7 +73,7 @@ function buildDisplayItems(messages: ChatMessage[]): DisplayItem[] {
 
 export const ChatThread = memo(function ChatThread({
   messages, streamText, thinkingText, toolStream, blockReplies,
-  activity, teamTasks, isRunning, loading, scrollTrigger = 0,
+  activity, teamTasks, isRunning, isBusy, loading, scrollTrigger = 0,
 }: ChatThreadProps) {
   const { t } = useTranslation("chat");
   const { ref, onScroll } = useAutoScroll<HTMLDivElement>(
@@ -83,7 +84,7 @@ export const ChatThread = memo(function ChatThread({
 
   const displayItems = useMemo(() => buildDisplayItems(messages), [messages]);
 
-  if (messages.length === 0 && !isRunning) {
+  if (messages.length === 0 && !isBusy) {
     if (loading) {
       return (
         <div className="flex flex-1 items-center justify-center">

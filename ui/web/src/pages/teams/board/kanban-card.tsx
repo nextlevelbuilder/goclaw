@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
-import { Trash2, Ban } from "lucide-react";
+import { Trash2, Ban, MessageSquare, Paperclip } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { isTaskLocked } from "./board-utils";
@@ -25,16 +25,18 @@ interface KanbanCardProps {
   task: TeamTaskData;
   isTeamV2?: boolean;
   emojiLookup?: Map<string, string>;
+  memberLookup?: Map<string, string>;
   taskLookup?: Map<string, string>;
   onClick: () => void;
   onDelete?: (taskId: string) => void;
 }
 
-export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup, taskLookup, onClick, onDelete }: KanbanCardProps) {
+export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup, memberLookup, taskLookup, onClick, onDelete }: KanbanCardProps) {
   const { t } = useTranslation("teams");
   const locked = isTaskLocked(task);
   const blocked = task.status === "blocked";
   const ownerEmoji = task.owner_agent_id && emojiLookup?.get(task.owner_agent_id);
+  const ownerName = (task.owner_agent_id && memberLookup?.get(task.owner_agent_id)) || task.owner_agent_key;
   const canDelete = onDelete && isTerminalStatus(task.status);
   const prio = PRIORITY_LABELS[task.priority] ?? PRIORITY_LABELS[0]!;
   const hasBlockers = task.blocked_by && task.blocked_by.length > 0;
@@ -51,11 +53,19 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
       }
       onClick={onClick}
     >
-      {/* Top row: identifier + running badge + delete button */}
+      {/* Top row: identifier + priority + running badge + delete button */}
       <div className="mb-1 flex items-center justify-between">
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {task.identifier || `#${task.task_number ?? ""}`}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {task.identifier || `#${task.task_number ?? ""}`}
+          </span>
+          <span
+            className={`font-mono text-[10px] font-medium ${prio.color}`}
+            title={`${PRIORITY_TOOLTIPS[task.priority] ?? "Low"} priority`}
+          >
+            {prio.label}
+          </span>
+        </div>
         <div className="flex items-center gap-1.5">
           {locked && (
             <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
@@ -87,21 +97,25 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
         </p>
       )}
 
-      {/* Bottom row: owner + type badge + priority */}
+      {/* Bottom row: owner + type badge + counts */}
       <div className="mt-2 flex items-center gap-1.5">
         {ownerEmoji && <span className="text-sm leading-none">{ownerEmoji}</span>}
         <span className="truncate text-xs text-muted-foreground">
-          {task.owner_agent_key || t("board.unassigned")}
+          {ownerName || t("board.unassigned")}
         </span>
         {task.task_type && task.task_type !== "general" && (
           <Badge variant="outline" className="text-[10px] px-1 py-0">{task.task_type}</Badge>
         )}
-        <span
-          className={`ml-auto shrink-0 font-mono text-[10px] font-medium ${prio.color}`}
-          title={`${PRIORITY_TOOLTIPS[task.priority] ?? "Low"} priority`}
-        >
-          {prio.label}
-        </span>
+        {(task.comment_count ?? 0) > 0 && (
+          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground ml-auto">
+            <MessageSquare className="h-3 w-3" /> {task.comment_count}
+          </span>
+        )}
+        {(task.attachment_count ?? 0) > 0 && (
+          <span className={`flex items-center gap-0.5 text-[10px] text-muted-foreground ${(task.comment_count ?? 0) === 0 ? "ml-auto" : ""}`}>
+            <Paperclip className="h-3 w-3" /> {task.attachment_count}
+          </span>
+        )}
       </div>
 
       {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && !isTerminalStatus(task.status) && (

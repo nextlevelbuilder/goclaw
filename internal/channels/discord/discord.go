@@ -32,10 +32,15 @@ type Channel struct {
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
 	groupHistory    *channels.PendingHistory
 	historyLimit    int
+	agentStore      store.AgentStore             // for agent key lookup (nil = writer commands disabled)
+	configPermStore store.ConfigPermissionStore   // for group file writer management (nil = writer commands disabled)
 }
 
 // New creates a new Discord channel from config.
-func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, pendingStore store.PendingMessageStore) (*Channel, error) {
+// agentStore and configPermStore are optional (nil = writer commands disabled).
+func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
+	agentStore store.AgentStore, configPermStore store.ConfigPermissionStore,
+	pendingStore store.PendingMessageStore) (*Channel, error) {
 	session, err := discordgo.New("Bot " + cfg.Token)
 	if err != nil {
 		return nil, fmt.Errorf("create discord session: %w", err)
@@ -60,13 +65,15 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 	}
 
 	return &Channel{
-		BaseChannel:    base,
-		session:        session,
-		config:         cfg,
-		requireMention: requireMention,
-		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeDiscord, pendingStore),
-		historyLimit:   historyLimit,
+		BaseChannel:     base,
+		session:         session,
+		config:          cfg,
+		requireMention:  requireMention,
+		pairingService:  pairingSvc,
+		groupHistory:    channels.MakeHistory(channels.TypeDiscord, pendingStore),
+		historyLimit:    historyLimit,
+		agentStore:      agentStore,
+		configPermStore: configPermStore,
 	}, nil
 }
 

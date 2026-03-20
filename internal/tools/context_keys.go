@@ -240,7 +240,7 @@ func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
 const ctxTeamID toolContextKey = "tool_team_id"
 
 // WithToolTeamID injects the dispatching team's ID into context so team
-// tools (team_tasks, team_message) and the WorkspaceInterceptor resolve
+// tools (team_tasks) and the WorkspaceInterceptor resolve
 // the correct team when the agent belongs to multiple teams.
 func WithToolTeamID(ctx context.Context, teamID string) context.Context {
 	return context.WithValue(ctx, ctxTeamID, teamID)
@@ -410,6 +410,26 @@ func WithRunMediaNames(ctx context.Context, names map[string]string) context.Con
 func RunMediaNamesFromCtx(ctx context.Context) map[string]string {
 	v, _ := ctx.Value(ctxRunMediaNames).(map[string]string)
 	return v
+}
+
+// --- Iteration progress (loop → tools) ---
+
+const ctxIterProgress toolContextKey = "tool_iter_progress"
+
+// IterationProgress carries the agent loop's current iteration state
+// so tools can adapt behaviour (e.g. reduce output size) as the budget shrinks.
+type IterationProgress struct {
+	Current int
+	Max     int
+}
+
+func WithIterationProgress(ctx context.Context, p IterationProgress) context.Context {
+	return context.WithValue(ctx, ctxIterProgress, p)
+}
+
+func IterationProgressFromCtx(ctx context.Context) (IterationProgress, bool) {
+	v, ok := ctx.Value(ctxIterProgress).(IterationProgress)
+	return v, ok
 }
 
 // --- Per-agent sandbox config override ---

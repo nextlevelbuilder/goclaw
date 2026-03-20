@@ -19,9 +19,6 @@ type RecoveredTaskInfo struct {
 	ChatID     string // task scope for notification routing
 }
 
-// ErrFileLocked is returned when a workspace file is being written by another agent.
-var ErrFileLocked = errors.New("file is being written by another agent, try again shortly")
-
 // ErrTaskNotFound is returned when a task does not exist.
 var ErrTaskNotFound = errors.New("task not found")
 
@@ -58,11 +55,6 @@ const (
 	TeamTaskFilterAll       = "all"       // all statuses (default when "" passed)
 )
 
-// Team message type constants.
-const (
-	TeamMessageTypeChat      = "chat"
-	TeamMessageTypeBroadcast = "broadcast"
-)
 
 // TeamData represents an agent team.
 type TeamData struct {
@@ -133,6 +125,10 @@ type TeamTaskData struct {
 	FollowupChannel string     `json:"followup_channel,omitempty"`
 	FollowupChatID  string     `json:"followup_chat_id,omitempty"`
 
+	// Denormalized counts for dashboard performance
+	CommentCount    int `json:"comment_count"`
+	AttachmentCount int `json:"attachment_count"`
+
 	// Joined fields
 	OwnerAgentKey     string `json:"owner_agent_key,omitempty"`
 	CreatedByAgentKey string `json:"created_by_agent_key,omitempty"`
@@ -162,16 +158,19 @@ type TeamTaskEventData struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
-// TeamTaskAttachmentData represents a workspace file attached to a team task.
+// TeamTaskAttachmentData represents a file attached to a team task (path-based, no FK to workspace).
 type TeamTaskAttachmentData struct {
-	ID        uuid.UUID  `json:"id"`
-	TaskID    uuid.UUID  `json:"task_id"`
-	FileID    uuid.UUID  `json:"file_id"`
-	AddedBy   *uuid.UUID `json:"added_by,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-
-	// Joined
-	FileName string `json:"file_name,omitempty"`
+	ID                uuid.UUID       `json:"id"`
+	TaskID            uuid.UUID       `json:"task_id"`
+	TeamID            uuid.UUID       `json:"team_id"`
+	ChatID            string          `json:"chat_id,omitempty"`
+	Path              string          `json:"path"`
+	FileSize          int64           `json:"file_size"`
+	MimeType          string          `json:"mime_type,omitempty"`
+	CreatedByAgentID  *uuid.UUID      `json:"created_by_agent_id,omitempty"`
+	CreatedBySenderID string          `json:"created_by_sender_id,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
 }
 
 // DelegationHistoryData represents a persisted delegation record.
@@ -209,74 +208,7 @@ type DelegationHistoryListOpts struct {
 	Offset        int
 }
 
-// TeamMessageData represents a message in the team mailbox.
-type TeamMessageData struct {
-	ID          uuid.UUID      `json:"id"`
-	TeamID      uuid.UUID      `json:"team_id"`
-	FromAgentID uuid.UUID      `json:"from_agent_id"`
-	ToAgentID   *uuid.UUID     `json:"to_agent_id,omitempty"`
-	Content     string         `json:"content"`
-	MessageType string         `json:"message_type"`
-	Read        bool           `json:"read"`
-	TaskID      *uuid.UUID     `json:"task_id,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-
-	// Joined fields
-	FromAgentKey string `json:"from_agent_key,omitempty"`
-	ToAgentKey   string `json:"to_agent_key,omitempty"`
-}
-
-// TeamWorkspaceFileData represents a file in the team's shared workspace.
-type TeamWorkspaceFileData struct {
-	ID         uuid.UUID       `json:"id"`
-	TeamID     uuid.UUID       `json:"team_id"`
-	Channel    string          `json:"channel"`
-	ChatID     string          `json:"chat_id"`
-	FileName   string          `json:"file_name"`
-	MimeType   string          `json:"mime_type,omitempty"`
-	FilePath   string          `json:"-"`
-	SizeBytes  int64           `json:"size_bytes"`
-	UploadedBy uuid.UUID       `json:"uploaded_by"`
-	TaskID     *uuid.UUID      `json:"task_id,omitempty"`
-	Pinned     bool            `json:"pinned"`
-	Tags       []string        `json:"tags,omitempty"`
-	Metadata   json.RawMessage `json:"metadata,omitempty"`
-	ArchivedAt *time.Time      `json:"archived_at,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
-
-	// Joined
-	UploadedByKey string `json:"uploaded_by_key,omitempty"`
-}
-
-// TeamWorkspaceFileVersionData represents a version of a workspace file.
-type TeamWorkspaceFileVersionData struct {
-	ID         uuid.UUID `json:"id"`
-	FileID     uuid.UUID `json:"file_id"`
-	Version    int       `json:"version"`
-	FilePath   string    `json:"-"`
-	SizeBytes  int64     `json:"size_bytes"`
-	UploadedBy uuid.UUID `json:"uploaded_by"`
-	CreatedAt  time.Time `json:"created_at"`
-
-	// Joined
-	UploadedByKey string `json:"uploaded_by_key,omitempty"`
-}
-
-// TeamWorkspaceCommentData represents a comment on a workspace file.
-type TeamWorkspaceCommentData struct {
-	ID        uuid.UUID `json:"id"`
-	FileID    uuid.UUID `json:"file_id"`
-	AgentID   uuid.UUID `json:"agent_id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
-
-	// Joined
-	AgentKey string `json:"agent_key,omitempty"`
-}
-
-// ScopeEntry represents a unique channel+chatID scope across tasks and workspace.
+// ScopeEntry represents a unique channel+chatID scope across tasks.
 type ScopeEntry struct {
 	Channel string `json:"channel"`
 	ChatID  string `json:"chat_id"`
@@ -365,6 +297,7 @@ type TeamStore interface {
 	// Task comments
 	AddTaskComment(ctx context.Context, comment *TeamTaskCommentData) error
 	ListTaskComments(ctx context.Context, taskID uuid.UUID) ([]TeamTaskCommentData, error)
+	ListRecentTaskComments(ctx context.Context, taskID uuid.UUID, limit int) ([]TeamTaskCommentData, error)
 
 	// Audit events
 	RecordTaskEvent(ctx context.Context, event *TeamTaskEventData) error
@@ -372,10 +305,11 @@ type TeamStore interface {
 	// ListTeamEvents returns recent events across all tasks in a team.
 	ListTeamEvents(ctx context.Context, teamID uuid.UUID, limit, offset int) ([]TeamTaskEventData, error)
 
-	// Attachments
+	// Attachments (path-based, no FK to workspace files)
 	AttachFileToTask(ctx context.Context, att *TeamTaskAttachmentData) error
+	GetAttachment(ctx context.Context, attachmentID uuid.UUID) (*TeamTaskAttachmentData, error)
 	ListTaskAttachments(ctx context.Context, taskID uuid.UUID) ([]TeamTaskAttachmentData, error)
-	DetachFileFromTask(ctx context.Context, taskID, fileID uuid.UUID) error
+	DetachFileFromTask(ctx context.Context, taskID uuid.UUID, path string) error
 
 	// Follow-up reminders
 	SetTaskFollowup(ctx context.Context, taskID, teamID uuid.UUID, followupAt time.Time, max int, message, channel, chatID string) error
@@ -419,44 +353,4 @@ type TeamStore interface {
 	SaveDelegationHistory(ctx context.Context, record *DelegationHistoryData) error
 	ListDelegationHistory(ctx context.Context, opts DelegationHistoryListOpts) ([]DelegationHistoryData, int, error)
 	GetDelegationHistory(ctx context.Context, id uuid.UUID) (*DelegationHistoryData, error)
-
-	// Messages (mailbox)
-	SendMessage(ctx context.Context, msg *TeamMessageData) error
-	GetUnread(ctx context.Context, teamID, agentID uuid.UUID) ([]TeamMessageData, error)
-	MarkRead(ctx context.Context, messageID uuid.UUID) error
-	// ListMessages returns paginated team messages ordered by created_at DESC.
-	ListMessages(ctx context.Context, teamID uuid.UUID, limit, offset int) ([]TeamMessageData, int, error)
-
-	// Workspace files
-	// UpsertWorkspaceFile acquires an advisory lock, calls diskWriteFn (if non-nil)
-	// to perform disk I/O under that lock, then upserts DB metadata — all within one tx.
-	// diskWriteFn receives isNew (true if this is a new file, false if update).
-	UpsertWorkspaceFile(ctx context.Context, file *TeamWorkspaceFileData, diskWriteFn func(isNew bool) error) (isNew bool, err error)
-	GetWorkspaceFile(ctx context.Context, teamID uuid.UUID, channel, chatID, fileName string) (*TeamWorkspaceFileData, error)
-	// ListWorkspaceFiles returns non-archived files for a team.
-	// When both channel and chatID are empty, all files for the team are returned
-	// regardless of scope (used by the Workspace UI tab).
-	// When either is non-empty, results are filtered to that exact channel+chatID scope.
-	ListWorkspaceFiles(ctx context.Context, teamID uuid.UUID, channel, chatID string) ([]TeamWorkspaceFileData, error)
-	DeleteWorkspaceFile(ctx context.Context, teamID uuid.UUID, channel, chatID, fileName string) (filePath string, err error)
-	CountWorkspaceFiles(ctx context.Context, teamID uuid.UUID, channel, chatID string) (int, error)
-	PinWorkspaceFile(ctx context.Context, teamID uuid.UUID, channel, chatID, fileName string, pinned bool) error
-	TagWorkspaceFile(ctx context.Context, teamID uuid.UUID, channel, chatID, fileName string, tags []string) error
-	ListDeliverableFiles(ctx context.Context, teamID uuid.UUID, channel, chatID string) ([]TeamWorkspaceFileData, error)
-	ArchiveWorkspaceFilesByTask(ctx context.Context, taskID uuid.UUID) error
-	ListOrphanWorkspaceFiles(ctx context.Context, teamID uuid.UUID, olderThan time.Time) ([]TeamWorkspaceFileData, error)
-	CopyFilesToTeam(ctx context.Context, fileIDs []uuid.UUID, targetTeamID uuid.UUID, targetChannel, targetChatID, dataDir string) error
-
-	// Workspace versioning
-	CreateFileVersion(ctx context.Context, version *TeamWorkspaceFileVersionData) error
-	ListFileVersions(ctx context.Context, fileID uuid.UUID) ([]TeamWorkspaceFileVersionData, error)
-	GetFileVersion(ctx context.Context, fileID uuid.UUID, version int) (*TeamWorkspaceFileVersionData, error)
-	PruneOldVersions(ctx context.Context, fileID uuid.UUID, keepN int) ([]string, error) // returns pruned file paths
-
-	// Workspace comments
-	AddFileComment(ctx context.Context, comment *TeamWorkspaceCommentData) error
-	ListFileComments(ctx context.Context, fileID uuid.UUID) ([]TeamWorkspaceCommentData, error)
-
-	// Workspace quota
-	GetWorkspaceTotalSize(ctx context.Context, teamID uuid.UUID) (int64, error)
 }

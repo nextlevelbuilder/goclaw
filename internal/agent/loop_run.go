@@ -178,6 +178,9 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			"cache_read_tokens":     result.Usage.CacheReadTokens,
 		}
 	}
+	if len(result.Media) > 0 {
+		completedPayload["media"] = result.Media
+	}
 	emitRun(AgentEvent{
 		Type:    protocol.AgentEventRunCompleted,
 		AgentID: l.id,

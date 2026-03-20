@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // buildTeamMD generates compact TEAM.md content for an agent that is part of a team.
@@ -83,38 +84,26 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 			sb.WriteString("Do NOT use `spawn` for team delegation — `spawn` is only for self-clone subagent work.\n\n")
 			sb.WriteString("Rules:\n")
 			sb.WriteString("- Always specify `assignee` — match member expertise from the list above\n")
-			sb.WriteString("- **Check task board first** — ALWAYS call `team_tasks(action=\"list\")` before creating tasks. The system blocks creation if you skip this step\n")
-			sb.WriteString("- Create all tasks first, then briefly tell the user what you delegated\n")
-			sb.WriteString("- Do NOT say \"done\", \"xong\", \"finished\", or any completion language after delegating — delegation is NOT completion. Only report completion when ALL task results have been delivered to the user\n")
-			sb.WriteString("- Do NOT phrase delegation as a question or request (\"nha?\", \"nhé?\", \"okay?\"). State it declaratively: \"Đã giao X cho Y\" not \"Để em giao cho Y nha anh\"\n")
-			sb.WriteString("- After creating tasks, briefly announce what was delegated and to whom — then STOP. Do not add filler, confirmations, or closing remarks\n")
+			sb.WriteString("- **Check task board first** — call `team_tasks(action=\"search\", query=\"<keywords>\")` to find similar tasks before creating. This uses semantic search and saves tokens vs listing all. The system blocks creation if you skip this step\n")
+			sb.WriteString("- **Create ALL tasks upfront** in one batch, then announce — then STOP. Do NOT create one task, wait for it to finish, then create the next\n")
+			sb.WriteString("- Delegation is NOT completion — do NOT say \"done\"/\"xong\"/\"finished\" after delegating. Only report completion when ALL task results have been delivered\n")
 			sb.WriteString("- Results arrive automatically — do NOT present partial results\n")
-			sb.WriteString("- **Prefer delegation** — if the user asks to involve the team, delegate tasks immediately. Do NOT do the work yourself first then hand off to members\n")
-			sb.WriteString("- **Do NOT block on completed tasks** — if a dependency task is already done, pass its result in the new task's description instead of using blocked_by\n")
-			sb.WriteString("- For dependency chains: use `blocked_by` to sequence tasks\n")
+			sb.WriteString("- **Prefer delegation** — delegate tasks to members, do NOT do the work yourself. If you need research, create a research task. If you need code, create a coding task. Only use tools like web_search yourself for quick clarifications needed to plan tasks (e.g., checking a member's capability), NOT for producing deliverables\n")
+			sb.WriteString("- **Do NOT block on completed tasks** — pass completed task's result in the description instead of using blocked_by\n")
 
-			sb.WriteString("\n## Task Decomposition (CRITICAL)\n\n")
-			sb.WriteString("NEVER assign one big task to one member. ALWAYS break user requests into small, atomic tasks:\n\n")
-			sb.WriteString("1. **Analyze** the request — identify distinct steps, deliverables, and SKILLS needed (writing, data, design, code...)\n")
-			sb.WriteString("2. **Match by SKILL, not topic** — assign based on what the task DOES, not what it's ABOUT.\n")
-			sb.WriteString("   Domain experts provide DATA/INFO. Content writers WRITE the article. Designers CREATE visuals.\n")
-			sb.WriteString("   Example: \"write about astrology\" → astrology expert provides facts → content writer composes the article\n")
-			sb.WriteString("3. **Decompose** into tasks where each has ONE clear deliverable\n")
-			sb.WriteString("4. **Distribute** across members — use ALL available members, not just one\n")
-			sb.WriteString("5. **Sequence** with `blocked_by` — if task B needs task A's output, set `blocked_by=[task_A_id]`\n")
-			sb.WriteString("   IMPORTANT: `blocked_by` requires real task UUIDs from previous create results.\n")
-			sb.WriteString("   Create dependency tasks FIRST, get their IDs, THEN create dependent tasks.\n")
-			sb.WriteString("   Do NOT use placeholders like \"task_1\" — only real UUIDs work.\n\n")
-
-			sb.WriteString("## Orchestration Patterns\n\n")
-			sb.WriteString("For complex requests with multiple steps, plan the full task graph UPFRONT and create all tasks in one turn:\n\n")
-			sb.WriteString("- **Parallel**: Independent tasks → create all with different assignees\n")
-			sb.WriteString("- **Sequential**: Create Task A first → get its UUID → create Task B with `blocked_by=[A_id]`\n")
-			sb.WriteString("- **Mixed**: Create A+B (parallel) → create C with `blocked_by=[A_id, B_id]`\n\n")
-			sb.WriteString("Create tasks in order: independent tasks first, then dependent tasks using the returned UUIDs.\n")
-			sb.WriteString("The system auto-dispatches blocked tasks when their dependencies complete.\n")
-			sb.WriteString("Do NOT wait for results to create follow-up tasks — plan the full pipeline ahead.\n\n")
-			sb.WriteString("After results: present to user (if done) or continue orchestrating.\n")
+			sb.WriteString("\n## Task Planning\n\n")
+			sb.WriteString("**CRITICAL: Create the full task graph in ONE batch.** Do NOT create→wait→create sequentially.\n\n")
+			sb.WriteString("Each task = ONE deliverable. Complex requests need 3+ tasks.\n\n")
+			sb.WriteString("1. Identify ALL distinct deliverables (research, writing, design, code...)\n")
+			sb.WriteString("2. Create independent tasks FIRST → get their UUIDs from the response\n")
+			sb.WriteString("3. THEN create dependent tasks with `blocked_by=[UUID]` — the system auto-dispatches when blockers complete\n")
+			sb.WriteString("   `blocked_by` only accepts real UUIDs returned by previous create calls. Never use placeholders.\n\n")
+			sb.WriteString("Same member → sequential (higher priority first). Different members → parallel.\n\n")
+			sb.WriteString("**Anti-pattern (WRONG):** create task A → wait for A to finish → create task B → wait...\n")
+			sb.WriteString("**Correct pattern:** create A → create B → create C(blocked_by=[A.id, B.id]) → announce → STOP. You must create tasks first to get their UUIDs, then use those UUIDs in blocked_by of dependent tasks.\n\n")
+			sb.WriteString("**Example:** User: \"research X and make infographic\"\n")
+			sb.WriteString("→ WRONG: web_search(X) yourself → summarize → delegate only infographic\n")
+			sb.WriteString("→ RIGHT: task 1 \"Research X\" (assignee=researcher) → task 2 \"Create infographic about X\" (assignee=artist, blocked_by=[task1.id])\n")
 
 			sb.WriteString("\n## Follow-up Reminders\n\n")
 			sb.WriteString("When you need user input/decision: create+claim task, then `ask_user` with text=<question>. ONLY use when you have a question for the user — NOT for waiting on teammates or status updates.\n")
@@ -143,25 +132,24 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		sb.WriteString("- For long tasks, report progress: `team_tasks(action=\"progress\", percent=50, text=\"status\")`\n")
 		sb.WriteString("- The task_id is auto-resolved — you don't need to specify it\n")
 		sb.WriteString("- Task completion is automatic when your run finishes\n")
+
+		memberCfg := tools.ParseMemberRequestConfig(team.Settings)
+		if memberCfg.Enabled {
+			sb.WriteString("\n## Requesting Help\n\n")
+			sb.WriteString("Need help from another teammate? Create a request:\n")
+			sb.WriteString("```\nteam_tasks(action=\"create\", task_type=\"request\", subject=\"...\", assignee=\"agent-key\")\n```\n")
+		} else {
+			sb.WriteString("\n## Communication\n\n")
+			sb.WriteString("Use `team_tasks(action=\"comment\")` to report issues or ask questions on your current task.\n")
+		}
 	}
 
 	return sb.String()
 }
 
-// agentToolPolicyForTeam denies team_message for team leads.
-// Leads should use spawn (which auto-announces results back) instead of team_message
-// (one-way notification that leaks raw responses to the output channel).
-func agentToolPolicyForTeam(policy *config.ToolPolicySpec, isLead bool) *config.ToolPolicySpec {
-	if !isLead {
-		return policy
-	}
-	if policy == nil {
-		policy = &config.ToolPolicySpec{}
-	}
-	if slices.Contains(policy.Deny, "team_message") {
-		return policy
-	}
-	policy.Deny = append(policy.Deny, "team_message")
+// agentToolPolicyForTeam applies team-specific tool policy adjustments.
+// Currently a no-op — team_message tool was removed; members communicate via task comments.
+func agentToolPolicyForTeam(policy *config.ToolPolicySpec, _ bool) *config.ToolPolicySpec {
 	return policy
 }
 

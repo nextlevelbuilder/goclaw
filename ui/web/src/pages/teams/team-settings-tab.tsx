@@ -6,7 +6,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { X, Save, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
-import type { TeamData, TeamAccessSettings, EscalationMode, EscalationAction } from "@/types/team";
+import type { TeamData, TeamAccessSettings, TeamNotifyConfig, EscalationMode, EscalationAction } from "@/types/team";
 import { useTeams } from "./hooks/use-teams";
 import { TeamVersionModal } from "./team-version-modal";
 
@@ -75,8 +75,14 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [notifyDispatched, setNotifyDispatched] = useState(initNotify.dispatched ?? true);
   const [notifyProgress, setNotifyProgress] = useState(initNotify.progress ?? true);
   const [notifyFailed, setNotifyFailed] = useState(initNotify.failed ?? true);
+  const [notifyCompleted, setNotifyCompleted] = useState(initNotify.completed ?? true);
+  const [notifyCommented, setNotifyCommented] = useState(initNotify.commented ?? true);
+  const [notifyNewTask, setNotifyNewTask] = useState(initNotify.new_task ?? true);
   const [notifySlowTool, setNotifySlowTool] = useState(initNotify.slow_tool ?? true);
   const [notifyMode, setNotifyMode] = useState<"direct" | "leader">(initNotify.mode ?? "direct");
+  const initMemberRequests = initial.member_requests ?? {};
+  const [memberRequestsEnabled, setMemberRequestsEnabled] = useState(initMemberRequests.enabled ?? false);
+  const [memberRequestsAutoDispatch, setMemberRequestsAutoDispatch] = useState(initMemberRequests.auto_dispatch ?? false);
   const [escalationMode, setEscalationMode] = useState<EscalationMode | "">(initial.escalation_mode ?? "");
   const [escalationActions, setEscalationActions] = useState<EscalationAction[]>(initial.escalation_actions ?? []);
   const [followupInterval, setFollowupInterval] = useState<number>(initial.followup_interval_minutes ?? 30);
@@ -104,8 +110,14 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setNotifyDispatched(sn.dispatched ?? true);
     setNotifyProgress(sn.progress ?? true);
     setNotifyFailed(sn.failed ?? true);
+    setNotifyCompleted(sn.completed ?? false);
+    setNotifyCommented(sn.commented ?? false);
+    setNotifyNewTask(sn.new_task ?? false);
     setNotifySlowTool(sn.slow_tool ?? true);
     setNotifyMode(sn.mode ?? "direct");
+    const smr = s.member_requests ?? {};
+    setMemberRequestsEnabled(smr.enabled ?? false);
+    setMemberRequestsAutoDispatch(smr.auto_dispatch ?? false);
     setEscalationMode(s.escalation_mode ?? "");
     setEscalationActions(s.escalation_actions ?? []);
     setFollowupInterval(s.followup_interval_minutes ?? 30);
@@ -121,13 +133,23 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       if (denyUserIds.length > 0) settings.deny_user_ids = denyUserIds;
       if (allowChannels.length > 0) settings.allow_channels = allowChannels;
       if (denyChannels.length > 0) settings.deny_channels = denyChannels;
-      settings.notifications = {
+      const notifications: TeamNotifyConfig = {
         dispatched: notifyDispatched,
         progress: notifyProgress,
         failed: notifyFailed,
         slow_tool: notifySlowTool,
         mode: notifyMode,
       };
+      notifications.completed = notifyCompleted;
+      notifications.commented = notifyCommented;
+      notifications.new_task = notifyNewTask;
+      settings.notifications = notifications;
+      if (memberRequestsEnabled) {
+        settings.member_requests = {
+          enabled: true,
+          auto_dispatch: memberRequestsAutoDispatch,
+        };
+      }
       if (escalationMode) {
         settings.escalation_mode = escalationMode;
         if (escalationActions.length > 0) settings.escalation_actions = escalationActions;
@@ -142,7 +164,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     } finally {
       setSaving(false);
     }
-  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifySlowTool, notifyMode, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved]);
+  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyCompleted, notifyCommented, notifyNewTask, notifySlowTool, notifyMode, memberRequestsEnabled, memberRequestsAutoDispatch, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
@@ -228,6 +250,24 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
                   <p className="text-xs text-muted-foreground">{t("settings.notifyFailedHint")}</p>
                 </div>
                 <Switch checked={notifyFailed} onCheckedChange={setNotifyFailed} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold">{t("settings.notifyCompleted")}</span>
+                </div>
+                <Switch checked={notifyCompleted} onCheckedChange={setNotifyCompleted} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold">{t("settings.notifyCommented")}</span>
+                </div>
+                <Switch checked={notifyCommented} onCheckedChange={setNotifyCommented} />
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold">{t("settings.notifyNewTask")}</span>
+                </div>
+                <Switch checked={notifyNewTask} onCheckedChange={setNotifyNewTask} />
               </div>
               <div className="flex items-center justify-between">
                 <div>
@@ -318,6 +358,29 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Member Requests */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">{t("settings.memberRequests")}</h3>
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-semibold">{t("settings.memberRequestsEnabled")}</span>
+              <p className="text-xs text-muted-foreground">{t("settings.memberRequestsEnabledDesc")}</p>
+            </div>
+            <Switch checked={memberRequestsEnabled} onCheckedChange={setMemberRequestsEnabled} />
+          </div>
+          {memberRequestsEnabled && (
+            <div className="flex items-center justify-between border-t pt-3">
+              <div>
+                <span className="text-sm font-semibold">{t("settings.memberRequestsAutoDispatch")}</span>
+                <p className="text-xs text-muted-foreground">{t("settings.memberRequestsAutoDispatchDesc")}</p>
+              </div>
+              <Switch checked={memberRequestsAutoDispatch} onCheckedChange={setMemberRequestsAutoDispatch} />
+            </div>
+          )}
         </div>
       </div>
 

@@ -51,6 +51,7 @@ export function ChatPage() {
     thinkingText,
     toolStream,
     isRunning,
+    isBusy,
     loading: messagesLoading,
     activity,
     blockReplies,
@@ -59,14 +60,14 @@ export function ChatPage() {
     addLocalMessage,
   } = useChatMessages(sessionKey, agentId);
 
-  // Refresh sessions when run completes
-  const prevIsRunningRef = useRef(false);
+  // Refresh sessions when all work completes (main agent + team tasks)
+  const prevIsBusyRef = useRef(false);
   useEffect(() => {
-    if (prevIsRunningRef.current && !isRunning) {
+    if (prevIsBusyRef.current && !isBusy) {
       refreshSessions();
     }
-    prevIsRunningRef.current = isRunning;
-  }, [isRunning, refreshSessions]);
+    prevIsBusyRef.current = isBusy;
+  }, [isBusy, refreshSessions]);
 
   const isOwn = !sessionKey || isOwnSession(sessionKey, userId);
 
@@ -212,7 +213,7 @@ export function ChatPage() {
           </div>
         )}
 
-        <ChatTopBar agentId={agentId} isRunning={isRunning} activity={activity} />
+        <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} />
 
         {sendError && (
           <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
@@ -230,6 +231,7 @@ export function ChatPage() {
             activity={activity}
             teamTasks={teamTasks}
             isRunning={isRunning}
+            isBusy={isBusy}
             loading={messagesLoading}
             scrollTrigger={scrollTrigger}
           />
@@ -238,7 +240,7 @@ export function ChatPage() {
             <ChatInput
               onSend={handleSend}
               onAbort={handleAbort}
-              isRunning={isRunning}
+              isBusy={isBusy}
               disabled={!connected}
               files={files}
               onFilesChange={setFiles}

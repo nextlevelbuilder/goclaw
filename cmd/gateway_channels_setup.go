@@ -39,7 +39,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 	}
 
 	if cfg.Channels.Discord.Enabled && cfg.Channels.Discord.Token != "" && instanceLoader == nil {
-		dc, err := discord.New(cfg.Channels.Discord, msgBus, nil, nil)
+		dc, err := discord.New(cfg.Channels.Discord, msgBus, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("failed to initialize discord channel", "error", err)
 		} else {

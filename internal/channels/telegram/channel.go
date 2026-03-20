@@ -43,6 +43,8 @@ type Channel struct {
 	requireMention   bool
 	pollCancel       context.CancelFunc // cancels the long polling context
 	pollDone         chan struct{}       // closed when polling goroutine exits
+	handlerWg        sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
+	handlerSem       chan struct{}       // bounded semaphore for concurrent handler goroutines
 }
 
 type thinkingCancel struct {
@@ -152,6 +154,7 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	c.SetRunning(true)
 	c.groupHistory.StartFlusher()
+	c.handlerSem = make(chan struct{}, 20) // limit concurrent message handlers
 	slog.Info("telegram bot connected", "username", c.bot.Username())
 
 	// Register bot menu commands with retry.
@@ -189,9 +192,29 @@ func (c *Channel) Start(ctx context.Context) error {
 					return
 				}
 				if update.Message != nil {
-					c.handleMessage(pollCtx, update)
+					select {
+					case c.handlerSem <- struct{}{}:
+						c.handlerWg.Add(1)
+						go func(u telego.Update) {
+							defer c.handlerWg.Done()
+							defer func() { <-c.handlerSem }()
+							c.handleMessage(pollCtx, u)
+						}(update)
+					case <-pollCtx.Done():
+						return
+					}
 				} else if update.CallbackQuery != nil {
-					c.handleCallbackQuery(pollCtx, update.CallbackQuery)
+					select {
+					case c.handlerSem <- struct{}{}:
+						c.handlerWg.Add(1)
+						go func(q *telego.CallbackQuery) {
+							defer c.handlerWg.Done()
+							defer func() { <-c.handlerSem }()
+							c.handleCallbackQuery(pollCtx, q)
+						}(update.CallbackQuery)
+					case <-pollCtx.Done():
+						return
+					}
 				} else {
 					// Log non-message updates for delivery diagnostics
 					updateType := "unknown"
@@ -270,10 +293,23 @@ func (c *Channel) Stop(_ context.Context) error {
 	if c.pollDone != nil {
 		select {
 		case <-c.pollDone:
-			slog.Info("telegram bot stopped")
+			slog.Info("telegram polling goroutine stopped")
 		case <-time.After(10 * time.Second):
 			slog.Warn("telegram polling goroutine did not exit within timeout")
 		}
+	}
+
+	// Wait for in-flight handler goroutines to finish processing.
+	handlerDone := make(chan struct{})
+	go func() {
+		c.handlerWg.Wait()
+		close(handlerDone)
+	}()
+	select {
+	case <-handlerDone:
+		slog.Info("telegram bot stopped")
+	case <-time.After(15 * time.Second):
+		slog.Warn("telegram handler goroutines did not drain within timeout")
 	}
 	return nil
 }

@@ -42,17 +42,28 @@ export function ActiveRunZone({
           <BlockReplyBubble key={msg.timestamp ?? i} message={msg} />
         ))}
 
-        {toolStream.map((entry) => (
-          <ToolCallCard key={entry.toolCallId} entry={entry} />
-        ))}
-
-        {thinkingText !== null && (
-          <ThinkingBlock text={thinkingText} isStreaming={isRunning && streamText === null} />
+        {/* Tool cards: match MessageBubble's compact grouped layout */}
+        {toolStream.length > 0 && (
+          <div className="rounded-md border bg-muted divide-y divide-border">
+            {toolStream.map((entry) => (
+              <ToolCallCard key={entry.toolCallId} entry={entry} compact />
+            ))}
+          </div>
         )}
 
-        {streamText !== null && <StreamingText text={streamText} />}
+        {/* Streaming text: wrap in bubble matching MessageBubble's assistant style */}
+        {(thinkingText !== null || streamText !== null) && (
+          <div className="flex-1 min-w-0 rounded-lg px-4 py-2 bg-card text-card-foreground border border-border shadow-sm">
+            {thinkingText !== null && (
+              <div className={streamText !== null ? "mb-2" : ""}>
+                <ThinkingBlock text={thinkingText} isStreaming={isRunning && streamText === null} />
+              </div>
+            )}
+            {streamText !== null && <StreamingText text={streamText} />}
+          </div>
+        )}
 
-        {isRunning && (
+        {(isRunning || activity?.phase === "leader_processing") && (
           <ActivityIndicator activity={activity} isRunning={isRunning} />
         )}
       </div>

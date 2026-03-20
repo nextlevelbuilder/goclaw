@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
-import { Loader2, Bot } from "lucide-react";
+import { Loader2, Bot, Users } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
-import type { RunActivity } from "@/types/chat";
+import type { RunActivity, ActiveTeamTask } from "@/types/chat";
 import type { AgentData } from "@/types/agent";
 
 interface ChatTopBarProps {
   agentId: string;
   isRunning: boolean;
+  isBusy: boolean;
   activity: RunActivity | null;
+  teamTasks: ActiveTeamTask[];
 }
 
 const phaseLabels: Record<RunActivity["phase"], string> = {
@@ -17,9 +19,10 @@ const phaseLabels: Record<RunActivity["phase"], string> = {
   streaming: "Responding…",
   compacting: "Compacting…",
   retrying: "Retrying…",
+  leader_processing: "Processing team results…",
 };
 
-export function ChatTopBar({ agentId, isRunning, activity }: ChatTopBarProps) {
+export function ChatTopBar({ agentId, isRunning, isBusy, activity, teamTasks }: ChatTopBarProps) {
   const http = useHttp();
   const connected = useAuthStore((s) => s.connected);
   const [agent, setAgent] = useState<{ name: string; emoji?: string } | null>(null);
@@ -59,6 +62,12 @@ export function ChatTopBar({ agentId, isRunning, activity }: ChatTopBarProps) {
       {isRunning ? (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span>{activity ? phaseLabels[activity.phase] : "Running…"}</span>
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        </div>
+      ) : isBusy ? (
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          <span>Team: {teamTasks.length} task{teamTasks.length > 1 ? "s" : ""} active</span>
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         </div>
       ) : (

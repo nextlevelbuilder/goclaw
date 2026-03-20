@@ -396,6 +396,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	// 2g. Cross-session task reminder: notify team leads about pending and in-progress tasks.
 	// Stale recovery (expired lock → pending) is handled by the background TaskTicker.
+	// Reminders are injected BEFORE the user message so the user's actual message is always
+	// the last message — prevents trailing assistant messages that proxy providers reject.
 	if l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil && team.LeadAgentID == l.agentUUID {
 			if tasks, err := l.teamStore.ListTasks(ctx, team.ID, "newest", "active", req.UserID, "", "", 0, 0); err == nil {
@@ -434,16 +436,20 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 				if len(parts) > 0 {
 					reminder := "[System] " + strings.Join(parts, "\n\n")
+					// Pop user message, inject reminder, push user message back
+					userMsg := messages[len(messages)-1]
+					messages = messages[:len(messages)-1]
 					messages = append(messages,
 						providers.Message{Role: "user", Content: reminder},
 						providers.Message{Role: "assistant", Content: "I see the task status. Let me handle accordingly."},
+						userMsg,
 					)
 				}
 			}
 		}
 	}
 
-	// 2g. Member task reminder: inject task context for members working on dispatched tasks.
+	// 2h. Member task reminder: inject task context for members working on dispatched tasks.
 	// Caches task subject/number for mid-loop progress nudge (avoids extra DB query).
 	var memberTaskSubject string
 	var memberTaskNumber int
@@ -457,9 +463,13 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 						"Stay focused on this task. Your final response becomes the task result — make it clear and complete. "+
 						"For long tasks, report progress: team_tasks(action=\"progress\", percent=50, text=\"status\").",
 					task.TaskNumber, task.Subject)
+				// Pop user message, inject reminder, push user message back
+				userMsg := messages[len(messages)-1]
+				messages = messages[:len(messages)-1]
 				messages = append(messages,
 					providers.Message{Role: "user", Content: reminder},
 					providers.Message{Role: "assistant", Content: "Understood. I'll focus on this task and report progress."},
+					userMsg,
 				)
 			}
 		}
@@ -584,6 +594,21 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			messages = append(messages, providers.Message{Role: "user", Content: nudge})
 		}
 
+		// Iteration budget nudge: when model has used 75% of iterations without
+		// producing any text response, warn it to start summarizing.
+		if maxIter > 0 && iteration > 1 && iteration == maxIter*3/4 && finalContent == "" {
+			messages = append(messages, providers.Message{
+				Role:    "user",
+				Content: "[System] You have used 75% of your iteration budget without providing a text response. Start summarizing your findings and respond to the user within the next few iterations.",
+			})
+		}
+
+		// Inject iteration progress into context so tools can adapt (e.g. web_fetch reduces maxChars).
+		iterCtx := tools.WithIterationProgress(ctx, tools.IterationProgress{
+			Current: iteration,
+			Max:     maxIter,
+		})
+
 		// Emit activity event: thinking phase
 		emitRun(AgentEvent{
 			Type:    protocol.AgentEventActivity,
@@ -643,6 +668,16 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				filtered = append(filtered, td)
 			}
 			toolDefs = filtered
+		}
+
+		// Final iteration: strip all tools to force a text-only response.
+		// Without this the model may keep requesting tools and exit with "...".
+		if iteration == maxIter {
+			toolDefs = nil
+			messages = append(messages, providers.Message{
+				Role:    "user",
+				Content: "[System] Final iteration reached. Summarize all findings and respond to the user now. No more tool calls allowed.",
+			})
 		}
 
 		// Use per-request model override if set (e.g. heartbeat uses cheaper model).
@@ -924,7 +959,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			}
 			if result == nil {
-				result = l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+				result = l.tools.ExecuteWithContext(iterCtx, registryName, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 			}
 			stopSlowTimer()
 
@@ -1100,7 +1135,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 						}
 					}
 					if result == nil {
-						result = l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+						result = l.tools.ExecuteWithContext(iterCtx, registryName, tc.Arguments, req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 					}
 					stopSlowTimer()
 					l.emitToolSpanEnd(ctx, spanID, spanStart, result)
@@ -1298,11 +1333,46 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		finalContent += req.ContentSuffix
 	}
 
-	pendingMsgs = append(pendingMsgs, providers.Message{
+	// Collect forwarded media + dedup + populate sizes BEFORE saving to session,
+	// so we can attach output MediaRefs to the assistant message for history reload.
+	for _, mf := range req.ForwardMedia {
+		ct := mf.MimeType
+		if ct == "" {
+			ct = mimeFromExt(filepath.Ext(mf.Path))
+		}
+		mediaResults = append(mediaResults, MediaResult{Path: mf.Path, ContentType: ct})
+	}
+	mediaResults = deduplicateMedia(mediaResults)
+	for i := range mediaResults {
+		if mediaResults[i].Size == 0 {
+			if info, err := os.Stat(mediaResults[i].Path); err == nil {
+				mediaResults[i].Size = info.Size()
+			}
+		}
+	}
+
+	// Build final assistant message with output media refs for history persistence.
+	assistantMsg := providers.Message{
 		Role:     "assistant",
 		Content:  finalContent,
 		Thinking: finalThinking,
-	})
+	}
+	for _, mr := range mediaResults {
+		kind := "document"
+		if strings.HasPrefix(mr.ContentType, "image/") {
+			kind = "image"
+		} else if strings.HasPrefix(mr.ContentType, "audio/") {
+			kind = "audio"
+		} else if strings.HasPrefix(mr.ContentType, "video/") {
+			kind = "video"
+		}
+		assistantMsg.MediaRefs = append(assistantMsg.MediaRefs, providers.MediaRef{
+			ID:       filepath.Base(mr.Path),
+			MimeType: mr.ContentType,
+			Kind:     kind,
+		})
+	}
+	pendingMsgs = append(pendingMsgs, assistantMsg)
 
 	// Bootstrap nudge: if model didn't call write_file on turn 2+, inject reminder
 	// into session history so the next turn sees it. Appended to pendingMsgs so it's
@@ -1394,19 +1464,6 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	// 5. Maybe summarize
 	l.maybeSummarize(ctx, req.SessionKey)
-
-	// Include forwarded media from delegation results (not cleaned up like req.Media)
-	for _, mf := range req.ForwardMedia {
-		ct := mf.MimeType
-		if ct == "" {
-			ct = mimeFromExt(filepath.Ext(mf.Path))
-		}
-		mediaResults = append(mediaResults, MediaResult{Path: mf.Path, ContentType: ct})
-	}
-
-	// Deduplicate media by path — prevents the same image being sent twice
-	// (e.g. once via ForwardMedia and again when the LLM reads the file).
-	mediaResults = deduplicateMedia(mediaResults)
 
 	return &RunResult{
 		Content:        finalContent,

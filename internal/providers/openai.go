@@ -340,6 +340,17 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		msgs = append(msgs, msg)
 	}
 
+	// Safety net: strip trailing assistant message to prevent HTTP 400 from
+	// proxy providers (LiteLLM, OpenRouter) that don't support assistant prefill.
+	// This should rarely trigger — the agent loop ensures user message is last.
+	if len(msgs) > 0 {
+		if role, _ := msgs[len(msgs)-1]["role"].(string); role == "assistant" {
+			slog.Warn("openai: stripped trailing assistant message (unsupported prefill)",
+				"provider", p.name, "model", model)
+			msgs = msgs[:len(msgs)-1]
+		}
+	}
+
 	body := map[string]any{
 		"model":    model,
 		"messages": msgs,

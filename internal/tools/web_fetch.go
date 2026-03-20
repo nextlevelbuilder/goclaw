@@ -192,6 +192,17 @@ func (t *WebFetchTool) Execute(ctx context.Context, args map[string]any) *Result
 		maxChars = int(mc)
 	}
 
+	// Adaptive maxChars: reduce as iterations progress to prevent context bloat.
+	if prog, ok := IterationProgressFromCtx(ctx); ok && prog.Max > 0 {
+		ratio := float64(prog.Current) / float64(prog.Max)
+		switch {
+		case ratio >= 0.75:
+			maxChars = min(maxChars, 10000)
+		case ratio >= 0.50:
+			maxChars = min(maxChars, 20000)
+		}
+	}
+
 	// Check cache (scoped per channel to prevent cross-channel cache poisoning)
 	channel := ToolChannelFromCtx(ctx)
 	cacheKey := fmt.Sprintf("fetch:%s:%s:%s:%d", channel, rawURL, extractMode, maxChars)

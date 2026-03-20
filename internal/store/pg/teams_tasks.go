@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode"
@@ -23,6 +24,7 @@ const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.o
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
 		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
+		 COALESCE(t.comment_count,0), COALESCE(t.attachment_count,0),
 		 t.created_at, t.updated_at,
 		 COALESCE(a.agent_key, '') AS owner_agent_key,
 		 COALESCE(ca.agent_key, '') AS created_by_agent_key`
@@ -133,7 +135,14 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Fire-and-forget: generate embedding for the new task's subject.
+	go s.generateTaskEmbedding(context.Background(), task.ID, task.Subject)
+
+	return nil
 }
 
 // allowedTaskUpdateCols is the whitelist of columns that UpdateTask accepts.
@@ -162,7 +171,16 @@ func (s *PGTeamStore) UpdateTask(ctx context.Context, taskID uuid.UUID, updates 
 		updates["blocked_by"] = pq.Array(v)
 	}
 	updates["updated_at"] = time.Now()
-	return execMapUpdate(ctx, s.db, "team_tasks", taskID, updates)
+	if err := execMapUpdate(ctx, s.db, "team_tasks", taskID, updates); err != nil {
+		return err
+	}
+
+	// Re-embed when subject changes.
+	if newSubject, ok := updates["subject"].(string); ok && newSubject != "" {
+		go s.generateTaskEmbedding(context.Background(), taskID, newSubject)
+	}
+
+	return nil
 }
 
 func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy string, statusFilter string, userID string, channel string, chatID string, limit int, offset int) ([]store.TeamTaskData, error) {
@@ -240,7 +258,8 @@ func (s *PGTeamStore) SearchTasks(ctx context.Context, teamID uuid.UUID, query s
 	if limit <= 0 {
 		limit = 20
 	}
-	// Split query into words and join with OR for broader matching
+	// Split query into words and join with AND for precise matching.
+	// Prefix each word for partial matching (e.g. "sketch" matches "sketchnote").
 	words := strings.Fields(query)
 	if len(words) == 0 {
 		return nil, nil
@@ -255,25 +274,64 @@ func (s *PGTeamStore) SearchTasks(ctx context.Context, teamID uuid.UUID, query s
 		}, w)
 		w = strings.TrimSpace(w)
 		if w != "" {
-			sanitized = append(sanitized, w)
+			sanitized = append(sanitized, w+":*")
 		}
 	}
 	if len(sanitized) == 0 {
 		return nil, nil
 	}
-	tsq := strings.Join(sanitized, " | ")
+	tsq := strings.Join(sanitized, " & ")
 
+	// FTS search.
+	ftsLimit := limit
+	if s.embProvider != nil {
+		ftsLimit = limit * 2 // fetch more for hybrid merge
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
 		 WHERE t.team_id = $1 AND t.tsv @@ to_tsquery('simple', $2) AND ($4 = '' OR t.user_id = $4)
 		 ORDER BY ts_rank(t.tsv, to_tsquery('simple', $2)) DESC
-		 LIMIT $3`, teamID, tsq, limit, userID)
+		 LIMIT $3`, teamID, tsq, ftsLimit, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanTaskRowsJoined(rows)
+	ftsResults, err := scanTaskRowsJoined(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	// Helper: truncate FTS results to limit for FTS-only fallback.
+	truncatedFTS := func() ([]store.TeamTaskData, error) {
+		if len(ftsResults) > limit {
+			return ftsResults[:limit], nil
+		}
+		return ftsResults, nil
+	}
+
+	// If no embedding provider, return FTS-only results (graceful degradation).
+	if s.embProvider == nil {
+		return truncatedFTS()
+	}
+
+	// Hybrid search: combine FTS + vector similarity.
+	embeddings, err := s.embProvider.Embed(ctx, []string{query})
+	if err != nil {
+		slog.Warn("task search embedding failed, falling back to FTS", "error", err)
+		return truncatedFTS()
+	}
+	if len(embeddings) == 0 || len(embeddings[0]) == 0 {
+		return truncatedFTS()
+	}
+
+	vecResults, err := s.SearchTasksByEmbedding(ctx, teamID, embeddings[0], limit*2, userID)
+	if err != nil {
+		slog.Warn("task vector search failed, falling back to FTS", "error", err)
+		return truncatedFTS()
+	}
+
+	return hybridMergeTaskResults(ftsResults, vecResults, 0.3, 0.7, limit), nil
 }
 
 func (s *PGTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) error {
@@ -333,6 +391,7 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,
 			&chatID, &metadataJSON, &lockedAt, &lockExpiresAt, &d.ProgressPercent, &progressStep,
 			&followupAt, &followupCount, &followupMax, &followupMessage, &followupChannel, &followupChatID,
+			&d.CommentCount, &d.AttachmentCount,
 			&d.CreatedAt, &d.UpdatedAt,
 			&d.OwnerAgentKey,
 			&d.CreatedByAgentKey,

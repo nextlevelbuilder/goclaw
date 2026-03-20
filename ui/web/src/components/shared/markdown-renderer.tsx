@@ -4,6 +4,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { useClipboard } from "@/hooks/use-clipboard";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { toFileUrl } from "@/lib/file-helpers";
 import { Check, Copy, Download, FileText } from "lucide-react";
 import { ImageLightbox } from "./image-lightbox";
 import {
@@ -50,9 +52,16 @@ interface MarkdownRendererProps {
   className?: string;
 }
 
-/** Check if a URL points to a local file via /v1/files/ endpoint */
+/** Common file extensions for generated/local files */
+const LOCAL_FILE_EXT_RE = /\.(png|jpg|jpeg|gif|webp|svg|bmp|mp3|wav|ogg|flac|aac|m4a|mp4|webm|mkv|avi|mov|pdf|doc|docx|xls|xlsx|csv|txt|md|json|zip)$/i;
+
+/** Check if a URL points to a local file (via /v1/files/ or relative path) */
 function isFileLink(href: string | undefined): boolean {
-  return !!href && (href.startsWith("/v1/files/") || href.includes("/v1/files/"));
+  if (!href) return false;
+  if (href.startsWith("/v1/files/") || href.includes("/v1/files/")) return true;
+  // Detect relative paths with file extensions (e.g. ./system/generated/file.png)
+  if ((href.startsWith("./") || href.startsWith("../")) && LOCAL_FILE_EXT_RE.test(href)) return true;
+  return false;
 }
 
 /** File type detection from name */
@@ -74,6 +83,7 @@ function fileNameFromHref(href: string): string {
 }
 
 export function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+  const token = useAuthStore((s) => s.token);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), []);
   const [filePreview, setFilePreview] = useState<{ name: string; href: string; content: string; mediaType?: "image" | "audio" | "video" } | null>(null);
@@ -86,12 +96,15 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
       setFilePreview({ name, href, content: "", mediaType: media });
       return;
     }
-    // Text/code files: fetch content
+    // Text/code files: fetch content (href already includes ?token= from toFileUrl)
     setFileLoading(true);
     fetch(href)
-      .then((res) => res.text())
+      .then((res) => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.text();
+      })
       .then((text) => setFilePreview({ name, href, content: text }))
-      .catch(() => window.open(href, "_blank"))
+      .catch(() => { /* fetch failed — file may not exist, ignore */ })
       .finally(() => setFileLoading(false));
   }, []);
 
@@ -122,19 +135,20 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
           },
           a({ href, children }) {
             if (isFileLink(href)) {
-              const name = typeof children === "string" ? children : fileNameFromHref(href ?? "");
+              const resolvedHref = toFileUrl(href!, token);
+              const name = typeof children === "string" ? children : fileNameFromHref(href!);
               return (
                 <span className="inline-flex items-center gap-0.5 rounded border bg-muted/50 text-[0.85em] font-medium">
                   <button
                     type="button"
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 text-primary hover:bg-muted cursor-pointer rounded-l"
-                    onClick={(e) => { e.preventDefault(); handleFileClick(href!, name); }}
+                    onClick={(e) => { e.preventDefault(); handleFileClick(resolvedHref, name); }}
                   >
                     <FileText className="h-3.5 w-3.5" />
                     {children}
                   </button>
                   <a
-                    href={href}
+                    href={resolvedHref}
                     download={name}
                     className="inline-flex items-center px-1 py-0.5 text-muted-foreground hover:bg-muted cursor-pointer rounded-r border-l"
                     onClick={(e) => e.stopPropagation()}
@@ -151,15 +165,16 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             );
           },
           img({ src, alt, ...props }) {
+            const resolvedSrc = isFileLink(src) ? toFileUrl(src!, token) : src;
             return (
               <img
-                src={src}
+                src={resolvedSrc}
                 alt={alt ?? "image"}
                 className="max-w-sm rounded-lg border shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
                 loading="lazy"
                 onClick={(e) => {
                   e.preventDefault();
-                  if (src) openLightbox(src, alt ?? "image");
+                  if (resolvedSrc) openLightbox(resolvedSrc, alt ?? "image");
                 }}
                 {...props}
               />
@@ -213,13 +228,13 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
 
       <Dialog open={!!filePreview} onOpenChange={(open) => { if (!open) setFilePreview(null); }}>
         {filePreview && (
-          <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-            <DialogHeader className="flex-row items-center justify-between gap-2">
-              <DialogTitle className="truncate text-base">{filePreview.name}</DialogTitle>
+          <DialogContent className="sm:max-w-4xl max-h-[85vh] flex flex-col">
+            <DialogHeader className="flex-row items-center gap-2 pr-10">
+              <DialogTitle className="truncate text-base flex-1">{filePreview.name}</DialogTitle>
               <a
                 href={filePreview.href}
                 download={filePreview.name}
-                className="mr-8 flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+                className="flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
               >
                 <Download className="h-3.5 w-3.5" />
                 Download

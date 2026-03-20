@@ -62,6 +62,11 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		return
 	}
 
+	// Handle bot commands (writer management, etc.) before further processing.
+	if c.tryHandleCommand(m) {
+		return
+	}
+
 	// Build content
 	content := m.Content
 

@@ -23,7 +23,7 @@ type agentCacheEntry struct {
 	cachedAt time.Time
 }
 
-// TeamToolManager is the shared backend for team_tasks and team_message tools.
+// TeamToolManager is the shared backend for team_tasks tool and workspace interceptor.
 // It resolves the calling agent's team from context and provides access to
 // the team store, agent store, and message bus.
 // Includes a TTL cache for team data to avoid DB queries on every tool call.

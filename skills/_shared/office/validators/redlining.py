@@ -29,9 +29,9 @@ class RedliningValidator:
             return False
 
         try:
-            import xml.etree.ElementTree as ET
+            import defusedxml.ElementTree as SafeET
 
-            tree = ET.parse(modified_file)
+            tree = SafeET.parse(modified_file)
             root = tree.getroot()
 
             del_elements = root.findall(".//w:del", self.namespaces)
@@ -74,13 +74,13 @@ class RedliningValidator:
                 return False
 
             try:
-                import xml.etree.ElementTree as ET
+                import defusedxml.ElementTree as SafeET
 
-                modified_tree = ET.parse(modified_file)
+                modified_tree = SafeET.parse(modified_file)
                 modified_root = modified_tree.getroot()
-                original_tree = ET.parse(original_file)
+                original_tree = SafeET.parse(original_file)
                 original_root = original_tree.getroot()
-            except ET.ParseError as e:
+            except SafeET.ParseError as e:
                 print(f"FAILED - Error parsing XML files: {e}")
                 return False
 

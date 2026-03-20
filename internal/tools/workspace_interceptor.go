@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -102,7 +105,8 @@ func (w *WorkspaceInterceptor) HandleWrite(ctx context.Context, path string, con
 	return false, nil
 }
 
-// AfterWrite broadcasts a workspace file change event.
+// AfterWrite broadcasts a workspace file change event and auto-tracks
+// file writes as task attachments when a team task ID is in context.
 func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, action string) {
 	if w == nil {
 		return
@@ -111,7 +115,7 @@ func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, acti
 	if teamIDStr == "" {
 		return
 	}
-	// Only broadcast for writes inside team workspace.
+	// Only process writes inside team workspace.
 	teamWs := ToolTeamWorkspaceFromCtx(ctx)
 	if teamWs == "" || !strings.HasPrefix(filepath.Clean(path), filepath.Clean(teamWs)) {
 		return
@@ -123,6 +127,7 @@ func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, acti
 		chatID = store.UserIDFromContext(ctx)
 	}
 
+	// Broadcast workspace file change event for real-time UI updates.
 	w.teamMgr.broadcastTeamEvent(protocol.EventWorkspaceFileChanged, map[string]string{
 		"team_id":   teamIDStr,
 		"channel":   "",
@@ -131,4 +136,65 @@ func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, acti
 		"action":    action,
 	})
 	slog.Debug("workspace: file changed", "team", teamIDStr, "file", fileName, "action", action)
+
+	// Auto-track file as task attachment when team task context is present.
+	taskIDStr := TeamTaskIDFromCtx(ctx)
+	if taskIDStr == "" {
+		return
+	}
+	teamID, err := uuid.Parse(teamIDStr)
+	if err != nil {
+		return
+	}
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		return
+	}
+
+	// Compute relative path from workspace root for storage.
+	relPath, err := filepath.Rel(filepath.Clean(teamWs), filepath.Clean(path))
+	if err != nil {
+		relPath = fileName
+	}
+
+	switch action {
+	case "write":
+		// Get file size and detect MIME type.
+		var fileSize int64
+		if info, err := os.Stat(path); err == nil {
+			fileSize = info.Size()
+		}
+		mimeType := mimeFromExt(filepath.Ext(path))
+
+		// Resolve agent ID for created_by_agent_id.
+		_, agentID, _ := w.teamMgr.resolveTeam(ctx)
+
+		att := &store.TeamTaskAttachmentData{
+			TaskID:           taskID,
+			TeamID:           teamID,
+			ChatID:           chatID,
+			Path:             relPath,
+			FileSize:         fileSize,
+			MimeType:         mimeType,
+			CreatedByAgentID: &agentID,
+		}
+		if err := w.teamMgr.teamStore.AttachFileToTask(ctx, att); err != nil {
+			slog.Warn("workspace: auto-attach failed", "task_id", taskIDStr, "path", relPath, "error", err)
+		} else {
+			slog.Debug("workspace: auto-attached file to task", "task_id", taskIDStr, "path", relPath)
+		}
+
+	case "delete":
+		if err := w.teamMgr.teamStore.DetachFileFromTask(ctx, taskID, relPath); err != nil {
+			slog.Warn("workspace: auto-detach failed", "task_id", taskIDStr, "path", relPath, "error", err)
+		}
+	}
+}
+
+// mimeFromExt returns a MIME type for a file extension using the stdlib registry.
+func mimeFromExt(ext string) string {
+	if t := mime.TypeByExtension(ext); t != "" {
+		return t
+	}
+	return "application/octet-stream"
 }

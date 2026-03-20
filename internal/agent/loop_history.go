@@ -482,7 +482,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	if l.compactionCfg != nil && l.compactionCfg.MaxHistoryShare > 0 {
 		historyShare = l.compactionCfg.MaxHistoryShare
 	}
-	minMessages := 50
+	minMessages := 200
 	if l.compactionCfg != nil && l.compactionCfg.MinMessages > 0 {
 		minMessages = l.compactionCfg.MinMessages
 	}
@@ -590,7 +590,34 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 // For non-writers: injects refusal instructions + removes SOUL.md/AGENTS.md from context files.
 func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID string, files []bootstrap.ContextFile) (string, []bootstrap.ContextFile) {
 	writers, err := l.configPermStore.ListFileWriters(ctx, l.agentUUID, groupID)
-	if err != nil || len(writers) == 0 {
+	if err != nil {
+		return "", files // fail-open
+	}
+
+	// Discord guilds: also fetch guild-wide wildcard writers (guild:{guildID}:*).
+	// Per-user scope (guild:{guildID}:user:{userID}) won't find guild-wide grants
+	// because ListFileWriters uses exact SQL match.
+	if strings.HasPrefix(groupID, "guild:") {
+		parts := strings.SplitN(groupID, ":", 3) // ["guild", "{guildID}", "user:..."]
+		if len(parts) >= 2 {
+			guildWildcard := parts[0] + ":" + parts[1] + ":*"
+			if guildWriters, gErr := l.configPermStore.ListFileWriters(ctx, l.agentUUID, guildWildcard); gErr == nil {
+				writers = append(writers, guildWriters...)
+			}
+			// Deduplicate by UserID (user may have both guild-wide and per-user grants).
+			seen := make(map[string]bool, len(writers))
+			deduped := writers[:0]
+			for _, w := range writers {
+				if !seen[w.UserID] {
+					seen[w.UserID] = true
+					deduped = append(deduped, w)
+				}
+			}
+			writers = deduped
+		}
+	}
+
+	if len(writers) == 0 {
 		return "", files // fail-open
 	}
 

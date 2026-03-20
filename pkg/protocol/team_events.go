@@ -102,6 +102,9 @@ type TeamTaskEventPayload struct {
 	ChatID           string `json:"chat_id"`
 	Timestamp        string `json:"timestamp"`
 
+	// Comment text preview (for team.task.commented events, truncated).
+	CommentText string `json:"comment_text,omitempty"`
+
 	// Progress (for team.task.progress events).
 	ProgressPercent int    `json:"progress_percent,omitempty"`
 	ProgressStep    string `json:"progress_step,omitempty"`

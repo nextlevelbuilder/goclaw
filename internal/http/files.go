@@ -13,13 +13,17 @@ import (
 
 // FilesHandler serves files over HTTP with Bearer token auth.
 // Accepts absolute paths — the auth token protects against unauthorized access.
+// When an exact path is not found, falls back to searching the workspace for
+// generated files by basename (goclaw_gen_* filenames are globally unique).
 type FilesHandler struct {
-	token string
+	token     string
+	workspace string // workspace root for fallback file search
 }
 
 // NewFilesHandler creates a handler that serves files by absolute path.
-func NewFilesHandler(token string) *FilesHandler {
-	return &FilesHandler{token: token}
+// workspace is the root directory used for fallback generated file search.
+func NewFilesHandler(token, workspace string) *FilesHandler {
+	return &FilesHandler{token: token, workspace: workspace}
 }
 
 // RegisterRoutes registers the file serving route.
@@ -79,8 +83,15 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 
 	info, err := os.Stat(absPath)
 	if err != nil || info.IsDir() {
-		http.NotFound(w, r)
-		return
+		// Fallback: search workspace for file by basename (handles LLM-hallucinated paths).
+		// Generated filenames (goclaw_gen_*) include nanosecond timestamps and are globally unique.
+		if resolved := h.findInWorkspace(filepath.Base(absPath)); resolved != "" {
+			absPath = resolved
+			info, _ = os.Stat(absPath)
+		} else {
+			http.NotFound(w, r)
+			return
+		}
 	}
 
 	// Set Content-Type from extension
@@ -91,4 +102,50 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.ServeFile(w, r, absPath)
+}
+
+// findInWorkspace searches the workspace directory tree for a file by basename.
+// Returns the absolute path if found, empty string otherwise.
+// Searches team directories including generated/ and system/ subdirs.
+func (h *FilesHandler) findInWorkspace(basename string) string {
+	if h.workspace == "" || basename == "" {
+		return ""
+	}
+	var found string
+	_ = filepath.WalkDir(h.workspace, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			name := d.Name()
+			// Allow workspace root + known directory structures
+			if name == "teams" || name == "generated" || name == "system" || path == h.workspace {
+				return nil
+			}
+			// Allow date directories (e.g. 2026-03-20)
+			if len(name) == 10 && name[4] == '-' {
+				return nil
+			}
+			// Allow team/user ID directories (UUIDs, numeric IDs)
+			if strings.Contains(name, "-") || isNumeric(name) {
+				return nil
+			}
+			return filepath.SkipDir
+		}
+		if d.Name() == basename {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
+func isNumeric(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }

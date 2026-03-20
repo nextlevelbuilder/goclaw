@@ -3,7 +3,9 @@ import { useWs } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { Methods, Events } from "@/api/protocol";
 import type { Message } from "@/types/session";
-import type { ChatMessage, AgentEventPayload, ToolStreamEntry, RunActivity, ActiveTeamTask } from "@/types/chat";
+import type { ChatMessage, AgentEventPayload, ToolStreamEntry, RunActivity, ActiveTeamTask, MediaItem } from "@/types/chat";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { toFileUrl, mediaKindFromMime } from "@/lib/file-helpers";
 
 /**
  * Manages chat message history and real-time streaming for a session.
@@ -14,6 +16,7 @@ import type { ChatMessage, AgentEventPayload, ToolStreamEntry, RunActivity, Acti
  */
 export function useChatMessages(sessionKey: string, agentId: string) {
   const ws = useWs();
+  const token = useAuthStore((s) => s.token);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streamText, setStreamText] = useState<string | null>(null);
   const [thinkingText, setThinkingText] = useState<string | null>(null);
@@ -59,7 +62,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   }, [sessionKey]);
 
   // Load history (no loading spinner — the empty state placeholder is shown instead)
-  const loadHistory = useCallback(async () => {
+  const loadHistory = useCallback(async (mediaItems?: MediaItem[]) => {
     if (!ws.isConnected || !sessionKey) {
       setLoading(false);
       return;
@@ -82,6 +85,15 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           ...m,
           timestamp: Date.now() - (allMsgs.length - i) * 1000,
         };
+        // Convert persisted media_refs to mediaItems for gallery display
+        if (m.role === "assistant" && m.media_refs && m.media_refs.length > 0) {
+          chatMsg.mediaItems = m.media_refs.map((ref) => ({
+            path: toFileUrl(ref.id, token),
+            mimeType: ref.mime_type,
+            fileName: ref.id,
+            kind: (ref.kind as MediaItem["kind"]) || "document",
+          }));
+        }
         // Reconstruct toolDetails for assistant messages with tool_calls
         if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
           chatMsg.toolDetails = m.tool_calls.map((tc) => {
@@ -100,6 +112,15 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         }
         return chatMsg;
       });
+      // Attach media to the last assistant message if provided
+      if (mediaItems?.length && msgs.length > 0) {
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i]!.role === "assistant") {
+            msgs[i] = { ...msgs[i]!, mediaItems };
+            break;
+          }
+        }
+      }
       setMessages(msgs);
     } catch {
       // will retry
@@ -126,16 +147,10 @@ export function useChatMessages(sessionKey: string, agentId: string) {
       const event = payload as AgentEventPayload;
       if (!event) return;
 
-      // Announce run.completed: reload history when a subagent/delegate announce finishes
-      // for the current agent (these runs aren't tracked by runIdRef).
-      if (event.type === "run.completed" && event.runKind === "announce" && event.agentId === agentIdRef.current) {
-        loadHistory();
-        return;
-      }
-
-      // Capture run.started when we are expecting a run for this agent
-      if (event.type === "run.started") {
-        if (expectingRunRef.current && event.agentId === agentIdRef.current) {
+      // Capture run.started when we are expecting a run for this agent,
+      // OR when an announce run starts (leader summarising team results).
+      if (event.type === "run.started" && event.agentId === agentIdRef.current) {
+        if (expectingRunRef.current || event.runKind === "announce") {
           runIdRef.current = event.runId;
           expectingRunRef.current = false;
           setIsRunning(true);
@@ -258,13 +273,25 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           blockRepliesRef.current = [];
           setBlockReplies([]);
 
+          // Convert media from run.completed event to MediaItem[]
+          const rawMedia = event.payload?.media;
+          const mediaItems: MediaItem[] | undefined = rawMedia?.length
+            ? rawMedia.map((m) => ({
+                path: toFileUrl(m.path, token),
+                mimeType: m.content_type ?? "application/octet-stream",
+                fileName: m.path.split("/").pop() ?? "file",
+                size: m.size,
+                kind: mediaKindFromMime(m.content_type ?? ""),
+              }))
+            : undefined;
+
           if (streamed && !hadTools) {
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", content: streamed, timestamp: Date.now() },
+              { role: "assistant", content: streamed, timestamp: Date.now(), mediaItems },
             ]);
           } else {
-            loadHistory();
+            loadHistory(mediaItems);
           }
           break;
         }
@@ -406,10 +433,24 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   useWsEvent(Events.TEAM_TASK_PROGRESS, onTaskProgress);
   useWsEvent(Events.TEAM_TASK_ASSIGNED, onTaskAssigned);
 
+  // Leader processing: backend emits when announce queue drains (before announce run starts).
+  const handleLeaderProcessing = useCallback((payload: unknown) => {
+    const event = payload as { agentId?: string; tasks?: number };
+    if (event?.agentId === agentIdRef.current) {
+      activityRef.current = { phase: "leader_processing" };
+      setActivity(activityRef.current);
+    }
+  }, []);
+  useWsEvent(Events.TEAM_LEADER_PROCESSING, handleLeaderProcessing);
+
   // Add a local message optimistically (shown immediately, replaced on next loadHistory)
   const addLocalMessage = useCallback((msg: ChatMessage) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
+
+  // isBusy: true when main agent is running, team tasks are active,
+  // or leader is processing team results before announce run starts.
+  const isBusy = isRunning || teamTasks.length > 0 || activity?.phase === "leader_processing";
 
   return {
     messages,
@@ -417,6 +458,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     thinkingText,
     toolStream,
     isRunning,
+    isBusy,
     loading,
     activity,
     blockReplies,

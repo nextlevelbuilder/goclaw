@@ -153,3 +153,30 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/** Convert a local file path to a /v1/files/ URL for serving.
+ *  Extracts basename so the backend fallback search can find generated files. */
+export function toFileUrl(path: string, token?: string): string {
+  let url: string;
+  if (path.startsWith("/v1/files/") || path.includes("/v1/files/")) {
+    url = path;
+  } else {
+    const basename = path.split("/").pop() ?? path;
+    url = `/v1/files/${basename}`;
+  }
+  if (token) {
+    const sep = url.includes("?") ? "&" : "?";
+    url += `${sep}token=${encodeURIComponent(token)}`;
+  }
+  return url;
+}
+
+/** Determine MediaItem kind from MIME type */
+export function mediaKindFromMime(mime: string): "image" | "video" | "audio" | "document" | "code" {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  const ext = mime.split("/").pop() ?? "";
+  if (["javascript", "typescript", "python", "json", "xml", "html", "css"].some((t) => ext.includes(t))) return "code";
+  return "document";
+}

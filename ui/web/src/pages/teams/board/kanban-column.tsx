@@ -12,12 +12,13 @@ interface KanbanColumnProps {
   tasks: TeamTaskData[];
   isTeamV2?: boolean;
   emojiLookup?: Map<string, string>;
+  memberLookup?: Map<string, string>;
   taskLookup?: Map<string, string>;
   onTaskClick: (task: TeamTaskData) => void;
   onDeleteTask?: (taskId: string) => void;
 }
 
-export const KanbanColumn = memo(function KanbanColumn({ columnId, title, tasks, isTeamV2, emojiLookup, taskLookup, onTaskClick, onDeleteTask }: KanbanColumnProps) {
+export const KanbanColumn = memo(function KanbanColumn({ columnId, title, tasks, isTeamV2, emojiLookup, memberLookup, taskLookup, onTaskClick, onDeleteTask }: KanbanColumnProps) {
   const { t } = useTranslation("teams");
 
   return (
@@ -40,6 +41,7 @@ export const KanbanColumn = memo(function KanbanColumn({ columnId, title, tasks,
                   task={task}
                   isTeamV2={isTeamV2}
                   emojiLookup={emojiLookup}
+                  memberLookup={memberLookup}
                   taskLookup={taskLookup}
                   onClick={() => onTaskClick(task)}
                   onDelete={onDeleteTask}

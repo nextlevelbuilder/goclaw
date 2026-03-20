@@ -20,8 +20,16 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const { t } = useTranslation("teams");
   const {
     getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
-    getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk,
+    getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment,
   } = useTeams();
+
+  // Wrap addTaskComment to match (teamId, taskId, content) signature expected by UI components.
+  const handleAddComment = useCallback(
+    async (tId: string, taskId: string, content: string) => {
+      await addTaskComment(taskId, content, tId);
+    },
+    [addTaskComment],
+  );
 
   const [team, setTeam] = useState<TeamData | null>(null);
   const [members, setMembers] = useState<TeamMemberData[]>([]);
@@ -102,6 +110,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         getTaskLight={getTaskLight}
         deleteTask={deleteTask}
         deleteTasksBulk={deleteTasksBulk}
+        addTaskComment={handleAddComment}
         onWorkspace={() => setWorkspaceOpen(true)}
       />
 

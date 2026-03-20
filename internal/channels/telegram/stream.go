@@ -89,6 +89,7 @@ type DraftStream struct {
 	draftID         int    // sendMessageDraft draft_id (0 = message transport)
 	useDraft        bool   // true = draft transport, false = message transport
 	draftFailed     bool   // true = draft API rejected permanently, using message transport
+	sendMayHaveLanded bool   // true = initial sendMessage was attempted and may have landed (even if timed out)
 }
 
 // NewDraftStream creates a new streaming preview manager.
@@ -199,6 +200,7 @@ func (ds *DraftStream) flush(ctx context.Context) error {
 		if sendThreadID := resolveThreadIDForSend(ds.messageThreadID); sendThreadID > 0 {
 			params.MessageThreadID = sendThreadID
 		}
+		ds.sendMayHaveLanded = true
 		msg, err := ds.bot.SendMessage(ctx, params)
 		// TS ref: withTelegramThreadFallback — retry without thread ID when topic is deleted.
 		if err != nil && params.MessageThreadID != 0 && threadNotFoundRe.MatchString(err.Error()) {
@@ -207,6 +209,10 @@ func (ds *DraftStream) flush(ctx context.Context) error {
 			msg, err = ds.bot.SendMessage(ctx, params)
 		}
 		if err != nil {
+			if isPostConnectNetworkErr(err) {
+				slog.Warn("stream: initial sendMessage timed out or lost. Treating as landed to avoid duplicate.", "error", err)
+				return nil // treat as successful but with unknown messageID
+			}
 			slog.Debug("stream: failed to send initial message", "error", err)
 			return err
 		}
@@ -312,10 +318,17 @@ func (c *Channel) CreateStream(ctx context.Context, chatID string, firstStream b
 // Also stops any thinking animation for the chat.
 // Implements channels.StreamingChannel.
 func (c *Channel) FinalizeStream(ctx context.Context, chatID string, stream channels.ChannelStream) {
-	if msgID := stream.MessageID(); msgID != 0 {
+	msgID := stream.MessageID()
+	if msgID != 0 {
 		// Hand off the stream message to Send() for final formatted edit.
 		c.placeholders.Store(chatID, msgID)
 		slog.Info("stream: ended, handing off to Send()", "chat_id", chatID, "message_id", msgID)
+	} else if ds, ok := stream.(*DraftStream); ok && ds.sendMayHaveLanded && !ds.UsedDraftTransport() {
+		// The message transport was used but no ID was retrieved (timeout).
+		// We MUST store a -1 placeholder to signal to Send() that a message
+		// likely landed and it should NOT send a duplicate, even if it cannot edit.
+		c.placeholders.Store(chatID, -1)
+		slog.Warn("stream: initial send landed but ID unknown. Suppressing fallback message to avoid duplicate.", "chat_id", chatID)
 	}
 
 	// Stop thinking animation

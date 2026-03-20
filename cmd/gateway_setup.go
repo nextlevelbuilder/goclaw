@@ -364,6 +364,18 @@ func setupMemoryEmbeddings(
 					}
 				}()
 			}
+
+			// Wire embedding provider into team store for semantic task search.
+			if pgTeamStore, ok := pgStores.Teams.(*pg.PGTeamStore); ok {
+				pgTeamStore.SetEmbeddingProvider(embProvider)
+				go func() {
+					if count, err := pgTeamStore.BackfillTaskEmbeddings(context.Background()); err != nil {
+						slog.Warn("task embeddings backfill failed", "error", err)
+					} else if count > 0 {
+						slog.Info("task embeddings backfill complete", "tasks_updated", count)
+					}
+				}()
+			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")
 		}

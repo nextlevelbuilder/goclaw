@@ -375,7 +375,6 @@ var toolStatusMap = map[string]string{
 	// Delegation & teams
 	"spawn":        "👥 Delegating task...",
 	"team_tasks":   "📋 Managing team tasks...",
-	"team_message": "💬 Sending team message...",
 	// Sessions
 	"sessions_list":    "📋 Listing sessions...",
 	"session_status":   "📋 Checking session...",

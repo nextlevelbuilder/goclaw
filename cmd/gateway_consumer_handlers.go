@@ -198,7 +198,7 @@ func handleTeammateMessage(
 		origChatID = msg.ChatID // fallback to inbound ChatID (team UUID for old dispatches)
 	}
 	origChannelType := resolveChannelType(channelMgr, origChannel)
-	targetAgent := msg.AgentID // team_message sets AgentID to the target agent key
+	targetAgent := msg.AgentID // dispatch sets AgentID to the target agent key
 	if targetAgent == "" {
 		targetAgent = cfg.ResolveDefaultAgentID()
 	}
@@ -470,6 +470,32 @@ func handleTeammateMessage(
 		}
 		if sid := inMeta["origin_root_span_id"]; sid != "" {
 			parentRootSpanID, _ = uuid.Parse(sid)
+		}
+
+		// Enrich announce content with member comments on the task (if any).
+		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
+			if tid, err := uuid.Parse(taskIDStr); err == nil {
+				if comments, err := teamStore.ListTaskComments(ctx, tid); err == nil && len(comments) > 0 {
+					// Include last 5 comments, each truncated to 200 chars.
+					start := 0
+					if len(comments) > 5 {
+						start = len(comments) - 5
+					}
+					var commentLines []string
+					for _, c := range comments[start:] {
+						author := c.AgentKey
+						if author == "" && c.UserID != "" {
+							author = "user:" + c.UserID
+						}
+						body := c.Content
+						if len(body) > 200 {
+							body = body[:200] + "..."
+						}
+						commentLines = append(commentLines, fmt.Sprintf("- [%s]: %s", author, body))
+					}
+					announceContent += "\n\n--- Member comments ---\n" + strings.Join(commentLines, "\n")
+				}
+			}
 		}
 
 		// Enqueue result. If we become the processor, run the announce loop.

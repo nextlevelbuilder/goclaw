@@ -218,6 +218,39 @@ func (m *TeamToolManager) buildBlockerResultsSummary(ctx context.Context, task *
 	return "=== Completed blocker task results ===\n\n" + strings.Join(parts, "\n\n")
 }
 
+// truncatePreview returns s truncated to maxRunes runes with "..." appended.
+// Uses rune slicing to avoid splitting multi-byte UTF-8 characters.
+func truncatePreview(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "..."
+}
+
+// buildRecentCommentsSummary fetches the 3 most recent comments on a task and
+// formats them for inclusion in dispatch content. This ensures re-dispatched
+// tasks (after reject, retry, stale recovery) include relevant context like
+// rejection reasons or progress notes without mutating the task description.
+func (m *TeamToolManager) buildRecentCommentsSummary(ctx context.Context, taskID uuid.UUID) string {
+	comments, err := m.teamStore.ListRecentTaskComments(ctx, taskID, 3)
+	if err != nil || len(comments) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, c := range comments {
+		author := "system"
+		if c.AgentID != nil {
+			author = m.agentKeyFromID(ctx, *c.AgentID)
+		} else if c.UserID != "" {
+			author = c.UserID
+		}
+		parts = append(parts, fmt.Sprintf("- [%s]: %s", author, truncatePreview(c.Content, 500)))
+	}
+	return "[Recent comments]\n" + strings.Join(parts, "\n")
+}
+
 // restoreTraceContext returns a context with the leader's trace IDs restored
 // from task metadata. This is needed because DispatchUnblockedTasks runs in
 // the member agent's context (during executeComplete), but the dispatch should
@@ -239,8 +272,12 @@ func (m *TeamToolManager) restoreTraceContext(ctx context.Context, task *store.T
 	return ctx
 }
 
-// DispatchUnblockedTasks finds pending tasks with an assigned owner, claims them
-// (pending → in_progress), and dispatches them immediately.
+// DispatchUnblockedTasks finds pending tasks with an assigned owner, claims the
+// highest-priority task per owner (pending → in_progress), and dispatches it.
+// Only one task per owner is dispatched per round — remaining tasks stay pending
+// and get dispatched after the current one completes. This ensures priority
+// ordering and prevents the cancellation bug where CancelSession kills innocent
+// queued tasks sharing the same session.
 // Called after task completion/cancellation to start newly-unblocked work
 // instead of waiting for the ticker (up to 5 min delay).
 func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uuid.UUID) {
@@ -248,37 +285,53 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 	if err != nil {
 		return
 	}
+	// Track which owners already have a task dispatched this round.
+	// ListRecoverableTasks orders by priority DESC, created_at — so the first
+	// pending task per owner is automatically the highest priority.
+	dispatched := make(map[uuid.UUID]bool)
 	for i := range tasks {
 		task := &tasks[i]
-		if task.Status == store.TeamTaskStatusPending && task.OwnerAgentID != nil {
-			// Assign (pending → in_progress + lock) so consumer can auto-complete.
-			if err := m.teamStore.AssignTask(ctx, task.ID, *task.OwnerAgentID, teamID); err != nil {
-				slog.Warn("DispatchUnblockedTasks: assign failed", "task_id", task.ID, "error", err)
-				continue
-			}
-			m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
-				TeamID:        teamID.String(),
-				TaskID:        task.ID.String(),
-				TaskNumber:    task.TaskNumber,
-				Subject:       task.Subject,
-				Status:        store.TeamTaskStatusInProgress,
-				OwnerAgentKey: m.agentKeyFromID(ctx, *task.OwnerAgentID),
-				Channel:       task.Channel,
-				ChatID:        task.ChatID,
-				Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-				ActorType:     "system",
-				ActorID:       "dispatch_unblocked",
-			})
-
-			// Append completed blocker results so the member agent has context.
-			if summary := m.buildBlockerResultsSummary(ctx, task); summary != "" {
-				task.Description += "\n\n" + summary
-			}
-
-			// Restore leader's trace context (stored in task metadata during creation)
-			// so the member agent's trace links back to the leader, not the completing member.
-			dispatchCtx := m.restoreTraceContext(ctx, task)
-			m.dispatchTaskToAgent(dispatchCtx, task, teamID, *task.OwnerAgentID)
+		if task.Status != store.TeamTaskStatusPending || task.OwnerAgentID == nil {
+			continue
 		}
+		ownerID := *task.OwnerAgentID
+		if dispatched[ownerID] {
+			continue // skip — this owner already has a higher-priority task dispatched
+		}
+		// Assign (pending → in_progress + lock) so consumer can auto-complete.
+		if err := m.teamStore.AssignTask(ctx, task.ID, ownerID, teamID); err != nil {
+			slog.Warn("DispatchUnblockedTasks: assign failed", "task_id", task.ID, "error", err)
+			continue
+		}
+		dispatched[ownerID] = true
+		m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
+			TeamID:        teamID.String(),
+			TaskID:        task.ID.String(),
+			TaskNumber:    task.TaskNumber,
+			Subject:       task.Subject,
+			Status:        store.TeamTaskStatusInProgress,
+			OwnerAgentKey: m.agentKeyFromID(ctx, ownerID),
+			Channel:       task.Channel,
+			ChatID:        task.ChatID,
+			Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			ActorType:     "system",
+			ActorID:       "dispatch_unblocked",
+		})
+
+		// Append completed blocker results so the member agent has context.
+		if summary := m.buildBlockerResultsSummary(ctx, task); summary != "" {
+			task.Description += "\n\n" + summary
+		}
+
+		// Append recent comments so re-dispatched tasks include rejection reasons,
+		// progress notes, or other context from previous runs.
+		if commentCtx := m.buildRecentCommentsSummary(ctx, task.ID); commentCtx != "" {
+			task.Description += "\n\n" + commentCtx
+		}
+
+		// Restore leader's trace context (stored in task metadata during creation)
+		// so the member agent's trace links back to the leader, not the completing member.
+		dispatchCtx := m.restoreTraceContext(ctx, task)
+		m.dispatchTaskToAgent(dispatchCtx, task, teamID, ownerID)
 	}
 }

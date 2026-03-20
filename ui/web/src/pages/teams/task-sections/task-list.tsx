@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { ClipboardList, Trash2 } from "lucide-react";
+import { ClipboardList, Trash2, MessageSquare, Paperclip } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
@@ -26,11 +26,12 @@ interface TaskListProps {
   }>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
+  addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
 }
 
 export function TaskList({
   tasks, loading, teamId, members, isTeamV2, emojiLookup,
-  getTaskDetail, deleteTask, deleteTasksBulk,
+  getTaskDetail, deleteTask, deleteTasksBulk, addTaskComment,
 }: TaskListProps) {
   const { t } = useTranslation("teams");
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null);
@@ -204,6 +205,20 @@ export function TaskList({
                 {task.task_type && task.task_type !== "general" && (
                   <Badge variant="outline" className="mt-0.5 text-[10px]">{task.task_type}</Badge>
                 )}
+                {((task.comment_count ?? 0) > 0 || (task.attachment_count ?? 0) > 0) && (
+                  <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                    {(task.comment_count ?? 0) > 0 && (
+                      <span className="flex items-center gap-0.5">
+                        <MessageSquare className="h-3 w-3" /> {task.comment_count}
+                      </span>
+                    )}
+                    {(task.attachment_count ?? 0) > 0 && (
+                      <span className="flex items-center gap-0.5">
+                        <Paperclip className="h-3 w-3" /> {task.attachment_count}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {isTeamV2 && task.progress_percent != null && task.progress_percent > 0 && !isTerminal && (
                   <div className="mt-1 flex items-center gap-1.5">
                     <div className="h-1.5 flex-1 rounded-full bg-muted">
@@ -258,6 +273,7 @@ export function TaskList({
           onClose={() => setSelectedTask(null)}
           getTaskDetail={getTaskDetail}
           deleteTask={deleteTask}
+          onAddComment={addTaskComment}
           taskLookup={taskLookup}
           memberLookup={memberLookup}
           emojiLookup={emojiLookup}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 )
 
 // ContentExtractor extracts readable content from a URL.
@@ -23,29 +24,63 @@ type ExtractResult struct {
 // ExtractorChain tries extractors in order until one returns quality content.
 type ExtractorChain struct {
 	extractors []ContentExtractor
+	maxRetries []int           // per-extractor max attempts (default 1)
+	timeouts   []time.Duration // per-extractor chain-level timeout (0 = no chain timeout)
 }
 
-// NewExtractorChain creates a chain from ordered extractors.
+// NewExtractorChain creates a chain from ordered extractors with default settings (1 attempt, no chain timeout).
 func NewExtractorChain(extractors ...ContentExtractor) *ExtractorChain {
-	return &ExtractorChain{extractors: extractors}
+	maxRetries := make([]int, len(extractors))
+	timeouts := make([]time.Duration, len(extractors))
+	for i := range extractors {
+		maxRetries[i] = 1
+	}
+	return &ExtractorChain{extractors: extractors, maxRetries: maxRetries, timeouts: timeouts}
 }
 
-// Extract runs each extractor in order, returning the first quality result.
+// Extract runs each extractor in order with per-entry retry and optional timeout.
+// Returns the first quality result or cascades to the next extractor.
 func (c *ExtractorChain) Extract(ctx context.Context, rawURL string) (ExtractResult, error) {
 	var lastErr error
-	for _, ext := range c.extractors {
-		content, err := ext.Extract(ctx, rawURL)
-		if err != nil {
-			slog.Debug("extractor failed", "extractor", ext.Name(), "url", rawURL, "error", err)
-			lastErr = err
-			continue
+	for i, ext := range c.extractors {
+		maxRetries := c.maxRetries[i]
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			// Apply chain-level timeout if configured.
+			callCtx, cancel := ctx, context.CancelFunc(nil)
+			if timeout := c.timeouts[i]; timeout > 0 {
+				callCtx, cancel = context.WithTimeout(ctx, timeout)
+			}
+
+			content, err := ext.Extract(callCtx, rawURL)
+			if cancel != nil {
+				cancel()
+			}
+			if err != nil {
+				lastErr = err
+				if ctx.Err() != nil {
+					return ExtractResult{}, fmt.Errorf("context cancelled: %w", lastErr)
+				}
+				if attempt < maxRetries {
+					slog.Warn("extractor_chain: attempt failed, retrying",
+						"extractor", ext.Name(), "url", rawURL,
+						"attempt", attempt, "max_retries", maxRetries,
+						"error", err)
+				} else {
+					slog.Debug("extractor failed", "extractor", ext.Name(), "url", rawURL, "error", err)
+				}
+				continue
+			}
+			if !isQualityContent(content) {
+				slog.Debug("extractor returned low quality content", "extractor", ext.Name(), "url", rawURL, "chars", len(content))
+				lastErr = fmt.Errorf("%s: content below quality threshold (%d chars)", ext.Name(), len(content))
+				break // low quality is not transient — don't retry, cascade to next
+			}
+			return ExtractResult{Content: content, Extractor: ext.Name()}, nil
 		}
-		if !isQualityContent(content) {
-			slog.Debug("extractor returned low quality content", "extractor", ext.Name(), "url", rawURL, "chars", len(content))
-			lastErr = fmt.Errorf("%s: content below quality threshold (%d chars)", ext.Name(), len(content))
-			continue
-		}
-		return ExtractResult{Content: content, Extractor: ext.Name()}, nil
+
+		slog.Debug("extractor_chain: extractor exhausted, moving to next",
+			"extractor", ext.Name(), "max_retries", maxRetries)
 	}
 	if lastErr != nil {
 		return ExtractResult{}, fmt.Errorf("all extractors failed for %s: %w", rawURL, lastErr)
@@ -69,10 +104,11 @@ func isQualityContent(content string) bool {
 
 // ExtractorEntry represents a single extractor in the chain settings JSON.
 type ExtractorEntry struct {
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	Timeout int    `json:"timeout,omitempty"`  // seconds, 0 = use extractor default
-	BaseURL string `json:"base_url,omitempty"` // for defuddle: CF Worker URL
+	Name       string `json:"name"`
+	Enabled    bool   `json:"enabled"`
+	Timeout    int    `json:"timeout,omitempty"`     // seconds, 0 = use extractor default
+	MaxRetries int    `json:"max_retries,omitempty"` // default 1 (no retry)
+	BaseURL    string `json:"base_url,omitempty"`    // for defuddle: CF Worker URL
 }
 
 // extractorChainSettings is the JSON schema for web_fetch builtin_tools.settings.
@@ -104,6 +140,8 @@ func parseExtractorChainSettings(raw []byte, tool *WebFetchTool) *ExtractorChain
 	}
 
 	var extractors []ContentExtractor
+	var maxRetries []int
+	var timeouts []time.Duration
 	for _, entry := range settings.Extractors {
 		if !entry.Enabled || entry.Name == "" {
 			continue
@@ -115,10 +153,17 @@ func parseExtractorChainSettings(raw []byte, tool *WebFetchTool) *ExtractorChain
 			extractors = append(extractors, &InProcessExtractor{tool: tool})
 		default:
 			slog.Warn("web_fetch: unknown extractor in chain, skipping", "name", entry.Name)
+			continue
 		}
+		retries := entry.MaxRetries
+		if retries <= 0 {
+			retries = 1
+		}
+		maxRetries = append(maxRetries, retries)
+		timeouts = append(timeouts, time.Duration(entry.Timeout)*time.Second)
 	}
 	if len(extractors) == 0 {
 		return nil
 	}
-	return NewExtractorChain(extractors...)
+	return &ExtractorChain{extractors: extractors, maxRetries: maxRetries, timeouts: timeouts}
 }

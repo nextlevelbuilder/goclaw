@@ -1,4 +1,4 @@
-import { Brain, Wrench, Pencil, Archive, RefreshCw } from "lucide-react";
+import { Brain, Wrench, Pencil, Archive, RefreshCw, Users } from "lucide-react";
 import type { RunActivity } from "@/types/chat";
 
 interface ActivityIndicatorProps {
@@ -7,7 +7,7 @@ interface ActivityIndicatorProps {
 }
 
 export function ActivityIndicator({ activity, isRunning }: ActivityIndicatorProps) {
-  if (!isRunning) return null;
+  if (!isRunning && activity?.phase !== "leader_processing") return null;
 
   if (!activity) {
     return (
@@ -51,6 +51,8 @@ function getPhaseConfig(activity: RunActivity) {
         color: "text-orange-500",
         label: `Retrying (${activity.retryAttempt ?? 0}/${activity.retryMax ?? 0})...`,
       };
+    case "leader_processing":
+      return { icon: Users, color: "text-emerald-500", label: "Processing team results..." };
     default:
       return { icon: Brain, color: "text-muted-foreground", label: "Working..." };
   }

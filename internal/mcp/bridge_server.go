@@ -47,8 +47,7 @@ var BridgeToolNames = map[string]bool{
 	"sessions_history": true,
 	"sessions_send":    true,
 	// Team tools (context from X-Agent-ID/X-Channel/X-Chat-ID headers)
-	"team_tasks":   true,
-	"team_message": true,
+	"team_tasks": true,
 }
 
 // NewBridgeServer creates a StreamableHTTPServer that exposes GoClaw tools as MCP tools.

@@ -206,6 +206,9 @@ export const Events = {
   TEAM_TASK_DISPATCHED: "team.task.dispatched",
   TEAM_TASK_DELETED: "team.task.deleted",
 
+  // Team leader processing (bridges gap between last task.completed and announce run.started)
+  TEAM_LEADER_PROCESSING: "team.leader.processing",
+
   // Team messages
   TEAM_MESSAGE_SENT: "team.message.sent",
 

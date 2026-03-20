@@ -30,7 +30,7 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 	apiBase = strings.TrimRight(apiBase, "/")
 
 	if defaultModel == "" {
-		defaultModel = "gpt-5.3-codex"
+		defaultModel = "gpt-5.4"
 	}
 
 	return &CodexProvider{

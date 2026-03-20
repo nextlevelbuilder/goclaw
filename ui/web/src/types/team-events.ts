@@ -15,6 +15,7 @@ export interface TeamTaskEventPayload {
   chat_id: string;
   timestamp: string;
   task_number?: number;
+  comment_text?: string;
   progress_percent?: number;
   progress_step?: string;
 }

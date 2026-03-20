@@ -174,7 +174,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		if !hasTeam {
 			contextFiles = append(contextFiles, bootstrap.ContextFile{
 				Path:    bootstrap.AvailabilityFile,
-				Content: "You are NOT part of any team. Do not use team_tasks or team_message tools.",
+				Content: "You are NOT part of any team. Do not use team_tasks tool.",
 			})
 		}
 

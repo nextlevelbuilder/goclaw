@@ -330,12 +330,21 @@ func (m *TeamsMethods) handleTaskComment(ctx context.Context, client *gateway.Cl
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
+		commentPreview := params.Content
+		if runes := []rune(commentPreview); len(runes) > 500 {
+			commentPreview = string(runes[:500]) + "..."
+		}
 		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskCommented, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    taskID.String(),
-			UserID:    client.UserID(),
-			Channel:   "dashboard",
-			Timestamp: taskNowUTC(),
+			TeamID:      teamID.String(),
+			TaskID:      taskID.String(),
+			TaskNumber:  task.TaskNumber,
+			Subject:     task.Subject,
+			CommentText: commentPreview,
+			UserID:      client.UserID(),
+			Channel:     "dashboard",
+			Timestamp:   taskNowUTC(),
+			ActorType:   "human",
+			ActorID:     client.UserID(),
 		}))
 	}
 }
@@ -499,17 +508,11 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	// Auto-assign: use explicit assignTo, otherwise fall back to team lead.
-	assignTo := params.AssignTo
-	if assignTo == "" {
-		team, err := m.teamStore.GetTeam(ctx, teamID)
-		if err == nil && team != nil && team.LeadAgentID != uuid.Nil {
-			assignTo = team.LeadAgentID.String()
-		}
-	}
+	// Auto-assign only when user explicitly specifies an agent.
+	// Unassigned tasks stay pending (backlog) — user assigns via UI when ready.
 	var autoAssignedAgentID uuid.UUID
-	if assignTo != "" {
-		agentID, err := uuid.Parse(assignTo)
+	if params.AssignTo != "" {
+		agentID, err := uuid.Parse(params.AssignTo)
 		if err == nil {
 			if err := m.teamStore.AssignTask(ctx, task.ID, agentID, teamID); err != nil {
 				slog.Warn("teams.tasks.create auto-assign failed", "task_id", task.ID, "agent_id", agentID, "error", err)
@@ -525,15 +528,17 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 
 	if m.msgBus != nil {
 		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskCreated, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    task.ID.String(),
-			Status:    store.TeamTaskStatusPending,
-			UserID:    client.UserID(),
-			Channel:   ch,
-			ChatID:    cid,
-			Timestamp: taskNowUTC(),
-			ActorType: "human",
-			ActorID:   client.UserID(),
+			TeamID:     teamID.String(),
+			TaskID:     task.ID.String(),
+			TaskNumber: task.TaskNumber,
+			Subject:    task.Subject,
+			Status:     task.Status,
+			UserID:     client.UserID(),
+			Channel:    ch,
+			ChatID:     cid,
+			Timestamp:  taskNowUTC(),
+			ActorType:  "human",
+			ActorID:    client.UserID(),
 		}))
 
 		if autoAssignedAgentID != uuid.Nil {
@@ -625,7 +630,7 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 		}))
 
 		// Dispatch task to the assigned agent via message bus so the consumer
-		// routes it through the agent loop (same pattern as team_message).
+		// routes it through the agent loop.
 		m.dispatchTaskToAgent(ctx, task, taskID, teamID, agentID, client.UserID())
 	}
 }

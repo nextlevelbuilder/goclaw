@@ -12,13 +12,14 @@ export interface AttachedFile {
 interface ChatInputProps {
   onSend: (message: string, files?: AttachedFile[]) => void;
   onAbort: () => void;
-  isRunning: boolean;
+  /** True when main agent or team tasks are active — controls stop button, file attach */
+  isBusy: boolean;
   disabled?: boolean;
   files: AttachedFile[];
   onFilesChange: (files: AttachedFile[]) => void;
 }
 
-export function ChatInput({ onSend, onAbort, isRunning, disabled, files, onFilesChange }: ChatInputProps) {
+export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesChange }: ChatInputProps) {
   const { t } = useTranslation("common");
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -101,7 +102,7 @@ export function ChatInput({ onSend, onAbort, isRunning, disabled, files, onFiles
           variant="ghost"
           size="icon-lg"
           onClick={handleFileSelect}
-          disabled={disabled || isRunning}
+          disabled={disabled || isBusy}
           title={t("attachFile")}
           className="text-muted-foreground hover:text-foreground"
         >
@@ -126,7 +127,7 @@ export function ChatInput({ onSend, onAbort, isRunning, disabled, files, onFiles
           rows={1}
           className="flex-1 resize-none rounded-lg border bg-background px-4 py-2.5 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
         />
-        {isRunning ? (
+        {isBusy ? (
           <div className="flex gap-1">
             <Button
               size="icon-lg"

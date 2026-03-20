@@ -52,6 +52,9 @@ const (
 	EventTeamTaskDeleted   = "team.task.deleted"
 	EventTeamTaskStale     = "team.task.stale"
 
+	// Emitted when leader starts processing completed team task results (before announce run).
+	EventTeamLeaderProcessing = "team.leader.processing"
+
 	// Team CRUD events (admin operations).
 	EventTeamCreated       = "team.created"
 	EventTeamUpdated       = "team.updated"

@@ -39,6 +39,7 @@ interface BoardContainerProps {
   getTaskLight: (teamId: string, taskId: string) => Promise<TeamTaskData>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
+  addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
   onWorkspace?: () => void;
 }
 
@@ -61,7 +62,7 @@ function taskMatchesFilter(task: TeamTaskData, sf: StatusFilter, scope: ScopeEnt
 
 export const BoardContainer = memo(function BoardContainer({
   teamId, members, scopes, isTeamV2,
-  getTeamTasks, getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, onWorkspace,
+  getTeamTasks, getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment, onWorkspace,
 }: BoardContainerProps) {
   const { t } = useTranslation("teams");
   const viewMode = useBoardStore((s) => s.viewMode);
@@ -215,7 +216,7 @@ export const BoardContainer = memo(function BoardContainer({
   useWsEvent(Events.TEAM_TASK_REJECTED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_ASSIGNED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_DISPATCHED, onFetchOne);
-  // TEAM_TASK_COMMENTED — no-op for list view
+  useWsEvent(Events.TEAM_TASK_COMMENTED, onFetchOne); // refresh comment_count badge
 
   // ── Callbacks for children ──
 
@@ -271,6 +272,7 @@ export const BoardContainer = memo(function BoardContainer({
             isTeamV2={isTeamV2}
             groupBy={groupBy}
             emojiLookup={emojiLookup}
+            memberLookup={memberLookup}
             taskLookup={taskLookup}
             onTaskClick={handleTaskClick}
             onDeleteTask={deleteTask ? handleDeleteTask : undefined}
@@ -286,6 +288,7 @@ export const BoardContainer = memo(function BoardContainer({
             getTaskDetail={getTaskDetail}
             deleteTask={deleteTask}
             deleteTasksBulk={deleteTasksBulk}
+            addTaskComment={addTaskComment}
           />
         )}
       </div>

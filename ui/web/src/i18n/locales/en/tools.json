@@ -198,8 +198,7 @@
       "spawn": "Spawn a subagent to handle a task in the background",
       "skill_search": "Search for available skills by keyword or description to find relevant capabilities",
       "use_skill": "Activate a skill to use its specialized capabilities (tracing marker)",
-      "team_tasks": "View, create, update, and complete tasks on the team task board",
-      "team_message": "Send a direct message or broadcast to teammates in the agent team"
+      "team_tasks": "View, create, update, and complete tasks on the team task board"
     }
   }
 }

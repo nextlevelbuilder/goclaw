@@ -47,8 +47,8 @@ func TestCodexProviderName(t *testing.T) {
 
 func TestCodexProviderDefaultModel(t *testing.T) {
 	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, "", "")
-	if p.DefaultModel() != "gpt-5.3-codex" {
-		t.Errorf("DefaultModel() = %q, want %q", p.DefaultModel(), "gpt-5.3-codex")
+	if p.DefaultModel() != "gpt-5.4" {
+		t.Errorf("DefaultModel() = %q, want %q", p.DefaultModel(), "gpt-5.4")
 	}
 
 	p2 := NewCodexProvider("test", &staticTokenSource{token: "test"}, "", "o3")

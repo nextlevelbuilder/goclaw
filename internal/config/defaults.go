@@ -7,7 +7,7 @@ const (
 	DefaultContextWindow   = 200000
 	DefaultMaxTokens       = 8192
 	DefaultMaxMessageChars = 32000
-	DefaultMaxIterations   = 20
+	DefaultMaxIterations   = 30
 	DefaultTemperature     = 0.7
 	DefaultHistoryShare    = 0.75
 )

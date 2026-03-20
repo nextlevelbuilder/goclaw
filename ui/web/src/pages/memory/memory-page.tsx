@@ -82,7 +82,7 @@ export function MemoryPage() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
-      await deleteDocument(deleteTarget.path, deleteTarget.user_id);
+      await deleteDocument(deleteTarget.path, deleteTarget.user_id, deleteTarget.agent_id);
       setDeleteTarget(null);
     } finally {
       setDeleteLoading(false);
