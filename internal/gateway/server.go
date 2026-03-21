@@ -77,10 +77,16 @@ type Server struct {
 	version   string
 	db        interface{ PingContext(context.Context) error } // for health check DB ping
 
-	logTee *LogTee // optional; auto-unsubscribes clients on disconnect
+	logTee   *LogTee                  // optional; auto-unsubscribes clients on disconnect
+	postTurn tools.PostTurnProcessor // optional; for team task dispatch in HTTP API paths
 
 	httpServer *http.Server
 	mux        *http.ServeMux
+}
+
+// SetPostTurnProcessor sets the post-turn processor for team task dispatch in HTTP API handlers.
+func (s *Server) SetPostTurnProcessor(pt tools.PostTurnProcessor) {
+	s.postTurn = pt
 }
 
 // NewServer creates a new gateway server.
@@ -159,10 +165,16 @@ func (s *Server) BuildMux() *http.ServeMux {
 	if s.rateLimiter.Enabled() {
 		chatHandler.SetRateLimiter(s.rateLimiter.Allow)
 	}
+	if s.postTurn != nil {
+		chatHandler.SetPostTurnProcessor(s.postTurn)
+	}
 	mux.Handle("/v1/chat/completions", chatHandler)
 
 	// OpenResponses protocol
 	responsesHandler := httpapi.NewResponsesHandler(s.agents, s.sessions, s.cfg.Gateway.Token)
+	if s.postTurn != nil {
+		responsesHandler.SetPostTurnProcessor(s.postTurn)
+	}
 	mux.Handle("/v1/responses", responsesHandler)
 
 	// Direct tool invocation
@@ -650,9 +662,15 @@ func StartTestServer(s *Server, ctx context.Context) (addr string, start func())
 	if s.rateLimiter.Enabled() {
 		chatHandler.SetRateLimiter(s.rateLimiter.Allow)
 	}
+	if s.postTurn != nil {
+		chatHandler.SetPostTurnProcessor(s.postTurn)
+	}
 	mux.Handle("/v1/chat/completions", chatHandler)
 
 	responsesHandler := httpapi.NewResponsesHandler(s.agents, s.sessions, s.cfg.Gateway.Token)
+	if s.postTurn != nil {
+		responsesHandler.SetPostTurnProcessor(s.postTurn)
+	}
 	mux.Handle("/v1/responses", responsesHandler)
 
 	if s.tools != nil {

@@ -23,7 +23,7 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 	vecStr := vectorToString(embedding)
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT name, slug, COALESCE(description, ''), version,
+		`SELECT name, slug, COALESCE(description, ''), version, file_path,
 				1 - (embedding <=> $1::vector) AS score
 			FROM skills
 			WHERE status = 'active' AND enabled = true AND embedding IS NOT NULL
@@ -41,10 +41,16 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 	for rows.Next() {
 		var r store.SkillSearchResult
 		var version int
-		if err := rows.Scan(&r.Name, &r.Slug, &r.Description, &version, &r.Score); err != nil {
+		var filePath *string
+		if err := rows.Scan(&r.Name, &r.Slug, &r.Description, &version, &filePath, &r.Score); err != nil {
 			continue
 		}
-		r.Path = fmt.Sprintf("%s/%s/%d/SKILL.md", s.baseDir, r.Slug, version)
+		// Use DB file_path when available; fall back to baseDir construction.
+		if filePath != nil && *filePath != "" {
+			r.Path = *filePath + "/SKILL.md"
+		} else {
+			r.Path = fmt.Sprintf("%s/%s/%d/SKILL.md", s.baseDir, r.Slug, version)
+		}
 		results = append(results, r)
 	}
 	return results, nil

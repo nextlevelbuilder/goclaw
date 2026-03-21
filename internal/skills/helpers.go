@@ -21,30 +21,10 @@ func ParseSkillFrontmatter(content string) (name, description, slug string, allF
 		return "", "", "", allFields
 	}
 	fm := content[3 : 3+end]
-
-	for _, line := range strings.Split(fm, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		val = strings.Trim(val, `"'`)
-		allFields[key] = val
-
-		switch key {
-		case "name":
-			name = val
-		case "description":
-			description = val
-		case "slug":
-			slug = val
-		}
-	}
+	allFields = parseSimpleYAML(fm)
+	name = allFields["name"]
+	description = allFields["description"]
+	slug = allFields["slug"]
 	return
 }
 

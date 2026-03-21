@@ -47,6 +47,19 @@ func TestInputSchemaToMap_EmptyType(t *testing.T) {
 	}
 }
 
+func TestInputSchemaToMap_ObjectNoProperties(t *testing.T) {
+	schema := mcpgo.ToolInputSchema{Type: "object"}
+	m := inputSchemaToMap(schema)
+
+	props, ok := m["properties"].(map[string]any)
+	if !ok || props == nil {
+		t.Fatal("expected empty properties map for object schema, got nil — OpenAI rejects object schemas without properties")
+	}
+	if len(props) != 0 {
+		t.Errorf("expected empty properties, got %v", props)
+	}
+}
+
 func TestExtractTextContent(t *testing.T) {
 	result := &mcpgo.CallToolResult{
 		Content: []mcpgo.Content{

@@ -62,9 +62,10 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	s.mu.RUnlock()
 
 	// Cache miss or TTL expired → query DB
-	// Returns active + system skills (and disabled ones — admin UI needs to see them to toggle back).
+	// Returns active + archived + system skills. Archived skills are shown dimmed in the UI
+	// so admins can see missing deps and re-activate after installing them.
 	rows, err := s.db.Query(
-		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter FROM skills WHERE status = 'active' OR is_system = true ORDER BY name`)
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path FROM skills WHERE status IN ('active', 'archived') OR is_system = true ORDER BY name`)
 	if err != nil {
 		return nil
 	}
@@ -79,10 +80,11 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 		var version int
 		var isSystem, enabled bool
 		var depsRaw, fmRaw []byte
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &fmRaw); err != nil {
+		var filePath *string
+		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &fmRaw, &filePath); err != nil {
 			continue
 		}
-		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
+		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir, filePath)
 		info.Visibility = visibility
 		info.Tags = tags
 		info.IsSystem = isSystem
@@ -110,7 +112,7 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 // Disabled skills are excluded — no point scanning or updating them.
 func (s *PGSkillStore) ListAllSkills() []store.SkillInfo {
 	rows, err := s.db.Query(
-		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps FROM skills WHERE enabled = true ORDER BY name`)
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path FROM skills WHERE enabled = true AND status != 'deleted' ORDER BY name`)
 	if err != nil {
 		return nil
 	}
@@ -125,10 +127,11 @@ func (s *PGSkillStore) ListAllSkills() []store.SkillInfo {
 		var version int
 		var isSystem, enabled bool
 		var depsRaw []byte
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw); err != nil {
+		var filePath *string
+		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &filePath); err != nil {
 			continue
 		}
-		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
+		info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir, filePath)
 		info.Visibility = visibility
 		info.Tags = tags
 		info.IsSystem = isSystem

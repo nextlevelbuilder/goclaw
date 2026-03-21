@@ -412,7 +412,12 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	// Azure OpenAI/Foundry support for now atleast
+	if strings.Contains(strings.ToLower(p.apiBase), "azure.com") {
+		httpReq.Header.Set("api-key", p.apiKey)
+	} else {
+		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {

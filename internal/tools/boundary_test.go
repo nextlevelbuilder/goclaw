@@ -205,9 +205,6 @@ func TestCheckHardlink_NormalFile(t *testing.T) {
 }
 
 func TestCheckHardlink_HardlinkedFileBlocked(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("hardlinks behave differently on Windows")
-	}
 	dir := t.TempDir()
 	original := filepath.Join(dir, "original.txt")
 	if err := os.WriteFile(original, []byte("data"), 0644); err != nil {

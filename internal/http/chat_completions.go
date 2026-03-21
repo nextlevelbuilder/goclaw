@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // ChatCompletionsHandler handles POST /v1/chat/completions (OpenAI-compatible).
@@ -23,6 +24,12 @@ type ChatCompletionsHandler struct {
 	token       string // expected bearer token (empty = no auth)
 	isManaged   bool
 	rateLimiter func(string) bool // rate limit check: key → allowed (nil = no limit)
+	postTurn    tools.PostTurnProcessor
+}
+
+// SetPostTurnProcessor sets the post-turn processor for team task dispatch.
+func (h *ChatCompletionsHandler) SetPostTurnProcessor(pt tools.PostTurnProcessor) {
+	h.postTurn = pt
 }
 
 // NewChatCompletionsHandler creates a handler for the chat completions endpoint.
@@ -172,7 +179,10 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *ChatCompletionsHandler) handleNonStream(w http.ResponseWriter, r *http.Request, loop agent.Agent, runID, sessionKey, message, model, userID string) {
-	result, err := loop.Run(r.Context(), agent.RunRequest{
+	ctx, drainTeamDispatch := tools.InjectTeamDispatch(r.Context(), h.postTurn)
+	defer drainTeamDispatch()
+
+	result, err := loop.Run(ctx, agent.RunRequest{
 		SessionKey: sessionKey,
 		Message:    message,
 		Channel:    "http",
@@ -230,7 +240,10 @@ func (h *ChatCompletionsHandler) handleStream(w http.ResponseWriter, r *http.Req
 	// Send initial role chunk
 	writeSSEChunk(w, flusher, completionID, model, &chatMessage{Role: "assistant"}, "")
 
-	result, err := loop.Run(r.Context(), agent.RunRequest{
+	ctx, drainTeamDispatch := tools.InjectTeamDispatch(r.Context(), h.postTurn)
+	defer drainTeamDispatch()
+
+	result, err := loop.Run(ctx, agent.RunRequest{
 		SessionKey: sessionKey,
 		Message:    message,
 		Channel:    "http",

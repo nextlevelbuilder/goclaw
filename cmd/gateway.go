@@ -318,6 +318,9 @@ func runGateway() {
 	}
 	// External wake/trigger API
 	wakeH := httpapi.NewWakeHandler(agentRouter, cfg.Gateway.Token)
+	if postTurn != nil {
+		wakeH.SetPostTurnProcessor(postTurn)
+	}
 	server.SetWakeHandler(wakeH)
 	if mcpH != nil {
 		server.SetMCPHandler(mcpH)
@@ -423,9 +426,11 @@ func runGateway() {
 	server.SetLogTee(logTee)
 	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions)
 
-	// Wire post-turn processor for WS chat.send team task dispatch.
+	// Wire post-turn processor for team task dispatch (WS chat.send + HTTP API paths).
 	if postTurn != nil {
 		chatMethods.SetPostTurnProcessor(postTurn)
+		server.SetPostTurnProcessor(postTurn) // HTTP: /v1/chat/completions, /v1/responses
+		wakeH.SetPostTurnProcessor(postTurn)  // HTTP: /v1/agents/{id}/wake
 	}
 
 	// Wire pairing event broadcasts to all WS clients.

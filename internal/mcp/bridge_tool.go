@@ -125,6 +125,9 @@ func inputSchemaToMap(schema mcpgo.ToolInputSchema) map[string]any {
 	}
 	if len(schema.Properties) > 0 {
 		m["properties"] = schema.Properties
+	} else if m["type"] == "object" {
+		// OpenAI requires "properties" even when empty for object schemas.
+		m["properties"] = map[string]any{}
 	}
 	if len(schema.Required) > 0 {
 		m["required"] = schema.Required

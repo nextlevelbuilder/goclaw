@@ -282,6 +282,20 @@ func (c *Channel) sendMediaMessage(ctx context.Context, chatID int64, msg bus.Ou
 			}
 		}
 
+		// Honor MediaMaxBytes for outbound sends.
+		// Prevents attempting to upload huge files that would fail via Telegram Bot API or local proxy.
+		maxBytes := c.config.MediaMaxBytes
+		if maxBytes == 0 {
+			if c.config.APIServer != "" {
+				maxBytes = localAPIDefaultMaxBytes
+			} else {
+				maxBytes = defaultMediaMaxBytes
+			}
+		}
+		if info, err := os.Stat(media.URL); err == nil && info.Size() > maxBytes {
+			return fmt.Errorf("outbound media too large: %d bytes (limit %d)", info.Size(), maxBytes)
+		}
+
 		// Send based on content type.
 		// Large images (>photoSizeThreshold) are sent as documents to avoid Telegram compression.
 		ct := strings.ToLower(media.ContentType)

@@ -114,7 +114,7 @@ func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, us
 // Access logic: public → all, private → owner only, internal → check grants.
 func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.SkillInfo, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT s.name, s.slug, s.description, s.version FROM skills s
+		`SELECT DISTINCT s.name, s.slug, s.description, s.version, s.file_path FROM skills s
 		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
 		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND sug.user_id = $2
 		WHERE s.status = 'active' AND (
@@ -134,11 +134,12 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 		var name, slug string
 		var desc *string
 		var version int
-		if err := rows.Scan(&name, &slug, &desc, &version); err != nil {
+		var filePath *string
+		if err := rows.Scan(&name, &slug, &desc, &version, &filePath); err != nil {
 			slog.Warn("skill_grants: scan error in ListAccessible", "error", err)
 			continue
 		}
-		result = append(result, buildSkillInfo("", name, slug, desc, version, s.baseDir))
+		result = append(result, buildSkillInfo("", name, slug, desc, version, s.baseDir, filePath))
 	}
 	return result, rows.Err()
 }

@@ -18,13 +18,15 @@ var skillFrontmatterRe = regexp.MustCompile(`(?s)^---\n(.*?)\n---\n?`)
 func (s *PGSkillStore) LoadSkill(name string) (string, bool) {
 	var slug string
 	var version int
+	var filePath *string
 	err := s.db.QueryRow(
-		"SELECT slug, version FROM skills WHERE slug = $1 AND status = 'active'", name,
-	).Scan(&slug, &version)
+		"SELECT slug, version, file_path FROM skills WHERE slug = $1 AND status = 'active'", name,
+	).Scan(&slug, &version, &filePath)
 	if err != nil {
 		return "", false
 	}
-	content, err := readSkillContent(s.baseDir, slug, version)
+	info := buildSkillInfo("", "", slug, nil, version, s.baseDir, filePath)
+	content, err := readSkillFile(info.Path)
 	if err != nil {
 		return "", false
 	}
@@ -83,13 +85,14 @@ func (s *PGSkillStore) GetSkill(name string) (*store.SkillInfo, bool) {
 	var tags []string
 	var version int
 	var isSystem bool
+	var filePath *string
 	err := s.db.QueryRow(
-		"SELECT id, name, slug, description, visibility, tags, version, is_system FROM skills WHERE slug = $1 AND status = 'active'", name,
-	).Scan(&id, &skillName, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem)
+		"SELECT id, name, slug, description, visibility, tags, version, is_system, file_path FROM skills WHERE slug = $1 AND status = 'active'", name,
+	).Scan(&id, &skillName, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &filePath)
 	if err != nil {
 		return nil, false
 	}
-	info := buildSkillInfo(id.String(), skillName, slug, desc, version, s.baseDir)
+	info := buildSkillInfo(id.String(), skillName, slug, desc, version, s.baseDir, filePath)
 	info.Visibility = visibility
 	info.Tags = tags
 	info.IsSystem = isSystem
@@ -132,15 +135,16 @@ func (s *PGSkillStore) GetSkillByID(id uuid.UUID) (store.SkillInfo, bool) {
 	var version int
 	var isSystem, enabled bool
 	var depsRaw []byte
+	var filePath *string
 	err := s.db.QueryRow(
-		`SELECT name, slug, description, visibility, tags, version, is_system, status, enabled, deps
+		`SELECT name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path
 		 FROM skills WHERE id = $1`,
 		id,
-	).Scan(&name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw)
+	).Scan(&name, &slug, &desc, &visibility, pq.Array(&tags), &version, &isSystem, &status, &enabled, &depsRaw, &filePath)
 	if err != nil {
 		return store.SkillInfo{}, false
 	}
-	info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir)
+	info := buildSkillInfo(id.String(), name, slug, desc, version, s.baseDir, filePath)
 	info.Visibility = visibility
 	info.Tags = tags
 	info.IsSystem = isSystem
@@ -172,30 +176,36 @@ func (s *PGSkillStore) GetSkillOwnerIDBySlug(slug string) (string, bool) {
 	return ownerID, true
 }
 
-func buildSkillInfo(id, name, slug string, desc *string, version int, baseDir string) store.SkillInfo {
+// buildSkillInfo constructs a SkillInfo. If filePath (from DB file_path column) is set,
+// it is used as BaseDir; otherwise BaseDir is constructed from baseDir/slug/version.
+// This ensures skills seeded under a previous data directory are still resolved correctly.
+func buildSkillInfo(id, name, slug string, desc *string, version int, baseDir string, filePath *string) store.SkillInfo {
 	d := ""
 	if desc != nil {
 		d = *desc
+	}
+	skillDir := fmt.Sprintf("%s/%s/%d", baseDir, slug, version)
+	if filePath != nil && *filePath != "" {
+		skillDir = *filePath
 	}
 	return store.SkillInfo{
 		ID:          id,
 		Name:        name,
 		Slug:        slug,
-		Path:        fmt.Sprintf("%s/%s/%d/SKILL.md", baseDir, slug, version),
-		BaseDir:     fmt.Sprintf("%s/%s/%d", baseDir, slug, version),
+		Path:        skillDir + "/SKILL.md",
+		BaseDir:     skillDir,
 		Source:      "managed",
 		Description: d,
 		Version:     version,
 	}
 }
 
-func readSkillContent(baseDir, slug string, version int) (string, error) {
-	path := fmt.Sprintf("%s/%s/%d/SKILL.md", baseDir, slug, version)
+// readSkillFile reads a SKILL.md file, normalizes line endings, and strips frontmatter.
+func readSkillFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	// Normalize line endings (Windows CRLF → LF) and strip frontmatter
 	content := strings.ReplaceAll(string(data), "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
 	content = skillFrontmatterRe.ReplaceAllString(content, "")

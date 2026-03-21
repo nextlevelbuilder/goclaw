@@ -504,21 +504,76 @@ func stripFrontmatter(content string) string {
 	return frontmatterRe.ReplaceAllString(normalizeLineEndings(content), "")
 }
 
+// parseSimpleYAML parses a subset of YAML: simple key: value pairs,
+// multiline block scalars (| and >), and list values (- item).
 func parseSimpleYAML(content string) map[string]string {
 	result := make(map[string]string)
-	for line := range strings.SplitSeq(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+	lines := strings.Split(content, "\n")
+
+	var currentKey string
+	var blockLines []string
+	var inBlock bool
+
+	flushBlock := func() {
+		if currentKey != "" {
+			if len(blockLines) > 0 {
+				result[currentKey] = strings.Join(blockLines, " ")
+			} else {
+				// Empty value (e.g. "slug:" with no indented continuation).
+				result[currentKey] = ""
+			}
+		}
+		currentKey = ""
+		blockLines = nil
+		inBlock = false
+	}
+
+	for _, line := range lines {
+		// Indented continuation line (block scalar or list item)
+		if inBlock && len(line) > 0 && (line[0] == ' ' || line[0] == '\t') {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			// List item: "  - value"
+			if strings.HasPrefix(trimmed, "- ") {
+				blockLines = append(blockLines, strings.TrimSpace(trimmed[2:]))
+			} else if trimmed != "-" {
+				blockLines = append(blockLines, trimmed)
+			}
 			continue
 		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			val = strings.Trim(val, "\"'")
-			result[key] = val
+
+		// Not indented — flush any pending block and parse as top-level key
+		flushBlock()
+
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
 		}
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		val = strings.Trim(val, "\"'")
+
+		if val == "|" || val == ">" || val == "|-" || val == ">-" {
+			// Start of a multiline block — collect subsequent indented lines
+			currentKey = key
+			inBlock = true
+			continue
+		}
+		if val == "" {
+			// Could be start of a list block (e.g. "allowed-tools:\n  - Bash")
+			currentKey = key
+			inBlock = true
+			continue
+		}
+		result[key] = val
 	}
+	flushBlock()
 	return result
 }
 

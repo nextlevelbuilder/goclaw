@@ -21,11 +21,20 @@ func (c *Channel) sendMediaMessage(channelID string, content string, mediaList [
 			continue
 		}
 
+		maxBytes := c.config.MediaMaxBytes
+		if maxBytes <= 0 {
+			maxBytes = defaultMediaMaxBytes
+		}
+
 		f, err := os.Open(filePath)
 		if err != nil {
 			return fmt.Errorf("open media file %s: %w", filePath, err)
 		}
 		defer f.Close()
+
+		if info, err := f.Stat(); err == nil && info.Size() > maxBytes {
+			return fmt.Errorf("outbound media too large: %d bytes (limit %d)", info.Size(), maxBytes)
+		}
 
 		ct := att.ContentType
 		if ct == "" {

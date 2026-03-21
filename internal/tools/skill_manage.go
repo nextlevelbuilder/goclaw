@@ -350,7 +350,7 @@ func (t *SkillManageTool) executeDelete(ctx context.Context, args map[string]any
 		t.loader.BumpVersion()
 	}
 
-	return NewResult(fmt.Sprintf("Skill %q archived and removed from search.", slug))
+	return NewResult(fmt.Sprintf("Skill %q deleted and removed from search.", slug))
 }
 
 // maxCopySize limits total companion file copy to 20MB (matching publish_skill).
