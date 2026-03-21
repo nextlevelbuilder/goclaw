@@ -112,7 +112,7 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 // Disabled skills are excluded — no point scanning or updating them.
 func (s *PGSkillStore) ListAllSkills() []store.SkillInfo {
 	rows, err := s.db.Query(
-		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path FROM skills WHERE enabled = true ORDER BY name`)
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path FROM skills WHERE enabled = true AND status != 'deleted' ORDER BY name`)
 	if err != nil {
 		return nil
 	}

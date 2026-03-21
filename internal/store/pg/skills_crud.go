@@ -18,7 +18,7 @@ type SkillCreateParams struct {
 	Description *string
 	OwnerID     string
 	Visibility  string
-	Status      string // "active" or "archived" (defaults to "active" if empty)
+	Status      string // "active", "archived" (missing deps), or "deleted" (user-deleted)
 	Version     int
 	FilePath    string
 	FileSize    int64
@@ -142,7 +142,7 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 		   version = EXCLUDED.version, frontmatter = EXCLUDED.frontmatter,
 		   file_path = EXCLUDED.file_path,
 		   file_size = EXCLUDED.file_size, file_hash = EXCLUDED.file_hash,
-		   visibility = CASE WHEN skills.status = 'archived' THEN 'private' ELSE skills.visibility END,
+		   visibility = CASE WHEN skills.status IN ('archived', 'deleted') THEN 'private' ELSE skills.visibility END,
 		   status = 'active', updated_at = NOW()
 		 RETURNING id`,
 		id, p.Name, p.Slug, p.Description, p.OwnerID, p.Visibility, version,
