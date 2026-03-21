@@ -515,8 +515,13 @@ func parseSimpleYAML(content string) map[string]string {
 	var inBlock bool
 
 	flushBlock := func() {
-		if currentKey != "" && len(blockLines) > 0 {
-			result[currentKey] = strings.Join(blockLines, " ")
+		if currentKey != "" {
+			if len(blockLines) > 0 {
+				result[currentKey] = strings.Join(blockLines, " ")
+			} else {
+				// Empty value (e.g. "slug:" with no indented continuation).
+				result[currentKey] = ""
+			}
 		}
 		currentKey = ""
 		blockLines = nil
