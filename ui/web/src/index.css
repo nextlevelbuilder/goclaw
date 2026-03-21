@@ -253,7 +253,7 @@
   margin: 4px 0;
 }
 .md-render li::marker {
-  color: var(--foreground) !important;
+  color: currentColor;
 }
 .md-render :where(li > p):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
   margin: 0;

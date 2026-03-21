@@ -158,7 +158,7 @@ export function ChatPage() {
   }, [handleNewChat]);
 
   return (
-    <div className="relative flex h-full">
+    <div className="relative flex h-full overflow-hidden">
       {/* Chat Sidebar */}
       {isMobile ? (
         <>
@@ -200,9 +200,9 @@ export function ChatPage() {
       )}
 
       {/* Main chat area */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 min-h-0 flex-col">
         {isMobile && (
-          <div className="flex items-center border-b px-3 py-2 landscape-compact">
+          <div className="flex shrink-0 items-center border-b px-3 py-2 landscape-compact">
             <button
               onClick={() => setChatSidebarOpen(true)}
               className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -213,10 +213,12 @@ export function ChatPage() {
           </div>
         )}
 
-        <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} />
+        <div className="shrink-0">
+          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} />
+        </div>
 
         {sendError && (
-          <div className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
+          <div className="shrink-0 border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
             {sendError}
           </div>
         )}

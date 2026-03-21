@@ -30,7 +30,48 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		return nil, err
 	}
 
-	rows, err := tx.QueryContext(ctx, `
+	var q string
+	var args []any
+	if store.IsSharedKG(ctx) {
+		q = `
+		WITH RECURSIVE paths AS (
+			SELECT
+				e.id, e.agent_id, e.user_id, e.external_id,
+				e.name, e.entity_type, e.description,
+				e.properties, e.source_id, e.confidence,
+				e.created_at, e.updated_at,
+				1 AS depth,
+				ARRAY[e.id::text] AS path,
+				''::text AS via
+			FROM kg_entities e
+			WHERE e.id = $1 AND e.agent_id = $2
+
+			UNION ALL
+
+			SELECT
+				e.id, e.agent_id, e.user_id, e.external_id,
+				e.name, e.entity_type, e.description,
+				e.properties, e.source_id, e.confidence,
+				e.created_at, e.updated_at,
+				p.depth + 1,
+				p.path || e.id::text,
+				r.relation_type
+			FROM paths p
+			JOIN kg_relations r ON p.id = r.source_entity_id AND r.agent_id = $2
+			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.agent_id = $2
+			WHERE p.depth < $3
+			  AND NOT e.id::text = ANY(p.path)
+		)
+		SELECT
+			id, agent_id, user_id, external_id,
+			name, entity_type, description,
+			properties, source_id, confidence,
+			created_at, updated_at,
+			depth, path, via
+		FROM paths WHERE depth > 1`
+		args = []any{startID, aid, maxDepth}
+	} else {
+		q = `
 		WITH RECURSIVE paths AS (
 			SELECT
 				e.id, e.agent_id, e.user_id, e.external_id,
@@ -65,9 +106,11 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			properties, source_id, confidence,
 			created_at, updated_at,
 			depth, path, via
-		FROM paths WHERE depth > 1`,
-		startID, aid, userID, maxDepth,
-	)
+		FROM paths WHERE depth > 1`
+		args = []any{startID, aid, userID, maxDepth}
+	}
+
+	rows, err := tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

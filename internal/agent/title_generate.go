@@ -9,7 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
-const titleGenerateTimeout = 30 * time.Second
+const titleGenerateTimeout = 120 * time.Second
 
 const titleSystemPrompt = `Generate a short title (max 15 words) for this conversation based on the user's message. Reply with only the title, no quotes or punctuation wrapping.`
 

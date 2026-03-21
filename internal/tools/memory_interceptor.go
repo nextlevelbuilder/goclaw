@@ -182,10 +182,12 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string,
 		}
 	}
 
-	// Trigger KG extraction in background if configured
+	// Trigger KG extraction in background if configured.
+	// Use KGUserID (not MemoryUserID) so shared KG entities go into agent-level scope.
 	kgTriggered := false
 	if m.kgExtractFn != nil && content != "" {
-		go m.kgExtractFn(context.WithoutCancel(ctx), agentStr, userID, content)
+		kgUserID := store.KGUserID(ctx)
+		go m.kgExtractFn(context.WithoutCancel(ctx), agentStr, kgUserID, content)
 		kgTriggered = true
 	}
 

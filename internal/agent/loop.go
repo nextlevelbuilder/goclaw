@@ -137,6 +137,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		if l.shouldShareMemory() {
 			ctx = store.WithSharedMemory(ctx)
 		}
+		if l.shouldShareKnowledgeGraph() {
+			ctx = store.WithSharedKG(ctx)
+		}
 		if err := os.MkdirAll(effectiveWorkspace, 0755); err != nil {
 			slog.Warn("failed to create user workspace directory", "workspace", effectiveWorkspace, "user", req.UserID, "error", err)
 		}

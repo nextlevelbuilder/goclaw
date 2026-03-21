@@ -34,7 +34,8 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         const active = (res.agents ?? []).filter((a) => a.status === "active");
         setAgents(active);
         if (active.length > 0 && !active.some((a) => a.agent_key === value)) {
-          onChange(active[0]!.agent_key);
+          const defaultAgent = active.find((a) => a.is_default) ?? active[0]!;
+          onChange(defaultAgent.agent_key);
         }
       })
       .catch(() => {});
@@ -92,7 +93,7 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         <div
           ref={dropdownRef}
           style={dropdownStyle}
-          className="pointer-events-auto max-h-60 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md"
+          className="pointer-events-auto max-h-60 sm:max-h-80 overflow-y-auto rounded-lg border bg-popover p-1 shadow-md"
         >
           {agents.length === 0 && (
             <div className="px-3 py-2 text-sm text-muted-foreground">

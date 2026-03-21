@@ -181,6 +181,7 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 		"", "", "", sessionKey, nil,
 	)
 
+
 	if result != nil && result.IsError {
 		slog.Warn("memory flush: write_file failed", "path", path, "error", result.ForLLM)
 	} else {
@@ -189,4 +190,45 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 
 	l.sessions.SetMemoryFlushDone(sessionKey)
 	l.sessions.Save(sessionKey)
+}
+
+// extractiveMemoryFallback runs the regex-based extraction on conversation history
+// and writes the result directly to the memory store when the LLM flush produced no output.
+func (l *Loop) extractiveMemoryFallback(ctx context.Context, sessionKey string, history []providers.Message, reason string) {
+	if l.memStore == nil {
+		return
+	}
+
+	// Limit input to last 20 messages to avoid regex over unbounded text
+	if len(history) > 20 {
+		history = history[len(history)-20:]
+	}
+
+	extracted := ExtractiveMemoryFallback(history)
+	if extracted == "" {
+		slog.Info("memory flush: extractive fallback produced no content", "session", sessionKey, "reason", reason)
+		return
+	}
+
+	agentID := l.agentUUID.String()
+	userID := store.MemoryUserID(ctx)
+	docPath := fmt.Sprintf("memory/%s-auto-extract.md", time.Now().Format("2006-01-02"))
+
+	// Append to existing document if it exists
+	existing, err := l.memStore.GetDocument(ctx, agentID, userID, docPath)
+	if err == nil && existing != "" {
+		extracted = existing + "\n\n---\n\n" + extracted
+	}
+
+	if err := l.memStore.PutDocument(ctx, agentID, userID, docPath, extracted); err != nil {
+		slog.Warn("memory flush: extractive fallback write failed", "session", sessionKey, "error", err)
+		return
+	}
+
+	if err := l.memStore.IndexDocument(ctx, agentID, userID, docPath); err != nil {
+		slog.Warn("memory flush: extractive fallback index failed", "session", sessionKey, "error", err)
+		// Non-fatal: document was saved
+	}
+
+	slog.Info("memory flush: extractive fallback saved", "session", sessionKey, "reason", reason, "path", docPath, "content_len", len(extracted))
 }

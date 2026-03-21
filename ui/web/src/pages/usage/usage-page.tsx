@@ -100,22 +100,36 @@ function AnalyticsDashboard() {
         </div>
       )}
 
-      <SummaryCards current={current} previous={previous} loading={loading} />
+      <ErrorBoundary>
+        <SummaryCards current={current} previous={previous} loading={loading} />
+      </ErrorBoundary>
 
-      <TokenAreaChart data={timeseries} loading={loading} granularity={filters.granularity} />
-      <RequestVolumeChart data={timeseries} loading={loading} granularity={filters.granularity} />
+      <ErrorBoundary>
+        <TokenAreaChart data={timeseries} loading={loading} granularity={filters.granularity} />
+      </ErrorBoundary>
+      <ErrorBoundary>
+        <RequestVolumeChart data={timeseries} loading={loading} granularity={filters.granularity} />
+      </ErrorBoundary>
 
-      <DistributionRow
-        providerBreakdown={providerBreakdown}
-        modelBreakdown={modelBreakdown}
-        channelBreakdown={channelBreakdown}
-        loading={loading}
-      />
+      <ErrorBoundary>
+        <DistributionRow
+          providerBreakdown={providerBreakdown}
+          modelBreakdown={modelBreakdown}
+          channelBreakdown={channelBreakdown}
+          loading={loading}
+        />
+      </ErrorBoundary>
 
-      <DurationChart data={timeseries} loading={loading} granularity={filters.granularity} />
-      <KnowledgeChart data={timeseries} loading={loading} granularity={filters.granularity} />
+      <ErrorBoundary>
+        <DurationChart data={timeseries} loading={loading} granularity={filters.granularity} />
+      </ErrorBoundary>
+      <ErrorBoundary>
+        <KnowledgeChart data={timeseries} loading={loading} granularity={filters.granularity} />
+      </ErrorBoundary>
 
-      <TopModelsTable data={modelBreakdown} loading={loading} />
+      <ErrorBoundary>
+        <TopModelsTable data={modelBreakdown} loading={loading} />
+      </ErrorBoundary>
 
       {/* Legacy records table */}
       <div>

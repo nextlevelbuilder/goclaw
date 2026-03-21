@@ -136,7 +136,10 @@ type Loop struct {
 
 	// Budget enforcement: monthly spending limit in cents (0 = unlimited)
 	budgetMonthlyCents int
-	tracingStore       store.TracingStore
+	tracingStore store.TracingStore
+
+	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
+	memStore store.MemoryStore
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -253,7 +256,10 @@ type LoopConfig struct {
 
 	// Budget enforcement
 	BudgetMonthlyCents int
-	TracingStore       store.TracingStore
+	TracingStore store.TracingStore
+
+	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
+	MemoryStore store.MemoryStore
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -342,6 +348,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		modelPricing:           cfg.ModelPricing,
 		budgetMonthlyCents:     cfg.BudgetMonthlyCents,
 		tracingStore:           cfg.TracingStore,
+		memStore:               cfg.MemoryStore,
 	}
 }
 

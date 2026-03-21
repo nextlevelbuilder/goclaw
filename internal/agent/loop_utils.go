@@ -65,6 +65,12 @@ func (l *Loop) shouldShareMemory() bool {
 	return l.workspaceSharing != nil && l.workspaceSharing.ShareMemory
 }
 
+// shouldShareKnowledgeGraph returns true if knowledge graph should be shared
+// across all users of the agent (agent-level, no per-user scoping).
+func (l *Loop) shouldShareKnowledgeGraph() bool {
+	return l.workspaceSharing != nil && l.workspaceSharing.ShareKnowledgeGraph
+}
+
 // InvalidateUserWorkspace clears the cached workspace for a user,
 // forcing the next request to re-read from user_agent_profiles.
 func (l *Loop) InvalidateUserWorkspace(userID string) {

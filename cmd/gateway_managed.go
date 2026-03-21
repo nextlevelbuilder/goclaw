@@ -157,6 +157,7 @@ func wireExtras(
 		MediaStore:             mediaStore,
 		ModelPricing:           appCfg.Telemetry.ModelPricing,
 		TracingStore:           stores.Tracing,
+		MemoryStore:            stores.Memory,
 		OnEvent: func(event agent.AgentEvent) {
 			msgBus.Broadcast(bus.Event{
 				Name:    protocol.EventAgent,

@@ -35,7 +35,6 @@ export function DistributionDonut({
   metric = "request_count",
 }: DistributionDonutProps) {
   const { t } = useTranslation("usage");
-  const isEmpty = !loading && data.length === 0;
 
   const sorted = [...data].sort((a, b) => b[metric] - a[metric]);
   const top = sorted.slice(0, MAX_SLICES);
@@ -49,8 +48,10 @@ export function DistributionDonut({
   }
 
   const total = slices.reduce((sum, s) => sum + s.value, 0);
+  const isEmpty = !loading && (data.length === 0 || total === 0);
 
-  const handleClick = (entry: PieSectorDataItem) => {
+  const handleClick = (entry: PieSectorDataItem | null | undefined) => {
+    if (!entry) return;
     const name = entry.name as string | undefined;
     if (!name || name === t("analytics.distribution.other")) return;
     onSliceClick?.(name);
@@ -66,10 +67,11 @@ export function DistributionDonut({
             cy="45%"
             innerRadius={55}
             outerRadius={85}
-            paddingAngle={2}
+            paddingAngle={slices.length > 1 ? 2 : 0}
             dataKey="value"
             onClick={handleClick}
             style={{ cursor: onSliceClick ? "pointer" : "default" }}
+            isAnimationActive={false}
             label={false}
           >
             {slices.map((entry, idx) => (
@@ -90,9 +92,13 @@ export function DistributionDonut({
           </text>
           <Tooltip
             formatter={(value, name) => {
-              const v = typeof value === "number" ? value : Number(value) || 0;
-              const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0";
-              return [`${v.toLocaleString()} (${pct}%)`, String(name)];
+              try {
+                const v = typeof value === "number" ? value : Number(value) || 0;
+                const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0";
+                return [`${v.toLocaleString()} (${pct}%)`, String(name)];
+              } catch {
+                return [String(value), String(name)];
+              }
             }}
           />
           <Legend

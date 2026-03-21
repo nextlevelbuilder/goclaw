@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, Fragment, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import i18n from "@/i18n";
@@ -10,12 +10,13 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  retryKey: number;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+  state: State = { hasError: false, retryKey: 0 };
 
-  static getDerivedStateFromError(): State {
+  static getDerivedStateFromError(): Partial<State> {
     return { hasError: true };
   }
 
@@ -24,11 +25,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleRetry = () => {
-    this.setState({ hasError: false });
+    this.setState((prev) => ({ hasError: false, retryKey: prev.retryKey + 1 }));
   };
 
   render() {
-    if (!this.state.hasError) return this.props.children;
+    if (!this.state.hasError) {
+      return <Fragment key={this.state.retryKey}>{this.props.children}</Fragment>;
+    }
 
     if (this.props.fallback) return this.props.fallback;
 
