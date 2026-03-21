@@ -17,7 +17,11 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 	aid := mustParseUUID(agentID)
 
 	// FTS search using tsvector
-	ftsResults, err := s.ftsSearch(ctx, query, aid, userID, maxResults*2)
+	ftsLang := "simple"
+	if opts.FTSLanguage != "" {
+		ftsLang = opts.FTSLanguage
+	}
+	ftsResults, err := s.ftsSearchWithLang(ctx, query, aid, userID, maxResults*2, ftsLang)
 	if err != nil {
 		return nil, err
 	}
@@ -77,22 +81,30 @@ type scoredChunk struct {
 }
 
 func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any, userID string, limit int) ([]scoredChunk, error) {
+	return s.ftsSearchWithLang(ctx, query, agentID, userID, limit, "simple")
+}
+
+// ftsSearchWithLang performs FTS search using the specified PostgreSQL text search configuration.
+// The lang parameter is validated against an allowlist to prevent SQL injection.
+func (s *PGMemoryStore) ftsSearchWithLang(ctx context.Context, query string, agentID any, userID string, limit int, lang string) ([]scoredChunk, error) {
+	lang = validFTSLang(lang)
+
 	var q string
 	var args []any
 
 	if userID != "" {
 		q = `SELECT path, start_line, end_line, text, user_id,
-				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+				ts_rank(tsv, plainto_tsquery('` + lang + `', $1)) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('` + lang + `', $3)
 			AND (user_id IS NULL OR user_id = $4)
 			ORDER BY score DESC LIMIT $5`
 		args = []any{query, agentID, query, userID, limit}
 	} else {
 		q = `SELECT path, start_line, end_line, text, user_id,
-				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+				ts_rank(tsv, plainto_tsquery('` + lang + `', $1)) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('` + lang + `', $3)
 			AND user_id IS NULL
 			ORDER BY score DESC LIMIT $4`
 		args = []any{query, agentID, query, limit}
@@ -214,4 +226,47 @@ func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, curre
 	}
 
 	return results
+}
+
+// allowedFTSLangs is the set of PostgreSQL built-in text search configurations
+// that are safe to interpolate into SQL queries.
+var allowedFTSLangs = map[string]bool{
+	"simple":     true,
+	"arabic":     true,
+	"armenian":   true,
+	"basque":     true,
+	"catalan":    true,
+	"danish":     true,
+	"dutch":      true,
+	"english":    true,
+	"finnish":    true,
+	"french":     true,
+	"german":     true,
+	"greek":      true,
+	"hindi":      true,
+	"hungarian":  true,
+	"indonesian": true,
+	"irish":      true,
+	"italian":    true,
+	"lithuanian": true,
+	"nepali":     true,
+	"norwegian":  true,
+	"portuguese": true,
+	"romanian":   true,
+	"russian":    true,
+	"serbian":    true,
+	"spanish":    true,
+	"swedish":    true,
+	"tamil":      true,
+	"turkish":    true,
+	"yiddish":    true,
+}
+
+// validFTSLang returns the language if it's in the allowlist, or "simple" as fallback.
+// This prevents SQL injection when interpolating the language into FTS queries.
+func validFTSLang(lang string) string {
+	if allowedFTSLangs[lang] {
+		return lang
+	}
+	return "simple"
 }

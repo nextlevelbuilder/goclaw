@@ -30,6 +30,7 @@ type MemorySearchOptions struct {
 	PathPrefix   string
 	VectorWeight float64 // per-agent override (0 = use store default)
 	TextWeight   float64 // per-agent override (0 = use store default)
+	FTSLanguage  string  // PostgreSQL text search config (default: "simple"). Examples: "english", "german", "simple"
 }
 
 // EmbeddingProvider generates vector embeddings for text.
