@@ -74,5 +74,8 @@ type KnowledgeGraphStore interface {
 
 	Stats(ctx context.Context, agentID, userID string) (*GraphStats, error)
 
+	// SetEmbeddingProvider configures the embedding provider for semantic search.
+	SetEmbeddingProvider(provider EmbeddingProvider)
+
 	Close() error
 }
