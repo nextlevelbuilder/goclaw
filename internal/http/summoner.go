@@ -38,9 +38,6 @@ var summoningFiles = []string{
 // fileTagRe parses <file name="SOUL.md">content</file> from LLM output.
 var fileTagRe = regexp.MustCompile(`(?s)<file\s+name="([^"]+)">\s*(.*?)\s*</file>`)
 
-// identityNameRe extracts the Name field from IDENTITY.md format: - **Name:** value
-var identityNameRe = regexp.MustCompile(`(?m)^-\s*\*\*Name:\*\*\s*(.+)$`)
-
 // frontmatterTagRe parses <frontmatter>short expertise summary</frontmatter> from LLM output.
 var frontmatterTagRe = regexp.MustCompile(`(?s)<frontmatter>\s*(.*?)\s*</frontmatter>`)
 
