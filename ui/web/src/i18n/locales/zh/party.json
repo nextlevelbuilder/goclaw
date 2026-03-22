@@ -1,0 +1,46 @@
+{
+  "title": "Party 模式",
+  "newParty": "新建 Party",
+  "topic": "讨论主题",
+  "selectTeam": "选择团队",
+  "customTeam": "自定义团队",
+  "start": "开始讨论",
+  "presets": {
+    "payment_feature": "支付功能",
+    "security_review": "安全审查",
+    "sprint_planning": "Sprint 规划",
+    "architecture_decision": "架构决策",
+    "ux_review": "UX 审查",
+    "incident_response": "事件响应"
+  },
+  "controls": {
+    "continue": "继续",
+    "deepMode": "深度模式 [P]",
+    "tokenRing": "令牌环 [R]",
+    "question": "提问 [Q]",
+    "summary": "总结 [D]",
+    "exit": "退出 [E]"
+  },
+  "status": {
+    "thinking": "思考中...",
+    "speaking": "发言中",
+    "idle": "空闲"
+  },
+  "round": "第 {{n}} 轮",
+  "mode": {
+    "standard": "标准",
+    "deep": "深度",
+    "token_ring": "令牌环"
+  },
+  "noSessions": "暂无 Party 会话",
+  "description": "多角色 AI 讨论，结构化轮次",
+  "exitConfirm": "退出此 Party 会话？",
+  "summary": {
+    "title": "讨论总结",
+    "agreements": "共识要点",
+    "disagreements": "分歧要点",
+    "decisions": "已做决策",
+    "actionItems": "行动项",
+    "compliance": "合规备注"
+  }
+}

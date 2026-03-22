@@ -480,6 +480,12 @@ func runGateway() {
 	// Register config-based channels as fallback when no DB instances loaded.
 	registerConfigChannels(cfg, channelMgr, msgBus, pgStores, instanceLoader)
 
+	// Party Mode RPC methods
+	if pgStores.Party != nil {
+		methods.NewPartyMethods(pgStores.Party, pgStores.Agents, providerRegistry, msgBus).Register(server.Router())
+		slog.Info("party mode enabled")
+	}
+
 	// Register channels/instances/links/teams RPC methods
 	wireChannelRPCMethods(server, pgStores, channelMgr, agentRouter, msgBus, workspace)
 

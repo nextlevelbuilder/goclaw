@@ -1,0 +1,46 @@
+{
+  "title": "Ch\u1ebf \u0111\u1ed9 Party",
+  "newParty": "T\u1ea1o Party m\u1edbi",
+  "topic": "Ch\u1ee7 \u0111\u1ec1 th\u1ea3o lu\u1eadn",
+  "selectTeam": "Ch\u1ecdn \u0111\u1ed9i",
+  "customTeam": "\u0110\u1ed9i tu\u1ef3 ch\u1ec9nh",
+  "start": "B\u1eaft \u0111\u1ea7u th\u1ea3o lu\u1eadn",
+  "presets": {
+    "payment_feature": "T\u00ednh n\u0103ng Thanh to\u00e1n",
+    "security_review": "\u0110\u00e1nh gi\u00e1 B\u1ea3o m\u1eadt",
+    "sprint_planning": "L\u1eadp k\u1ebf ho\u1ea1ch Sprint",
+    "architecture_decision": "Quy\u1ebft \u0111\u1ecbnh Ki\u1ebfn tr\u00fac",
+    "ux_review": "\u0110\u00e1nh gi\u00e1 UX",
+    "incident_response": "X\u1eed l\u00fd s\u1ef1 c\u1ed1"
+  },
+  "controls": {
+    "continue": "Ti\u1ebfp t\u1ee5c",
+    "deepMode": "Ch\u1ebf \u0111\u1ed9 Deep [P]",
+    "tokenRing": "Token Ring [R]",
+    "question": "C\u00e2u h\u1ecfi [Q]",
+    "summary": "T\u00f3m t\u1eaft [D]",
+    "exit": "Tho\u00e1t [E]"
+  },
+  "status": {
+    "thinking": "\u0110ang suy ngh\u0129...",
+    "speaking": "\u0110ang n\u00f3i",
+    "idle": "Ch\u1edd"
+  },
+  "round": "V\u00f2ng {{n}}",
+  "mode": {
+    "standard": "Ti\u00eau chu\u1ea9n",
+    "deep": "Deep",
+    "token_ring": "Token Ring"
+  },
+  "noSessions": "Ch\u01b0a c\u00f3 phi\u00ean party n\u00e0o",
+  "description": "Th\u1ea3o lu\u1eadn AI \u0111a nh\u00e2n v\u1eadt v\u1edbi c\u00e1c v\u00f2ng c\u00f3 c\u1ea5u tr\u00fac",
+  "exitConfirm": "Tho\u00e1t phi\u00ean party n\u00e0y?",
+  "summary": {
+    "title": "T\u00f3m t\u1eaft th\u1ea3o lu\u1eadn",
+    "agreements": "\u0110i\u1ec3m \u0111\u1ed3ng thu\u1eadn",
+    "disagreements": "\u0110i\u1ec3m b\u1ea5t \u0111\u1ed3ng",
+    "decisions": "Quy\u1ebft \u0111\u1ecbnh",
+    "actionItems": "H\u1ea1ng m\u1ee5c h\u00e0nh \u0111\u1ed9ng",
+    "compliance": "Ghi ch\u00fa tu\u00e2n th\u1ee7"
+  }
+}

@@ -38,6 +38,7 @@
     "cliCredentials": "Xác thực CLI",
     "apiKeys": "Khóa API",
     "apiDocs": "Tài liệu API",
-    "packages": "Gói phần mềm"
+    "packages": "Gói phần mềm",
+    "party": "Chế độ Party"
   }
 }

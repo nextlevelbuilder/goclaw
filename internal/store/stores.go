@@ -25,6 +25,7 @@ type Stores struct {
 	Contacts         ContactStore
 	Activity         ActivityStore
 	Snapshots        SnapshotStore
+	Party            PartyStore
 	SecureCLI        SecureCLIStore
 	APIKeys           APIKeyStore
 	Heartbeats        HeartbeatStore

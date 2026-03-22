@@ -34,6 +34,7 @@ import enActivity from "./locales/en/activity.json";
 import enApiKeys from "./locales/en/api-keys.json";
 import enCliCredentials from "./locales/en/cli-credentials.json";
 import enPackages from "./locales/en/packages.json";
+import enParty from "./locales/en/party.json";
 
 // --- VI namespaces ---
 import viCommon from "./locales/vi/common.json";
@@ -68,6 +69,7 @@ import viActivity from "./locales/vi/activity.json";
 import viApiKeys from "./locales/vi/api-keys.json";
 import viCliCredentials from "./locales/vi/cli-credentials.json";
 import viPackages from "./locales/vi/packages.json";
+import viParty from "./locales/vi/party.json";
 
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
@@ -102,6 +104,7 @@ import zhActivity from "./locales/zh/activity.json";
 import zhApiKeys from "./locales/zh/api-keys.json";
 import zhCliCredentials from "./locales/zh/cli-credentials.json";
 import zhPackages from "./locales/zh/packages.json";
+import zhParty from "./locales/zh/party.json";
 
 const STORAGE_KEY = "goclaw:language";
 
@@ -120,7 +123,7 @@ const ns = [
   "channels", "providers", "traces", "events",
   "usage", "approvals", "nodes", "logs", "tools", "mcp", "tts",
   "setup", "memory", "storage", "pending-messages", "contacts", "activity", "api-keys",
-  "cli-credentials", "packages",
+  "cli-credentials", "packages", "party",
 ] as const;
 
 i18n.use(initReactI18next).init({
@@ -136,7 +139,7 @@ i18n.use(initReactI18next).init({
       "pending-messages": enPendingMessages,
       contacts: enContacts, activity: enActivity, "api-keys": enApiKeys,
       "cli-credentials": enCliCredentials,
-      packages: enPackages,
+      packages: enPackages, party: enParty,
     },
     vi: {
       common: viCommon, sidebar: viSidebar, topbar: viTopbar, login: viLogin,
@@ -149,7 +152,7 @@ i18n.use(initReactI18next).init({
       "pending-messages": viPendingMessages,
       contacts: viContacts, activity: viActivity, "api-keys": viApiKeys,
       "cli-credentials": viCliCredentials,
-      packages: viPackages,
+      packages: viPackages, party: viParty,
     },
     zh: {
       common: zhCommon, sidebar: zhSidebar, topbar: zhTopbar, login: zhLogin,
@@ -162,7 +165,7 @@ i18n.use(initReactI18next).init({
       "pending-messages": zhPendingMessages,
       contacts: zhContacts, activity: zhActivity, "api-keys": zhApiKeys,
       "cli-credentials": zhCliCredentials,
-      packages: zhPackages,
+      packages: zhPackages, party: zhParty,
     },
   },
   ns: [...ns],

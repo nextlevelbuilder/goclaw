@@ -98,6 +98,9 @@ const ApiKeysPage = lazyWithRetry(() =>
 const PackagesPage = lazyWithRetry(() =>
   import("@/pages/packages/packages-page").then((m) => ({ default: m.PackagesPage })),
 );
+const PartyPage = lazyWithRetry(() =>
+  import("@/pages/party/party-page").then((m) => ({ default: m.PartyPage })),
+);
 
 function PageLoader() {
   return (
@@ -172,6 +175,7 @@ export function AppRoutes() {
           <Route path={ROUTES.CLI_CREDENTIALS} element={<CliCredentialsPage />} />
           <Route path={ROUTES.API_KEYS} element={<ApiKeysPage />} />
           <Route path={ROUTES.PACKAGES} element={<PackagesPage />} />
+          <Route path={ROUTES.PARTY} element={<PartyPage />} />
         </Route>
 
         {/* Catch-all → overview */}

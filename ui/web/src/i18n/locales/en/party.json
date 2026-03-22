@@ -1,0 +1,46 @@
+{
+  "title": "Party Mode",
+  "newParty": "New Party",
+  "topic": "Discussion Topic",
+  "selectTeam": "Select Team",
+  "customTeam": "Custom Team",
+  "start": "Start Discussion",
+  "presets": {
+    "payment_feature": "Payment Feature",
+    "security_review": "Security Review",
+    "sprint_planning": "Sprint Planning",
+    "architecture_decision": "Architecture Decision",
+    "ux_review": "UX Review",
+    "incident_response": "Incident Response"
+  },
+  "controls": {
+    "continue": "Continue",
+    "deepMode": "Deep Mode [P]",
+    "tokenRing": "Token Ring [R]",
+    "question": "Question [Q]",
+    "summary": "Summary [D]",
+    "exit": "Exit [E]"
+  },
+  "status": {
+    "thinking": "Thinking...",
+    "speaking": "Speaking",
+    "idle": "Idle"
+  },
+  "round": "Round {{n}}",
+  "mode": {
+    "standard": "Standard",
+    "deep": "Deep",
+    "token_ring": "Token Ring"
+  },
+  "noSessions": "No party sessions yet",
+  "description": "Multi-persona AI discussions with structured rounds",
+  "exitConfirm": "Exit this party session?",
+  "summary": {
+    "title": "Discussion Summary",
+    "agreements": "Points of Agreement",
+    "disagreements": "Points of Disagreement",
+    "decisions": "Decisions Made",
+    "actionItems": "Action Items",
+    "compliance": "Compliance Notes"
+  }
+}
