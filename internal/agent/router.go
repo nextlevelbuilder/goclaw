@@ -7,9 +7,18 @@ import (
 	"time"
 )
 
+// ResolveOpts carries per-request context for the resolver (e.g., project scoping).
+// When ProjectID is non-empty the resolver creates a Loop whose MCP connections
+// are scoped to that project, preventing cross-project contamination in shared
+// agents like sdlc-assistant.
+type ResolveOpts struct {
+	ProjectID        string
+	ProjectOverrides map[string]map[string]string
+}
+
 // ResolverFunc is called when an agent isn't found in the cache.
 // Used to lazy-create agents from DB.
-type ResolverFunc func(agentKey string) (Agent, error)
+type ResolverFunc func(agentKey string, opts ResolveOpts) (Agent, error)
 
 const defaultRouterTTL = 10 * time.Minute
 
@@ -83,7 +92,7 @@ func (r *Router) Get(agentID string) (Agent, error) {
 
 	// Try resolver (create from DB)
 	if resolver != nil {
-		ag, err := resolver(agentID)
+		ag, err := resolver(agentID, ResolveOpts{})
 		if err != nil {
 			return nil, err
 		}
@@ -99,6 +108,50 @@ func (r *Router) Get(agentID string) (Agent, error) {
 	}
 
 	return nil, fmt.Errorf("agent not found: %s", agentID)
+}
+
+// GetForProject returns an agent Loop scoped to a specific project.
+// Cache key: "agentID:projectID". If projectID is empty, falls back to Get(agentID).
+func (r *Router) GetForProject(agentID, projectID string, projectOverrides map[string]map[string]string) (Agent, error) {
+	if projectID == "" {
+		return r.Get(agentID)
+	}
+	cacheKey := agentID + ":" + projectID
+
+	r.mu.RLock()
+	entry, ok := r.agents[cacheKey]
+	resolver := r.resolver
+	r.mu.RUnlock()
+
+	if ok && (r.ttl == 0 || time.Since(entry.cachedAt) < r.ttl) {
+		return entry.agent, nil
+	}
+	if ok {
+		r.mu.Lock()
+		delete(r.agents, cacheKey)
+		r.mu.Unlock()
+	}
+	if resolver == nil {
+		return nil, fmt.Errorf("agent not found: %s", agentID)
+	}
+
+	ag, err := resolver(agentID, ResolveOpts{
+		ProjectID:        projectID,
+		ProjectOverrides: projectOverrides,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	// Double-check: another goroutine might have created it
+	if existing, ok := r.agents[cacheKey]; ok {
+		r.mu.Unlock()
+		return existing.agent, nil
+	}
+	r.agents[cacheKey] = &agentEntry{agent: ag, cachedAt: time.Now()}
+	r.mu.Unlock()
+	return ag, nil
 }
 
 // Remove removes an agent from the router.

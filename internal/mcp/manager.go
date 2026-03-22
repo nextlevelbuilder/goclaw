@@ -148,7 +148,9 @@ func (m *Manager) Start(ctx context.Context) error {
 
 // LoadForAgent connects MCP servers accessible by a specific agent+user.
 // Previously registered MCP tools for this manager are cleared and reloaded.
-func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID string) error {
+// projectID and projectOverrides enable per-project MCP process isolation:
+// each project gets its own pool entry with merged env vars.
+func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID string, projectID string, projectOverrides map[string]map[string]string) error {
 	if m.store == nil {
 		return nil
 	}
@@ -173,8 +175,13 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 
 		if m.pool != nil {
 			// Pool mode: acquire shared connection, create per-agent BridgeTools
+			var serverOverrides map[string]string
+			if projectOverrides != nil {
+				serverOverrides = projectOverrides[srv.Name]
+			}
 			if err := m.connectViaPool(ctx, srv.Name, srv.Transport, srv.Command,
-				args, env, srv.URL, headers, srv.ToolPrefix, srv.TimeoutSec); err != nil {
+				args, env, srv.URL, headers, srv.ToolPrefix, srv.TimeoutSec,
+				projectID, serverOverrides); err != nil {
 				slog.Warn("mcp.server.connect_failed", "server", srv.Name, "error", err)
 				continue
 			}
@@ -189,8 +196,13 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 		}
 
 		// Apply tool filtering from grants
+		// Use poolKey for pool-backed servers so filterTools finds the right entries
+		poolKey := srv.Name
+		if m.pool != nil && projectID != "" {
+			poolKey = srv.Name + ":" + projectID
+		}
 		if len(info.ToolAllow) > 0 || len(info.ToolDeny) > 0 {
-			m.filterTools(srv.Name, info.ToolAllow, info.ToolDeny)
+			m.filterTools(poolKey, info.ToolAllow, info.ToolDeny)
 		}
 	}
 

@@ -1,0 +1,79 @@
+{
+  "title": "Dự án",
+  "description": "Quản lý workspace dự án và cấu hình MCP server riêng",
+  "addProject": "Dự án mới",
+  "searchPlaceholder": "Tìm dự án...",
+  "emptyTitle": "Chưa có dự án",
+  "emptyDescription": "Tạo dự án đầu tiên để bắt đầu.",
+  "noMatchTitle": "Không tìm thấy dự án",
+  "noMatchDescription": "Thử từ khóa khác.",
+  "columns": {
+    "name": "Tên",
+    "slug": "Slug",
+    "channel": "Kênh",
+    "status": "Trạng thái",
+    "overrides": "MCP Override",
+    "createdBy": "Người tạo",
+    "actions": "Thao tác"
+  },
+  "manageOverrides": "Quản lý MCP override",
+  "delete": {
+    "title": "Xóa dự án",
+    "description": "Bạn có chắc muốn xóa \"{{name}}\"? Tất cả MCP override cũng sẽ bị xóa.",
+    "confirmLabel": "Xóa"
+  },
+  "form": {
+    "createTitle": "Dự án mới",
+    "editTitle": "Sửa dự án",
+    "name": "Tên *",
+    "slug": "Slug *",
+    "slugHint": "Chỉ chữ thường, số và dấu gạch ngang",
+    "channelType": "Loại kênh",
+    "channelTypePlaceholder": "Chọn loại kênh...",
+    "chatId": "Chat ID",
+    "chatIdPlaceholder": "VD: -1001234567890",
+    "description": "Mô tả",
+    "descriptionPlaceholder": "Mô tả ngắn về dự án",
+    "status": "Trạng thái",
+    "cancel": "Hủy",
+    "create": "Tạo",
+    "update": "Cập nhật",
+    "saving": "Đang lưu...",
+    "errors": {
+      "nameRequired": "Tên và slug là bắt buộc",
+      "slugInvalid": "Slug chỉ được chứa chữ thường, số và dấu gạch ngang"
+    }
+  },
+  "overrides": {
+    "title": "MCP Override — {{name}}",
+    "description": "Biến môi trường riêng cho từng dự án. Các key bí mật (TOKEN, SECRET, PASSWORD, API_KEY) phải đặt trong cấu hình MCP server chung.",
+    "serverName": "MCP Server *",
+    "serverNamePlaceholder": "VD: gitlab, atlassian",
+    "envOverrides": "Biến môi trường",
+    "envKeyPlaceholder": "Tên biến",
+    "envValuePlaceholder": "Giá trị",
+    "addVariable": "Thêm biến",
+    "addOverride": "Thêm Override",
+    "save": "Lưu",
+    "saving": "Đang lưu...",
+    "noOverrides": "Chưa có MCP override",
+    "noOverridesDescription": "Thêm biến môi trường riêng cho MCP server.",
+    "failedLoad": "Không thể tải override",
+    "failedSave": "Không thể lưu override",
+    "failedDelete": "Không thể xóa override",
+    "saved": "Đã lưu override",
+    "deleted": "Đã xóa override"
+  },
+  "status": {
+    "active": "Hoạt động",
+    "archived": "Lưu trữ"
+  },
+  "toast": {
+    "created": "Đã tạo dự án",
+    "updated": "Đã cập nhật dự án",
+    "deleted": "Đã xóa dự án",
+    "failedCreate": "Không thể tạo dự án",
+    "failedUpdate": "Không thể cập nhật dự án",
+    "failedDelete": "Không thể xóa dự án"
+  }
+}

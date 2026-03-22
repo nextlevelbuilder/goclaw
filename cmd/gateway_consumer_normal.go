@@ -37,6 +37,7 @@ func processNormalMessage(
 	contactCollector *store.ContactCollector,
 	postTurn tools.PostTurnProcessor,
 	msgBus *bus.MessageBus,
+	projectStore store.ProjectStore,
 ) {
 	// Determine target agent via bindings or explicit AgentID
 	agentID := msg.AgentID
@@ -44,7 +45,11 @@ func processNormalMessage(
 		agentID = resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 
-	agentLoop, err := agents.Get(agentID)
+	// Resolve project for this chat (nil projectStore = backward compatible)
+	channelType := resolveChannelType(channelMgr, msg.Channel)
+	projectID, projectOverrides := resolveProjectOverrides(ctx, projectStore, channelType, msg.ChatID)
+
+	agentLoop, err := agents.GetForProject(agentID, projectID, projectOverrides)
 	if err != nil {
 		slog.Warn("inbound: agent not found", "agent", agentID, "channel", msg.Channel)
 		return

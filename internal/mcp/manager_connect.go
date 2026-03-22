@@ -121,10 +121,35 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 	return registeredNames
 }
 
+// mergeEnv merges base env with project overrides.
+// Project overrides take priority (add/replace only, never remove base keys).
+func mergeEnv(base, overrides map[string]string) map[string]string {
+	if len(overrides) == 0 {
+		return base
+	}
+	merged := make(map[string]string, len(base)+len(overrides))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range overrides {
+		merged[k] = v
+	}
+	return merged
+}
+
 // connectViaPool acquires a shared connection from the pool and creates
 // per-agent BridgeTools pointing to the shared client/connected pointers.
-func (m *Manager) connectViaPool(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int) error {
-	entry, err := m.pool.Acquire(ctx, name, transportType, command, args, env, url, headers, timeoutSec)
+func (m *Manager) connectViaPool(ctx context.Context, name, transportType, command string,
+	args []string, env map[string]string, url string, headers map[string]string,
+	toolPrefix string, timeoutSec int, projectID string, projectEnvOverrides map[string]string) error {
+
+	mergedEnv := mergeEnv(env, projectEnvOverrides)
+	poolKey := name
+	if projectID != "" {
+		poolKey = name + ":" + projectID
+	}
+
+	entry, err := m.pool.Acquire(ctx, poolKey, name, transportType, command, args, mergedEnv, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
@@ -134,24 +159,25 @@ func (m *Manager) connectViaPool(ctx context.Context, name, transportType, comma
 
 	// Track server state and per-agent tool names
 	m.mu.Lock()
-	m.servers[name] = entry.state
+	m.servers[poolKey] = entry.state
 	if m.poolServers == nil {
 		m.poolServers = make(map[string]struct{})
 	}
-	m.poolServers[name] = struct{}{}
+	m.poolServers[poolKey] = struct{}{}
 	if m.poolToolNames == nil {
 		m.poolToolNames = make(map[string][]string)
 	}
-	m.poolToolNames[name] = registeredNames
+	m.poolToolNames[poolKey] = registeredNames
 	m.mu.Unlock()
 
 	if len(registeredNames) > 0 {
-		tools.RegisterToolGroup("mcp:"+name, registeredNames)
+		tools.RegisterToolGroup("mcp:"+poolKey, registeredNames)
 		m.updateMCPGroup()
 	}
 
 	slog.Info("mcp.server.connected_via_pool",
 		"server", name,
+		"poolKey", poolKey,
 		"transport", transportType,
 		"tools", len(registeredNames),
 	)

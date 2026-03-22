@@ -43,6 +43,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		Contacts:         NewPGContactStore(db),
 		Activity:         NewPGActivityStore(db),
 		Snapshots:        NewPGSnapshotStore(db),
+		Projects:         NewPGProjectStore(db),
 		SecureCLI:        NewPGSecureCLIStore(db, cfg.EncryptionKey),
 		APIKeys:           NewPGAPIKeyStore(db),
 		Heartbeats:        NewPGHeartbeatStore(db),

@@ -9,8 +9,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// wireHTTP creates HTTP handlers (agents + skills + traces + MCP + custom tools + channel instances + providers + delegations + builtin tools + pending messages).
-func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.CustomToolsHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.DelegationsHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler) {
+// wireHTTP creates HTTP handlers (agents + skills + traces + MCP + custom tools + channel instances + providers + delegations + builtin tools + pending messages + projects + team events + secure CLI).
+func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.CustomToolsHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.DelegationsHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.ProjectHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler) {
 	var agentsH *httpapi.AgentsHandler
 	var skillsH *httpapi.SkillsHandler
 	var tracesH *httpapi.TracesHandler
@@ -21,6 +21,7 @@ func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.
 	var delegationsH *httpapi.DelegationsHandler
 	var builtinToolsH *httpapi.BuiltinToolsHandler
 	var pendingMessagesH *httpapi.PendingMessagesHandler
+	var projectsH *httpapi.ProjectHandler
 	var secureCLIH *httpapi.SecureCLIHandler
 
 	if stores != nil && stores.Agents != nil {
@@ -79,9 +80,13 @@ func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.
 		pendingMessagesH = httpapi.NewPendingMessagesHandler(stores.PendingMessages, stores.Agents, token, providerReg)
 	}
 
+	if stores != nil && stores.Projects != nil {
+		projectsH = httpapi.NewProjectHandler(stores.Projects, token)
+	}
+
 	if stores != nil && stores.SecureCLI != nil {
 		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, token, msgBus)
 	}
 
-	return agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH
+	return agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, projectsH, teamEventsH, secureCLIH
 }

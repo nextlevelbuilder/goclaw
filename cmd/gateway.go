@@ -303,7 +303,7 @@ func runGateway() {
 	if mcpMgr != nil {
 		mcpToolLister = mcpMgr
 	}
-	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH := wireHTTP(pgStores, cfg.Gateway.Token, cfg.Agents.Defaults.Workspace, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, projectsH, teamEventsH, secureCLIH := wireHTTP(pgStores, cfg.Gateway.Token, cfg.Agents.Defaults.Workspace, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
 	if providersH != nil {
 		providersH.SetAPIBaseFallback(cfg.Providers.APIBaseForType)
 	}
@@ -324,6 +324,9 @@ func runGateway() {
 	server.SetWakeHandler(wakeH)
 	if mcpH != nil {
 		server.SetMCPHandler(mcpH)
+	}
+	if projectsH != nil {
+		server.SetProjectHandler(projectsH)
 	}
 	if customToolsH != nil {
 		server.SetCustomToolsHandler(customToolsH)
@@ -934,7 +937,7 @@ func runGateway() {
 		channelMgr.SetContactCollector(contactCollector) // propagate to all channel handlers
 	}
 
-	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker, pgStores.Sessions, pgStores.Agents, contactCollector, postTurn)
+	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker, pgStores.Sessions, pgStores.Agents, contactCollector, postTurn, pgStores.Projects)
 
 	// Task recovery ticker: re-dispatches stale/pending team tasks on startup and periodically.
 	var taskTicker *tasks.TaskTicker

@@ -62,6 +62,7 @@ type Server struct {
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
 	activityHandler         *httpapi.ActivityHandler         // activity audit log API
 	usageHandler            *httpapi.UsageHandler            // usage analytics API
+	projectHandler          *httpapi.ProjectHandler          // project CRUD + MCP overrides API
 	apiKeysHandler     *httpapi.APIKeysHandler      // API key management
 	apiKeyStore        store.APIKeyStore            // for API key auth lookup
 	docsHandler        *httpapi.DocsHandler         // OpenAPI spec + Swagger UI
@@ -206,6 +207,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// MCP server management API
 	if s.mcpHandler != nil {
 		s.mcpHandler.RegisterRoutes(mux)
+	}
+
+	// Project CRUD + MCP overrides API
+	if s.projectHandler != nil {
+		s.projectHandler.RegisterRoutes(mux)
 	}
 
 	// Custom tool CRUD API
@@ -557,6 +563,9 @@ func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) { s.activityHand
 
 // SetUsageHandler sets the usage analytics handler.
 func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.usageHandler = h }
+
+// SetProjectHandler sets the project CRUD + MCP overrides handler.
+func (s *Server) SetProjectHandler(h *httpapi.ProjectHandler) { s.projectHandler = h }
 
 // SetDocsHandler sets the OpenAPI spec + Swagger UI handler.
 func (s *Server) SetDocsHandler(h *httpapi.DocsHandler) { s.docsHandler = h }

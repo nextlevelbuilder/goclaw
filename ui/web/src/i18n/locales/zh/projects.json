@@ -1,0 +1,79 @@
+{
+  "title": "项目",
+  "description": "管理项目工作空间及其 MCP 服务器配置",
+  "addProject": "新建项目",
+  "searchPlaceholder": "搜索项目...",
+  "emptyTitle": "暂无项目",
+  "emptyDescription": "创建第一个项目以开始使用。",
+  "noMatchTitle": "未找到匹配项目",
+  "noMatchDescription": "请尝试其他搜索词。",
+  "columns": {
+    "name": "名称",
+    "slug": "Slug",
+    "channel": "渠道",
+    "status": "状态",
+    "overrides": "MCP 覆盖",
+    "createdBy": "创建者",
+    "actions": "操作"
+  },
+  "manageOverrides": "管理 MCP 覆盖",
+  "delete": {
+    "title": "删除项目",
+    "description": "确定要删除 \"{{name}}\" 吗？所有 MCP 覆盖也将被删除。",
+    "confirmLabel": "删除"
+  },
+  "form": {
+    "createTitle": "新建项目",
+    "editTitle": "编辑项目",
+    "name": "名称 *",
+    "slug": "Slug *",
+    "slugHint": "仅限小写字母、数字和连字符",
+    "channelType": "渠道类型",
+    "channelTypePlaceholder": "选择渠道类型...",
+    "chatId": "Chat ID",
+    "chatIdPlaceholder": "例如 -1001234567890",
+    "description": "描述",
+    "descriptionPlaceholder": "项目简要描述",
+    "status": "状态",
+    "cancel": "取消",
+    "create": "创建",
+    "update": "更新",
+    "saving": "保存中...",
+    "errors": {
+      "nameRequired": "名称和 Slug 为必填项",
+      "slugInvalid": "Slug 仅允许小写字母、数字和连字符"
+    }
+  },
+  "overrides": {
+    "title": "MCP 覆盖 — {{name}}",
+    "description": "每个项目的 MCP 服务器环境变量覆盖。敏感键（TOKEN、SECRET、PASSWORD、API_KEY）须在全局 MCP 服务器配置中设置。",
+    "serverName": "MCP 服务器 *",
+    "serverNamePlaceholder": "例如 gitlab、atlassian",
+    "envOverrides": "环境变量",
+    "envKeyPlaceholder": "变量名",
+    "envValuePlaceholder": "值",
+    "addVariable": "添加变量",
+    "addOverride": "添加覆盖",
+    "save": "保存",
+    "saving": "保存中...",
+    "noOverrides": "暂无 MCP 覆盖",
+    "noOverridesDescription": "为 MCP 服务器添加项目专属环境变量。",
+    "failedLoad": "加载覆盖失败",
+    "failedSave": "保存覆盖失败",
+    "failedDelete": "删除覆盖失败",
+    "saved": "覆盖已保存",
+    "deleted": "覆盖已删除"
+  },
+  "status": {
+    "active": "活跃",
+    "archived": "已归档"
+  },
+  "toast": {
+    "created": "项目已创建",
+    "updated": "项目已更新",
+    "deleted": "项目已删除",
+    "failedCreate": "创建项目失败",
+    "failedUpdate": "更新项目失败",
+    "failedDelete": "删除项目失败"
+  }
+}

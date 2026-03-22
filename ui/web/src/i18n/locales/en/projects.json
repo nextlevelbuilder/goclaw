@@ -1,0 +1,79 @@
+{
+  "title": "Projects",
+  "description": "Manage project workspaces and their MCP server overrides",
+  "addProject": "New Project",
+  "searchPlaceholder": "Search projects...",
+  "emptyTitle": "No projects",
+  "emptyDescription": "Create your first project to get started.",
+  "noMatchTitle": "No matching projects",
+  "noMatchDescription": "Try a different search term.",
+  "columns": {
+    "name": "Name",
+    "slug": "Slug",
+    "channel": "Channel",
+    "status": "Status",
+    "overrides": "MCP Overrides",
+    "createdBy": "Created By",
+    "actions": "Actions"
+  },
+  "manageOverrides": "Manage MCP overrides",
+  "delete": {
+    "title": "Delete Project",
+    "description": "Are you sure you want to delete \"{{name}}\"? This will also remove all MCP overrides.",
+    "confirmLabel": "Delete"
+  },
+  "form": {
+    "createTitle": "New Project",
+    "editTitle": "Edit Project",
+    "name": "Name *",
+    "slug": "Slug *",
+    "slugHint": "Lowercase letters, numbers, and hyphens only",
+    "channelType": "Channel Type",
+    "channelTypePlaceholder": "Select channel type...",
+    "chatId": "Chat ID",
+    "chatIdPlaceholder": "e.g. -1001234567890",
+    "description": "Description",
+    "descriptionPlaceholder": "Brief description of this project",
+    "status": "Status",
+    "cancel": "Cancel",
+    "create": "Create",
+    "update": "Update",
+    "saving": "Saving...",
+    "errors": {
+      "nameRequired": "Name and slug are required",
+      "slugInvalid": "Slug must be lowercase letters, numbers, and hyphens only"
+    }
+  },
+  "overrides": {
+    "title": "MCP Overrides — {{name}}",
+    "description": "Per-project environment variable overrides for MCP servers. Secret keys (TOKEN, SECRET, PASSWORD, API_KEY) must be set in the global MCP server config.",
+    "serverName": "MCP Server *",
+    "serverNamePlaceholder": "e.g. gitlab, atlassian",
+    "envOverrides": "Environment Variables",
+    "envKeyPlaceholder": "Variable name",
+    "envValuePlaceholder": "Value",
+    "addVariable": "Add Variable",
+    "addOverride": "Add Override",
+    "save": "Save",
+    "saving": "Saving...",
+    "noOverrides": "No MCP overrides configured",
+    "noOverridesDescription": "Add per-project environment variables for MCP servers.",
+    "failedLoad": "Failed to load overrides",
+    "failedSave": "Failed to save override",
+    "failedDelete": "Failed to delete override",
+    "saved": "Override saved",
+    "deleted": "Override deleted"
+  },
+  "status": {
+    "active": "Active",
+    "archived": "Archived"
+  },
+  "toast": {
+    "created": "Project created",
+    "updated": "Project updated",
+    "deleted": "Project deleted",
+    "failedCreate": "Failed to create project",
+    "failedUpdate": "Failed to update project",
+    "failedDelete": "Failed to delete project"
+  }
+}

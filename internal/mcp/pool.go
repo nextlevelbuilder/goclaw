@@ -34,25 +34,27 @@ func NewPool() *Pool {
 // Acquire returns a shared connection for the named server.
 // If no connection exists, it connects using the provided config.
 // Increments the reference count.
-func (p *Pool) Acquire(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, timeoutSec int) (*poolEntry, error) {
+// poolKey is the composite key (e.g. "name" or "name:projectID") used for
+// process isolation; name is the server name used for connectAndDiscover.
+func (p *Pool) Acquire(ctx context.Context, poolKey, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, timeoutSec int) (*poolEntry, error) {
 	p.mu.Lock()
 
-	if entry, ok := p.servers[name]; ok && entry.state.connected.Load() {
+	if entry, ok := p.servers[poolKey]; ok && entry.state.connected.Load() {
 		entry.refCount++
 		p.mu.Unlock()
-		slog.Debug("mcp.pool.reuse", "server", name, "refCount", entry.refCount)
+		slog.Debug("mcp.pool.reuse", "server", name, "poolKey", poolKey, "refCount", entry.refCount)
 		return entry, nil
 	}
 
 	// If entry exists but disconnected, close old connection first
-	if old, ok := p.servers[name]; ok {
+	if old, ok := p.servers[poolKey]; ok {
 		if old.state.cancel != nil {
 			old.state.cancel()
 		}
 		if old.state.client != nil {
 			_ = old.state.client.Close()
 		}
-		delete(p.servers, name)
+		delete(p.servers, poolKey)
 	}
 
 	p.mu.Unlock()
@@ -76,7 +78,7 @@ func (p *Pool) Acquire(ctx context.Context, name, transportType, command string,
 
 	p.mu.Lock()
 	// Check if another goroutine connected while we were connecting
-	if existing, ok := p.servers[name]; ok && existing.state.connected.Load() {
+	if existing, ok := p.servers[poolKey]; ok && existing.state.connected.Load() {
 		// Use existing, close ours
 		p.mu.Unlock()
 		hcancel()
@@ -86,26 +88,26 @@ func (p *Pool) Acquire(ctx context.Context, name, transportType, command string,
 		p.mu.Unlock()
 		return existing, nil
 	}
-	p.servers[name] = entry
+	p.servers[poolKey] = entry
 	p.mu.Unlock()
 
-	slog.Info("mcp.pool.connected", "server", name, "tools", len(mcpTools))
+	slog.Info("mcp.pool.connected", "server", name, "poolKey", poolKey, "tools", len(mcpTools))
 	return entry, nil
 }
 
 // Release decrements the reference count for a server.
 // The connection is NOT closed when refCount reaches 0 — it stays
 // alive for future agents. Use Stop() to close all connections.
-func (p *Pool) Release(name string) {
+func (p *Pool) Release(poolKey string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if entry, ok := p.servers[name]; ok {
+	if entry, ok := p.servers[poolKey]; ok {
 		entry.refCount--
 		if entry.refCount < 0 {
 			entry.refCount = 0
 		}
-		slog.Debug("mcp.pool.release", "server", name, "refCount", entry.refCount)
+		slog.Debug("mcp.pool.release", "poolKey", poolKey, "refCount", entry.refCount)
 	}
 }
 
