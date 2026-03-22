@@ -328,7 +328,10 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		AgentID:  c.agentID,
 	}
 
-	c.bus.PublishInbound(msg)
+	if !c.bus.TryPublishInbound(msg) {
+		slog.Warn("bus.inbound full, message dropped",
+			"channel", c.name, "sender_id", senderID, "chat_id", chatID)
+	}
 }
 
 // GroupMember represents a member of a group chat.

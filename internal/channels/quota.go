@@ -258,6 +258,9 @@ func (qc *QuotaChecker) Usage(ctx context.Context) QuotaUsageResult {
 			Week:   QuotaUsage{Used: week, Limit: window.Week},
 		})
 	}
+	if err := rows.Err(); err != nil {
+		slog.Warn("quota.usage: error iterating user counts", "error", err)
+	}
 
 	QueryTodaySummary(ctx, qc.db, &result)
 	return result

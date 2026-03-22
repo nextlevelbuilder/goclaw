@@ -37,6 +37,9 @@ func (s *PGMemoryStore) ListAllDocumentsGlobal(ctx context.Context) ([]store.Doc
 		}
 		result = append(result, info)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -70,6 +73,9 @@ func (s *PGMemoryStore) ListAllDocuments(ctx context.Context, agentID string) ([
 			info.UserID = *uid
 		}
 		result = append(result, info)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -158,6 +164,9 @@ func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path st
 			continue
 		}
 		result = append(result, ci)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

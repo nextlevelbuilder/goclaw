@@ -247,7 +247,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	userID := mc.SenderID
 
 	// 13. Publish to bus directly (to preserve MediaFile MIME types)
-	c.Bus().PublishInbound(bus.InboundMessage{
+	if !c.Bus().TryPublishInbound(bus.InboundMessage{
 		Channel:      c.Name(),
 		SenderID:     mc.SenderID,
 		ChatID:       chatID,
@@ -258,7 +258,10 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		AgentID:      targetAgentID,
 		HistoryLimit: c.historyLimit,
 		Metadata:     metadata,
-	})
+	}) {
+		slog.Warn("bus.inbound full, message dropped",
+			"channel", "feishu", "sender_id", mc.SenderID, "chat_id", chatID)
+	}
 
 	// Clear pending history after sending to agent.
 	if mc.ChatType == "group" {

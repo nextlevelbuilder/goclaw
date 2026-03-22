@@ -60,6 +60,9 @@ func (s *PGMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid.UUI
 		}
 		result = append(result, g)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -83,6 +86,9 @@ func (s *PGMCPServerStore) ListServerGrants(ctx context.Context, serverID uuid.U
 		}
 		result = append(result, g)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -104,6 +110,9 @@ func (s *PGMCPServerStore) CountAgentGrantsByServer(ctx context.Context) (map[uu
 			continue
 		}
 		result[serverID] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -198,6 +207,9 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 		}
 		result = append(result, info)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -247,6 +259,9 @@ func (s *PGMCPServerStore) ListPendingRequests(ctx context.Context) ([]store.MCP
 		r.ReviewedBy = derefStr(reviewedBy)
 		r.ReviewNote = derefStr(reviewNote)
 		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

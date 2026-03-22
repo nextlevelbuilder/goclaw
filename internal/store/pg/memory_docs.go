@@ -141,6 +141,9 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 		}
 		result = append(result, info)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -342,6 +345,10 @@ func (s *PGMemoryStore) BackfillEmbeddings(ctx context.Context) (int, error) {
 				continue
 			}
 			chunks = append(chunks, c)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return total, fmt.Errorf("iterate chunks without embeddings: %w", err)
 		}
 		rows.Close()
 

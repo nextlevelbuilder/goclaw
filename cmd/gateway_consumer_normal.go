@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -145,7 +146,9 @@ func processNormalMessage(
 	// Fire-and-forget: don't block message processing.
 	if teamStore != nil && msg.Channel != tools.ChannelSystem && msg.Channel != tools.ChannelTeammate && msg.Channel != tools.ChannelDashboard {
 		go func(ch, cid string) {
-			if n, err := teamStore.ClearFollowupByScope(ctx, ch, cid); err != nil {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if n, err := teamStore.ClearFollowupByScope(bgCtx, ch, cid); err != nil {
 				slog.Warn("auto-clear followup failed", "channel", ch, "chat_id", cid, "error", err)
 			} else if n > 0 {
 				slog.Info("auto-clear followup: cleared", "channel", ch, "chat_id", cid, "count", n)

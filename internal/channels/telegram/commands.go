@@ -116,7 +116,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		if isGroup {
 			peerKind = "group"
 		}
-		c.Bus().PublishInbound(bus.InboundMessage{
+		if !c.Bus().TryPublishInbound(bus.InboundMessage{
 			Channel:  c.Name(),
 			SenderID: senderID,
 			ChatID:   chatIDStr,
@@ -130,7 +130,10 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 				"is_forum":          fmt.Sprintf("%t", isForum),
 				"message_thread_id": fmt.Sprintf("%d", messageThreadID),
 			},
-		})
+		}) {
+			slog.Warn("bus.inbound full, message dropped",
+				"channel", "telegram", "command", "reset", "sender_id", senderID, "chat_id", chatIDStr)
+		}
 		msg := tu.Message(chatIDObj, "Conversation history has been reset.")
 		setThread(msg)
 		c.bot.SendMessage(ctx, msg)
@@ -141,7 +144,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		if isGroup {
 			peerKind = "group"
 		}
-		c.Bus().PublishInbound(bus.InboundMessage{
+		if !c.Bus().TryPublishInbound(bus.InboundMessage{
 			Channel:  c.Name(),
 			SenderID: senderID,
 			ChatID:   chatIDStr,
@@ -155,7 +158,10 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 				"is_forum":          fmt.Sprintf("%t", isForum),
 				"message_thread_id": fmt.Sprintf("%d", messageThreadID),
 			},
-		})
+		}) {
+			slog.Warn("bus.inbound full, message dropped",
+				"channel", "telegram", "command", "stop", "sender_id", senderID, "chat_id", chatIDStr)
+		}
 		// Feedback is sent by the consumer after cancel result is known.
 		return true
 
@@ -164,7 +170,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		if isGroup {
 			peerKind = "group"
 		}
-		c.Bus().PublishInbound(bus.InboundMessage{
+		if !c.Bus().TryPublishInbound(bus.InboundMessage{
 			Channel:  c.Name(),
 			SenderID: senderID,
 			ChatID:   chatIDStr,
@@ -178,7 +184,10 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 				"is_forum":          fmt.Sprintf("%t", isForum),
 				"message_thread_id": fmt.Sprintf("%d", messageThreadID),
 			},
-		})
+		}) {
+			slog.Warn("bus.inbound full, message dropped",
+				"channel", "telegram", "command", "stopall", "sender_id", senderID, "chat_id", chatIDStr)
+		}
 		// Feedback is sent by the consumer after cancel result is known.
 		return true
 

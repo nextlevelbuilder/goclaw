@@ -258,7 +258,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	}
 
 	// Publish directly to bus (to preserve MediaFile MIME types)
-	c.Bus().PublishInbound(bus.InboundMessage{
+	if !c.Bus().TryPublishInbound(bus.InboundMessage{
 		Channel:  c.Name(),
 		SenderID: senderID,
 		ChatID:   channelID,
@@ -268,7 +268,10 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		UserID:   senderID,
 		AgentID:  targetAgentID,
 		Metadata: metadata,
-	})
+	}) {
+		slog.Warn("bus.inbound full, message dropped",
+			"channel", "discord", "sender_id", senderID, "chat_id", channelID)
+	}
 
 	// Clear pending history after sending to agent.
 	if peerKind == "group" {

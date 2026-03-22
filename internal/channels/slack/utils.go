@@ -35,7 +35,7 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 		cc.EnsureContact(context.Background(), c.Type(), c.Name(), userID, userID, metadata["username"], "", peerKind)
 	}
 
-	c.Bus().PublishInbound(bus.InboundMessage{
+	if !c.Bus().TryPublishInbound(bus.InboundMessage{
 		Channel:  c.Name(),
 		SenderID: senderID,
 		ChatID:   chatID,
@@ -45,7 +45,10 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 		UserID:   userID,
 		Metadata: metadata,
 		AgentID:  c.AgentID(),
-	})
+	}) {
+		slog.Warn("bus.inbound full, message dropped",
+			"channel", "slack", "sender_id", senderID, "chat_id", chatID)
+	}
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override.

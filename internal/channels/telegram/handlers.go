@@ -513,7 +513,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, user.FirstName, user.Username, peerKind)
 	}
 
-	c.Bus().PublishInbound(bus.InboundMessage{
+	if !c.Bus().TryPublishInbound(bus.InboundMessage{
 		Channel:      c.Name(),
 		SenderID:     senderID,
 		ChatID:       chatIDStr,
@@ -525,7 +525,10 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		HistoryLimit: c.historyLimit,
 		ToolAllow:    topicCfg.tools,
 		Metadata:     metadata,
-	})
+	}) {
+		slog.Warn("bus.inbound full, message dropped",
+			"channel", "telegram", "sender_id", senderID, "chat_id", chatIDStr)
+	}
 
 	// Clear pending history after sending to agent.
 	if isGroup {

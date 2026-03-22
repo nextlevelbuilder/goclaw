@@ -105,6 +105,9 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 		p.APIKey = s.decryptKey(apiKey, p.Name)
 		result = append(result, p)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 

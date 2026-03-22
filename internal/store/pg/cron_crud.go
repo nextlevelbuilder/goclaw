@@ -135,6 +135,9 @@ func (s *PGCronStore) ListJobs(includeDisabled bool, agentID, userID string) []s
 		}
 		result = append(result, *job)
 	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
 	return result
 }
 

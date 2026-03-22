@@ -92,6 +92,9 @@ func (s *PGSkillStore) ListSystemSkillDirs() map[string]string {
 		}
 		dirs[slug] = path
 	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
 	return dirs
 }
 
