@@ -23,4 +23,5 @@ type MediaInfo struct {
 	FileName    string // original filename
 	FileSize    int64
 	Transcript  string // STT transcript for audio/voice (empty if not transcribed)
+	FromReply   bool   // true if media came from a replied-to/quoted message
 }

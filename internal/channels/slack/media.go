@@ -18,6 +18,7 @@ type mediaItem struct {
 	FilePath    string // local temp file path
 	FileName    string // original filename
 	ContentType string // MIME type
+	FromReply   bool   // true if media came from a replied-to/thread-parent message
 }
 
 // resolveMedia downloads and classifies files attached to a Slack message.
@@ -83,16 +84,24 @@ func classifyMime(mime string) string {
 }
 
 // buildMediaTags generates content tags for media items.
+// Items with FromReply=true are annotated so the LLM can distinguish origin.
 func buildMediaTags(items []mediaItem) string {
 	var tags []string
 	for _, m := range items {
+		var tag string
 		switch m.Type {
 		case "image":
-			tags = append(tags, "<media:image>")
+			tag = "<media:image>"
 		case "audio":
-			tags = append(tags, "<media:audio>")
+			tag = "<media:audio>"
 		case "document":
-			tags = append(tags, fmt.Sprintf("<media:document file=%q>", m.FileName))
+			tag = fmt.Sprintf("<media:document file=%q>", m.FileName)
+		}
+		if tag != "" {
+			if m.FromReply {
+				tag += " (from replied message)"
+			}
+			tags = append(tags, tag)
 		}
 	}
 	return strings.Join(tags, "\n")

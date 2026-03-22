@@ -13,32 +13,41 @@ const docMaxChars = 200_000
 
 // BuildMediaTags generates content tags for media items (matching TS media placeholder format).
 // For audio/voice items that have been transcribed, the transcript is embedded in a <transcript> block.
+// Items with FromReply=true are annotated with "(from replied message)" so the LLM can distinguish
+// media from the current message vs media from the message being replied to.
 func BuildMediaTags(mediaList []MediaInfo) string {
 	var tags []string
 	for _, m := range mediaList {
+		var tag string
 		switch m.Type {
 		case TypeImage:
-			tags = append(tags, "<media:image>")
+			tag = "<media:image>"
 		case TypeVideo, TypeAnimation:
-			tags = append(tags, "<media:video>")
+			tag = "<media:video>"
 		case TypeAudio:
 			if m.Transcript != "" {
-				tags = append(tags, fmt.Sprintf("<media:audio>\n<transcript>%s</transcript>", html.EscapeString(m.Transcript)))
+				tag = fmt.Sprintf("<media:audio>\n<transcript>%s</transcript>", html.EscapeString(m.Transcript))
 			} else {
-				tags = append(tags, "<media:audio>")
+				tag = "<media:audio>"
 			}
 		case TypeVoice:
 			if m.Transcript != "" {
-				tags = append(tags, fmt.Sprintf("<media:voice>\n<transcript>%s</transcript>", html.EscapeString(m.Transcript)))
+				tag = fmt.Sprintf("<media:voice>\n<transcript>%s</transcript>", html.EscapeString(m.Transcript))
 			} else {
-				tags = append(tags, "<media:voice>")
+				tag = "<media:voice>"
 			}
 		case TypeDocument:
 			if m.FileName != "" {
-				tags = append(tags, fmt.Sprintf("<media:document name=%q>", m.FileName))
+				tag = fmt.Sprintf("<media:document name=%q>", m.FileName)
 			} else {
-				tags = append(tags, "<media:document>")
+				tag = "<media:document>"
 			}
+		}
+		if tag != "" {
+			if m.FromReply {
+				tag += " (from replied message)"
+			}
+			tags = append(tags, tag)
 		}
 	}
 	return strings.Join(tags, "\n")

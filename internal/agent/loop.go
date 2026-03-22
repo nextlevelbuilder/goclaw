@@ -303,9 +303,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		}
 	}
 
-	// 2a. Tool mode: also load historical images into context for read_image tool.
+	// 2a. Load historical images into context for read_image tool.
 	// Without this, read_image can only see current-turn images, not previous turns.
-	if deferToReadImageTool && l.mediaStore != nil {
+	// Both inline and tool-deferred modes need this — inline mode attaches images to
+	// messages for the main LLM, but the read_image tool also needs context access
+	// to analyze historical images on demand.
+	if l.mediaStore != nil {
 		ctx = l.loadHistoricalImagesForTool(ctx, mediaRefs, messages)
 	}
 

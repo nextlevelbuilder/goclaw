@@ -110,11 +110,14 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		content = "[empty message]"
 	}
 
-	// 7b. Fetch reply context if this is a reply to another message
+	// 7b. Fetch reply context + media if this is a reply to another message
+	var replyMediaList []media.MediaInfo
 	if mc.ParentID != "" {
-		if replyCtx := c.fetchReplyContext(ctx, mc.ParentID); replyCtx != "" {
+		replyCtx, replyMedia := c.fetchReplyContext(ctx, mc.ParentID)
+		if replyCtx != "" {
 			content += "\n\n" + replyCtx
 		}
+		replyMediaList = replyMedia
 	}
 
 	// 8. Topic session
@@ -172,9 +175,13 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// 10. Resolve inbound media (image, file, audio, video, sticker)
 	var mediaList []media.MediaInfo
+	// Reply media first (context), current media second.
+	if len(replyMediaList) > 0 {
+		mediaList = append(mediaList, replyMediaList...)
+	}
 	switch mc.ContentType {
 	case "image", "file", "audio", "video", "sticker":
-		mediaList = c.resolveMediaFromMessage(ctx, mc.MessageID, mc.ContentType, msg.Content)
+		mediaList = append(mediaList, c.resolveMediaFromMessage(ctx, mc.MessageID, mc.ContentType, msg.Content)...)
 	}
 
 	// 11. Process media: STT transcription, document extraction, build tags
@@ -269,22 +276,19 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 const replyContextMaxLen = 500
 
 // fetchReplyContext fetches the parent message content and returns a formatted
-// reply context string, similar to Telegram's [Replying to ...] format.
-func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) string {
+// reply context string + any downloaded media from the parent message.
+func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) (string, []media.MediaInfo) {
 	resp, err := c.client.GetMessage(ctx, parentID)
 	if err != nil {
 		slog.Debug("feishu: failed to fetch parent message", "parent_id", parentID, "error", err)
-		return ""
+		return "", nil
 	}
 	if len(resp.Items) == 0 {
-		return ""
+		return "", nil
 	}
 
 	item := &resp.Items[0]
 	body := parseMessageContent(item.Body.Content, item.MsgType)
-	if body == "" {
-		return ""
-	}
 
 	// Resolve sender name
 	senderName := "unknown"
@@ -294,6 +298,26 @@ func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) string
 		}
 	}
 
-	body = channels.Truncate(body, replyContextMaxLen)
-	return fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", senderName, body)
+	// Build reply context text.
+	var replyCtx string
+	if body != "" {
+		body = channels.Truncate(body, replyContextMaxLen)
+		replyCtx = fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", senderName, body)
+	}
+
+	// Download media from parent message (image, file, audio, video, sticker).
+	var replyMedia []media.MediaInfo
+	switch item.MsgType {
+	case "image", "file", "audio", "video", "sticker":
+		replyMedia = c.resolveMediaFromMessage(ctx, parentID, item.MsgType, item.Body.Content)
+		for i := range replyMedia {
+			replyMedia[i].FromReply = true
+		}
+		if len(replyMedia) > 0 {
+			slog.Debug("feishu: resolved media from replied message",
+				"parent_id", parentID, "media_count", len(replyMedia))
+		}
+	}
+
+	return replyCtx, replyMedia
 }

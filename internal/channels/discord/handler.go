@@ -70,12 +70,36 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// Build content
 	content := m.Content
 
+	// Build reply context if replying to another message.
+	if m.ReferencedMessage != nil {
+		author := "unknown"
+		if m.ReferencedMessage.Author != nil {
+			author = m.ReferencedMessage.Author.Username
+		}
+		body := channels.Truncate(m.ReferencedMessage.Content, 500)
+		replyCtx := fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", author, body)
+		if content != "" {
+			content = replyCtx + "\n\n" + content
+		} else {
+			content = replyCtx
+		}
+	}
+
 	// Resolve media attachments (download files, classify types)
 	maxBytes := c.config.MediaMaxBytes
 	if maxBytes <= 0 {
 		maxBytes = defaultMediaMaxBytes
 	}
 	mediaList := resolveMedia(m.Attachments, maxBytes)
+
+	// Download media from replied-to message and merge (reply first, current second).
+	if m.ReferencedMessage != nil && len(m.ReferencedMessage.Attachments) > 0 {
+		replyMedia := resolveMedia(m.ReferencedMessage.Attachments, maxBytes)
+		for i := range replyMedia {
+			replyMedia[i].FromReply = true
+		}
+		mediaList = append(replyMedia, mediaList...)
+	}
 
 	// Process media: STT, document extraction, build tags
 	var mediaFiles []bus.MediaFile
@@ -142,6 +166,12 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 				mentioned = true
 				break
 			}
+		}
+		// Reply to bot's message counts as implicit mention.
+		if !mentioned && m.ReferencedMessage != nil &&
+			m.ReferencedMessage.Author != nil &&
+			m.ReferencedMessage.Author.ID == c.botUserID {
+			mentioned = true
 		}
 		if !mentioned {
 			// Collect media file paths for group history context.

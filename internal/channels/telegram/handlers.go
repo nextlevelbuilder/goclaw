@@ -314,10 +314,15 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	// Deferred until after mention + pairing gates to avoid downloading
 	// media for messages that only get recorded in pending history.
 	mediaList, mediaErrors := c.resolveMedia(ctx, message)
-	if message.ReplyToMessage != nil && len(mediaList) == 0 {
+	if message.ReplyToMessage != nil {
 		replyMedia, replyErrors := c.resolveMedia(ctx, message.ReplyToMessage)
 		if len(replyMedia) > 0 {
-			mediaList = append(mediaList, replyMedia...)
+			// Tag reply media so LLM knows which images came from the replied-to message.
+			for i := range replyMedia {
+				replyMedia[i].FromReply = true
+			}
+			// Reply media first (context), current media second.
+			mediaList = append(replyMedia, mediaList...)
 			slog.Debug("telegram: resolved media from replied message",
 				"reply_msg_id", message.ReplyToMessage.MessageID,
 				"media_count", len(replyMedia),
