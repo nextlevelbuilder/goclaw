@@ -16,5 +16,14 @@
   "pendingPairingRequests": "{{count}} 个待处理配对请求",
   "apiKeys": "API Keys",
   "documents": "文档",
+  "about": {
+    "menuItem": "关于 GoClaw",
+    "title": "关于 GoClaw",
+    "version": "版本",
+    "sourceCode": "源代码",
+    "license": "许可证",
+    "documentation": "文档",
+    "reportBug": "报告问题"
+  },
   "toggleTheme": "切换主题"
 }

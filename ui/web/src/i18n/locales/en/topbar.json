@@ -12,6 +12,15 @@
   "pendingPairingRequests": "{{count}} pending pairing requests",
   "apiKeys": "API Keys",
   "documents": "Documents",
+  "about": {
+    "menuItem": "About GoClaw",
+    "title": "About GoClaw",
+    "version": "Version",
+    "sourceCode": "Source Code",
+    "license": "License",
+    "documentation": "Documentation",
+    "reportBug": "Report a Bug"
+  },
   "languages": {
     "en": "English",
     "vi": "Tiếng Việt",
