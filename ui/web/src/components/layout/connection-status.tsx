@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { cn } from "@/lib/utils";
+import { cleanVersion } from "@/lib/clean-version";
 
 export function ConnectionStatus({ collapsed }: { collapsed?: boolean }) {
   const { t } = useTranslation("common");
@@ -19,7 +20,7 @@ export function ConnectionStatus({ collapsed }: { collapsed?: boolean }) {
         <span className="truncate">
           {connected ? t("connected") : t("disconnected")}
           {connected && serverVersion && (
-            <span className="ml-1 opacity-60">· {serverVersion}</span>
+            <span className="ml-1 opacity-60">· {cleanVersion(serverVersion)}</span>
           )}
         </span>
       )}

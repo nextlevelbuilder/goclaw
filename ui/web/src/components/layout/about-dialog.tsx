@@ -4,6 +4,7 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { useWsCall } from "@/hooks/use-ws-call";
 import { Methods } from "@/api/protocol";
 import type { HealthPayload } from "@/pages/overview/types";
+import { cleanVersion } from "@/lib/clean-version";
 import {
   Dialog,
   DialogContent,
@@ -15,12 +16,6 @@ import {
 interface AboutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-// Strip git build metadata from version: "v2.5.1-3-g4fd653c1" → "v2.5.1"
-function cleanVersion(v: string): string {
-  const match = v.match(/^(v?\d+\.\d+\.\d+)/);
-  return match?.[1] ?? v;
 }
 
 export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
