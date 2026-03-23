@@ -769,6 +769,28 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 		if err != nil {
 			l.emitLLMSpanEnd(ctx, llmSpanID, llmSpanStart, nil, err)
+
+			// Handle context window overflow: perform emergency history pruning and retry the turn.
+			if providers.IsContextOverflowError(err) && iteration < maxIter && len(messages) > 2 {
+				slog.Warn("context overflow detected, pruning and retrying",
+					"agent", l.id, "iteration", iteration, "messages", len(messages))
+
+				// 1. Kick off long-term maintenance (asynchronous summary and session cleanup).
+				l.maybeSummarize(ctx, req.SessionKey)
+
+				// 2. Perform immediate in-memory pruning of current turn history to clear window space.
+				// Keep [0] (System Prompt) and prune roughly oldest 50% of the remaining history.
+				pivot := len(messages) / 2
+				if pivot < 2 {
+					pivot = 2 // ensure we keep at least the system prompt
+				}
+				messages = append(messages[:1], messages[pivot:]...)
+
+				// 3. Retry the same turn
+				iteration--
+				continue
+			}
+
 			return nil, fmt.Errorf("LLM call failed (iteration %d): %w", iteration, err)
 		}
 

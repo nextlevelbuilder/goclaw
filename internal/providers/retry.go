@@ -95,6 +95,21 @@ func IsRetryableError(err error) bool {
 	return false
 }
 
+// IsContextOverflowError checks if an error indicates a context window/length limit has been exceeded.
+// Recognizes common provider strings for context window exhaustion across multiple LLM backends.
+func IsContextOverflowError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	// Match standard context window stop reason strings and provider-specific error variants.
+	return strings.Contains(lower, "context_window_exceeded") ||
+		strings.Contains(lower, "context_length_exceeded") ||
+		strings.Contains(lower, "context_overflow") ||
+		strings.Contains(lower, "too many tokens") ||
+		strings.Contains(lower, "maximum context length")
+}
+
 // RetryDo executes fn with retry logic using exponential backoff and jitter.
 func RetryDo[T any](ctx context.Context, cfg RetryConfig, fn func() (T, error)) (T, error) {
 	if cfg.Attempts <= 0 {
