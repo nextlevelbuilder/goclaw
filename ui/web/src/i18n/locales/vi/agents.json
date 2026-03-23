@@ -385,6 +385,8 @@
       "description": "Tìm kiếm bộ nhớ ngữ nghĩa và cấu hình nhúng",
       "enabled": "Đã bật",
       "enabledTip": "Bật/tắt hệ thống bộ nhớ cho agent này.",
+      "embeddingDimensions": "Số chiều nhúng",
+      "embeddingDimensionsTip": "Số chiều đầu ra nhúng. Cần thiết cho provider tự host (ví dụ Ollama) có model xuất nhiều hơn 1536 chiều. Để trống dùng mặc định (1536).",
       "maxChunkLen": "Độ dài chunk tối đa",
       "maxChunkLenTip": "Số ký tự tối đa mỗi chunk. Để trống dùng mặc định hệ thống.",
       "chunkOverlap": "Chunk Overlap",

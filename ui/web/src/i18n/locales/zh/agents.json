@@ -385,6 +385,8 @@
       "description": "语义记忆搜索和嵌入配置",
       "enabled": "已启用",
       "enabledTip": "启用或禁用此Agent的记忆系统。",
+      "embeddingDimensions": "嵌入维度",
+      "embeddingDimensionsTip": "嵌入输出的维度数。自托管提供商（如 Ollama）的模型输出超过 1536 维时需要设置。留空使用默认值（1536）。",
       "maxChunkLen": "最大块长度",
       "maxChunkLenTip": "每个记忆块的最大字符数。留空使用系统默认值。",
       "chunkOverlap": "块重叠",

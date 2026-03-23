@@ -26,6 +26,18 @@ export function MemorySection({ value, onChange }: MemorySectionProps) {
           />
           <InfoLabel tip={t(`${s}.enabledTip`)}>{t(`${s}.enabled`)}</InfoLabel>
         </div>
+        <div className="space-y-2">
+          <InfoLabel tip={t(`${s}.embeddingDimensionsTip`)}>{t(`${s}.embeddingDimensions`)}</InfoLabel>
+          <Input
+            type="number"
+            min={1}
+            max={1536}
+            placeholder="1536"
+            value={value.embedding_dimensions ?? ""}
+            onChange={(e) => onChange({ ...value, embedding_dimensions: numOrUndef(e.target.value) })}
+            className="text-base md:text-sm"
+          />
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <InfoLabel tip={t(`${s}.maxChunkLenTip`)}>{t(`${s}.maxChunkLen`)}</InfoLabel>

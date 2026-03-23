@@ -176,6 +176,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
             modelPlaceholder="text-embedding-3-small"
             allowEmpty
           />
+          <Field label={t("agents.memory.embeddingDimensions")} tip={t("agents.memory.embeddingDimensionsTip")} type="number" value={memory.embedding_dimensions} onChange={(v) => updateNested("memory", { embedding_dimensions: v ? Number(v) : undefined })} placeholder="1536" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label={t("agents.memory.maxResults")} tip={t("agents.memory.maxResultsTip")} type="number" value={memory.max_results} onChange={(v) => updateNested("memory", { max_results: Number(v) })} placeholder="6" />
             <Field label={t("agents.memory.minScore")} tip={t("agents.memory.minScoreTip")} type="number" step="0.01" value={memory.min_score} onChange={(v) => updateNested("memory", { min_score: Number(v) })} placeholder="0.35" />

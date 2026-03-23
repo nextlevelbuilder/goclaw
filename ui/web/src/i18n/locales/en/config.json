@@ -85,6 +85,8 @@
   "agents.memory.embeddingModel": "Embedding Model",
   "agents.memory.embeddingProviderTip": "Provider used to generate text embeddings for memory storage.",
   "agents.memory.embeddingModelTip": "Embedding model name. Leave empty to use the provider default.",
+  "agents.memory.embeddingDimensions": "Embedding Dimensions",
+  "agents.memory.embeddingDimensionsTip": "Number of dimensions for embedding output. Required for self-hosted providers (e.g. Ollama) whose models output more than 1536 dimensions. Leave empty for OpenAI/Gemini.",
   "agents.memory.maxResults": "Max Results",
   "agents.memory.maxResultsTip": "Maximum number of memory entries returned per recall query.",
   "agents.memory.maxChunkLen": "Max Chunk Length",

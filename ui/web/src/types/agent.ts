@@ -62,6 +62,7 @@ export interface MemoryConfig {
   enabled?: boolean;
   embedding_provider?: string;
   embedding_model?: string;
+  embedding_dimensions?: number;
   max_results?: number;
   max_chunk_len?: number;
   chunk_overlap?: number;

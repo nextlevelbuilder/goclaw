@@ -85,6 +85,8 @@
   "agents.memory.embeddingModel": "Model nhúng",
   "agents.memory.embeddingProviderTip": "Provider dùng để tạo nhúng văn bản cho lưu trữ bộ nhớ.",
   "agents.memory.embeddingModelTip": "Tên model nhúng. Để trống để dùng mặc định của provider.",
+  "agents.memory.embeddingDimensions": "Số chiều nhúng",
+  "agents.memory.embeddingDimensionsTip": "Số chiều cho đầu ra nhúng. Cần thiết cho provider tự host (ví dụ Ollama) có model xuất nhiều hơn 1536 chiều. Để trống cho OpenAI/Gemini.",
   "agents.memory.maxResults": "Kết quả tối đa",
   "agents.memory.maxResultsTip": "Số mục bộ nhớ tối đa trả về cho mỗi truy vấn.",
   "agents.memory.maxChunkLen": "Độ dài chunk tối đa",

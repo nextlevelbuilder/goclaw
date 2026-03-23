@@ -385,6 +385,8 @@
       "description": "Semantic memory search and embedding configuration",
       "enabled": "Enabled",
       "enabledTip": "Enable or disable the memory system for this agent.",
+      "embeddingDimensions": "Embedding Dimensions",
+      "embeddingDimensionsTip": "Output dimensions for embeddings. Required for self-hosted providers (e.g. Ollama) whose models output more than 1536 dimensions. Leave empty to use default (1536).",
       "maxChunkLen": "Max Chunk Length",
       "maxChunkLenTip": "Maximum characters per memory chunk. Leave empty for system default.",
       "chunkOverlap": "Chunk Overlap",

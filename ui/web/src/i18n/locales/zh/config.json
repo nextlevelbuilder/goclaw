@@ -85,6 +85,8 @@
   "agents.memory.embeddingModel": "嵌入模型",
   "agents.memory.embeddingProviderTip": "用于生成记忆存储文本嵌入的提供商。",
   "agents.memory.embeddingModelTip": "嵌入模型名称。留空则使用提供商默认值。",
+  "agents.memory.embeddingDimensions": "嵌入维度",
+  "agents.memory.embeddingDimensionsTip": "嵌入输出的维度数。自托管提供商（如 Ollama）的模型输出超过 1536 维时需要设置。OpenAI/Gemini 留空即可。",
   "agents.memory.maxResults": "最大结果数",
   "agents.memory.maxResultsTip": "每次召回查询返回的最大记忆条目数。",
   "agents.memory.maxChunkLen": "最大块长度",
