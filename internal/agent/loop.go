@@ -500,7 +500,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	}
 
 	// 4. Run LLM iteration loop
-	var loopDetector toolLoopState // detects repeated no-progress tool calls
+	loopDetector := newToolLoopState(l.toolLoopCfg) // detects repeated no-progress tool calls
 	var totalUsage providers.Usage
 	iteration := 0
 	totalToolCalls := 0

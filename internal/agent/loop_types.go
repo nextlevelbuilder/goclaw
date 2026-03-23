@@ -115,6 +115,9 @@ type Loop struct {
 	// Thinking level for extended thinking support
 	thinkingLevel string
 
+	// Tool loop detection config (per-agent overrides, nil = use defaults)
+	toolLoopCfg *store.ToolLoopConfig
+
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
 
@@ -243,6 +246,9 @@ type LoopConfig struct {
 	// Thinking level: "off", "low", "medium", "high" (from agent other_config)
 	ThinkingLevel string
 
+	// Tool loop detection config (per-agent overrides, nil = use defaults)
+	ToolLoopCfg *store.ToolLoopConfig
+
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
 
@@ -351,6 +357,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		builtinToolSettings:    cfg.BuiltinToolSettings,
 		disabledTools:          cfg.DisabledTools,
 		thinkingLevel:          cfg.ThinkingLevel,
+		toolLoopCfg:            cfg.ToolLoopCfg,
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,

@@ -6,22 +6,80 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// Tool loop detection thresholds (per-run, not per-session).
+// Default tool loop detection thresholds (per-run, not per-session).
+// These are used when no per-agent overrides are configured.
 const (
-	toolLoopHistorySize       = 30
-	toolLoopWarningThreshold  = 3 // inject warning into conversation
-	toolLoopCriticalThreshold = 5 // force stop the iteration loop
+	defaultToolLoopHistorySize       = 30
+	defaultToolLoopWarningThreshold  = 3 // inject warning into conversation
+	defaultToolLoopCriticalThreshold = 5 // force stop the iteration loop
 
 	// Read-only streak: consecutive non-mutating tool calls without any write/edit.
-	readOnlyStreakWarning  = 8
-	readOnlyStreakCritical = 12
+	defaultReadOnlyStreakWarning  = 8
+	defaultReadOnlyStreakCritical = 12
 
 	// Same-result: same tool returning identical results with different args.
-	sameResultWarning  = 4
-	sameResultCritical = 6
+	defaultSameResultWarning  = 4
+	defaultSameResultCritical = 6
 )
+
+// toolLoopThresholds holds the resolved thresholds for a single run.
+type toolLoopThresholds struct {
+	historySize       int
+	warningThreshold  int
+	criticalThreshold int
+	readOnlyWarning   int
+	readOnlyCritical  int
+	sameResultWarning  int
+	sameResultCritical int
+}
+
+// defaultToolLoopThresholds returns the hardcoded default thresholds.
+func defaultToolLoopThresholds() toolLoopThresholds {
+	return toolLoopThresholds{
+		historySize:        defaultToolLoopHistorySize,
+		warningThreshold:   defaultToolLoopWarningThreshold,
+		criticalThreshold:  defaultToolLoopCriticalThreshold,
+		readOnlyWarning:    defaultReadOnlyStreakWarning,
+		readOnlyCritical:   defaultReadOnlyStreakCritical,
+		sameResultWarning:  defaultSameResultWarning,
+		sameResultCritical: defaultSameResultCritical,
+	}
+}
+
+// mergeToolLoopConfig returns thresholds with per-agent overrides applied.
+// Non-zero values in cfg override the defaults.
+func mergeToolLoopConfig(cfg *store.ToolLoopConfig) toolLoopThresholds {
+	t := defaultToolLoopThresholds()
+	if cfg == nil {
+		return t
+	}
+	if cfg.HistorySize > 0 {
+		t.historySize = cfg.HistorySize
+	}
+	if cfg.WarningThreshold > 0 {
+		t.warningThreshold = cfg.WarningThreshold
+	}
+	if cfg.CriticalThreshold > 0 {
+		t.criticalThreshold = cfg.CriticalThreshold
+	}
+	if cfg.ReadOnlyWarning > 0 {
+		t.readOnlyWarning = cfg.ReadOnlyWarning
+	}
+	if cfg.ReadOnlyCritical > 0 {
+		t.readOnlyCritical = cfg.ReadOnlyCritical
+	}
+	if cfg.SameResultWarning > 0 {
+		t.sameResultWarning = cfg.SameResultWarning
+	}
+	if cfg.SameResultCritical > 0 {
+		t.sameResultCritical = cfg.SameResultCritical
+	}
+	return t
+}
 
 // mutatingTools are tools that indicate real progress (write/create/action).
 // exec is excluded: ambiguous (could be ls or rm). It neither resets nor
@@ -36,7 +94,15 @@ var mutatingTools = map[string]bool{
 
 // toolLoopState tracks recent tool calls within a single agent run
 // to detect infinite loops (same tool + same args + same result).
+// newToolLoopState creates a toolLoopState with resolved thresholds.
+func newToolLoopState(cfg *store.ToolLoopConfig) toolLoopState {
+	return toolLoopState{
+		cfg: mergeToolLoopConfig(cfg),
+	}
+}
+
 type toolLoopState struct {
+	cfg            toolLoopThresholds
 	history        []toolCallRecord
 	readOnlyStreak int // consecutive non-mutating, non-exec tool calls
 }
@@ -54,8 +120,8 @@ func (s *toolLoopState) record(toolName string, args map[string]any) string {
 		toolName: toolName,
 		argsHash: h,
 	})
-	if len(s.history) > toolLoopHistorySize {
-		s.history = s.history[len(s.history)-toolLoopHistorySize:]
+	if len(s.history) > s.cfg.historySize {
+		s.history = s.history[len(s.history)-s.cfg.historySize:]
 	}
 	return h
 }
@@ -76,7 +142,7 @@ func (s *toolLoopState) recordResult(argsHash, resultContent string) {
 // detect checks for repeated no-progress tool calls.
 // Returns level ("warning", "critical", or "") and a human-readable message.
 func (s *toolLoopState) detect(toolName string, argsHash string) (level, message string) {
-	if len(s.history) < toolLoopWarningThreshold {
+	if len(s.history) < s.cfg.warningThreshold {
 		return "", ""
 	}
 
@@ -101,13 +167,13 @@ func (s *toolLoopState) detect(toolName string, argsHash string) (level, message
 		}
 	}
 
-	if noProgressCount >= toolLoopCriticalThreshold {
+	if noProgressCount >= s.cfg.criticalThreshold {
 		return "critical", fmt.Sprintf(
 			"CRITICAL: %s has been called %d times with identical arguments and results. "+
 				"Stopping to prevent runaway loop.", toolName, noProgressCount)
 	}
 
-	if noProgressCount >= toolLoopWarningThreshold {
+	if noProgressCount >= s.cfg.warningThreshold {
 		return "warning", fmt.Sprintf(
 			"[System: WARNING — %s has been called %d times with the same arguments and identical results. "+
 				"This is not making progress. Try a completely different approach, use different tools, "+
@@ -133,12 +199,12 @@ func (s *toolLoopState) recordMutation(toolName string) {
 // detectReadOnlyStreak checks for long runs of read-only tool calls
 // without any write/edit action. Returns level and message.
 func (s *toolLoopState) detectReadOnlyStreak() (level, message string) {
-	if s.readOnlyStreak >= readOnlyStreakCritical {
+	if s.readOnlyStreak >= s.cfg.readOnlyCritical {
 		return "critical", fmt.Sprintf(
 			"CRITICAL: %d consecutive read-only tool calls without any write/edit action. "+
 				"Stopping to prevent runaway loop.", s.readOnlyStreak)
 	}
-	if s.readOnlyStreak >= readOnlyStreakWarning {
+	if s.readOnlyStreak >= s.cfg.readOnlyWarning {
 		return "warning", fmt.Sprintf(
 			"[System: WARNING — You have made %d consecutive read-only tool calls (list_files, read_file, find, etc.) "+
 				"without writing or editing any file. If you already have the information you need, use the edit or "+
@@ -161,12 +227,12 @@ func (s *toolLoopState) detectSameResult(toolName, resultHash string) (level, me
 			count++
 		}
 	}
-	if count >= sameResultCritical {
+	if count >= s.cfg.sameResultCritical {
 		return "critical", fmt.Sprintf(
 			"CRITICAL: %s returned identical results %d times (with different arguments). "+
 				"Stopping to prevent runaway loop.", toolName, count)
 	}
-	if count >= sameResultWarning {
+	if count >= s.cfg.sameResultWarning {
 		return "warning", fmt.Sprintf(
 			"[System: WARNING — %s has returned the same result %d times with different arguments. "+
 				"The information is already in your context. Stop re-reading and take action — "+

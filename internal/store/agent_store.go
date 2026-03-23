@@ -235,6 +235,33 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return *cfg.SkillNudgeInterval
 }
 
+// ToolLoopConfig holds per-agent overrides for tool loop detection thresholds.
+// Zero values mean "use default". Only non-zero values override the hardcoded defaults.
+type ToolLoopConfig struct {
+	HistorySize        int `json:"history_size,omitempty"`
+	WarningThreshold   int `json:"warning_threshold,omitempty"`
+	CriticalThreshold  int `json:"critical_threshold,omitempty"`
+	ReadOnlyWarning    int `json:"read_only_warning,omitempty"`
+	ReadOnlyCritical   int `json:"read_only_critical,omitempty"`
+	SameResultWarning  int `json:"same_result_warning,omitempty"`
+	SameResultCritical int `json:"same_result_critical,omitempty"`
+}
+
+// ParseToolLoopConfig extracts tool_loop from other_config JSONB.
+// Returns nil if not configured.
+func (a *AgentData) ParseToolLoopConfig() *ToolLoopConfig {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var cfg struct {
+		ToolLoop *ToolLoopConfig `json:"tool_loop"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
+		return nil
+	}
+	return cfg.ToolLoop
+}
+
 // WorkspaceSharingConfig controls per-user workspace isolation.
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.

@@ -379,6 +379,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			BuiltinToolSettings:    builtinSettings,
 			DisabledTools:          disabledTools,
 			ThinkingLevel:          ag.ParseThinkingLevel(),
+			ToolLoopCfg:            ag.ParseToolLoopConfig(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),
