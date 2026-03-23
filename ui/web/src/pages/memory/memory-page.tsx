@@ -4,6 +4,13 @@ import { Brain, Plus, RefreshCw, Search, Database, Trash2, RotateCw } from "luci
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
@@ -19,6 +26,9 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
 import type { MemoryDocument } from "@/types/memory";
+
+const ALL_AGENTS_VALUE = "__all_agents__";
+const ALL_SCOPE_VALUE = "__all_scope__";
 
 export function MemoryPage() {
   const { t } = useTranslation("memory");
@@ -142,35 +152,48 @@ export function MemoryPage() {
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="grid gap-1.5">
           <Label htmlFor="mem-agent" className="text-xs">{t("filters.agent")}</Label>
-          <select
-            id="mem-agent"
-            value={agentId}
-            onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); setPage(1); }}
-            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
+          <Select
+            value={agentId || ALL_AGENTS_VALUE}
+            onValueChange={(value) => {
+              setAgentId(value === ALL_AGENTS_VALUE ? "" : value);
+              setUserIdFilter("");
+              setPage(1);
+            }}
           >
-            <option value="">{t("filters.allAgents")}</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.display_name || a.agent_key}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="mem-agent" className="h-9 min-w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value={ALL_AGENTS_VALUE}>{t("filters.allAgents")}</SelectItem>
+              {agents.map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  {a.display_name || a.agent_key}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="mem-scope" className="text-xs">{t("filters.scope")}</Label>
-          <select
-            id="mem-scope"
-            value={userIdFilter}
-            onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
-            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm min-w-[180px]"
+          <Select
+            value={userIdFilter || ALL_SCOPE_VALUE}
+            onValueChange={(value) => {
+              setUserIdFilter(value === ALL_SCOPE_VALUE ? "" : value);
+              setPage(1);
+            }}
           >
-            <option value="">{t("filters.allScope")}</option>
-            {userIds.map((uid) => (
-              <option key={uid} value={uid}>
-                {formatScopeLabel(uid, resolveContact)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="mem-scope" className="h-9 min-w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value={ALL_SCOPE_VALUE}>{t("filters.allScope")}</SelectItem>
+              {userIds.map((uid) => (
+                <SelectItem key={uid} value={uid}>
+                  {formatScopeLabel(uid, resolveContact)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         {agentId && (
           <Button

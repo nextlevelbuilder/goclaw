@@ -4,6 +4,7 @@
   "openMenu": "Open menu",
   "systemSettings": "System Settings",
   "toggleTheme": "Toggle theme",
+  "colorPreset": "Color preset",
   "logout": "Logout",
   "logoutConfirm": "Are you sure you want to logout?",
   "language": "Language",
@@ -29,5 +30,9 @@
     "en": "English",
     "vi": "Tiếng Việt",
     "zh": "中文"
+  },
+  "colorPresets": {
+    "classic": "Classic",
+    "midnight": "Midnight"
   }
 }

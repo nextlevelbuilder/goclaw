@@ -3,11 +3,15 @@ import { useTranslation } from "react-i18next";
 import { Network } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
 import { useSessions } from "@/pages/sessions/hooks/use-sessions";
 import { parseSessionKey } from "@/lib/session-key";
 import { KGEntitiesTab } from "@/pages/memory/kg-entities-tab";
+
+const KG_AGENT_PLACEHOLDER_VALUE = "__select_agent__";
+const KG_SCOPE_PLACEHOLDER_VALUE = "__all_scope__";
 
 export function KnowledgeGraphPage() {
   const { t } = useTranslation("memory");
@@ -56,31 +60,42 @@ export function KnowledgeGraphPage() {
             )}
           </p>
         </div>
-        <select
-          id="kg-agent"
-          value={agentId}
-          onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); }}
-          className="h-8 rounded-md border bg-background px-2 text-base md:text-sm"
+        <Select
+          value={agentId || KG_AGENT_PLACEHOLDER_VALUE}
+          onValueChange={(value) => {
+            setAgentId(value === KG_AGENT_PLACEHOLDER_VALUE ? "" : value);
+            setUserIdFilter("");
+          }}
         >
-          <option value="">{t("filters.selectAgent")}</option>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.display_name || a.agent_key}
-            </option>
-          ))}
-        </select>
-        {agentId && (
-          <select
-            id="kg-scope"
-            value={userIdFilter}
-            onChange={(e) => setUserIdFilter(e.target.value)}
-            className="h-8 rounded-md border bg-background px-2 text-base md:text-sm max-w-[240px]"
-          >
-            <option value="">{t("filters.allScope")}</option>
-            {scopeOptions.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+          <SelectTrigger id="kg-agent" className="h-8 min-w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start">
+            <SelectItem value={KG_AGENT_PLACEHOLDER_VALUE}>{t("filters.selectAgent")}</SelectItem>
+            {agents.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.display_name || a.agent_key}
+              </SelectItem>
             ))}
-          </select>
+          </SelectContent>
+        </Select>
+        {agentId && (
+          <Select
+            value={userIdFilter || KG_SCOPE_PLACEHOLDER_VALUE}
+            onValueChange={(value) => setUserIdFilter(value === KG_SCOPE_PLACEHOLDER_VALUE ? "" : value)}
+          >
+            <SelectTrigger id="kg-scope" className="h-8 min-w-[220px] max-w-[280px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value={KG_SCOPE_PLACEHOLDER_VALUE}>{t("filters.allScope")}</SelectItem>
+              {scopeOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </div>
 
@@ -92,18 +107,25 @@ export function KnowledgeGraphPage() {
             title={t("kg.selectAgentTitle")}
             description={t("kg.selectAgentDescription")}
             action={
-              <select
-                value={agentId}
-                onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); }}
-                className="mt-2 h-9 rounded-md border bg-background px-3 text-base md:text-sm"
+              <Select
+                value={agentId || KG_AGENT_PLACEHOLDER_VALUE}
+                onValueChange={(value) => {
+                  setAgentId(value === KG_AGENT_PLACEHOLDER_VALUE ? "" : value);
+                  setUserIdFilter("");
+                }}
               >
-                <option value="">{t("filters.selectAgent")}</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.display_name || a.agent_key}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="mt-2 h-9 min-w-[220px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectItem value={KG_AGENT_PLACEHOLDER_VALUE}>{t("filters.selectAgent")}</SelectItem>
+                  {agents.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.display_name || a.agent_key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             }
           />
         ) : (

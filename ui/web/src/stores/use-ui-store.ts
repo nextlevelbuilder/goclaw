@@ -1,17 +1,24 @@
 import { create } from "zustand";
 import i18n from "@/i18n";
-import { LOCAL_STORAGE_KEYS, type Language } from "@/lib/constants";
+import {
+  COLOR_PRESETS,
+  LOCAL_STORAGE_KEYS,
+  type ColorPreset,
+  type Language,
+} from "@/lib/constants";
 
 export type Theme = "light" | "dark" | "system";
 
 interface UiState {
   theme: Theme;
+  colorPreset: ColorPreset;
   language: Language;
   timezone: string; // IANA timezone or "auto"
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
 
   setTheme: (theme: Theme) => void;
+  setColorPreset: (preset: ColorPreset) => void;
   setLanguage: (language: Language) => void;
   setTimezone: (tz: string) => void;
   toggleSidebar: () => void;
@@ -19,8 +26,16 @@ interface UiState {
   setMobileSidebarOpen: (open: boolean) => void;
 }
 
+const savedColorPreset = localStorage.getItem(LOCAL_STORAGE_KEYS.COLOR_PRESET);
+const initialColorPreset: ColorPreset = COLOR_PRESETS.includes(
+  savedColorPreset as ColorPreset,
+)
+  ? (savedColorPreset as ColorPreset)
+  : "classic";
+
 export const useUiStore = create<UiState>((set) => ({
   theme: (localStorage.getItem(LOCAL_STORAGE_KEYS.THEME) as Theme) ?? "dark",
+  colorPreset: initialColorPreset,
   language: (i18n.language as Language) ?? "en",
   timezone: localStorage.getItem(LOCAL_STORAGE_KEYS.TIMEZONE) ?? "auto",
   sidebarCollapsed:
@@ -30,6 +45,11 @@ export const useUiStore = create<UiState>((set) => ({
   setTheme: (theme) => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, theme);
     set({ theme });
+  },
+
+  setColorPreset: (preset) => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.COLOR_PRESET, preset);
+    set({ colorPreset: preset });
   },
 
   setLanguage: (language) => {
