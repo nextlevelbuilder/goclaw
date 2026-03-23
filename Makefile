@@ -1,4 +1,4 @@
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
@@ -22,7 +22,10 @@ UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f
 net:
 	docker network inspect shared >/dev/null 2>&1 || docker network create shared
 
-up: net
+version-file:
+	@echo $(VERSION) > VERSION
+
+up: net version-file
 	$(COMPOSE) up -d --build
 	$(UPGRADE) run --rm upgrade
 
@@ -32,7 +35,7 @@ down:
 logs:
 	$(COMPOSE) logs -f goclaw
 
-reset: net
+reset: net version-file
 	$(COMPOSE) down -v
 	$(COMPOSE) up -d --build
 

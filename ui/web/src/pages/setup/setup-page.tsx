@@ -11,6 +11,8 @@ import { StepChannel } from "./step-channel";
 import { SetupCompleteModal } from "./setup-complete-modal";
 import { Building2 } from "lucide-react";
 import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, LOCAL_STORAGE_KEYS } from "@/lib/constants";
+import { markSetupSkipped } from "@/lib/setup-skip";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useTenants } from "@/hooks/use-tenants";
 import type { ProviderData } from "@/types/provider";
@@ -78,6 +80,8 @@ function TenantSwitcher() {
 export function SetupPage() {
   const { t } = useTranslation("setup");
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.userId);
+  const { currentTenantId, currentTenantSlug } = useTenants();
   const { currentStep, loading, providers, agents } = useBootstrapStatus();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [createdProvider, setCreatedProvider] = useState<ProviderData | null>(null);
@@ -170,6 +174,7 @@ export function SetupPage() {
             className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
             onClick={() => {
               if (window.confirm(t("skipSetupConfirm"))) {
+                markSetupSkipped({ userId, tenantId: currentTenantId, tenantSlug: currentTenantSlug });
                 navigate(ROUTES.OVERVIEW, { replace: true });
               }
             }}

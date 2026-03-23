@@ -752,6 +752,8 @@ func runGateway() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	server.StartUpdateChecker(ctx)
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 

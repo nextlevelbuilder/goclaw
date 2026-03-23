@@ -146,8 +146,9 @@ func (h *PendingMessagesHandler) handleCompact(w http.ResponseWriter, r *http.Re
 	if keepRecent <= 0 {
 		keepRecent = 15
 	}
+	tenantID := store.TenantIDFromContext(r.Context())
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+		ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 180*time.Second)
 		defer cancel()
 		remaining, err := channels.CompactGroup(ctx, h.store, req.ChannelName, req.HistoryKey, provider, model, keepRecent, h.maxTokens)
 		if err != nil {

@@ -15,6 +15,9 @@ export interface HealthPayload {
   tools?: number;
   clients?: ClientInfo[];
   currentId?: string;
+  latestVersion?: string;
+  updateAvailable?: boolean;
+  updateUrl?: string;
 }
 
 export interface AgentInfo {

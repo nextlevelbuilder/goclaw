@@ -240,6 +240,11 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if base, ok := ch.(interface{ SetTenantID(uuid.UUID) }); ok {
 		base.SetTenantID(inst.TenantID)
 	}
+	// Propagate tenant_id to pending history for compaction/sweep DB operations.
+	// Factory creates PendingHistory before SetTenantID is called, so tenantID is uuid.Nil at construction.
+	if ph, ok := ch.(interface{ SetPendingHistoryTenantID(uuid.UUID) }); ok {
+		ph.SetPendingHistoryTenantID(inst.TenantID)
+	}
 
 	// Wire pending message auto-compaction.
 	// Priority: config provider/model > agent's provider/model > fallback.

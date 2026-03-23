@@ -15,5 +15,6 @@
   "pendingPairingRequest": "待处理配对请求",
   "pendingPairingRequests": "{{count}} 个待处理配对请求",
   "apiKeys": "API Keys",
+  "documents": "文档",
   "toggleTheme": "切换主题"
 }

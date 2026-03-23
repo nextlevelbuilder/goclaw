@@ -1,11 +1,11 @@
-import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Bell, Globe, Clock, Building2, ChevronDown, Check, User, KeyRound } from "lucide-react";
+import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Globe, Clock, Building2, ChevronDown, Check, User, KeyRound, FileText } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useTenants } from "@/hooks/use-tenants";
 import { useIsMobile } from "@/hooks/use-media-query";
-import { usePendingPairingsCount } from "@/hooks/use-pending-pairings-count";
+
 import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, TIMEZONE_OPTIONS, LOCAL_STORAGE_KEYS, type Language } from "@/lib/constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover } from "radix-ui";
@@ -24,8 +24,6 @@ export function Topbar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const isMobile = useIsMobile();
-  const navigate = useNavigate();
-  const { pendingCount } = usePendingPairingsCount({ showToast: true });
 
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
@@ -52,16 +50,16 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigate(ROUTES.NODES)}
-          className="relative cursor-pointer rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          title={pendingCount > 0 ? t("pendingPairing", { count: pendingCount }) : t("pairingRequests")}
+        <a
+          href="https://docs.goclaw.sh"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 cursor-pointer rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          title={t("documents")}
         >
-          <Bell className="h-4 w-4" />
-          {pendingCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
-          )}
-        </button>
+          <FileText className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">{t("documents")}</span>
+        </a>
 
         <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
           <SelectTrigger

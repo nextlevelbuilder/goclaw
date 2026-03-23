@@ -106,8 +106,18 @@ export function OverviewPage() {
           <div className="flex items-center gap-2">
             {health?.version && (
               <span className="text-xs text-muted-foreground">
-                v{health.version}
+                {health.version}
               </span>
+            )}
+            {health?.updateAvailable && health.latestVersion && (
+              <a
+                href={health.updateUrl || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
+              >
+                {health.latestVersion} available
+              </a>
             )}
             <StatusBadge
               status={connected ? "success" : "error"}

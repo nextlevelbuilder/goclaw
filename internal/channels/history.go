@@ -116,6 +116,13 @@ func MakeHistory(channelName string, s store.PendingMessageStore, tenantID uuid.
 	return NewPendingHistory()
 }
 
+// SetTenantID updates the tenant scope for DB operations.
+// Called by InstanceLoader after channel creation to fix initialization order
+// (factory captures uuid.Nil because SetTenantID on BaseChannel hasn't been called yet).
+func (ph *PendingHistory) SetTenantID(id uuid.UUID) {
+	ph.tenantID = id
+}
+
 // tenantCtx returns a context with the tenant ID set for DB operations.
 func (ph *PendingHistory) tenantCtx() context.Context {
 	ctx := context.Background()
