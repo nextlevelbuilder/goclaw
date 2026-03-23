@@ -19,7 +19,10 @@
     "sourceCode": "Source Code",
     "license": "License",
     "documentation": "Documentation",
-    "reportBug": "Report a Bug"
+    "reportBug": "Report a Bug",
+    "upToDate": "Up to date",
+    "updateAvailable": "Update available: {{version}}",
+    "viewRelease": "View release notes →"
   },
   "languages": {
     "en": "English",

@@ -23,7 +23,10 @@
     "sourceCode": "Mã nguồn",
     "license": "Giấy phép",
     "documentation": "Tài liệu",
-    "reportBug": "Báo lỗi"
+    "reportBug": "Báo lỗi",
+    "upToDate": "Đã cập nhật",
+    "updateAvailable": "Có bản cập nhật: {{version}}",
+    "viewRelease": "Xem chi tiết →"
   },
   "toggleTheme": "Chuyển đổi giao diện"
 }
