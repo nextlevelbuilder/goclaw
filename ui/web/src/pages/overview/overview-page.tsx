@@ -14,7 +14,6 @@ import { useTraces } from "@/pages/traces/hooks/use-traces";
 import { Methods, Events } from "@/api/protocol";
 import { ROUTES } from "@/lib/constants";
 import { formatTokens, formatCost } from "@/lib/format";
-import { cleanVersion } from "@/lib/clean-version";
 
 import type {
   HealthPayload,
@@ -107,7 +106,7 @@ export function OverviewPage() {
           <div className="flex items-center gap-2">
             {health?.version && (
               <span className="text-xs text-muted-foreground">
-                {cleanVersion(health.version)}
+                {health.version}
               </span>
             )}
             {health?.updateAvailable && health.latestVersion && (

@@ -8,12 +8,14 @@ import {
   CheckCircle2,
   XCircle,
   Minus,
+  Tag,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { HealthPayload, ChannelStatusEntry } from "./types";
 import type { RuntimeInfo } from "@/pages/skills/hooks/use-runtimes";
 import { formatUptime } from "./hooks/use-live-uptime";
+import { cleanVersion } from "@/lib/clean-version";
 
 function StatusDot({ ok }: { ok: boolean | undefined }) {
   if (ok === undefined)
@@ -84,6 +86,14 @@ export function SystemHealthCard({
             icon={Timer}
             value={formatUptime(liveUptime)}
           />
+          {health?.version && (
+            <HealthCell
+              label={t("systemHealth.version")}
+              icon={Tag}
+              value={cleanVersion(health.version)}
+              statusOk={health.updateAvailable === false}
+            />
+          )}
           {health?.database && (
             <HealthCell
               label={t("systemHealth.database")}

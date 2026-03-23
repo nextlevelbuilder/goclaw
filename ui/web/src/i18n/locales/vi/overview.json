@@ -74,6 +74,7 @@
     "title": "Tình trạng hệ thống",
     "tools": "Công cụ",
     "uptime": "Thời gian hoạt động",
+    "version": "Phiên bản",
     "runtimes": "Môi trường runtime"
   },
   "title": "Bảng điều khiển"
