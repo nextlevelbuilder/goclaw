@@ -40,6 +40,7 @@ services:
     volumes:
       - goclaw-data:/app/data
       - goclaw-workspace:/app/workspace
+      - ${HOME}/.claude:/app/.claude-host:ro
     security_opt:
       - no-new-privileges:true
     init: true
