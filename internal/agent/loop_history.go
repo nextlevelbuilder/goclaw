@@ -66,7 +66,7 @@ func (l *Loop) buildMCPToolDescs(toolNames []string) map[string]string {
 // buildMessages constructs the full message list for an LLM request.
 // Returns the messages and whether BOOTSTRAP.md was present in context files
 // (used by the caller for auto-cleanup without an extra DB roundtrip).
-func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
+func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage string, systemEvents []string, extraSystemPrompt, sessionKey, channel, channelType, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
 	// Build full system prompt using the new builder (matching TS buildAgentSystemPrompt)
@@ -235,7 +235,27 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		l.sessions.Save(ctx, sessionKey)
 	}
 
-	// Current user message
+	// Current user message — Sanitize to prevent spoofing and prepend system events.
+	// We move gateway system events (model switch, node status) from the system prompt 
+	// to the user message timeline to protect the high-context prefix cache.
+	userMessage = SanitizeInboundSystemTags(userMessage)
+	if len(systemEvents) > 0 {
+		var sb strings.Builder
+		now := time.Now().Format("15:04:05")
+		for _, event := range systemEvents {
+			sb.WriteString("System: [")
+			sb.WriteString(now)
+			sb.WriteString("] ")
+			sb.WriteString(event)
+			sb.WriteByte('\n')
+		}
+		if userMessage != "" {
+			sb.WriteByte('\n')
+			sb.WriteString(userMessage)
+		}
+		userMessage = sb.String()
+	}
+
 	messages = append(messages, providers.Message{
 		Role:    "user",
 		Content: userMessage,

@@ -409,6 +409,10 @@ type RunRequest struct {
 	TeamTaskID    string // team task ID (if delegation has an associated task)
 	ParentAgentID string // parent agent key that initiated the delegation
 
+	// Gateway system events (model switches, node status, etc.)
+	// These are prepended to the user message in buildMessages to avoid KV cache busts in the system prompt.
+	SystemEvents []string
+
 	// Workspace scope propagation (set by delegation, read by workspace tools)
 	WorkspaceChannel string
 	WorkspaceChatID  string

@@ -254,18 +254,18 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildGroupChatReplyHint()...)
 	}
 
-	// 10. Extra system prompt (wrapped in tags for context isolation)
+	// 10. # Project Context — remaining context files (persona files already injected early)
+	if len(otherFiles) > 0 {
+		lines = append(lines, buildProjectContextSection(otherFiles, cfg.AgentType)...)
+	}
+
+	// 11. Extra system prompt (wrapped in tags for context isolation)
 	if cfg.ExtraPrompt != "" {
 		header := "## Additional Context"
 		if isMinimal {
 			header = "## Subagent Context"
 		}
 		lines = append(lines, header, "", "<extra_context>", cfg.ExtraPrompt, "</extra_context>", "")
-	}
-
-	// 11. # Project Context — remaining context files (persona files already injected early)
-	if len(otherFiles) > 0 {
-		lines = append(lines, buildProjectContextSection(otherFiles, cfg.AgentType)...)
 	}
 
 	// 13. ## Sub-Agent Spawning — skipped for team agents and bootstrap

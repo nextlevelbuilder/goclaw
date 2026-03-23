@@ -407,3 +407,49 @@ func IsSilentReply(text string) bool {
 func isWordChar(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
 }
+
+// --- Inbound Sanitization (Security) ---
+
+// SanitizeInboundSystemTags prevents LLM spoofing by rewriting user-supplied
+// "System:" prefixes to "System (untrusted):" before they reach the prompt.
+// Smart version: skips lines within triple-backtick (```) code blocks to avoid 
+// false positives during technical discussions.
+func SanitizeInboundSystemTags(content string) string {
+	if content == "" {
+		return content
+	}
+	// Case-insensitive check for prefix anywhere in content (fast check)
+	lower := strings.ToLower(content)
+	if !strings.Contains(lower, "system:") {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	changed := false
+	inCodeBlock := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Toggle code block state
+		if strings.HasPrefix(trimmed, "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+
+		// Skip sanitization if inside a code block or if line doesn't start with "system:" (case insensitive)
+		if inCodeBlock || !strings.HasPrefix(strings.ToLower(trimmed), "system:") {
+			continue
+		}
+
+		// Replace it, preserving the rest of the line's own punctuation or whitespace.
+		// Use the first 7 chars of 'trimmed' for case-insensitive match (guaranteed at least 7 due to prefix check).
+		lines[i] = strings.Replace(line, trimmed[:7], "System (untrusted):", 1)
+		changed = true
+	}
+
+	if !changed {
+		return content
+	}
+	return strings.Join(lines, "\n")
+}
