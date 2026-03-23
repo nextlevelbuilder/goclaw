@@ -123,11 +123,19 @@ func buildEmbeddingProvider(
 		apiBase = memCfg.EmbeddingAPIBase
 	}
 
-	// Dimension truncation: provider settings override, default to 1536 to match pgvector schema.
-	// Models that natively output 1536 ignore the parameter; models with larger native dims get truncated.
+	// Dimension truncation: provider settings → memCfg override → default 1536 (pgvector schema).
+	// Models that natively output 1536 ignore the parameter; larger native dims get truncated.
+	// Clamped to [1, 1536] — pgvector columns are vector(1536).
 	dims := 1536
 	if es != nil && es.Dimensions > 0 {
 		dims = es.Dimensions
+	}
+	if memCfg != nil && memCfg.EmbeddingDimensions > 0 {
+		dims = memCfg.EmbeddingDimensions
+	}
+	if dims > 1536 {
+		slog.Warn("embedding_dimensions exceeds pgvector schema (1536), clamping", "requested", dims)
+		dims = 1536
 	}
 
 	// Try registry first for the actual API key / base (handles runtime-registered providers)

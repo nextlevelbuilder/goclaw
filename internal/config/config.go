@@ -184,7 +184,8 @@ type MemoryConfig struct {
 	ChunkOverlap      int     `json:"chunk_overlap,omitempty"`      // overlap chars between chunks (default 200)
 	VectorWeight      float64 `json:"vector_weight,omitempty"`      // hybrid search vector weight (default 0.7)
 	TextWeight        float64 `json:"text_weight,omitempty"`        // hybrid search FTS weight (default 0.3)
-	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)
+	MinScore            float64 `json:"min_score,omitempty"`              // minimum relevance score (default 0.35)
+	EmbeddingDimensions int     `json:"embedding_dimensions,omitempty"`   // truncate output to N dimensions (0 = provider default)
 }
 
 // SandboxConfig configures Docker-based sandbox execution.
