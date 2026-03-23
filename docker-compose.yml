@@ -23,7 +23,9 @@ services:
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
         ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
     ports:
-      - "${GOCLAW_PORT:-18790}:18790"
+      # Host port default 28790 — avoids Windows Hyper-V excluded port ranges.
+      # Override with GOCLAW_PORT env var if needed.
+      - "${GOCLAW_PORT:-28790}:18790"
     env_file:
       - path: .env
         required: false
