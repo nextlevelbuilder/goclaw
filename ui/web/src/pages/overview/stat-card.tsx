@@ -47,8 +47,8 @@ export function StatCard({
           {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
         </div>
       </div>
-      {sparkData && sparkData.length > 1 && (
-        <div className="mt-3 h-[40px]">
+      <div className="mt-3 h-[40px]">
+        {sparkData && sparkData.length > 1 && (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={sparkData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
               <defs>
@@ -68,8 +68,8 @@ export function StatCard({
               />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
