@@ -22,6 +22,7 @@ services:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
         ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
+        VERSION: "${GOCLAW_VERSION:-dev}"
     ports:
       - "${GOCLAW_PORT:-18790}:18790"
     env_file:
