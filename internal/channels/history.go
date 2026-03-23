@@ -27,8 +27,9 @@ const maxHistoryKeys = 1000
 const DefaultGroupHistoryLimit = 100
 
 const (
-	flushInterval = 3 * time.Second // periodic flush interval
-	flushBatchMax = 20              // flush when buffer reaches this size
+	flushInterval        = 3 * time.Second  // periodic flush interval
+	flushBatchMax        = 20               // flush when buffer reaches this size
+	compactSweepInterval = 10 * time.Minute // periodic compaction sweep for post-restart safety
 )
 
 // HistoryEntry represents a single tracked group message.

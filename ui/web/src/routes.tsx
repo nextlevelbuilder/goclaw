@@ -155,8 +155,8 @@ export function AppRoutes() {
           <Route path={ROUTES.SESSION_DETAIL} element={<SessionsPage key="detail" />} />
           <Route path={ROUTES.SKILLS} element={<SkillsPage key="list" />} />
           <Route path={ROUTES.SKILL_DETAIL} element={<SkillsPage key="detail" />} />
-          <Route path={ROUTES.CRON} element={<CronPage />} />
-          <Route path={ROUTES.CRON_DETAIL} element={<CronPage />} />
+          <Route path={ROUTES.CRON} element={<CronPage key="list" />} />
+          <Route path={ROUTES.CRON_DETAIL} element={<CronPage key="detail" />} />
           {/* Admin-only pages */}
           <Route path={ROUTES.CONFIG} element={<RequireCrossTenant><ConfigPage /></RequireCrossTenant>} />
           <Route path={ROUTES.PROVIDERS} element={<RequireAdmin><ProvidersPage key="list" /></RequireAdmin>} />

@@ -31,26 +31,7 @@ export function CronPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CronJob | null>(null);
 
-  // Detail routing
-  const detailJob = detailId ? jobs.find((j) => j.id === detailId) : null;
-  if (detailJob) {
-    return (
-      <CronDetailPage
-        job={detailJob}
-        onBack={() => navigate("/cron")}
-        onRun={runJob}
-        onToggle={toggleJob}
-        onDelete={async (id) => {
-          await deleteJob(id);
-          navigate("/cron");
-        }}
-        onUpdate={updateJob}
-        getRunLog={getRunLog}
-        onRefresh={refresh}
-      />
-    );
-  }
-
+  // All hooks must be called before any conditional return
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     if (!q) return jobs;
@@ -68,6 +49,26 @@ export function CronPage() {
   if (search !== prevSearch) {
     setPrevSearch(search);
     resetPage();
+  }
+
+  // Detail routing — after all hooks
+  const detailJob = detailId ? jobs.find((j) => j.id === detailId) : null;
+  if (detailJob) {
+    return (
+      <CronDetailPage
+        job={detailJob}
+        onBack={() => navigate("/cron")}
+        onRun={runJob}
+        onToggle={toggleJob}
+        onDelete={async (id) => {
+          await deleteJob(id);
+          navigate("/cron");
+        }}
+        onUpdate={updateJob}
+        getRunLog={getRunLog}
+        onRefresh={refresh}
+      />
+    );
   }
 
   return (

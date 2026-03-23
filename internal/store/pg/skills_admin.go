@@ -57,10 +57,10 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParam
 	fmJSON := marshalFrontmatter(p.Frontmatter)
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status,
-		 is_system, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, NOW(), NOW())`,
+		 is_system, frontmatter, file_path, file_size, file_hash, tenant_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, $11, NOW(), NOW())`,
 		id, p.Name, p.Slug, p.Description, p.Version, p.Status,
-		fmJSON, p.FilePath, p.FileSize, p.FileHash,
+		fmJSON, p.FilePath, p.FileSize, p.FileHash, store.MasterTenantID,
 	)
 	if err != nil {
 		return uuid.Nil, false, "", fmt.Errorf("insert system skill: %w", err)

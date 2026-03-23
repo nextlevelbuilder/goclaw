@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CronJob } from "./hooks/use-cron";
 import { formatSchedule, CronStatusBadge } from "./cron-utils";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 interface CronListRowProps {
   job: CronJob;
@@ -14,6 +15,8 @@ interface CronListRowProps {
 
 export function CronListRow({ job, onClick, onRun, onDelete }: CronListRowProps) {
   const { t } = useTranslation("cron");
+  const { agents } = useAgents();
+  const agent = job.agentId ? agents.find((a) => a.id === job.agentId) : null;
   const isRunning = job.state?.lastStatus === "running";
 
   return (
@@ -46,7 +49,7 @@ export function CronListRow({ job, onClick, onRun, onDelete }: CronListRowProps)
 
       {/* Agent */}
       <div className="hidden shrink-0 text-xs text-muted-foreground md:block md:w-28 md:truncate">
-        {job.agentId || t("card.defaultAgent")}
+        {agent?.display_name || agent?.agent_key || job.agentId || t("card.defaultAgent")}
       </div>
 
       {/* Message preview */}

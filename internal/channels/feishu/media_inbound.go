@@ -12,13 +12,19 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 )
 
-// resolveMediaFromMessage extracts and downloads media from a Feishu message.
-// Returns a list of MediaInfo for each media item found.
-func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messageType, rawContent string) []media.MediaInfo {
+// mediaMaxBytes returns the configured per-file size limit in bytes.
+func (c *Channel) mediaMaxBytes() int64 {
 	maxBytes := int64(c.cfg.MediaMaxMB) * 1024 * 1024
 	if maxBytes <= 0 {
 		maxBytes = int64(defaultMediaMaxMB) * 1024 * 1024
 	}
+	return maxBytes
+}
+
+// resolveMediaFromMessage extracts and downloads media from a Feishu message.
+// Returns a list of MediaInfo for each media item found.
+func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messageType, rawContent string) []media.MediaInfo {
+	maxBytes := c.mediaMaxBytes()
 
 	var results []media.MediaInfo
 
@@ -137,6 +143,34 @@ func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messag
 		})
 	}
 
+	return results
+}
+
+// resolvePostImages downloads images embedded in post messages by their image_key.
+// Uses continue-on-error so one failed image doesn't skip the rest.
+func (c *Channel) resolvePostImages(ctx context.Context, messageID string, imageKeys []string) []media.MediaInfo {
+	maxBytes := c.mediaMaxBytes()
+
+	var results []media.MediaInfo
+	for _, key := range imageKeys {
+		data, _, err := c.downloadMessageResource(ctx, messageID, key, "image")
+		if err != nil {
+			slog.Debug("feishu download post image failed", "message_id", messageID, "image_key", key, "error", err)
+			continue
+		}
+		if int64(len(data)) > maxBytes {
+			slog.Debug("feishu post image too large", "size", len(data), "max", maxBytes)
+			continue
+		}
+		path, err := saveMediaToTemp(data, "img", ".png")
+		if err != nil {
+			slog.Debug("feishu save post image failed", "error", err)
+			continue
+		}
+		results = append(results, media.MediaInfo{
+			Type: media.TypeImage, FilePath: path, ContentType: "image/png",
+		})
+	}
 	return results
 }
 

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { validateSkillZip } from "./lib/validate-skill-zip";
+import { uniqueId } from "@/lib/utils";
 
 type FileStatus = "validating" | "valid" | "invalid" | "uploading" | "success" | "error";
 
@@ -46,7 +47,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
     if (fresh.length === 0) return;
 
     const pending: FileEntry[] = fresh.map((f) => ({
-      id: crypto.randomUUID(),
+      id: uniqueId(),
       file: f,
       status: "validating" as const,
     }));

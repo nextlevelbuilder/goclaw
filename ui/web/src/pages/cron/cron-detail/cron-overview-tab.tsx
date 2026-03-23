@@ -1,13 +1,18 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Calendar, Clock, AlertTriangle, Globe, Pencil } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
+import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { formatDate } from "@/lib/format";
 import type { CronJob } from "../hooks/use-cron";
+import { CronStatusBadge } from "../cron-utils";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 interface CronOverviewTabProps {
   job: CronJob;
@@ -23,17 +28,9 @@ function getEverySeconds(job: CronJob): string {
   return "60";
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <span className="text-muted-foreground text-xs">{label}</span>
-      <div className="mt-0.5 text-sm font-medium">{value}</div>
-    </div>
-  );
-}
-
 export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
   const { t } = useTranslation("cron");
+  const { agents } = useAgents();
   const readonly = !onUpdate;
 
   const [scheduleKind, setScheduleKind] = useState<ScheduleKind>(job.schedule.kind as ScheduleKind);
@@ -42,7 +39,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
   const [message, setMessage] = useState(job.payload?.message ?? "");
   const [agentId, setAgentId] = useState(job.agentId ?? "");
   const [enabled, setEnabled] = useState(job.enabled);
-
+  const [editingMessage, setEditingMessage] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -63,6 +60,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         agentId: agentId.trim() || undefined,
         enabled,
       });
+      setEditingMessage(false);
     } catch {
       // toast shown by hook
     } finally {
@@ -136,20 +134,40 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         )}
       </section>
 
-      {/* Message section */}
+      {/* Message section — markdown preview or textarea */}
       <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-        <h3 className="text-sm font-medium">{t("detail.messageSection")}</h3>
-        <div className="space-y-2">
-          <Label>{t("create.message")}</Label>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium">{t("detail.messageSection")}</h3>
+          {!readonly && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 text-xs text-muted-foreground"
+              onClick={() => setEditingMessage(!editingMessage)}
+            >
+              <Pencil className="h-3 w-3" />
+              {editingMessage ? t("detail.preview") : t("detail.edit")}
+            </Button>
+          )}
+        </div>
+
+        {editingMessage ? (
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            rows={4}
-            disabled={readonly}
+            rows={6}
             placeholder={t("create.messagePlaceholder")}
             className="text-base md:text-sm resize-none"
           />
-        </div>
+        ) : (
+          <div className="rounded-md border bg-muted/30 p-3 sm:p-4">
+            {message ? (
+              <MarkdownRenderer content={message} className="prose-sm max-w-none" />
+            ) : (
+              <p className="text-sm italic text-muted-foreground">{t("detail.noMessage")}</p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Agent & Status section */}
@@ -158,13 +176,19 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>{t("create.agentId")}</Label>
-            <Input
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-              disabled={readonly}
-              placeholder={t("create.agentIdPlaceholder")}
-              className="text-base md:text-sm"
-            />
+            <Select value={agentId || "__default__"} onValueChange={(v) => setAgentId(v === "__default__" ? "" : v)} disabled={readonly}>
+              <SelectTrigger className="text-base md:text-sm">
+                <SelectValue placeholder={t("create.agentIdPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__default__">{t("create.agentIdPlaceholder")}</SelectItem>
+                {agents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.display_name || a.agent_key || a.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label>{t("columns.enabled")}</Label>
@@ -179,32 +203,64 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
           </div>
         </div>
 
-        {/* Info rows */}
-        <div className="grid grid-cols-1 gap-4 rounded-md bg-muted/50 p-4 sm:grid-cols-2">
+        {/* Info grid */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {job.state?.nextRunAtMs && (
-            <InfoRow label={t("detail.infoRows.nextRun")} value={formatDate(new Date(job.state.nextRunAtMs))} />
+            <div className="rounded-md bg-muted/50 p-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                {t("detail.infoRows.nextRun")}
+              </div>
+              <div className="mt-1 text-sm font-medium">{formatDate(new Date(job.state.nextRunAtMs))}</div>
+            </div>
           )}
           {job.state?.lastRunAtMs && (
-            <InfoRow label={t("detail.infoRows.lastRun")} value={formatDate(new Date(job.state.lastRunAtMs))} />
+            <div className="rounded-md bg-muted/50 p-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                {t("detail.infoRows.lastRun")}
+              </div>
+              <div className="mt-1 text-sm font-medium">{formatDate(new Date(job.state.lastRunAtMs))}</div>
+            </div>
           )}
           {job.state?.lastStatus && (
-            <InfoRow label={t("detail.infoRows.lastStatus")} value={job.state.lastStatus} />
+            <div className="rounded-md bg-muted/50 p-3">
+              <div className="text-xs text-muted-foreground">{t("detail.infoRows.lastStatus")}</div>
+              <div className="mt-1"><CronStatusBadge status={job.state.lastStatus} /></div>
+            </div>
           )}
-          <InfoRow label={t("detail.infoRows.created")} value={formatDate(new Date(job.createdAtMs))} />
-          <InfoRow label={t("detail.infoRows.updated")} value={formatDate(new Date(job.updatedAtMs))} />
+          <div className="rounded-md bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">{t("detail.infoRows.created")}</div>
+            <div className="mt-1 text-sm font-medium">{formatDate(new Date(job.createdAtMs))}</div>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <div className="text-xs text-muted-foreground">{t("detail.infoRows.updated")}</div>
+            <div className="mt-1 text-sm font-medium">{formatDate(new Date(job.updatedAtMs))}</div>
+          </div>
           {job.schedule.tz && (
-            <InfoRow label={t("detail.infoRows.timezone")} value={job.schedule.tz} />
+            <div className="rounded-md bg-muted/50 p-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Globe className="h-3 w-3" />
+                {t("detail.infoRows.timezone")}
+              </div>
+              <div className="mt-1 text-sm font-medium">{job.schedule.tz}</div>
+            </div>
           )}
         </div>
-
-        {/* Last error */}
-        {job.state?.lastError && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm">
-            <h4 className="mb-1 font-medium text-destructive">{t("detail.lastError")}</h4>
-            <p className="text-xs text-destructive/80">{job.state.lastError}</p>
-          </div>
-        )}
       </section>
+
+      {/* Last error */}
+      {job.state?.lastError && (
+        <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 sm:p-4 overflow-hidden">
+          <div className="mb-2 flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <h3 className="text-sm font-medium text-destructive">{t("detail.lastError")}</h3>
+          </div>
+          <div className="rounded-md bg-background/50 p-3">
+            <MarkdownRenderer content={job.state.lastError} className="prose-sm max-w-none text-destructive/80" />
+          </div>
+        </section>
+      )}
 
       {!readonly && (
         <StickySaveBar

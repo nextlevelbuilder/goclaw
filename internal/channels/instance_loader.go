@@ -282,6 +282,16 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 			pc.SetPendingCompaction(cc)
 			slog.Debug("pending compaction configured", "channel", inst.Name, "provider", p.Name(), "model", model,
 				"threshold", cc.Threshold, "keep_recent", cc.KeepRecent, "max_tokens", cc.MaxTokens)
+		} else {
+			attemptedProvider := ""
+			if l.pendingCompactCfg != nil {
+				attemptedProvider = l.pendingCompactCfg.Provider
+			}
+			if attemptedProvider == "" && ag != nil {
+				attemptedProvider = ag.Provider
+			}
+			slog.Warn("pending compaction not configured: provider/model unavailable",
+				"channel", inst.Name, "agent_id", inst.AgentID, "attempted_provider", attemptedProvider)
 		}
 	}
 	l.manager.RegisterChannel(inst.Name, ch)

@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // Options keys used in ChatRequest.Options across providers.
@@ -111,6 +112,11 @@ type Message struct {
 	// RawAssistantContent carries raw provider content blocks through tool loop iterations.
 	// Anthropic requires thinking blocks to be passed back exactly as received.
 	RawAssistantContent json.RawMessage `json:"-"`
+
+	// CreatedAt records when this message was added to the session.
+	// Pointer type so that older messages (stored before this field existed) deserialize as nil,
+	// allowing the frontend to fall back to synthetic timestamps.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 }
 
 // ToolCall represents a tool invocation requested by the LLM.

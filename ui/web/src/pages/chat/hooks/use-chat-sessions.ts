@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { toast } from "@/stores/use-toast-store";
 import i18next from "i18next";
 import { userFriendlyError } from "@/lib/error-utils";
+import { uniqueId } from "@/lib/utils";
 
 /**
  * Manages the session list for the chat sidebar.
@@ -45,7 +46,7 @@ export function useChatSessions(agentId: string) {
   }, [loadSessions]);
 
   const buildNewSessionKey = useCallback(() => {
-    const convId = crypto.randomUUID();
+    const convId = uniqueId();
     return `agent:${agentId}:ws:direct:${convId}`;
   }, [agentId]);
 

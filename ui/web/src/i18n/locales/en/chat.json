@@ -18,5 +18,8 @@
     "attached": "attached"
   },
   "forwardedFrom": "Forwarded from",
-  "replyingTo": "Replying to"
+  "replyingTo": "Replying to",
+  "error": {
+    "notConnected": "Not connected. Please wait for the connection to be established."
+  }
 }

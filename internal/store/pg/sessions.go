@@ -143,6 +143,12 @@ func (s *PGSessionStore) AddMessage(ctx context.Context, key string, msg provide
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Stamp message creation time if not already set.
+	if msg.CreatedAt == nil {
+		now := time.Now().UTC()
+		msg.CreatedAt = &now
+	}
+
 	data := s.getOrInit(ctx, key)
 	// Fork: backfill full_messages from messages on first use (for sessions created before this feature)
 	if len(data.FullMessages) == 0 && len(data.Messages) > 0 {

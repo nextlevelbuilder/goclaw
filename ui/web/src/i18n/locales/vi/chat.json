@@ -18,5 +18,8 @@
   "newChat": "Trò chuyện mới",
   "openSessions": "Mở phiên",
   "readOnly": "Chỉ đọc — phiên này thuộc về người dùng khác",
-  "replyingTo": "Đang trả lời"
+  "replyingTo": "Đang trả lời",
+  "error": {
+    "notConnected": "Chưa kết nối. Vui lòng chờ kết nối được thiết lập."
+  }
 }

@@ -18,5 +18,8 @@
   "newChat": "新建对话",
   "openSessions": "打开Session",
   "readOnly": "只读 — 此Session属于其他用户",
-  "replyingTo": "回复"
+  "replyingTo": "回复",
+  "error": {
+    "notConnected": "未连接。请等待连接建立。"
+  }
 }

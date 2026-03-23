@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import type { CronJob } from "../hooks/use-cron";
 import { formatSchedule } from "../cron-utils";
+import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 interface CronHeaderProps {
   job: CronJob;
@@ -20,6 +21,9 @@ interface CronHeaderProps {
 
 export function CronHeader({ job, isRunning, onBack, onRun, onAdvanced, onToggle, onDelete }: CronHeaderProps) {
   const { t } = useTranslation("cron");
+  const { agents } = useAgents();
+  const agent = job.agentId ? agents.find((a) => a.id === job.agentId) : null;
+  const agentLabel = agent?.display_name || agent?.agent_key || job.agentId;
 
   return (
     <TooltipProvider>
@@ -61,7 +65,7 @@ export function CronHeader({ job, isRunning, onBack, onRun, onAdvanced, onToggle
             {job.agentId && (
               <>
                 <span className="text-border">·</span>
-                <span className="font-mono text-[11px]">{job.agentId}</span>
+                <span className="text-[11px]">{agentLabel}</span>
               </>
             )}
           </div>

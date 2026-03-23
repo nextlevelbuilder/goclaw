@@ -182,6 +182,10 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	switch mc.ContentType {
 	case "image", "file", "audio", "video", "sticker":
 		mediaList = append(mediaList, c.resolveMediaFromMessage(ctx, mc.MessageID, mc.ContentType, msg.Content)...)
+	case "post":
+		if imageKeys := extractPostImageKeys(msg.Content); len(imageKeys) > 0 {
+			mediaList = append(mediaList, c.resolvePostImages(ctx, mc.MessageID, imageKeys)...)
+		}
 	}
 
 	// 11. Process media: STT transcription, document extraction, build tags
@@ -305,18 +309,22 @@ func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) (strin
 		replyCtx = fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", senderName, body)
 	}
 
-	// Download media from parent message (image, file, audio, video, sticker).
+	// Download media from parent message (image, file, audio, video, sticker, post).
 	var replyMedia []media.MediaInfo
 	switch item.MsgType {
 	case "image", "file", "audio", "video", "sticker":
 		replyMedia = c.resolveMediaFromMessage(ctx, parentID, item.MsgType, item.Body.Content)
-		for i := range replyMedia {
-			replyMedia[i].FromReply = true
+	case "post":
+		if imageKeys := extractPostImageKeys(item.Body.Content); len(imageKeys) > 0 {
+			replyMedia = c.resolvePostImages(ctx, parentID, imageKeys)
 		}
-		if len(replyMedia) > 0 {
-			slog.Debug("feishu: resolved media from replied message",
-				"parent_id", parentID, "media_count", len(replyMedia))
-		}
+	}
+	for i := range replyMedia {
+		replyMedia[i].FromReply = true
+	}
+	if len(replyMedia) > 0 {
+		slog.Debug("feishu: resolved media from replied message",
+			"parent_id", parentID, "media_count", len(replyMedia))
 	}
 
 	return replyCtx, replyMedia

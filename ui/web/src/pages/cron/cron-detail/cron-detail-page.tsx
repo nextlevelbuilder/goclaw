@@ -69,8 +69,8 @@ export function CronDetailPage({
         onDelete={() => setConfirmDelete(true)}
       />
 
-      <div className="p-3 sm:p-4">
-        <div className="max-w-4xl">
+      <div className="p-3 pb-10 sm:p-4 sm:pb-10">
+        <div className="mx-auto max-w-4xl">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="w-full justify-start overflow-x-auto overflow-y-hidden">
               <TabsTrigger value="overview">{t("detail.tabs.overview")}</TabsTrigger>

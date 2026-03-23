@@ -99,10 +99,12 @@ func parseMessageContent(rawContent, messageType string) string {
 	}
 }
 
-func parsePostContent(rawContent string) string {
+// resolvePostElements extracts the flattened element list from a Lark post message JSON.
+// Handles language variant lookup (zh_cn → en_us → any first key).
+func resolvePostElements(rawContent string) []any {
 	var post map[string]any
 	if err := json.Unmarshal([]byte(rawContent), &post); err != nil {
-		return rawContent
+		return nil
 	}
 
 	var langContent any
@@ -119,16 +121,24 @@ func parsePostContent(rawContent string) string {
 		}
 	}
 	if langContent == nil {
-		return rawContent
+		return nil
 	}
 
 	langMap, ok := langContent.(map[string]any)
 	if !ok {
-		return rawContent
+		return nil
 	}
 
 	contentArr, ok := langMap["content"].([]any)
 	if !ok {
+		return nil
+	}
+	return contentArr
+}
+
+func parsePostContent(rawContent string) string {
+	contentArr := resolvePostElements(rawContent)
+	if contentArr == nil {
 		return rawContent
 	}
 
@@ -177,6 +187,40 @@ func parsePostContent(rawContent string) string {
 	}
 
 	return strings.Join(textParts, "\n")
+}
+
+// extractPostImageKeys parses post content JSON and returns deduplicated image_key
+// values from embedded img tags. Used to download images inline in post messages.
+func extractPostImageKeys(rawContent string) []string {
+	contentArr := resolvePostElements(rawContent)
+	if contentArr == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var keys []string
+	for _, para := range contentArr {
+		paraArr, ok := para.([]any)
+		if !ok {
+			continue
+		}
+		for _, elem := range paraArr {
+			elemMap, ok := elem.(map[string]any)
+			if !ok {
+				continue
+			}
+			tag, _ := elemMap["tag"].(string)
+			if tag == "img" {
+				if key, ok := elemMap["image_key"].(string); ok && key != "" {
+					if _, dup := seen[key]; !dup {
+						seen[key] = struct{}{}
+						keys = append(keys, key)
+					}
+				}
+			}
+		}
+	}
+	return keys
 }
 
 // resolveMentions replaces mention placeholders (@_user_1, @_user_2, etc.) in content.

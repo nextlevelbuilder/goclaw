@@ -5,6 +5,7 @@ import { Methods, Events } from "@/api/protocol";
 import type { Message } from "@/types/session";
 import type { ChatMessage, AgentEventPayload, ToolStreamEntry, RunActivity, ActiveTeamTask, MediaItem } from "@/types/chat";
 import { toFileUrl, mediaKindFromMime } from "@/lib/file-helpers";
+import { messageToTimestamp } from "@/lib/message-utils";
 
 /**
  * Manages chat message history and real-time streaming for a session.
@@ -90,7 +91,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
       const msgs: ChatMessage[] = allMsgs.map((m: Message, i: number) => {
         const chatMsg: ChatMessage = {
           ...m,
-          timestamp: Date.now() - (allMsgs.length - i) * 1000,
+          timestamp: messageToTimestamp(m, i, allMsgs.length),
         };
         // Convert persisted media_refs to mediaItems for gallery display
         if (m.role === "assistant" && m.media_refs && m.media_refs.length > 0) {
