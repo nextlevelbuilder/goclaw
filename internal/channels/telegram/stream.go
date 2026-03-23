@@ -331,6 +331,11 @@ func (c *Channel) FinalizeStream(ctx context.Context, chatID string, stream chan
 		slog.Warn("stream: initial send landed but ID unknown. Suppressing fallback message to avoid duplicate.", "chat_id", chatID)
 	}
 
+	// Capture draft ID for clearing after the final Send()
+	if ds, ok := stream.(*DraftStream); ok && ds.UsedDraftTransport() {
+		c.pendingDraftID.Store(chatID, ds.draftID)
+	}
+
 	// Stop thinking animation
 	if stop, ok := c.stopThinking.Load(chatID); ok {
 		if cf, ok := stop.(*thinkingCancel); ok {
