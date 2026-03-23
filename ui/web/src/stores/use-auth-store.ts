@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
+import { clearSetupSkippedState } from "@/lib/setup-skip";
 import type { TenantMembership } from "@/types/tenant";
 
 type UserRole = "admin" | "operator" | "viewer" | "";
@@ -80,6 +81,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem(LOCAL_STORAGE_KEYS.SENDER_ID);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.TENANT_ID);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.TENANT_HINT);
+    clearSetupSkippedState();
     set({
       token: "", userId: "", senderID: "", connected: false, role: "", serverInfo: null,
       tenantId: "", tenantName: "", tenantSlug: "", isCrossTenant: false, availableTenants: [],
