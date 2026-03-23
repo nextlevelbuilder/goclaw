@@ -13,6 +13,7 @@ import (
 type RecoveredTaskInfo struct {
 	ID         uuid.UUID
 	TeamID     uuid.UUID
+	TenantID   uuid.UUID
 	TaskNumber int
 	Subject    string
 	Channel    string // task's origin channel for notification routing
@@ -136,12 +137,13 @@ type TeamTaskData struct {
 
 // TeamTaskCommentData represents a comment on a team task.
 type TeamTaskCommentData struct {
-	ID        uuid.UUID  `json:"id"`
-	TaskID    uuid.UUID  `json:"task_id"`
-	AgentID   *uuid.UUID `json:"agent_id,omitempty"`
-	UserID    string     `json:"user_id,omitempty"`
-	Content   string     `json:"content"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID          uuid.UUID  `json:"id"`
+	TaskID      uuid.UUID  `json:"task_id"`
+	AgentID     *uuid.UUID `json:"agent_id,omitempty"`
+	UserID      string     `json:"user_id,omitempty"`
+	Content     string     `json:"content"`
+	CommentType string     `json:"comment_type,omitempty"` // "note" (default) or "blocker"
+	CreatedAt   time.Time  `json:"created_at"`
 
 	// Joined
 	AgentKey string `json:"agent_key,omitempty"`
@@ -171,41 +173,17 @@ type TeamTaskAttachmentData struct {
 	CreatedBySenderID string          `json:"created_by_sender_id,omitempty"`
 	Metadata          json.RawMessage `json:"metadata,omitempty"`
 	CreatedAt         time.Time       `json:"created_at"`
+	DownloadURL       string          `json:"download_url,omitempty"` // signed URL, populated at delivery time
 }
 
-// DelegationHistoryData represents a persisted delegation record.
-type DelegationHistoryData struct {
-	BaseModel
-	SourceAgentID uuid.UUID      `json:"source_agent_id"`
-	TargetAgentID uuid.UUID      `json:"target_agent_id"`
-	TeamID        *uuid.UUID     `json:"team_id,omitempty"`
-	TeamTaskID    *uuid.UUID     `json:"team_task_id,omitempty"`
-	UserID        string         `json:"user_id,omitempty"`
-	Task          string         `json:"task"`
-	Mode          string         `json:"mode"`
-	Status        string         `json:"status"`
-	Result        *string        `json:"result,omitempty"`
-	Error         *string        `json:"error,omitempty"`
-	Iterations    int            `json:"iterations"`
-	TraceID       *uuid.UUID     `json:"trace_id,omitempty"`
-	DurationMS    int            `json:"duration_ms"`
-	CompletedAt   *time.Time     `json:"completed_at,omitempty"`
-	Metadata      map[string]any `json:"metadata,omitempty"`
-
-	// Joined fields
-	SourceAgentKey string `json:"source_agent_key,omitempty"`
-	TargetAgentKey string `json:"target_agent_key,omitempty"`
-}
-
-// DelegationHistoryListOpts configures delegation history queries.
-type DelegationHistoryListOpts struct {
-	SourceAgentID *uuid.UUID
-	TargetAgentID *uuid.UUID
-	TeamID        *uuid.UUID
-	UserID        string
-	Status        string // "completed", "failed", "" = all
-	Limit         int
-	Offset        int
+// TeamUserGrant represents a user's access grant to a team.
+type TeamUserGrant struct {
+	ID        uuid.UUID `json:"id"`
+	TeamID    uuid.UUID `json:"team_id"`
+	UserID    string    `json:"user_id"`
+	Role      string    `json:"role"`
+	GrantedBy string    `json:"granted_by,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // ScopeEntry represents a unique channel+chatID scope across tasks.
@@ -349,8 +327,10 @@ type TeamStore interface {
 	// ResetTaskStatus resets a stale or failed task back to pending for retry.
 	ResetTaskStatus(ctx context.Context, taskID, teamID uuid.UUID) error
 
-	// Delegation history
-	SaveDelegationHistory(ctx context.Context, record *DelegationHistoryData) error
-	ListDelegationHistory(ctx context.Context, opts DelegationHistoryListOpts) ([]DelegationHistoryData, int, error)
-	GetDelegationHistory(ctx context.Context, id uuid.UUID) (*DelegationHistoryData, error)
+	// Team user grants
+	GrantTeamAccess(ctx context.Context, teamID uuid.UUID, userID, role, grantedBy string) error
+	RevokeTeamAccess(ctx context.Context, teamID uuid.UUID, userID string) error
+	ListTeamGrants(ctx context.Context, teamID uuid.UUID) ([]TeamUserGrant, error)
+	ListUserTeams(ctx context.Context, userID string) ([]TeamData, error)
+	HasTeamAccess(ctx context.Context, teamID uuid.UUID, userID string) (bool, error)
 }

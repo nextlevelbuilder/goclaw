@@ -12,7 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.CronJob, error) {
+func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.CronJobPatch) (*store.CronJob, error) {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid job ID: %s", jobID)
@@ -25,14 +25,25 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 	if patch.Enabled != nil {
 		updates["enabled"] = *patch.Enabled
 	}
+	// Build tenant WHERE suffix for internal reads (defense-in-depth).
+	tenantSuffix := ""
+	var tenantArg []any
+	if !store.IsCrossTenant(ctx) {
+		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+			tenantSuffix = " AND tenant_id = $2"
+			tenantArg = append(tenantArg, tid)
+		}
+	}
+
 	if patch.Schedule != nil {
 		// Fetch current schedule to merge with patch (partial updates)
 		var curKind string
 		var curExpr, curTZ *string
 		var curIntervalMS *int64
 		var curRunAt *time.Time
-		s.db.QueryRow(
-			"SELECT schedule_kind, cron_expression, timezone, interval_ms, run_at FROM cron_jobs WHERE id = $1", id,
+		s.db.QueryRowContext(ctx,
+			"SELECT schedule_kind, cron_expression, timezone, interval_ms, run_at FROM cron_jobs WHERE id = $1"+tenantSuffix,
+			append([]any{id}, tenantArg...)...,
 		).Scan(&curKind, &curExpr, &curTZ, &curIntervalMS, &curRunAt)
 
 		// Resolve the effective schedule kind
@@ -151,7 +162,7 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 	needsPayloadUpdate := patch.Message != "" || patch.Deliver != nil || patch.Channel != nil || patch.To != nil || patch.WakeHeartbeat != nil
 	if needsPayloadUpdate {
 		var payloadJSON []byte
-		if scanErr := s.db.QueryRow("SELECT payload FROM cron_jobs WHERE id = $1", id).Scan(&payloadJSON); scanErr == nil {
+		if scanErr := s.db.QueryRowContext(ctx, "SELECT payload FROM cron_jobs WHERE id = $1"+tenantSuffix, append([]any{id}, tenantArg...)...).Scan(&payloadJSON); scanErr == nil {
 			var payload store.CronPayload
 			json.Unmarshal(payloadJSON, &payload)
 
@@ -178,11 +189,22 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 
 	updates["updated_at"] = time.Now()
 
-	if err := execMapUpdate(context.Background(), s.db, "cron_jobs", id, updates); err != nil {
+	var execErr error
+	if store.IsCrossTenant(ctx) {
+		execErr = execMapUpdate(ctx, s.db, "cron_jobs", id, updates)
+	} else {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			execErr = fmt.Errorf("tenant_id required for update")
+		} else {
+			execErr = execMapUpdateWhereTenant(ctx, s.db, "cron_jobs", updates, id, tid)
+		}
+	}
+	if err := execErr; err != nil {
 		return nil, err
 	}
 
 	s.cacheLoaded = false
-	job, _ := s.scanJob(id)
+	job, _ := s.scanJob(ctx, id)
 	return job, nil
 }

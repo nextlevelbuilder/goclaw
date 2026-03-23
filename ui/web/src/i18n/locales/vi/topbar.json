@@ -9,9 +9,11 @@
     "zh": "中文"
   },
   "logout": "Đăng xuất",
+  "logoutConfirm": "Bạn có chắc muốn đăng xuất?",
   "openMenu": "Mở menu",
   "pairingRequests": "Yêu cầu ghép nối",
   "pendingPairingRequest": "{{count}} yêu cầu ghép nối đang chờ",
   "pendingPairingRequests": "{{count}} yêu cầu ghép nối đang chờ",
+  "apiKeys": "API Keys",
   "toggleTheme": "Chuyển đổi giao diện"
 }

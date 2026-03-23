@@ -1,5 +1,11 @@
 {
   "subtitle": "Sign in to the gateway dashboard",
+  "selectTenant": "Select Tenant",
+  "selectTenantDescription": "Choose a tenant to continue",
+  "allTenantsOption": "All Tenants",
+  "allTenantsDescription": "View data from all tenants",
+  "noAccess": "No Access",
+  "noAccessDescription": "You don't have access to any tenant. Contact your administrator.",
   "tabs": {
     "token": "Token",
     "pairing": "Pairing"
@@ -28,5 +34,7 @@
     "waitingForApproval": "Waiting for approval...",
     "cancel": "Cancel",
     "approved": "Access approved! Redirecting..."
-  }
+  },
+  "noAccessHint": "Ask your administrator to add you to a tenant, or use a different account.",
+  "logout": "Sign Out"
 }

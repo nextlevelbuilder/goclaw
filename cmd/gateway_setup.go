@@ -201,6 +201,15 @@ func setupToolRegistry(
 		if et, ok := execTool.(*tools.ExecTool); ok {
 			et.DenyPaths(dataDir, ".goclaw/")
 			et.AllowPathExemptions(".goclaw/skills-store/")
+			// Harden: block access to internal workspace files via shell commands.
+			// Prevents `cat ../config.json`, `cat memory.db` etc. from user workspaces.
+			et.DenyPaths(
+				filepath.Join(workspace, "memory.db"),
+				filepath.Join(workspace, "memory.db-wal"),
+				filepath.Join(workspace, "memory.db-shm"),
+				filepath.Join(workspace, "config.json"),
+				filepath.Join(workspace, "delegate"),
+			)
 			if cfgPath := os.Getenv("GOCLAW_CONFIG"); cfgPath != "" {
 				et.DenyPaths(cfgPath)
 			}
@@ -214,11 +223,17 @@ func setupToolRegistry(
 	// deny paths add defense-in-depth.
 	internalDenyPaths := []string{
 		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
-		"memory/", ".media/", "delegate/",
+		"memory/", ".media/", ".uploads/", "delegate/",
+	}
+	// read_file: allow .media/ access (uploaded documents accessed via AllowPaths
+	// for backward compat; new uploads go to per-user .uploads/ within workspace).
+	readFileDenyPaths := []string{
+		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
+		"memory/", "delegate/",
 	}
 	if rf, ok := toolsReg.Get("read_file"); ok {
 		if t, ok := rf.(*tools.ReadFileTool); ok {
-			t.DenyPaths(internalDenyPaths...)
+			t.DenyPaths(readFileDenyPaths...)
 		}
 	}
 	if wf, ok := toolsReg.Get("write_file"); ok {
@@ -338,7 +353,7 @@ func setupMemoryEmbeddings(
 	if pgStores.Memory != nil {
 		memCfg := cfg.Agents.Defaults.Memory
 		if pgStores.Agents != nil {
-			if defaultAgent, agErr := pgStores.Agents.GetByKey(context.Background(), "default"); agErr == nil {
+			if defaultAgent, agErr := pgStores.Agents.GetByKey(store.WithCrossTenant(context.Background()), "default"); agErr == nil {
 				if agentMemCfg := defaultAgent.ParseMemoryConfig(); agentMemCfg != nil {
 					memCfg = agentMemCfg
 					slog.Debug("using per-agent memory config from DB", "agent", defaultAgent.AgentKey)
@@ -452,7 +467,9 @@ func setupSkillsSystem(
 	toolsReg *tools.Registry,
 	providerRegistry *providers.Registry,
 	msgBus *bus.MessageBus,
-) (*skills.Loader, *tools.SkillSearchTool, string) {
+) (*skills.Loader, *tools.SkillSearchTool, string, string) {
+	var bundledSkillsDir string // resolved later; returned for HTTP handler fallback
+
 	// Skills loader + search tool
 	// Global skills live under ~/.goclaw/skills/ (user-managed), not data/skills/.
 	globalSkillsDir := os.Getenv("GOCLAW_SKILLS_DIR")
@@ -469,7 +486,7 @@ func setupSkillsSystem(
 	skillSearchTool := tools.NewSkillSearchTool(skillsLoader)
 	toolsReg.Register(skillSearchTool)
 	toolsReg.Register(tools.NewUseSkillTool())
-	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills()))
+	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(store.WithCrossTenant(context.Background()))))
 
 	// Wire skills-store directory into filesystem loader so agents
 	// can discover uploaded skills in their system prompt and BM25 search index.
@@ -480,7 +497,7 @@ func setupSkillsSystem(
 			slog.Info("skills-store directory wired into loader", "dir", storeDirs[0])
 
 			// Seed system/bundled skills into DB
-			bundledSkillsDir := os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
+			bundledSkillsDir = os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
 			if bundledSkillsDir == "" {
 				// Check common locations: Docker default, then local dev
 				for _, candidate := range []string{"bundled-skills", "/app/bundled-skills", "skills"} {
@@ -518,7 +535,7 @@ func setupSkillsSystem(
 			if len(storeDirs) > 0 {
 				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], skillsLoader))
 				slog.Info("publish_skill tool registered")
-				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], skillsLoader))
+				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("skill_manage tool registered")
 			}
 		}
@@ -549,6 +566,6 @@ func setupSkillsSystem(
 		}
 	}
 
-	return skillsLoader, skillSearchTool, globalSkillsDir
+	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir
 }
 

@@ -60,7 +60,9 @@
       "commandRequired": "Command is required for stdio transport",
       "urlRequired": "URL is required for SSE/HTTP transport",
       "connectionFailed": "Connection failed"
-    }
+    },
+    "requireUserCredentials": "Require User Credentials",
+    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials."
   },
   "grants": {
     "title": "Agent Grants - {{name}}",
@@ -97,5 +99,28 @@
     "failedCreate": "Failed to create MCP server",
     "failedUpdate": "Failed to update MCP server",
     "failedDelete": "Failed to delete MCP server"
+  },
+  "userCredentials": {
+    "title": "My Credentials",
+    "description": "Set your personal credentials for this MCP server. These override the server defaults for your account only.",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Leave empty to keep current",
+    "headers": "Headers",
+    "env": "Environment Variables",
+    "headerPlaceholder": "KEY=VALUE, one per line",
+    "save": "Save",
+    "delete": "Delete",
+    "deleteAll": "Delete All",
+    "cancel": "Cancel",
+    "saved": "Credentials saved",
+    "deleted": "Credentials deleted",
+    "hasApiKey": "API Key set",
+    "hasHeaders": "Headers set",
+    "hasEnv": "Env vars set",
+    "noCredentials": "No credentials set",
+    "addHeader": "Add Header",
+    "addEnv": "Add Variable",
+    "saveFailed": "Failed to save credentials",
+    "deleteFailed": "Failed to delete credentials"
   }
 }

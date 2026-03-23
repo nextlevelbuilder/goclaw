@@ -3,12 +3,16 @@ package agent
 import (
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -50,19 +54,20 @@ func loadImages(files []bus.MediaFile) []providers.ImageContent {
 	return images
 }
 
-// persistMedia sanitizes images, saves all media files to persistent storage,
-// and returns lightweight MediaRefs. Non-image files are saved as-is.
-// If mediaStore is nil, falls back to legacy behavior (no persistence, delete temp files).
-func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile) []providers.MediaRef {
-	if l.mediaStore == nil {
-		// Fallback: no persistent storage configured.
-		// slog.Warn("media: no media store configured, temp files will be deleted", "agent", l.id)
-		// Keep workspace files — don't delete originals.
-		// defer func() {
-		// 	for _, f := range files {
-		// 		_ = os.Remove(f.Path)
-		// 	}
-		// }()
+// persistMedia sanitizes images, saves all media files to the per-user workspace
+// .uploads/ directory, and returns lightweight MediaRefs with persisted paths.
+// All media types (images, documents, audio, video) are stored within the user's
+// workspace for filesystem-level tenant isolation.
+// workspace is the per-user workspace path from ToolWorkspaceFromCtx(ctx).
+func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile, workspace string) []providers.MediaRef {
+	if workspace == "" {
+		slog.Warn("media: no workspace, cannot persist media")
+		return nil
+	}
+
+	uploadsDir := filepath.Join(workspace, ".uploads")
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		slog.Warn("media: failed to create .uploads dir", "dir", uploadsDir, "error", err)
 		return nil
 	}
 
@@ -70,49 +75,80 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile) []provider
 	for _, f := range files {
 		mime := f.MimeType
 		if mime == "" {
-			mime = mimeFromExt(filepath.Ext(f.Path)) // fallback for legacy callers
+			mime = mimeFromExt(filepath.Ext(f.Path))
 		}
 		kind := mediaKindFromMime(mime)
 
 		// Sanitize images before persistent storage.
 		srcPath := f.Path
+		var sanitizedTemp string // track temp file for cleanup
 		if kind == "image" {
 			sanitized, err := SanitizeImage(f.Path)
 			if err != nil {
 				slog.Warn("media: sanitize image failed, using original", "path", f.Path, "error", err)
 			} else {
 				srcPath = sanitized
+				sanitizedTemp = sanitized
 				mime = "image/jpeg" // sanitized output is always JPEG
-				// Keep workspace files — don't delete originals after sanitization.
-				// if sanitized != f.Path {
-				// 	_ = os.Remove(f.Path)
-				// }
 			}
 		}
 
-		id, _, err := l.mediaStore.SaveFile(sessionKey, srcPath, mime)
-		if err != nil {
+		id := uuid.New().String()
+		ext := media.ExtFromMime(mime)
+		if ext == "" {
+			ext = filepath.Ext(srcPath) // fallback to source extension
+		}
+		dstPath := filepath.Join(uploadsDir, id+ext)
+
+		if err := copyMediaFile(srcPath, dstPath); err != nil {
 			slog.Warn("media: failed to persist file", "path", f.Path, "error", err)
-			// Keep workspace files — don't delete on persist failure.
-			// _ = os.Remove(srcPath)
+			if sanitizedTemp != "" {
+				os.Remove(sanitizedTemp)
+			}
 			continue
+		}
+		if sanitizedTemp != "" {
+			os.Remove(sanitizedTemp) // cleanup sanitized temp file
 		}
 
 		refs = append(refs, providers.MediaRef{
 			ID:       id,
 			MimeType: mime,
 			Kind:     kind,
+			Path:     dstPath,
 		})
-		slog.Debug("media: persisted file", "id", id, "kind", kind, "mime", mime, "agent", l.id)
+		slog.Debug("media: persisted file", "id", id, "kind", kind, "path", dstPath, "agent", l.id)
 	}
 	return refs
+}
+
+// copyMediaFile copies src to dst using buffered I/O.
+// Removes partial dst file on failure.
+func copyMediaFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst) // cleanup partial file
+		return err
+	}
+	return out.Close()
 }
 
 // enrichDocumentPaths updates the last user message to include persisted file paths
 // in <media:document> tags. This allows skills (e.g. pdf skill via exec) to access
 // the file directly, matching how Claude Code skills work with file paths.
 func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []providers.MediaRef) {
-	if l.mediaStore == nil || len(messages) == 0 {
+	if len(messages) == 0 {
 		return
 	}
 	// Find last user message
@@ -132,8 +168,16 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 		if ref.Kind != "document" {
 			continue
 		}
-		p, err := l.mediaStore.LoadPath(ref.ID)
-		if err != nil {
+		// Use persisted workspace path; fall back to legacy .media/ lookup.
+		p := ref.Path
+		if p == "" && l.mediaStore != nil {
+			var err error
+			p, err = l.mediaStore.LoadPath(ref.ID)
+			if err != nil {
+				continue
+			}
+		}
+		if p == "" {
 			continue
 		}
 		// Replace <media:document> or <media:document name="X"> with version that includes path.
@@ -307,7 +351,7 @@ const maxMediaReloadMessages = 5
 // reloadMediaForMessages populates Images on historical messages that have image MediaRefs.
 // Only reloads the last maxMessages messages with image refs (newest first) to limit context usage.
 func (l *Loop) reloadMediaForMessages(msgs []providers.Message, maxMessages int) {
-	if l.mediaStore == nil || maxMessages <= 0 {
+	if maxMessages <= 0 {
 		return
 	}
 
@@ -324,9 +368,16 @@ func (l *Loop) reloadMediaForMessages(msgs []providers.Message, maxMessages int)
 				continue
 			}
 			hasImageRef = true
-			p, err := l.mediaStore.LoadPath(ref.ID)
-			if err != nil {
-				slog.Debug("media: reload skip missing file", "id", ref.ID, "error", err)
+			p := ref.Path
+			if p == "" && l.mediaStore != nil {
+				var err error
+				p, err = l.mediaStore.LoadPath(ref.ID)
+				if err != nil {
+					slog.Debug("media: reload skip missing file", "id", ref.ID, "error", err)
+					continue
+				}
+			}
+			if p == "" {
 				continue
 			}
 			imageFiles = append(imageFiles, bus.MediaFile{Path: p, MimeType: ref.MimeType})

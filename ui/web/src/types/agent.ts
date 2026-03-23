@@ -102,6 +102,7 @@ export interface AgentData {
   context_pruning?: ContextPruningConfig | null;
   other_config?: Record<string, unknown> | null;
   budget_monthly_cents?: number | null;
+  tenant_id?: string;
 }
 
 export interface AgentShareData {

@@ -76,6 +76,13 @@ type MCPAccessInfo struct {
 	ToolDeny  []string      `json:"tool_deny,omitempty"`  // effective deny list
 }
 
+// MCPUserCredentials holds per-user credential overrides for an MCP server.
+type MCPUserCredentials struct {
+	APIKey  string            `json:"api_key,omitempty"`  // decrypted
+	Headers map[string]string `json:"headers,omitempty"`  // decrypted
+	Env     map[string]string `json:"env,omitempty"`      // decrypted
+}
+
 // MCPServerStore manages MCP server configs and access grants.
 type MCPServerStore interface {
 	// Server CRUD
@@ -106,4 +113,9 @@ type MCPServerStore interface {
 	CreateRequest(ctx context.Context, req *MCPAccessRequest) error
 	ListPendingRequests(ctx context.Context) ([]MCPAccessRequest, error)
 	ReviewRequest(ctx context.Context, requestID uuid.UUID, approved bool, reviewedBy, note string) error
+
+	// Per-user credentials
+	GetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) (*MCPUserCredentials, error)
+	SetUserCredentials(ctx context.Context, serverID uuid.UUID, userID string, creds MCPUserCredentials) error
+	DeleteUserCredentials(ctx context.Context, serverID uuid.UUID, userID string) error
 }

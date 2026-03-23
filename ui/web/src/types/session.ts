@@ -34,7 +34,7 @@ export interface Message {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   is_error?: boolean;
-  media_refs?: { id: string; mime_type: string; kind: string }[];
+  media_refs?: { id: string; mime_type: string; kind: string; path?: string }[];
 }
 
 export interface ToolCall {

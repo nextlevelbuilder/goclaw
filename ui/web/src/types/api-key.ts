@@ -9,12 +9,14 @@ export interface ApiKeyData {
   created_by: string;
   created_at: string;
   updated_at: string;
+  tenant_id?: string;
 }
 
 export interface ApiKeyCreateInput {
   name: string;
   scopes: string[];
   expires_in?: number; // seconds; undefined = never
+  tenant_id?: string;  // cross-tenant admin only; omit for system-wide key
 }
 
 export interface ApiKeyCreateResponse extends ApiKeyData {

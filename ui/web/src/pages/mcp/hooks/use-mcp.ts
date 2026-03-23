@@ -4,9 +4,9 @@ import i18next from "i18next";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
-import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo } from "@/types/mcp";
+import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput } from "@/types/mcp";
 
-export type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo };
+export type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPUserCredentialStatus, MCPUserCredentialInput };
 
 export function useMCP() {
   const http = useHttp();
@@ -117,6 +117,27 @@ export function useMCP() {
     [http],
   );
 
+  const getUserCredentials = useCallback(
+    async (serverId: string) => {
+      return http.get<MCPUserCredentialStatus>(`/v1/mcp/servers/${serverId}/user-credentials`);
+    },
+    [http],
+  );
+
+  const setUserCredentials = useCallback(
+    async (serverId: string, creds: MCPUserCredentialInput) => {
+      await http.put(`/v1/mcp/servers/${serverId}/user-credentials`, creds);
+    },
+    [http],
+  );
+
+  const deleteUserCredentials = useCallback(
+    async (serverId: string) => {
+      await http.delete(`/v1/mcp/servers/${serverId}/user-credentials`);
+    },
+    [http],
+  );
+
   return {
     servers,
     loading,
@@ -130,5 +151,8 @@ export function useMCP() {
     listGrantsByAgent,
     testConnection,
     listServerTools,
+    getUserCredentials,
+    setUserCredentials,
+    deleteUserCredentials,
   };
 }

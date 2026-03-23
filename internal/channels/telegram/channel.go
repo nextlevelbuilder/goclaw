@@ -83,7 +83,7 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 	}
 
 	httpClient := &http.Client{
-		Timeout:   30 * time.Second,
+		Timeout:   60 * time.Second, // Must exceed getUpdates Timeout to avoid long-poll race (#361)
 		Transport: transport,
 	}
 	// Apply ForceIPv4 at init if configured (explicit, predictable, no runtime heuristic).
@@ -122,7 +122,7 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		agentStore:      agentStore,
 		configPermStore: configPermStore,
 		teamStore:       teamStore,
-		groupHistory:    channels.MakeHistory(channels.TypeTelegram, pendingStore),
+		groupHistory:    channels.MakeHistory(channels.TypeTelegram, pendingStore, base.TenantID()),
 		historyLimit:    historyLimit,
 		requireMention:  requireMention,
 	}, nil
@@ -139,7 +139,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.pollDone = make(chan struct{})
 
 	updates, err := c.bot.UpdatesViaLongPolling(pollCtx, &telego.GetUpdatesParams{
-		Timeout: 30,
+		Timeout: 25, // Long-poll seconds; keep below HTTP client Timeout (#361)
 		AllowedUpdates: []string{
 			"message",
 			"edited_message",

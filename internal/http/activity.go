@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -38,6 +39,13 @@ func (h *ActivityHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.URL.Query().Get("actor_id"); v != "" {
 		opts.ActorID = v
+	}
+
+	// Non-admin callers may only see their own activity logs.
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		opts.ActorID = callerID
 	}
 	if v := r.URL.Query().Get("action"); v != "" {
 		opts.Action = v

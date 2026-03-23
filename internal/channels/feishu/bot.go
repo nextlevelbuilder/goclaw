@@ -62,7 +62,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// 4. Group policy
 	if mc.ChatType == "group" {
-		if !c.checkGroupPolicy(mc.SenderID, mc.ChatID) {
+		if !c.checkGroupPolicy(ctx, mc.SenderID, mc.ChatID) {
 			slog.Debug("feishu group message rejected by policy", "sender_id", mc.SenderID, "chat_id", mc.ChatID)
 			return
 		}
@@ -99,7 +99,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// 6. DM policy (pairing flow)
 	if mc.ChatType == "p2p" {
-		if !c.checkDMPolicy(mc.SenderID, mc.ChatID) {
+		if !c.checkDMPolicy(ctx, mc.SenderID, mc.ChatID) {
 			return
 		}
 	}

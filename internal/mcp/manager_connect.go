@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -123,8 +124,8 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 
 // connectViaPool acquires a shared connection from the pool and creates
 // per-agent BridgeTools pointing to the shared client/connected pointers.
-func (m *Manager) connectViaPool(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int) error {
-	entry, err := m.pool.Acquire(ctx, name, transportType, command, args, env, url, headers, timeoutSec)
+func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int) error {
+	entry, err := m.pool.Acquire(ctx, tenantID, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
@@ -132,7 +133,9 @@ func (m *Manager) connectViaPool(ctx context.Context, name, transportType, comma
 	// Create per-agent BridgeTools from the pool's shared connection
 	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec)
 
-	// Track server state and per-agent tool names
+	// Track server state and per-agent tool names.
+	// poolServers/poolToolNames keyed by plain name for Close() iteration.
+	// poolKeys maps plain name → pool compound key for Release().
 	m.mu.Lock()
 	m.servers[name] = entry.state
 	if m.poolServers == nil {
@@ -143,6 +146,10 @@ func (m *Manager) connectViaPool(ctx context.Context, name, transportType, comma
 		m.poolToolNames = make(map[string][]string)
 	}
 	m.poolToolNames[name] = registeredNames
+	if m.poolKeys == nil {
+		m.poolKeys = make(map[string]string)
+	}
+	m.poolKeys[name] = poolKey(tenantID, name)
 	m.mu.Unlock()
 
 	if len(registeredNames) > 0 {

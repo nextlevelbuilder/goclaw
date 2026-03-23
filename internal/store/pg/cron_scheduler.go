@@ -34,7 +34,7 @@ func (s *PGCronStore) GetDueJobs(now time.Time) []store.CronJob {
 // refreshJobCache reloads all enabled jobs from DB. Must be called with mu held.
 func (s *PGCronStore) refreshJobCache() {
 	rows, err := s.db.Query(
-		`SELECT id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+		`SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE enabled = true`)
 	if err != nil {
@@ -244,7 +244,7 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 	}
 
 	// Emit completion event
-	evt := store.CronEvent{Action: "completed", JobID: job.ID, JobName: job.Name, Status: status}
+	evt := store.CronEvent{Action: "completed", JobID: job.ID, JobName: job.Name, UserID: job.UserID, Status: status}
 	if err != nil {
 		evt.Action = "error"
 		evt.Error = err.Error()

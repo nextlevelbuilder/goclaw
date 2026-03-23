@@ -26,7 +26,7 @@ func (h *SkillsHandler) handleListVersions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(id)
+	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return
@@ -73,7 +73,7 @@ func (h *SkillsHandler) handleListFiles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(id)
+	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return
@@ -162,7 +162,7 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(id)
+	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return

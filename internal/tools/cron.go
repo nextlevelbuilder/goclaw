@@ -156,17 +156,17 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *Result {
 	case "status":
 		return t.handleStatus()
 	case "list":
-		return t.handleList(args, agentID, userID)
+		return t.handleList(ctx, args, agentID, userID)
 	case "add":
 		return t.handleAdd(ctx, args, agentID, userID)
 	case "update":
-		return t.handleUpdate(args, agentID, userID)
+		return t.handleUpdate(ctx, args, agentID, userID)
 	case "remove":
-		return t.handleRemove(args, agentID, userID)
+		return t.handleRemove(ctx, args, agentID, userID)
 	case "run":
-		return t.handleRun(args, agentID, userID)
+		return t.handleRun(ctx, args, agentID, userID)
 	case "runs":
-		return t.handleRuns(args, agentID, userID)
+		return t.handleRuns(ctx, args, agentID, userID)
 	default:
 		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
 	}
@@ -178,9 +178,9 @@ func (t *CronTool) handleStatus() *Result {
 	return NewResult(string(data))
 }
 
-func (t *CronTool) handleList(args map[string]any, agentID, userID string) *Result {
+func (t *CronTool) handleList(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	includeDisabled, _ := args["includeDisabled"].(bool)
-	jobs := t.cronStore.ListJobs(includeDisabled, agentID, userID)
+	jobs := t.cronStore.ListJobs(ctx, includeDisabled, agentID, userID)
 
 	result := map[string]any{
 		"jobs":  jobs,
@@ -288,7 +288,7 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		agentID = explicit
 	}
 
-	job, err := t.cronStore.AddJob(name, schedule, message, deliver, channel, to, agentID, userID)
+	job, err := t.cronStore.AddJob(ctx, name, schedule, message, deliver, channel, to, agentID, userID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create cron job: %v", err))
 	}
@@ -296,7 +296,7 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 	// Set wake_heartbeat if requested (triggers heartbeat after cron job completes)
 	if wh, _ := jobObj["wake_heartbeat"].(bool); wh {
 		wakeTrue := true
-		if updated, uErr := t.cronStore.UpdateJob(job.ID, store.CronJobPatch{WakeHeartbeat: &wakeTrue}); uErr == nil {
+		if updated, uErr := t.cronStore.UpdateJob(ctx, job.ID, store.CronJobPatch{WakeHeartbeat: &wakeTrue}); uErr == nil {
 			job = updated
 		}
 	}
@@ -307,8 +307,8 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 
 // checkJobOwnership validates that the job belongs to the current agent+user scope.
 // When agentID/userID is empty, all jobs are accessible.
-func (t *CronTool) checkJobOwnership(jobID, agentID, userID string) (*store.CronJob, *Result) {
-	job, ok := t.cronStore.GetJob(jobID)
+func (t *CronTool) checkJobOwnership(ctx context.Context, jobID, agentID, userID string) (*store.CronJob, *Result) {
+	job, ok := t.cronStore.GetJob(ctx, jobID)
 	if !ok {
 		return nil, ErrorResult(fmt.Sprintf("job %s not found", jobID))
 	}
@@ -324,13 +324,13 @@ func (t *CronTool) checkJobOwnership(jobID, agentID, userID string) (*store.Cron
 	return job, nil
 }
 
-func (t *CronTool) handleUpdate(args map[string]any, agentID, userID string) *Result {
+func (t *CronTool) handleUpdate(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	jobID := resolveJobID(args)
 	if jobID == "" {
 		return ErrorResult("jobId is required for update action")
 	}
 
-	if _, errResult := t.checkJobOwnership(jobID, agentID, userID); errResult != nil {
+	if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
 		return errResult
 	}
 
@@ -351,7 +351,7 @@ func (t *CronTool) handleUpdate(args map[string]any, agentID, userID string) *Re
 		}
 	}
 
-	job, err := t.cronStore.UpdateJob(jobID, patch)
+	job, err := t.cronStore.UpdateJob(ctx, jobID, patch)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to update cron job: %v", err))
 	}
@@ -360,17 +360,17 @@ func (t *CronTool) handleUpdate(args map[string]any, agentID, userID string) *Re
 	return NewResult(string(data))
 }
 
-func (t *CronTool) handleRemove(args map[string]any, agentID, userID string) *Result {
+func (t *CronTool) handleRemove(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	jobID := resolveJobID(args)
 	if jobID == "" {
 		return ErrorResult("jobId is required for remove action")
 	}
 
-	if _, errResult := t.checkJobOwnership(jobID, agentID, userID); errResult != nil {
+	if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
 		return errResult
 	}
 
-	if err := t.cronStore.RemoveJob(jobID); err != nil {
+	if err := t.cronStore.RemoveJob(ctx, jobID); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to remove cron job: %v", err))
 	}
 
@@ -378,20 +378,20 @@ func (t *CronTool) handleRemove(args map[string]any, agentID, userID string) *Re
 	return NewResult(string(data))
 }
 
-func (t *CronTool) handleRun(args map[string]any, agentID, userID string) *Result {
+func (t *CronTool) handleRun(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	jobID := resolveJobID(args)
 	if jobID == "" {
 		return ErrorResult("jobId is required for run action")
 	}
 
-	if _, errResult := t.checkJobOwnership(jobID, agentID, userID); errResult != nil {
+	if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
 		return errResult
 	}
 
 	runMode, _ := args["runMode"].(string)
 	force := runMode == "force"
 
-	ran, reason, err := t.cronStore.RunJob(jobID, force)
+	ran, reason, err := t.cronStore.RunJob(ctx, jobID, force)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to run cron job: %v", err))
 	}
@@ -407,12 +407,12 @@ func (t *CronTool) handleRun(args map[string]any, agentID, userID string) *Resul
 	return NewResult(string(data))
 }
 
-func (t *CronTool) handleRuns(args map[string]any, agentID, userID string) *Result {
+func (t *CronTool) handleRuns(ctx context.Context, args map[string]any, agentID, userID string) *Result {
 	jobID := resolveJobID(args)
 
 	// Validate ownership if a specific job is requested
 	if jobID != "" {
-		if _, errResult := t.checkJobOwnership(jobID, agentID, userID); errResult != nil {
+		if _, errResult := t.checkJobOwnership(ctx, jobID, agentID, userID); errResult != nil {
 			return errResult
 		}
 	}
@@ -422,7 +422,7 @@ func (t *CronTool) handleRuns(args map[string]any, agentID, userID string) *Resu
 		limit = int(v)
 	}
 
-	entries, total := t.cronStore.GetRunLog(jobID, limit, 0)
+	entries, total := t.cronStore.GetRunLog(ctx, jobID, limit, 0)
 
 	result := map[string]any{
 		"entries": entries,

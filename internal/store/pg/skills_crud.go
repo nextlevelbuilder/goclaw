@@ -29,9 +29,9 @@ type SkillCreateParams struct {
 func (s *PGSkillStore) CreateSkill(name, slug string, description *string, ownerID, visibility string, version int, filePath string, fileSize int64, fileHash *string) error {
 	id := store.GenNewID()
 	_, err := s.db.Exec(
-		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status, file_path, file_size, file_hash, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9, $10, NOW(), NOW())`,
-		id, name, slug, description, ownerID, visibility, version, filePath, fileSize, fileHash,
+		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status, file_path, file_size, file_hash, tenant_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9, $10, $11, NOW(), NOW())`,
+		id, name, slug, description, ownerID, visibility, version, filePath, fileSize, fileHash, store.MasterTenantID,
 	)
 	if err == nil {
 		s.BumpVersion()
@@ -39,42 +39,68 @@ func (s *PGSkillStore) CreateSkill(name, slug string, description *string, owner
 	return err
 }
 
-func (s *PGSkillStore) UpdateSkill(id uuid.UUID, updates map[string]any) error {
-	if err := execMapUpdate(context.Background(), s.db, "skills", id, updates); err != nil {
+func (s *PGSkillStore) UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error {
+	var err error
+	if store.IsCrossTenant(ctx) {
+		err = execMapUpdate(ctx, s.db, "skills", id, updates)
+	} else {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return fmt.Errorf("tenant_id required for update")
+		} else {
+			err = execMapUpdateWhereTenant(ctx, s.db, "skills", updates, id, tid)
+		}
+	}
+	if err != nil {
 		return err
 	}
 	s.BumpVersion()
 	return nil
 }
 
-func (s *PGSkillStore) DeleteSkill(id uuid.UUID) error {
+func (s *PGSkillStore) DeleteSkill(ctx context.Context, id uuid.UUID) error {
 	// Reject deletion of system skills
 	var isSystem bool
-	if err := s.db.QueryRow("SELECT is_system FROM skills WHERE id = $1", id).Scan(&isSystem); err != nil {
+	if err := s.db.QueryRowContext(ctx, "SELECT is_system FROM skills WHERE id = $1", id).Scan(&isSystem); err != nil {
 		return fmt.Errorf("check skill: %w", err)
 	}
 	if isSystem {
 		return fmt.Errorf("cannot delete system skill")
 	}
 
-	tx, err := s.db.Begin()
+	// Tenant-scoped delete: only delete skill owned by this tenant.
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return fmt.Errorf("tenant_id required")
+		}
+		var skillTenantID uuid.UUID
+		if err := s.db.QueryRowContext(ctx, "SELECT tenant_id FROM skills WHERE id = $1", id).Scan(&skillTenantID); err != nil {
+			return fmt.Errorf("skill not found")
+		}
+		if skillTenantID != tid {
+			return fmt.Errorf("skill not found")
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
 	// Cascade: remove all agent grants for this skill
-	if _, err := tx.Exec("DELETE FROM skill_agent_grants WHERE skill_id = $1", id); err != nil {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM skill_agent_grants WHERE skill_id = $1", id); err != nil {
 		return fmt.Errorf("delete skill grants: %w", err)
 	}
 
 	// Cascade: remove all user grants for this skill
-	if _, err := tx.Exec("DELETE FROM skill_user_grants WHERE skill_id = $1", id); err != nil {
+	if _, err := tx.ExecContext(ctx, "DELETE FROM skill_user_grants WHERE skill_id = $1", id); err != nil {
 		return fmt.Errorf("delete skill user grants: %w", err)
 	}
 
 	// Soft-delete the skill (use 'deleted' status, distinct from 'archived' which means missing deps)
-	if _, err := tx.Exec("UPDATE skills SET status = 'deleted' WHERE id = $1", id); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE skills SET status = 'deleted' WHERE id = $1", id); err != nil {
 		return fmt.Errorf("delete skill: %w", err)
 	}
 
@@ -132,12 +158,18 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 		return uuid.Nil, fmt.Errorf("get next version: %w", err)
 	}
 
+	// Resolve tenant_id: default to MasterTenantID if no tenant in context.
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+
 	id := store.GenNewID()
 	var returnedID uuid.UUID
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9, $10, $11, NOW(), NOW())
-		 ON CONFLICT (slug) DO UPDATE SET
+		`INSERT INTO skills (id, name, slug, description, owner_id, tenant_id, visibility, version, status, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, $11, $12, NOW(), NOW())
+		 ON CONFLICT (tenant_id, slug) DO UPDATE SET
 		   name = EXCLUDED.name, description = EXCLUDED.description,
 		   version = EXCLUDED.version, frontmatter = EXCLUDED.frontmatter,
 		   file_path = EXCLUDED.file_path,
@@ -145,7 +177,7 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 		   visibility = CASE WHEN skills.status IN ('archived', 'deleted') THEN 'private' ELSE skills.visibility END,
 		   status = 'active', updated_at = NOW()
 		 RETURNING id`,
-		id, p.Name, p.Slug, p.Description, p.OwnerID, p.Visibility, version,
+		id, p.Name, p.Slug, p.Description, p.OwnerID, tenantID, p.Visibility, version,
 		fmJSON, p.FilePath, p.FileSize, p.FileHash,
 	).Scan(&returnedID)
 	if err != nil {
@@ -168,10 +200,18 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 }
 
 // GetSkillFilePath returns the filesystem path and version for a skill by UUID.
-func (s *PGSkillStore) GetSkillFilePath(id uuid.UUID) (filePath string, slug string, version int, ok bool) {
-	err := s.db.QueryRow(
-		"SELECT file_path, slug, version FROM skills WHERE id = $1 AND status = 'active'", id,
-	).Scan(&filePath, &slug, &version)
+func (s *PGSkillStore) GetSkillFilePath(ctx context.Context, id uuid.UUID) (filePath string, slug string, version int, ok bool) {
+	q := "SELECT file_path, slug, version FROM skills WHERE id = $1 AND status = 'active'"
+	args := []any{id}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			tid = store.MasterTenantID
+		}
+		q += " AND (is_system = true OR tenant_id = $2)"
+		args = append(args, tid)
+	}
+	err := s.db.QueryRowContext(ctx, q, args...).Scan(&filePath, &slug, &version)
 	return filePath, slug, version, err == nil
 }
 
@@ -209,11 +249,19 @@ func (s *PGSkillStore) GetNextVersionLocked(ctx context.Context, slug string) (i
 }
 
 // ToggleSkill enables or disables a skill by UUID.
-func (s *PGSkillStore) ToggleSkill(id uuid.UUID, enabled bool) error {
-	_, err := s.db.Exec(
-		`UPDATE skills SET enabled = $1, updated_at = NOW() WHERE id = $2`,
-		enabled, id,
-	)
+func (s *PGSkillStore) ToggleSkill(ctx context.Context, id uuid.UUID, enabled bool) error {
+	q := `UPDATE skills SET enabled = $1, updated_at = NOW() WHERE id = $2`
+	args := []any{enabled, id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid != uuid.Nil {
+			q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+			args = append(args, tid)
+		}
+	}
+
+	_, err := s.db.ExecContext(ctx, q, args...)
 	if err == nil {
 		s.BumpVersion()
 	}

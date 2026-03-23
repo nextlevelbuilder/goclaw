@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,12 +10,12 @@ import (
 
 // SessionData holds conversation state for one session.
 type SessionData struct {
-	Key      string              `json:"key"`
+	Key          string              `json:"key"`
 	Messages     []providers.Message `json:"messages"`
 	FullMessages []providers.Message `json:"fullMessages,omitempty"`
-	Summary  string              `json:"summary,omitempty"`
-	Created  time.Time           `json:"created"`
-	Updated  time.Time           `json:"updated"`
+	Summary      string              `json:"summary,omitempty"`
+	Created      time.Time           `json:"created"`
+	Updated      time.Time           `json:"updated"`
 
 	AgentUUID uuid.UUID  `json:"agentUUID,omitempty"` // DB agent UUID
 	UserID    string     `json:"userID,omitempty"`    // External user ID (e.g. Telegram user ID)
@@ -28,8 +29,8 @@ type SessionData struct {
 	CompactionCount            int    `json:"compactionCount,omitempty"`
 	MemoryFlushCompactionCount int    `json:"memoryFlushCompactionCount,omitempty"`
 	MemoryFlushAt              int64  `json:"memoryFlushAt,omitempty"`
-	NumericID                   int64  `json:"numericId,omitempty"`
-	Label                      string `json:"label,omitempty"`
+	NumericID                  int64  `json:"numericId,omitempty"`
+	Label                      string            `json:"label,omitempty"`
 	SpawnedBy                  string            `json:"spawnedBy,omitempty"`
 	SpawnDepth                 int               `json:"spawnDepth,omitempty"`
 	Metadata                   map[string]string `json:"metadata,omitempty"`
@@ -42,7 +43,7 @@ type SessionData struct {
 
 // SessionInfo is lightweight session metadata for listing.
 type SessionInfo struct {
-	NumericID     int64             `json:"numericId,omitempty"`
+	NumericID    int64             `json:"numericId,omitempty"`
 	Key          string            `json:"key"`
 	MessageCount int               `json:"messageCount"`
 	Created      time.Time         `json:"created"`
@@ -55,11 +56,12 @@ type SessionInfo struct {
 
 // SessionListOpts holds pagination options for ListPaged.
 type SessionListOpts struct {
-	AgentID string
-	Channel string // optional: filter by channel prefix ("ws", "telegram", etc.)
-	UserID  string // optional: filter by user_id
-	Limit   int
-	Offset  int
+	AgentID  string
+	Channel  string    // optional: filter by channel prefix ("ws", "telegram", etc.)
+	UserID   string    // optional: filter by user_id
+	TenantID uuid.UUID // optional: filter by tenant (uuid.Nil = no filter)
+	Limit    int
+	Offset   int
 }
 
 // SessionListResult is the paginated result of ListPaged.
@@ -89,36 +91,38 @@ type SessionListRichResult struct {
 
 // SessionStore manages conversation sessions.
 type SessionStore interface {
-	GetOrCreate(key string) *SessionData
-	AddMessage(key string, msg providers.Message)
-	GetHistory(key string) []providers.Message
-	GetFullHistory(key string) []providers.Message
-	GetSummary(key string) string
-	SetSummary(key, summary string)
-	GetNumericID(key string) int64
-	GetLabel(key string) string
-	SetLabel(key, label string)
-	SetAgentInfo(key string, agentUUID uuid.UUID, userID string)
-	UpdateMetadata(key, model, provider, channel string)
-	AccumulateTokens(key string, input, output int64)
-	IncrementCompaction(key string)
-	GetCompactionCount(key string) int
-	GetMemoryFlushCompactionCount(key string) int
-	SetMemoryFlushDone(key string)
-	GetSessionMetadata(key string) map[string]string
-	SetSessionMetadata(key string, metadata map[string]string)
-	SetSpawnInfo(key, spawnedBy string, depth int)
-	SetContextWindow(key string, cw int)
-	GetContextWindow(key string) int
-	SetLastPromptTokens(key string, tokens, msgCount int)
-	GetLastPromptTokens(key string) (tokens, msgCount int)
-	TruncateHistory(key string, keepLast int)
-	SetHistory(key string, msgs []providers.Message)
-	Reset(key string)
-	Delete(key string) error
-	List(agentID string) []SessionInfo
-	ListPaged(opts SessionListOpts) SessionListResult
-	ListPagedRich(opts SessionListOpts) SessionListRichResult
-	Save(key string) error
-	LastUsedChannel(agentID string) (channel, chatID string)
+	GetOrCreate(ctx context.Context, key string) *SessionData
+	// Get returns the session if it exists (cache or DB), nil otherwise. Never creates.
+	Get(ctx context.Context, key string) *SessionData
+	AddMessage(ctx context.Context, key string, msg providers.Message)
+	GetHistory(ctx context.Context, key string) []providers.Message
+	GetFullHistory(ctx context.Context, key string) []providers.Message
+	GetSummary(ctx context.Context, key string) string
+	SetSummary(ctx context.Context, key, summary string)
+	GetNumericID(ctx context.Context, key string) int64
+	GetLabel(ctx context.Context, key string) string
+	SetLabel(ctx context.Context, key, label string)
+	SetAgentInfo(ctx context.Context, key string, agentUUID uuid.UUID, userID string)
+	UpdateMetadata(ctx context.Context, key, model, provider, channel string)
+	AccumulateTokens(ctx context.Context, key string, input, output int64)
+	IncrementCompaction(ctx context.Context, key string)
+	GetCompactionCount(ctx context.Context, key string) int
+	GetMemoryFlushCompactionCount(ctx context.Context, key string) int
+	SetMemoryFlushDone(ctx context.Context, key string)
+	GetSessionMetadata(ctx context.Context, key string) map[string]string
+	SetSessionMetadata(ctx context.Context, key string, metadata map[string]string)
+	SetSpawnInfo(ctx context.Context, key, spawnedBy string, depth int)
+	SetContextWindow(ctx context.Context, key string, cw int)
+	GetContextWindow(ctx context.Context, key string) int
+	SetLastPromptTokens(ctx context.Context, key string, tokens, msgCount int)
+	GetLastPromptTokens(ctx context.Context, key string) (tokens, msgCount int)
+	TruncateHistory(ctx context.Context, key string, keepLast int)
+	SetHistory(ctx context.Context, key string, msgs []providers.Message)
+	Reset(ctx context.Context, key string)
+	Delete(ctx context.Context, key string) error
+	List(ctx context.Context, agentID string) []SessionInfo
+	ListPaged(ctx context.Context, opts SessionListOpts) SessionListResult
+	ListPagedRich(ctx context.Context, opts SessionListOpts) SessionListRichResult
+	Save(ctx context.Context, key string) error
+	LastUsedChannel(ctx context.Context, agentID string) (channel, chatID string)
 }

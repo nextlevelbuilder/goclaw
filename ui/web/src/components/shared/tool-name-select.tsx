@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { X, ChevronDownIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBuiltinTools } from "@/pages/builtin-tools/hooks/use-builtin-tools";
-import { useCustomTools } from "@/pages/custom-tools/hooks/use-custom-tools";
 
 interface ToolNameSelectProps {
   value: string[];
@@ -16,7 +15,7 @@ interface ToolNameSelectProps {
 interface ToolOption {
   name: string;
   displayName: string;
-  group: "built-in" | "custom";
+  group: "built-in";
 }
 
 export function ToolNameSelect({
@@ -27,7 +26,6 @@ export function ToolNameSelect({
 }: ToolNameSelectProps) {
   const { t } = useTranslation("common");
   const { tools: builtinTools } = useBuiltinTools();
-  const { tools: customTools } = useCustomTools();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -36,18 +34,12 @@ export function ToolNameSelect({
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
   const allTools = useMemo<ToolOption[]>(() => {
-    const builtin: ToolOption[] = builtinTools.map((t) => ({
+    return builtinTools.map((t) => ({
       name: t.name,
       displayName: t.display_name || t.name,
-      group: "built-in",
+      group: "built-in" as const,
     }));
-    const custom: ToolOption[] = customTools.map((t) => ({
-      name: t.name,
-      displayName: t.name,
-      group: "custom",
-    }));
-    return [...builtin, ...custom];
-  }, [builtinTools, customTools]);
+  }, [builtinTools]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -57,9 +49,7 @@ export function ToolNameSelect({
   }, [allTools, value, search]);
 
   const grouped = useMemo(() => {
-    const builtinGroup = filtered.filter((t) => t.group === "built-in");
-    const customGroup = filtered.filter((t) => t.group === "custom");
-    return { builtin: builtinGroup, custom: customGroup };
+    return { builtin: filtered };
   }, [filtered]);
 
   // Compute dropdown position for portal rendering
@@ -157,7 +147,7 @@ export function ToolNameSelect({
           onClick={() => setOpen(!open)}
         />
       </div>
-      {open && (grouped.builtin.length > 0 || grouped.custom.length > 0) && createPortal(
+      {open && grouped.builtin.length > 0 && createPortal(
         <div
           ref={dropdownRef}
           style={dropdownStyle}
@@ -178,24 +168,6 @@ export function ToolNameSelect({
                 >
                   <span className="truncate">{t.displayName}</span>
                   <code className="text-muted-foreground text-[10px]">{t.name}</code>
-                </button>
-              ))}
-            </>
-          )}
-          {grouped.custom.length > 0 && (
-            <>
-              <div className="text-muted-foreground mt-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider">
-                {t("customTools")}
-              </div>
-              {grouped.custom.map((t) => (
-                <button
-                  key={t.name}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => addTool(t.name)}
-                  className="hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none"
-                >
-                  <span className="truncate">{t.name}</span>
                 </button>
               ))}
             </>

@@ -34,7 +34,7 @@ export function ActivityIndicator({ activity, isRunning }: ActivityIndicatorProp
 function getPhaseConfig(activity: RunActivity) {
   switch (activity.phase) {
     case "thinking":
-      return { icon: Brain, color: "text-purple-500", label: "Thinking..." };
+      return { icon: Brain, color: "text-orange-500", label: "Thinking..." };
     case "tool_exec":
       return {
         icon: Wrench,

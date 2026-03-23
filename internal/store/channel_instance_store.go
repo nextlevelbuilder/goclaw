@@ -11,6 +11,7 @@ import (
 // ChannelInstanceData represents a channel instance in the database.
 type ChannelInstanceData struct {
 	BaseModel
+	TenantID    uuid.UUID       `json:"tenant_id,omitempty"`
 	Name        string          `json:"name"`
 	DisplayName string          `json:"display_name"`
 	ChannelType string          `json:"channel_type"`

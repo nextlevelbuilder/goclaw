@@ -1,4 +1,10 @@
 {
+  "selectTenant": "选择租户",
+  "selectTenantDescription": "选择一个租户继续",
+  "allTenantsOption": "所有租户",
+  "allTenantsDescription": "查看所有租户数据",
+  "noAccess": "无权访问",
+  "noAccessDescription": "您没有任何租户的访问权限。请联系管理员。",
   "pairing": {
     "approved": "访问已批准！正在跳转...",
     "askAdmin": "请让管理员批准此配对码：",
@@ -28,5 +34,7 @@
     "tokenPlaceholder": "Bearer token",
     "userId": "用户 ID",
     "userIdPlaceholder": "您的用户 ID"
-  }
+  },
+  "noAccessHint": "请联系管理员将您添加到租户，或使用其他账号登录。",
+  "logout": "退出登录"
 }

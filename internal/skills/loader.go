@@ -10,6 +10,7 @@
 package skills
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -100,7 +101,7 @@ func (l *Loader) SetManagedDir(dir string) {
 
 // ListSkills returns all available skills, respecting the priority hierarchy.
 // Higher-priority sources override lower ones by name.
-func (l *Loader) ListSkills() []Info {
+func (l *Loader) ListSkills(_ context.Context) []Info {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -278,7 +279,7 @@ func (l *Loader) findLatestVersion(slug string) (int, string) {
 // LoadSkill reads and returns the content of a skill by name (frontmatter stripped).
 // The {baseDir} placeholder in SKILL.md is replaced with the skill's absolute directory path.
 // Priority: workspace > agents > global > managed > builtin
-func (l *Loader) LoadSkill(name string) (string, bool) {
+func (l *Loader) LoadSkill(_ context.Context, name string) (string, bool) {
 	// Check flat skill directories (workspace, agents, global) first
 	for _, dir := range []string{l.workspaceSkills, l.projectAgentSkills, l.personalAgentSkills, l.globalSkills} {
 		if dir == "" {
@@ -324,12 +325,12 @@ func (l *Loader) LoadSkill(name string) (string, bool) {
 
 // LoadForContext loads multiple skills and formats them for system prompt injection.
 // If allowList is nil, all skills are loaded. If non-nil, only listed skills are loaded.
-func (l *Loader) LoadForContext(allowList []string) string {
+func (l *Loader) LoadForContext(ctx context.Context, allowList []string) string {
 	var names []string
 
 	if allowList == nil {
 		// Load all available skills
-		for _, s := range l.ListSkills() {
+		for _, s := range l.ListSkills(ctx) {
 			names = append(names, s.Name)
 		}
 	} else {
@@ -342,7 +343,7 @@ func (l *Loader) LoadForContext(allowList []string) string {
 
 	var parts []string
 	for _, name := range names {
-		content, ok := l.LoadSkill(name)
+		content, ok := l.LoadSkill(ctx, name)
 		if !ok {
 			continue
 		}
@@ -359,8 +360,8 @@ func (l *Loader) LoadForContext(allowList []string) string {
 // BuildSummary returns an XML summary of skills for context injection.
 // If allowList is nil, all skills are included. If non-nil, only listed skills are included.
 // The format matches the TS <available_skills> XML used in system prompts.
-func (l *Loader) BuildSummary(allowList []string) string {
-	allSkills := l.ListSkills()
+func (l *Loader) BuildSummary(ctx context.Context, allowList []string) string {
+	allSkills := l.ListSkills(ctx)
 	if len(allSkills) == 0 {
 		return ""
 	}
@@ -423,8 +424,8 @@ func (l *Loader) Dirs() []string {
 
 // FilterSkills returns skills filtered by an allowlist.
 // If allowList is nil, all skills are returned. If empty slice, none are returned.
-func (l *Loader) FilterSkills(allowList []string) []Info {
-	all := l.ListSkills()
+func (l *Loader) FilterSkills(ctx context.Context, allowList []string) []Info {
+	all := l.ListSkills(ctx)
 	if allowList == nil {
 		return all
 	}
@@ -445,9 +446,9 @@ func (l *Loader) FilterSkills(allowList []string) []Info {
 }
 
 // GetSkill returns info about a specific skill.
-func (l *Loader) GetSkill(name string) (*Info, bool) {
+func (l *Loader) GetSkill(ctx context.Context, name string) (*Info, bool) {
 	// Ensure cache is populated
-	l.ListSkills()
+	l.ListSkills(ctx)
 
 	l.mu.RLock()
 	defer l.mu.RUnlock()

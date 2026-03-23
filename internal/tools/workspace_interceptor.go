@@ -128,7 +128,7 @@ func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, acti
 	}
 
 	// Broadcast workspace file change event for real-time UI updates.
-	w.teamMgr.broadcastTeamEvent(protocol.EventWorkspaceFileChanged, map[string]string{
+	w.teamMgr.broadcastTeamEvent(ctx, protocol.EventWorkspaceFileChanged, map[string]string{
 		"team_id":   teamIDStr,
 		"channel":   "",
 		"chat_id":   chatID,
@@ -151,11 +151,7 @@ func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, acti
 		return
 	}
 
-	// Compute relative path from workspace root for storage.
-	relPath, err := filepath.Rel(filepath.Clean(teamWs), filepath.Clean(path))
-	if err != nil {
-		relPath = fileName
-	}
+	absPath := filepath.Clean(path)
 
 	switch action {
 	case "write":
@@ -173,21 +169,76 @@ func (w *WorkspaceInterceptor) AfterWrite(ctx context.Context, path string, acti
 			TaskID:           taskID,
 			TeamID:           teamID,
 			ChatID:           chatID,
-			Path:             relPath,
+			Path:             absPath,
 			FileSize:         fileSize,
 			MimeType:         mimeType,
 			CreatedByAgentID: &agentID,
 		}
 		if err := w.teamMgr.teamStore.AttachFileToTask(ctx, att); err != nil {
-			slog.Warn("workspace: auto-attach failed", "task_id", taskIDStr, "path", relPath, "error", err)
+			slog.Warn("workspace: auto-attach failed", "task_id", taskIDStr, "path", absPath, "error", err)
 		} else {
-			slog.Debug("workspace: auto-attached file to task", "task_id", taskIDStr, "path", relPath)
+			slog.Debug("workspace: auto-attached file to task", "task_id", taskIDStr, "path", absPath)
 		}
 
 	case "delete":
-		if err := w.teamMgr.teamStore.DetachFileFromTask(ctx, taskID, relPath); err != nil {
-			slog.Warn("workspace: auto-detach failed", "task_id", taskIDStr, "path", relPath, "error", err)
+		if err := w.teamMgr.teamStore.DetachFileFromTask(ctx, taskID, absPath); err != nil {
+			slog.Warn("workspace: auto-detach failed", "task_id", taskIDStr, "path", absPath, "error", err)
 		}
+	}
+}
+
+// AutoAttachWorkspaceFile attaches a file inside the team workspace to the
+// current task. No-op when the file is outside workspace or no task context exists.
+// Safe to call redundantly — DB uses ON CONFLICT DO NOTHING for dedup.
+func AutoAttachWorkspaceFile(ctx context.Context, teamStore store.TeamStore, workspace, absPath string) {
+	if teamStore == nil || workspace == "" {
+		return
+	}
+	cleanWs := filepath.Clean(workspace)
+	cleanPath := filepath.Clean(absPath)
+	if !strings.HasPrefix(cleanPath, cleanWs) {
+		return
+	}
+	taskIDStr := TeamTaskIDFromCtx(ctx)
+	teamIDStr := ToolTeamIDFromCtx(ctx)
+	if taskIDStr == "" || teamIDStr == "" {
+		return
+	}
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		return
+	}
+	teamID, err := uuid.Parse(teamIDStr)
+	if err != nil {
+		return
+	}
+
+	var fileSize int64
+	if info, err := os.Stat(cleanPath); err == nil {
+		fileSize = info.Size()
+	}
+
+	chatID := ToolChatIDFromCtx(ctx)
+	if chatID == "" {
+		chatID = store.UserIDFromContext(ctx)
+	}
+	agentID := store.AgentIDFromContext(ctx)
+
+	att := &store.TeamTaskAttachmentData{
+		TaskID:   taskID,
+		TeamID:   teamID,
+		ChatID:   chatID,
+		Path:     cleanPath,
+		FileSize: fileSize,
+		MimeType: mimeFromExt(filepath.Ext(cleanPath)),
+	}
+	if agentID != uuid.Nil {
+		att.CreatedByAgentID = &agentID
+	}
+	if err := teamStore.AttachFileToTask(ctx, att); err != nil {
+		slog.Warn("workspace: auto-attach media failed", "task_id", taskIDStr, "path", cleanPath, "error", err)
+	} else {
+		slog.Debug("workspace: auto-attached media to task", "task_id", taskIDStr, "path", cleanPath)
 	}
 }
 

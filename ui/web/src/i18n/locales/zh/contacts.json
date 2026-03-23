@@ -13,7 +13,8 @@
     "senderId": "发送者 ID",
     "channelType": "Channel",
     "peerKind": "类型",
-    "lastSeen": "最后活跃"
+    "lastSeen": "最后活跃",
+    "merged": "已合并"
   },
   "permissionsNote": {
     "title": "各Channel联系人名称权限说明",
@@ -22,6 +23,27 @@
     "zalo": "Zalo — 显示名称自动获取。",
     "slack": "Slack — 通过 Slack API 解析显示名称（Bot 需在工作区内）。",
     "feishu": "飞书/Lark — 需要 contact:user.base:readonly 权限。未授权时名称将为空。"
+  },
+  "selectedCount": "已选择 {{count}} 个",
+  "merge": {
+    "button": "合并",
+    "unmergeButton": "取消合并",
+    "dialogTitle": "合并联系人",
+    "dialogDescription": "将选中的联系人关联到一个租户用户身份。标识他们为跨Channel的同一个人。",
+    "linkExisting": "关联到现有用户",
+    "createNew": "创建新用户",
+    "selectUser": "选择租户用户...",
+    "displayName": "显示名称",
+    "displayNamePlaceholder": "例如：张三",
+    "userId": "用户 ID",
+    "userIdPlaceholder": "唯一标识符",
+    "confirm": "合并",
+    "cancel": "取消",
+    "success": "联系人合并成功",
+    "unmergeSuccess": "联系人取消合并成功",
+    "error": "合并联系人失败",
+    "unmergeError": "取消合并失败",
+    "comingSoon": "此功能正在开发中，尚不可用。"
   },
   "filters": {
     "allChannels": "所有Channel",

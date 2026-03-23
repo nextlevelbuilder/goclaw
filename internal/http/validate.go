@@ -35,7 +35,7 @@ var agentAllowedFields = map[string]bool{
 	"agent_key": true, "agent_type": true, "display_name": true,
 	"provider": true, "model": true, "status": true,
 	"context_window": true, "max_tool_iterations": true,
-	"workspace": true, "restrict_to_workspace": true,
+	"workspace": true,
 	"frontmatter": true, "compaction_config": true,
 	"memory_config": true, "other_config": true, "tools_config": true,
 	"is_default": true, "budget_monthly_cents": true, "subagents_config": true,
@@ -59,7 +59,7 @@ var mcpServerAllowedFields = map[string]bool{
 	"name": true, "transport": true, "command": true, "args": true,
 	"url": true, "api_key": true, "env": true, "headers": true,
 	"enabled": true, "tool_prefix": true, "timeout_seconds": true,
-	"agent_id": true, "config": true,
+	"agent_id": true, "config": true, "settings": true,
 }
 
 var channelInstanceAllowedFields = map[string]bool{

@@ -111,6 +111,9 @@ export class HttpClient {
     if (userId) h["X-GoClaw-User-Id"] = userId;
     const senderID = this.getSenderID();
     if (senderID) h["X-GoClaw-Sender-Id"] = senderID;
+    // Tenant scope: narrow cross-tenant admin to a specific tenant
+    const tenantScope = localStorage.getItem("goclaw:tenant_id");
+    if (tenantScope) h["X-GoClaw-Tenant-Id"] = tenantScope;
     return h;
   }
 
@@ -130,10 +133,10 @@ export class HttpClient {
     }
 
     if (!res.ok) {
-      if (res.status === 401) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      if (res.status === 401 || err.code === "TENANT_ACCESS_REVOKED") {
         this.onAuthFailure?.();
       }
-      const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new ApiError(
         err.code ?? "HTTP_ERROR",
         err.error ?? err.message ?? res.statusText,

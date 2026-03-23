@@ -36,6 +36,7 @@ type DBTokenSource struct {
 	providerStore store.ProviderStore
 	secretsStore  store.ConfigSecretsStore
 	providerName  string
+	tenantID      uuid.UUID // tenant context for DB queries
 
 	mu          sync.Mutex
 	cachedToken string
@@ -48,7 +49,14 @@ func NewDBTokenSource(provStore store.ProviderStore, secretsStore store.ConfigSe
 		providerStore: provStore,
 		secretsStore:  secretsStore,
 		providerName:  providerName,
+		tenantID:      store.MasterTenantID,
 	}
+}
+
+// WithTenantID sets the tenant context for DB queries. Must be called at init time before Token().
+func (ts *DBTokenSource) WithTenantID(tenantID uuid.UUID) *DBTokenSource {
+	ts.tenantID = tenantID
+	return ts
 }
 
 // Token returns a valid access token, refreshing if expired or about to expire.
@@ -61,7 +69,7 @@ func (ts *DBTokenSource) Token() (string, error) {
 		return ts.cachedToken, nil
 	}
 
-	ctx := context.Background()
+	ctx := store.WithTenantID(context.Background(), ts.tenantID)
 
 	// Load from DB if not cached
 	if ts.cachedToken == "" {

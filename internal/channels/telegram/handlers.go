@@ -148,8 +148,8 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		default: // "pairing" or unknown → secure default
 			paired := false
 			if c.pairingService != nil {
-				p1, err1 := c.pairingService.IsPaired(userID, c.Name())
-				p2, err2 := c.pairingService.IsPaired(senderID, c.Name())
+				p1, err1 := c.pairingService.IsPaired(ctx, userID, c.Name())
+				p2, err2 := c.pairingService.IsPaired(ctx, senderID, c.Name())
 				if err1 != nil || err2 != nil {
 					slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 						"user_id", userID, "channel", c.Name(), "err1", err1, "err2", err2)
@@ -256,7 +256,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			if topicCfg.groupPolicy == "pairing" && c.pairingService != nil {
 				if _, cached := c.approvedGroups.Load(chatIDStr); !cached {
 					groupSenderID := fmt.Sprintf("group:%d", chatID)
-					paired, pairErr := c.pairingService.IsPaired(groupSenderID, c.Name())
+					paired, pairErr := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
 					if pairErr != nil {
 						slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 							"group_sender", groupSenderID, "channel", c.Name(), "error", pairErr)
@@ -295,7 +295,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	if isGroup && topicCfg.groupPolicy == "pairing" && c.pairingService != nil {
 		if _, cached := c.approvedGroups.Load(chatIDStr); !cached {
 			groupSenderID := fmt.Sprintf("group:%d", chatID)
-			paired, err := c.pairingService.IsPaired(groupSenderID, c.Name())
+			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
 			if err != nil {
 				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 					"group_sender", groupSenderID, "channel", c.Name(), "error", err)

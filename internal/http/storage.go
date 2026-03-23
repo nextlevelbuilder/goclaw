@@ -13,24 +13,28 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // StorageHandler provides HTTP endpoints for browsing and managing
 // files inside the ~/.goclaw/ data directory.
 // Skills directories are browsable (read-only) but deletion is blocked.
+// sizeCacheEntry holds a cached storage size calculation for one tenant.
+type sizeCacheEntry struct {
+	total    int64
+	files    int
+	cachedAt time.Time
+}
+
 type StorageHandler struct {
-	baseDir string // resolved absolute path to ~/.goclaw/
+	baseDir string // global data dir (resolved absolute path to ~/.goclaw/)
 	token   string
 
-	// sizeCache caches the total storage size for 60 minutes.
-	sizeCache struct {
-		mu       sync.Mutex
-		total    int64
-		files    int
-		cachedAt time.Time
-	}
+	// sizeCache caches the total storage size per tenant for 60 minutes.
+	sizeCache sync.Map // tenantBaseDir (string) → *sizeCacheEntry
 }
 
 // NewStorageHandler creates a handler for workspace storage management.
@@ -48,6 +52,14 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(h.token, "", next)
+}
+
+// tenantBaseDir resolves the data directory scoped to the requesting tenant.
+// Master tenant returns the global baseDir (backward compat).
+func (h *StorageHandler) tenantBaseDir(r *http.Request) string {
+	tid := store.TenantIDFromContext(r.Context())
+	slug := store.TenantSlugFromContext(r.Context())
+	return config.TenantDataDir(h.baseDir, tid, slug)
 }
 
 // protectedDirs are top-level directories where deletion is blocked
@@ -91,11 +103,12 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rootDir := h.baseDir
+	base := h.tenantBaseDir(r)
+	rootDir := base
 	if subPath != "" {
-		rootDir = filepath.Join(h.baseDir, filepath.Clean(subPath))
-		if !strings.HasPrefix(rootDir, h.baseDir) {
-			slog.Warn("security.storage_escape", "resolved", rootDir, "root", h.baseDir)
+		rootDir = filepath.Join(base, filepath.Clean(subPath))
+		if !strings.HasPrefix(rootDir, base) {
+			slog.Warn("security.storage_escape", "resolved", rootDir, "root", base)
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
 			return
 		}
@@ -119,7 +132,7 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		if path == rootDir {
 			return nil
 		}
-		rel, _ := filepath.Rel(h.baseDir, path)
+		rel, _ := filepath.Rel(base, path)
 
 		// Skip symlinks
 		if d.Type()&os.ModeSymlink != 0 {
@@ -183,7 +196,7 @@ func (h *StorageHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"files":   entries,
-		"baseDir": h.baseDir,
+		"baseDir": base,
 	})
 }
 
@@ -205,34 +218,33 @@ func (h *StorageHandler) handleSize(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 
-	// Check cache
-	h.sizeCache.mu.Lock()
-	if !h.sizeCache.cachedAt.IsZero() && time.Since(h.sizeCache.cachedAt) < sizeCacheTTL {
-		total := h.sizeCache.total
-		files := h.sizeCache.files
-		h.sizeCache.mu.Unlock()
-		writeSizeEvent(w, flusher, map[string]any{"total": total, "files": files, "done": true, "cached": true})
-		return
+	sizeBase := h.tenantBaseDir(r)
+
+	// Check per-tenant cache
+	if entry, ok := h.sizeCache.Load(sizeBase); ok {
+		ce := entry.(*sizeCacheEntry)
+		if time.Since(ce.cachedAt) < sizeCacheTTL {
+			writeSizeEvent(w, flusher, map[string]any{"total": ce.total, "files": ce.files, "done": true, "cached": true})
+			return
+		}
 	}
-	h.sizeCache.mu.Unlock()
 
 	// Walk and stream progress
 	var total int64
 	var fileCount int
 	lastFlush := time.Now()
 
-	filepath.WalkDir(h.baseDir, func(path string, d os.DirEntry, err error) error {
+	filepath.WalkDir(sizeBase, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		// Check client disconnect
 		if r.Context().Err() != nil {
 			return filepath.SkipAll
 		}
 		if d.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
-		rel, _ := filepath.Rel(h.baseDir, path)
+		rel, _ := filepath.Rel(sizeBase, path)
 		if skills.IsSystemArtifact(rel) {
 			return nil
 		}
@@ -240,7 +252,6 @@ func (h *StorageHandler) handleSize(w http.ResponseWriter, r *http.Request) {
 			total += info.Size()
 			fileCount++
 		}
-		// Emit progress every 50 files or 200ms
 		if fileCount%50 == 0 || time.Since(lastFlush) > 200*time.Millisecond {
 			writeSizeEvent(w, flusher, map[string]any{"current": total, "files": fileCount})
 			lastFlush = time.Now()
@@ -248,12 +259,8 @@ func (h *StorageHandler) handleSize(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 
-	// Update cache
-	h.sizeCache.mu.Lock()
-	h.sizeCache.total = total
-	h.sizeCache.files = fileCount
-	h.sizeCache.cachedAt = time.Now()
-	h.sizeCache.mu.Unlock()
+	// Update per-tenant cache
+	h.sizeCache.Store(sizeBase, &sizeCacheEntry{total: total, files: fileCount, cachedAt: time.Now()})
 
 	// Send final event
 	writeSizeEvent(w, flusher, map[string]any{"total": total, "files": fileCount, "done": true, "cached": false})
@@ -279,9 +286,10 @@ func (h *StorageHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := filepath.Join(h.baseDir, filepath.Clean(relPath))
-	if !strings.HasPrefix(absPath, h.baseDir+string(filepath.Separator)) {
-		slog.Warn("security.storage_escape", "resolved", absPath, "root", h.baseDir)
+	readBase := h.tenantBaseDir(r)
+	absPath := filepath.Join(readBase, filepath.Clean(relPath))
+	if !strings.HasPrefix(absPath, readBase+string(filepath.Separator)) {
+		slog.Warn("security.storage_escape", "resolved", absPath, "root", readBase)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
 		return
 	}
@@ -346,9 +354,10 @@ func (h *StorageHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	absPath := filepath.Join(h.baseDir, filepath.Clean(relPath))
-	if !strings.HasPrefix(absPath, h.baseDir+string(filepath.Separator)) {
-		slog.Warn("security.storage_escape", "resolved", absPath, "root", h.baseDir)
+	delBase := h.tenantBaseDir(r)
+	absPath := filepath.Join(delBase, filepath.Clean(relPath))
+	if !strings.HasPrefix(absPath, delBase+string(filepath.Separator)) {
+		slog.Warn("security.storage_escape", "resolved", absPath, "root", delBase)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
 		return
 	}

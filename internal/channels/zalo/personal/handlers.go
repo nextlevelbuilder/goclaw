@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -32,6 +33,8 @@ func (c *Channel) handleMessage(msg protocol.Message) {
 }
 
 func (c *Channel) handleDM(msg protocol.UserMessage) {
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	senderID := msg.Data.UIDFrom
 	threadID := msg.ThreadID()
 
@@ -40,7 +43,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 		return
 	}
 
-	if !c.checkDMPolicy(senderID, threadID) {
+	if !c.checkDMPolicy(ctx, senderID, threadID) {
 		return
 	}
 
@@ -61,7 +64,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 
 	// Collect contact for DM messages.
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, "", "direct")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "direct")
 	}
 
 	metadata := map[string]string{
@@ -72,6 +75,8 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 }
 
 func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	senderID := msg.Data.UIDFrom
 	threadID := msg.ThreadID()
 
@@ -81,7 +86,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	}
 
 	// Step 1: enforce access policy (allowlist/pairing). Hard reject — don't record history.
-	if !c.checkGroupPolicy(senderID, threadID) {
+	if !c.checkGroupPolicy(ctx, senderID, threadID) {
 		return
 	}
 
@@ -105,7 +110,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
 			}
 
 			slog.Debug("zalo_personal group message recorded (no mention)",
@@ -138,7 +143,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 
 	// Collect contact for group-mentioned messages.
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
 	}
 
 	metadata := map[string]string{

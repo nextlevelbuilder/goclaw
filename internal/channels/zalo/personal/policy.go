@@ -13,7 +13,7 @@ import (
 const pairingDebounce = 60 * time.Second
 
 // checkDMPolicy enforces DM policy for incoming messages.
-func (c *Channel) checkDMPolicy(senderID, chatID string) bool {
+func (c *Channel) checkDMPolicy(ctx context.Context, senderID, chatID string) bool {
 	dmPolicy := c.config.DMPolicy
 	if dmPolicy == "" {
 		dmPolicy = "allowlist"
@@ -37,7 +37,7 @@ func (c *Channel) checkDMPolicy(senderID, chatID string) bool {
 	default: // "pairing"
 		paired := false
 		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(senderID, c.Name())
+			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
 			if err != nil {
 				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 					"sender_id", senderID, "channel", c.Name(), "error", err)
@@ -52,12 +52,12 @@ func (c *Channel) checkDMPolicy(senderID, chatID string) bool {
 			return true
 		}
 
-		c.sendPairingReply(senderID, chatID)
+		c.sendPairingReply(ctx, senderID, chatID)
 		return false
 	}
 }
 
-func (c *Channel) sendPairingReply(senderID, chatID string) {
+func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string) {
 	sess := c.session()
 	if c.pairingService == nil || sess == nil {
 		return
@@ -70,7 +70,7 @@ func (c *Channel) sendPairingReply(senderID, chatID string) {
 		}
 	}
 
-	code, err := c.pairingService.RequestPairing(senderID, c.Name(), chatID, "default", nil)
+	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
 	if err != nil {
 		slog.Debug("zalo_personal pairing request failed", "sender_id", senderID, "error", err)
 		return
@@ -98,7 +98,7 @@ func (c *Channel) sendPairingReply(senderID, chatID string) {
 
 // checkGroupPolicy enforces group access policy (allowlist/pairing).
 // Returns false if the group is blocked by policy; does NOT check @mention gating.
-func (c *Channel) checkGroupPolicy(senderID, groupID string) bool {
+func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, groupID string) bool {
 	groupPolicy := c.config.GroupPolicy
 	if groupPolicy == "" {
 		groupPolicy = "allowlist"
@@ -124,7 +124,7 @@ func (c *Channel) checkGroupPolicy(senderID, groupID string) bool {
 			groupSenderID := fmt.Sprintf("group:%s", groupID)
 			paired := false
 			if c.pairingService != nil {
-				p, err := c.pairingService.IsPaired(groupSenderID, c.Name())
+				p, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
 				if err != nil {
 					slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 						"group_sender", groupSenderID, "channel", c.Name(), "error", err)
@@ -135,7 +135,7 @@ func (c *Channel) checkGroupPolicy(senderID, groupID string) bool {
 			if paired {
 				c.approvedGroups.Store(groupID, true)
 			} else {
-				c.sendPairingReply(groupSenderID, groupID)
+				c.sendPairingReply(ctx, groupSenderID, groupID)
 				return false
 			}
 		}

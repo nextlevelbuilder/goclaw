@@ -21,13 +21,14 @@ type ChannelInstancesHandler struct {
 	agentStore      store.AgentStore
 	configPermStore store.ConfigPermissionStore
 	contactStore    store.ContactStore
+	tenantStore     store.TenantStore
 	token           string
 	msgBus          *bus.MessageBus
 }
 
 // NewChannelInstancesHandler creates a handler for channel instance management endpoints.
-func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, contactStore store.ContactStore, token string, msgBus *bus.MessageBus) *ChannelInstancesHandler {
-	return &ChannelInstancesHandler{store: s, agentStore: agentStore, configPermStore: configPermStore, contactStore: contactStore, token: token, msgBus: msgBus}
+func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, contactStore store.ContactStore, tenantStore store.TenantStore, token string, msgBus *bus.MessageBus) *ChannelInstancesHandler {
+	return &ChannelInstancesHandler{store: s, agentStore: agentStore, configPermStore: configPermStore, contactStore: contactStore, tenantStore: tenantStore, token: token, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all channel instance routes on the given mux.
@@ -42,6 +43,12 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	if h.contactStore != nil {
 		mux.HandleFunc("GET /v1/contacts", h.auth(h.handleListContacts))
 		mux.HandleFunc("GET /v1/contacts/resolve", h.auth(h.handleResolveContacts))
+		mux.HandleFunc("POST /v1/contacts/merge", h.auth(h.handleMergeContacts))
+		mux.HandleFunc("POST /v1/contacts/unmerge", h.auth(h.handleUnmergeContacts))
+		mux.HandleFunc("GET /v1/contacts/merged/{tenantUserId}", h.auth(h.handleListMergedContacts))
+	}
+	if h.tenantStore != nil {
+		mux.HandleFunc("GET /v1/tenant-users", h.auth(h.handleListTenantUsers))
 	}
 
 	// Group file writers (nested under channel instances)

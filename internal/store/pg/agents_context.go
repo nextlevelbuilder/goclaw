@@ -17,8 +17,13 @@ import (
 // --- Agent-level Context Files ---
 
 func (s *PGAgentStore) GetAgentContextFiles(ctx context.Context, agentID uuid.UUID) ([]store.AgentContextFileData, error) {
+	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = $1", agentID)
+		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = $1"+tClause,
+		append([]any{agentID}, tArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -37,10 +42,10 @@ func (s *PGAgentStore) GetAgentContextFiles(ctx context.Context, agentID uuid.UU
 
 func (s *PGAgentStore) SetAgentContextFile(ctx context.Context, agentID uuid.UUID, fileName, content string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO agent_context_files (id, agent_id, file_name, content, updated_at)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO agent_context_files (id, agent_id, file_name, content, updated_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (agent_id, file_name) DO UPDATE SET content = EXCLUDED.content, updated_at = EXCLUDED.updated_at`,
-		store.GenNewID(), agentID, fileName, content, time.Now(),
+		store.GenNewID(), agentID, fileName, content, time.Now(), tenantIDForInsert(ctx),
 	)
 	return err
 }
@@ -48,8 +53,13 @@ func (s *PGAgentStore) SetAgentContextFile(ctx context.Context, agentID uuid.UUI
 // --- Per-user Context Files ---
 
 func (s *PGAgentStore) GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]store.UserContextFileData, error) {
+	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND user_id = $2", agentID, userID)
+		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND user_id = $2"+tClause,
+		append([]any{agentID, userID}, tArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -68,18 +78,22 @@ func (s *PGAgentStore) GetUserContextFiles(ctx context.Context, agentID uuid.UUI
 
 func (s *PGAgentStore) SetUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName, content string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_context_files (id, agent_id, user_id, file_name, content, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO user_context_files (id, agent_id, user_id, file_name, content, updated_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (agent_id, user_id, file_name) DO UPDATE SET content = EXCLUDED.content, updated_at = EXCLUDED.updated_at`,
-		store.GenNewID(), agentID, userID, fileName, content, time.Now(),
+		store.GenNewID(), agentID, userID, fileName, content, time.Now(), tenantIDForInsert(ctx),
 	)
 	return err
 }
 
 func (s *PGAgentStore) DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error {
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM user_context_files WHERE agent_id = $1 AND user_id = $2 AND file_name = $3",
-		agentID, userID, fileName)
+	tClause, tArgs, err := tenantClauseN(ctx, 4)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		"DELETE FROM user_context_files WHERE agent_id = $1 AND user_id = $2 AND file_name = $3"+tClause,
+		append([]any{agentID, userID, fileName}, tArgs...)...)
 	return err
 }
 
@@ -96,11 +110,11 @@ func (s *PGAgentStore) GetOrCreateUserProfile(ctx context.Context, agentID uuid.
 	var isInserted bool
 	var storedWorkspace sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO user_agent_profiles (agent_id, user_id, workspace, first_seen_at, last_seen_at)
-		VALUES ($1, $2, NULLIF($3, ''), NOW(), NOW())
+		INSERT INTO user_agent_profiles (agent_id, user_id, workspace, first_seen_at, last_seen_at, tenant_id)
+		VALUES ($1, $2, NULLIF($3, ''), NOW(), NOW(), $4)
 		ON CONFLICT (agent_id, user_id) DO UPDATE SET last_seen_at = NOW()
 		RETURNING (xmax = 0), workspace
-	`, agentID, userID, effectiveWs).Scan(&isInserted, &storedWorkspace)
+	`, agentID, userID, effectiveWs, tenantIDForInsert(ctx)).Scan(&isInserted, &storedWorkspace)
 	if err != nil {
 		return false, effectiveWs, err
 	}
@@ -115,16 +129,25 @@ func (s *PGAgentStore) GetOrCreateUserProfile(ctx context.Context, agentID uuid.
 // Used when admin manually adds a contact as an agent instance via the UI.
 func (s *PGAgentStore) EnsureUserProfile(ctx context.Context, agentID uuid.UUID, userID string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO user_agent_profiles (agent_id, user_id, first_seen_at, last_seen_at)
-		VALUES ($1, $2, NOW(), NOW())
+		INSERT INTO user_agent_profiles (agent_id, user_id, first_seen_at, last_seen_at, tenant_id)
+		VALUES ($1, $2, NOW(), NOW(), $3)
 		ON CONFLICT (agent_id, user_id) DO NOTHING
-	`, agentID, userID)
+	`, agentID, userID, tenantIDForInsert(ctx))
 	return err
 }
 
 // --- User Instances ---
 
 func (s *PGAgentStore) ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]store.UserInstanceData, error) {
+	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+	// Tenant-scope the file count subquery to prevent cross-tenant leakage.
+	subTenantFilter := ""
+	if !store.IsCrossTenant(ctx) {
+		subTenantFilter = " AND tenant_id = $2"
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT p.user_id,
 		       TO_CHAR(p.first_seen_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS first_seen_at,
@@ -135,12 +158,12 @@ func (s *PGAgentStore) ListUserInstances(ctx context.Context, agentID uuid.UUID)
 		LEFT JOIN (
 		    SELECT user_id, COUNT(*) AS cnt
 		    FROM user_context_files
-		    WHERE agent_id = $1
+		    WHERE agent_id = $1`+subTenantFilter+`
 		    GROUP BY user_id
 		) fc ON fc.user_id = p.user_id
-		WHERE p.agent_id = $1
+		WHERE p.agent_id = $1`+tClause+`
 		ORDER BY p.last_seen_at DESC
-	`, agentID)
+	`, append([]any{agentID}, tArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,10 +189,14 @@ func (s *PGAgentStore) UpdateUserProfileMetadata(ctx context.Context, agentID uu
 	if err != nil {
 		return err
 	}
+	tClause, tArgs, err := tenantClauseN(ctx, 4)
+	if err != nil {
+		return err
+	}
 	_, err = s.db.ExecContext(ctx,
 		`UPDATE user_agent_profiles SET metadata = COALESCE(metadata, '{}') || $3::jsonb
-		 WHERE agent_id = $1 AND user_id = $2`,
-		agentID, userID, metaJSON,
+		 WHERE agent_id = $1 AND user_id = $2`+tClause,
+		append([]any{agentID, userID, metaJSON}, tArgs...)...,
 	)
 	return err
 }
@@ -177,10 +204,14 @@ func (s *PGAgentStore) UpdateUserProfileMetadata(ctx context.Context, agentID uu
 // --- User Overrides ---
 
 func (s *PGAgentStore) GetUserOverride(ctx context.Context, agentID uuid.UUID, userID string) (*store.UserAgentOverrideData, error) {
+	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	if err != nil {
+		return nil, err
+	}
 	var d store.UserAgentOverrideData
-	err := s.db.QueryRowContext(ctx,
-		"SELECT agent_id, user_id, provider, model FROM user_agent_overrides WHERE agent_id = $1 AND user_id = $2",
-		agentID, userID,
+	err = s.db.QueryRowContext(ctx,
+		"SELECT agent_id, user_id, provider, model FROM user_agent_overrides WHERE agent_id = $1 AND user_id = $2"+tClause,
+		append([]any{agentID, userID}, tArgs...)...,
 	).Scan(&d.AgentID, &d.UserID, &d.Provider, &d.Model)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -193,10 +224,10 @@ func (s *PGAgentStore) GetUserOverride(ctx context.Context, agentID uuid.UUID, u
 
 func (s *PGAgentStore) SetUserOverride(ctx context.Context, override *store.UserAgentOverrideData) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_agent_overrides (id, agent_id, user_id, provider, model)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO user_agent_overrides (id, agent_id, user_id, provider, model, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (agent_id, user_id) DO UPDATE SET provider = EXCLUDED.provider, model = EXCLUDED.model`,
-		store.GenNewID(), override.AgentID, override.UserID, override.Provider, override.Model,
+		store.GenNewID(), override.AgentID, override.UserID, override.Provider, override.Model, tenantIDForInsert(ctx),
 	)
 	return err
 }

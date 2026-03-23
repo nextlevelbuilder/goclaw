@@ -59,7 +59,7 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		if err := m.teamStore.FailPendingTask(ctx, taskID, teamID, errMsg); err != nil {
 			slog.Warn("post_turn: FailPendingTask error", "task_id", taskID, "error", err)
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
 			TeamID:    teamID.String(),
 			TaskID:    taskID.String(),
 			Status:    store.TeamTaskStatusFailed,
@@ -91,7 +91,7 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 			slog.Warn("post_turn: assign failed", "task_id", task.ID, "error", err)
 			continue
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
 			TeamID:        teamID.String(),
 			TaskID:        task.ID.String(),
 			TaskNumber:    task.TaskNumber,
@@ -133,7 +133,7 @@ func (m *TeamToolManager) failCycledTasks(ctx context.Context, teamID uuid.UUID,
 		if err := m.teamStore.FailPendingTask(ctx, id, teamID, cycleDesc); err != nil {
 			slog.Warn("post_turn: FailPendingTask (cycle) error", "task_id", id, "error", err)
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
 			TeamID:    teamID.String(),
 			TaskID:    id.String(),
 			Status:    store.TeamTaskStatusFailed,
@@ -177,6 +177,7 @@ func (m *TeamToolManager) notifyLeaderCycleError(ctx context.Context, teamID uui
 		ChatID:   chatID,
 		AgentID:  leadAgent.AgentKey,
 		UserID:   team.CreatedBy,
+		TenantID: store.TenantIDFromContext(ctx),
 		Content:  content,
 	})
 }

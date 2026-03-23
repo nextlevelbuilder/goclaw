@@ -13,7 +13,8 @@
     "senderId": "Sender ID",
     "channelType": "Channel",
     "peerKind": "Type",
-    "lastSeen": "Last Seen"
+    "lastSeen": "Last Seen",
+    "merged": "Merged"
   },
   "permissionsNote": {
     "title": "Channel permissions for contact names",
@@ -22,6 +23,27 @@
     "zalo": "Zalo — Display names available automatically.",
     "slack": "Slack — Display names resolved via Slack API (bot must be in workspace).",
     "feishu": "Feishu/Lark — Requires contact:user.base:readonly permission. Without this, names will be empty."
+  },
+  "selectedCount": "{{count}} selected",
+  "merge": {
+    "button": "Merge",
+    "unmergeButton": "Unmerge",
+    "dialogTitle": "Merge Contacts",
+    "dialogDescription": "Link selected contacts to a tenant user identity. This identifies them as the same person across channels.",
+    "linkExisting": "Link to existing user",
+    "createNew": "Create new user",
+    "selectUser": "Select a tenant user...",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "e.g. John Doe",
+    "userId": "User ID",
+    "userIdPlaceholder": "Unique identifier",
+    "confirm": "Merge",
+    "cancel": "Cancel",
+    "success": "Contacts merged successfully",
+    "unmergeSuccess": "Contacts unmerged successfully",
+    "error": "Failed to merge contacts",
+    "unmergeError": "Failed to unmerge contacts",
+    "comingSoon": "This feature is under development and not yet available."
   },
   "filters": {
     "allChannels": "All Channels",

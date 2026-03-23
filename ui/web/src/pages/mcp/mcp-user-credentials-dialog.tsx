@@ -1,0 +1,201 @@
+import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { KeyRound, Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { KeyValueEditor } from "@/components/shared/key-value-editor";
+import { toast } from "@/stores/use-toast-store";
+import i18next from "i18next";
+import type { MCPServerData, MCPUserCredentialStatus, MCPUserCredentialInput } from "./hooks/use-mcp";
+
+/** Header keys whose values should be masked. */
+const SENSITIVE_HEADER_RE = /^(authorization|bearer)|(key|secret|token|password|credential)/i;
+const isSensitiveHeader = (key: string) => SENSITIVE_HEADER_RE.test(key.trim());
+
+/** Env var keys whose values should be masked. */
+const SENSITIVE_ENV_RE = /^.*(key|secret|token|password|credential).*$/i;
+const isSensitiveEnv = (key: string) => SENSITIVE_ENV_RE.test(key.trim());
+
+interface MCPUserCredentialsDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  server: MCPServerData;
+  onGetCredentials: (serverId: string) => Promise<MCPUserCredentialStatus>;
+  onSetCredentials: (serverId: string, creds: MCPUserCredentialInput) => Promise<void>;
+  onDeleteCredentials: (serverId: string) => Promise<void>;
+}
+
+export function MCPUserCredentialsDialog({
+  open,
+  onOpenChange,
+  server,
+  onGetCredentials,
+  onSetCredentials,
+  onDeleteCredentials,
+}: MCPUserCredentialsDialogProps) {
+  const { t } = useTranslation("mcp");
+  const [status, setStatus] = useState<MCPUserCredentialStatus | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const [apiKey, setApiKey] = useState("");
+  const [headers, setHeaders] = useState<Record<string, string>>({});
+  const [env, setEnv] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    setApiKey("");
+    setHeaders({});
+    setEnv({});
+    setStatus(null);
+    setLoadingStatus(true);
+    onGetCredentials(server.id)
+      .then(setStatus)
+      .catch(() => {})
+      .finally(() => setLoadingStatus(false));
+  }, [open, server.id, onGetCredentials]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const creds: MCPUserCredentialInput = {};
+      if (apiKey.trim()) creds.api_key = apiKey.trim();
+      if (Object.keys(headers).length > 0) creds.headers = headers;
+      if (Object.keys(env).length > 0) creds.env = env;
+      await onSetCredentials(server.id, creds);
+      toast.success(i18next.t("mcp:userCredentials.saved"));
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(i18next.t("mcp:userCredentials.saveFailed"), err instanceof Error ? err.message : "");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await onDeleteCredentials(server.id);
+      toast.success(i18next.t("mcp:userCredentials.deleted"));
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(i18next.t("mcp:userCredentials.deleteFailed"), err instanceof Error ? err.message : "");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            {t("userCredentials.title")}
+          </DialogTitle>
+          <DialogDescription>{t("userCredentials.description")}</DialogDescription>
+        </DialogHeader>
+
+        {loadingStatus ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
+            {/* Current status badges */}
+            {status && (
+              <div className="flex flex-wrap gap-2">
+                {!status.has_credentials ? (
+                  <Badge variant="secondary">{t("userCredentials.noCredentials")}</Badge>
+                ) : (
+                  <>
+                    {status.has_api_key && (
+                      <Badge variant="default">{t("userCredentials.hasApiKey")}</Badge>
+                    )}
+                    {status.has_headers && (
+                      <Badge variant="default">{t("userCredentials.hasHeaders")}</Badge>
+                    )}
+                    {status.has_env && (
+                      <Badge variant="default">{t("userCredentials.hasEnv")}</Badge>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* API Key */}
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="uc-api-key">{t("userCredentials.apiKey")}</Label>
+              <Input
+                id="uc-api-key"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={t("userCredentials.apiKeyPlaceholder")}
+                className="text-base md:text-sm font-mono"
+              />
+            </div>
+
+            {/* Headers — KeyValueEditor with sensitive masking */}
+            <div className="flex flex-col gap-1.5">
+              <Label>{t("userCredentials.headers")}</Label>
+              <KeyValueEditor
+                value={headers}
+                onChange={setHeaders}
+                keyPlaceholder="Header"
+                valuePlaceholder="Value"
+                addLabel={t("userCredentials.addHeader")}
+                maskValue={isSensitiveHeader}
+              />
+            </div>
+
+            {/* Env vars — KeyValueEditor with sensitive masking */}
+            <div className="flex flex-col gap-1.5">
+              <Label>{t("userCredentials.env")}</Label>
+              <KeyValueEditor
+                value={env}
+                onChange={setEnv}
+                keyPlaceholder="ENV_KEY"
+                valuePlaceholder="value"
+                addLabel={t("userCredentials.addEnv")}
+                maskValue={isSensitiveEnv}
+              />
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {status?.has_credentials && (
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting || saving}
+              className="sm:mr-auto"
+            >
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              {t("userCredentials.deleteAll")}
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || deleting}>
+            {t("userCredentials.cancel")}
+          </Button>
+          <Button onClick={handleSave} disabled={saving || deleting || loadingStatus}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+            {t("userCredentials.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

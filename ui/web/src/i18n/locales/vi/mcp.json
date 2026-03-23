@@ -60,7 +60,9 @@
       "commandRequired": "Lệnh là bắt buộc cho giao thức stdio",
       "urlRequired": "URL là bắt buộc cho giao thức SSE/HTTP",
       "connectionFailed": "Kết nối thất bại"
-    }
+    },
+    "requireUserCredentials": "Yêu cầu Credentials riêng",
+    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials."
   },
   "grants": {
     "title": "Quyền agent - {{name}}",
@@ -97,5 +99,28 @@
     "failedCreate": "Không thể tạo MCP server",
     "failedUpdate": "Không thể cập nhật MCP server",
     "failedDelete": "Không thể xóa MCP server"
+  },
+  "userCredentials": {
+    "title": "Thông tin xác thực",
+    "description": "Đặt thông tin xác thực cá nhân của bạn cho máy chủ MCP này. Chỉ áp dụng cho tài khoản của bạn.",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Để trống để giữ nguyên",
+    "headers": "Headers",
+    "env": "Biến môi trường",
+    "headerPlaceholder": "KEY=VALUE, mỗi dòng một cặp",
+    "save": "Lưu",
+    "delete": "Xóa",
+    "deleteAll": "Xóa tất cả",
+    "cancel": "Hủy",
+    "saved": "Đã lưu thông tin xác thực",
+    "deleted": "Đã xóa thông tin xác thực",
+    "hasApiKey": "API Key đã đặt",
+    "hasHeaders": "Headers đã đặt",
+    "hasEnv": "Biến môi trường đã đặt",
+    "noCredentials": "Chưa có thông tin xác thực",
+    "addHeader": "Thêm Header",
+    "addEnv": "Thêm biến",
+    "saveFailed": "Lưu credentials thất bại",
+    "deleteFailed": "Xóa credentials thất bại"
   }
 }

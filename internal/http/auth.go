@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -77,6 +78,8 @@ func extractAgentID(r *http.Request, model string) string {
 
 var pkgAPIKeyCache *apiKeyCache
 var pkgPairingStore store.PairingStore
+var pkgTenantCache *tenantCache
+var pkgOwnerIDs []string
 
 // InitAPIKeyCache initializes the shared API key cache with TTL and pubsub invalidation.
 // Must be called once during server startup before handling requests.
@@ -97,6 +100,42 @@ func InitPairingAuth(ps store.PairingStore) {
 	pkgPairingStore = ps
 }
 
+// InitOwnerIDs sets the configured owner user IDs for HTTP auth.
+// Only owners get cross-tenant access with gateway token; others are tenant-scoped.
+func InitOwnerIDs(ids []string) {
+	pkgOwnerIDs = ids
+}
+
+// isHTTPOwnerID checks if the user ID is a configured owner.
+// If no owner IDs configured, only "system" is treated as owner (fail-closed).
+func isHTTPOwnerID(userID string, ownerIDs []string) bool {
+	if userID == "" {
+		return false
+	}
+	if len(ownerIDs) == 0 {
+		return userID == "system"
+	}
+	for _, id := range ownerIDs {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// InitTenantStore sets the tenant cache for HTTP auth with TTL and pubsub invalidation.
+// Allows gateway token requests to scope to a specific tenant via X-GoClaw-Tenant-Id header.
+func InitTenantStore(ts store.TenantStore, mb *bus.MessageBus) {
+	pkgTenantCache = newTenantCache(ts, 5*time.Minute)
+	if mb != nil {
+		mb.Subscribe("http-tenant-cache", func(e bus.Event) {
+			if p, ok := e.Payload.(bus.CacheInvalidatePayload); ok && p.Kind == bus.CacheKindTenants {
+				pkgTenantCache.invalidateAll()
+			}
+		})
+	}
+}
+
 // ResolveAPIKey checks if the bearer token is a valid API key using the shared cache.
 // Returns the key data and derived role, or nil if not found/expired/revoked.
 func ResolveAPIKey(ctx context.Context, token string) (*store.APIKeyData, permissions.Role) {
@@ -111,6 +150,9 @@ func ResolveAPIKey(ctx context.Context, token string) (*store.APIKeyData, permis
 type authResult struct {
 	Role          permissions.Role
 	Authenticated bool
+	KeyData       *store.APIKeyData // non-nil when authenticated via API key
+	TenantID      uuid.UUID         // resolved tenant; uuid.Nil for cross-tenant
+	CrossTenant   bool              // true for owner/system admin
 }
 
 // resolveAuth determines the caller's role from the request.
@@ -123,18 +165,54 @@ func resolveAuth(r *http.Request, gatewayToken string) authResult {
 // Useful for handlers that also accept tokens from query params.
 func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult {
 	// Gateway token → admin
+	// Only owner IDs get cross-tenant access; others are tenant-scoped.
+	// If no owner IDs configured, all gateway token users get cross-tenant (backward compat).
 	if gatewayToken != "" && tokenMatch(bearer, gatewayToken) {
-		return authResult{Role: permissions.RoleAdmin, Authenticated: true}
+		userID := extractUserID(r)
+		isOwner := isHTTPOwnerID(userID, pkgOwnerIDs)
+		res := authResult{Role: permissions.RoleAdmin, Authenticated: true, CrossTenant: isOwner}
+		tenantVal := r.Header.Get("X-GoClaw-Tenant-Id")
+		if isOwner && tenantVal != "" && pkgTenantCache != nil {
+			// Cross-tenant admin can narrow scope via header
+			if tid, err := uuid.Parse(tenantVal); err == nil {
+				if t, err := pkgTenantCache.GetTenant(r.Context(), tid); err == nil && t != nil {
+					res.TenantID = t.ID
+				}
+			} else if t, err := pkgTenantCache.GetTenantBySlug(r.Context(), tenantVal); err == nil && t != nil {
+				res.TenantID = t.ID
+			}
+		} else if !isOwner && pkgTenantCache != nil {
+			// Non-owner with gateway token: resolve tenant from header or fallback to master
+			if tenantVal != "" {
+				if tid, err := uuid.Parse(tenantVal); err == nil {
+					if t, err := pkgTenantCache.GetTenant(r.Context(), tid); err == nil && t != nil {
+						res.TenantID = t.ID
+					}
+				} else if t, err := pkgTenantCache.GetTenantBySlug(r.Context(), tenantVal); err == nil && t != nil {
+					res.TenantID = t.ID
+				}
+			}
+			if res.TenantID == uuid.Nil {
+				res.TenantID = store.MasterTenantID
+			}
+		}
+		return res
 	}
 	// API key → role from scopes
-	if _, role := ResolveAPIKey(r.Context(), bearer); role != "" {
-		return authResult{Role: role, Authenticated: true}
+	if keyData, role := ResolveAPIKey(r.Context(), bearer); role != "" {
+		res := authResult{Role: role, Authenticated: true, KeyData: keyData}
+		if keyData.TenantID == uuid.Nil {
+			res.CrossTenant = true
+		} else {
+			res.TenantID = keyData.TenantID
+		}
+		return res
 	}
 	// Browser pairing → operator (via X-GoClaw-Sender-Id header)
 	if senderID := r.Header.Get("X-GoClaw-Sender-Id"); senderID != "" && pkgPairingStore != nil {
-		paired, err := pkgPairingStore.IsPaired(senderID, "browser")
+		paired, err := pkgPairingStore.IsPaired(r.Context(), senderID, "browser")
 		if err == nil && paired {
-			return authResult{Role: permissions.RoleOperator, Authenticated: true}
+			return authResult{Role: permissions.RoleOperator, Authenticated: true, TenantID: store.MasterTenantID}
 		}
 		if err != nil {
 			slog.Warn("security.http_pairing_check_failed", "sender_id", senderID, "error", err)
@@ -144,7 +222,7 @@ func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult 
 	}
 	// No auth configured → admin (no token = dev/single-user mode, full access)
 	if gatewayToken == "" {
-		return authResult{Role: permissions.RoleAdmin, Authenticated: true}
+		return authResult{Role: permissions.RoleAdmin, Authenticated: true, TenantID: store.MasterTenantID}
 	}
 	return authResult{}
 }
@@ -187,8 +265,51 @@ func requireAuth(token string, minRole permissions.Role, next http.HandlerFunc) 
 		}
 
 		ctx := store.WithLocale(r.Context(), locale)
-		if userID := extractUserID(r); userID != "" {
+		userID := extractUserID(r)
+		// If the API key has a bound owner, force user_id to owner regardless of header.
+		if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
+			if userID != "" && userID != auth.KeyData.OwnerID {
+				slog.Warn("security.api_key_owner_override",
+					"header_user_id", userID,
+					"owner_id", auth.KeyData.OwnerID,
+				)
+			}
+			userID = auth.KeyData.OwnerID
+		}
+		if userID != "" {
 			ctx = store.WithUserID(ctx, userID)
+		}
+		if auth.CrossTenant && auth.TenantID != uuid.Nil {
+			// Cross-tenant admin with tenant scope: filter data by chosen tenant
+			ctx = store.WithTenantID(ctx, auth.TenantID)
+			slog.Debug("security.http_auth_resolved",
+				"path", r.URL.Path,
+				"role", string(auth.Role),
+				"tenant_scope", auth.TenantID.String(),
+			)
+		} else if auth.CrossTenant {
+			// Auto-scope to MasterTenantID so all operations use a concrete tenant.
+			ctx = store.WithTenantID(ctx, store.MasterTenantID)
+			slog.Debug("security.http_auth_resolved",
+				"path", r.URL.Path,
+				"role", string(auth.Role),
+				"cross_tenant", true,
+				"auto_scope", store.MasterTenantID.String(),
+			)
+		} else if auth.TenantID != uuid.Nil {
+			ctx = store.WithTenantID(ctx, auth.TenantID)
+			slog.Debug("security.http_auth_resolved",
+				"path", r.URL.Path,
+				"role", string(auth.Role),
+				"tenant_id", auth.TenantID.String(),
+			)
+		} else {
+			ctx = store.WithTenantID(ctx, store.MasterTenantID)
+			slog.Debug("security.http_auth_resolved",
+				"path", r.URL.Path,
+				"role", string(auth.Role),
+				"tenant_id", store.MasterTenantID.String(),
+			)
 		}
 		next(w, r.WithContext(ctx))
 	}
@@ -196,7 +317,8 @@ func requireAuth(token string, minRole permissions.Role, next http.HandlerFunc) 
 
 // requireAuthBearer is like requireAuth but accepts a pre-extracted bearer token.
 // Used by handlers that accept tokens from query params (files, media).
-func requireAuthBearer(token string, minRole permissions.Role, bearer string, w http.ResponseWriter, r *http.Request) bool {
+// Returns the authenticated request with user context applied (owner_id enforcement included).
+func requireAuthBearer(token string, minRole permissions.Role, bearer string, w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
 	locale := extractLocale(r)
 	auth := resolveAuthBearer(r, token, bearer)
 
@@ -204,7 +326,7 @@ func requireAuthBearer(token string, minRole permissions.Role, bearer string, w 
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": i18n.T(locale, i18n.MsgUnauthorized),
 		})
-		return false
+		return r, false
 	}
 
 	required := minRole
@@ -216,9 +338,33 @@ func requireAuthBearer(token string, minRole permissions.Role, bearer string, w 
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path),
 		})
-		return false
+		return r, false
 	}
-	return true
+
+	// Apply user context + owner_id enforcement (same as requireAuth).
+	ctx := store.WithLocale(r.Context(), locale)
+	userID := extractUserID(r)
+	if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
+		if userID != "" && userID != auth.KeyData.OwnerID {
+			slog.Warn("security.api_key_owner_override",
+				"header_user_id", userID,
+				"owner_id", auth.KeyData.OwnerID,
+				"path", r.URL.Path,
+			)
+		}
+		userID = auth.KeyData.OwnerID
+	}
+	if userID != "" {
+		ctx = store.WithUserID(ctx, userID)
+	}
+	if auth.CrossTenant {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
+	} else if auth.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, auth.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
+	}
+	return r.WithContext(ctx), true
 }
 
 // extractLocale parses the Accept-Language header and returns a supported locale.

@@ -4,7 +4,6 @@ import { useWsEvent } from "@/hooks/use-ws-event";
 import { Methods, Events } from "@/api/protocol";
 import type { Message } from "@/types/session";
 import type { ChatMessage, AgentEventPayload, ToolStreamEntry, RunActivity, ActiveTeamTask, MediaItem } from "@/types/chat";
-import { useAuthStore } from "@/stores/use-auth-store";
 import { toFileUrl, mediaKindFromMime } from "@/lib/file-helpers";
 
 /**
@@ -16,7 +15,6 @@ import { toFileUrl, mediaKindFromMime } from "@/lib/file-helpers";
  */
 export function useChatMessages(sessionKey: string, agentId: string) {
   const ws = useWs();
-  const token = useAuthStore((s) => s.token);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streamText, setStreamText] = useState<string | null>(null);
   const [thinkingText, setThinkingText] = useState<string | null>(null);
@@ -37,6 +35,8 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   agentIdRef.current = agentId;
   const activityRef = useRef<RunActivity | null>(null);
   const blockRepliesRef = useRef<ChatMessage[]>([]);
+  const rafPendingRef = useRef(false);
+  const rafHandleRef = useRef(0);
 
   // Reset streaming/run state when session changes.
   // Messages are NOT cleared here — loadHistory() will replace them atomically.
@@ -59,6 +59,13 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     toolStreamRef.current = [];
     activityRef.current = null;
     blockRepliesRef.current = [];
+    cancelAnimationFrame(rafHandleRef.current);
+    rafPendingRef.current = false;
+    // Clear messages when navigating away from a session (empty key).
+    // When switching to another session, loadHistory() will replace them.
+    if (!sessionKey) {
+      setMessages([]);
+    }
   }, [sessionKey]);
 
   // Load history (no loading spinner — the empty state placeholder is shown instead)
@@ -88,9 +95,9 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         // Convert persisted media_refs to mediaItems for gallery display
         if (m.role === "assistant" && m.media_refs && m.media_refs.length > 0) {
           chatMsg.mediaItems = m.media_refs.map((ref) => ({
-            path: toFileUrl(ref.id, token),
+            path: toFileUrl(ref.path || ref.id),
             mimeType: ref.mime_type,
-            fileName: ref.id,
+            fileName: ref.path?.split("/").pop() ?? ref.id,
             kind: (ref.kind as MediaItem["kind"]) || "document",
           }));
         }
@@ -171,13 +178,29 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         case "thinking": {
           const content = event.payload?.content ?? "";
           thinkingRef.current += content;
-          setThinkingText(thinkingRef.current);
+          // Batch state updates: only one setState per animation frame
+          if (!rafPendingRef.current) {
+            rafPendingRef.current = true;
+            rafHandleRef.current = requestAnimationFrame(() => {
+              rafPendingRef.current = false;
+              setThinkingText(thinkingRef.current);
+              setStreamText(streamRef.current);
+            });
+          }
           break;
         }
         case "chunk": {
           const content = event.payload?.content ?? "";
           streamRef.current += content;
-          setStreamText(streamRef.current);
+          // Batch state updates: only one setState per animation frame
+          if (!rafPendingRef.current) {
+            rafPendingRef.current = true;
+            rafHandleRef.current = requestAnimationFrame(() => {
+              rafPendingRef.current = false;
+              setStreamText(streamRef.current);
+              setThinkingText(thinkingRef.current);
+            });
+          }
           break;
         }
         case "tool.call": {
@@ -253,6 +276,10 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           break;
         }
         case "run.completed": {
+          // Cancel any pending rAF to prevent stale state overwrite
+          cancelAnimationFrame(rafHandleRef.current);
+          rafPendingRef.current = false;
+
           setIsRunning(false);
           runIdRef.current = null;
 
@@ -277,7 +304,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           const rawMedia = event.payload?.media;
           const mediaItems: MediaItem[] | undefined = rawMedia?.length
             ? rawMedia.map((m) => ({
-                path: toFileUrl(m.path, token),
+                path: toFileUrl(m.path),
                 mimeType: m.content_type ?? "application/octet-stream",
                 fileName: m.path.split("/").pop() ?? "file",
                 size: m.size,
@@ -296,6 +323,9 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           break;
         }
         case "run.failed": {
+          cancelAnimationFrame(rafHandleRef.current);
+          rafPendingRef.current = false;
+
           setIsRunning(false);
           runIdRef.current = null;
           setStreamText(null);

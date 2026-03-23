@@ -17,9 +17,11 @@ export function ProviderListRow({ provider, onClick, onDelete }: ProviderListRow
   const tb = PROVIDER_TYPE_BADGE[provider.provider_type] ?? { label: provider.provider_type, variant: "outline" as const };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
       className="flex w-full cursor-pointer items-center gap-3 rounded-lg border bg-card px-4 py-3 text-left transition-all hover:border-primary/30 hover:shadow-sm"
     >
       {/* Icon */}
@@ -64,6 +66,6 @@ export function ProviderListRow({ provider, onClick, onDelete }: ProviderListRow
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       )}
-    </button>
+    </div>
   );
 }

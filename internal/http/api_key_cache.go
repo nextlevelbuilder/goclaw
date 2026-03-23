@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -49,9 +50,15 @@ func (c *apiKeyCache) get(hash string) (*store.APIKeyData, permissions.Role, boo
 
 // getOrFetch returns a cached entry or fetches from the store on cache miss.
 func (c *apiKeyCache) getOrFetch(ctx context.Context, hash string) (*store.APIKeyData, permissions.Role) {
+	hashPrefix := hash
+	if len(hashPrefix) > 8 {
+		hashPrefix = hashPrefix[:8]
+	}
 	if key, role, ok := c.get(hash); ok {
+		slog.Debug("api_key_cache.hit", "hash_prefix", hashPrefix)
 		return key, role
 	}
+	slog.Debug("api_key_cache.miss", "hash_prefix", hashPrefix)
 
 	// Cache miss — fetch from DB
 	keyData, err := c.store.GetByHash(ctx, hash)

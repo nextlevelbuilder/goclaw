@@ -39,10 +39,11 @@ func (s *PGKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *store.
 	}
 	now := time.Now()
 	id := uuid.Must(uuid.NewV7())
+	tid := tenantIDForInsert(ctx)
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO kg_entities
-			(id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+			(id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, tenant_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
 		ON CONFLICT (agent_id, user_id, external_id) DO UPDATE SET
 			name        = EXCLUDED.name,
 			entity_type = EXCLUDED.entity_type,
@@ -50,9 +51,10 @@ func (s *PGKnowledgeGraphStore) UpsertEntity(ctx context.Context, entity *store.
 			properties  = EXCLUDED.properties,
 			source_id   = EXCLUDED.source_id,
 			confidence  = EXCLUDED.confidence,
+			tenant_id   = EXCLUDED.tenant_id,
 			updated_at  = EXCLUDED.updated_at`,
 		id, aid, entity.UserID, entity.ExternalID, entity.Name, entity.EntityType,
-		entity.Description, props, entity.SourceID, entity.Confidence, now,
+		entity.Description, props, entity.SourceID, entity.Confidence, tid, now,
 	)
 	return err
 }
@@ -62,20 +64,28 @@ func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, 
 	eid := mustParseUUID(entityID)
 
 	if store.IsSharedKG(ctx) {
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return nil, err
+		}
 		row := s.db.QueryRowContext(ctx, `
 			SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 			       properties, source_id, confidence, created_at, updated_at
-			FROM kg_entities WHERE id = $1 AND agent_id = $2`,
-			eid, aid,
+			FROM kg_entities WHERE id = $1 AND agent_id = $2`+tc,
+			append([]any{eid, aid}, tcArgs...)...,
 		)
 		return scanEntity(row)
 	}
 
+	tc, tcArgs, err := tenantClauseN(ctx, 4)
+	if err != nil {
+		return nil, err
+	}
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 		       properties, source_id, confidence, created_at, updated_at
-		FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`,
-		eid, aid, userID,
+		FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
+		append([]any{eid, aid, userID}, tcArgs...)...,
 	)
 	return scanEntity(row)
 }
@@ -84,15 +94,23 @@ func (s *PGKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, userI
 	aid := mustParseUUID(agentID)
 	eid := mustParseUUID(entityID)
 	if store.IsSharedKG(ctx) {
-		_, err := s.db.ExecContext(ctx,
-			`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2`,
-			eid, aid,
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return err
+		}
+		_, err = s.db.ExecContext(ctx,
+			`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2`+tc,
+			append([]any{eid, aid}, tcArgs...)...,
 		)
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`,
-		eid, aid, userID,
+	tc, tcArgs, err := tenantClauseN(ctx, 4)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`DELETE FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
+		append([]any{eid, aid, userID}, tcArgs...)...,
 	)
 	return err
 }
@@ -116,6 +134,15 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 	if opts.EntityType != "" {
 		where += fmt.Sprintf(" AND entity_type = $%d", idx)
 		args = append(args, opts.EntityType)
+		idx++
+	}
+	tc, tcArgs, err := tenantClauseN(ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+	if tc != "" {
+		where += tc
+		args = append(args, tcArgs...)
 		idx++
 	}
 	args = append(args, limit, opts.Offset)
@@ -201,6 +228,15 @@ func (s *PGKnowledgeGraphStore) ilikeSearchEntities(ctx context.Context, agentID
 		args = append(args, userID)
 		idx++
 	}
+	tc, tcArgs, err := tenantClauseN(ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+	if tc != "" {
+		where += tc
+		args = append(args, tcArgs...)
+		idx++
+	}
 	args = append(args, pattern, limit)
 	q := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
@@ -245,6 +281,15 @@ func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedd
 	if !shared && userID != "" {
 		where += fmt.Sprintf(" AND user_id = $%d", idx)
 		args = append(args, userID)
+		idx++
+	}
+	tc, tcArgs, err := tenantClauseN(ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+	if tc != "" {
+		where += tc
+		args = append(args, tcArgs...)
 		idx++
 	}
 	args = append(args, vecStr, limit)
@@ -330,14 +375,16 @@ func (s *PGKnowledgeGraphStore) UpsertRelation(ctx context.Context, relation *st
 	}
 	id := uuid.Must(uuid.NewV7())
 	now := time.Now()
+	tid := tenantIDForInsert(ctx)
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO kg_relations
-			(id, agent_id, user_id, source_entity_id, relation_type, target_entity_id, confidence, properties, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			(id, agent_id, user_id, source_entity_id, relation_type, target_entity_id, confidence, properties, tenant_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (agent_id, user_id, source_entity_id, relation_type, target_entity_id) DO UPDATE SET
 			confidence  = EXCLUDED.confidence,
-			properties  = EXCLUDED.properties`,
-		id, aid, relation.UserID, src, relation.RelationType, tgt, relation.Confidence, props, now,
+			properties  = EXCLUDED.properties,
+			tenant_id   = EXCLUDED.tenant_id`,
+		id, aid, relation.UserID, src, relation.RelationType, tgt, relation.Confidence, props, tid, now,
 	)
 	return err
 }
@@ -346,15 +393,23 @@ func (s *PGKnowledgeGraphStore) DeleteRelation(ctx context.Context, agentID, use
 	aid := mustParseUUID(agentID)
 	rid := mustParseUUID(relationID)
 	if store.IsSharedKG(ctx) {
-		_, err := s.db.ExecContext(ctx,
-			`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2`,
-			rid, aid,
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return err
+		}
+		_, err = s.db.ExecContext(ctx,
+			`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2`+tc,
+			append([]any{rid, aid}, tcArgs...)...,
 		)
 		return err
 	}
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2 AND user_id = $3`,
-		rid, aid, userID,
+	tc, tcArgs, err := tenantClauseN(ctx, 4)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`DELETE FROM kg_relations WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
+		append([]any{rid, aid, userID}, tcArgs...)...,
 	)
 	return err
 }
@@ -366,21 +421,29 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 	var q string
 	var args []any
 	if store.IsSharedKG(ctx) {
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return nil, err
+		}
 		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
 		       confidence, properties, created_at
 		FROM kg_relations
 		WHERE agent_id = $1
-		  AND (source_entity_id = $2 OR target_entity_id = $2)
+		  AND (source_entity_id = $2 OR target_entity_id = $2)` + tc + `
 		ORDER BY created_at DESC`
-		args = []any{aid, eid}
+		args = append([]any{aid, eid}, tcArgs...)
 	} else {
+		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		if err != nil {
+			return nil, err
+		}
 		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
 		       confidence, properties, created_at
 		FROM kg_relations
 		WHERE agent_id = $1 AND user_id = $2
-		  AND (source_entity_id = $3 OR target_entity_id = $3)
+		  AND (source_entity_id = $3 OR target_entity_id = $3)` + tc + `
 		ORDER BY created_at DESC`
-		args = []any{aid, userID, eid}
+		args = append([]any{aid, userID, eid}, tcArgs...)
 	}
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
@@ -402,6 +465,15 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	if !store.IsSharedKG(ctx) && userID != "" {
 		where += fmt.Sprintf(" AND user_id = $%d", idx)
 		args = append(args, userID)
+		idx++
+	}
+	tc, tcArgs, err := tenantClauseN(ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+	if tc != "" {
+		where += tc
+		args = append(args, tcArgs...)
 		idx++
 	}
 	args = append(args, limit)
@@ -427,6 +499,7 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 
 	aid := mustParseUUID(agentID)
 	now := time.Now()
+	tid := tenantIDForInsert(ctx)
 
 	// Upsert entities and build external_id → DB UUID lookup for relations
 	extIDToUUID := make(map[string]uuid.UUID, len(entities))
@@ -440,8 +513,8 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 		var actualID uuid.UUID
 		if err := tx.QueryRowContext(ctx, `
 			INSERT INTO kg_entities
-				(id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+				(id, agent_id, user_id, external_id, name, entity_type, description, properties, source_id, confidence, tenant_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
 			ON CONFLICT (agent_id, user_id, external_id) DO UPDATE SET
 				name        = EXCLUDED.name,
 				entity_type = EXCLUDED.entity_type,
@@ -449,10 +522,11 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 				properties  = EXCLUDED.properties,
 				source_id   = EXCLUDED.source_id,
 				confidence  = EXCLUDED.confidence,
+				tenant_id   = EXCLUDED.tenant_id,
 				updated_at  = EXCLUDED.updated_at
 			RETURNING id`,
 			id, aid, userID, e.ExternalID, e.Name, e.EntityType,
-			e.Description, props, e.SourceID, e.Confidence, now,
+			e.Description, props, e.SourceID, e.Confidence, tid, now,
 		).Scan(&actualID); err != nil {
 			return err
 		}
@@ -500,12 +574,13 @@ func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, u
 		id := uuid.Must(uuid.NewV7())
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO kg_relations
-				(id, agent_id, user_id, source_entity_id, relation_type, target_entity_id, confidence, properties, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+				(id, agent_id, user_id, source_entity_id, relation_type, target_entity_id, confidence, properties, tenant_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			ON CONFLICT (agent_id, user_id, source_entity_id, relation_type, target_entity_id) DO UPDATE SET
 				confidence  = EXCLUDED.confidence,
-				properties  = EXCLUDED.properties`,
-			id, aid, userID, src, r.RelationType, tgt, r.Confidence, props, now,
+				properties  = EXCLUDED.properties,
+				tenant_id   = EXCLUDED.tenant_id`,
+			id, aid, userID, src, r.RelationType, tgt, r.Confidence, props, tid, now,
 		); err != nil {
 			return err
 		}
@@ -519,14 +594,22 @@ func (s *PGKnowledgeGraphStore) PruneByConfidence(ctx context.Context, agentID, 
 	var res sql.Result
 	var err error
 	if store.IsSharedKG(ctx) {
+		tc, tcArgs, tcErr := tenantClauseN(ctx, 3)
+		if tcErr != nil {
+			return 0, tcErr
+		}
 		res, err = s.db.ExecContext(ctx,
-			`DELETE FROM kg_entities WHERE agent_id = $1 AND confidence < $2`,
-			aid, minConfidence,
+			`DELETE FROM kg_entities WHERE agent_id = $1 AND confidence < $2`+tc,
+			append([]any{aid, minConfidence}, tcArgs...)...,
 		)
 	} else {
+		tc, tcArgs, tcErr := tenantClauseN(ctx, 4)
+		if tcErr != nil {
+			return 0, tcErr
+		}
 		res, err = s.db.ExecContext(ctx,
-			`DELETE FROM kg_entities WHERE agent_id = $1 AND user_id = $2 AND confidence < $3`,
-			aid, userID, minConfidence,
+			`DELETE FROM kg_entities WHERE agent_id = $1 AND user_id = $2 AND confidence < $3`+tc,
+			append([]any{aid, userID, minConfidence}, tcArgs...)...,
 		)
 	}
 	if err != nil {
@@ -542,24 +625,32 @@ func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID strin
 
 	userFilter := ""
 	args := []any{aid}
+	idx := 2
 	if userID != "" {
-		userFilter = " AND user_id = $2"
+		userFilter = fmt.Sprintf(" AND user_id = $%d", idx)
 		args = append(args, userID)
+		idx++
 	}
+	tc, tcArgs, err := tenantClauseN(ctx, idx)
+	if err != nil {
+		return nil, err
+	}
+	tenantFilter := tc
+	args = append(args, tcArgs...)
 
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter, args...,
+		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+tenantFilter, args...,
 	).Scan(&stats.EntityCount); err != nil {
 		return nil, err
 	}
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1`+userFilter, args...,
+		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1`+userFilter+tenantFilter, args...,
 	).Scan(&stats.RelationCount); err != nil {
 		return nil, err
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT entity_type, COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+` GROUP BY entity_type`, args...,
+		`SELECT entity_type, COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+tenantFilter+` GROUP BY entity_type`, args...,
 	)
 	if err != nil {
 		return nil, err

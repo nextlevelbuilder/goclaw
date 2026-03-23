@@ -50,23 +50,37 @@ func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary)
 	b.CreatedAt = now
 	b.UpdatedAt = now
 
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO secure_cli_binaries (id, binary_name, binary_path, description, encrypted_env,
-		 deny_args, deny_verbose, timeout_seconds, tips, agent_id, enabled, created_by, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+		 deny_args, deny_verbose, timeout_seconds, tips, agent_id, enabled, created_by, created_at, updated_at, tenant_id)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
 		b.ID, b.BinaryName, nilStr(derefStr(b.BinaryPath)), b.Description,
 		envBytes,
 		jsonOrEmptyArray(b.DenyArgs), jsonOrEmptyArray(b.DenyVerbose),
 		b.TimeoutSeconds, b.Tips,
 		nilUUID(b.AgentID), b.Enabled,
-		b.CreatedBy, now, now,
+		b.CreatedBy, now, now, tenantID,
 	)
 	return err
 }
 
 func (s *PGSecureCLIStore) Get(ctx context.Context, id uuid.UUID) (*store.SecureCLIBinary, error) {
+	if store.IsCrossTenant(ctx) {
+		row := s.db.QueryRowContext(ctx,
+			`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries WHERE id = $1`, id)
+		return s.scanRow(row)
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return nil, sql.ErrNoRows
+	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries WHERE id = $1`, id)
+		`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	return s.scanRow(row)
 }
 
@@ -179,17 +193,42 @@ func (s *PGSecureCLIStore) Update(ctx context.Context, id uuid.UUID, updates map
 		}
 	}
 	updates["updated_at"] = time.Now()
-	return execMapUpdate(ctx, s.db, "secure_cli_binaries", id, updates)
+	if store.IsCrossTenant(ctx) {
+		return execMapUpdate(ctx, s.db, "secure_cli_binaries", id, updates)
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for update")
+	}
+	return execMapUpdateWhereTenant(ctx, s.db, "secure_cli_binaries", updates, id, tid)
 }
 
 func (s *PGSecureCLIStore) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx, "DELETE FROM secure_cli_binaries WHERE id = $1", id)
+	if store.IsCrossTenant(ctx) {
+		_, err := s.db.ExecContext(ctx, "DELETE FROM secure_cli_binaries WHERE id = $1", id)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required")
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM secure_cli_binaries WHERE id = $1 AND tenant_id = $2", id, tid)
 	return err
 }
 
 func (s *PGSecureCLIStore) List(ctx context.Context) ([]store.SecureCLIBinary, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries ORDER BY binary_name, agent_id NULLS LAST`)
+	query := `SELECT ` + secureCLISelectCols + ` FROM secure_cli_binaries`
+	var qArgs []any
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, nil
+		}
+		query += ` WHERE tenant_id = $1`
+		qArgs = append(qArgs, tenantID)
+	}
+	query += ` ORDER BY binary_name, agent_id NULLS LAST`
+	rows, err := s.db.QueryContext(ctx, query, qArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -197,10 +236,24 @@ func (s *PGSecureCLIStore) List(ctx context.Context) ([]store.SecureCLIBinary, e
 }
 
 func (s *PGSecureCLIStore) ListByAgent(ctx context.Context, agentID uuid.UUID) ([]store.SecureCLIBinary, error) {
+	if store.IsCrossTenant(ctx) {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
+			 WHERE (agent_id = $1 OR agent_id IS NULL) AND enabled = true
+			 ORDER BY binary_name, agent_id NULLS LAST`, agentID)
+		if err != nil {
+			return nil, err
+		}
+		return s.scanRows(rows)
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return nil, nil
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-		 WHERE (agent_id = $1 OR agent_id IS NULL) AND enabled = true
-		 ORDER BY binary_name, agent_id NULLS LAST`, agentID)
+		 WHERE (agent_id = $1 OR agent_id IS NULL) AND enabled = true AND tenant_id = $2
+		 ORDER BY binary_name, agent_id NULLS LAST`, agentID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -212,15 +265,35 @@ func (s *PGSecureCLIStore) ListByAgent(ctx context.Context, agentID uuid.UUID) (
 func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string, agentID *uuid.UUID) (*store.SecureCLIBinary, error) {
 	var row *sql.Row
 	if agentID != nil {
-		row = s.db.QueryRowContext(ctx,
-			`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-			 WHERE binary_name = $1 AND (agent_id = $2 OR agent_id IS NULL) AND enabled = true
-			 ORDER BY agent_id NULLS LAST LIMIT 1`, binaryName, *agentID)
+		if store.IsCrossTenant(ctx) {
+			row = s.db.QueryRowContext(ctx,
+				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
+				 WHERE binary_name = $1 AND (agent_id = $2 OR agent_id IS NULL) AND enabled = true
+				 ORDER BY agent_id NULLS LAST LIMIT 1`, binaryName, *agentID)
+		} else {
+			tid := store.TenantIDFromContext(ctx)
+			if tid == uuid.Nil {
+				return nil, nil
+			}
+			row = s.db.QueryRowContext(ctx,
+				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
+				 WHERE binary_name = $1 AND (agent_id = $2 OR agent_id IS NULL) AND enabled = true AND tenant_id = $3
+				 ORDER BY agent_id NULLS LAST LIMIT 1`, binaryName, *agentID, tid)
+		}
 	} else {
-		row = s.db.QueryRowContext(ctx,
-			`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-			 WHERE binary_name = $1 AND agent_id IS NULL AND enabled = true
-			 LIMIT 1`, binaryName)
+		if store.IsCrossTenant(ctx) {
+			row = s.db.QueryRowContext(ctx,
+				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
+				 WHERE binary_name = $1 AND agent_id IS NULL AND enabled = true LIMIT 1`, binaryName)
+		} else {
+			tid := store.TenantIDFromContext(ctx)
+			if tid == uuid.Nil {
+				return nil, nil
+			}
+			row = s.db.QueryRowContext(ctx,
+				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
+				 WHERE binary_name = $1 AND agent_id IS NULL AND enabled = true AND tenant_id = $2 LIMIT 1`, binaryName, tid)
+		}
 	}
 	b, err := s.scanRow(row)
 	if err == sql.ErrNoRows {
@@ -230,9 +303,18 @@ func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string
 }
 
 func (s *PGSecureCLIStore) ListEnabled(ctx context.Context) ([]store.SecureCLIBinary, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-		 WHERE enabled = true ORDER BY binary_name`)
+	query := `SELECT ` + secureCLISelectCols + ` FROM secure_cli_binaries WHERE enabled = true`
+	var qArgs []any
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return nil, nil
+		}
+		query += ` AND tenant_id = $1`
+		qArgs = append(qArgs, tenantID)
+	}
+	query += ` ORDER BY binary_name`
+	rows, err := s.db.QueryContext(ctx, query, qArgs...)
 	if err != nil {
 		return nil, err
 	}

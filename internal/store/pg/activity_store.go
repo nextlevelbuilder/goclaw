@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -20,17 +22,21 @@ func NewPGActivityStore(db *sql.DB) *PGActivityStore {
 }
 
 func (s *PGActivityStore) Log(ctx context.Context, entry *store.ActivityLog) error {
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO activity_logs (actor_type, actor_id, action, entity_type, entity_id, details, ip_address)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO activity_logs (actor_type, actor_id, action, entity_type, entity_id, details, ip_address, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		entry.ActorType, entry.ActorID, entry.Action,
-		entry.EntityType, entry.EntityID, entry.Details, entry.IPAddress,
+		entry.EntityType, entry.EntityID, entry.Details, entry.IPAddress, tenantID,
 	)
 	return err
 }
 
 func (s *PGActivityStore) List(ctx context.Context, opts store.ActivityListOpts) ([]store.ActivityLog, error) {
-	where, args := buildActivityWhere(opts)
+	where, args := buildActivityWhere(ctx, opts)
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 50
@@ -61,7 +67,7 @@ func (s *PGActivityStore) List(ctx context.Context, opts store.ActivityListOpts)
 }
 
 func (s *PGActivityStore) Count(ctx context.Context, opts store.ActivityListOpts) (int, error) {
-	where, args := buildActivityWhere(opts)
+	where, args := buildActivityWhere(ctx, opts)
 	query := fmt.Sprintf("SELECT COUNT(*) FROM activity_logs %s", where)
 
 	var count int
@@ -69,10 +75,19 @@ func (s *PGActivityStore) Count(ctx context.Context, opts store.ActivityListOpts
 	return count, err
 }
 
-func buildActivityWhere(opts store.ActivityListOpts) (string, []any) {
+func buildActivityWhere(ctx context.Context, opts store.ActivityListOpts) (string, []any) {
 	var conditions []string
 	var args []any
 	idx := 1
+
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID != uuid.Nil {
+			conditions = append(conditions, fmt.Sprintf("tenant_id = $%d", idx))
+			args = append(args, tenantID)
+			idx++
+		}
+	}
 
 	if opts.ActorType != "" {
 		conditions = append(conditions, fmt.Sprintf("actor_type = $%d", idx))

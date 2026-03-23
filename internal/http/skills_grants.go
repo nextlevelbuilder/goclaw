@@ -47,7 +47,7 @@ func (h *SkillsHandler) handleGrantAgent(w http.ResponseWriter, r *http.Request)
 	// Ownership check (admins bypass)
 	auth := resolveAuth(r, h.token)
 	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
-		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), skillID); found && ownerID != userID {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
 			return
 		}
@@ -96,7 +96,7 @@ func (h *SkillsHandler) handleRevokeAgent(w http.ResponseWriter, r *http.Request
 	auth := resolveAuth(r, h.token)
 	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
 		userID := store.UserIDFromContext(r.Context())
-		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), skillID); found && ownerID != userID {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
 			return
 		}
@@ -133,7 +133,7 @@ func (h *SkillsHandler) handleGrantUser(w http.ResponseWriter, r *http.Request) 
 	// Ownership check (admins bypass)
 	auth := resolveAuth(r, h.token)
 	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
-		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), skillID); found && ownerID != userID {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
 			return
 		}
@@ -179,7 +179,7 @@ func (h *SkillsHandler) handleRevokeUser(w http.ResponseWriter, r *http.Request)
 	auth := resolveAuth(r, h.token)
 	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
 		userID := store.UserIDFromContext(r.Context())
-		if ownerID, found := h.skills.GetSkillOwnerID(skillID); found && ownerID != userID {
+		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), skillID); found && ownerID != userID {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the skill owner can perform this action"})
 			return
 		}

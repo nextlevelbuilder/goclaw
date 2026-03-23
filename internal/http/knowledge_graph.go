@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"net/http"
 
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
@@ -21,11 +22,11 @@ func NewKnowledgeGraphHandler(s store.KnowledgeGraphStore, providerReg *provider
 }
 
 // NewExtractor creates an Extractor from the given provider name and model.
-func (h *KnowledgeGraphHandler) NewExtractor(providerName, model string, minConfidence float64) *kg.Extractor {
+func (h *KnowledgeGraphHandler) NewExtractor(ctx context.Context, providerName, model string, minConfidence float64) *kg.Extractor {
 	if h.providerReg == nil || providerName == "" || model == "" {
 		return nil
 	}
-	p, err := h.providerReg.Get(providerName)
+	p, err := h.providerReg.Get(ctx, providerName)
 	if err != nil {
 		return nil
 	}

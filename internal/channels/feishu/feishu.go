@@ -86,7 +86,7 @@ func New(cfg config.FeishuConfig, msgBus *bus.MessageBus, pairingSvc store.Pairi
 		client:         client,
 		pairingService: pairingSvc,
 		groupAllowList: cfg.GroupAllowFrom,
-		groupHistory:   channels.MakeHistory(channels.TypeFeishu, pendingStore),
+		groupHistory:   channels.MakeHistory(channels.TypeFeishu, pendingStore, base.TenantID()),
 		historyLimit:   historyLimit,
 		stopCh:         make(chan struct{}),
 	}, nil
@@ -255,7 +255,8 @@ func (c *Channel) WebhookHandler() (string, http.Handler) {
 	}
 
 	handler := NewWebhookHandler(c.cfg.VerificationToken, c.cfg.EncryptKey, func(event *MessageEvent) {
-		c.handleMessageEvent(context.Background(), event)
+		ctx := store.WithTenantID(context.Background(), c.TenantID())
+		c.handleMessageEvent(ctx, event)
 	})
 
 	return path, http.HandlerFunc(handler)
@@ -275,7 +276,8 @@ func (c *Channel) startWebhook(ctx context.Context) error {
 	slog.Info("feishu: starting Webhook server", "port", port, "path", path)
 
 	handler := NewWebhookHandler(c.cfg.VerificationToken, c.cfg.EncryptKey, func(event *MessageEvent) {
-		c.handleMessageEvent(context.Background(), event)
+		ctx := store.WithTenantID(context.Background(), c.TenantID())
+		c.handleMessageEvent(ctx, event)
 	})
 
 	mux := http.NewServeMux()

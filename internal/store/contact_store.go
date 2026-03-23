@@ -49,7 +49,18 @@ type ContactStore interface {
 	// Returns a map of sender_id → ChannelContact (first match per sender_id).
 	GetContactsBySenderIDs(ctx context.Context, senderIDs []string) (map[string]ChannelContact, error)
 
-	// MergeContacts assigns the same merged_id to all given contact IDs,
-	// linking them as the same person across channels.
-	MergeContacts(ctx context.Context, contactIDs []uuid.UUID) error
+	// GetContactByID returns a single contact by primary key. Tenant-scoped via context.
+	GetContactByID(ctx context.Context, id uuid.UUID) (*ChannelContact, error)
+
+	// MergeContacts sets merged_id = tenantUserID on all given contact IDs,
+	// linking them to a tenant_users identity. Tenant-scoped via context.
+	MergeContacts(ctx context.Context, contactIDs []uuid.UUID, tenantUserID uuid.UUID) error
+
+	// UnmergeContacts sets merged_id = NULL on the given contact IDs.
+	// Tenant-scoped via context.
+	UnmergeContacts(ctx context.Context, contactIDs []uuid.UUID) error
+
+	// GetContactsByMergedID returns all contacts linked to a given merged_id.
+	// Tenant-scoped via context.
+	GetContactsByMergedID(ctx context.Context, mergedID uuid.UUID) ([]ChannelContact, error)
 }

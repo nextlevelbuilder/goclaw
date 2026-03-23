@@ -103,5 +103,9 @@
   },
   "common": {
     "back": "Quay lại"
-  }
+  },
+  "skipSetup": "Bỏ qua cài đặt và vào dashboard",
+  "skipSetupConfirm": "Bạn có chắc muốn bỏ qua? Bạn luôn có thể cấu hình provider và agent sau từ dashboard.",
+  "switchTenant": "Chuyển",
+  "allTenants": "Tất cả Tenant"
 }

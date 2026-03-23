@@ -12,6 +12,7 @@ export interface BuiltinToolData {
   description: string;
   category: string;
   enabled: boolean;
+  tenant_enabled: boolean | null;
   settings: Record<string, unknown>;
   requires: string[];
   metadata: Record<string, unknown>;
@@ -51,5 +52,33 @@ export function useBuiltinTools() {
     [http, invalidate],
   );
 
-  return { tools, loading, refresh: invalidate, updateTool };
+  const setTenantConfig = useCallback(
+    async (name: string, enabled: boolean) => {
+      try {
+        await http.put(`/v1/tools/builtin/${name}/tenant-config`, { enabled });
+        await invalidate();
+        toast.success(i18next.t("tools:builtin.settingsDialog.toast.saved"));
+      } catch (err) {
+        toast.error(i18next.t("tools:builtin.settingsDialog.toast.failed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
+  const deleteTenantConfig = useCallback(
+    async (name: string) => {
+      try {
+        await http.delete(`/v1/tools/builtin/${name}/tenant-config`);
+        await invalidate();
+        toast.success(i18next.t("tools:builtin.settingsDialog.toast.saved"));
+      } catch (err) {
+        toast.error(i18next.t("tools:builtin.settingsDialog.toast.failed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
+  return { tools, loading, refresh: invalidate, updateTool, setTenantConfig, deleteTenantConfig };
 }

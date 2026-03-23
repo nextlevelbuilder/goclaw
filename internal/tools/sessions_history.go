@@ -76,7 +76,7 @@ func (t *SessionsHistoryTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult("access denied: session belongs to a different agent")
 	}
 
-	history := t.sessions.GetHistory(sessionKey)
+	history := t.sessions.GetHistory(ctx, sessionKey)
 	if history == nil {
 		return SilentResult(`{"session_key":"` + sessionKey + `","messages":[],"count":0}`)
 	}

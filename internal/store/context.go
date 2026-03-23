@@ -29,6 +29,12 @@ const (
 	SharedKGKey contextKey = "goclaw_shared_kg"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
 	ShellDenyGroupsKey contextKey = "goclaw_shell_deny_groups"
+	// TenantIDKey is the context key for the tenant UUID.
+	TenantIDKey contextKey = "goclaw_tenant_id"
+	// CrossTenantKey indicates the caller has cross-tenant access (owner/system admin).
+	CrossTenantKey contextKey = "goclaw_cross_tenant"
+	// TenantSlugKey stores the tenant's URL-safe slug for filesystem paths.
+	TenantSlugKey contextKey = "goclaw_tenant_slug"
 )
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
@@ -159,6 +165,47 @@ func LocaleFromContext(ctx context.Context) string {
 	}
 	return "en"
 }
+
+// WithTenantID returns a new context with the given tenant UUID.
+func WithTenantID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, TenantIDKey, id)
+}
+
+// TenantIDFromContext extracts the tenant UUID from context.
+// Returns uuid.Nil if not set (fail-closed — callers must check).
+func TenantIDFromContext(ctx context.Context) uuid.UUID {
+	if v, ok := ctx.Value(TenantIDKey).(uuid.UUID); ok {
+		return v
+	}
+	return uuid.Nil
+}
+
+// WithCrossTenant returns a context flagged for cross-tenant access.
+// Used by owner/system admin callers who can access all tenants.
+func WithCrossTenant(ctx context.Context) context.Context {
+	return context.WithValue(ctx, CrossTenantKey, true)
+}
+
+// IsCrossTenant returns true if the caller has cross-tenant access.
+func IsCrossTenant(ctx context.Context) bool {
+	v, _ := ctx.Value(CrossTenantKey).(bool)
+	return v
+}
+
+// WithTenantSlug returns a new context with the given tenant slug.
+func WithTenantSlug(ctx context.Context, slug string) context.Context {
+	return context.WithValue(ctx, TenantSlugKey, slug)
+}
+
+// TenantSlugFromContext extracts the tenant slug from context. Returns "" if not set.
+func TenantSlugFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(TenantSlugKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// --- Fork: compact metadata context helpers ---
 
 // WithCompactSessionKey stores the session_key for a memory compact write.
 // Used by memoryflush to tag memory_documents with the originating session.

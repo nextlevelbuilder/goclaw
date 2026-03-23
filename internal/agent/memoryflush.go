@@ -79,7 +79,7 @@ func ResolveMemoryFlushSettings(compaction *config.CompactionConfig) *MemoryFlus
 // shouldRunMemoryFlush checks whether a memory flush should run before compaction.
 // Flush always runs when compaction triggers (called inside maybeSummarize),
 // gated only by enabled/memory checks and a dedup guard per compaction cycle.
-func (l *Loop) shouldRunMemoryFlush(sessionKey string, totalTokens int, settings *MemoryFlushSettings) bool {
+func (l *Loop) shouldRunMemoryFlush(ctx context.Context, sessionKey string, totalTokens int, settings *MemoryFlushSettings) bool {
 	if settings == nil || !settings.Enabled || !l.hasMemory {
 		return false
 	}
@@ -89,8 +89,8 @@ func (l *Loop) shouldRunMemoryFlush(sessionKey string, totalTokens int, settings
 	}
 
 	// Deduplication: skip if already flushed in this compaction cycle.
-	compactionCount := l.sessions.GetCompactionCount(sessionKey)
-	lastFlushAt := l.sessions.GetMemoryFlushCompactionCount(sessionKey)
+	compactionCount := l.sessions.GetCompactionCount(ctx, sessionKey)
+	lastFlushAt := l.sessions.GetMemoryFlushCompactionCount(ctx, sessionKey)
 	if lastFlushAt >= 0 && lastFlushAt == compactionCount {
 		return false
 	}
@@ -108,8 +108,9 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 	flushCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	history := l.sessions.GetHistory(sessionKey)
-	summary := l.sessions.GetSummary(sessionKey)
+	// Build messages: system prompt + history summary + flush prompt
+	history := l.sessions.GetHistory(flushCtx, sessionKey)
+	summary := l.sessions.GetSummary(flushCtx, sessionKey)
 
 	// Build messages for extraction LLM call
 	var messages []providers.Message
@@ -148,22 +149,22 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 	})
 	if err != nil {
 		slog.Warn("memory flush: extraction LLM call failed", "error", err)
-		l.sessions.SetMemoryFlushDone(sessionKey)
-		l.sessions.Save(sessionKey)
+		l.sessions.SetMemoryFlushDone(ctx, sessionKey)
+		l.sessions.Save(ctx, sessionKey)
 		return
 	}
 
 	extracted := SanitizeAssistantContent(resp.Content)
 	if extracted == "" || IsSilentReply(extracted) {
 		slog.Info("memory flush: nothing to extract")
-		l.sessions.SetMemoryFlushDone(sessionKey)
-		l.sessions.Save(sessionKey)
+		l.sessions.SetMemoryFlushDone(ctx, sessionKey)
+		l.sessions.Save(ctx, sessionKey)
 		return
 	}
 
 	// Compact number = current count + 1 (IncrementCompaction runs after TruncateHistory)
-	compactNum := l.sessions.GetCompactionCount(sessionKey) + 1
-	numericID := l.sessions.GetNumericID(sessionKey)
+	compactNum := l.sessions.GetCompactionCount(ctx, sessionKey) + 1
+	numericID := l.sessions.GetNumericID(ctx, sessionKey)
 	var path string
 	if numericID > 0 {
 		path = fmt.Sprintf("memory/sessions/%d/compact_%d.md", numericID, compactNum)
@@ -188,8 +189,11 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 		slog.Info("memory flush: compact written", "session", sessionKey, "compact", compactNum, "path", path, "chars", len(extracted))
 	}
 
-	l.sessions.SetMemoryFlushDone(sessionKey)
-	l.sessions.Save(sessionKey)
+	// Mark flush as done
+	l.sessions.SetMemoryFlushDone(ctx, sessionKey)
+	l.sessions.Save(ctx, sessionKey)
+
+	slog.Info("memory flush: completed", "session", sessionKey)
 }
 
 // extractiveMemoryFallback runs the regex-based extraction on conversation history

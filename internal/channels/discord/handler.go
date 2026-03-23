@@ -13,10 +13,13 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // handleMessage processes incoming Discord messages.
 func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate) {
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	// Ignore bot's own messages
 	if m.Author == nil || m.Author.ID == c.botUserID {
 		return
@@ -40,11 +43,11 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	}
 
 	if isDM {
-		if !c.checkDMPolicy(senderID, channelID) {
+		if !c.checkDMPolicy(ctx, senderID, channelID) {
 			return
 		}
 	} else {
-		if !c.checkGroupPolicy(senderID, channelID) {
+		if !c.checkGroupPolicy(ctx, senderID, channelID) {
 			slog.Debug("discord group message rejected by policy",
 				"user_id", senderID,
 				"username", senderName,
@@ -192,7 +195,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, "group")
 			}
 
 			slog.Debug("discord group message recorded (no mention)",
@@ -284,7 +287,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, peerKind)
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, peerKind)
 	}
 
 	// Publish directly to bus (to preserve MediaFile MIME types)
@@ -307,7 +310,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.
-func (c *Channel) checkGroupPolicy(senderID, channelID string) bool {
+func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, channelID string) bool {
 	groupPolicy := c.config.GroupPolicy
 	if groupPolicy == "" {
 		groupPolicy = "open"
@@ -327,7 +330,7 @@ func (c *Channel) checkGroupPolicy(senderID, channelID string) bool {
 		}
 		groupSenderID := fmt.Sprintf("group:%s", channelID)
 		if c.pairingService != nil {
-			paired, err := c.pairingService.IsPaired(groupSenderID, c.Name())
+			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
 			if err != nil {
 				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 					"group_sender", groupSenderID, "channel", c.Name(), "error", err)
@@ -338,7 +341,7 @@ func (c *Channel) checkGroupPolicy(senderID, channelID string) bool {
 				return true
 			}
 		}
-		c.sendPairingReply(groupSenderID, channelID)
+		c.sendPairingReply(ctx, groupSenderID, channelID)
 		return false
 	default: // "open"
 		return true
@@ -346,7 +349,7 @@ func (c *Channel) checkGroupPolicy(senderID, channelID string) bool {
 }
 
 // checkDMPolicy evaluates the DM policy for a sender, handling pairing flow.
-func (c *Channel) checkDMPolicy(senderID, channelID string) bool {
+func (c *Channel) checkDMPolicy(ctx context.Context, senderID, channelID string) bool {
 	dmPolicy := c.config.DMPolicy
 	if dmPolicy == "" {
 		dmPolicy = "pairing"
@@ -367,7 +370,7 @@ func (c *Channel) checkDMPolicy(senderID, channelID string) bool {
 	default: // "pairing"
 		paired := false
 		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(senderID, c.Name())
+			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
 			if err != nil {
 				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 					"sender_id", senderID, "channel", c.Name(), "error", err)
@@ -382,13 +385,13 @@ func (c *Channel) checkDMPolicy(senderID, channelID string) bool {
 			return true
 		}
 
-		c.sendPairingReply(senderID, channelID)
+		c.sendPairingReply(ctx, senderID, channelID)
 		return false
 	}
 }
 
 // sendPairingReply sends a pairing code to the user via DM.
-func (c *Channel) sendPairingReply(senderID, channelID string) {
+func (c *Channel) sendPairingReply(ctx context.Context, senderID, channelID string) {
 	if c.pairingService == nil {
 		return
 	}
@@ -400,7 +403,7 @@ func (c *Channel) sendPairingReply(senderID, channelID string) {
 		}
 	}
 
-	code, err := c.pairingService.RequestPairing(senderID, c.Name(), channelID, "default", nil)
+	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), channelID, "default", nil)
 	if err != nil {
 		slog.Debug("discord pairing request failed", "sender_id", senderID, "error", err)
 		return

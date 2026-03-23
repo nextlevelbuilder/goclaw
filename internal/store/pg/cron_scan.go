@@ -1,8 +1,10 @@
 package pg
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/adhocore/gronx"
@@ -11,11 +13,23 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGCronStore) scanJob(id uuid.UUID) (*store.CronJob, error) {
-	row := s.db.QueryRow(
-		`SELECT id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+// scanJob fetches a single cron job by ID with tenant filtering.
+func (s *PGCronStore) scanJob(ctx context.Context, id uuid.UUID) (*store.CronJob, error) {
+	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
-		 created_at, updated_at FROM cron_jobs WHERE id = $1`, id)
+		 created_at, updated_at FROM cron_jobs WHERE id = $1`
+	args := []any{id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return nil, fmt.Errorf("tenant_id required")
+		}
+		q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+
+	row := s.db.QueryRowContext(ctx, q, args...)
 	return scanCronSingleRow(row)
 }
 
@@ -27,6 +41,7 @@ type cronRowScanner interface {
 
 func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var id uuid.UUID
+	var tenantID uuid.UUID
 	var agentID *uuid.UUID
 	var userID *string
 	var name, scheduleKind string
@@ -37,7 +52,7 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var payloadJSON []byte
 	var createdAt, updatedAt time.Time
 
-	err := row.Scan(&id, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
+	err := row.Scan(&id, &tenantID, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
 		&intervalMS, &payloadJSON, &deleteAfterRun, &nextRunAt, &lastRunAt, &lastStatus, &lastError,
 		&createdAt, &updatedAt)
 	if err != nil {
@@ -48,9 +63,10 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	json.Unmarshal(payloadJSON, &payload)
 
 	job := &store.CronJob{
-		ID:      id.String(),
-		Name:    name,
-		Enabled: enabled,
+		ID:       id.String(),
+		TenantID: tenantID,
+		Name:     name,
+		Enabled:  enabled,
 		Schedule: store.CronSchedule{
 			Kind: scheduleKind,
 		},

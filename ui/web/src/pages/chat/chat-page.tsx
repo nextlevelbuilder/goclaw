@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router";
 import { Eye, PanelLeftOpen } from "lucide-react";
@@ -29,13 +29,17 @@ export function ChatPage() {
   // sessionKey derived from URL — single source of truth, no separate state
   const sessionKey = urlSessionKey ?? "";
 
-  const [agentId, setAgentId] = useState(() => {
+  // Fallback agent ID used only when URL has no session key
+  const [agentIdFallback, setAgentIdFallback] = useState("default");
+
+  // Derive agentId from URL (source of truth), fallback to state when no session
+  const agentId = useMemo(() => {
     if (urlSessionKey) {
       const { agentId: parsed } = parseSessionKey(urlSessionKey);
       if (parsed) return parsed;
     }
-    return "default";
-  });
+    return agentIdFallback;
+  }, [urlSessionKey, agentIdFallback]);
 
   const {
     sessions,
@@ -91,12 +95,10 @@ export function ChatPage() {
   const handleSessionSelect = useCallback(
     (key: string) => {
       const { agentId: parsed } = parseSessionKey(key);
-      if (parsed && parsed !== agentId) {
-        setAgentId(parsed);
-      }
+      if (parsed) setAgentIdFallback(parsed);
       navigate(`/chat/${encodeURIComponent(key)}`);
     },
-    [navigate, agentId],
+    [navigate],
   );
 
   const handleDeleteSession = useCallback(async (key: string) => {
@@ -113,10 +115,12 @@ export function ChatPage() {
 
   const handleAgentChange = useCallback(
     (newAgentId: string) => {
-      setAgentId(newAgentId);
-      navigate(`/chat/${encodeURIComponent(`agent:${newAgentId}:ws:direct:${crypto.randomUUID()}`)}`);
+      setAgentIdFallback(newAgentId);
+      if (sessionKey) {
+        navigate("/chat");
+      }
     },
-    [navigate],
+    [navigate, sessionKey],
   );
 
   const handleSend = useCallback(

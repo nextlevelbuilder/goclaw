@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -137,6 +138,11 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 		return tools.ErrorResult("action is required")
 	}
 
+	// Propagate tenant ID from store context to browser context for page isolation.
+	if tid := store.TenantIDFromContext(ctx); tid.String() != "00000000-0000-0000-0000-000000000000" {
+		ctx = WithTenantID(ctx, tid.String())
+	}
+
 	// Auto-start browser for actions that need it
 	switch action {
 	case "open", "snapshot", "screenshot", "navigate", "act", "tabs":
@@ -165,7 +171,7 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 	case "navigate":
 		return t.handleNavigate(ctx, args)
 	case "console":
-		return t.handleConsole(args)
+		return t.handleConsole(ctx, args)
 	case "act":
 		return t.handleAct(ctx, args)
 	default:
@@ -279,9 +285,9 @@ func (t *BrowserTool) handleNavigate(ctx context.Context, args map[string]any) *
 	return tools.NewResult(fmt.Sprintf("Navigated to %s", url))
 }
 
-func (t *BrowserTool) handleConsole(args map[string]any) *tools.Result {
+func (t *BrowserTool) handleConsole(ctx context.Context, args map[string]any) *tools.Result {
 	targetID, _ := args["targetId"].(string)
-	msgs := t.manager.ConsoleMessages(targetID)
+	msgs := t.manager.ConsoleMessages(ctx, targetID)
 	return jsonResult(msgs)
 }
 

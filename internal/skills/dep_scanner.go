@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,6 +35,7 @@ func scanScriptsDir(scriptsDir string) *SkillManifest {
 
 	entries, err := os.ReadDir(scriptsDir)
 	if err != nil {
+		slog.Debug("dep_scanner: scripts dir not found", "dir", scriptsDir, "error", err)
 		return m
 	}
 
@@ -102,6 +104,11 @@ func scanScriptsDir(scriptsDir string) *SkillManifest {
 	}
 	if len(nodeImports) > 0 && !binaries["node"] {
 		m.Requires = append(m.Requires, "node")
+	}
+
+	if !m.IsEmpty() {
+		slog.Debug("dep_scanner: scanned", "dir", scriptsDir,
+			"bins", len(m.Requires), "py", len(m.RequiresPython), "node", len(m.RequiresNode))
 	}
 
 	return m

@@ -80,6 +80,13 @@
     "deprecatedTooltip": "Công cụ này đã ngừng sử dụng và không còn khả dụng",
     "settings": "Cài đặt",
     "configuredVia": "Cấu hình qua trang Config",
+    "tenantOverride": "Ghi đè tenant",
+    "tenantEnabled": "Bật cho tenant này",
+    "tenantDisabled": "Tắt cho tenant này",
+    "tenantDefault": "Dùng mặc định",
+    "resetToDefault": "Đặt lại mặc định",
+    "unconfiguredWarning": "{{count}} công cụ cần cấu hình provider để agent sử dụng đầy đủ năng lực.",
+    "unconfiguredAction": "Cấu hình",
     "categories": {
       "filesystem": "Hệ thống tệp",
       "runtime": "Thời gian chạy",

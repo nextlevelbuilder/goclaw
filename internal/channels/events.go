@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -28,6 +31,9 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 	}
 
 	ctx := context.Background()
+	if ta, ok := ch.(interface{ TenantID() uuid.UUID }); ok {
+		ctx = store.WithTenantID(ctx, ta.TenantID())
+	}
 
 	// Forward to StreamingChannel
 	if sc, ok := ch.(StreamingChannel); ok {

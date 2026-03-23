@@ -32,7 +32,7 @@ export function ConfigPage() {
 
   if (showSkeleton) {
     return (
-      <div className="p-4 sm:p-6">
+      <div className="p-4 sm:p-6 pb-10">
         <PageHeader title={t("title")} description={t("description")} />
         <div className="mt-6">
           <DetailSkeleton />
@@ -43,7 +43,7 @@ export function ConfigPage() {
 
   if (!config) {
     return (
-      <div className="p-4 sm:p-6">
+      <div className="p-4 sm:p-6 pb-10">
         <PageHeader title={t("title")} description={t("description")} />
         <div className="mt-6">
           <EmptyState
@@ -62,7 +62,7 @@ export function ConfigPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("title")}
         description={t("description")}

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Bot } from "lucide-react";
 import { ActivityIndicator } from "./activity-indicator";
 import { BlockReplyBubble } from "./block-reply-bubble";
@@ -15,7 +16,7 @@ interface ActiveRunZoneProps {
   blockReplies: ChatMessage[];
 }
 
-export function ActiveRunZone({
+export const ActiveRunZone = memo(function ActiveRunZone({
   isRunning,
   activity,
   thinkingText,
@@ -69,4 +70,4 @@ export function ActiveRunZone({
       </div>
     </div>
   );
-}
+});

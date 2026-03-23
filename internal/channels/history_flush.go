@@ -93,7 +93,7 @@ func (ph *PendingHistory) flushLoop() {
 
 // writeBatch writes a batch of messages to the DB store.
 func (ph *PendingHistory) writeBatch(batch []store.PendingMessage) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ph.tenantCtx(), 15*time.Second)
 	defer cancel()
 
 	if err := ph.store.AppendBatch(ctx, batch); err != nil {

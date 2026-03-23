@@ -63,6 +63,12 @@ func (s *seedStubStore) GetByKey(_ context.Context, _ string) (*store.AgentData,
 func (s *seedStubStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
 	return nil, nil
 }
+func (s *seedStubStore) GetByKeys(_ context.Context, _ []string) ([]store.AgentData, error) {
+	return nil, nil
+}
+func (s *seedStubStore) GetByIDs(_ context.Context, _ []uuid.UUID) ([]store.AgentData, error) {
+	return nil, nil
+}
 func (s *seedStubStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error   { return nil }
 func (s *seedStubStore) Delete(_ context.Context, _ uuid.UUID) error                     { return nil }
 func (s *seedStubStore) List(_ context.Context, _ string) ([]store.AgentData, error)     { return nil, nil }

@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
@@ -27,22 +28,29 @@ type PGSkillStore struct {
 	cache   map[string]*store.SkillInfo
 	version atomic.Int64
 
-	// List cache: cached result of ListSkills() with version + TTL validation
-	listCache []store.SkillInfo
-	listVer   int64
-	listTime  time.Time
+	// List cache: per-tenant cached result of ListSkills() with version + TTL validation.
+	// Key is tenant UUID; uuid.Nil = cross-tenant (system admin).
+	listCache map[uuid.UUID]*listCacheEntry
 	ttl       time.Duration
 
 	// Embedding provider for vector-based skill search
 	embProvider store.EmbeddingProvider
 }
 
+// listCacheEntry holds per-tenant cached skill list with version + TTL.
+type listCacheEntry struct {
+	skills []store.SkillInfo
+	ver    int64
+	time   time.Time
+}
+
 func NewPGSkillStore(db *sql.DB, baseDir string) *PGSkillStore {
 	return &PGSkillStore{
-		db:      db,
-		baseDir: baseDir,
-		cache:   make(map[string]*store.SkillInfo),
-		ttl:     defaultSkillsCacheTTL,
+		db:        db,
+		baseDir:   baseDir,
+		cache:     make(map[string]*store.SkillInfo),
+		listCache: make(map[uuid.UUID]*listCacheEntry),
+		ttl:       defaultSkillsCacheTTL,
 	}
 }
 
@@ -50,12 +58,17 @@ func (s *PGSkillStore) Version() int64 { return s.version.Load() }
 func (s *PGSkillStore) BumpVersion()   { s.version.Store(time.Now().UnixMilli()) }
 func (s *PGSkillStore) Dirs() []string { return []string{s.baseDir} }
 
-func (s *PGSkillStore) ListSkills() []store.SkillInfo {
+func (s *PGSkillStore) ListSkills(ctx context.Context) []store.SkillInfo {
 	currentVer := s.version.Load()
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil && !store.IsCrossTenant(ctx) {
+		tid = store.MasterTenantID
+	}
 
+	// Check per-tenant cache
 	s.mu.RLock()
-	if s.listCache != nil && s.listVer == currentVer && time.Since(s.listTime) < s.ttl {
-		result := s.listCache
+	if entry := s.listCache[tid]; entry != nil && entry.ver == currentVer && time.Since(entry.time) < s.ttl {
+		result := entry.skills
 		s.mu.RUnlock()
 		return result
 	}
@@ -64,8 +77,19 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	// Cache miss or TTL expired → query DB
 	// Returns active + archived + system skills. Archived skills are shown dimmed in the UI
 	// so admins can see missing deps and re-activate after installing them.
-	rows, err := s.db.Query(
-		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path FROM skills WHERE status IN ('active', 'archived') OR is_system = true ORDER BY name`)
+	// Tenant filter: system skills visible globally, custom skills scoped to tenant.
+	var rows *sql.Rows
+	var err error
+	if store.IsCrossTenant(ctx) {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path
+			 FROM skills WHERE status IN ('active', 'archived') OR is_system = true ORDER BY name`)
+	} else {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path
+			 FROM skills WHERE (status IN ('active', 'archived') OR is_system = true) AND (is_system = true OR tenant_id = $1)
+			 ORDER BY name`, tid)
+	}
 	if err != nil {
 		return nil
 	}
@@ -100,9 +124,7 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 	}
 
 	s.mu.Lock()
-	s.listCache = result
-	s.listVer = currentVer
-	s.listTime = time.Now()
+	s.listCache[tid] = &listCacheEntry{skills: result, ver: currentVer, time: time.Now()}
 	s.mu.Unlock()
 
 	return result
@@ -110,8 +132,8 @@ func (s *PGSkillStore) ListSkills() []store.SkillInfo {
 
 // ListAllSkills returns all enabled skills regardless of status (for admin operations like rescan-deps).
 // Disabled skills are excluded — no point scanning or updating them.
-func (s *PGSkillStore) ListAllSkills() []store.SkillInfo {
-	rows, err := s.db.Query(
+func (s *PGSkillStore) ListAllSkills(ctx context.Context) []store.SkillInfo {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path FROM skills WHERE enabled = true AND status != 'deleted' ORDER BY name`)
 	if err != nil {
 		return nil

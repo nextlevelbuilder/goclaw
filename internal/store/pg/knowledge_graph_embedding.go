@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -17,12 +18,20 @@ func (s *PGKnowledgeGraphStore) BackfillKGEmbeddings(ctx context.Context) (int, 
 	const batchSize = 50
 	total := 0
 
+	// $1=batchSize (LIMIT), tenant at $2 if not cross-tenant
+	tc, tcArgs, tcErr := tenantClauseN(ctx, 2)
+	if tcErr != nil {
+		return 0, tcErr
+	}
+	batchQ := fmt.Sprintf(`SELECT id, name, description FROM kg_entities
+		 WHERE embedding IS NULL%s
+		 ORDER BY created_at DESC
+		 LIMIT $1`, tc)
+	batchBaseArgs := tcArgs // tenant uuid(s) prepended after $1
+
 	for {
-		rows, err := s.db.QueryContext(ctx,
-			`SELECT id, name, description FROM kg_entities
-			 WHERE embedding IS NULL
-			 ORDER BY created_at DESC
-			 LIMIT $1`, batchSize)
+		queryArgs := append([]any{batchSize}, batchBaseArgs...)
+		rows, err := s.db.QueryContext(ctx, batchQ, queryArgs...)
 		if err != nil {
 			return total, err
 		}

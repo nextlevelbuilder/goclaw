@@ -9,16 +9,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// wireHTTP creates HTTP handlers (agents + skills + traces + MCP + custom tools + channel instances + providers + delegations + builtin tools + pending messages).
-func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.CustomToolsHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.DelegationsHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler) {
+// wireHTTP creates HTTP handlers (agents + skills + traces + MCP + channel instances + providers + builtin tools + pending messages).
+func wireHTTP(stores *store.Stores, token, defaultWorkspace, dataDir, bundledSkillsDir string, msgBus *bus.MessageBus, toolsReg *tools.Registry, providerReg *providers.Registry, isOwner func(string) bool, gatewayAddr string, mcpToolLister httpapi.MCPToolLister) (*httpapi.AgentsHandler, *httpapi.SkillsHandler, *httpapi.TracesHandler, *httpapi.MCPHandler, *httpapi.ChannelInstancesHandler, *httpapi.ProvidersHandler, *httpapi.BuiltinToolsHandler, *httpapi.PendingMessagesHandler, *httpapi.TeamEventsHandler, *httpapi.SecureCLIHandler, *httpapi.MCPUserCredentialsHandler) {
 	var agentsH *httpapi.AgentsHandler
 	var skillsH *httpapi.SkillsHandler
 	var tracesH *httpapi.TracesHandler
 	var mcpH *httpapi.MCPHandler
-	var customToolsH *httpapi.CustomToolsHandler
 	var channelInstancesH *httpapi.ChannelInstancesHandler
 	var providersH *httpapi.ProvidersHandler
-	var delegationsH *httpapi.DelegationsHandler
 	var builtinToolsH *httpapi.BuiltinToolsHandler
 	var pendingMessagesH *httpapi.PendingMessagesHandler
 	var secureCLIH *httpapi.SecureCLIHandler
@@ -35,7 +33,7 @@ func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.
 		if pgSkills, ok := stores.Skills.(*pg.PGSkillStore); ok {
 			dirs := pgSkills.Dirs()
 			if len(dirs) > 0 {
-				skillsH = httpapi.NewSkillsHandler(pgSkills, dirs[0], token, msgBus)
+				skillsH = httpapi.NewSkillsHandler(pgSkills, dirs[0], dataDir, bundledSkillsDir, token, msgBus)
 			}
 		}
 	}
@@ -47,13 +45,13 @@ func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.
 	if stores != nil && stores.MCP != nil {
 		mcpH = httpapi.NewMCPHandler(stores.MCP, token, msgBus, mcpToolLister)
 	}
-
-	if stores != nil && stores.CustomTools != nil {
-		customToolsH = httpapi.NewCustomToolsHandler(stores.CustomTools, token, msgBus, toolsReg)
+	var mcpUserCredsH *httpapi.MCPUserCredentialsHandler
+	if stores != nil && stores.MCP != nil {
+		mcpUserCredsH = httpapi.NewMCPUserCredentialsHandler(stores.MCP, token)
 	}
 
 	if stores != nil && stores.ChannelInstances != nil {
-		channelInstancesH = httpapi.NewChannelInstancesHandler(stores.ChannelInstances, stores.Agents, stores.ConfigPermissions, stores.Contacts, token, msgBus)
+		channelInstancesH = httpapi.NewChannelInstancesHandler(stores.ChannelInstances, stores.Agents, stores.ConfigPermissions, stores.Contacts, stores.Tenants, token, msgBus)
 	}
 
 	if stores != nil && stores.Providers != nil {
@@ -67,12 +65,11 @@ func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.
 	var teamEventsH *httpapi.TeamEventsHandler
 
 	if stores != nil && stores.Teams != nil {
-		delegationsH = httpapi.NewDelegationsHandler(stores.Teams, token)
 		teamEventsH = httpapi.NewTeamEventsHandler(stores.Teams, token)
 	}
 
 	if stores != nil && stores.BuiltinTools != nil {
-		builtinToolsH = httpapi.NewBuiltinToolsHandler(stores.BuiltinTools, token, msgBus)
+		builtinToolsH = httpapi.NewBuiltinToolsHandler(stores.BuiltinTools, stores.BuiltinToolTenantCfgs, token, msgBus)
 	}
 
 	if stores != nil && stores.PendingMessages != nil {
@@ -83,5 +80,5 @@ func wireHTTP(stores *store.Stores, token, defaultWorkspace string, msgBus *bus.
 		secureCLIH = httpapi.NewSecureCLIHandler(stores.SecureCLI, token, msgBus)
 	}
 
-	return agentsH, skillsH, tracesH, mcpH, customToolsH, channelInstancesH, providersH, delegationsH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH
+	return agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, mcpUserCredsH
 }

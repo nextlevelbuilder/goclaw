@@ -69,8 +69,11 @@ func (l *Loop) loadHistoricalImagesForTool(ctx context.Context, currentRefs []pr
 				continue
 			}
 			hasImage = true
-			p, err := l.mediaStore.LoadPath(ref.ID)
-			if err != nil {
+			p := ref.Path
+			if p == "" && l.mediaStore != nil {
+				p, _ = l.mediaStore.LoadPath(ref.ID)
+			}
+			if p == "" {
 				continue
 			}
 			histPaths = append(histPaths, bus.MediaFile{Path: p, MimeType: ref.MimeType})

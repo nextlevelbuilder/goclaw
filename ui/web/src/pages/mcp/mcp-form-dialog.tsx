@@ -33,6 +33,17 @@ interface MCPFormDialogProps {
   onTest: (data: { transport: string; command?: string; args?: string[]; url?: string; headers?: Record<string, string>; env?: Record<string, string> }) => Promise<{ success: boolean; tool_count?: number; error?: string }>;
 }
 
+/** Split a string into shell-like tokens, treating commas and spaces outside quotes as delimiters. */
+function splitShellTokens(input: string): string[] {
+  const tokens: string[] = [];
+  const re = /"([^"]*)"|'([^']*)'|[^\s,]+/g;
+  let m;
+  while ((m = re.exec(input)) !== null) {
+    tokens.push(m[1] ?? m[2] ?? m[0]);
+  }
+  return tokens.filter(Boolean);
+}
+
 const TRANSPORTS = [
   { value: "stdio", label: "stdio" },
   { value: "sse", label: "SSE" },
@@ -52,6 +63,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
   const [toolPrefix, setToolPrefix] = useState("");
   const [timeout, setTimeout] = useState(60);
   const [enabled, setEnabled] = useState(true);
+  const [requireUserCreds, setRequireUserCreds] = useState(false);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; tool_count?: number; error?: string } | null>(null);
@@ -70,6 +82,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
       setToolPrefix((server?.tool_prefix ?? "").replace(/^mcp_/, ""));
       setTimeout(server?.timeout_sec ?? 60);
       setEnabled(server?.enabled ?? true);
+      setRequireUserCreds(server?.settings?.require_user_credentials ?? false);
       setError("");
       setTestResult(null);
     }
@@ -79,24 +92,27 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
 
   const buildConnectionData = () => {
     let parsedArgs: string[] | undefined = undefined;
-    if (isStdio && args.trim()) {
-      // Split by spaces respecting quoted strings, including --flag="value" patterns.
-      const matches = args.match(/[^\s"']*"([^"]*)"|[^\s"']*'([^']*)'|[^\s]+/g);
-      if (matches) {
-        parsedArgs = matches.map((m) => {
-          // Strip surrounding quotes from standalone quoted args: "foo bar" → foo bar
-          if (m.startsWith('"') && m.endsWith('"')) return m.slice(1, -1);
-          if (m.startsWith("'") && m.endsWith("'")) return m.slice(1, -1);
-          // Strip quotes from --flag="value" patterns: --flag="foo bar" → --flag=foo bar
-          return m.replace(/"([^"]*)"/g, "$1").replace(/'([^']*)'/g, "$1");
-        });
+    let resolvedCommand = command.trim();
+
+    if (isStdio) {
+      // If user pasted full command into Command field (e.g. "npx -y @foo/bar"),
+      // split it: first token is the command, rest are prepended to args.
+      const cmdTokens = splitShellTokens(resolvedCommand);
+      if (cmdTokens.length > 1) {
+        resolvedCommand = cmdTokens[0]!;
+        const extraArgs = cmdTokens.slice(1);
+        const userArgs = args.trim() ? splitShellTokens(args) : [];
+        parsedArgs = [...extraArgs, ...userArgs];
+      } else if (args.trim()) {
+        parsedArgs = splitShellTokens(args);
       }
     }
+
     const parsedHeaders = !isStdio && Object.keys(headers).length > 0 ? headers : undefined;
     const parsedEnv = Object.keys(env).length > 0 ? env : undefined;
     return {
       transport,
-      command: isStdio ? command.trim() : undefined,
+      command: isStdio ? resolvedCommand : undefined,
       args: parsedArgs,
       url: !isStdio ? url.trim() : undefined,
       headers: parsedHeaders,
@@ -155,6 +171,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
         ...conn,
         tool_prefix: toolPrefix.trim() || undefined,
         timeout_sec: timeout,
+        settings: { require_user_credentials: requireUserCreds },
         enabled,
       });
       onOpenChange(false);
@@ -205,7 +222,7 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
             <>
               <div className="grid gap-1.5">
                 <Label htmlFor="mcp-cmd">{t("form.command")}</Label>
-                <Input id="mcp-cmd" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx -y @modelcontextprotocol/server-everything" className="font-mono" />
+                <Input id="mcp-cmd" value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" className="font-mono" />
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="mcp-args">{t("form.args")}</Label>
@@ -262,6 +279,15 @@ export function MCPFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
             <Switch id="mcp-enabled" checked={enabled} onCheckedChange={setEnabled} />
             <Label htmlFor="mcp-enabled">{t("form.enabled")}</Label>
           </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Switch id="mcp-require-creds" checked={requireUserCreds} onCheckedChange={setRequireUserCreds} />
+              <Label htmlFor="mcp-require-creds">{t("form.requireUserCredentials")}</Label>
+            </div>
+            <p className="text-xs text-muted-foreground pl-9">{t("form.requireUserCredentialsHint")}</p>
+          </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 

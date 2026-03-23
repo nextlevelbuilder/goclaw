@@ -117,8 +117,9 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	// Determine version (always increment — includes archived skills so re-upload gets v2+)
 	version := h.skills.GetNextVersion(slug)
 
-	// Extract to filesystem: baseDir/slug/version/
-	destDir := filepath.Join(h.baseDir, slug, fmt.Sprintf("%d", version))
+	// Extract to filesystem: tenant-scoped skills-store/slug/version/
+	tenantSkillsBase := h.tenantSkillsDir(r)
+	destDir := filepath.Join(tenantSkillsBase, slug, fmt.Sprintf("%d", version))
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create skill directory")})
 		return
@@ -200,7 +201,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		ok, missing := skills.CheckSkillDeps(manifest)
 		if !ok {
 			// Set skill to archived due to missing deps
-			_ = h.skills.UpdateSkill(id, map[string]any{"status": "archived"})
+			_ = h.skills.UpdateSkill(r.Context(), id, map[string]any{"status": "archived"})
 			response["deps_warning"] = "missing dependencies: " + skills.FormatMissing(missing)
 		}
 	}

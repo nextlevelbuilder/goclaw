@@ -203,9 +203,15 @@ func (c *Config) applyEnvOverrides() {
 		c.Telemetry.Insecure = v == "true" || v == "1"
 	}
 
-	// Owner IDs from env (comma-separated)
+	// Owner IDs from env (comma-separated, whitespace-trimmed)
 	if v := os.Getenv("GOCLAW_OWNER_IDS"); v != "" {
-		c.Gateway.OwnerIDs = strings.Split(v, ",")
+		var ids []string
+		for _, id := range strings.Split(v, ",") {
+			if trimmed := strings.TrimSpace(id); trimmed != "" {
+				ids = append(ids, trimmed)
+			}
+		}
+		c.Gateway.OwnerIDs = ids
 	}
 
 	// Tailscale (tsnet)

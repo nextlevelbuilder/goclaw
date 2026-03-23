@@ -37,12 +37,12 @@ type SkillSearchResult struct {
 // SkillStore manages skill discovery and loading.
 // Backed by Postgres (PGSkillStore) or filesystem (FileSkillStore).
 type SkillStore interface {
-	ListSkills() []SkillInfo
-	LoadSkill(name string) (string, bool)
-	LoadForContext(allowList []string) string
-	BuildSummary(allowList []string) string
-	GetSkill(name string) (*SkillInfo, bool)
-	FilterSkills(allowList []string) []SkillInfo
+	ListSkills(ctx context.Context) []SkillInfo
+	LoadSkill(ctx context.Context, name string) (string, bool)
+	LoadForContext(ctx context.Context, allowList []string) string
+	BuildSummary(ctx context.Context, allowList []string) string
+	GetSkill(ctx context.Context, name string) (*SkillInfo, bool)
+	FilterSkills(ctx context.Context, allowList []string) []SkillInfo
 	Version() int64
 	BumpVersion()
 	Dirs() []string

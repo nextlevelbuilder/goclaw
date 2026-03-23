@@ -70,7 +70,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		config:          cfg,
 		requireMention:  requireMention,
 		pairingService:  pairingSvc,
-		groupHistory:    channels.MakeHistory(channels.TypeDiscord, pendingStore),
+		groupHistory:    channels.MakeHistory(channels.TypeDiscord, pendingStore, base.TenantID()),
 		historyLimit:    historyLimit,
 		agentStore:      agentStore,
 		configPermStore: configPermStore,

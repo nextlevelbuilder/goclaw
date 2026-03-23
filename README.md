@@ -1,10 +1,8 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="_statics/goclaw-logo.svg" alt="GoClaw" height="200" />
 </p>
 
-<h1 align="center">GoClaw</h1>
-
-<p align="center"><strong>Enterprise AI Agent Platform</strong></p>
+<p align="center"><strong>Multi-Tenant AI Agent Platform</strong></p>
 
 <p align="center">
 Multi-agent AI gateway built in Go. 20+ LLM providers. 7 channels. Multi-tenant PostgreSQL.<br/>
@@ -108,6 +106,10 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 
 <p align="center">
   <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/goclaw_multi_tenant.png" alt="GoClaw Multi-Tenant" width="800" />
 </p>
 
 ## Quick Start

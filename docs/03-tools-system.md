@@ -118,8 +118,8 @@ Context keys ensure each tool call receives the correct per-call values without 
 
 | Tool | Description |
 |------|-------------|
-| `team_tasks` | Task board: list, create, claim, complete, search |
-| `team_message` | Mailbox: send, broadcast, read unread messages |
+| `team_tasks` | Task board: create, list, get, claim, complete, cancel, assign, review, approve, reject, comment (with type: note/blocker), progress, attach, ask_user, search, update |
+| `team_message` | Mailbox: send direct message to teammate, broadcast to all, read unread messages |
 
 ### Media Generation
 

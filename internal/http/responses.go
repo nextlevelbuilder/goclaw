@@ -80,7 +80,7 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	agentID := extractAgentID(r, req.Model)
 	userID := extractUserID(r)
 
-	loop, err := h.agents.Get(agentID)
+	loop, err := h.agents.Get(r.Context(), agentID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"agent not found: %s"}`, agentID), http.StatusNotFound)
 		return

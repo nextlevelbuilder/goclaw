@@ -84,7 +84,7 @@ func ResolveMediaProviderChain(
 	}
 
 	// 3. Hardcoded default chain — use first available provider
-	return buildDefaultChain(defaultPriority, defaultModels, registry)
+	return buildDefaultChain(ctx, defaultPriority, defaultModels, registry)
 }
 
 // parseChainSettings parses the settings JSON into a chain, handling both new
@@ -116,13 +116,14 @@ func parseChainSettings(raw []byte, defaultModels map[string]string) []MediaProv
 // buildDefaultChain creates a chain from the hardcoded priority list,
 // including only providers that are currently registered.
 func buildDefaultChain(
+	ctx context.Context,
 	priority []string,
 	defaultModels map[string]string,
 	registry *providers.Registry,
 ) []MediaProviderEntry {
 	var chain []MediaProviderEntry
 	for _, name := range priority {
-		if _, err := registry.Get(name); err == nil {
+		if _, err := registry.Get(ctx, name); err == nil {
 			entry := MediaProviderEntry{
 				Provider: name,
 				Model:    defaultModels[name],
@@ -162,7 +163,7 @@ func ExecuteWithChain(
 
 	var lastErr error
 	for _, entry := range chain {
-		p, err := registry.Get(entry.Provider)
+		p, err := registry.Get(ctx, entry.Provider)
 		if err != nil {
 			slog.Warn("media_chain: provider not found, skipping",
 				"provider", entry.Provider, "error", err)

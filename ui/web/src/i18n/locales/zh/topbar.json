@@ -9,9 +9,11 @@
     "zh": "中文"
   },
   "logout": "退出登录",
+  "logoutConfirm": "确定要退出登录吗？",
   "openMenu": "打开菜单",
   "pairingRequests": "配对请求",
   "pendingPairingRequest": "待处理配对请求",
   "pendingPairingRequests": "{{count}} 个待处理配对请求",
+  "apiKeys": "API Keys",
   "toggleTheme": "切换主题"
 }

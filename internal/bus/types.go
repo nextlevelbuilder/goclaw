@@ -3,6 +3,8 @@ package bus
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/google/uuid"
 )
 
 // MediaFile represents an inbound media file with its MIME type.
@@ -21,6 +23,7 @@ type InboundMessage struct {
 	Media        []MediaFile       `json:"media,omitempty"`
 	SessionKey   string            `json:"session_key"`             // deprecated: gateway builds canonical key
 	PeerKind     string            `json:"peer_kind,omitempty"`     // "direct" or "group" (used for session key)
+	TenantID     uuid.UUID         `json:"tenant_id,omitempty"`     // tenant scope from channel instance
 	AgentID      string            `json:"agent_id,omitempty"`      // target agent (for multi-agent routing)
 	UserID       string            `json:"user_id,omitempty"`       // external user ID for per-user scoping (memory, bootstrap)
 	HistoryLimit int               `json:"history_limit,omitempty"` // max turns to keep in context (0=unlimited, from channel config)
@@ -46,8 +49,9 @@ type MediaAttachment struct {
 
 // Event represents a server-side event to broadcast to WebSocket clients.
 type Event struct {
-	Name    string `json:"name"` // event name (e.g. "agent", "chat", "health")
-	Payload any    `json:"payload,omitempty"`
+	Name     string    `json:"name"`              // event name (e.g. "agent", "chat", "health")
+	Payload  any       `json:"payload,omitempty"`
+	TenantID uuid.UUID `json:"-"` // tenant scope for event filtering (not serialized to clients)
 }
 
 // Cache invalidation kind constants.
@@ -56,7 +60,6 @@ const (
 	CacheKindBootstrap        = "bootstrap"
 	CacheKindSkills           = "skills"
 	CacheKindCron             = "cron"
-	CacheKindCustomTools      = "custom_tools"
 	CacheKindChannelInstances = "channel_instances"
 	CacheKindBuiltinTools     = "builtin_tools"
 	CacheKindTeam             = "team"
@@ -67,6 +70,10 @@ const (
 	CacheKindAPIKeys          = "api_keys"
 	CacheKindHeartbeat        = "heartbeat"
 	CacheKindConfigPerms      = "config_perms"
+	CacheKindTenantUsers      = "tenant_users"
+	CacheKindAgentAccess      = "agent_access"
+	CacheKindTeamAccess       = "team_access"
+	CacheKindTenants          = "tenants"
 )
 
 // Topic constants for msgBus.Subscribe() / Broadcast().
@@ -75,7 +82,6 @@ const (
 	TopicCacheAgent            = "cache:agent"
 	TopicCacheSkills           = "cache:skills"
 	TopicCacheCron             = "cache:cron"
-	TopicCacheCustomTools      = "cache:custom_tools"
 	TopicCacheBuiltinTools     = "cache:builtin_tools"
 	TopicCacheTeam             = "cache:team"
 	TopicCacheUserWorkspace    = "cache:user_workspace"
@@ -122,6 +128,7 @@ type AuditEventPayload struct {
 	EntityID   string          `json:"entity_id"`
 	IPAddress  string          `json:"ip_address,omitempty"`
 	Details    json.RawMessage `json:"details,omitempty"`
+	TenantID   uuid.UUID       `json:"tenant_id,omitempty"` // for async subscriber tenant scoping
 }
 
 // CacheInvalidatePayload signals cache layers to evict stale entries.

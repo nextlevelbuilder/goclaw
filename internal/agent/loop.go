@@ -43,6 +43,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if l.agentUUID != uuid.Nil {
 		ctx = store.WithAgentID(ctx, l.agentUUID)
 	}
+	// Inject tenant into context for tool-level tenant scoping (spawn, MCP, etc.)
+	if l.tenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, l.tenantID)
+	}
 	// Inject user ID into context for per-user scoping (memory, context files, etc.)
 	if req.UserID != "" {
 		ctx = store.WithUserID(ctx, req.UserID)
@@ -182,7 +186,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			if tools.IsSharedWorkspace(team.Settings) {
 				wsChat = ""
 			}
-			if wsDir, err := tools.WorkspaceDir(l.dataDir, team.ID, wsChat); err == nil {
+			tenantBase := config.TenantWorkspace(l.dataDir, store.TenantIDFromContext(ctx), store.TenantSlugFromContext(ctx))
+			if wsDir, err := tools.WorkspaceDir(tenantBase, team.ID, wsChat); err == nil {
 				ctx = tools.WithToolTeamWorkspace(ctx, wsDir)
 				if team.LeadAgentID == l.agentUUID {
 					ctx = tools.WithToolWorkspace(ctx, wsDir)
@@ -196,7 +201,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	// Persist agent UUID + user ID on the session (for querying/tracing)
 	if l.agentUUID != uuid.Nil || req.UserID != "" {
-		l.sessions.SetAgentInfo(req.SessionKey, l.agentUUID, req.UserID)
+		l.sessions.SetAgentInfo(ctx, req.SessionKey, l.agentUUID, req.UserID)
 	}
 
 	// Security: scan user message for injection patterns.
@@ -247,19 +252,19 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	// 0. Cache agent's context window on the session (first run only).
 	// Enables scheduler's adaptive throttle to use the real value instead of hardcoded 200K.
-	if l.sessions.GetContextWindow(req.SessionKey) <= 0 {
-		l.sessions.SetContextWindow(req.SessionKey, l.contextWindow)
+	if l.sessions.GetContextWindow(ctx, req.SessionKey) <= 0 {
+		l.sessions.SetContextWindow(ctx, req.SessionKey, l.contextWindow)
 	}
 
 	// 0b. Load adaptive tool timing from session metadata.
-	toolTiming := ParseToolTiming(l.sessions.GetSessionMetadata(req.SessionKey))
+	toolTiming := ParseToolTiming(l.sessions.GetSessionMetadata(ctx, req.SessionKey))
 
 	// Resolve slow_tool notification config from already-loaded team settings (no extra DB query).
 	slowToolEnabled := tools.ParseTeamNotifyConfig(resolvedTeamSettings).SlowTool
 
 	// 1. Build messages from session history
-	history := l.sessions.GetHistory(req.SessionKey)
-	summary := l.sessions.GetSummary(req.SessionKey)
+	history := l.sessions.GetHistory(ctx, req.SessionKey)
+	summary := l.sessions.GetSummary(ctx, req.SessionKey)
 
 	// buildMessages resolves context files once and also detects BOOTSTRAP.md presence
 	// (hadBootstrap) — no extra DB roundtrip needed for bootstrap detection.
@@ -279,14 +284,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// 2. Process media: sanitize images, persist to media store.
 	var mediaRefs []providers.MediaRef
 	if len(req.Media) > 0 {
-		mediaRefs = l.persistMedia(req.SessionKey, req.Media)
-		// Load current-turn images from persisted refs.
+		mediaRefs = l.persistMedia(req.SessionKey, req.Media, tools.ToolWorkspaceFromCtx(ctx))
+		// Load current-turn images from persisted refs (Path is always set for new uploads).
 		var imageFiles []bus.MediaFile
 		for _, ref := range mediaRefs {
-			if ref.Kind == "image" {
-				if p, err := l.mediaStore.LoadPath(ref.ID); err == nil {
-					imageFiles = append(imageFiles, bus.MediaFile{Path: p, MimeType: ref.MimeType})
-				}
+			if ref.Kind == "image" && ref.Path != "" {
+				imageFiles = append(imageFiles, bus.MediaFile{Path: ref.Path, MimeType: ref.MimeType})
 			}
 		}
 		if images := loadImages(imageFiles); len(images) > 0 {
@@ -384,7 +387,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	if len(mediaRefs) > 0 && l.mediaStore != nil {
 		var mediaPaths []string
 		for _, ref := range mediaRefs {
-			if p, err := l.mediaStore.LoadPath(ref.ID); err == nil {
+			// Prefer workspace-local path (.uploads/) over canonical .media/ path.
+			if ref.Path != "" {
+				mediaPaths = append(mediaPaths, ref.Path)
+			} else if p, err := l.mediaStore.LoadPath(ref.ID); err == nil {
 				mediaPaths = append(mediaPaths, p)
 			}
 		}
@@ -636,6 +642,19 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			toolDefs = l.tools.ProviderDefs()
 		}
 
+		// Per-tenant tool exclusions: remove tools disabled for this agent's tenant.
+		if len(l.disabledTools) > 0 {
+			filtered := toolDefs[:0]
+			for _, td := range toolDefs {
+				if !l.disabledTools[td.Function.Name] {
+					filtered = append(filtered, td)
+				} else {
+					delete(allowedTools, td.Function.Name)
+				}
+			}
+			toolDefs = filtered
+		}
+
 		// Bootstrap mode: restrict API tool definitions to write_file only (open agents).
 		// Predefined agents keep all tools — BOOTSTRAP.md guides behavior.
 		if hadBootstrap && l.agentType != store.AgentTypePredefined {
@@ -874,7 +893,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			if sanitized != "" && !IsSilentReply(sanitized) {
 				blockReplies++
 				lastBlockReply = sanitized
-				l.emit(AgentEvent{
+				emitRun(AgentEvent{
 					Type:    protocol.AgentEventBlockReply,
 					AgentID: l.id,
 					RunID:   req.RunID,
@@ -1031,6 +1050,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			} else if mr := parseMediaResult(result.ForLLM); mr != nil {
 				mediaResults = append(mediaResults, *mr)
+			}
+			// Auto-attach workspace media to task (covers create_image/audio/video).
+			if teamWs := tools.ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
+				for _, mf := range result.Media {
+					tools.AutoAttachWorkspaceFile(ctx, l.teamStore, teamWs, mf.Path)
+				}
 			}
 			if result.Deliverable != "" {
 				deliverables = append(deliverables, result.Deliverable)
@@ -1229,6 +1254,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				} else if mr := parseMediaResult(r.result.ForLLM); mr != nil {
 					mediaResults = append(mediaResults, *mr)
 				}
+				// Auto-attach workspace media to task (covers create_image/audio/video).
+				if teamWs := tools.ToolTeamWorkspaceFromCtx(ctx); teamWs != "" {
+					for _, mf := range r.result.Media {
+						tools.AutoAttachWorkspaceFile(ctx, l.teamStore, teamWs, mf.Path)
+					}
+				}
 				if r.result.Deliverable != "" {
 					deliverables = append(deliverables, r.result.Deliverable)
 				}
@@ -1403,27 +1434,27 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Flush all buffered messages to session atomically.
 	// This ensures concurrent runs never see each other's in-progress messages.
 	for _, msg := range pendingMsgs {
-		l.sessions.AddMessage(req.SessionKey, msg)
+		l.sessions.AddMessage(ctx, req.SessionKey, msg)
 	}
 
 	// Persist adaptive tool timing to session metadata.
 	if serialized := toolTiming.Serialize(); serialized != "" {
-		l.sessions.SetSessionMetadata(req.SessionKey, map[string]string{"tool_timing": serialized})
+		l.sessions.SetSessionMetadata(ctx, req.SessionKey, map[string]string{"tool_timing": serialized})
 	}
 
 	// Write session metadata (matching TS session entry updates)
-	l.sessions.UpdateMetadata(req.SessionKey, l.model, l.provider.Name(), req.Channel)
-	l.sessions.AccumulateTokens(req.SessionKey, int64(totalUsage.PromptTokens), int64(totalUsage.CompletionTokens))
+	l.sessions.UpdateMetadata(ctx, req.SessionKey, l.model, l.provider.Name(), req.Channel)
+	l.sessions.AccumulateTokens(ctx, req.SessionKey, int64(totalUsage.PromptTokens), int64(totalUsage.CompletionTokens))
 
 	// Calibrate token estimation: store actual prompt tokens + message count.
 	// Next time EstimateTokensWithCalibration() is called, it uses this as a base
 	// instead of the chars/3 heuristic (more accurate for multilingual content).
 	if totalUsage.PromptTokens > 0 {
 		msgCount := len(history) + len(pendingMsgs)
-		l.sessions.SetLastPromptTokens(req.SessionKey, totalUsage.PromptTokens, msgCount)
+		l.sessions.SetLastPromptTokens(ctx, req.SessionKey, totalUsage.PromptTokens, msgCount)
 	}
 
-	l.sessions.Save(req.SessionKey)
+	l.sessions.Save(ctx, req.SessionKey)
 
 	// Auto-generate session label after the first exchange (async, non-blocking).
 	// len(history) == 0 means this is the very first turn of the session.

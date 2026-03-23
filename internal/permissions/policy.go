@@ -37,6 +37,7 @@ const (
 	ScopeWrite     Scope = "operator.write"
 	ScopeApprovals Scope = "operator.approvals"
 	ScopePairing   Scope = "operator.pairing"
+	ScopeProvision Scope = "operator.provision"
 )
 
 // AllScopes is the set of all valid API key scopes.
@@ -46,6 +47,7 @@ var AllScopes = map[Scope]bool{
 	ScopeWrite:     true,
 	ScopeApprovals: true,
 	ScopePairing:   true,
+	ScopeProvision: true,
 }
 
 // ValidScope reports whether s is a recognised API key scope.

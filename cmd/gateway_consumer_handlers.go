@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,13 @@ func handleSubagentAnnounce(
 ) bool {
 	if !(msg.Channel == tools.ChannelSystem && strings.HasPrefix(msg.SenderID, "subagent:")) {
 		return false
+	}
+
+	// Inject tenant scope — same as processNormalMessage.
+	if msg.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, msg.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
 	}
 
 	origChannel := msg.Metadata["origin_channel"]
@@ -190,6 +198,13 @@ func handleTeammateMessage(
 		return false
 	}
 
+	// Inject tenant scope — same as processNormalMessage.
+	if msg.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, msg.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
+	}
+
 	origChannel := msg.Metadata["origin_channel"]
 	origPeerKind := msg.Metadata["origin_peer_kind"]
 	origLocalKey := msg.Metadata["origin_local_key"]
@@ -316,7 +331,7 @@ func handleTeammateMessage(
 			teamID, _ := uuid.Parse(inMeta["team_id"])
 			if teamTaskID != uuid.Nil && teamStore != nil {
 				cachedTeam, _ = teamStore.GetTeam(ctx, teamID)
-				if cachedTeam != nil && isConsumerTeamV2(cachedTeam) {
+				if cachedTeam != nil {
 					// Check current task status — agent may have already updated it via tool.
 					currentTask, taskErr := teamStore.GetTask(ctx, teamTaskID)
 					alreadyTerminal := taskErr == nil && currentTask != nil &&
@@ -346,24 +361,21 @@ func handleTeammateMessage(
 							if err := teamStore.FailTask(ctx, teamTaskID, teamID, outcome.Err.Error()); err != nil {
 								slog.Warn("auto-complete: FailTask error", "task_id", teamTaskID, "error", err)
 							} else {
-								msgBus.Broadcast(bus.Event{
-									Name: protocol.EventTeamTaskFailed,
-									Payload: protocol.TeamTaskEventPayload{
-										TeamID:     teamID.String(),
-										TaskID:     teamTaskID.String(),
-										TaskNumber: taskNumber,
-										Subject:    taskSubject,
-										Status:     store.TeamTaskStatusFailed,
-										Reason:     outcome.Err.Error(),
-										Channel:    taskChannel,
-										ChatID:     taskChatID,
-										Timestamp:  now,
-										ActorType:  "agent",
-										ActorID:    toAgent,
-									},
+								bus.BroadcastForTenant(msgBus, protocol.EventTeamTaskFailed, store.TenantIDFromContext(ctx), protocol.TeamTaskEventPayload{
+									TeamID:     teamID.String(),
+									TaskID:     teamTaskID.String(),
+									TaskNumber: taskNumber,
+									Subject:    taskSubject,
+									Status:     store.TeamTaskStatusFailed,
+									Reason:     outcome.Err.Error(),
+									Channel:    taskChannel,
+									ChatID:     taskChatID,
+									Timestamp:  now,
+									ActorType:  "agent",
+									ActorID:    toAgent,
 								})
 							}
-						} else {
+						} else if outcome.Result != nil {
 							result := outcome.Result.Content
 							if len(outcome.Result.Deliverables) > 0 {
 								result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
@@ -374,21 +386,18 @@ func handleTeammateMessage(
 							if err := teamStore.CompleteTask(ctx, teamTaskID, teamID, result); err != nil {
 								slog.Warn("auto-complete: CompleteTask error", "task_id", teamTaskID, "error", err)
 							} else {
-								msgBus.Broadcast(bus.Event{
-									Name: protocol.EventTeamTaskCompleted,
-									Payload: protocol.TeamTaskEventPayload{
-										TeamID:        teamID.String(),
-										TaskID:        teamTaskID.String(),
-										TaskNumber:    taskNumber,
-										Subject:       taskSubject,
-										Status:        store.TeamTaskStatusCompleted,
-										OwnerAgentKey: toAgent,
-										Channel:       taskChannel,
+								bus.BroadcastForTenant(msgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), protocol.TeamTaskEventPayload{
+									TeamID:        teamID.String(),
+									TaskID:        teamTaskID.String(),
+									TaskNumber:    taskNumber,
+									Subject:       taskSubject,
+									Status:        store.TeamTaskStatusCompleted,
+									OwnerAgentKey: toAgent,
+									Channel:       taskChannel,
 										ChatID:        taskChatID,
 										Timestamp:     now,
 										ActorType:     "agent",
 										ActorID:       toAgent,
-									},
 								})
 							}
 						}
@@ -413,12 +422,42 @@ func handleTeammateMessage(
 				errMsg = errMsg[:500] + "..."
 			}
 			announceContent = fmt.Sprintf("[FAILED] %s", errMsg)
+		} else if outcome.Result == nil {
+			slog.Warn("teammate message: nil result without error", "from", senderID)
+			return
 		} else if (outcome.Result.Content == "" && len(outcome.Result.Media) == 0) || agent.IsSilentReply(outcome.Result.Content) {
 			slog.Info("teammate message: suppressed silent/empty reply", "from", senderID)
 			return
 		} else {
 			announceContent = outcome.Result.Content
 			announceMedia = outcome.Result.Media
+		}
+
+		// Append member comments & attachments so leader sees them in the announce.
+		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
+			if taskUUID, err := uuid.Parse(taskIDStr); err == nil {
+				if comments, err := teamStore.ListRecentTaskComments(ctx, taskUUID, 5); err == nil && len(comments) > 0 {
+					var parts []string
+					for _, c := range comments {
+						author := c.AgentKey
+						if author == "" {
+							author = "system"
+						}
+						text := c.Content
+						if len([]rune(text)) > 500 {
+							text = string([]rune(text)[:500]) + "..."
+						}
+						parts = append(parts, fmt.Sprintf("- [%s]: %s", author, text))
+					}
+					announceContent += "\n\n[Member notes]\n" + strings.Join(parts, "\n")
+				}
+				if attachments, err := teamStore.ListTaskAttachments(ctx, taskUUID); err == nil && len(attachments) > 0 {
+					announceContent += "\n\n[Attached files in team workspace]"
+					for _, a := range attachments {
+						announceContent += "\n- " + filepath.Base(a.Path)
+					}
+				}
+			}
 		}
 
 		// Announce result (or failure) to lead agent via announce queue.
@@ -472,30 +511,9 @@ func handleTeammateMessage(
 			parentRootSpanID, _ = uuid.Parse(sid)
 		}
 
-		// Enrich announce content with member comments on the task (if any).
-		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
-			if tid, err := uuid.Parse(taskIDStr); err == nil {
-				if comments, err := teamStore.ListTaskComments(ctx, tid); err == nil && len(comments) > 0 {
-					// Include last 5 comments, each truncated to 200 chars.
-					start := 0
-					if len(comments) > 5 {
-						start = len(comments) - 5
-					}
-					var commentLines []string
-					for _, c := range comments[start:] {
-						author := c.AgentKey
-						if author == "" && c.UserID != "" {
-							author = "user:" + c.UserID
-						}
-						body := c.Content
-						if len(body) > 200 {
-							body = body[:200] + "..."
-						}
-						commentLines = append(commentLines, fmt.Sprintf("- [%s]: %s", author, body))
-					}
-					announceContent += "\n\n--- Member comments ---\n" + strings.Join(commentLines, "\n")
-				}
-			}
+		// Cap announce content to prevent context blowup for the leader agent.
+		if len([]rune(announceContent)) > 50_000 {
+			announceContent = string([]rune(announceContent)[:50_000]) + "\n[truncated]"
 		}
 
 		// Enqueue result. If we become the processor, run the announce loop.
@@ -560,8 +578,9 @@ func handleResetCommand(
 			sessionKey = sessions.BuildGroupTopicSessionKey(agentID, msg.Channel, msg.ChatID, topicID)
 		}
 	}
-	sessStore.Reset(sessionKey)
-	sessStore.Save(sessionKey)
+	ctx := store.WithTenantID(context.Background(), msg.TenantID)
+	sessStore.Reset(ctx, sessionKey)
+	sessStore.Save(ctx, sessionKey)
 	providers.ResetCLISession("", sessionKey)
 	slog.Info("inbound: /reset command", "session", sessionKey)
 

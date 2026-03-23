@@ -50,9 +50,6 @@ type ResolverDeps struct {
 	SandboxContainerDir    string
 	SandboxWorkspaceAccess string
 
-	// Dynamic custom tools
-	DynamicLoader *tools.DynamicToolLoader
-
 	// Inter-agent delegation
 	AgentLinkStore store.AgentLinkStore
 
@@ -89,13 +86,22 @@ type ResolverDeps struct {
 
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
+
+	// Tenant store for workspace path resolution
+	TenantStore store.TenantStore
+
+	// Per-tenant tool/skill config overrides
+	BuiltinToolTenantCfgs store.BuiltinToolTenantConfigStore
+	SkillTenantCfgs       store.SkillTenantConfigStore
+
+	// Global workspace root (GOCLAW_WORKSPACE)
+	Workspace string
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
 // Agents are defined in Postgres, not config.json.
 func NewManagedResolver(deps ResolverDeps) ResolverFunc {
-	return func(agentKey string) (Agent, error) {
-		ctx := context.Background()
+	return func(ctx context.Context, agentKey string) (Agent, error) {
 
 		// Support lookup by UUID (e.g. from cron jobs that store agent_id as UUID)
 		var ag *store.AgentData
@@ -113,15 +119,15 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			return nil, fmt.Errorf("agent %s is inactive", agentKey)
 		}
 
-		// Resolve provider
-		provider, err := deps.ProviderReg.Get(ag.Provider)
+		// Resolve provider (tenant-aware: tries tenant-specific first, falls back to master)
+		provider, err := deps.ProviderReg.GetForTenant(ag.TenantID, ag.Provider)
 		if err != nil {
-			// Fallback to any available provider
-			names := deps.ProviderReg.List()
+			// Fallback to any available provider for this tenant
+			names := deps.ProviderReg.ListForTenant(ag.TenantID)
 			if len(names) == 0 {
 				return nil, fmt.Errorf("no providers configured for agent %s", agentKey)
 			}
-			provider, _ = deps.ProviderReg.Get(names[0])
+			provider, _ = deps.ProviderReg.GetForTenant(ag.TenantID, names[0])
 			slog.Warn("agent provider not found, using fallback",
 				"agent", agentKey, "wanted", ag.Provider, "using", names[0])
 			if tl := ag.ParseThinkingLevel(); tl != "" && tl != "off" {
@@ -156,7 +162,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 						hasTeam = true
 						contextFiles = append(contextFiles, bootstrap.ContextFile{
 							Path:    bootstrap.TeamFile,
-							Content: buildTeamMD(team, members, ag.ID, tools.IsTeamV2(team)),
+							Content: buildTeamMD(team, members, ag.ID),
 						})
 						// Detect lead role for tool policy
 						for _, m := range members {
@@ -210,27 +216,33 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			sandboxCfgOverride = &resolved
 		}
 
-		// Expand ~ in workspace path and ensure directory exists
+		// Resolve tenant slug once for workspace + dataDir scoping.
+		var tenantSlug string
+		if ag.TenantID != store.MasterTenantID && ag.TenantID != uuid.Nil {
+			tenantSlug = resolveTenantSlug(deps.TenantStore, ag.TenantID)
+		}
+
+		// Expand ~ in workspace path and ensure directory exists.
+		// For non-master tenants, prefix workspace with tenant slug directory.
 		workspace := ag.Workspace
 		if workspace != "" {
 			workspace = config.ExpandHome(workspace)
 			if !filepath.IsAbs(workspace) {
 				workspace, _ = filepath.Abs(workspace)
 			}
+		}
+		if tenantSlug != "" {
+			if deps.Workspace != "" {
+				workspace = config.TenantWorkspace(deps.Workspace, ag.TenantID, tenantSlug)
+			}
+		}
+		if workspace != "" {
 			if err := os.MkdirAll(workspace, 0755); err != nil {
 				slog.Warn("failed to create agent workspace directory", "workspace", workspace, "agent", agentKey, "error", err)
 			}
 		}
 
-		// Per-agent custom tools (clone registry if agent has custom tools)
 		toolsReg := deps.Tools
-		if deps.DynamicLoader != nil {
-			if agentReg, err := deps.DynamicLoader.LoadForAgent(ctx, deps.Tools, ag.ID); err != nil {
-				slog.Warn("failed to load custom tools", "agent", agentKey, "error", err)
-			} else if agentReg != nil {
-				toolsReg = agentReg
-			}
-		}
 
 		// Per-agent MCP servers: connect to granted MCP servers and register their tools.
 		// Uses a per-agent MCP Manager that queries the MCPServerStore for accessible servers.
@@ -292,6 +304,18 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
+		// Load per-tenant tool exclusions (disabled tools for this agent's tenant)
+		var disabledTools map[string]bool
+		if deps.BuiltinToolTenantCfgs != nil && ag.TenantID != uuid.Nil {
+			if disabled, err := deps.BuiltinToolTenantCfgs.ListDisabled(ctx, ag.TenantID); err == nil && len(disabled) > 0 {
+				disabledTools = make(map[string]bool, len(disabled))
+				for _, name := range disabled {
+					disabledTools[name] = true
+				}
+				slog.Debug("tenant tool exclusions", "agent", agentKey, "tenant", ag.TenantID, "disabled", len(disabled))
+			}
+		}
+
 		// Filter skills by visibility + agent grants.
 		// Only public skills and explicitly granted internal skills appear in the system prompt.
 		var skillAllowList []string
@@ -308,10 +332,17 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
+		// Resolve tenant-scoped DataDir for team workspace resolution.
+		dataDir := deps.DataDir
+		if tenantSlug != "" {
+			dataDir = config.TenantDataDir(deps.DataDir, ag.TenantID, tenantSlug)
+		}
+
 		restrictVal := true // always restrict agents to their workspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
 			AgentUUID:              ag.ID,
+			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			Provider:               provider,
 			Model:                  ag.Model,
@@ -319,7 +350,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MaxTokens:              ag.ParseMaxTokens(),
 			MaxIterations:          maxIter,
 			Workspace:              workspace,
-			DataDir:                deps.DataDir,
+			DataDir:                dataDir,
 			RestrictToWs:           &restrictVal,
 			SubagentsCfg:           ag.ParseSubagentsConfig(),
 			MemoryCfg:              ag.ParseMemoryConfig(),
@@ -346,6 +377,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxContainerDir:    sandboxContainerDir,
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 			BuiltinToolSettings:    builtinSettings,
+			DisabledTools:          disabledTools,
 			ThinkingLevel:          ag.ParseThinkingLevel(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
@@ -383,6 +415,19 @@ func (r *Router) InvalidateAll() {
 	defer r.mu.Unlock()
 	r.agents = make(map[string]*agentEntry)
 	slog.Debug("invalidated all agent caches")
+}
+
+// resolveTenantSlug looks up the tenant slug for workspace path resolution.
+// Returns the tenant ID string as fallback if lookup fails.
+func resolveTenantSlug(ts store.TenantStore, tenantID uuid.UUID) string {
+	if ts == nil {
+		return tenantID.String()
+	}
+	tenant, err := ts.GetTenant(store.WithCrossTenant(context.Background()), tenantID)
+	if err != nil || tenant == nil {
+		return tenantID.String()
+	}
+	return tenant.Slug
 }
 
 func derefInt(p *int) int {

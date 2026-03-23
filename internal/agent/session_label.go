@@ -52,8 +52,8 @@ func (l *Loop) generateAndSetLabel(sessionKey, userMsg, assistantMsg string) {
 		return
 	}
 
-	l.sessions.SetLabel(sessionKey, label)
-	if err := l.sessions.Save(sessionKey); err != nil {
+	l.sessions.SetLabel(context.Background(), sessionKey, label)
+	if err := l.sessions.Save(context.Background(), sessionKey); err != nil {
 		slog.Warn("session label: save failed", "session", sessionKey, "error", err)
 	}
 	slog.Info("session label: generated", "session", sessionKey, "label", label)

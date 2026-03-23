@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // SpawnTool spawns subagent clones to handle tasks in the background.
@@ -95,6 +98,15 @@ func (t *SpawnTool) executeSpawn(ctx context.Context, args map[string]any) *Resu
 			"spawn does not accept 'agent' parameter. spawn is for self-clone subagent only. "+
 				"To delegate work to team member %q, use: team_tasks(action=\"create\", subject=\"...\", description=\"...\", assignee=%q)",
 			agentKey, agentKey))
+	}
+
+	// Validate tenant isolation: non-cross-tenant callers must have a tenant in context.
+	// Self-clone subagents inherit caller's context (WithoutCancel), so tenant propagates automatically.
+	if !store.IsCrossTenant(ctx) {
+		callerTenant := store.TenantIDFromContext(ctx)
+		if callerTenant == uuid.Nil {
+			return ErrorResult("spawn requires tenant context: no tenant ID found in request context")
+		}
 	}
 
 	task, _ := args["task"].(string)

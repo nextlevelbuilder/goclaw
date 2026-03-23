@@ -93,8 +93,8 @@ export function StepChannel({ agent, onComplete, onSkip, onBack }: StepChannelPr
   const agentLabel = agent?.display_name || agent?.agent_key || "—";
 
   return (
-    <Card>
-      <CardContent className="space-y-4 pt-6">
+    <Card className="py-0 gap-0">
+      <CardContent className="space-y-4 px-6 py-5">
         <TooltipProvider>
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">

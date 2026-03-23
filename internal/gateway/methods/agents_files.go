@@ -38,7 +38,7 @@ func (m *AgentsMethods) handleFilesList(ctx context.Context, client *gateway.Cli
 
 	if m.agentStore != nil {
 		// --- DB-backed: list from store ---
-		ctx := context.Background()
+
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgAgentNotFound, params.AgentID)))
@@ -137,7 +137,7 @@ func (m *AgentsMethods) handleFilesGet(ctx context.Context, client *gateway.Clie
 
 	if m.agentStore != nil {
 		// --- DB-backed: read from store ---
-		ctx := context.Background()
+
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgAgentNotFound, params.AgentID)))
@@ -236,7 +236,7 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 
 	if m.agentStore != nil {
 		// --- DB-backed: write to store ---
-		ctx := context.Background()
+
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgAgentNotFound, params.AgentID)))

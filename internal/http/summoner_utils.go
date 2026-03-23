@@ -4,17 +4,82 @@ import (
 	"strings"
 )
 
+var identityFieldPrefixes = []string{
+	"- **Name:**",
+	"- **Creature:**",
+	"- **Purpose:**",
+	"- **Vibe:**",
+	"- **Emoji:**",
+	"- **Avatar:**",
+	"Name:",
+	"Creature:",
+	"Purpose:",
+	"Vibe:",
+	"Emoji:",
+	"Avatar:",
+}
+
 // extractIdentityName extracts the Name field from IDENTITY.md content.
-// Matches format: - **Name:** value
+// Accepts only an inline Name value and ignores markdown field spillover.
 func extractIdentityName(content string) string {
 	if content == "" {
 		return ""
 	}
-	m := identityNameRe.FindStringSubmatch(content)
-	if len(m) < 2 {
+
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		switch {
+		case strings.HasPrefix(line, "- **Name:**"):
+			return normalizeIdentityName(strings.TrimSpace(strings.TrimPrefix(line, "- **Name:**")))
+		case strings.HasPrefix(line, "Name:"):
+			return normalizeIdentityName(strings.TrimSpace(strings.TrimPrefix(line, "Name:")))
+		}
+	}
+
+	return ""
+}
+
+func normalizeIdentityName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || looksLikeIdentityField(value) {
 		return ""
 	}
-	return strings.TrimSpace(m[1])
+
+	for {
+		next := trimMarkdownWrapper(value)
+		if next == value {
+			return value
+		}
+		value = strings.TrimSpace(next)
+		if value == "" || looksLikeIdentityField(value) {
+			return ""
+		}
+	}
+}
+
+func looksLikeIdentityField(value string) bool {
+	for _, prefix := range identityFieldPrefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func trimMarkdownWrapper(value string) string {
+	wrappers := [][2]string{
+		{"**", "**"},
+		{"__", "__"},
+		{"`", "`"},
+		{"*", "*"},
+		{"_", "_"},
+	}
+	for _, wrapper := range wrappers {
+		if strings.HasPrefix(value, wrapper[0]) && strings.HasSuffix(value, wrapper[1]) && len(value) > len(wrapper[0])+len(wrapper[1]) {
+			return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, wrapper[0]), wrapper[1]))
+		}
+	}
+	return value
 }
 
 // suffixString returns the last n runes of s.

@@ -67,6 +67,7 @@ func (s *PGMemoryStore) writeEmbeddingCache(ctx context.Context, entries []embed
 	}
 
 	now := time.Now()
+	tenantID := tenantIDForInsert(ctx)
 
 	// Process in batches of 100 to avoid exceeding max query params
 	const batchSize = 100
@@ -78,16 +79,16 @@ func (s *PGMemoryStore) writeEmbeddingCache(ctx context.Context, entries []embed
 		batch := entries[start:end]
 
 		var sb strings.Builder
-		sb.WriteString(`INSERT INTO embedding_cache (hash, provider, model, embedding, dims, created_at, updated_at) VALUES `)
-		args := make([]any, 0, len(batch)*6)
+		sb.WriteString(`INSERT INTO embedding_cache (hash, provider, model, embedding, dims, created_at, updated_at, tenant_id) VALUES `)
+		args := make([]any, 0, len(batch)*7)
 		for i, e := range batch {
 			if i > 0 {
 				sb.WriteByte(',')
 			}
-			base := i * 6
-			fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d::vector,$%d,$%d,$%d)",
-				base+1, base+2, base+3, base+4, base+5, base+6, base+6)
-			args = append(args, e.Hash, provider, model, vectorToString(e.Embedding), len(e.Embedding), now)
+			base := i * 7
+			fmt.Fprintf(&sb, "($%d,$%d,$%d,$%d::vector,$%d,$%d,$%d,$%d)",
+				base+1, base+2, base+3, base+4, base+5, base+6, base+6, base+7)
+			args = append(args, e.Hash, provider, model, vectorToString(e.Embedding), len(e.Embedding), now, tenantID)
 		}
 		sb.WriteString(` ON CONFLICT (hash, provider, model) DO UPDATE SET embedding = EXCLUDED.embedding, dims = EXCLUDED.dims, updated_at = EXCLUDED.updated_at`)
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -103,6 +104,13 @@ func (m *TeamsMethods) handleTaskGet(ctx context.Context, client *gateway.Client
 	comments, _ := m.teamStore.ListTaskComments(ctx, taskID)
 	events, _ := m.teamStore.ListTaskEvents(ctx, taskID)
 	attachments, _ := m.teamStore.ListTaskAttachments(ctx, taskID)
+
+	// Sign download URLs at delivery time (same pattern as chat file URLs).
+	for i := range attachments {
+		dlPath := fmt.Sprintf("/v1/teams/%s/attachments/%s/download", teamID, attachments[i].ID)
+		ft := httpapi.SignFileToken(dlPath, httpapi.FileSigningKey(), httpapi.FileTokenTTL)
+		attachments[i].DownloadURL = dlPath + "?ft=" + ft
+	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"task":        task,

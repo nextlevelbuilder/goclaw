@@ -4,11 +4,13 @@
   "openMenu": "Open menu",
   "toggleTheme": "Toggle theme",
   "logout": "Logout",
+  "logoutConfirm": "Are you sure you want to logout?",
   "language": "Language",
   "timezone": "Timezone",
   "pairingRequests": "Pairing requests",
   "pendingPairingRequest": "{{count}} pending pairing request",
   "pendingPairingRequests": "{{count}} pending pairing requests",
+  "apiKeys": "API Keys",
   "languages": {
     "en": "English",
     "vi": "Tiếng Việt",

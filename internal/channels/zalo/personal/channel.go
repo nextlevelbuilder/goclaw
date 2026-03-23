@@ -64,7 +64,7 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 		BaseChannel:    base,
 		config:         cfg,
 		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeZaloPersonal, pendingStore),
+		groupHistory:   channels.MakeHistory(channels.TypeZaloPersonal, pendingStore, base.TenantID()),
 		historyLimit:   historyLimit,
 		requireMention: requireMention,
 		stopCh:         make(chan struct{}),

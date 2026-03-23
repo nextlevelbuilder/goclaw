@@ -7,7 +7,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"os"
-	"path/filepath"
 
 	"github.com/disintegration/imaging"
 )
@@ -51,10 +50,17 @@ func SanitizeImage(inputPath string) (string, error) {
 			return "", fmt.Errorf("encode jpeg (q=%d): %w", quality, err)
 		}
 		if buf.Len() <= imageSanitizeMaxBytes {
-			outPath := filepath.Join(os.TempDir(), fmt.Sprintf("goclaw_sanitized_%d.jpg", os.Getpid()))
-			if err := os.WriteFile(outPath, buf.Bytes(), 0644); err != nil {
+			f, err := os.CreateTemp("", "goclaw_sanitized_*.jpg")
+			if err != nil {
+				return "", fmt.Errorf("create temp file: %w", err)
+			}
+			outPath := f.Name()
+			if _, err := f.Write(buf.Bytes()); err != nil {
+				f.Close()
+				os.Remove(outPath)
 				return "", fmt.Errorf("write sanitized image: %w", err)
 			}
+			f.Close()
 			return outPath, nil
 		}
 	}

@@ -20,19 +20,19 @@ import (
 // RegenerateAgent updates context files based on an edit prompt.
 // Reads existing files, sends them + edit instructions to LLM, stores results.
 // Synchronous — caller should run in goroutine if needed.
-func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, providerName, model, editPrompt string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, providerName, model, editPrompt string) {
+	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 300*time.Second)
 	defer cancel()
 
 	s.ensureUserPredefined(ctx, agentID)
 
-	s.emitEvent(agentID, SummonEventStarted, "", "")
+	s.emitEvent(agentID, tenantID, SummonEventStarted, "", "")
 
 	// Read existing files for context
 	existing, err := s.agents.GetAgentContextFiles(ctx, agentID)
 	if err != nil {
 		slog.Warn("summoning: failed to read existing files", "agent", agentID, "error", err)
-		s.emitEvent(agentID, SummonEventFailed, "", err.Error())
+		s.emitEvent(agentID, tenantID, SummonEventFailed, "", err.Error())
 		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
 		return
 	}
@@ -42,13 +42,13 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, providerName, model, 
 	files, err := s.generateFiles(ctx, providerName, model, prompt)
 	if err != nil {
 		slog.Warn("summoning: regeneration failed", "agent", agentID, "error", err)
-		s.emitEvent(agentID, SummonEventFailed, "", err.Error())
+		s.emitEvent(agentID, tenantID, SummonEventFailed, "", err.Error())
 		// Use fresh context — the original may have timed out, but we still need to update status.
 		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
 		return
 	}
 
-	s.storeFiles(ctx, agentID, files)
+	s.storeFiles(ctx, agentID, tenantID, files)
 
 	// Update frontmatter + display_name if IDENTITY.md was regenerated
 	updates := map[string]any{}
@@ -65,7 +65,7 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, providerName, model, 
 	}
 
 	s.setAgentStatus(ctx, agentID, store.AgentStatusActive)
-	s.emitEvent(agentID, SummonEventCompleted, "", "")
+	s.emitEvent(agentID, tenantID, SummonEventCompleted, "", "")
 
 	slog.Info("summoning: regeneration completed", "agent", agentID, "files", len(files))
 }
@@ -98,7 +98,7 @@ func (s *AgentSummoner) isGenerated(existingMap map[string]string, fileName stri
 
 // generateFiles calls the LLM and parses the XML-tagged response into file map.
 func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, prompt string) (map[string]string, error) {
-	provider, err := s.resolveProvider(providerName)
+	provider, err := s.resolveProvider(ctx, providerName)
 	if err != nil {
 		return nil, fmt.Errorf("resolve provider: %w", err)
 	}
@@ -139,7 +139,7 @@ func (s *AgentSummoner) generateFiles(ctx context.Context, providerName, model, 
 }
 
 // storeFiles saves generated files to agent_context_files and emits progress events.
-func (s *AgentSummoner) storeFiles(ctx context.Context, agentID uuid.UUID, files map[string]string) {
+func (s *AgentSummoner) storeFiles(ctx context.Context, agentID, tenantID uuid.UUID, files map[string]string) {
 	for _, name := range summoningFiles {
 		content, ok := files[name]
 		if !ok || content == "" {
@@ -149,23 +149,23 @@ func (s *AgentSummoner) storeFiles(ctx context.Context, agentID uuid.UUID, files
 			slog.Warn("summoning: failed to store file", "agent", agentID, "file", name, "error", err)
 			continue
 		}
-		s.emitEvent(agentID, SummonEventFileGenerated, name, "")
+		s.emitEvent(agentID, tenantID, SummonEventFileGenerated, name, "")
 	}
 }
 
-func (s *AgentSummoner) resolveProvider(name string) (providers.Provider, error) {
+func (s *AgentSummoner) resolveProvider(ctx context.Context, name string) (providers.Provider, error) {
 	if s.providerReg == nil {
 		return nil, fmt.Errorf("no provider registry")
 	}
 
-	provider, err := s.providerReg.Get(name)
+	provider, err := s.providerReg.Get(ctx, name)
 	if err != nil {
 		// Fallback to first available provider
-		names := s.providerReg.List()
+		names := s.providerReg.List(ctx)
 		if len(names) == 0 {
 			return nil, fmt.Errorf("no providers configured")
 		}
-		provider, err = s.providerReg.Get(names[0])
+		provider, err = s.providerReg.Get(ctx, names[0])
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +197,7 @@ func (s *AgentSummoner) setAgentStatus(ctx context.Context, agentID uuid.UUID, s
 	}
 }
 
-func (s *AgentSummoner) emitEvent(agentID uuid.UUID, eventType, fileName, errMsg string) {
+func (s *AgentSummoner) emitEvent(agentID, tenantID uuid.UUID, eventType, fileName, errMsg string) {
 	if s.msgBus == nil {
 		return
 	}
@@ -211,8 +211,5 @@ func (s *AgentSummoner) emitEvent(agentID uuid.UUID, eventType, fileName, errMsg
 	if errMsg != "" {
 		payload["error"] = errMsg
 	}
-	s.msgBus.Broadcast(bus.Event{
-		Name:    protocol.EventAgentSummoning,
-		Payload: payload,
-	})
+	bus.BroadcastForTenant(s.msgBus, protocol.EventAgentSummoning, tenantID, payload)
 }

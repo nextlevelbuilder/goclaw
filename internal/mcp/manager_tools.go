@@ -63,7 +63,9 @@ func (m *Manager) unregisterAllTools() {
 				m.registry.Unregister(toolName)
 			}
 			if m.pool != nil {
-				m.pool.Release(name)
+				if pkey, ok := m.poolKeys[name]; ok {
+					m.pool.Release(pkey)
+				}
 			}
 		} else {
 			// Standalone: close connection directly

@@ -80,6 +80,13 @@
     "deprecatedTooltip": "This tool has been deprecated and is no longer available",
     "settings": "Settings",
     "configuredVia": "Configured via the Config page",
+    "tenantOverride": "Tenant Override",
+    "tenantEnabled": "Enabled for this tenant",
+    "tenantDisabled": "Disabled for this tenant",
+    "tenantDefault": "Using default",
+    "resetToDefault": "Reset to default",
+    "unconfiguredWarning": "{{count}} tools need provider configuration for agents to use them at full capacity.",
+    "unconfiguredAction": "Configure",
     "categories": {
       "filesystem": "Filesystem",
       "runtime": "Runtime",

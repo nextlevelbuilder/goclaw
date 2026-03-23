@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // FilesHandler serves files over HTTP with Bearer token auth.
@@ -18,12 +20,14 @@ import (
 type FilesHandler struct {
 	token     string
 	workspace string // workspace root for fallback file search
+	dataDir   string // data directory root for tenant path validation
 }
 
 // NewFilesHandler creates a handler that serves files by absolute path.
 // workspace is the root directory used for fallback generated file search.
-func NewFilesHandler(token, workspace string) *FilesHandler {
-	return &FilesHandler{token: token, workspace: workspace}
+// dataDir is used for tenant path validation (files must be within tenant's dirs).
+func NewFilesHandler(token, workspace, dataDir string) *FilesHandler {
+	return &FilesHandler{token: token, workspace: workspace, dataDir: dataDir}
 }
 
 // RegisterRoutes registers the file serving route.
@@ -33,15 +37,23 @@ func (h *FilesHandler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Accept token via Bearer header or ?token= query param (for <img src>).
-		provided := extractBearerToken(r)
-		if provided == "" {
-			provided = r.URL.Query().Get("token")
-		}
-		if !requireAuthBearer(h.token, "", provided, w, r) {
+		// Priority 1: short-lived signed file token (?ft=) — decoupled from gateway token.
+		if ft := r.URL.Query().Get("ft"); ft != "" {
+			path := "/v1/files/" + r.PathValue("path")
+			if VerifyFileToken(ft, path, FileSigningKey()) {
+				next(w, r)
+				return
+			}
+			http.Error(w, "invalid or expired file token", http.StatusUnauthorized)
 			return
 		}
-		next(w, r)
+		// Priority 2: Bearer header (API clients only).
+		provided := extractBearerToken(r)
+		authedReq, ok := requireAuthBearer(h.token, "", provided, w, r)
+		if !ok {
+			return
+		}
+		next(w, authedReq)
 	}
 }
 
@@ -81,11 +93,27 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Tenant isolation: validate absolute path is within tenant's allowed directories.
+	// Skip for HMAC file tokens — the path is cryptographically bound in the signature,
+	// so it cannot be tampered with. File tokens are generated server-side with the correct path.
+	if r.URL.Query().Get("ft") == "" {
+		tenantData := config.TenantDataDir(h.dataDir, store.TenantIDFromContext(r.Context()), store.TenantSlugFromContext(r.Context()))
+		tenantWs := h.tenantWorkspace(r)
+		if !strings.HasPrefix(absPath, tenantData+string(filepath.Separator)) &&
+			!strings.HasPrefix(absPath, tenantWs+string(filepath.Separator)) &&
+			absPath != tenantData && absPath != tenantWs {
+			http.NotFound(w, r)
+			return
+		}
+	}
+
 	info, err := os.Stat(absPath)
 	if err != nil || info.IsDir() {
 		// Fallback: search workspace for file by basename (handles LLM-hallucinated paths).
 		// Generated filenames (goclaw_gen_*) include nanosecond timestamps and are globally unique.
-		if resolved := h.findInWorkspace(filepath.Base(absPath)); resolved != "" {
+		// Workspace scoped to tenant to prevent cross-tenant file discovery.
+		ws := h.tenantWorkspace(r)
+		if resolved := h.findInWorkspace(ws, filepath.Base(absPath)); resolved != "" {
 			absPath = resolved
 			info, _ = os.Stat(absPath)
 		} else {
@@ -104,22 +132,29 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, absPath)
 }
 
+// tenantWorkspace resolves the workspace scoped to the requesting tenant.
+func (h *FilesHandler) tenantWorkspace(r *http.Request) string {
+	tid := store.TenantIDFromContext(r.Context())
+	slug := store.TenantSlugFromContext(r.Context())
+	return config.TenantWorkspace(h.workspace, tid, slug)
+}
+
 // findInWorkspace searches the workspace directory tree for a file by basename.
 // Returns the absolute path if found, empty string otherwise.
 // Searches team directories including generated/ and system/ subdirs.
-func (h *FilesHandler) findInWorkspace(basename string) string {
-	if h.workspace == "" || basename == "" {
+func (h *FilesHandler) findInWorkspace(workspace, basename string) string {
+	if workspace == "" || basename == "" {
 		return ""
 	}
 	var found string
-	_ = filepath.WalkDir(h.workspace, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(workspace, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return filepath.SkipDir
 		}
 		if d.IsDir() {
 			name := d.Name()
 			// Allow workspace root + known directory structures
-			if name == "teams" || name == "generated" || name == "system" || path == h.workspace {
+			if name == "teams" || name == "generated" || name == "system" || name == ".uploads" || path == workspace {
 				return nil
 			}
 			// Allow date directories (e.g. 2026-03-20)

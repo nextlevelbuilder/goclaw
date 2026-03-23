@@ -22,7 +22,7 @@ import (
 type QRMethods struct {
 	instanceStore  store.ChannelInstanceStore
 	msgBus         *bus.MessageBus
-	activeSessions sync.Map // instanceID (string) -> struct{}
+	activeSessions sync.Map // instanceID (string) -> context.CancelFunc
 }
 
 func NewQRMethods(s store.ChannelInstanceStore, msgBus *bus.MessageBus) *QRMethods {
@@ -53,27 +53,28 @@ func (m *QRMethods) handleQRStart(ctx context.Context, client *gateway.Client, r
 		return
 	}
 
-	if _, loaded := m.activeSessions.LoadOrStore(params.InstanceID, struct{}{}); loaded {
-		client.SendResponse(goclawprotocol.NewErrorResponse(req.ID, goclawprotocol.ErrInvalidRequest, "QR session already active for this instance"))
-		return
+	qrCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+
+	// Atomically swap cancel func; cancel any previous QR session so the user can retry.
+	if prev, loaded := m.activeSessions.Swap(params.InstanceID, cancel); loaded {
+		if cancelFn, ok := prev.(context.CancelFunc); ok {
+			cancelFn()
+		}
 	}
 
 	// ACK immediately — QR arrives via event.
 	client.SendResponse(goclawprotocol.NewOKResponse(req.ID, map[string]any{"status": "started"}))
 
-	go m.runQRFlow(ctx, client, params.InstanceID, instID)
+	go m.runQRFlow(qrCtx, cancel, client, params.InstanceID, instID)
 }
 
-func (m *QRMethods) runQRFlow(ctx context.Context, client *gateway.Client, instanceIDStr string, instanceID uuid.UUID) {
-	defer m.activeSessions.Delete(instanceIDStr)
+func (m *QRMethods) runQRFlow(ctx context.Context, cancel context.CancelFunc, client *gateway.Client, instanceIDStr string, instanceID uuid.UUID) {
+	defer cancel()
+	defer m.activeSessions.CompareAndDelete(instanceIDStr, cancel)
 
 	sess := protocol.NewSession()
-	// LoginQR has internal 100s timeout per QR code. Use 2m as outer bound.
-	// Derived from parent ctx so QR flow cancels when the WS client disconnects.
-	qrCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
 
-	cred, err := protocol.LoginQR(qrCtx, sess, func(qrPNG []byte) {
+	cred, err := protocol.LoginQR(ctx, sess, func(qrPNG []byte) {
 		client.SendEvent(goclawprotocol.EventFrame{
 			Type:  goclawprotocol.FrameTypeEvent,
 			Event: goclawprotocol.EventZaloPersonalQRCode,
@@ -110,7 +111,7 @@ func (m *QRMethods) runQRFlow(ctx context.Context, client *gateway.Client, insta
 		return
 	}
 
-	if err := m.instanceStore.Update(context.Background(), instanceID, map[string]any{
+	if err := m.instanceStore.Update(ctx, instanceID, map[string]any{
 		"credentials": string(credsJSON),
 	}); err != nil {
 		slog.Error("Zalo Personal QR: save credentials failed", "instance", instanceIDStr, "error", err)

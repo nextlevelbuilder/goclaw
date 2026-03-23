@@ -15,7 +15,7 @@ import (
 // --- agent.identity.get ---
 // Matching TS src/gateway/server-methods/agent.ts:601-643
 
-func (m *AgentsMethods) handleIdentityGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+func (m *AgentsMethods) handleIdentityGet(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	var params struct {
 		AgentID    string `json:"agentId"`
 		SessionKey string `json:"sessionKey"`
@@ -42,7 +42,6 @@ func (m *AgentsMethods) handleIdentityGet(_ context.Context, client *gateway.Cli
 
 	if m.agentStore != nil {
 		// --- DB-backed: read identity from store ---
-		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err == nil {
 			result["name"] = ag.DisplayName

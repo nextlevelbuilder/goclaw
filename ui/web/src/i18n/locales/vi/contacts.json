@@ -13,7 +13,8 @@
     "senderId": "ID gửi",
     "channelType": "Channel",
     "peerKind": "Loại",
-    "lastSeen": "Lần cuối"
+    "lastSeen": "Lần cuối",
+    "merged": "Đã gộp"
   },
   "permissionsNote": {
     "title": "Quyền truy cập tên liên hệ theo channel",
@@ -22,6 +23,27 @@
     "zalo": "Zalo — Tên hiển thị có sẵn tự động.",
     "slack": "Slack — Tên được lấy qua Slack API (bot phải trong workspace).",
     "feishu": "Feishu/Lark — Cần quyền contact:user.base:readonly. Nếu không có, tên sẽ trống."
+  },
+  "selectedCount": "Đã chọn {{count}}",
+  "merge": {
+    "button": "Gộp",
+    "unmergeButton": "Tách",
+    "dialogTitle": "Gộp liên hệ",
+    "dialogDescription": "Liên kết các liên hệ đã chọn với một người dùng tenant. Xác định họ là cùng một người trên các channel khác nhau.",
+    "linkExisting": "Liên kết với người dùng có sẵn",
+    "createNew": "Tạo người dùng mới",
+    "selectUser": "Chọn người dùng tenant...",
+    "displayName": "Tên hiển thị",
+    "displayNamePlaceholder": "VD: Nguyễn Văn A",
+    "userId": "ID người dùng",
+    "userIdPlaceholder": "Định danh duy nhất",
+    "confirm": "Gộp",
+    "cancel": "Hủy",
+    "success": "Gộp liên hệ thành công",
+    "unmergeSuccess": "Tách liên hệ thành công",
+    "error": "Không thể gộp liên hệ",
+    "unmergeError": "Không thể tách liên hệ",
+    "comingSoon": "Tính năng này đang được phát triển và chưa khả dụng."
   },
   "filters": {
     "allChannels": "Tất cả Channel",

@@ -97,6 +97,9 @@ const (
 	// Zalo Personal QR login events (client-scoped, not broadcast).
 	EventZaloPersonalQRCode = "zalo.personal.qr.code"
 	EventZaloPersonalQRDone = "zalo.personal.qr.done"
+
+	// Tenant access revocation — forces affected user's UI to logout.
+	EventTenantAccessRevoked = "tenant.access.revoked"
 )
 
 // Agent event subtypes (in payload.type)

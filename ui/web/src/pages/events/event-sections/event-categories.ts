@@ -31,8 +31,8 @@ const teamMessage: EventCategoryConfig = {
 const agent: EventCategoryConfig = {
   label: "Agent",
   icon: Bot,
-  borderColor: "border-l-purple-500",
-  iconColor: "text-purple-500",
+  borderColor: "border-l-orange-500",
+  iconColor: "text-orange-500",
 };
 
 const teamCrud: EventCategoryConfig = {

@@ -155,20 +155,14 @@ export function formatSize(bytes: number): string {
 }
 
 /** Convert a local file path to a /v1/files/ URL for serving.
- *  Extracts basename so the backend fallback search can find generated files. */
-export function toFileUrl(path: string, token?: string): string {
-  let url: string;
+ *  Extracts basename so the backend fallback search can find generated files.
+ *  Server signs URLs with ?ft= at delivery time — no client-side token needed. */
+export function toFileUrl(path: string): string {
   if (path.startsWith("/v1/files/") || path.includes("/v1/files/")) {
-    url = path;
-  } else {
-    const basename = path.split("/").pop() ?? path;
-    url = `/v1/files/${basename}`;
+    return path;
   }
-  if (token) {
-    const sep = url.includes("?") ? "&" : "?";
-    url += `${sep}token=${encodeURIComponent(token)}`;
-  }
-  return url;
+  const basename = path.split("/").pop() ?? path;
+  return `/v1/files/${basename}`;
 }
 
 /** Determine MediaItem kind from MIME type */

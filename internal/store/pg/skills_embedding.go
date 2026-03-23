@@ -22,15 +22,27 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 	}
 	vecStr := vectorToString(embedding)
 
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT name, slug, COALESCE(description, ''), version, file_path,
-				1 - (embedding <=> $1::vector) AS score
-			FROM skills
-			WHERE status = 'active' AND enabled = true AND embedding IS NOT NULL
-			  AND visibility != 'private'
-			ORDER BY embedding <=> $2::vector
-			LIMIT $3`,
-		vecStr, vecStr, limit,
+	// $1=vec, $2=vec → tenant at $3 (if needed), ORDER vec at $3+len(tcArgs), LIMIT after
+	tc, tcArgs, err := tenantClauseN(ctx, 3)
+	if err != nil {
+		return nil, err
+	}
+	tenantCond := ""
+	if tc != "" {
+		tenantCond = fmt.Sprintf(" AND (is_system = true OR tenant_id = $%d)", 3)
+	}
+	orderN := 3 + len(tcArgs)
+	limitN := orderN + 1
+	q := fmt.Sprintf(`SELECT name, slug, COALESCE(description, ''), version, file_path,
+			1 - (embedding <=> $1::vector) AS score
+		FROM skills
+		WHERE status = 'active' AND enabled = true AND embedding IS NOT NULL
+		  AND visibility != 'private'%s
+		ORDER BY embedding <=> $%d::vector
+		LIMIT $%d`, tenantCond, orderN, limitN)
+
+	rows, err := s.db.QueryContext(ctx, q,
+		append(append([]any{vecStr}, tcArgs...), vecStr, limit)...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("embedding skill search: %w", err)

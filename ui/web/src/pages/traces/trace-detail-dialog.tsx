@@ -313,7 +313,7 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
                   </span>
                 )}
                 {(span.metadata?.thinking_tokens ?? 0) > 0 && (
-                  <span className="ml-1 text-purple-400">
+                  <span className="ml-1 text-orange-400">
                     ({formatTokens(span.metadata!.thinking_tokens!)} {t("span.thinking")})
                   </span>
                 )}
@@ -369,7 +369,7 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
                 )}
                 {(span.metadata?.thinking_tokens ?? 0) > 0 && (
                   <span className="ml-2 text-muted-foreground">
-                    (<span className="text-purple-400">{formatTokens(span.metadata!.thinking_tokens!)} {t("span.thinking")}</span>)
+                    (<span className="text-orange-400">{formatTokens(span.metadata!.thinking_tokens!)} {t("span.thinking")}</span>)
                   </span>
                 )}
               </div>

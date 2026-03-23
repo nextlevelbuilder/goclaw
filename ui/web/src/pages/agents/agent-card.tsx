@@ -48,7 +48,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           )}
         </div>
         {agent.status === "summoning" ? (
-          <Badge variant="outline" className="shrink-0 animate-pulse border-violet-400 text-violet-600 dark:text-violet-400">
+          <Badge variant="outline" className="shrink-0 animate-pulse border-orange-400 text-orange-600 dark:text-orange-400">
             {t("card.summoning")}
           </Badge>
         ) : agent.status === "summon_failed" ? (
@@ -93,7 +93,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
             <TooltipTrigger asChild>
               <Badge
                 variant={selfEvolve ? "default" : "outline"}
-                className={`text-[11px] ${selfEvolve ? "bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300" : "text-muted-foreground"}`}
+                className={`text-[11px] ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
               >
                 <Sparkles className="mr-0.5 h-3 w-3" />
                 {selfEvolve ? t("card.evolving") : t("card.static")}

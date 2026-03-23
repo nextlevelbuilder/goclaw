@@ -18,18 +18,27 @@ type MCPToolLister interface {
 	ServerToolNames(serverName string) []string
 }
 
+// MCPPoolEvictor evicts pooled connections for a tenant+server (called on credential rotation).
+type MCPPoolEvictor interface {
+	Evict(tenantID uuid.UUID, serverName string)
+}
+
 // MCPHandler handles MCP server management HTTP endpoints.
 type MCPHandler struct {
-	store  store.MCPServerStore
-	token  string
-	msgBus *bus.MessageBus
-	mgr    MCPToolLister // optional, nil when Manager not available
+	store       store.MCPServerStore
+	token       string
+	msgBus      *bus.MessageBus
+	mgr         MCPToolLister   // optional, nil when Manager not available
+	poolEvictor MCPPoolEvictor  // optional, nil when pool not available
 }
 
 // NewMCPHandler creates a handler for MCP server management endpoints.
 func NewMCPHandler(s store.MCPServerStore, token string, msgBus *bus.MessageBus, mgr MCPToolLister) *MCPHandler {
 	return &MCPHandler{store: s, token: token, msgBus: msgBus, mgr: mgr}
 }
+
+// SetPoolEvictor sets the pool evictor for credential rotation handling.
+func (h *MCPHandler) SetPoolEvictor(e MCPPoolEvictor) { h.poolEvictor = e }
 
 func (h *MCPHandler) emitCacheInvalidate() {
 	if h.msgBus == nil {
@@ -177,10 +186,27 @@ func (h *MCPHandler) handleUpdateServer(w http.ResponseWriter, r *http.Request) 
 	// Allowlist: only permit known MCP server columns.
 	updates = filterAllowedKeys(updates, mcpServerAllowedFields)
 
+	// Read server name before update for pool eviction
+	var serverName string
+	if srv, _ := h.store.GetServer(r.Context(), id); srv != nil {
+		serverName = srv.Name
+	}
+
 	if err := h.store.UpdateServer(r.Context(), id, updates); err != nil {
 		slog.Error("mcp.update_server", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+
+	// Evict pool connections when credentials change (force reconnect with new creds)
+	if h.poolEvictor != nil && serverName != "" {
+		_, hasKey := updates["api_key"]
+		_, hasHeaders := updates["headers"]
+		_, hasEnv := updates["env"]
+		if hasKey || hasHeaders || hasEnv {
+			tid := store.TenantIDFromContext(r.Context())
+			h.poolEvictor.Evict(tid, serverName)
+		}
 	}
 
 	h.emitCacheInvalidate()

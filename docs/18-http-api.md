@@ -32,6 +32,7 @@ API keys are hashed with SHA-256 before lookup — the raw key is never stored. 
 | `Authorization` | Bearer token for authentication |
 | `X-GoClaw-User-Id` | External user ID for multi-tenant context |
 | `X-GoClaw-Agent-Id` | Agent identifier for scoped operations |
+| `X-GoClaw-Tenant-Id` | Tenant scope — UUID or slug (gateway token / cross-tenant API keys) |
 | `Accept-Language` | Locale (`en`, `vi`, `zh`) for i18n error messages |
 | `Content-Type` | `application/json` for request bodies |
 

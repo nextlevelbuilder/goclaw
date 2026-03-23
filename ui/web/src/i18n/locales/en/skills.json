@@ -107,6 +107,9 @@
     "updated": "Skill updated",
     "updateFailed": "Failed to update skill",
     "deleted": "Skill deleted",
-    "deleteFailed": "Failed to delete skill"
+    "deleteFailed": "Failed to delete skill",
+    "rescanUpdated": "{{count}} skill(s) updated",
+    "rescanNoChanges": "All skills up to date",
+    "rescanFailed": "Failed to rescan dependencies"
   }
 }

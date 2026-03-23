@@ -93,7 +93,7 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loop, err := h.agents.Get(agentID)
+	loop, err := h.agents.Get(r.Context(), agentID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "agent", agentID)})
 		return

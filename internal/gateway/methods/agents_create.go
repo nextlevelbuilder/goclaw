@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -28,6 +30,7 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 		Avatar    string   `json:"avatar"`
 		AgentType string   `json:"agent_type"`          // "open" (default) or "predefined"
 		OwnerIDs  []string `json:"owner_ids,omitempty"` // first entry used as DB owner_id; falls back to "system"
+		TenantID  string   `json:"tenant_id"`           // required for cross-tenant callers; ignored otherwise
 		// Per-agent config overrides
 		ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 		SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`
@@ -67,7 +70,6 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 
 	if m.agentStore != nil {
 		// --- DB-backed: create agent in store ---
-		ctx := context.Background()
 
 		// Check if agent already exists in DB
 		if existing, _ := m.agentStore.GetByKey(ctx, agentID); existing != nil {
@@ -82,10 +84,28 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 			ownerID = params.OwnerIDs[0]
 		}
 
+		// Resolve tenant_id: cross-tenant callers must provide it; others inherit their own tenant.
+		var tenantID uuid.UUID
+		if client.IsCrossTenant() {
+			if params.TenantID == "" {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "tenant_id")))
+				return
+			}
+			tid, err := uuid.Parse(params.TenantID)
+			if err != nil {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "tenant_id")))
+				return
+			}
+			tenantID = tid
+		} else {
+			tenantID = client.TenantID()
+		}
+
 		agentData := &store.AgentData{
 			AgentKey:         agentID,
 			DisplayName:      params.Name,
 			OwnerID:          ownerID,
+			TenantID:         tenantID,
 			AgentType:        agentType,
 			Provider:         m.cfg.Agents.Defaults.Provider,
 			Model:            m.cfg.Agents.Defaults.Model,

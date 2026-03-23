@@ -10,6 +10,7 @@ export interface MCPServerData {
   env: Record<string, string> | null;
   tool_prefix: string;
   timeout_sec: number;
+  settings?: { require_user_credentials?: boolean };
   enabled: boolean;
   created_by: string;
   agent_count?: number;
@@ -28,6 +29,7 @@ export interface MCPServerInput {
   env?: Record<string, string>;
   tool_prefix?: string;
   timeout_sec?: number;
+  settings?: { require_user_credentials?: boolean };
   enabled?: boolean;
 }
 
@@ -45,4 +47,17 @@ export interface MCPAgentGrant {
   tool_deny: string[] | null;
   granted_by: string;
   created_at: string;
+}
+
+export interface MCPUserCredentialStatus {
+  has_credentials: boolean;
+  has_api_key: boolean;
+  has_headers: boolean;
+  has_env: boolean;
+}
+
+export interface MCPUserCredentialInput {
+  api_key?: string;
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
 }

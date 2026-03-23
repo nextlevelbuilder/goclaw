@@ -185,6 +185,17 @@ func (h *UsageHandler) queryLiveHour(r *http.Request, from, to time.Time, q stor
 
 	args := []any{from, to}
 	idx := 3
+
+	// Tenant isolation: scope to caller's tenant
+	if !store.IsCrossTenant(r.Context()) {
+		tid := store.TenantIDFromContext(r.Context())
+		if tid != uuid.Nil {
+			query += fmt.Sprintf(" AND tenant_id = $%d", idx)
+			args = append(args, tid)
+			idx++
+		}
+	}
+
 	if q.AgentID != nil {
 		query += fmt.Sprintf(" AND agent_id = $%d", idx)
 		args = append(args, *q.AgentID)

@@ -156,12 +156,6 @@ const (
 	MethodTeamsEventsList = "teams.events.list"
 )
 
-// Delegation history
-const (
-	MethodDelegationsList = "delegations.list"
-	MethodDelegationsGet  = "delegations.get"
-)
-
 // API key management
 const (
 	MethodAPIKeysList   = "api_keys.list"

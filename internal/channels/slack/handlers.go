@@ -12,6 +12,7 @@ import (
 	"github.com/slack-go/slack/socketmode"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 func (c *Channel) handleEventsAPI(evt socketmode.Event) {
@@ -32,6 +33,8 @@ func (c *Channel) handleEventsAPI(evt socketmode.Event) {
 }
 
 func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	// For message_changed: extract user/text from the nested Message field.
 	// Only process if the edit introduces a new @bot mention.
 	if ev.SubType == "message_changed" {
@@ -89,11 +92,11 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 
 	// Policy check
 	if isDM {
-		if !c.checkDMPolicy(senderID, channelID) {
+		if !c.checkDMPolicy(ctx, senderID, channelID) {
 			return
 		}
 	} else {
-		if !c.checkGroupPolicy(senderID, channelID) {
+		if !c.checkGroupPolicy(ctx, senderID, channelID) {
 			return
 		}
 	}
@@ -196,7 +199,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, displayName, "", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group")
 			}
 
 			slog.Debug("slack group message recorded (no mention)",

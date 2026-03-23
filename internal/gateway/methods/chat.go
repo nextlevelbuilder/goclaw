@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -22,11 +23,11 @@ import (
 
 // ChatMethods handles chat.send, chat.history, chat.abort, chat.inject.
 type ChatMethods struct {
-	agents      *agent.Router
-	sessions    store.SessionStore
-	rateLimiter *gateway.RateLimiter
-	eventBus    bus.EventPublisher
-	postTurn    tools.PostTurnProcessor
+	agents         *agent.Router
+	sessions       store.SessionStore
+	rateLimiter    *gateway.RateLimiter
+	eventBus       bus.EventPublisher
+	postTurn tools.PostTurnProcessor
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
@@ -114,7 +115,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		}
 	}
 
-	loop, err := m.agents.Get(params.AgentID)
+	loop, err := m.agents.Get(ctx, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
@@ -222,24 +223,25 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		}
 
 		// Auto-generate conversation title on first message (label empty = never titled).
-		if label := m.sessions.GetLabel(sessionKey); label == "" {
+		if label := m.sessions.GetLabel(ctx, sessionKey); label == "" {
 			agentProvider := loop.Provider()
 			agentModel := loop.Model()
 			userMsg := params.Message
+			// Use runCtxBase (WithoutCancel + tenant-aware) so title save uses correct tenant.
+			titleCtx := runCtxBase
 			go func() {
-				title := agent.GenerateTitle(context.Background(), agentProvider, agentModel, userMsg)
+				title := agent.GenerateTitle(titleCtx, agentProvider, agentModel, userMsg)
 				if title == "" {
 					return
 				}
-				m.sessions.SetLabel(sessionKey, title)
-				if err := m.sessions.Save(sessionKey); err != nil {
+				m.sessions.SetLabel(titleCtx, sessionKey, title)
+				if err := m.sessions.Save(titleCtx, sessionKey); err != nil {
 					slog.Warn("failed to save session title", "sessionKey", sessionKey, "error", err)
 					return
 				}
-				m.eventBus.Broadcast(bus.Event{
-					Name:    protocol.EventSessionUpdated,
-					Payload: map[string]string{"sessionKey": sessionKey, "label": title},
-				})
+				bus.BroadcastForTenant(m.eventBus, protocol.EventSessionUpdated,
+					client.TenantID(),
+					map[string]string{"sessionKey": sessionKey, "label": title, "userId": userID})
 			}()
 		}
 
@@ -277,7 +279,12 @@ func (m *ChatMethods) handleHistory(ctx context.Context, client *gateway.Client,
 		sessionKey = sessions.BuildWSSessionKey(params.AgentID, uuid.NewString())
 	}
 
-	history := m.sessions.GetFullHistory(sessionKey)
+	history := m.sessions.GetFullHistory(ctx, sessionKey)
+
+	// Sign file URLs before delivery — sessions store clean paths.
+	for i := range history {
+		history[i].Content = httpapi.SignFileURLs(history[i].Content, httpapi.FileSigningKey())
+	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"messages": history,
@@ -320,7 +327,7 @@ func (m *ChatMethods) handleInject(ctx context.Context, client *gateway.Client, 
 
 	// Create an assistant message with gateway-injected metadata
 	messageID := uuid.NewString()
-	m.sessions.AddMessage(params.SessionKey, providers.Message{
+	m.sessions.AddMessage(ctx, params.SessionKey, providers.Message{
 		Role:    "assistant",
 		Content: text,
 	})

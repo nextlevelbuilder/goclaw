@@ -152,10 +152,23 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	start := time.Now()
 	agentIDStr := hb.AgentID.String()
 
-	// Resolve agent key for events.
+	// Resolve agent to get tenant scope + display key.
+	// System-level lookup (cross-tenant) since ticker is a global scheduler.
+	sysCtx := store.WithCrossTenant(context.Background())
 	agentKey := agentIDStr
-	if ag, err := t.agents.GetByID(ctx, hb.AgentID); err == nil {
-		agentKey = ag.AgentKey
+	ag, agErr := t.agents.GetByID(sysCtx, hb.AgentID)
+	if agErr != nil {
+		slog.Warn("heartbeat.agent_not_found", "agent_id", agentIDStr, "error", agErr)
+		return
+	}
+	agentKey = ag.AgentKey
+
+	// Inject agent's tenant into context so all store operations
+	// (context files, sessions, etc.) are tenant-scoped.
+	if ag.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, ag.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
 	}
 
 	// [1] Active hours filter.
@@ -336,7 +349,7 @@ func (t *Ticker) finishRun(ctx context.Context, hb store.AgentHeartbeat, session
 
 	// Cleanup isolated session — data is already in heartbeat_run_logs.
 	if hb.IsolatedSession && t.sessions != nil && sessionKey != "" {
-		if err := t.sessions.Delete(sessionKey); err != nil {
+		if err := t.sessions.Delete(ctx, sessionKey); err != nil {
 			slog.Debug("heartbeat.session_cleanup_failed", "session_key", sessionKey, "error", err)
 		}
 	}

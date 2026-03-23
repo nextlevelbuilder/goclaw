@@ -29,10 +29,25 @@ func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.Con
 }
 
 func (m *ConfigMethods) Register(router *gateway.MethodRouter) {
-	router.Register(protocol.MethodConfigGet, m.handleGet)
-	router.Register(protocol.MethodConfigApply, m.handleApply)
-	router.Register(protocol.MethodConfigPatch, m.handlePatch)
-	router.Register(protocol.MethodConfigSchema, m.handleSchema)
+	router.Register(protocol.MethodConfigGet, m.requireCrossTenant(m.handleGet))
+	router.Register(protocol.MethodConfigApply, m.requireCrossTenant(m.handleApply))
+	router.Register(protocol.MethodConfigPatch, m.requireCrossTenant(m.handlePatch))
+	router.Register(protocol.MethodConfigSchema, m.requireCrossTenant(m.handleSchema))
+}
+
+// requireCrossTenant wraps a handler to only allow cross-tenant (owner/system) users.
+func (m *ConfigMethods) requireCrossTenant(next gateway.MethodHandler) gateway.MethodHandler {
+	return func(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+		if !client.IsCrossTenant() {
+			locale := store.LocaleFromContext(ctx)
+			client.SendResponse(protocol.NewErrorResponse(
+				req.ID, protocol.ErrUnauthorized,
+				i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+			))
+			return
+		}
+		next(ctx, client, req)
+	}
 }
 
 func (m *ConfigMethods) handleGet(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {

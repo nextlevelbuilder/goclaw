@@ -40,6 +40,7 @@ type BootstrapCleanupFunc func(ctx context.Context, agentID uuid.UUID, userID st
 type Loop struct {
 	id            string
 	agentUUID     uuid.UUID // set for context propagation
+	tenantID      uuid.UUID // agent's owning tenant
 	agentType     string    // "open" or "predefined"
 	provider      providers.Provider
 	model         string
@@ -108,6 +109,9 @@ type Loop struct {
 	// Global builtin tool settings (from builtin_tools table)
 	builtinToolSettings tools.BuiltinToolSettings
 
+	// Per-tenant disabled tools (tool name → true means excluded from LLM)
+	disabledTools map[string]bool
+
 	// Thinking level for extended thinking support
 	thinkingLevel string
 
@@ -160,6 +164,9 @@ type AgentEvent struct {
 	UserID  string `json:"userId,omitempty"`
 	Channel string `json:"channel,omitempty"`
 	ChatID  string `json:"chatId,omitempty"`
+
+	// TenantID scopes this event to a specific tenant for filtering (not serialized).
+	TenantID uuid.UUID `json:"-"`
 }
 
 // LoopConfig configures a new Loop.
@@ -209,9 +216,10 @@ type LoopConfig struct {
 	// Shell deny group overrides (nil = all defaults)
 	ShellDenyGroups map[string]bool
 
-	// Agent UUID for context propagation to tools
+	// Agent UUID + tenant for context propagation to tools
 	AgentUUID uuid.UUID
-	AgentType string // "open" or "predefined"
+	TenantID  uuid.UUID // agent's owning tenant — injected into execution context
+	AgentType string    // "open" or "predefined"
 
 	// Per-user file seeding + dynamic context loading
 	EnsureUserFiles   EnsureUserFilesFunc
@@ -228,6 +236,9 @@ type LoopConfig struct {
 
 	// Global builtin tool settings (from builtin_tools table)
 	BuiltinToolSettings tools.BuiltinToolSettings
+
+	// Per-tenant disabled tools (tool name → true means excluded)
+	DisabledTools map[string]bool
 
 	// Thinking level: "off", "low", "medium", "high" (from agent other_config)
 	ThinkingLevel string
@@ -298,6 +309,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 	return &Loop{
 		id:                     cfg.ID,
 		agentUUID:              cfg.AgentUUID,
+		tenantID:               cfg.TenantID,
 		agentType:              cfg.AgentType,
 		provider:               cfg.Provider,
 		model:                  cfg.Model,
@@ -337,6 +349,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		injectionAction:        action,
 		maxMessageChars:        cfg.MaxMessageChars,
 		builtinToolSettings:    cfg.BuiltinToolSettings,
+		disabledTools:          cfg.DisabledTools,
 		thinkingLevel:          cfg.ThinkingLevel,
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,

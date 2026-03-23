@@ -93,6 +93,7 @@ type SpanData struct {
 	OutputPreview string          `json:"output_preview,omitempty"`
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
 	TeamID        *uuid.UUID      `json:"team_id,omitempty"`
+	TenantID      uuid.UUID       `json:"tenant_id"`
 	CreatedAt     time.Time       `json:"created_at"`
 }
 

@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -16,9 +17,11 @@ import (
 // reconnectLocked re-establishes the CDP connection to a remote Chrome.
 // Must be called with m.mu held. Only works when remoteURL is set.
 func (m *Manager) reconnectLocked() error {
+	m.closeTenantContextsLocked()
 	m.browser = nil
 	m.pages = make(map[string]*rod.Page)
 	m.console = make(map[string][]ConsoleMessage)
+	m.pageTenants = make(map[string]string)
 	m.refs = NewRefStore()
 
 	controlURL, err := resolveRemoteCDP(m.remoteURL)
@@ -87,6 +90,29 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 	return pages[0], nil
 }
 
+// getPageForTenant wraps getPage with tenant ownership validation.
+// If tenantID is set and the page belongs to a different tenant, access is denied.
+// Must be called with m.mu held.
+func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error) {
+	page, err := m.getPage(targetID)
+	if err != nil {
+		return nil, err
+	}
+	// If no tenant context or master tenant, allow access to all pages
+	if tenantID == "" || tenantID == MasterTenantID {
+		return page, nil
+	}
+	// Check ownership: page must belong to this tenant
+	resolvedTID := targetID
+	if targetID == "" {
+		resolvedTID = string(page.TargetID)
+	}
+	if owner, ok := m.pageTenants[resolvedTID]; ok && owner != tenantID {
+		return nil, fmt.Errorf("tab not found: %s", targetID)
+	}
+	return page, nil
+}
+
 // setupConsoleListener attaches a console message listener to a page via Rod's EachEvent.
 func (m *Manager) setupConsoleListener(page *rod.Page, targetID string) {
 	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
@@ -146,10 +172,11 @@ func (m *Manager) resolveElement(page *rod.Page, targetID, ref string) (*rod.Ele
 	return el, nil
 }
 
-// getPageAndResolve is a helper that locks, gets page, and resolves an element.
-func (m *Manager) getPageAndResolve(targetID, ref string) (*rod.Page, *rod.Element, error) {
+// getPageAndResolve is a helper that locks, gets page with tenant check, and resolves an element.
+func (m *Manager) getPageAndResolve(ctx context.Context, targetID, ref string) (*rod.Page, *rod.Element, error) {
+	tenantID := tenantIDFromCtx(ctx)
 	m.mu.Lock()
-	page, err := m.getPage(targetID)
+	page, err := m.getPageForTenant(targetID, tenantID)
 	m.mu.Unlock()
 	if err != nil {
 		return nil, nil, err

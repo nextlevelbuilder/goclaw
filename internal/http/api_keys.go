@@ -42,7 +42,8 @@ func (h *APIKeysHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
 
 func (h *APIKeysHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	keys, err := h.apiKeys.List(r.Context())
+	// HTTP API key list is admin-only (adminAuth middleware), so no owner filter needed.
+	keys, err := h.apiKeys.List(r.Context(), "")
 	if err != nil {
 		slog.Error("api_keys.list failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "API keys")})
@@ -61,6 +62,7 @@ func (h *APIKeysHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Name      string   `json:"name"`
 		Scopes    []string `json:"scopes"`
 		ExpiresIn *int     `json:"expires_in"` // seconds; nil = never
+		TenantID  string   `json:"tenant_id"`  // optional UUID; cross-tenant callers may specify or omit (NULL = system key)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
@@ -95,6 +97,22 @@ func (h *APIKeysHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve tenant_id based on caller type.
+	var tenantID uuid.UUID // uuid.Nil = system-level (NULL in DB)
+	if store.IsCrossTenant(r.Context()) {
+		if input.TenantID != "" {
+			tid, err := uuid.Parse(input.TenantID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "tenant_id")})
+				return
+			}
+			tenantID = tid
+		}
+		// else: uuid.Nil stays → system-level key
+	} else {
+		tenantID = store.TenantIDFromContext(r.Context())
+	}
+
 	now := time.Now()
 	key := &store.APIKeyData{
 		ID:        store.GenNewID(),
@@ -102,6 +120,7 @@ func (h *APIKeysHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Prefix:    prefix,
 		KeyHash:   hash,
 		Scopes:    input.Scopes,
+		TenantID:  tenantID,
 		CreatedBy: extractUserID(r),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -141,7 +160,8 @@ func (h *APIKeysHandler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.apiKeys.Revoke(r.Context(), id); err != nil {
+	// HTTP revoke is admin-only (adminAuth middleware), so no owner filter needed.
+	if err := h.apiKeys.Revoke(r.Context(), id, ""); err != nil {
 		slog.Error("api_keys.revoke failed", "error", err, "id", idStr)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "API key", idStr)})
 		return

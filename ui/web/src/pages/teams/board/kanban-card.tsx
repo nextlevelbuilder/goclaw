@@ -75,7 +75,7 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
           )}
           {canDelete && (
             <button
-              className="hidden rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive group-hover:inline-flex"
+              className="inline-flex rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
               title={t("tasks.delete")}
               onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
             >

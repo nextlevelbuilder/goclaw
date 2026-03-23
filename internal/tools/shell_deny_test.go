@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"regexp"
 	"testing"
 )
 
@@ -47,6 +48,94 @@ func TestBase64DecodeShellDeny(t *testing.T) {
 			t.Errorf("unexpected deny for %q", cmd)
 		}
 	}
+}
+
+// mustDeny asserts all commands match at least one pattern.
+func mustDeny(t *testing.T, patterns []*regexp.Regexp, commands ...string) {
+	t.Helper()
+	for _, cmd := range commands {
+		matched := false
+		for _, p := range patterns {
+			if p.MatchString(cmd) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Errorf("expected deny for %q", cmd)
+		}
+	}
+}
+
+// mustAllow asserts no command matches any pattern.
+func mustAllow(t *testing.T, patterns []*regexp.Regexp, commands ...string) {
+	t.Helper()
+	for _, cmd := range commands {
+		for _, p := range patterns {
+			if p.MatchString(cmd) {
+				t.Errorf("unexpected deny for %q (matched %s)", cmd, p.String())
+				break
+			}
+		}
+	}
+}
+
+func TestDestructiveOpsGaps(t *testing.T) {
+	patterns := DenyGroupRegistry["destructive_ops"].Patterns
+
+	mustDeny(t, patterns,
+		// existing
+		"shutdown", "reboot", "poweroff",
+		"shutdown -h now", "reboot -f",
+		// new: halt
+		"halt", "halt -p", "systemctl halt",
+		// new: init/telinit
+		"init 0", "init 6", "telinit 0", "telinit 6",
+		// new: systemctl suspend/hibernate
+		"systemctl suspend", "systemctl hibernate",
+	)
+
+	mustAllow(t, patterns,
+		"halting the process",  // "halt" inside word
+		"initialize",          // "init" inside word
+		"initial setup",       // "init" inside word
+		"init_db",             // no space+digit after init
+		"init 1",              // only 0 and 6 are blocked
+		"systemctl status",    // not suspend/hibernate
+		"systemctl start nginx",
+	)
+}
+
+func TestPrivilegeEscalationGaps(t *testing.T) {
+	patterns := DenyGroupRegistry["privilege_escalation"].Patterns
+
+	mustDeny(t, patterns,
+		// existing
+		"sudo ls", "sudo -i",
+		// su: all forms now blocked
+		"su", "su -", "su root", "su -l postgres", "su admin",
+		// new: doas
+		"doas reboot", "doas ls /root", "doas -u www sh",
+		// new: pkexec
+		"pkexec vim /etc/passwd", "pkexec /bin/bash",
+		// new: runuser
+		"runuser -l postgres", "runuser -u nobody -- /bin/sh",
+		// existing
+		"nsenter --target 1", "unshare -m", "mount /dev/sda1 /mnt",
+	)
+
+	mustAllow(t, patterns,
+		"summit",    // not "su"
+		"sugar",     // not "su"
+		"surplus",   // not "su"
+		"issue",     // not "su"
+		"result",    // not "su"
+		"resume",    // not "su"
+		"visual",    // not "su"
+		"sushi",     // not "su"
+		"doaspkg",   // not "doas" (no word boundary)
+		"pkexecute", // not "pkexec" (no word boundary)
+	)
 }
 
 func TestLimitedBuffer(t *testing.T) {

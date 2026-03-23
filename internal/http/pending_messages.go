@@ -127,7 +127,7 @@ func (h *PendingMessagesHandler) handleCompact(w http.ResponseWriter, r *http.Re
 	}
 
 	// Resolve an LLM provider for summarization using the default agent's config
-	provider, model := h.resolveProviderAndModel()
+	provider, model := h.resolveProviderAndModel(r.Context())
 	if provider == nil {
 		// Fallback: hard delete if no provider available
 		slog.Warn("compact.no_provider", "channel", req.ChannelName, "key", req.HistoryKey)
@@ -162,14 +162,14 @@ func (h *PendingMessagesHandler) handleCompact(w http.ResponseWriter, r *http.Re
 
 // resolveProviderAndModel resolves the LLM provider+model for pending message compaction.
 // Priority: config provider/model > default agent's provider/model > first available provider.
-func (h *PendingMessagesHandler) resolveProviderAndModel() (providers.Provider, string) {
+func (h *PendingMessagesHandler) resolveProviderAndModel(ctx context.Context) (providers.Provider, string) {
 	if h.providerReg == nil {
 		return nil, ""
 	}
 
 	// Config-level provider/model override.
 	if h.cfgProvider != "" {
-		if p, err := h.providerReg.Get(h.cfgProvider); err == nil {
+		if p, err := h.providerReg.Get(ctx, h.cfgProvider); err == nil {
 			model := h.cfgModel
 			if model == "" {
 				model = p.DefaultModel()
@@ -182,8 +182,8 @@ func (h *PendingMessagesHandler) resolveProviderAndModel() (providers.Provider, 
 
 	// Fallback: default agent's provider+model.
 	if h.agentStore != nil {
-		if ag, err := h.agentStore.GetDefault(context.Background()); err == nil && ag.Provider != "" {
-			if p, err := h.providerReg.Get(ag.Provider); err == nil {
+		if ag, err := h.agentStore.GetDefault(ctx); err == nil && ag.Provider != "" {
+			if p, err := h.providerReg.GetForTenant(ag.TenantID, ag.Provider); err == nil {
 				model := ag.Model
 				if model == "" {
 					model = p.DefaultModel()
@@ -196,8 +196,8 @@ func (h *PendingMessagesHandler) resolveProviderAndModel() (providers.Provider, 
 	}
 
 	// Fallback: first provider with a valid default model
-	for _, name := range h.providerReg.List() {
-		p, err := h.providerReg.Get(name)
+	for _, name := range h.providerReg.List(ctx) {
+		p, err := h.providerReg.Get(ctx, name)
 		if err != nil {
 			continue
 		}

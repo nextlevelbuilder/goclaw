@@ -80,11 +80,11 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
 
         {/* Memory & Knowledge Graph — independent section */}
         <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-violet-700 dark:text-violet-400">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-orange-700 dark:text-orange-400">
             <Brain className="h-3.5 w-3.5" />
             {t(`${s}.memoryGroupLabel`)}
           </div>
-          <div className="flex items-center justify-between rounded-md border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-800/40 dark:bg-violet-950/20">
+          <div className="flex items-center justify-between rounded-md border border-orange-200 bg-orange-50/50 p-3 dark:border-orange-800/40 dark:bg-orange-950/20">
             <InfoLabel tip={t(`${s}.shareMemoryTip`)}>{t(`${s}.shareMemory`)}</InfoLabel>
             <Switch
               checked={value.share_memory ?? false}
@@ -92,7 +92,7 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
             />
           </div>
           {value.share_memory && (
-            <p className="text-xs text-violet-600 dark:text-violet-400">
+            <p className="text-xs text-orange-600 dark:text-orange-400">
               {t(`${s}.shareMemoryNote`)}
             </p>
           )}

@@ -108,7 +108,7 @@ function JsonHighlight({ json }: { json: string }) {
         // Number
         if (/^-?\d/.test(part)) {
           return (
-            <span key={i} className="text-violet-600 dark:text-violet-400">
+            <span key={i} className="text-orange-600 dark:text-orange-400">
               {part}
             </span>
           );

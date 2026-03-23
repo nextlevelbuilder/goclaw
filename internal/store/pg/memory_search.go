@@ -3,14 +3,12 @@ package pg
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // Search performs hybrid search (FTS + vector) over memory_chunks.
 // Merges global (user_id IS NULL) + per-user chunks, with user boost.
-// Supports optional filters: PathPrefix (SQL LIKE) and SessionKey (subquery on memory_documents).
 func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userID string, opts store.MemorySearchOptions) ([]store.MemorySearchResult, error) {
 	maxResults := opts.MaxResults
 	if maxResults <= 0 {
@@ -19,22 +17,25 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 
 	aid := mustParseUUID(agentID)
 
-	ftsResults, err := s.ftsSearch(ctx, query, aid, userID, maxResults*2, opts)
+	// FTS search using tsvector
+	ftsResults, err := s.ftsSearch(ctx, query, aid, userID, maxResults*2)
 	if err != nil {
 		return nil, err
 	}
 
+	// Vector search if provider available
 	var vecResults []scoredChunk
 	if s.provider != nil {
 		embeddings, err := s.provider.Embed(ctx, []string{query})
 		if err == nil && len(embeddings) > 0 {
-			vecResults, err = s.vectorSearch(ctx, embeddings[0], aid, userID, maxResults*2, opts)
+			vecResults, err = s.vectorSearch(ctx, embeddings[0], aid, userID, maxResults*2)
 			if err != nil {
 				vecResults = nil
 			}
 		}
 	}
 
+	// Merge results — use per-query overrides if set, else store defaults
 	textW, vecW := s.cfg.TextWeight, s.cfg.VectorWeight
 	if opts.TextWeight > 0 {
 		textW = opts.TextWeight
@@ -49,9 +50,33 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 	}
 	merged := hybridMerge(ftsResults, vecResults, textW, vecW, userID)
 
+	// Fork: if SessionKey filter is set, load allowed paths from memory_documents
+	var sessionPaths map[string]bool
+	if opts.SessionKey != "" {
+		sessionPaths = make(map[string]bool)
+		rows, err := s.db.QueryContext(ctx,
+			"SELECT path FROM memory_documents WHERE session_key = $1", opts.SessionKey)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var p string
+				if rows.Scan(&p) == nil {
+					sessionPaths[p] = true
+				}
+			}
+		}
+	}
+
+	// Apply min score filter
 	var filtered []store.MemorySearchResult
 	for _, m := range merged {
 		if opts.MinScore > 0 && m.Score < opts.MinScore {
+			continue
+		}
+		if opts.PathPrefix != "" && len(m.Path) < len(opts.PathPrefix) {
+			continue
+		}
+		if sessionPaths != nil && !sessionPaths[m.Path] {
 			continue
 		}
 		filtered = append(filtered, m)
@@ -72,38 +97,45 @@ type scoredChunk struct {
 	UserID    *string
 }
 
-// ftsSearch runs a full-text search over memory_chunks.
-// Optionally filters by PathPrefix (LIKE) and SessionKey (subquery).
-func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any, userID string, limit int, opts store.MemorySearchOptions) ([]scoredChunk, error) {
-	args := []any{query, agentID, query}
-
-	var sb strings.Builder
-	sb.WriteString(`SELECT path, start_line, end_line, text, user_id,
-		ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
-	FROM memory_chunks
-	WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)`)
+func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any, userID string, limit int) ([]scoredChunk, error) {
+	var q string
+	var args []any
 
 	if userID != "" {
-		args = append(args, userID)
-		fmt.Fprintf(&sb, " AND (user_id IS NULL OR user_id = $%d)", len(args))
+		// fixed params: $1=query, $2=agentID, $3=query, $4=userID
+		// tenant clause appended at $5 (if filtered), then LIMIT at $5 or $6
+		tc, tcArgs, err := tenantClauseN(ctx, 5)
+		if err != nil {
+			return nil, err
+		}
+		limitN := 5 + len(tcArgs)
+		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
+				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+			FROM memory_chunks
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
+			AND (user_id IS NULL OR user_id = $4)%s
+			ORDER BY score DESC LIMIT $%d`, tc, limitN)
+		args = append([]any{query, agentID, query, userID}, tcArgs...)
+		args = append(args, limit)
 	} else {
-		sb.WriteString(" AND user_id IS NULL")
+		// fixed params: $1=query, $2=agentID, $3=query
+		// tenant clause at $4 (if filtered), then LIMIT at $4 or $5
+		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		if err != nil {
+			return nil, err
+		}
+		limitN := 4 + len(tcArgs)
+		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
+				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+			FROM memory_chunks
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
+			AND user_id IS NULL%s
+			ORDER BY score DESC LIMIT $%d`, tc, limitN)
+		args = append([]any{query, agentID, query}, tcArgs...)
+		args = append(args, limit)
 	}
 
-	if opts.PathPrefix != "" {
-		args = append(args, opts.PathPrefix+"%")
-		fmt.Fprintf(&sb, " AND path LIKE $%d", len(args))
-	}
-
-	if opts.SessionKey != "" {
-		args = append(args, opts.SessionKey)
-		fmt.Fprintf(&sb, " AND document_id IN (SELECT id FROM memory_documents WHERE session_key = $%d)", len(args))
-	}
-
-	args = append(args, limit)
-	fmt.Fprintf(&sb, " ORDER BY score DESC LIMIT $%d", len(args))
-
-	rows, err := s.db.QueryContext(ctx, sb.String(), args...)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -118,40 +150,49 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 	return results, nil
 }
 
-// vectorSearch runs a cosine similarity search over memory_chunks embeddings.
-// Optionally filters by PathPrefix (LIKE) and SessionKey (subquery).
-func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, agentID any, userID string, limit int, opts store.MemorySearchOptions) ([]scoredChunk, error) {
+func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, agentID any, userID string, limit int) ([]scoredChunk, error) {
 	vecStr := vectorToString(embedding)
-	args := []any{vecStr, agentID}
 
-	var sb strings.Builder
-	sb.WriteString(`SELECT path, start_line, end_line, text, user_id,
-		1 - (embedding <=> $1::vector) AS score
-	FROM memory_chunks
-	WHERE agent_id = $2 AND embedding IS NOT NULL`)
+	var q string
+	var args []any
 
 	if userID != "" {
-		args = append(args, userID)
-		fmt.Fprintf(&sb, " AND (user_id IS NULL OR user_id = $%d)", len(args))
+		// fixed params: $1=vec, $2=agentID, $3=userID
+		// tenant clause at $4, then ORDER vec at $4+len(tcArgs), LIMIT after
+		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		if err != nil {
+			return nil, err
+		}
+		orderN := 4 + len(tcArgs)
+		limitN := orderN + 1
+		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
+				1 - (embedding <=> $1::vector) AS score
+			FROM memory_chunks
+			WHERE agent_id = $2 AND embedding IS NOT NULL
+			AND (user_id IS NULL OR user_id = $3)%s
+			ORDER BY embedding <=> $%d::vector LIMIT $%d`, tc, orderN, limitN)
+		args = append([]any{vecStr, agentID, userID}, tcArgs...)
+		args = append(args, vecStr, limit)
 	} else {
-		sb.WriteString(" AND user_id IS NULL")
+		// fixed params: $1=vec, $2=agentID
+		// tenant clause at $3, then ORDER vec at $3+len(tcArgs), LIMIT after
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return nil, err
+		}
+		orderN := 3 + len(tcArgs)
+		limitN := orderN + 1
+		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
+				1 - (embedding <=> $1::vector) AS score
+			FROM memory_chunks
+			WHERE agent_id = $2 AND embedding IS NOT NULL
+			AND user_id IS NULL%s
+			ORDER BY embedding <=> $%d::vector LIMIT $%d`, tc, orderN, limitN)
+		args = append([]any{vecStr, agentID}, tcArgs...)
+		args = append(args, vecStr, limit)
 	}
 
-	if opts.PathPrefix != "" {
-		args = append(args, opts.PathPrefix+"%")
-		fmt.Fprintf(&sb, " AND path LIKE $%d", len(args))
-	}
-
-	if opts.SessionKey != "" {
-		args = append(args, opts.SessionKey)
-		fmt.Fprintf(&sb, " AND document_id IN (SELECT id FROM memory_documents WHERE session_key = $%d)", len(args))
-	}
-
-	// vecStr appears twice: once for distance score ($1) and once for ORDER BY
-	args = append(args, vecStr, limit)
-	fmt.Fprintf(&sb, " ORDER BY embedding <=> $%d::vector LIMIT $%d", len(args)-1, len(args))
-
-	rows, err := s.db.QueryContext(ctx, sb.String(), args...)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +228,7 @@ func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, curre
 
 		if existing, ok := seen[k]; ok {
 			existing.Score += score
+			// User copy wins
 			if scope == "personal" {
 				existing.Scope = "personal"
 				existing.Snippet = r.Text
@@ -211,11 +253,13 @@ func hybridMerge(fts, vec []scoredChunk, textWeight, vectorWeight float64, curre
 		addResult(r, vectorWeight)
 	}
 
+	// Collect and sort by score
 	results := make([]store.MemorySearchResult, 0, len(seen))
 	for _, r := range seen {
 		results = append(results, *r)
 	}
 
+	// Simple sort (descending score)
 	for i := 0; i < len(results); i++ {
 		for j := i + 1; j < len(results); j++ {
 			if results[j].Score > results[i].Score {

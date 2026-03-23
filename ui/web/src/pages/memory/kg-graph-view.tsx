@@ -22,11 +22,11 @@ import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 
 // Color mapping for entity types
 const TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  person:       { bg: "#dbeafe", border: "#3b82f6", text: "#1e40af" },
+  person:       { bg: "#fde8d8", border: "#E85D24", text: "#7a2610" },
   project:      { bg: "#dcfce7", border: "#22c55e", text: "#166534" },
   task:         { bg: "#fef3c7", border: "#f59e0b", text: "#92400e" },
   event:        { bg: "#fce7f3", border: "#ec4899", text: "#9d174d" },
-  concept:      { bg: "#e0e7ff", border: "#6366f1", text: "#3730a3" },
+  concept:      { bg: "#fef5e0", border: "#F8D080", text: "#7a5010" },
   location:     { bg: "#ccfbf1", border: "#14b8a6", text: "#115e59" },
   organization: { bg: "#fee2e2", border: "#ef4444", text: "#991b1b" },
 };

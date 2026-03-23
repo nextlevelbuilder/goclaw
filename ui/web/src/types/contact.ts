@@ -1,3 +1,14 @@
+export interface MergeContactsRequest {
+  contact_ids: string[];
+  tenant_user_id?: string;
+  create_user?: { user_id: string; display_name?: string };
+}
+
+export interface MergeContactsResponse {
+  merged_id: string;
+  merged_count: number;
+}
+
 export interface ChannelContact {
   id: string;
   channel_type: string;

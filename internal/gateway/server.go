@@ -43,15 +43,14 @@ type Server struct {
 	tracesHandler  *httpapi.TracesHandler // LLM trace listing API
 	wakeHandler    *httpapi.WakeHandler  // external wake/trigger API
 	mcpHandler         *httpapi.MCPHandler         // MCP server management API
-	customToolsHandler      *httpapi.CustomToolsHandler      // custom tool CRUD API
 	channelInstancesHandler *httpapi.ChannelInstancesHandler // channel instance CRUD API
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
-	delegationsHandler      *httpapi.DelegationsHandler      // delegation history API
 	teamEventsHandler       *httpapi.TeamEventsHandler       // team event history API
 	teamAttachmentsHandler  *httpapi.TeamAttachmentsHandler  // team attachment download API
 	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
 	pendingMessagesHandler  *httpapi.PendingMessagesHandler  // pending messages API
 	secureCLIHandler       *httpapi.SecureCLIHandler        // secure CLI credential CRUD API
+	mcpUserCredsHandler    *httpapi.MCPUserCredentialsHandler // MCP per-user credentials API
 	packagesHandler        *httpapi.PackagesHandler         // runtime package management API
 	memoryHandler           *httpapi.MemoryHandler           // memory management API
 	kgHandler               *httpapi.KnowledgeGraphHandler   // knowledge graph API
@@ -64,6 +63,7 @@ type Server struct {
 	usageHandler            *httpapi.UsageHandler            // usage analytics API
 	apiKeysHandler     *httpapi.APIKeysHandler      // API key management
 	apiKeyStore        store.APIKeyStore            // for API key auth lookup
+	tenantsHandler     *httpapi.TenantsHandler      // tenant management API
 	docsHandler        *httpapi.DocsHandler         // OpenAPI spec + Swagger UI
 	agentStore         store.AgentStore             // for context injection in tools_invoke
 	msgBus             *bus.MessageBus              // for MCP bridge media delivery
@@ -207,10 +207,9 @@ func (s *Server) BuildMux() *http.ServeMux {
 	if s.mcpHandler != nil {
 		s.mcpHandler.RegisterRoutes(mux)
 	}
-
-	// Custom tool CRUD API
-	if s.customToolsHandler != nil {
-		s.customToolsHandler.RegisterRoutes(mux)
+	// MCP per-user credentials API
+	if s.mcpUserCredsHandler != nil {
+		s.mcpUserCredsHandler.RegisterRoutes(mux)
 	}
 
 	// Secure CLI credential CRUD API
@@ -228,10 +227,6 @@ func (s *Server) BuildMux() *http.ServeMux {
 		s.providersHandler.RegisterRoutes(mux)
 	}
 
-	// Delegation history API
-	if s.delegationsHandler != nil {
-		s.delegationsHandler.RegisterRoutes(mux)
-	}
 
 	// Team event history API
 	if s.teamEventsHandler != nil {
@@ -285,6 +280,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	if s.apiKeysHandler != nil {
 		s.apiKeysHandler.RegisterRoutes(mux)
+	}
+
+	// Tenant management API
+	if s.tenantsHandler != nil {
+		s.tenantsHandler.RegisterRoutes(mux)
 	}
 
 	if s.activityHandler != nil {
@@ -485,10 +485,8 @@ func (s *Server) SetTracesHandler(h *httpapi.TracesHandler) { s.tracesHandler = 
 func (s *Server) SetWakeHandler(h *httpapi.WakeHandler) { s.wakeHandler = h }
 
 // SetMCPHandler sets the MCP server management handler.
-func (s *Server) SetMCPHandler(h *httpapi.MCPHandler) { s.mcpHandler = h }
-
-// SetCustomToolsHandler sets the custom tool CRUD handler.
-func (s *Server) SetCustomToolsHandler(h *httpapi.CustomToolsHandler) { s.customToolsHandler = h }
+func (s *Server) SetMCPHandler(h *httpapi.MCPHandler)                       { s.mcpHandler = h }
+func (s *Server) SetMCPUserCredentialsHandler(h *httpapi.MCPUserCredentialsHandler) { s.mcpUserCredsHandler = h }
 
 // SetChannelInstancesHandler sets the channel instance CRUD handler.
 func (s *Server) SetChannelInstancesHandler(h *httpapi.ChannelInstancesHandler) {
@@ -497,9 +495,6 @@ func (s *Server) SetChannelInstancesHandler(h *httpapi.ChannelInstancesHandler) 
 
 // SetProvidersHandler sets the provider CRUD handler.
 func (s *Server) SetProvidersHandler(h *httpapi.ProvidersHandler) { s.providersHandler = h }
-
-// SetDelegationsHandler sets the delegation history handler.
-func (s *Server) SetDelegationsHandler(h *httpapi.DelegationsHandler) { s.delegationsHandler = h }
 
 // SetTeamEventsHandler sets the team event history handler.
 func (s *Server) SetTeamEventsHandler(h *httpapi.TeamEventsHandler) { s.teamEventsHandler = h }
@@ -530,6 +525,9 @@ func (s *Server) SetOAuthHandler(h *httpapi.OAuthHandler) { s.oauthHandler = h }
 
 // SetAPIKeysHandler sets the API key management handler.
 func (s *Server) SetAPIKeysHandler(h *httpapi.APIKeysHandler) { s.apiKeysHandler = h }
+
+// SetTenantsHandler sets the tenant management handler.
+func (s *Server) SetTenantsHandler(h *httpapi.TenantsHandler) { s.tenantsHandler = h }
 
 // SetAPIKeyStore sets the API key store for token-based auth lookup.
 func (s *Server) SetAPIKeyStore(st store.APIKeyStore) { s.apiKeyStore = st }
@@ -623,12 +621,11 @@ func (s *Server) registerClient(c *Client) {
 	defer s.mu.Unlock()
 	s.clients[c.id] = c
 
-	// Subscribe to bus events for this client (skip internal cache events)
+	// Subscribe to bus events with per-user/team filtering.
 	s.eventPub.Subscribe(c.id, func(event bus.Event) {
-		if strings.HasPrefix(event.Name, "cache.") {
-			return // internal event, don't forward to WS clients
+		if clientCanReceiveEvent(c, event) {
+			c.SendEvent(*protocol.NewEvent(event.Name, event.Payload))
 		}
-		c.SendEvent(*protocol.NewEvent(event.Name, event.Payload))
 	})
 
 	slog.Info("client connected", "id", c.id)

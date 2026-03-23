@@ -259,6 +259,66 @@ func TestCheckDeniedPath(t *testing.T) {
 	}
 }
 
+func TestResolvePathWithAllowed_TenantScoping(t *testing.T) {
+	// Simulate: tenant workspace is a subdirectory of global workspace.
+	// Paths outside tenant workspace but inside global should be BLOCKED.
+	globalWs := t.TempDir()
+	tenantWs := filepath.Join(globalWs, "tenants", "acme")
+	otherTenantWs := filepath.Join(globalWs, "tenants", "evil")
+	if err := os.MkdirAll(tenantWs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(otherTenantWs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(otherTenantWs, "secret.txt"), []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tenantWs, "ok.txt"), []byte("ok"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Using tenant workspace as base: should allow files inside tenant workspace
+	_, err := resolvePathWithAllowed("ok.txt", tenantWs, true, nil)
+	if err != nil {
+		t.Fatalf("expected success for file in tenant workspace, got: %v", err)
+	}
+
+	// Using tenant workspace as base: should BLOCK files in other tenant's workspace
+	_, err = resolvePathWithAllowed(filepath.Join(otherTenantWs, "secret.txt"), tenantWs, true, nil)
+	if err == nil {
+		t.Fatal("expected error for path in another tenant's workspace, got nil")
+	}
+
+	// Using GLOBAL workspace as base (the bug): would wrongly allow cross-tenant access
+	_, err = resolvePathWithAllowed(filepath.Join(otherTenantWs, "secret.txt"), globalWs, true, nil)
+	if err != nil {
+		t.Fatal("global workspace allows all children (demonstrates why tenant scoping matters)")
+	}
+}
+
+func TestResolvePathWithAllowed_TeamWorkspaceAccess(t *testing.T) {
+	// Agent workspace and team workspace are separate directories.
+	// Team workspace should be accessible via allowed prefixes.
+	agentWs := t.TempDir()
+	teamWs := t.TempDir()
+	if err := os.WriteFile(filepath.Join(teamWs, "shared.txt"), []byte("shared"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without team workspace in allowed: should BLOCK
+	_, err := resolvePathWithAllowed(filepath.Join(teamWs, "shared.txt"), agentWs, true, nil)
+	if err == nil {
+		t.Fatal("expected error without team workspace in allowed prefixes, got nil")
+	}
+
+	// With team workspace in allowed: should ALLOW
+	_, err = resolvePathWithAllowed(filepath.Join(teamWs, "shared.txt"), agentWs, true, []string{teamWs})
+	if err != nil {
+		t.Fatalf("expected success with team workspace in allowed prefixes, got: %v", err)
+	}
+}
+
 func TestIsPathInside(t *testing.T) {
 	tests := []struct {
 		child, parent string

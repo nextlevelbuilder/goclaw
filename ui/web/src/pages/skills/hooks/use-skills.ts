@@ -118,12 +118,22 @@ export function useSkills() {
 
   const rescanDeps = useCallback(
     async () => {
-      const res = await http.post<{ updated: number; results: Array<{ slug: string; status: string; missing?: string[] }> }>(
-        "/v1/skills/rescan-deps",
-        {},
-      );
-      await invalidate();
-      return res;
+      try {
+        const res = await http.post<{ updated: number; results: Array<{ slug: string; status: string; missing?: string[] }> }>(
+          "/v1/skills/rescan-deps",
+          {},
+        );
+        await invalidate();
+        if (res.updated > 0) {
+          toast.success(i18next.t("skills:toast.rescanUpdated", { count: res.updated }));
+        } else {
+          toast.info(i18next.t("skills:toast.rescanNoChanges"));
+        }
+        return res;
+      } catch (err) {
+        toast.error(i18next.t("skills:toast.rescanFailed"), userFriendlyError(err));
+        throw err;
+      }
     },
     [http, invalidate],
   );

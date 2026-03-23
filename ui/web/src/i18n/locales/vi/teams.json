@@ -160,6 +160,27 @@
       "empty": "File trống hoặc là file nhị phân"
     }
   },
+  "auditLogs": {
+    "title": "Nhật ký hoạt động",
+    "empty": "Chưa có sự kiện",
+    "loadMore": "Tải thêm",
+    "event": {
+      "created": "Tạo mới",
+      "claimed": "Nhận",
+      "assigned": "Phân công",
+      "dispatched": "Gửi đi",
+      "completed": "Hoàn thành",
+      "failed": "Thất bại",
+      "cancelled": "Hủy",
+      "reviewed": "Đánh giá",
+      "approved": "Duyệt",
+      "rejected": "Từ chối",
+      "commented": "Bình luận",
+      "progress": "Tiến độ",
+      "updated": "Cập nhật",
+      "stale": "Quá hạn"
+    }
+  },
   "settings": {
     "title": "Cài đặt nhóm",
     "name": "Tên",
@@ -212,6 +233,9 @@
     "escalationPolicy": "Chính sách Leo thang",
     "escalationMode": "Chế độ Leo thang",
     "escalationModeHint": "Kiểm soát cách xử lý action workspace nhạy cảm (pin, tag, xóa file người khác, set_template) khi agent yêu cầu.",
+    "blockerEscalation": "Escalation khi bị chặn",
+    "blockerEscalationEnabled": "Bật escalation khi bị chặn",
+    "blockerEscalationHint": "Khi member báo blocker, task tự fail và leader được thông báo để retry với hướng dẫn mới.",
     "escalationModeAuto": "Tự động (mặc định)",
     "escalationModeAutoDesc": "LLM lead đánh giá yêu cầu — từ chối hoặc tạo task review. Không bao giờ thực thi trực tiếp.",
     "escalationModeReview": "Review",
@@ -241,7 +265,7 @@
     "versionAdvancedDesc": "Tất cả tính năng V1 cùng khóa thực thi, nhắc nhở theo dõi, quy trình duyệt, theo dõi tiến độ, bình luận, nhật ký hoạt động và tự phục hồi.",
     "whatsNew": "Có gì mới?",
     "versionModal": {
-      "title": "Phiên bản Team",
+      "title": "Tính năng Super Team",
       "feature": "Tính năng",
       "taskManagement": "Quản lý nhiệm vụ",
       "taskManagementDesc": "Tạo, phân công, hoàn thành, hủy nhiệm vụ",
@@ -259,11 +283,11 @@
       "commentsAuditDesc": "Bình luận nhiệm vụ và lịch sử sự kiện đầy đủ",
       "autoRecovery": "Tự phục hồi",
       "autoRecoveryDesc": "Nhiệm vụ bị treo tự đặt lại sau thời gian chờ",
-      "escalationPolicy": "Chính sách leo thang",
-      "escalationPolicyDesc": "Kiểm soát những gì agent có thể tự thực hiện",
+      "escalationPolicy": "Escalation khi bị chặn",
+      "escalationPolicyDesc": "Member có thể báo blocker — tự fail task và thông báo leader để retry",
       "comingSoon": "Sắp ra mắt",
       "downgradeNote": "Hạ cấp an toàn — dữ liệu V2 được giữ lại nhưng ẩn đi.",
-      "betaNote": "V2 hiện đang ở giai đoạn Beta.",
+      "betaNote": "Một số tính năng đang ở giai đoạn Beta.",
       "gotIt": "Đã hiểu"
     }
   },

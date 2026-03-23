@@ -65,6 +65,10 @@ func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration 
 		span.AgentID = &l.agentUUID
 	}
 	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
+	span.TenantID = store.TenantIDFromContext(ctx)
+	if span.TenantID == uuid.Nil {
+		span.TenantID = store.MasterTenantID
+	}
 
 	// Verbose mode: include input messages (same stripping as emitLLMSpan).
 	if collector.Verbose() && len(messages) > 0 {
@@ -195,6 +199,10 @@ func (l *Loop) emitToolSpanStart(ctx context.Context, start time.Time, toolName,
 		span.AgentID = &l.agentUUID
 	}
 	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
+	span.TenantID = store.TenantIDFromContext(ctx)
+	if span.TenantID == uuid.Nil {
+		span.TenantID = store.MasterTenantID
+	}
 
 	collector.EmitSpan(span)
 	return spanID
@@ -302,6 +310,10 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		span.AgentID = &l.agentUUID
 	}
 	span.TeamID = tracing.TraceTeamIDPtrFromContext(ctx)
+	span.TenantID = store.TenantIDFromContext(ctx)
+	if span.TenantID == uuid.Nil {
+		span.TenantID = store.MasterTenantID
+	}
 
 	collector.EmitSpan(span)
 }

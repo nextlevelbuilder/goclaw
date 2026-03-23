@@ -115,8 +115,8 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   };
 
   return (
-    <Card>
-      <CardContent className="space-y-4 pt-6">
+    <Card className="py-0 gap-0">
+      <CardContent className="space-y-4 px-6 py-5">
         <TooltipProvider>
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">{t("provider.title")}</h2>

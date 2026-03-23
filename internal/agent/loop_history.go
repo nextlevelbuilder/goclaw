@@ -179,7 +179,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		OwnerIDs:               l.ownerIDs,
 		Mode:                   mode,
 		ToolNames:              toolNames,
-		SkillsSummary:          l.resolveSkillsSummary(skillFilter),
+		SkillsSummary:          l.resolveSkillsSummary(ctx, skillFilter),
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
 		HasTeam:                hasTeamTools,
@@ -231,8 +231,8 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		slog.Info("sanitizeHistory: cleaned session history",
 			"session", sessionKey, "dropped", droppedCount)
 		cleanedHistory, _ := sanitizeHistory(history)
-		l.sessions.SetHistory(sessionKey, cleanedHistory)
-		l.sessions.Save(sessionKey)
+		l.sessions.SetHistory(ctx, sessionKey, cleanedHistory)
+		l.sessions.Save(ctx, sessionKey)
 	}
 
 	// Current user message
@@ -305,7 +305,7 @@ const (
 // Returns (summary XML, useInline) — useInline=true means skills are inlined and
 // the system prompt should use TS-style "scan <available_skills>" instructions
 // instead of "use skill_search".
-func (l *Loop) resolveSkillsSummary(skillFilter []string) string {
+func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) string {
 	if l.skillsLoader == nil {
 		return ""
 	}
@@ -316,7 +316,7 @@ func (l *Loop) resolveSkillsSummary(skillFilter []string) string {
 		allowList = skillFilter
 	}
 
-	filtered := l.skillsLoader.FilterSkills(allowList)
+	filtered := l.skillsLoader.FilterSkills(ctx, allowList)
 	if len(filtered) == 0 {
 		return ""
 	}
@@ -330,7 +330,7 @@ func (l *Loop) resolveSkillsSummary(skillFilter []string) string {
 
 	if len(filtered) <= skillInlineMaxCount && estimatedTokens <= skillInlineMaxTokens {
 		// Inline mode: build full XML summary
-		return l.skillsLoader.BuildSummary(allowList)
+		return l.skillsLoader.BuildSummary(ctx, allowList)
 	}
 
 	// Search mode: no XML in prompt, agent uses skill_search tool
@@ -471,10 +471,10 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 }
 
 func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
-	history := l.sessions.GetHistory(sessionKey)
+	history := l.sessions.GetHistory(ctx, sessionKey)
 
 	// Use calibrated token estimation when available.
-	lastPT, lastMC := l.sessions.GetLastPromptTokens(sessionKey)
+	lastPT, lastMC := l.sessions.GetLastPromptTokens(ctx, sessionKey)
 	tokenEstimate := EstimateTokensWithCalibration(history, lastPT, lastMC)
 
 	// Resolve compaction thresholds from config with sensible defaults.
@@ -505,7 +505,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	// Memory flush runs synchronously INSIDE the guard
 	// (so concurrent runs don't both trigger flush for the same compaction cycle).
 	flushSettings := ResolveMemoryFlushSettings(l.compactionCfg)
-	if l.shouldRunMemoryFlush(sessionKey, tokenEstimate, flushSettings) {
+	if l.shouldRunMemoryFlush(ctx, sessionKey, tokenEstimate, flushSettings) {
 		l.runMemoryFlush(ctx, sessionKey, flushSettings)
 	}
 
@@ -521,13 +521,13 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 
 		// Re-check: history may have been truncated by a concurrent summarize
 		// that finished between our threshold check and acquiring the lock.
-		history := l.sessions.GetHistory(sessionKey)
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 120*time.Second)
+		defer cancel()
+
+		history := l.sessions.GetHistory(sctx, sessionKey)
 		if len(history) <= keepLast {
 			return
 		}
-
-		sctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
 
 		toSummarize := history[:len(history)-keepLast]
 
@@ -576,13 +576,13 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 			return
 		}
 
-		// Append reminder so agent knows how to recover deeper context when needed.
+		// Fork: append reminder so agent knows how to recover deeper context when needed.
 		rollingText := SanitizeAssistantContent(resp.Content)
 		const memoryReminder = "\n\n[If current context is insufficient — use memory_search to find this session's compacts or search across all history]"
-		l.sessions.SetSummary(sessionKey, rollingText+memoryReminder)
-		l.sessions.TruncateHistory(sessionKey, keepLast)
-		l.sessions.IncrementCompaction(sessionKey)
-		l.sessions.Save(sessionKey)
+		l.sessions.SetSummary(sctx, sessionKey, rollingText+memoryReminder)
+		l.sessions.TruncateHistory(sctx, sessionKey, keepLast)
+		l.sessions.IncrementCompaction(sctx, sessionKey)
+		l.sessions.Save(sctx, sessionKey)
 	}()
 }
 

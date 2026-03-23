@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/json"
@@ -35,20 +36,22 @@ func (s *PGPairingStore) SetOnRequest(cb func(code, senderID, channel, chatID st
 	s.onRequest = cb
 }
 
-func (s *PGPairingStore) RequestPairing(senderID, channel, chatID, accountID string, metadata map[string]string) (string, error) {
-	// Prune expired
-	s.db.Exec("DELETE FROM pairing_requests WHERE expires_at < $1", time.Now())
+func (s *PGPairingStore) RequestPairing(ctx context.Context, senderID, channel, chatID, accountID string, metadata map[string]string) (string, error) {
+	tid := tenantIDForInsert(ctx)
 
-	// Check max pending
+	// Prune expired
+	s.db.ExecContext(ctx, "DELETE FROM pairing_requests WHERE expires_at < $1", time.Now())
+
+	// Check max pending (per tenant)
 	var count int64
-	s.db.QueryRow("SELECT COUNT(*) FROM pairing_requests WHERE account_id = $1", accountID).Scan(&count)
+	s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pairing_requests WHERE account_id = $1 AND tenant_id = $2", accountID, tid).Scan(&count)
 	if count >= maxPendingPerAccount {
 		return "", fmt.Errorf("max pending pairing requests (%d) exceeded", maxPendingPerAccount)
 	}
 
-	// Check existing
+	// Check existing (per tenant)
 	var existingCode string
-	err := s.db.QueryRow("SELECT code FROM pairing_requests WHERE sender_id = $1 AND channel = $2", senderID, channel).Scan(&existingCode)
+	err := s.db.QueryRowContext(ctx, "SELECT code FROM pairing_requests WHERE sender_id = $1 AND channel = $2 AND tenant_id = $3", senderID, channel, tid).Scan(&existingCode)
 	if err == nil {
 		return existingCode, nil
 	}
@@ -60,10 +63,10 @@ func (s *PGPairingStore) RequestPairing(senderID, channel, chatID, accountID str
 
 	code := generatePairingCode()
 	now := time.Now()
-	_, err = s.db.Exec(
-		`INSERT INTO pairing_requests (id, code, sender_id, channel, chat_id, account_id, expires_at, created_at, metadata)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		uuid.Must(uuid.NewV7()), code, senderID, channel, chatID, accountID, now.Add(codeTTL), now, metaJSON,
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO pairing_requests (id, code, sender_id, channel, chat_id, account_id, expires_at, created_at, metadata, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		uuid.Must(uuid.NewV7()), code, senderID, channel, chatID, accountID, now.Add(codeTTL), now, metaJSON, tid,
 	)
 	if err != nil {
 		return "", fmt.Errorf("create pairing request: %w", err)
@@ -74,30 +77,34 @@ func (s *PGPairingStore) RequestPairing(senderID, channel, chatID, accountID str
 	return code, nil
 }
 
-func (s *PGPairingStore) ApprovePairing(code, approvedBy string) (*store.PairedDeviceData, error) {
+// ApprovePairing looks up by code (globally unique random token) and creates paired device.
+// The approver's tenant context determines paired_devices.tenant_id.
+func (s *PGPairingStore) ApprovePairing(ctx context.Context, code, approvedBy string) (*store.PairedDeviceData, error) {
 	// Prune expired
-	s.db.Exec("DELETE FROM pairing_requests WHERE expires_at < $1", time.Now())
+	s.db.ExecContext(ctx, "DELETE FROM pairing_requests WHERE expires_at < $1", time.Now())
 
 	var reqID uuid.UUID
 	var senderID, channel, chatID string
 	var metaJSON []byte
-	err := s.db.QueryRow(
-		"SELECT id, sender_id, channel, chat_id, COALESCE(metadata, '{}') FROM pairing_requests WHERE code = $1", code,
-	).Scan(&reqID, &senderID, &channel, &chatID, &metaJSON)
+	var reqTenantID uuid.UUID
+	// Code lookup is cross-tenant (random token, approver is WS/HTTP user)
+	err := s.db.QueryRowContext(ctx,
+		"SELECT id, sender_id, channel, chat_id, COALESCE(metadata, '{}'), tenant_id FROM pairing_requests WHERE code = $1", code,
+	).Scan(&reqID, &senderID, &channel, &chatID, &metaJSON, &reqTenantID)
 	if err != nil {
 		return nil, fmt.Errorf("pairing code %s not found or expired", code)
 	}
 
 	// Remove from pending
-	s.db.Exec("DELETE FROM pairing_requests WHERE id = $1", reqID)
+	s.db.ExecContext(ctx, "DELETE FROM pairing_requests WHERE id = $1", reqID)
 
-	// Add to paired (with expiry for defense-in-depth)
+	// Add to paired — use the request's tenant (the channel that initiated pairing)
 	now := time.Now()
 	expiresAt := now.Add(pairedDeviceTTL)
-	_, err = s.db.Exec(
-		`INSERT INTO paired_devices (id, sender_id, channel, chat_id, paired_by, paired_at, metadata, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		uuid.Must(uuid.NewV7()), senderID, channel, chatID, approvedBy, now, metaJSON, expiresAt,
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO paired_devices (id, sender_id, channel, chat_id, paired_by, paired_at, metadata, expires_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		uuid.Must(uuid.NewV7()), senderID, channel, chatID, approvedBy, now, metaJSON, expiresAt, reqTenantID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create paired device: %w", err)
@@ -118,8 +125,9 @@ func (s *PGPairingStore) ApprovePairing(code, approvedBy string) (*store.PairedD
 	}, nil
 }
 
-func (s *PGPairingStore) DenyPairing(code string) error {
-	result, err := s.db.Exec("DELETE FROM pairing_requests WHERE code = $1", code)
+func (s *PGPairingStore) DenyPairing(ctx context.Context, code string) error {
+	// Code lookup is cross-tenant (random token)
+	result, err := s.db.ExecContext(ctx, "DELETE FROM pairing_requests WHERE code = $1", code)
 	if err != nil {
 		return err
 	}
@@ -130,8 +138,9 @@ func (s *PGPairingStore) DenyPairing(code string) error {
 	return nil
 }
 
-func (s *PGPairingStore) RevokePairing(senderID, channel string) error {
-	result, err := s.db.Exec("DELETE FROM paired_devices WHERE sender_id = $1 AND channel = $2", senderID, channel)
+func (s *PGPairingStore) RevokePairing(ctx context.Context, senderID, channel string) error {
+	tid := tenantIDForInsert(ctx)
+	result, err := s.db.ExecContext(ctx, "DELETE FROM paired_devices WHERE sender_id = $1 AND channel = $2 AND tenant_id = $3", senderID, channel, tid)
 	if err != nil {
 		return err
 	}
@@ -142,11 +151,12 @@ func (s *PGPairingStore) RevokePairing(senderID, channel string) error {
 	return nil
 }
 
-func (s *PGPairingStore) IsPaired(senderID, channel string) (bool, error) {
+func (s *PGPairingStore) IsPaired(ctx context.Context, senderID, channel string) (bool, error) {
+	tid := tenantIDForInsert(ctx)
 	var count int64
-	err := s.db.QueryRow(
-		"SELECT COUNT(*) FROM paired_devices WHERE sender_id = $1 AND channel = $2 AND (expires_at IS NULL OR expires_at > NOW())",
-		senderID, channel,
+	err := s.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM paired_devices WHERE sender_id = $1 AND channel = $2 AND tenant_id = $3 AND (expires_at IS NULL OR expires_at > NOW())",
+		senderID, channel, tid,
 	).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("pairing check query: %w", err)
@@ -154,12 +164,15 @@ func (s *PGPairingStore) IsPaired(senderID, channel string) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *PGPairingStore) ListPending() []store.PairingRequestData {
-	// Prune expired
-	s.db.Exec("DELETE FROM pairing_requests WHERE expires_at < $1", time.Now())
+func (s *PGPairingStore) ListPending(ctx context.Context) []store.PairingRequestData {
+	tid := tenantIDForInsert(ctx)
 
-	rows, err := s.db.Query(
-		"SELECT code, sender_id, channel, chat_id, account_id, created_at, expires_at, COALESCE(metadata, '{}') FROM pairing_requests ORDER BY created_at DESC")
+	// Prune expired
+	s.db.ExecContext(ctx, "DELETE FROM pairing_requests WHERE expires_at < $1", time.Now())
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT code, sender_id, channel, chat_id, account_id, created_at, expires_at, COALESCE(metadata, '{}')
+		 FROM pairing_requests WHERE tenant_id = $1 ORDER BY created_at DESC`, tid)
 	if err != nil {
 		return nil
 	}
@@ -186,11 +199,15 @@ func (s *PGPairingStore) ListPending() []store.PairingRequestData {
 	return result
 }
 
-func (s *PGPairingStore) ListPaired() []store.PairedDeviceData {
-	// Prune expired paired devices
-	s.db.Exec("DELETE FROM paired_devices WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+func (s *PGPairingStore) ListPaired(ctx context.Context) []store.PairedDeviceData {
+	tid := tenantIDForInsert(ctx)
 
-	rows, err := s.db.Query("SELECT sender_id, channel, chat_id, paired_by, paired_at, COALESCE(metadata, '{}') FROM paired_devices ORDER BY paired_at DESC")
+	// Prune expired paired devices
+	s.db.ExecContext(ctx, "DELETE FROM paired_devices WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT sender_id, channel, chat_id, paired_by, paired_at, COALESCE(metadata, '{}')
+		 FROM paired_devices WHERE tenant_id = $1 ORDER BY paired_at DESC`, tid)
 	if err != nil {
 		return nil
 	}

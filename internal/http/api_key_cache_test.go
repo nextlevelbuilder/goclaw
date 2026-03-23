@@ -41,10 +41,10 @@ func (m *mockAPIKeyStore) TouchLastUsed(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (m *mockAPIKeyStore) Create(_ context.Context, _ *store.APIKeyData) error   { return nil }
-func (m *mockAPIKeyStore) List(_ context.Context) ([]store.APIKeyData, error)    { return nil, nil }
-func (m *mockAPIKeyStore) Revoke(_ context.Context, _ uuid.UUID) error           { return nil }
-func (m *mockAPIKeyStore) Delete(_ context.Context, _ uuid.UUID) error           { return nil }
+func (m *mockAPIKeyStore) Create(_ context.Context, _ *store.APIKeyData) error            { return nil }
+func (m *mockAPIKeyStore) List(_ context.Context, _ string) ([]store.APIKeyData, error)   { return nil, nil }
+func (m *mockAPIKeyStore) Revoke(_ context.Context, _ uuid.UUID, _ string) error          { return nil }
+func (m *mockAPIKeyStore) Delete(_ context.Context, _ uuid.UUID, _ string) error          { return nil }
 
 func (m *mockAPIKeyStore) getCalls() int {
 	m.mu.Lock()

@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -22,7 +23,7 @@ type TeamsMethods struct {
 	agentRouter *agent.Router        // for cache invalidation
 	msgBus      *bus.MessageBus      // for pub/sub cache invalidation
 	eventBus    bus.EventPublisher
-	dataDir     string // workspace data directory for resolving file paths
+	dataDir string // workspace data directory for resolving file paths
 }
 
 func NewTeamsMethods(teamStore store.TeamStore, agentStore store.AgentStore, linkStore store.AgentLinkStore, agentRouter *agent.Router, msgBus *bus.MessageBus, eventBus bus.EventPublisher, dataDir string) *TeamsMethods {
@@ -73,7 +74,14 @@ func (m *TeamsMethods) handleList(ctx context.Context, client *gateway.Client, r
 		return
 	}
 
-	teams, err := m.teamStore.ListTeams(ctx)
+	var teams []store.TeamData
+	var err error
+	if permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
+		teams, err = m.teamStore.ListTeams(ctx)
+	} else {
+		callerID := store.UserIDFromContext(ctx)
+		teams, err = m.teamStore.ListUserTeams(ctx, callerID)
+	}
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
@@ -118,7 +126,7 @@ func (m *TeamsMethods) handleCreate(ctx context.Context, client *gateway.Client,
 	}
 
 	// Resolve lead agent
-	leadAgent, err := resolveAgentInfo(m.agentStore, params.Lead)
+	leadAgent, err := resolveAgentInfo(ctx, m.agentStore, params.Lead)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "lead agent: "+err.Error()))
 		return
@@ -134,7 +142,7 @@ func (m *TeamsMethods) handleCreate(ctx context.Context, client *gateway.Client,
 	// Resolve member agents
 	var memberAgents []*store.AgentData
 	for _, memberKey := range params.Members {
-		ag, err := resolveAgentInfo(m.agentStore, memberKey)
+		ag, err := resolveAgentInfo(ctx, m.agentStore, memberKey)
 		if err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "member agent "+memberKey+": "+err.Error()))
 			return

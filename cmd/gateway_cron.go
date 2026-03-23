@@ -60,8 +60,11 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			)
 		}
 
+		// Build context with tenant scope so agent loop events are scoped correctly.
+		cronCtx := store.WithTenantID(context.Background(), job.TenantID)
+
 		// Schedule through cron lane — scheduler handles agent resolution and concurrency
-		outCh := sched.Schedule(context.Background(), scheduler.LaneCron, agent.RunRequest{
+		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
 			SessionKey:        sessionKey,
 			Message:           job.Payload.Message,
 			Channel:           channel,

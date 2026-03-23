@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -23,7 +25,7 @@ type ChannelFactory func(name string, creds json.RawMessage, cfg json.RawMessage
 	msgBus *bus.MessageBus, pairingSvc store.PairingStore) (Channel, error)
 
 // InstanceLoader loads channel instances from the database and registers them with the Manager.
-// Follows the DynamicToolLoader pattern: LoadAll at startup, Reload on cache invalidation.
+// Follows a load-all-at-startup pattern with cache invalidation for reload.
 type InstanceLoader struct {
 	store       store.ChannelInstanceStore
 	agentStore  store.AgentStore
@@ -234,6 +236,10 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	if base, ok := ch.(interface{ SetType(string) }); ok {
 		base.SetType(inst.ChannelType)
 	}
+	// Propagate tenant_id from DB instance to channel for tenant-scoped message handling.
+	if base, ok := ch.(interface{ SetTenantID(uuid.UUID) }); ok {
+		base.SetTenantID(inst.TenantID)
+	}
 
 	// Wire pending message auto-compaction.
 	// Priority: config provider/model > agent's provider/model > fallback.
@@ -242,8 +248,9 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		var model string
 
 		// Try config-level provider/model first.
+		tctx := store.WithTenantID(ctx, inst.TenantID)
 		if l.pendingCompactCfg != nil && l.pendingCompactCfg.Provider != "" {
-			if cp, err := l.providerReg.Get(l.pendingCompactCfg.Provider); err == nil {
+			if cp, err := l.providerReg.Get(tctx, l.pendingCompactCfg.Provider); err == nil {
 				p = cp
 				model = l.pendingCompactCfg.Model
 				if model == "" {
@@ -253,7 +260,7 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		}
 		// Fallback: agent's provider/model.
 		if p == nil && ag != nil && ag.Provider != "" {
-			if ap, err := l.providerReg.Get(ag.Provider); err == nil {
+			if ap, err := l.providerReg.Get(tctx, ag.Provider); err == nil {
 				p = ap
 				model = ag.Model
 				if model == "" {

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -73,6 +74,13 @@ func (h *TracesHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Non-admin callers may only see their own traces.
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		opts.UserID = callerID
+	}
+
 	traces, err := h.tracing.ListTraces(r.Context(), opts)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -102,6 +110,16 @@ func (h *TracesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "trace", traceIDStr)})
 		return
+	}
+
+	// Non-admin callers may only access their own traces.
+	auth := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		if trace.UserID != callerID {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "trace", traceIDStr)})
+			return
+		}
 	}
 
 	spans, err := h.tracing.GetTraceSpans(r.Context(), traceID)
@@ -158,6 +176,21 @@ func (h *TracesHandler) handleExport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "trace")})
 		return
+	}
+
+	// Verify ownership before export.
+	rootTrace, err := h.tracing.GetTrace(r.Context(), traceID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "trace", traceID.String())})
+		return
+	}
+	authExport := resolveAuth(r, h.token)
+	if !permissions.HasMinRole(authExport.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		if rootTrace.UserID != callerID {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "trace", traceID.String())})
+			return
+		}
 	}
 
 	entry, err := h.collectTraceTree(r.Context(), traceID, 0)

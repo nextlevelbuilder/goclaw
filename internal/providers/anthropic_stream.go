@@ -149,6 +149,10 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("anthropic stream read error: %w", err)
+	}
+
 	// Parse accumulated tool call JSON arguments
 	for i, rawJSON := range toolCallJSON {
 		if rawJSON != "" {

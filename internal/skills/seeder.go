@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -20,7 +21,7 @@ type SystemSkillStore interface {
 	UpsertSystemSkill(ctx context.Context, p pg.SkillCreateParams) (uuid.UUID, bool, string, error)
 	GetNextVersion(slug string) int
 	BumpVersion()
-	UpdateSkill(id uuid.UUID, updates map[string]interface{}) error
+	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]interface{}) error
 	StoreMissingDeps(id uuid.UUID, missing []string) error
 }
 
@@ -130,7 +131,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 			// scripts/ dir has content but the managed scripts/ dir is missing or empty.
 			if needsReCopy(skillDir, actualDir) {
 				slog.Info("seeder: managed dir incomplete, re-copying", "slug", slug, "dir", actualDir)
-				if err := copyDir(skillDir, actualDir); err != nil {
+				if err := CopyDir(skillDir, actualDir); err != nil {
 					slog.Error("seeder: failed to re-copy skill files", "slug", slug, "error", err)
 				}
 			}
@@ -140,7 +141,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 		}
 
 		// Copy skill directory to managed dir
-		if err := copyDir(skillDir, destDir); err != nil {
+		if err := CopyDir(skillDir, destDir); err != nil {
 			slog.Error("seeder: failed to copy skill files", "slug", slug, "error", err)
 			continue
 		}
@@ -176,7 +177,7 @@ func (s *Seeder) CheckDepsAsync(skills []seededSkill, msgBus *bus.MessageBus) {
 			status := "active"
 			if !ok {
 				status = "archived"
-				_ = s.store.UpdateSkill(sk.id, map[string]interface{}{"status": "archived"})
+				_ = s.store.UpdateSkill(store.WithCrossTenant(context.Background()), sk.id, map[string]interface{}{"status": "archived"})
 				s.store.BumpVersion()
 				slog.Warn("seeder: skill deps missing", "slug", sk.slug, "missing", FormatMissing(missing))
 			}
@@ -230,7 +231,7 @@ func (s *Seeder) copySharedDir(name string) {
 		return
 	}
 
-	if err := copyDir(src, dst); err != nil {
+	if err := CopyDir(src, dst); err != nil {
 		slog.Warn("seeder: failed to copy shared dir", "name", name, "error", err)
 	}
 }
@@ -239,7 +240,8 @@ func (s *Seeder) copySharedDir(name string) {
 // Resolves the top-level path and any mid-tree symlinks pointing to directories
 // so local module symlinks (e.g. scripts/office -> ../../_shared/office)
 // are copied as real directories rather than left as dangling entries.
-func copyDir(src, dst string) error {
+// CopyDir recursively copies a directory tree.
+func CopyDir(src, dst string) error {
 	resolved, err := filepath.EvalSymlinks(src)
 	if err != nil {
 		resolved = src
@@ -264,7 +266,7 @@ func copyDir(src, dst string) error {
 		// Detect and recurse into directory symlinks so local modules are fully copied.
 		if info.Mode()&os.ModeSymlink != 0 {
 			if realInfo, statErr := os.Stat(path); statErr == nil && realInfo.IsDir() {
-				return copyDir(path, target)
+				return CopyDir(path, target)
 			}
 			return nil // skip broken symlinks
 		}

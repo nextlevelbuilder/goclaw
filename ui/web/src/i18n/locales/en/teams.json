@@ -160,6 +160,27 @@
       "empty": "File is empty or binary"
     }
   },
+  "auditLogs": {
+    "title": "Audit Logs",
+    "empty": "No events yet",
+    "loadMore": "Load more",
+    "event": {
+      "created": "Created",
+      "claimed": "Claimed",
+      "assigned": "Assigned",
+      "dispatched": "Dispatched",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "reviewed": "Reviewed",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "commented": "Commented",
+      "progress": "Progress",
+      "updated": "Updated",
+      "stale": "Stale"
+    }
+  },
   "settings": {
     "title": "Team Settings",
     "name": "Name",
@@ -212,6 +233,9 @@
     "escalationPolicy": "Escalation Policy",
     "escalationMode": "Escalation Mode",
     "escalationModeHint": "Controls how privileged workspace actions (pin, tag, delete others' files, set_template) are handled when requested by agents.",
+    "blockerEscalation": "Blocker Escalation",
+    "blockerEscalationEnabled": "Enable blocker escalation",
+    "blockerEscalationHint": "When members flag a blocker, the task auto-fails and the leader is notified to retry with updated instructions.",
     "escalationModeAuto": "Auto (default)",
     "escalationModeAutoDesc": "LLM lead evaluates the request — either rejects or creates a review task. Never executes directly.",
     "escalationModeReview": "Review",
@@ -241,7 +265,7 @@
     "versionAdvancedDesc": "All V1 features plus execution locking, follow-up reminders, review workflow, progress tracking, comments, audit trail, and auto-recovery.",
     "whatsNew": "What's different?",
     "versionModal": {
-      "title": "Team Versions",
+      "title": "Super Team Features",
       "feature": "Feature",
       "taskManagement": "Task Management",
       "taskManagementDesc": "Create, assign, complete, cancel tasks",
@@ -259,11 +283,11 @@
       "commentsAuditDesc": "Task comments and full event history",
       "autoRecovery": "Auto-Recovery",
       "autoRecoveryDesc": "Stuck tasks auto-reset after timeout",
-      "escalationPolicy": "Escalation Policy",
-      "escalationPolicyDesc": "Control what agents can do autonomously",
+      "escalationPolicy": "Blocker Escalation",
+      "escalationPolicyDesc": "Members can flag blockers — auto-fails task and notifies leader to retry",
       "comingSoon": "Coming soon",
       "downgradeNote": "Downgrade is safe — V2 data is preserved but hidden.",
-      "betaNote": "V2 is currently in Beta.",
+      "betaNote": "Some features are currently in Beta.",
       "gotIt": "Got it"
     }
   },

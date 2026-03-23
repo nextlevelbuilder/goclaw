@@ -270,7 +270,7 @@ Emitted when a human rejects a task via the dashboard (status becomes cancelled 
 ```
 
 #### `team.task.commented`
-Emitted when a human adds a comment to a task (no status change).
+Emitted when a human or agent adds a comment to a task. For agent blocker comments, also triggers task failure and leader escalation (see below).
 
 ```json
 {
@@ -279,9 +279,18 @@ Emitted when a human adds a comment to a task (no status change).
   "user_id": "user123",
   "channel": "dashboard",
   "chat_id": "-100123456",
-  "timestamp": "2026-03-05T10:02:45Z"
+  "timestamp": "2026-03-05T10:02:45Z",
+  "actor_type": "human",
+  "actor_id": "user123"
 }
 ```
+
+**Agent blocker comments** (type='blocker') trigger special handling:
+- Comment is saved with `comment_type='blocker'`
+- Task is auto-failed (transitions to failed status)
+- `EventTeamTaskFailed` is emitted (see below)
+- Lead agent receives escalation message via `system:escalation`
+- Member's session is cancelled
 
 #### `team.task.deleted`
 Emitted when a terminal-status task is hard-deleted via the dashboard.
@@ -301,19 +310,98 @@ Emitted when a terminal-status task is hard-deleted via the dashboard.
 ```
 
 #### `team.task.failed`
-Reserved for future use. Emitted when a task auto-execution fails (not currently triggered).
+Emitted when a task is auto-failed due to blocker escalation or system errors.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "task_number": 5,
+  "subject": "Create Instagram image",
+  "status": "failed",
+  "reason": "Blocked: Cannot find API documentation",
+  "owner_agent_key": "tieu-la",
+  "owner_display_name": "Tieu La",
+  "user_id": "user123",
+  "channel": "telegram",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:02:15Z",
+  "actor_type": "system",
+  "actor_id": "blocker-escalation"
+}
+```
 
 #### `team.task.reviewed`
-Reserved for future use. Emitted when a task enters review stage (not currently triggered).
+Emitted when a member submits a task for review via `team_tasks(action="review", task_id="...")`.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "status": "in_review",
+  "owner_agent_key": "tieu-la",
+  "owner_display_name": "Tieu La",
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:02:30Z",
+  "actor_type": "agent",
+  "actor_id": "tieu-la"
+}
+```
 
 #### `team.task.progress`
-Reserved for future use. Emitted periodically for long-running tasks (not currently triggered).
+Emitted when a member updates task progress via `team_tasks(action="progress", task_id="...", progress_percent=..., progress_step="...")`.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "progress_percent": 50,
+  "progress_step": "Waiting for API response",
+  "user_id": "user123",
+  "channel": "system",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:02:00Z",
+  "actor_type": "agent",
+  "actor_id": "tieu-la"
+}
+```
 
 #### `team.task.updated`
-Reserved for future use. Emitted when task metadata is updated (not currently triggered).
+Emitted when task metadata (priority, description, etc.) is updated via `team_tasks(action="update", task_id="...", ...)`.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "changes": ["priority", "description"],
+  "user_id": "user123",
+  "channel": "dashboard",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:01:30Z",
+  "actor_type": "human",
+  "actor_id": "user123"
+}
+```
 
 #### `team.task.stale`
-Reserved for future use. Emitted when a task hasn't been updated within a timeout threshold (not currently triggered).
+Emitted when a task hasn't been updated within a timeout threshold and is marked as stale by the system.
+
+```json
+{
+  "team_id": "019c9503-...",
+  "task_id": "019ca84f-...",
+  "status": "stale",
+  "reason": "No activity for 7 days",
+  "user_id": "user123",
+  "channel": "system",
+  "chat_id": "-100123456",
+  "timestamp": "2026-03-05T10:00:00Z",
+  "actor_type": "system",
+  "actor_id": "stale-detector"
+}
+```
 
 ---
 
@@ -558,11 +646,11 @@ All event name constants are defined in `pkg/protocol/events.go`:
 | `EventTeamTaskRejected` | `team.task.rejected` | Active |
 | `EventTeamTaskCommented` | `team.task.commented` | Active |
 | `EventTeamTaskDeleted` | `team.task.deleted` | Active |
-| `EventTeamTaskFailed` | `team.task.failed` | Reserved (future) |
-| `EventTeamTaskReviewed` | `team.task.reviewed` | Reserved (future) |
-| `EventTeamTaskProgress` | `team.task.progress` | Reserved (future) |
-| `EventTeamTaskUpdated` | `team.task.updated` | Reserved (future) |
-| `EventTeamTaskStale` | `team.task.stale` | Reserved (future) |
+| `EventTeamTaskFailed` | `team.task.failed` | Active |
+| `EventTeamTaskReviewed` | `team.task.reviewed` | Active |
+| `EventTeamTaskProgress` | `team.task.progress` | Active |
+| `EventTeamTaskUpdated` | `team.task.updated` | Active |
+| `EventTeamTaskStale` | `team.task.stale` | Active |
 
 ### Team CRUD Events
 | Constant | Event Name |

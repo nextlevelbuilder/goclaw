@@ -107,6 +107,9 @@
     "updated": "技能已更新",
     "updateFailed": "更新技能失败",
     "deleted": "技能已删除",
-    "deleteFailed": "删除技能失败"
+    "deleteFailed": "删除技能失败",
+    "rescanUpdated": "已更新 {{count}} 个技能",
+    "rescanNoChanges": "所有技能已是最新",
+    "rescanFailed": "重新扫描依赖失败"
   }
 }

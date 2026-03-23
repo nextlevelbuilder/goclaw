@@ -125,7 +125,7 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 	images, _ := params["images"].([]providers.ImageContent)
 
 	// Get the full provider for Chat() access
-	p, err := t.registry.Get(providerName)
+	p, err := t.registry.Get(ctx, providerName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provider %q not available: %w", providerName, err)
 	}

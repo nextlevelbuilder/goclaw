@@ -38,9 +38,6 @@ var summoningFiles = []string{
 // fileTagRe parses <file name="SOUL.md">content</file> from LLM output.
 var fileTagRe = regexp.MustCompile(`(?s)<file\s+name="([^"]+)">\s*(.*?)\s*</file>`)
 
-// identityNameRe extracts the Name field from IDENTITY.md format: - **Name:** value
-var identityNameRe = regexp.MustCompile(`(?m)^-\s*\*\*Name:\*\*\s*(.+)$`)
-
 // frontmatterTagRe parses <frontmatter>short expertise summary</frontmatter> from LLM output.
 var frontmatterTagRe = regexp.MustCompile(`(?s)<frontmatter>\s*(.*?)\s*</frontmatter>`)
 
@@ -72,12 +69,12 @@ const singleCallTimeout = 300 * time.Second
 // On retry (resummon), skips files that were already generated (differ from template).
 // On success: stores generated files and sets agent status to "active".
 // On failure: keeps template files (already seeded) and sets status to store.AgentStatusSummonFailed.
-func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, description string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Second)
+func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, providerName, model, description string) {
+	ctx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 600*time.Second)
 	defer cancel()
 
 	s.ensureUserPredefined(ctx, agentID)
-	s.emitEvent(agentID, SummonEventStarted, "", "")
+	s.emitEvent(agentID, tenantID, SummonEventStarted, "", "")
 
 	// Check which files already exist (from a previous partial run)
 	existingMap := s.loadExistingFiles(ctx, agentID)
@@ -85,9 +82,9 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 	// Skip if all files already generated
 	if s.isGenerated(existingMap, bootstrap.SoulFile) && s.isGenerated(existingMap, bootstrap.IdentityFile) {
 		slog.Info("summoning: all files already generated, skipping", "agent", agentID)
-		s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.SoulFile, "")
-		s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
-		s.finishSummon(ctx, agentID, existingMap[bootstrap.IdentityFile], "", description)
+		s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.SoulFile, "")
+		s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
+		s.finishSummon(ctx, agentID, tenantID, existingMap[bootstrap.IdentityFile], "", description)
 		return
 	}
 
@@ -98,15 +95,15 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 
 	if err == nil {
 		slog.Info("summoning: single-call succeeded", "agent", agentID)
-		s.storeFiles(ctx, agentID, files)
-		s.finishSummon(ctx, agentID, files[bootstrap.IdentityFile], files[frontmatterKey], description)
+		s.storeFiles(ctx, agentID, tenantID, files)
+		s.finishSummon(ctx, agentID, tenantID, files[bootstrap.IdentityFile], files[frontmatterKey], description)
 		return
 	}
 
 	// Non-retryable error → fail immediately
 	if !isRetryableError(err) {
 		slog.Warn("summoning: single-call failed (non-retryable)", "agent", agentID, "error", err)
-		s.emitEvent(agentID, SummonEventFailed, "", err.Error())
+		s.emitEvent(agentID, tenantID, SummonEventFailed, "", err.Error())
 		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
 		return
 	}
@@ -124,12 +121,12 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 	if s.isGenerated(existingMap, bootstrap.SoulFile) {
 		soulContent = existingMap[bootstrap.SoulFile]
 		slog.Info("summoning: SOUL.md already generated, skipping", "agent", agentID)
-		s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.SoulFile, "")
+		s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.SoulFile, "")
 	} else {
 		soulFiles, soulErr := s.generateFiles(ctx, providerName, model, s.buildSoulPrompt(description))
 		if soulErr != nil {
 			slog.Warn("summoning: SOUL.md generation failed", "agent", agentID, "error", soulErr)
-			s.emitEvent(agentID, SummonEventFailed, "", soulErr.Error())
+			s.emitEvent(agentID, tenantID, SummonEventFailed, "", soulErr.Error())
 			s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
 			return
 		}
@@ -139,7 +136,7 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 			if storeErr := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.SoulFile, soulContent); storeErr != nil {
 				slog.Warn("summoning: failed to store SOUL.md", "agent", agentID, "error", storeErr)
 			} else {
-				s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.SoulFile, "")
+				s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.SoulFile, "")
 			}
 		}
 	}
@@ -152,12 +149,12 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 	if !identityNeeded && !userPredNeeded {
 		identityContent = existingMap[bootstrap.IdentityFile]
 		slog.Info("summoning: IDENTITY.md + USER_PREDEFINED.md already generated, skipping", "agent", agentID)
-		s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
+		s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
 	} else {
 		idFiles, idErr := s.generateFiles(ctx, providerName, model, s.buildIdentityPrompt(description, soulContent))
 		if idErr != nil {
 			slog.Warn("summoning: IDENTITY.md generation failed", "agent", agentID, "error", idErr)
-			s.emitEvent(agentID, SummonEventFailed, "", idErr.Error())
+			s.emitEvent(agentID, tenantID, SummonEventFailed, "", idErr.Error())
 			s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
 			return
 		}
@@ -169,23 +166,23 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, providerName, model, desc
 			if storeErr := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.IdentityFile, identityContent); storeErr != nil {
 				slog.Warn("summoning: failed to store IDENTITY.md", "agent", agentID, "error", storeErr)
 			} else {
-				s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
+				s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.IdentityFile, "")
 			}
 		}
 		if upContent := idFiles[bootstrap.UserPredefinedFile]; upContent != "" && userPredNeeded {
 			if storeErr := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.UserPredefinedFile, upContent); storeErr != nil {
 				slog.Warn("summoning: failed to store USER_PREDEFINED.md", "agent", agentID, "error", storeErr)
 			} else {
-				s.emitEvent(agentID, SummonEventFileGenerated, bootstrap.UserPredefinedFile, "")
+				s.emitEvent(agentID, tenantID, SummonEventFileGenerated, bootstrap.UserPredefinedFile, "")
 			}
 		}
 	}
 
-	s.finishSummon(ctx, agentID, identityContent, frontmatter, description)
+	s.finishSummon(ctx, agentID, tenantID, identityContent, frontmatter, description)
 }
 
 // finishSummon saves agent metadata and marks the agent as active.
-func (s *AgentSummoner) finishSummon(ctx context.Context, agentID uuid.UUID, identityContent, frontmatter, description string) {
+func (s *AgentSummoner) finishSummon(ctx context.Context, agentID, tenantID uuid.UUID, identityContent, frontmatter, description string) {
 	updates := map[string]any{}
 	if frontmatter == "" {
 		frontmatter = truncateUTF8(description, 200)
@@ -202,7 +199,7 @@ func (s *AgentSummoner) finishSummon(ctx context.Context, agentID uuid.UUID, ide
 		}
 	}
 	s.setAgentStatus(ctx, agentID, store.AgentStatusActive)
-	s.emitEvent(agentID, SummonEventCompleted, "", "")
+	s.emitEvent(agentID, tenantID, SummonEventCompleted, "", "")
 	slog.Info("summoning: completed", "agent", agentID)
 }
 

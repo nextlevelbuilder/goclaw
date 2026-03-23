@@ -3,12 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Combobox } from "@/components/ui/combobox";
-import { X, Save, Bell, ShieldAlert, Clock, Info, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
+import { X, Save, Bell, ShieldAlert, Clock, FolderLock, FolderSync, Zap, Bot, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import type { TeamData, TeamAccessSettings, TeamNotifyConfig, EscalationMode, EscalationAction } from "@/types/team";
 import { useTeams } from "./hooks/use-teams";
-import { TeamVersionModal } from "./team-version-modal";
 
 interface TeamSettingsTabProps {
   teamId: string;
@@ -66,7 +65,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
 
   // Parse initial settings
   const initial = (team.settings ?? {}) as TeamAccessSettings;
-  const [version, setVersion] = useState<number>(initial.version ?? 1);
   const [allowUserIds, setAllowUserIds] = useState<string[]>(initial.allow_user_ids ?? []);
   const [denyUserIds, setDenyUserIds] = useState<string[]>(initial.deny_user_ids ?? []);
   const [allowChannels, setAllowChannels] = useState<string[]>(initial.allow_channels ?? []);
@@ -85,13 +83,13 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const [memberRequestsAutoDispatch, setMemberRequestsAutoDispatch] = useState(initMemberRequests.auto_dispatch ?? false);
   const [escalationMode, setEscalationMode] = useState<EscalationMode | "">(initial.escalation_mode ?? "");
   const [escalationActions, setEscalationActions] = useState<EscalationAction[]>(initial.escalation_actions ?? []);
+  const initBlockerEscalation = initial.blocker_escalation ?? {};
+  const [blockerEscalationEnabled, setBlockerEscalationEnabled] = useState(initBlockerEscalation.enabled ?? true);
   const [followupInterval, setFollowupInterval] = useState<number>(initial.followup_interval_minutes ?? 30);
   const [followupMaxReminders, setFollowupMaxReminders] = useState<number>(initial.followup_max_reminders ?? 0);
   const [workspaceScope, setWorkspaceScope] = useState<string>(initial.workspace_scope ?? "isolated");
-  const isTeamV2 = version >= 2;
 
   const [saving, setSaving] = useState(false);
-  const [versionModalOpen, setVersionModalOpen] = useState(false);
 
   // Load known users for combobox
   useEffect(() => {
@@ -101,7 +99,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   // Reset when team changes
   useEffect(() => {
     const s = (team.settings ?? {}) as TeamAccessSettings;
-    setVersion(s.version ?? 1);
     setAllowUserIds(s.allow_user_ids ?? []);
     setDenyUserIds(s.deny_user_ids ?? []);
     setAllowChannels(s.allow_channels ?? []);
@@ -110,9 +107,9 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setNotifyDispatched(sn.dispatched ?? true);
     setNotifyProgress(sn.progress ?? true);
     setNotifyFailed(sn.failed ?? true);
-    setNotifyCompleted(sn.completed ?? false);
-    setNotifyCommented(sn.commented ?? false);
-    setNotifyNewTask(sn.new_task ?? false);
+    setNotifyCompleted(sn.completed ?? true);
+    setNotifyCommented(sn.commented ?? true);
+    setNotifyNewTask(sn.new_task ?? true);
     setNotifySlowTool(sn.slow_tool ?? true);
     setNotifyMode(sn.mode ?? "direct");
     const smr = s.member_requests ?? {};
@@ -120,6 +117,8 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
     setMemberRequestsAutoDispatch(smr.auto_dispatch ?? false);
     setEscalationMode(s.escalation_mode ?? "");
     setEscalationActions(s.escalation_actions ?? []);
+    const sbe = s.blocker_escalation ?? {};
+    setBlockerEscalationEnabled(sbe.enabled ?? true);
     setFollowupInterval(s.followup_interval_minutes ?? 30);
     setFollowupMaxReminders(s.followup_max_reminders ?? 0);
     setWorkspaceScope(s.workspace_scope ?? "isolated");
@@ -154,77 +153,27 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
         settings.escalation_mode = escalationMode;
         if (escalationActions.length > 0) settings.escalation_actions = escalationActions;
       }
+      settings.blocker_escalation = { enabled: blockerEscalationEnabled };
       if (followupInterval !== 30) settings.followup_interval_minutes = followupInterval;
       if (followupMaxReminders !== 0) settings.followup_max_reminders = followupMaxReminders;
       settings.workspace_scope = workspaceScope || "isolated";
-      if (version >= 2) settings.version = version;
       await updateTeamSettings(teamId, settings);
       onSaved();
     } catch { // toast shown by hook
     } finally {
       setSaving(false);
     }
-  }, [teamId, version, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyCompleted, notifyCommented, notifyNewTask, notifySlowTool, notifyMode, memberRequestsEnabled, memberRequestsAutoDispatch, escalationMode, escalationActions, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved, t]);
+  }, [teamId, allowUserIds, denyUserIds, allowChannels, denyChannels, notifyDispatched, notifyProgress, notifyFailed, notifyCompleted, notifyCommented, notifyNewTask, notifySlowTool, notifyMode, memberRequestsEnabled, memberRequestsAutoDispatch, escalationMode, escalationActions, blockerEscalationEnabled, followupInterval, followupMaxReminders, workspaceScope, updateTeamSettings, onSaved]);
 
   const userOptions = knownUsers.map((u) => ({ value: u, label: u }));
   const channelOptions = CHANNEL_TYPES.map((c) => ({ value: c.value, label: c.label }));
 
   return (
     <div className="space-y-6">
-      {/* Team Version */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{t("settings.teamVersion")}</h3>
-          <button
-            type="button"
-            onClick={() => setVersionModalOpen(true)}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <Info className="h-3.5 w-3.5" />
-            {t("settings.whatsNew")}
-          </button>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setVersion(1)}
-            className={
-              "rounded-lg border p-3 text-left transition-colors " +
-              (version === 1
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50")
-            }
-          >
-            <div className="text-sm font-medium">V1 — {t("settings.versionBasic")}</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              {t("settings.versionBasicDesc")}
-            </div>
-          </button>
-          <button
-            type="button"
-            onClick={() => setVersion(2)}
-            className={
-              "rounded-lg border p-3 text-left transition-colors " +
-              (version >= 2
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50")
-            }
-          >
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-medium">V2 — {t("settings.versionAdvanced")}</span>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Beta</Badge>
-            </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
-              {t("settings.versionAdvancedDesc")}
-            </div>
-          </button>
-        </div>
-      </div>
-
       {/* Notifications */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium">{t("settings.notifications")}</h3>
-        <div className="rounded-lg border bg-gradient-to-r from-blue-500/5 to-purple-500/5 p-4 space-y-3">
+        <div className="rounded-lg border bg-gradient-to-r from-blue-500/5 to-orange-500/5 p-4 space-y-3">
           <div className="flex items-start gap-4">
             <div className="rounded-lg bg-blue-500/10 p-2.5 text-blue-600 dark:text-blue-400">
               <Bell className="h-5 w-5" />
@@ -384,29 +333,31 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
         </div>
       </div>
 
-      {/* Escalation Policy (V2 only — coming soon) */}
-      {isTeamV2 && <div className="space-y-4 opacity-40 pointer-events-none select-none">
-        <h3 className="text-sm font-medium flex items-center gap-2">
-          {t("settings.escalationPolicy")}
-          <span className="rounded border px-1.5 py-0.5 text-[9px] font-normal text-muted-foreground">{t("settings.versionModal.comingSoon")}</span>
-        </h3>
+      {/* Blocker Escalation */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">{t("settings.blockerEscalation")}</h3>
         <div className="rounded-lg border bg-gradient-to-r from-orange-500/5 to-red-500/5 p-4">
           <div className="flex items-start gap-4">
             <div className="rounded-lg bg-orange-500/10 p-2.5 text-orange-600 dark:text-orange-400">
               <ShieldAlert className="h-5 w-5" />
             </div>
-            <div className="flex-1 space-y-1">
-              <span className="text-sm font-semibold">{t("settings.escalationMode")}</span>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {t("settings.escalationModeHint")}
-              </p>
+            <div className="flex-1 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="text-sm font-semibold">{t("settings.blockerEscalationEnabled")}</span>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {t("settings.blockerEscalationHint")}
+                  </p>
+                </div>
+                <Switch checked={blockerEscalationEnabled} onCheckedChange={setBlockerEscalationEnabled} />
+              </div>
             </div>
           </div>
         </div>
-      </div>}
+      </div>
 
-      {/* Follow-up Reminders (V2 only) */}
-      {isTeamV2 && <div className="space-y-4">
+      {/* Follow-up Reminders */}
+      <div className="space-y-4">
         <h3 className="text-sm font-medium">{t("settings.followupReminders")}</h3>
         <div className="rounded-lg border bg-gradient-to-r from-amber-500/5 to-yellow-500/5 p-4">
           <div className="flex items-start gap-4">
@@ -445,7 +396,7 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
             </div>
           </div>
         </div>
-      </div>}
+      </div>
 
       {/* User Access Control */}
       <div className="space-y-4">
@@ -517,7 +468,6 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
         </Button>
       </div>
 
-      <TeamVersionModal open={versionModalOpen} onOpenChange={setVersionModalOpen} />
     </div>
   );
 }

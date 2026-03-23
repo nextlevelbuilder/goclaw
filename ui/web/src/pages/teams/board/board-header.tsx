@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Settings, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Clock, Settings, Trash2, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { TeamData, TeamMemberData, TeamAccessSettings } from "@/types/team";
+import type { TeamData, TeamMemberData } from "@/types/team";
+import { TeamFeaturesModal } from "../team-features-modal";
+import { TeamAuditLogsModal } from "../team-audit-logs-modal";
 
 interface BoardHeaderProps {
   team: TeamData;
@@ -11,13 +14,12 @@ interface BoardHeaderProps {
   onDelete: () => void;
   onSettings: () => void;
   onMembers: () => void;
-  onV2Click?: () => void;
 }
 
-export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMembers, onV2Click }: BoardHeaderProps) {
+export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMembers }: BoardHeaderProps) {
   const { t } = useTranslation("teams");
-  const settings = (team.settings ?? {}) as TeamAccessSettings;
-  const isV2 = (settings.version ?? 1) >= 2;
+  const [featuresOpen, setFeaturesOpen] = useState(false);
+  const [auditLogsOpen, setAuditLogsOpen] = useState(false);
   const leadMember = members.find((m) => m.role === "lead");
   const leadName = leadMember?.display_name || leadMember?.agent_key
     || team.lead_display_name || team.lead_agent_key;
@@ -36,14 +38,11 @@ export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMem
           <Badge variant={team.status === "active" ? "success" : "secondary"} className="text-[10px]">
             {team.status}
           </Badge>
-          {isV2 && (
-            <Badge
-              className="bg-gradient-to-r from-violet-500 to-indigo-500 text-[10px] px-2 py-0.5 text-white border-0 font-semibold shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={onV2Click}
-            >
-              v2 Super Team (Beta)
+          <button type="button" className="relative inline-flex items-center" onClick={() => setFeaturesOpen(true)}>
+            <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-[10px] px-2 py-0.5 text-white border-0 font-semibold hover:from-orange-600 hover:to-amber-600">
+              v2 Super Team
             </Badge>
-          )}
+          </button>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {leadName && (
@@ -62,6 +61,10 @@ export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMem
         <Users className="h-4 w-4" />
         <span className="hidden sm:inline">{t("members.title")}</span>
       </Button>
+      <Button variant="ghost" size="sm" onClick={() => setAuditLogsOpen(true)} className="shrink-0 gap-1.5">
+        <Clock className="h-4 w-4" />
+        <span className="hidden sm:inline">{t("auditLogs.title")}</span>
+      </Button>
       <Button variant="ghost" size="sm" onClick={onSettings} className="shrink-0 gap-1.5">
         <Settings className="h-4 w-4" />
         <span className="hidden sm:inline">{t("detail.tabs.settings")}</span>
@@ -75,6 +78,9 @@ export function BoardHeader({ team, members, onBack, onDelete, onSettings, onMem
         <Trash2 className="h-4 w-4" />
         <span className="hidden sm:inline">{t("delete.title")}</span>
       </Button>
+
+      <TeamFeaturesModal open={featuresOpen} onOpenChange={setFeaturesOpen} />
+      <TeamAuditLogsModal open={auditLogsOpen} onOpenChange={setAuditLogsOpen} teamId={team.id} />
     </div>
   );
 }

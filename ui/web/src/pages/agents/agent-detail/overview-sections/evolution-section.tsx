@@ -28,7 +28,7 @@ export function EvolutionSection({
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
+            <Sparkles className="h-4 w-4 text-orange-500 shrink-0" />
             <div className="space-y-0.5">
               <Label htmlFor="self-evolve" className="text-sm font-normal cursor-pointer">
                 {t("general.selfEvolutionLabel")}
@@ -39,7 +39,7 @@ export function EvolutionSection({
           <Switch id="self-evolve" checked={selfEvolve} onCheckedChange={onSelfEvolveChange} />
         </div>
         {selfEvolve && (
-          <div className="flex items-start gap-2 rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300">
+          <div className="flex items-start gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{t("general.selfEvolutionInfo")}</span>
           </div>

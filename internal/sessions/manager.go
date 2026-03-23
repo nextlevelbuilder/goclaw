@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -63,7 +64,7 @@ func SessionKey(agentID, scopeKey string) string {
 }
 
 // GetOrCreate returns an existing session or creates a new one.
-func (m *Manager) GetOrCreate(key string) *Session {
+func (m *Manager) GetOrCreate(_ context.Context, key string) *Session {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -82,7 +83,7 @@ func (m *Manager) GetOrCreate(key string) *Session {
 }
 
 // AddMessage appends a message to a session.
-func (m *Manager) AddMessage(key string, msg providers.Message) {
+func (m *Manager) AddMessage(_ context.Context, key string, msg providers.Message) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -101,7 +102,7 @@ func (m *Manager) AddMessage(key string, msg providers.Message) {
 }
 
 // GetHistory returns a copy of the message history.
-func (m *Manager) GetHistory(key string) []providers.Message {
+func (m *Manager) GetHistory(_ context.Context, key string) []providers.Message {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -116,7 +117,7 @@ func (m *Manager) GetHistory(key string) []providers.Message {
 }
 
 // GetSummary returns the session summary.
-func (m *Manager) GetSummary(key string) string {
+func (m *Manager) GetSummary(_ context.Context, key string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if s, ok := m.sessions[key]; ok {
@@ -126,7 +127,7 @@ func (m *Manager) GetSummary(key string) string {
 }
 
 // SetSummary updates the session summary.
-func (m *Manager) SetSummary(key, summary string) {
+func (m *Manager) SetSummary(_ context.Context, key, summary string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -136,7 +137,7 @@ func (m *Manager) SetSummary(key, summary string) {
 }
 
 // SetLabel updates the session label.
-func (m *Manager) SetLabel(key, label string) {
+func (m *Manager) SetLabel(_ context.Context, key, label string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -146,7 +147,7 @@ func (m *Manager) SetLabel(key, label string) {
 }
 
 // UpdateMetadata sets model/provider/channel metadata on a session.
-func (m *Manager) UpdateMetadata(key, model, provider, channel string) {
+func (m *Manager) UpdateMetadata(_ context.Context, key, model, provider, channel string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -163,7 +164,7 @@ func (m *Manager) UpdateMetadata(key, model, provider, channel string) {
 }
 
 // AccumulateTokens adds token counts from a completed run.
-func (m *Manager) AccumulateTokens(key string, inputTokens, outputTokens int64) {
+func (m *Manager) AccumulateTokens(_ context.Context, key string, inputTokens, outputTokens int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -173,7 +174,7 @@ func (m *Manager) AccumulateTokens(key string, inputTokens, outputTokens int64) 
 }
 
 // IncrementCompaction bumps the compaction counter after summarization.
-func (m *Manager) IncrementCompaction(key string) {
+func (m *Manager) IncrementCompaction(_ context.Context, key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -182,7 +183,7 @@ func (m *Manager) IncrementCompaction(key string) {
 }
 
 // GetCompactionCount returns the current compaction count for a session.
-func (m *Manager) GetCompactionCount(key string) int {
+func (m *Manager) GetCompactionCount(_ context.Context, key string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if s, ok := m.sessions[key]; ok {
@@ -192,7 +193,7 @@ func (m *Manager) GetCompactionCount(key string) int {
 }
 
 // GetMemoryFlushCompactionCount returns the compaction count at which memory flush last ran.
-func (m *Manager) GetMemoryFlushCompactionCount(key string) int {
+func (m *Manager) GetMemoryFlushCompactionCount(_ context.Context, key string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if s, ok := m.sessions[key]; ok {
@@ -202,7 +203,7 @@ func (m *Manager) GetMemoryFlushCompactionCount(key string) int {
 }
 
 // SetMemoryFlushDone records that memory flush completed at the current compaction count.
-func (m *Manager) SetMemoryFlushDone(key string) {
+func (m *Manager) SetMemoryFlushDone(_ context.Context, key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -212,7 +213,7 @@ func (m *Manager) SetMemoryFlushDone(key string) {
 }
 
 // SetSpawnInfo sets subagent origin metadata on a session.
-func (m *Manager) SetSpawnInfo(key, spawnedBy string, depth int) {
+func (m *Manager) SetSpawnInfo(_ context.Context, key, spawnedBy string, depth int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -222,7 +223,7 @@ func (m *Manager) SetSpawnInfo(key, spawnedBy string, depth int) {
 }
 
 // SetContextWindow caches the agent's context window on the session.
-func (m *Manager) SetContextWindow(key string, cw int) {
+func (m *Manager) SetContextWindow(_ context.Context, key string, cw int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -231,7 +232,7 @@ func (m *Manager) SetContextWindow(key string, cw int) {
 }
 
 // GetContextWindow returns the cached context window for a session (0 if unset).
-func (m *Manager) GetContextWindow(key string) int {
+func (m *Manager) GetContextWindow(_ context.Context, key string) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if s, ok := m.sessions[key]; ok {
@@ -241,7 +242,7 @@ func (m *Manager) GetContextWindow(key string) int {
 }
 
 // SetLastPromptTokens records actual prompt tokens from the last LLM response.
-func (m *Manager) SetLastPromptTokens(key string, tokens, msgCount int) {
+func (m *Manager) SetLastPromptTokens(_ context.Context, key string, tokens, msgCount int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s, ok := m.sessions[key]; ok {
@@ -251,7 +252,7 @@ func (m *Manager) SetLastPromptTokens(key string, tokens, msgCount int) {
 }
 
 // GetLastPromptTokens returns the last known prompt tokens and message count.
-func (m *Manager) GetLastPromptTokens(key string) (int, int) {
+func (m *Manager) GetLastPromptTokens(_ context.Context, key string) (int, int) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if s, ok := m.sessions[key]; ok {
@@ -261,7 +262,7 @@ func (m *Manager) GetLastPromptTokens(key string) (int, int) {
 }
 
 // TruncateHistory keeps only the last N messages.
-func (m *Manager) TruncateHistory(key string, keepLast int) {
+func (m *Manager) TruncateHistory(_ context.Context, key string, keepLast int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -279,7 +280,7 @@ func (m *Manager) TruncateHistory(key string, keepLast int) {
 }
 
 // SetHistory replaces a session's message history with the given slice.
-func (m *Manager) SetHistory(key string, msgs []providers.Message) {
+func (m *Manager) SetHistory(_ context.Context, key string, msgs []providers.Message) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -290,7 +291,7 @@ func (m *Manager) SetHistory(key string, msgs []providers.Message) {
 }
 
 // Reset clears a session's history and summary.
-func (m *Manager) Reset(key string) {
+func (m *Manager) Reset(_ context.Context, key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -302,7 +303,7 @@ func (m *Manager) Reset(key string) {
 }
 
 // Delete removes a session entirely.
-func (m *Manager) Delete(key string) error {
+func (m *Manager) Delete(_ context.Context, key string) error {
 	m.mu.Lock()
 	delete(m.sessions, key)
 	m.mu.Unlock()
@@ -318,7 +319,7 @@ func (m *Manager) Delete(key string) error {
 }
 
 // List returns metadata for all sessions, optionally filtered by agent ID.
-func (m *Manager) List(agentID string) []SessionInfo {
+func (m *Manager) List(_ context.Context, agentID string) []SessionInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -346,7 +347,7 @@ func (m *Manager) List(agentID string) []SessionInfo {
 
 // LastUsedChannel finds the most recently updated channel session for an agent
 // and extracts channel + chatID from the key. Returns ("", "") if none found.
-func (m *Manager) LastUsedChannel(agentID string) (channel, chatID string) {
+func (m *Manager) LastUsedChannel(_ context.Context, agentID string) (channel, chatID string) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -392,7 +393,7 @@ type SessionInfo struct {
 }
 
 // Save persists a session to disk atomically.
-func (m *Manager) Save(key string) error {
+func (m *Manager) Save(_ context.Context, key string) error {
 	if m.storage == "" {
 		return nil
 	}

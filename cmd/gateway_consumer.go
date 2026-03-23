@@ -108,6 +108,12 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			continue
 		}
 
+		// Blocker escalation messages bypass debounce — deliver immediately to leader.
+		if msg.SenderID == "system:escalation" {
+			go processNormalMessage(ctx, msg, agents, cfg, sched, channelMgr, teamStore, quotaChecker, sessStore, agentStore, contactCollector, postTurn, msgBus)
+			continue
+		}
+
 		// --- Normal messages: route through debouncer ---
 		debouncer.Push(msg)
 	}
@@ -120,6 +126,7 @@ func autoSetFollowup(ctx context.Context, teamStore store.TeamStore, agentStore 
 	if agentStore == nil {
 		return
 	}
+	// Caller (processNormalMessage) already injected tenant_id into ctx.
 	// agentKey may be a slug ("default") or a UUID string (from WS clients).
 	var ag *store.AgentData
 	var err error
@@ -135,11 +142,6 @@ func autoSetFollowup(ctx context.Context, teamStore store.TeamStore, agentStore 
 	if err != nil || team == nil || team.LeadAgentID != ag.ID {
 		return // only lead agent triggers auto-set
 	}
-	// Followup is a v2 feature.
-	if !isConsumerTeamV2(team) {
-		return
-	}
-
 	// Skip auto-followup when lead is waiting for teammates (not user).
 	if hasMember, _ := teamStore.HasActiveMemberTasks(ctx, team.ID, ag.ID); hasMember {
 		slog.Debug("auto-followup: skipping, active member tasks exist", "team_id", team.ID)
@@ -157,9 +159,6 @@ func autoSetFollowup(ctx context.Context, teamStore store.TeamStore, agentStore 
 		slog.Info("auto-set followup: set", "channel", channel, "chat_id", chatID, "count", n, "followup_at", followupAt)
 	}
 }
-
-// isConsumerTeamV2 delegates to tools.IsTeamV2 for version checking.
-var isConsumerTeamV2 = tools.IsTeamV2
 
 // parseFollowupSettings extracts followup interval and max reminders from team settings.
 func parseFollowupSettings(team *store.TeamData) (time.Duration, int) {

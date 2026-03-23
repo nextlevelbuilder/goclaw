@@ -85,9 +85,10 @@ type ImageContent struct {
 // Stored in session JSONB (~60 bytes each) instead of megabytes for base64.
 // On reload, MediaRefs are resolved to file paths and loaded into Images (for images).
 type MediaRef struct {
-	ID       string `json:"id"`        // unique media ID (uuid)
-	MimeType string `json:"mime_type"` // e.g. "image/jpeg", "application/pdf"
-	Kind     string `json:"kind"`      // "image", "video", "audio", "document"
+	ID       string `json:"id"`                // unique media ID (uuid)
+	MimeType string `json:"mime_type"`         // e.g. "image/jpeg", "application/pdf"
+	Kind     string `json:"kind"`              // "image", "video", "audio", "document"
+	Path     string `json:"path,omitempty"`    // absolute workspace path (persisted for /v1/files/ serving)
 }
 
 // Message represents a conversation message.

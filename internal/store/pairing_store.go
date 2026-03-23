@@ -1,5 +1,7 @@
 package store
 
+import "context"
+
 // PairingRequest represents a pending pairing code.
 type PairingRequestData struct {
 	Code      string            `json:"code"`
@@ -24,11 +26,11 @@ type PairedDeviceData struct {
 
 // PairingStore manages device pairing.
 type PairingStore interface {
-	RequestPairing(senderID, channel, chatID, accountID string, metadata map[string]string) (string, error)
-	ApprovePairing(code, approvedBy string) (*PairedDeviceData, error)
-	DenyPairing(code string) error
-	RevokePairing(senderID, channel string) error
-	IsPaired(senderID, channel string) (bool, error)
-	ListPending() []PairingRequestData
-	ListPaired() []PairedDeviceData
+	RequestPairing(ctx context.Context, senderID, channel, chatID, accountID string, metadata map[string]string) (string, error)
+	ApprovePairing(ctx context.Context, code, approvedBy string) (*PairedDeviceData, error)
+	DenyPairing(ctx context.Context, code string) error
+	RevokePairing(ctx context.Context, senderID, channel string) error
+	IsPaired(ctx context.Context, senderID, channel string) (bool, error)
+	ListPending(ctx context.Context) []PairingRequestData
+	ListPaired(ctx context.Context) []PairedDeviceData
 }

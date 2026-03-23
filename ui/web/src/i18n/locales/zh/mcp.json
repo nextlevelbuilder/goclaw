@@ -60,7 +60,9 @@
       "commandRequired": "stdio 传输协议需要提供命令",
       "urlRequired": "SSE/HTTP 传输协议需要提供 URL",
       "connectionFailed": "连接失败"
-    }
+    },
+    "requireUserCredentials": "要求用户凭据",
+    "requireUserCredentialsHint": "每个用户必须配置自己的凭据。未设置凭据的用户将无法使用此服务器。"
   },
   "grants": {
     "title": "Agent授权 - {{name}}",
@@ -97,5 +99,28 @@
     "failedCreate": "创建 MCP 服务器失败",
     "failedUpdate": "更新 MCP 服务器失败",
     "failedDelete": "删除 MCP 服务器失败"
+  },
+  "userCredentials": {
+    "title": "我的凭证",
+    "description": "为此 MCP 服务器设置您的个人凭证，仅对您的账户生效。",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholder": "留空以保持当前值",
+    "headers": "请求头",
+    "env": "环境变量",
+    "headerPlaceholder": "KEY=VALUE，每行一个",
+    "save": "保存",
+    "delete": "删除",
+    "deleteAll": "删除全部",
+    "cancel": "取消",
+    "saved": "凭证已保存",
+    "deleted": "凭证已删除",
+    "hasApiKey": "API 密钥已设置",
+    "hasHeaders": "请求头已设置",
+    "hasEnv": "环境变量已设置",
+    "noCredentials": "未设置凭证",
+    "addHeader": "添加 Header",
+    "addEnv": "添加变量",
+    "saveFailed": "保存凭据失败",
+    "deleteFailed": "删除凭据失败"
   }
 }

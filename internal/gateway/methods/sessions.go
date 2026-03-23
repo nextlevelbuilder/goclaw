@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -15,10 +17,11 @@ import (
 type SessionsMethods struct {
 	sessions store.SessionStore
 	eventBus bus.EventPublisher
+	cfg      *config.Config
 }
 
-func NewSessionsMethods(sess store.SessionStore, eventBus bus.EventPublisher) *SessionsMethods {
-	return &SessionsMethods{sessions: sess, eventBus: eventBus}
+func NewSessionsMethods(sess store.SessionStore, eventBus bus.EventPublisher, cfg *config.Config) *SessionsMethods {
+	return &SessionsMethods{sessions: sess, eventBus: eventBus, cfg: cfg}
 }
 
 func (m *SessionsMethods) Register(router *gateway.MethodRouter) {
@@ -36,7 +39,7 @@ type sessionsListParams struct {
 	Offset  int    `json:"offset"`
 }
 
-func (m *SessionsMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+func (m *SessionsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	var params sessionsListParams
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -47,18 +50,19 @@ func (m *SessionsMethods) handleList(_ context.Context, client *gateway.Client, 
 	}
 
 	opts := store.SessionListOpts{
-		AgentID: params.AgentID,
-		Channel: params.Channel,
-		Limit:   params.Limit,
-		Offset:  params.Offset,
+		AgentID:  params.AgentID,
+		Channel:  params.Channel,
+		Limit:    params.Limit,
+		Offset:   params.Offset,
+		TenantID: store.TenantIDFromContext(ctx),
 	}
-	// Only filter by UserID when a channel filter is specified (e.g. chat sidebar sends channel="ws").
-	// Sessions admin page omits channel → sees all sessions unfiltered.
-	if params.Channel != "" {
+	// Role-based filtering: admins/owners see all sessions; regular users see only their own.
+	// Tenant scope is always applied above — admin sees all sessions within the tenant.
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
 		opts.UserID = client.UserID()
 	}
 
-	result := m.sessions.ListPagedRich(opts)
+	result := m.sessions.ListPagedRich(ctx, opts)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"sessions": result.Sessions,
 		"total":    result.Total,
@@ -79,8 +83,26 @@ func (m *SessionsMethods) handlePreview(ctx context.Context, client *gateway.Cli
 		return
 	}
 
-	history := m.sessions.GetHistory(params.Key)
-	summary := m.sessions.GetSummary(params.Key)
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		sess := m.sessions.Get(ctx, params.Key)
+		if sess == nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "session", params.Key)))
+			return
+		}
+		if sess.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+	}
+
+	history := m.sessions.GetHistory(ctx, params.Key)
+	summary := m.sessions.GetSummary(ctx, params.Key)
+
+	// Sign file URLs before delivery — sessions store clean paths.
+	for i := range history {
+		history[i].Content = httpapi.SignFileURLs(history[i].Content, httpapi.FileSigningKey())
+	}
+	summary = httpapi.SignFileURLs(summary, httpapi.FileSigningKey())
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"key":      params.Key,
@@ -109,23 +131,35 @@ func (m *SessionsMethods) handlePatch(ctx context.Context, client *gateway.Clien
 		return
 	}
 
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		sess := m.sessions.Get(ctx, params.Key)
+		if sess == nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "session", params.Key)))
+			return
+		}
+		if sess.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+	}
+
 	// Apply label patch
 	if params.Label != nil {
-		m.sessions.SetLabel(params.Key, *params.Label)
+		m.sessions.SetLabel(ctx, params.Key, *params.Label)
 	}
 
 	// Apply model patch
 	if params.Model != nil {
-		m.sessions.UpdateMetadata(params.Key, *params.Model, "", "")
+		m.sessions.UpdateMetadata(ctx, params.Key, *params.Model, "", "")
 	}
 
 	// Apply metadata patch
 	if len(params.Metadata) > 0 {
-		m.sessions.SetSessionMetadata(params.Key, params.Metadata)
+		m.sessions.SetSessionMetadata(ctx, params.Key, params.Metadata)
 	}
 
 	// Save changes to DB
-	m.sessions.Save(params.Key)
+	m.sessions.Save(ctx, params.Key)
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok":  true,
@@ -142,7 +176,19 @@ func (m *SessionsMethods) handleDelete(ctx context.Context, client *gateway.Clie
 		return
 	}
 
-	if err := m.sessions.Delete(params.Key); err != nil {
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		sess := m.sessions.Get(ctx, params.Key)
+		if sess == nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "session", params.Key)))
+			return
+		}
+		if sess.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+	}
+
+	if err := m.sessions.Delete(ctx, params.Key); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
 	}
@@ -161,7 +207,19 @@ func (m *SessionsMethods) handleReset(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	m.sessions.Reset(params.Key)
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		sess := m.sessions.Get(ctx, params.Key)
+		if sess == nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "session", params.Key)))
+			return
+		}
+		if sess.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
+	}
+
+	m.sessions.Reset(ctx, params.Key)
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"ok": true,

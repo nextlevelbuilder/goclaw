@@ -103,5 +103,9 @@
   },
   "common": {
     "back": "返回"
-  }
+  },
+  "skipSetup": "跳过设置，直接进入仪表盘",
+  "skipSetupConfirm": "确定要跳过设置吗？您可以稍后在仪表盘中配置 provider 和 agent。",
+  "switchTenant": "切换",
+  "allTenants": "所有租户"
 }

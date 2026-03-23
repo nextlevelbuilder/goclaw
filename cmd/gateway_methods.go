@@ -19,14 +19,14 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	chatMethods := methods.NewChatMethods(agents, sessStore, server.RateLimiter(), msgBus)
 	chatMethods.Register(router)
 	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
-	methods.NewSessionsMethods(sessStore, msgBus).Register(router)
+	methods.NewSessionsMethods(sessStore, msgBus, cfg).Register(router)
 	methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus).Register(router)
 
 	// Phase 2: Skills (uses SkillStore interface — PG or File)
 	methods.NewSkillsMethods(skillStore).Register(router)
 
 	// Phase 2: Cron (store created externally, shared with gateway)
-	methods.NewCronMethods(cronStore, msgBus).Register(router)
+	methods.NewCronMethods(cronStore, msgBus, cfg).Register(router)
 
 	// Phase 2: Heartbeat
 	heartbeatMethods := methods.NewHeartbeatMethods(heartbeatStore, msgBus)
@@ -51,11 +51,6 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 
 	// Phase 3: Live log tailing
 	methods.NewLogsMethods(logTee).Register(router)
-
-	// Phase 4: Delegation history
-	if teamStore != nil {
-		methods.NewDelegationsMethods(teamStore).Register(router)
-	}
 
 	slog.Info("registered all RPC methods",
 		"phase1", []string{"chat", "agents", "sessions", "config"},

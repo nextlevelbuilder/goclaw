@@ -36,7 +36,7 @@ func (c *Channel) sendPairingReply(ctx context.Context, chatID int64, userID, us
 	}
 
 	meta := map[string]string{"username": username}
-	code, err := c.pairingService.RequestPairing(userID, c.Name(), fmt.Sprintf("%d", chatID), "default", meta)
+	code, err := c.pairingService.RequestPairing(ctx, userID, c.Name(), fmt.Sprintf("%d", chatID), "default", meta)
 	if err != nil {
 		slog.Debug("pairing request failed", "user_id", userID, "error", err)
 		return
@@ -70,7 +70,7 @@ func (c *Channel) sendGroupPairingReply(ctx context.Context, chatID int64, chatI
 	if chatTitle != "" {
 		meta = map[string]string{"chat_title": chatTitle}
 	}
-	code, err := c.pairingService.RequestPairing(groupSenderID, c.Name(), localKey, "default", meta)
+	code, err := c.pairingService.RequestPairing(ctx, groupSenderID, c.Name(), localKey, "default", meta)
 	if err != nil {
 		slog.Debug("group pairing request failed", "chat_id", chatIDStr, "error", err)
 		return

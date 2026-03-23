@@ -28,8 +28,10 @@ var DenyGroupRegistry = map[string]*DenyGroup{
 			regexp.MustCompile(`\b(mkfs|diskpart)\b|\bformat\s`),
 			regexp.MustCompile(`\bdd\s+if=`),
 			regexp.MustCompile(`>\s*/dev/sd[a-z]\b`),
-			regexp.MustCompile(`\b(shutdown|reboot|poweroff)\b`),
-			regexp.MustCompile(`:\(\)\s*\{.*\};\s*:`), // fork bomb
+			regexp.MustCompile(`\b(shutdown|reboot|poweroff|halt)\b`),
+			regexp.MustCompile(`\b(init|telinit)\s+[06]\b`),          // SysV shutdown/reboot
+			regexp.MustCompile(`\bsystemctl\s+(suspend|hibernate)\b`), // power management
+			regexp.MustCompile(`:\(\)\s*\{.*\};\s*:`),                 // fork bomb
 		},
 	},
 	"data_exfiltration": {
@@ -81,7 +83,10 @@ var DenyGroupRegistry = map[string]*DenyGroup{
 		Default:     true,
 		Patterns: []*regexp.Regexp{
 			regexp.MustCompile(`\bsudo\b`),
-			regexp.MustCompile(`\bsu\s+-`),
+			regexp.MustCompile(`\bsu\b`),
+			regexp.MustCompile(`\bdoas\b`),
+			regexp.MustCompile(`\bpkexec\b`),
+			regexp.MustCompile(`\brunuser\b`),
 			regexp.MustCompile(`\bnsenter\b`),
 			regexp.MustCompile(`\bunshare\b`),
 			regexp.MustCompile(`\b(mount|umount)\b`),

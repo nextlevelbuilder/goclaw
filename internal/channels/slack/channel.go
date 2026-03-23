@@ -122,7 +122,7 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 		config:         cfg,
 		requireMention: requireMention,
 		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeSlack, pendingStore),
+		groupHistory:   channels.MakeHistory(channels.TypeSlack, pendingStore, base.TenantID()),
 		historyLimit:   historyLimit,
 		debounceDelay:  debounceDelay,
 		threadTTL:      threadTTL,

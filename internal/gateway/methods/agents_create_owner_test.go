@@ -31,6 +31,12 @@ func (s *createCaptureStore) GetByKey(_ context.Context, _ string) (*store.Agent
 func (s *createCaptureStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
 	return nil, nil
 }
+func (s *createCaptureStore) GetByKeys(_ context.Context, _ []string) ([]store.AgentData, error) {
+	return nil, nil
+}
+func (s *createCaptureStore) GetByIDs(_ context.Context, _ []uuid.UUID) ([]store.AgentData, error) {
+	return nil, nil
+}
 func (s *createCaptureStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil
 }

@@ -179,7 +179,7 @@ func (h *KnowledgeGraphHandler) handleExtract(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	extractor := h.NewExtractor(body.Provider, body.Model, body.MinConf)
+	extractor := h.NewExtractor(r.Context(), body.Provider, body.Model, body.MinConf)
 	if extractor == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidProviderOrModel)})
 		return

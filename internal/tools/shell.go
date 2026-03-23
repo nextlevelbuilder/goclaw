@@ -198,14 +198,23 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		}
 	}
 
-	// Use per-user workspace from context if available, fallback to struct field
+	// Use per-user workspace from context if available, fallback to struct field.
+	// The context workspace is tenant-scoped; t.workspace is the global (master) workspace.
 	cwd := ToolWorkspaceFromCtx(ctx)
 	if cwd == "" {
 		cwd = t.workspace
 	}
 	if wd, _ := args["working_dir"].(string); wd != "" {
 		if effectiveRestrict(ctx, t.restrict) {
-			resolved, err := resolvePath(wd, t.workspace, true)
+			// Validate working_dir against the tenant-scoped workspace (not the
+			// global workspace) so non-master tenants can't escape their scope.
+			// Also allow team workspace as a valid target (same as filesystem tools).
+			wsBase := ToolWorkspaceFromCtx(ctx)
+			if wsBase == "" {
+				wsBase = t.workspace
+			}
+			allowed := allowedWithTeamWorkspace(ctx, nil)
+			resolved, err := resolvePathWithAllowed(wd, wsBase, true, allowed)
 			if err != nil {
 				return ErrorResult(err.Error())
 			}

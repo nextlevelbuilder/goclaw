@@ -41,7 +41,8 @@ const (
 // AgentData represents an agent in the database.
 type AgentData struct {
 	BaseModel
-	AgentKey            string `json:"agent_key"`
+	TenantID            uuid.UUID `json:"tenant_id"`
+	AgentKey            string    `json:"agent_key"`
 	DisplayName         string `json:"display_name,omitempty"`
 	Frontmatter         string `json:"frontmatter,omitempty"` // short expertise summary (NOT other_config.description which is the summoning prompt)
 	OwnerID             string `json:"owner_id"`
@@ -315,6 +316,8 @@ type AgentStore interface {
 	Create(ctx context.Context, agent *AgentData) error
 	GetByKey(ctx context.Context, agentKey string) (*AgentData, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*AgentData, error)
+	GetByKeys(ctx context.Context, keys []string) ([]AgentData, error)
+	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]AgentData, error)
 	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, ownerID string) ([]AgentData, error)

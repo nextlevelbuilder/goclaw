@@ -9,10 +9,20 @@ import (
 
 // ListAllDocumentsGlobal returns all documents across all agents (for admin overview).
 func (s *PGMemoryStore) ListAllDocumentsGlobal(ctx context.Context) ([]store.DocumentInfo, error) {
+	var whereClause string
+	var args []any
+	if !store.IsCrossTenant(ctx) {
+		tid, err := requireTenantID(ctx)
+		if err != nil {
+			return nil, err
+		}
+		whereClause = "WHERE tenant_id = $1"
+		args = []any{tid}
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT agent_id, path, hash, user_id, updated_at
-		 FROM memory_documents
-		 ORDER BY updated_at DESC`)
+		 FROM memory_documents `+whereClause+`
+		 ORDER BY updated_at DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,10 +53,14 @@ func (s *PGMemoryStore) ListAllDocumentsGlobal(ctx context.Context) ([]store.Doc
 // ListAllDocuments returns all documents for an agent across all users (global + personal).
 func (s *PGMemoryStore) ListAllDocuments(ctx context.Context, agentID string) ([]store.DocumentInfo, error) {
 	aid := mustParseUUID(agentID)
+	tc, tcArgs, err := tenantClauseN(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT agent_id, path, hash, user_id, updated_at
-		 FROM memory_documents WHERE agent_id = $1
-		 ORDER BY updated_at DESC`, aid)
+		 FROM memory_documents WHERE agent_id = $1`+tc+`
+		 ORDER BY updated_at DESC`, append([]any{aid}, tcArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -81,23 +95,31 @@ func (s *PGMemoryStore) GetDocumentDetail(ctx context.Context, agentID, userID, 
 	var q string
 	var args []any
 	if userID == "" {
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return nil, err
+		}
 		q = `SELECT d.path, d.content, d.hash, d.user_id, d.created_at, d.updated_at,
 				COUNT(c.id) AS chunk_count,
 				COUNT(c.embedding) AS embedded_count
 			 FROM memory_documents d
 			 LEFT JOIN memory_chunks c ON c.document_id = d.id
-			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id IS NULL
+			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id IS NULL` + tc + `
 			 GROUP BY d.id`
-		args = []any{aid, path}
+		args = append([]any{aid, path}, tcArgs...)
 	} else {
+		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		if err != nil {
+			return nil, err
+		}
 		q = `SELECT d.path, d.content, d.hash, d.user_id, d.created_at, d.updated_at,
 				COUNT(c.id) AS chunk_count,
 				COUNT(c.embedding) AS embedded_count
 			 FROM memory_documents d
 			 LEFT JOIN memory_chunks c ON c.document_id = d.id
-			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id = $3
+			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id = $3` + tc + `
 			 GROUP BY d.id`
-		args = []any{aid, path, userID}
+		args = append([]any{aid, path, userID}, tcArgs...)
 	}
 
 	var detail store.DocumentDetail
@@ -126,23 +148,31 @@ func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path st
 	var q string
 	var args []any
 	if userID == "" {
+		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		if err != nil {
+			return nil, err
+		}
 		q = `SELECT c.id, c.start_line, c.end_line,
 				c.text AS text_preview,
 				(c.embedding IS NOT NULL) AS has_embedding
 			 FROM memory_chunks c
 			 JOIN memory_documents d ON c.document_id = d.id
-			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id IS NULL
+			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id IS NULL` + tc + `
 			 ORDER BY c.start_line`
-		args = []any{aid, path}
+		args = append([]any{aid, path}, tcArgs...)
 	} else {
+		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		if err != nil {
+			return nil, err
+		}
 		q = `SELECT c.id, c.start_line, c.end_line,
 				c.text AS text_preview,
 				(c.embedding IS NOT NULL) AS has_embedding
 			 FROM memory_chunks c
 			 JOIN memory_documents d ON c.document_id = d.id
-			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id = $3
+			 WHERE d.agent_id = $1 AND d.path = $2 AND d.user_id = $3` + tc + `
 			 ORDER BY c.start_line`
-		args = []any{aid, path, userID}
+		args = append([]any{aid, path, userID}, tcArgs...)
 	}
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
