@@ -165,9 +165,11 @@ func isGroupContext(ctx context.Context) bool {
 }
 
 // resolveMediaPath extracts and validates a file path from a "MEDIA:path" string.
-// Uses the same workspace-aware path resolution as other filesystem tools:
-//   - When restrict_to_workspace is true: allows workspace dir + /tmp/
-//   - When restrict_to_workspace is false: allows any valid path
+// Uses the same workspace-aware path resolution as other filesystem tools.
+// Tool-level workspace restriction is always enforced for multi-tenant
+// isolation, so MEDIA: paths may resolve to:
+//   - files inside the agent workspace
+//   - absolute paths under /tmp/ for generated media artifacts
 //
 // Relative paths are resolved against the agent's workspace.
 func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, bool) {
