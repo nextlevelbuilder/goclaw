@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,19 +25,20 @@ type UpdateInfo struct {
 	UpdateAvailable bool   `json:"updateAvailable"`
 }
 
-// updateChecker periodically checks GitHub for new releases.
-type updateChecker struct {
+// UpdateChecker periodically checks GitHub for new releases.
+type UpdateChecker struct {
 	currentVersion string
 	mu             sync.RWMutex
 	info           *UpdateInfo
 }
 
-func newUpdateChecker(currentVersion string) *updateChecker {
-	return &updateChecker{currentVersion: currentVersion}
+// NewUpdateChecker creates an UpdateChecker for the given current version.
+func NewUpdateChecker(currentVersion string) *UpdateChecker {
+	return &UpdateChecker{currentVersion: currentVersion}
 }
 
 // Start begins periodic update checking. Call with a cancellable context.
-func (uc *updateChecker) Start(ctx context.Context) {
+func (uc *UpdateChecker) Start(ctx context.Context) {
 	// Initial check after short delay (don't block startup)
 	go func() {
 		select {
@@ -59,13 +62,13 @@ func (uc *updateChecker) Start(ctx context.Context) {
 }
 
 // Info returns the cached update info, or nil if not yet checked.
-func (uc *updateChecker) Info() *UpdateInfo {
+func (uc *UpdateChecker) Info() *UpdateInfo {
 	uc.mu.RLock()
 	defer uc.mu.RUnlock()
 	return uc.info
 }
 
-func (uc *updateChecker) check() {
+func (uc *UpdateChecker) check() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -76,6 +79,7 @@ func (uc *updateChecker) check() {
 		return
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "goclaw/"+uc.currentVersion)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -93,7 +97,7 @@ func (uc *updateChecker) check() {
 		TagName string `json:"tag_name"`
 		HTMLURL string `json:"html_url"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
 		slog.Warn("update check: failed to decode response", "error", err)
 		return
 	}
@@ -165,12 +169,7 @@ func parseSemver(s string) []int {
 	parts := strings.Split(s, ".")
 	nums := make([]int, 0, len(parts))
 	for _, p := range parts {
-		n := 0
-		for _, c := range p {
-			if c >= '0' && c <= '9' {
-				n = n*10 + int(c-'0')
-			}
-		}
+		n, _ := strconv.Atoi(p)
 		nums = append(nums, n)
 	}
 	return nums

@@ -281,7 +281,6 @@ func runGateway() {
 	server := gateway.NewServer(cfg, msgBus, agentRouter, pgStores.Sessions, toolsReg)
 	server.SetVersion(Version)
 	server.SetDB(pgStores.DB)
-	server.StartUpdateChecker(ctx)
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
@@ -731,6 +730,8 @@ func runGateway() {
 	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	server.StartUpdateChecker(ctx)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
