@@ -24,6 +24,38 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// PromoteThinkingTags extracts reasoning/thinking content from within tags
+// (<think>, <thinking>, <thought>, <antThinking>) and moves it into the
+// Thinking field, while removing it from the user-facing text.
+// If multiple tags are present, they are joined with newlines.
+func PromoteThinkingTags(content, currentThinking string) (string, string) {
+	if content == "" {
+		return content, currentThinking
+	}
+
+	thinking := currentThinking
+	cleaned := content
+
+	for _, pat := range thinkingTagPatterns {
+		matches := pat.FindAllStringSubmatch(cleaned, -1)
+		for _, m := range matches {
+			if len(m) > 1 {
+				reasoning := strings.TrimSpace(m[1])
+				if reasoning != "" {
+					if thinking != "" {
+						thinking += "\n\n"
+					}
+					thinking += reasoning
+				}
+			}
+		}
+		// Clean the tag from the content
+		cleaned = pat.ReplaceAllString(cleaned, "")
+	}
+
+	return strings.TrimSpace(cleaned), thinking
+}
+
 // SanitizeAssistantContent applies the full sanitization pipeline to assistant
 // response text before saving to session and sending to user.
 // Matching TS extractAssistantText() + sanitizeUserFacingText().
@@ -171,12 +203,16 @@ func stripDowngradedToolCallText(content string) string {
 // Strips: <think>...</think>, <thinking>...</thinking>, <thought>...</thought>,
 //         <antThinking>...</antThinking>
 // Go regexp doesn't support backreferences, so we use separate patterns.
+// Matches TS stripThinkingTagsFromText() with strict mode.
+// Strips: <think>...</think>, <thinking>...</thinking>, <thought>...</thought>,
+//         <antThinking>...</antThinking>
+// Captured group 1 contains the actual content for promotion.
 var thinkingTagPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?is)<think>.*?</think>`),
-	regexp.MustCompile(`(?is)<thinking>.*?</thinking>`),
-	regexp.MustCompile(`(?is)<thought>.*?</thought>`),
-	regexp.MustCompile(`(?is)<antThinking>.*?</antThinking>`),
-	regexp.MustCompile(`(?is)<antthinking>.*?</antthinking>`),
+	regexp.MustCompile(`(?is)<think>(.*?)</think>`),
+	regexp.MustCompile(`(?is)<thinking>(.*?)</thinking>`),
+	regexp.MustCompile(`(?is)<thought>(.*?)</thought>`),
+	regexp.MustCompile(`(?is)<antThinking>(.*?)</antThinking>`),
+	regexp.MustCompile(`(?is)<antthinking>(.*?)</antthinking>`),
 }
 
 func stripThinkingTags(content string) string {

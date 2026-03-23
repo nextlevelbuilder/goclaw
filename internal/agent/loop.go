@@ -1348,7 +1348,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 
 	}
 
-	// 4. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
+	// 4. Thinking promotion + Sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
+	finalContent, finalThinking = PromoteThinkingTags(finalContent, finalThinking)
 	finalContent = SanitizeAssistantContent(finalContent)
 
 	// 4b. Config leak detection — disabled: too many false positives
