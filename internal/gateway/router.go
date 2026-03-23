@@ -457,7 +457,7 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 		toolCount = s.tools.Count()
 	}
 
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+	resp := map[string]any{
 		"status":    "ok",
 		"version":   s.version,
 		"uptime":    uptimeMs,
@@ -466,7 +466,15 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 		"tools":     toolCount,
 		"clients":   clientList,
 		"currentId": client.ID(),
-	}))
+	}
+	if s.updateChecker != nil {
+		if info := s.updateChecker.Info(); info != nil {
+			resp["latestVersion"] = info.LatestVersion
+			resp["updateAvailable"] = info.UpdateAvailable
+			resp["updateUrl"] = info.UpdateURL
+		}
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, resp))
 }
 
 func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *protocol.RequestFrame) {

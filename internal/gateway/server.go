@@ -73,9 +73,10 @@ type Server struct {
 	clients     map[string]*Client
 	mu          sync.RWMutex
 
-	startedAt time.Time
-	version   string
-	db        interface{ PingContext(context.Context) error } // for health check DB ping
+	startedAt      time.Time
+	version        string
+	db             interface{ PingContext(context.Context) error } // for health check DB ping
+	updateChecker  *UpdateChecker
 
 	logTee   *LogTee                  // optional; auto-unsubscribes clients on disconnect
 	postTurn tools.PostTurnProcessor // optional; for team task dispatch in HTTP API paths
@@ -576,6 +577,13 @@ func (s *Server) StartedAt() time.Time { return s.startedAt }
 
 // Version returns the server version string.
 func (s *Server) Version() string { return s.version }
+
+// StartUpdateChecker starts a background goroutine that periodically checks
+// GitHub for new releases and caches the result for the health endpoint.
+func (s *Server) StartUpdateChecker(ctx context.Context) {
+	s.updateChecker = NewUpdateChecker(s.version)
+	s.updateChecker.Start(ctx)
+}
 
 // ClientList returns a snapshot of all connected clients.
 func (s *Server) ClientList() []*Client {
