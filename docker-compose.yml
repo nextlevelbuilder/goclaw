@@ -59,7 +59,7 @@ services:
           pids: 200
     networks:
       - default
-      - shared
+      - goclaw-net
     restart: unless-stopped
 
 volumes:
@@ -67,6 +67,6 @@ volumes:
   goclaw-workspace:
 
 networks:
-  shared:
-    name: shared
+  goclaw-net:
+    name: goclaw-net
     driver: bridge
