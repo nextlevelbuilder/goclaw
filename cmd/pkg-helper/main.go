@@ -1,6 +1,6 @@
 // pkg-helper is a root-privileged helper that listens on a Unix socket
-// and executes apk add/del commands on behalf of the non-root app process.
-// It is started by docker-entrypoint.sh before dropping privileges.
+// and executes apt-get install/remove commands on behalf of the non-root app process.
+// It is started by a systemd service before the main goclaw process.
 package main
 
 import (
@@ -51,19 +51,17 @@ func main() {
 	}
 	defer listener.Close()
 
-	// Socket permissions: owner root, group goclaw (gid 1000), mode 0660.
-	// Chown requires CAP_CHOWN; if missing (misconfigured container), warn but continue
-	// since umask already set restrictive permissions.
+	// Socket permissions: owner root, group ubuntu (gid 1000), mode 0660.
 	if os.Getuid() == 0 {
 		if err := os.Chown(socketPath, 0, 1000); err != nil {
-			slog.Warn("pkg-helper: chown socket failed (missing CAP_CHOWN?)", "error", err)
+			slog.Warn("pkg-helper: chown socket failed", "error", err)
 		}
 	}
 	if err := os.Chmod(socketPath, 0660); err != nil {
 		slog.Warn("pkg-helper: chmod socket failed", "error", err)
 	}
 
-	// Ensure persist directory is writable by root (self-healing for upgrades).
+	// Ensure persist directory exists.
 	ensurePersistDir()
 
 	// Graceful shutdown on SIGTERM/SIGINT.
@@ -141,7 +139,8 @@ func handleRequest(req request) response {
 func doInstall(pkg string) response {
 	slog.Info("pkg-helper: installing", "package", pkg)
 
-	cmd := exec.Command("apk", "add", "--no-cache", pkg)
+	cmd := exec.Command("apt-get", "install", "-y", "--no-install-recommends", pkg)
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
@@ -157,7 +156,8 @@ func doInstall(pkg string) response {
 func doUninstall(pkg string) response {
 	slog.Info("pkg-helper: uninstalling", "package", pkg)
 
-	cmd := exec.Command("apk", "del", pkg)
+	cmd := exec.Command("apt-get", "remove", "-y", pkg)
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := fmt.Sprintf("%s: %v", strings.TrimSpace(string(out)), err)
@@ -170,15 +170,14 @@ func doUninstall(pkg string) response {
 	return response{OK: true}
 }
 
-// persistAdd appends a package name to the apk persist file (dedup check).
+// persistAdd appends a package name to the persist file (dedup check).
 func persistAdd(pkg string) {
-	listFile := apkListFile()
+	listFile := pkgListFile()
 
-	// Check if already persisted (avoid duplicates).
 	if data, err := os.ReadFile(listFile); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			if strings.TrimSpace(line) == pkg {
-				return // already persisted
+				return
 			}
 		}
 	}
@@ -192,10 +191,9 @@ func persistAdd(pkg string) {
 	fmt.Fprintln(f, pkg)
 }
 
-// persistRemove removes a package name from the apk persist file.
-// Uses write-to-temp-then-rename for atomic update (avoids truncation on disk-full).
+// persistRemove removes a package name from the persist file.
 func persistRemove(pkg string) {
-	listFile := apkListFile()
+	listFile := pkgListFile()
 	data, err := os.ReadFile(listFile)
 	if err != nil {
 		return
@@ -220,36 +218,17 @@ func persistRemove(pkg string) {
 	}
 }
 
-func apkListFile() string {
+func pkgListFile() string {
 	runtimeDir := os.Getenv("RUNTIME_DIR")
 	if runtimeDir == "" {
-		runtimeDir = "/app/data/.runtime"
+		runtimeDir = "/var/lib/goclaw/.runtime"
 	}
-	return runtimeDir + "/apk-packages"
+	return runtimeDir + "/apt-packages"
 }
 
-// ensurePersistDir ensures the apk persist file's parent directory is writable by root.
-// On existing volumes the directory may be goclaw-owned (from older images); fix ownership
-// using CAP_CHOWN so pkg-helper can create/write the persist file.
 func ensurePersistDir() {
-	dir := filepath.Dir(apkListFile())
-	fi, err := os.Stat(dir)
-	if err != nil {
-		// Directory doesn't exist — entrypoint should have created it.
-		return
-	}
-	if !fi.IsDir() {
-		return
-	}
-
-	// Try to fix ownership to root:goclaw (gid 1000) if not already root-owned.
-	// CAP_CHOWN is available even when CAP_DAC_OVERRIDE is dropped.
-	if stat, ok := fi.Sys().(*syscall.Stat_t); ok && stat.Uid != 0 {
-		if err := os.Chown(dir, 0, 1000); err != nil {
-			slog.Warn("pkg-helper: cannot fix persist dir ownership", "dir", dir, "error", err)
-		} else {
-			os.Chmod(dir, 0750) //nolint:errcheck
-			slog.Info("pkg-helper: fixed persist dir ownership", "dir", dir)
-		}
+	dir := filepath.Dir(pkgListFile())
+	if err := os.MkdirAll(dir, 0750); err != nil {
+		slog.Warn("pkg-helper: cannot create persist dir", "dir", dir, "error", err)
 	}
 }
