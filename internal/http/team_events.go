@@ -13,11 +13,10 @@ import (
 // TeamEventsHandler handles team event history HTTP endpoints.
 type TeamEventsHandler struct {
 	teamStore store.TeamStore
-	token     string
 }
 
-func NewTeamEventsHandler(teamStore store.TeamStore, token string) *TeamEventsHandler {
-	return &TeamEventsHandler{teamStore: teamStore, token: token}
+func NewTeamEventsHandler(teamStore store.TeamStore) *TeamEventsHandler {
+	return &TeamEventsHandler{teamStore: teamStore}
 }
 
 func (h *TeamEventsHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -25,17 +24,7 @@ func (h *TeamEventsHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *TeamEventsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.token != "" {
-			provided := extractBearerToken(r)
-			if !tokenMatch(provided, h.token) {
-				locale := extractLocale(r)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
-				return
-			}
-		}
-		next(w, r)
-	}
+	return requireAuth("", next)
 }
 
 func (h *TeamEventsHandler) handleList(w http.ResponseWriter, r *http.Request) {

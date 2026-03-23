@@ -18,13 +18,12 @@ import (
 type BuiltinToolsHandler struct {
 	store          store.BuiltinToolStore
 	tenantCfgStore store.BuiltinToolTenantConfigStore
-	token          string
 	msgBus         *bus.MessageBus
 }
 
 // NewBuiltinToolsHandler creates a handler for built-in tool management endpoints.
-func NewBuiltinToolsHandler(s store.BuiltinToolStore, tenantCfgs store.BuiltinToolTenantConfigStore, token string, msgBus *bus.MessageBus) *BuiltinToolsHandler {
-	return &BuiltinToolsHandler{store: s, tenantCfgStore: tenantCfgs, token: token, msgBus: msgBus}
+func NewBuiltinToolsHandler(s store.BuiltinToolStore, tenantCfgs store.BuiltinToolTenantConfigStore, msgBus *bus.MessageBus) *BuiltinToolsHandler {
+	return &BuiltinToolsHandler{store: s, tenantCfgStore: tenantCfgs, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all built-in tool routes on the given mux.
@@ -37,7 +36,7 @@ func (h *BuiltinToolsHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *BuiltinToolsHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *BuiltinToolsHandler) emitCacheInvalidate(key string) {

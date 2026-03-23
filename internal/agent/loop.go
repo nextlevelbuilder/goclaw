@@ -512,6 +512,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	var deliverables []string      // actual content from tool outputs (for team task results)
 	var blockReplies int           // count of block.reply events emitted (for dedup in consumer)
 	var lastBlockReply string      // last block reply content
+	var checkpointFlushedMsgs int  // messages flushed mid-run for crash safety (#294)
 
 	// Mid-loop compaction: summarize in-memory messages when context exceeds threshold.
 	// Uses same config as maybeSummarize (contextWindow * historyShare).
@@ -724,6 +725,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				providers.OptChannel:     req.Channel,
 				providers.OptChatID:      req.ChatID,
 				providers.OptPeerKind:    req.PeerKind,
+				providers.OptWorkspace:   tools.ToolWorkspaceFromCtx(ctx),
 			},
 		}
 		if l.thinkingLevel != "" && l.thinkingLevel != "off" {
@@ -1329,6 +1331,21 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 			pendingMsgs = append(pendingMsgs, forSession...)
 		}
 
+		// Periodic checkpoint: flush pending messages to session every 5 iterations
+		// to limit data loss on container crash (#294). Trade-off: partial visibility
+		// to concurrent reads vs full data loss on crash.
+		// AddMessage writes to in-memory cache; Save persists to DB. We must clear
+		// pendingMsgs after AddMessage to prevent double-add in the final flush.
+		const checkpointInterval = 5
+		if iteration > 0 && iteration%checkpointInterval == 0 && len(pendingMsgs) > 0 {
+			for _, msg := range pendingMsgs {
+				l.sessions.AddMessage(ctx, req.SessionKey, msg)
+			}
+			checkpointFlushedMsgs += len(pendingMsgs)
+			pendingMsgs = pendingMsgs[:0]
+			l.sessions.Save(ctx, req.SessionKey) //nolint:errcheck — best-effort persistence
+		}
+
 	}
 
 	// 4. Full sanitization pipeline (matching TS extractAssistantText + sanitizeUserFacingText)
@@ -1450,7 +1467,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	// Next time EstimateTokensWithCalibration() is called, it uses this as a base
 	// instead of the chars/3 heuristic (more accurate for multilingual content).
 	if totalUsage.PromptTokens > 0 {
-		msgCount := len(history) + len(pendingMsgs)
+		msgCount := len(history) + checkpointFlushedMsgs + len(pendingMsgs)
 		l.sessions.SetLastPromptTokens(ctx, req.SessionKey, totalUsage.PromptTokens, msgCount)
 	}
 

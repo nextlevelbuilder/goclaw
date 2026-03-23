@@ -76,10 +76,17 @@ func extractAgentID(r *http.Request, model string) string {
 
 // --- Package-level API key cache for shared auth ---
 
+var pkgGatewayToken string
 var pkgAPIKeyCache *apiKeyCache
 var pkgPairingStore store.PairingStore
 var pkgTenantCache *tenantCache
 var pkgOwnerIDs []string
+
+// InitGatewayToken sets the gateway bearer token for HTTP auth.
+// Must be called once during server startup before handling requests.
+func InitGatewayToken(token string) {
+	pkgGatewayToken = token
+}
 
 // InitAPIKeyCache initializes the shared API key cache with TTL and pubsub invalidation.
 // Must be called once during server startup before handling requests.
@@ -157,17 +164,17 @@ type authResult struct {
 
 // resolveAuth determines the caller's role from the request.
 // Priority: gateway token → API key → no-auth fallback.
-func resolveAuth(r *http.Request, gatewayToken string) authResult {
-	return resolveAuthBearer(r, gatewayToken, extractBearerToken(r))
+func resolveAuth(r *http.Request) authResult {
+	return resolveAuthWithBearer(r, extractBearerToken(r))
 }
 
-// resolveAuthBearer is like resolveAuth but accepts a pre-extracted bearer token.
+// resolveAuthWithBearer is like resolveAuth but accepts a pre-extracted bearer token.
 // Useful for handlers that also accept tokens from query params.
-func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult {
+func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 	// Gateway token → admin
 	// Only owner IDs get cross-tenant access; others are tenant-scoped.
 	// If no owner IDs configured, all gateway token users get cross-tenant (backward compat).
-	if gatewayToken != "" && tokenMatch(bearer, gatewayToken) {
+	if pkgGatewayToken != "" && tokenMatch(bearer, pkgGatewayToken) {
 		userID := extractUserID(r)
 		isOwner := isHTTPOwnerID(userID, pkgOwnerIDs)
 		res := authResult{Role: permissions.RoleAdmin, Authenticated: true, CrossTenant: isOwner}
@@ -221,7 +228,7 @@ func resolveAuthBearer(r *http.Request, gatewayToken, bearer string) authResult 
 		}
 	}
 	// No auth configured → admin (no token = dev/single-user mode, full access)
-	if gatewayToken == "" {
+	if pkgGatewayToken == "" {
 		return authResult{Role: permissions.RoleAdmin, Authenticated: true, TenantID: store.MasterTenantID}
 	}
 	return authResult{}
@@ -239,11 +246,11 @@ func httpMinRole(method string) permissions.Role {
 
 // requireAuth is a middleware that checks authentication and minimum role.
 // Pass "" for minRole to auto-detect from HTTP method (GET→Viewer, POST→Operator).
-// Injects locale and userID into request context.
-func requireAuth(token string, minRole permissions.Role, next http.HandlerFunc) http.HandlerFunc {
+// Injects locale, role, userID and tenantID into request context.
+func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		locale := extractLocale(r)
-		auth := resolveAuth(r, token)
+		auth := resolveAuth(r)
 
 		if !auth.Authenticated {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
@@ -265,6 +272,7 @@ func requireAuth(token string, minRole permissions.Role, next http.HandlerFunc) 
 		}
 
 		ctx := store.WithLocale(r.Context(), locale)
+		ctx = store.WithRole(ctx, string(auth.Role))
 		userID := extractUserID(r)
 		// If the API key has a bound owner, force user_id to owner regardless of header.
 		if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
@@ -318,9 +326,9 @@ func requireAuth(token string, minRole permissions.Role, next http.HandlerFunc) 
 // requireAuthBearer is like requireAuth but accepts a pre-extracted bearer token.
 // Used by handlers that accept tokens from query params (files, media).
 // Returns the authenticated request with user context applied (owner_id enforcement included).
-func requireAuthBearer(token string, minRole permissions.Role, bearer string, w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
+func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
 	locale := extractLocale(r)
-	auth := resolveAuthBearer(r, token, bearer)
+	auth := resolveAuthWithBearer(r, bearer)
 
 	if !auth.Authenticated {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
@@ -343,6 +351,7 @@ func requireAuthBearer(token string, minRole permissions.Role, bearer string, w 
 
 	// Apply user context + owner_id enforcement (same as requireAuth).
 	ctx := store.WithLocale(r.Context(), locale)
+	ctx = store.WithRole(ctx, string(auth.Role))
 	userID := extractUserID(r)
 	if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
 		if userID != "" && userID != auth.KeyData.OwnerID {

@@ -28,13 +28,12 @@ type SkillsHandler struct {
 	baseDir    string // filesystem base for skill content (skills-store/) — master tenant
 	dataDir    string // parent data dir for tenant-scoped skill paths
 	bundledDir string // original bundled skills dir (fallback for broken managed copies)
-	token      string
 	msgBus     *bus.MessageBus
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.
-func NewSkillsHandler(skills *pg.PGSkillStore, baseDir, dataDir, bundledDir, token string, msgBus *bus.MessageBus) *SkillsHandler {
-	return &SkillsHandler{skills: skills, baseDir: baseDir, dataDir: dataDir, bundledDir: bundledDir, token: token, msgBus: msgBus}
+func NewSkillsHandler(skills *pg.PGSkillStore, baseDir, dataDir, bundledDir string, msgBus *bus.MessageBus) *SkillsHandler {
+	return &SkillsHandler{skills: skills, baseDir: baseDir, dataDir: dataDir, bundledDir: bundledDir, msgBus: msgBus}
 }
 
 // tenantSkillsDir returns the skills-store directory scoped to the requesting tenant.
@@ -81,13 +80,13 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 // adminMiddleware requires admin role — used for system-level operations
 // (rescan deps, install packages, toggle skills) that affect the entire server.
 func (h *SkillsHandler) adminMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, permissions.RoleAdmin, next)
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 // requireMasterTenant rejects requests from non-master tenants.
@@ -135,7 +134,7 @@ func (h *SkillsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ownership check (admins bypass)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
 		userID := store.UserIDFromContext(r.Context())
 		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), id); found && ownerID != userID {
@@ -176,7 +175,7 @@ func (h *SkillsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ownership check (admins bypass)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
 		userID := store.UserIDFromContext(r.Context())
 		if ownerID, found := h.skills.GetSkillOwnerID(r.Context(), id); found && ownerID != userID {

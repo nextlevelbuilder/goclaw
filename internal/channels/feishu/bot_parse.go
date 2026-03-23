@@ -100,13 +100,21 @@ func parseMessageContent(rawContent, messageType string) string {
 }
 
 // resolvePostElements extracts the flattened element list from a Lark post message JSON.
-// Handles language variant lookup (zh_cn → en_us → any first key).
+// Handles two formats:
+//  1. Language-wrapped: {"zh_cn": {"title":"...", "content": [[...]]}}
+//  2. Flat (no language key): {"title":"...", "content": [[...]]}
 func resolvePostElements(rawContent string) []any {
 	var post map[string]any
 	if err := json.Unmarshal([]byte(rawContent), &post); err != nil {
 		return nil
 	}
 
+	// Format 2: flat — "content" at top level (no language wrapper).
+	if contentArr, ok := post["content"].([]any); ok {
+		return contentArr
+	}
+
+	// Format 1: language-wrapped — try known locales, then first map value.
 	var langContent any
 	for _, lang := range []string{"zh_cn", "en_us"} {
 		if lc, ok := post[lang]; ok {
@@ -116,8 +124,10 @@ func resolvePostElements(rawContent string) []any {
 	}
 	if langContent == nil {
 		for _, v := range post {
-			langContent = v
-			break
+			if _, ok := v.(map[string]any); ok {
+				langContent = v
+				break
+			}
 		}
 	}
 	if langContent == nil {

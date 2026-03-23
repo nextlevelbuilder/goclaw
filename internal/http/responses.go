@@ -20,7 +20,6 @@ import (
 type ResponsesHandler struct {
 	agents   *agent.Router
 	sessions store.SessionStore
-	token    string
 	postTurn tools.PostTurnProcessor
 }
 
@@ -30,11 +29,10 @@ func (h *ResponsesHandler) SetPostTurnProcessor(pt tools.PostTurnProcessor) {
 }
 
 // NewResponsesHandler creates a handler for the responses endpoint.
-func NewResponsesHandler(agents *agent.Router, sess store.SessionStore, token string) *ResponsesHandler {
+func NewResponsesHandler(agents *agent.Router, sess store.SessionStore) *ResponsesHandler {
 	return &ResponsesHandler{
 		agents:   agents,
 		sessions: sess,
-		token:    token,
 	}
 }
 
@@ -52,7 +50,7 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Auth + RBAC check (gateway token or API key, operator required for POST)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return

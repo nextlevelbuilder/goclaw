@@ -14,13 +14,12 @@ import (
 // TeamAttachmentsHandler serves team task attachment files for download.
 type TeamAttachmentsHandler struct {
 	teamStore store.TeamStore
-	token     string
 	dataDir   string
 }
 
 // NewTeamAttachmentsHandler creates a new handler for serving team attachments.
-func NewTeamAttachmentsHandler(teamStore store.TeamStore, token, dataDir string) *TeamAttachmentsHandler {
-	return &TeamAttachmentsHandler{teamStore: teamStore, token: token, dataDir: dataDir}
+func NewTeamAttachmentsHandler(teamStore store.TeamStore, dataDir string) *TeamAttachmentsHandler {
+	return &TeamAttachmentsHandler{teamStore: teamStore, dataDir: dataDir}
 }
 
 // RegisterRoutes registers the attachment download endpoint.
@@ -46,7 +45,7 @@ func (h *TeamAttachmentsHandler) authMiddleware(next http.HandlerFunc) http.Hand
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		authedReq, ok := requireAuthBearer(h.token, "", provided, w, r)
+		authedReq, ok := requireAuthBearer("", provided, w, r)
 		if !ok {
 			return
 		}

@@ -149,25 +149,25 @@ func TestReadOnlyStreak_ResetByMutation(t *testing.T) {
 
 func TestReadOnlyStreak_ExecNeutral(t *testing.T) {
 	var s toolLoopState
-	// 5 reads → streak = 5
-	for range 5 {
+	// 10 reads -> streak = 10
+	for range 10 {
 		s.recordMutation("read_file")
 	}
 	// exec does not reset or increment
 	s.recordMutation("exec")
-	if s.readOnlyStreak != 5 {
-		t.Fatalf("expected streak 5 after exec, got %d", s.readOnlyStreak)
+	if s.readOnlyStreak != 10 {
+		t.Fatalf("expected streak 10 after exec, got %d", s.readOnlyStreak)
 	}
-	// 5 more reads → streak = 10
-	for range 5 {
+	// 10 more reads -> streak = 20 (= readOnlyStreakWarning)
+	for range 10 {
 		s.recordMutation("list_files")
 	}
-	if s.readOnlyStreak != 10 {
-		t.Fatalf("expected streak 10, got %d", s.readOnlyStreak)
+	if s.readOnlyStreak != 20 {
+		t.Fatalf("expected streak 20, got %d", s.readOnlyStreak)
 	}
 	level, _ := s.detectReadOnlyStreak()
 	if level != "warning" {
-		t.Fatalf("expected warning at streak 10, got %q", level)
+		t.Fatalf("expected warning at streak 20, got %q", level)
 	}
 }
 

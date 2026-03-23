@@ -14,15 +14,13 @@ import (
 // ToolsInvokeHandler handles POST /v1/tools/invoke (direct tool invocation).
 type ToolsInvokeHandler struct {
 	registry   *tools.Registry
-	token      string
 	agentStore store.AgentStore // nil if not configured
 }
 
 // NewToolsInvokeHandler creates a handler for the tools invoke endpoint.
-func NewToolsInvokeHandler(registry *tools.Registry, token string, agentStore store.AgentStore) *ToolsInvokeHandler {
+func NewToolsInvokeHandler(registry *tools.Registry, agentStore store.AgentStore) *ToolsInvokeHandler {
 	return &ToolsInvokeHandler{
 		registry:   registry,
-		token:      token,
 		agentStore: agentStore,
 	}
 }
@@ -47,7 +45,7 @@ func (h *ToolsInvokeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
 		return

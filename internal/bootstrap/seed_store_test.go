@@ -102,6 +102,9 @@ func (s *seedStubStore) UpdateUserProfileMetadata(_ context.Context, _ uuid.UUID
 func (s *seedStubStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
+func (s *seedStubStore) PropagateContextFile(_ context.Context, _ uuid.UUID, _ string) (int, error) {
+	return 0, nil
+}
 
 // ---- Tests ----
 

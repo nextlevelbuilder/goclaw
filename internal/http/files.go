@@ -18,7 +18,6 @@ import (
 // When an exact path is not found, falls back to searching the workspace for
 // generated files by basename (goclaw_gen_* filenames are globally unique).
 type FilesHandler struct {
-	token     string
 	workspace string // workspace root for fallback file search
 	dataDir   string // data directory root for tenant path validation
 }
@@ -26,8 +25,8 @@ type FilesHandler struct {
 // NewFilesHandler creates a handler that serves files by absolute path.
 // workspace is the root directory used for fallback generated file search.
 // dataDir is used for tenant path validation (files must be within tenant's dirs).
-func NewFilesHandler(token, workspace, dataDir string) *FilesHandler {
-	return &FilesHandler{token: token, workspace: workspace, dataDir: dataDir}
+func NewFilesHandler(workspace, dataDir string) *FilesHandler {
+	return &FilesHandler{workspace: workspace, dataDir: dataDir}
 }
 
 // RegisterRoutes registers the file serving route.
@@ -49,7 +48,7 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// Priority 2: Bearer header (API clients only).
 		provided := extractBearerToken(r)
-		authedReq, ok := requireAuthBearer(h.token, "", provided, w, r)
+		authedReq, ok := requireAuthBearer("", provided, w, r)
 		if !ok {
 			return
 		}

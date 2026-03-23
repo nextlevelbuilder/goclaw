@@ -1,4 +1,4 @@
-import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Globe, Clock, Building2, ChevronDown, Check, User, KeyRound, FileText } from "lucide-react";
+import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Globe, Clock, Building2, ChevronDown, Check, User, KeyRound, Info } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover } from "radix-ui";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { AboutDialog } from "./about-dialog";
 
 export function Topbar() {
   const { t } = useTranslation("topbar");
@@ -24,7 +25,6 @@ export function Topbar() {
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
   const isMobile = useIsMobile();
-
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   const handleSidebarToggle = isMobile
@@ -50,21 +50,10 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <a
-          href="https://docs.goclaw.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1 cursor-pointer rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          title={t("documents")}
-        >
-          <FileText className="h-4 w-4 shrink-0" />
-          <span className="hidden sm:inline">{t("documents")}</span>
-        </a>
-
         <Select value={language} onValueChange={(v) => setLanguage(v as Language)}>
           <SelectTrigger
             title={t("language")}
-            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
+            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-sm text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
           >
             <Globe className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline"><SelectValue /></span>
@@ -79,7 +68,7 @@ export function Topbar() {
         <Select value={timezone} onValueChange={setTimezone}>
           <SelectTrigger
             title={t("timezone")}
-            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-xs text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
+            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-sm text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
           >
             <Clock className="h-4 w-4 shrink-0" />
             <span className="hidden sm:inline"><SelectValue /></span>
@@ -101,6 +90,7 @@ export function Topbar() {
 
         <UserMenu />
       </div>
+
     </header>
   );
 }
@@ -113,6 +103,7 @@ function UserMenu() {
   const { currentTenant, currentTenantName, tenants, isCrossTenant, isMultiTenant, currentTenantId } = useTenants();
   const [open, setOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const navigate = useNavigate();
 
   const tenantLabel = currentTenant?.name || currentTenantName || "";
@@ -133,7 +124,7 @@ function UserMenu() {
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
-          className="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className="flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           title={userId || t("logout")}
         >
           <User className="h-4 w-4 shrink-0" />
@@ -204,6 +195,15 @@ function UserMenu() {
             <span>{t("apiKeys")}</span>
           </button>
 
+          {/* About */}
+          <button
+            onClick={() => { setOpen(false); setShowAbout(true); }}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+          >
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            <span>{t("about.menuItem")}</span>
+          </button>
+
           <div className="my-1 border-t" />
 
           {/* Logout */}
@@ -227,6 +227,8 @@ function UserMenu() {
       variant="destructive"
       onConfirm={() => { setShowLogoutConfirm(false); logout(); }}
     />
+
+    <AboutDialog open={showAbout} onOpenChange={setShowAbout} />
     </>
   );
 }

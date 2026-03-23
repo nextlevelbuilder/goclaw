@@ -76,6 +76,13 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		m.failCycledTasks(ctx, teamID, cycled, taskMap)
 	}
 
+	// Fetch team once for lead-agent guard in dispatchTaskToAgent.
+	team, err := m.teamStore.GetTeam(ctx, teamID)
+	if err != nil || team == nil {
+		slog.Warn("post_turn: cannot fetch team", "team_id", teamID, "error", err)
+		return fmt.Errorf("cannot fetch team %s: %w", teamID, err)
+	}
+
 	// Dispatch pending assigned tasks (not blocked, not failed).
 	for _, task := range tasks {
 		if _, isCycled := cycled[task.ID]; isCycled {
@@ -85,6 +92,10 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 			continue
 		}
 		if task.Status != store.TeamTaskStatusPending || task.OwnerAgentID == nil {
+			continue
+		}
+		// Skip tasks assigned to the lead agent — would cause self-dispatch loop.
+		if *task.OwnerAgentID == team.LeadAgentID {
 			continue
 		}
 		if err := m.teamStore.AssignTask(ctx, task.ID, *task.OwnerAgentID, teamID); err != nil {
@@ -107,7 +118,7 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		// Restore leader's trace context from task metadata (ctx here is the
 		// consumer goroutine context which has no trace after the turn ends).
 		dispatchCtx := m.restoreTraceContext(ctx, task)
-		m.dispatchTaskToAgent(dispatchCtx, task, teamID, *task.OwnerAgentID)
+		m.dispatchTaskToAgent(dispatchCtx, task, team, *task.OwnerAgentID)
 	}
 
 	slog.Info("post_turn: processed pending tasks",

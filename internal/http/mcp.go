@@ -26,15 +26,14 @@ type MCPPoolEvictor interface {
 // MCPHandler handles MCP server management HTTP endpoints.
 type MCPHandler struct {
 	store       store.MCPServerStore
-	token       string
 	msgBus      *bus.MessageBus
-	mgr         MCPToolLister   // optional, nil when Manager not available
-	poolEvictor MCPPoolEvictor  // optional, nil when pool not available
+	mgr         MCPToolLister  // optional, nil when Manager not available
+	poolEvictor MCPPoolEvictor // optional, nil when pool not available
 }
 
 // NewMCPHandler creates a handler for MCP server management endpoints.
-func NewMCPHandler(s store.MCPServerStore, token string, msgBus *bus.MessageBus, mgr MCPToolLister) *MCPHandler {
-	return &MCPHandler{store: s, token: token, msgBus: msgBus, mgr: mgr}
+func NewMCPHandler(s store.MCPServerStore, msgBus *bus.MessageBus, mgr MCPToolLister) *MCPHandler {
+	return &MCPHandler{store: s, msgBus: msgBus, mgr: mgr}
 }
 
 // SetPoolEvictor sets the pool evictor for credential rotation handling.
@@ -82,7 +81,7 @@ func (h *MCPHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *MCPHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 // --- Server CRUD ---

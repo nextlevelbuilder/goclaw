@@ -31,15 +31,14 @@ type sizeCacheEntry struct {
 
 type StorageHandler struct {
 	baseDir string // global data dir (resolved absolute path to ~/.goclaw/)
-	token   string
 
 	// sizeCache caches the total storage size per tenant for 60 minutes.
 	sizeCache sync.Map // tenantBaseDir (string) → *sizeCacheEntry
 }
 
 // NewStorageHandler creates a handler for workspace storage management.
-func NewStorageHandler(baseDir, token string) *StorageHandler {
-	return &StorageHandler{baseDir: baseDir, token: token}
+func NewStorageHandler(baseDir string) *StorageHandler {
+	return &StorageHandler{baseDir: baseDir}
 }
 
 // RegisterRoutes registers storage management routes on the given mux.
@@ -51,7 +50,7 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 // tenantBaseDir resolves the data directory scoped to the requesting tenant.

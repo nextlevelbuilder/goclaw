@@ -199,9 +199,9 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p SkillCreatePara
 	return returnedID, nil
 }
 
-// GetSkillFilePath returns the filesystem path and version for a skill by UUID.
-func (s *PGSkillStore) GetSkillFilePath(ctx context.Context, id uuid.UUID) (filePath string, slug string, version int, ok bool) {
-	q := "SELECT file_path, slug, version FROM skills WHERE id = $1 AND status = 'active'"
+// GetSkillFilePath returns the filesystem path, version, and system flag for a skill by UUID.
+func (s *PGSkillStore) GetSkillFilePath(ctx context.Context, id uuid.UUID) (filePath string, slug string, version int, isSystem bool, ok bool) {
+	q := "SELECT file_path, slug, version, is_system FROM skills WHERE id = $1 AND status = 'active'"
 	args := []any{id}
 	if !store.IsCrossTenant(ctx) {
 		tid := store.TenantIDFromContext(ctx)
@@ -211,8 +211,8 @@ func (s *PGSkillStore) GetSkillFilePath(ctx context.Context, id uuid.UUID) (file
 		q += " AND (is_system = true OR tenant_id = $2)"
 		args = append(args, tid)
 	}
-	err := s.db.QueryRowContext(ctx, q, args...).Scan(&filePath, &slug, &version)
-	return filePath, slug, version, err == nil
+	err := s.db.QueryRowContext(ctx, q, args...).Scan(&filePath, &slug, &version, &isSystem)
+	return filePath, slug, version, isSystem, err == nil
 }
 
 // GetNextVersion returns the next version number for a skill slug.

@@ -103,6 +103,9 @@
   "userCredentials": {
     "title": "My Credentials",
     "description": "Set your personal credentials for this MCP server. These override the server defaults for your account only.",
+    "titleAdmin": "User Credentials",
+    "descriptionAdmin": "Set credentials for a specific user on this MCP server. These override the server defaults for the selected user only.",
+    "selectUser": "Select user",
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Leave empty to keep current",
     "headers": "Headers",

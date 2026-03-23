@@ -334,6 +334,10 @@ type AgentStore interface {
 	GetAgentContextFiles(ctx context.Context, agentID uuid.UUID) ([]AgentContextFileData, error)
 	SetAgentContextFile(ctx context.Context, agentID uuid.UUID, fileName, content string) error
 
+	// Propagate agent-level file content to all existing user instances that have this file.
+	// Returns count of updated user rows.
+	PropagateContextFile(ctx context.Context, agentID uuid.UUID, fileName string) (int, error)
+
 	// Per-user context files + overrides
 	GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]UserContextFileData, error)
 	SetUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName, content string) error

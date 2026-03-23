@@ -28,6 +28,9 @@ const OptChatID = "chat_id"
 // OptPeerKind passes the peer kind (direct/group) for MCP bridge context.
 const OptPeerKind = "peer_kind"
 
+// OptWorkspace passes the agent workspace path so MCP bridge tools can resolve file paths.
+const OptWorkspace = "workspace"
+
 // ClaudeCLIProvider implements Provider by shelling out to the `claude` CLI binary.
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.

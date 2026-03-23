@@ -19,20 +19,19 @@ import (
 // TenantsHandler handles tenant CRUD and membership endpoints.
 type TenantsHandler struct {
 	tenantStore store.TenantStore
-	token       string
 	msgBus      *bus.MessageBus
 	workspace   string // base workspace directory for tenant dirs
 }
 
 // NewTenantsHandler creates a handler for tenant management endpoints.
-func NewTenantsHandler(tenantStore store.TenantStore, token string, msgBus *bus.MessageBus, workspace string) *TenantsHandler {
-	return &TenantsHandler{tenantStore: tenantStore, token: token, msgBus: msgBus, workspace: workspace}
+func NewTenantsHandler(tenantStore store.TenantStore, msgBus *bus.MessageBus, workspace string) *TenantsHandler {
+	return &TenantsHandler{tenantStore: tenantStore, msgBus: msgBus, workspace: workspace}
 }
 
 // RegisterRoutes registers all tenant management routes on the given mux.
 func (h *TenantsHandler) RegisterRoutes(mux *http.ServeMux) {
 	admin := func(next http.HandlerFunc) http.HandlerFunc {
-		return requireAuth(h.token, permissions.RoleAdmin, next)
+		return requireAuth(permissions.RoleAdmin, next)
 	}
 	mux.HandleFunc("GET /v1/tenants", admin(h.handleList))
 	mux.HandleFunc("POST /v1/tenants", admin(h.handleCreate))

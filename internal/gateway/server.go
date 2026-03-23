@@ -162,7 +162,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	// OpenAI-compatible chat completions
 	isManaged := s.agentStore != nil
-	chatHandler := httpapi.NewChatCompletionsHandler(s.agents, s.sessions, s.cfg.Gateway.Token, isManaged)
+	chatHandler := httpapi.NewChatCompletionsHandler(s.agents, s.sessions, isManaged)
 	if s.rateLimiter.Enabled() {
 		chatHandler.SetRateLimiter(s.rateLimiter.Allow)
 	}
@@ -172,7 +172,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 	mux.Handle("/v1/chat/completions", chatHandler)
 
 	// OpenResponses protocol
-	responsesHandler := httpapi.NewResponsesHandler(s.agents, s.sessions, s.cfg.Gateway.Token)
+	responsesHandler := httpapi.NewResponsesHandler(s.agents, s.sessions)
 	if s.postTurn != nil {
 		responsesHandler.SetPostTurnProcessor(s.postTurn)
 	}
@@ -180,7 +180,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	// Direct tool invocation
 	if s.tools != nil {
-		toolsHandler := httpapi.NewToolsInvokeHandler(s.tools, s.cfg.Gateway.Token, s.agentStore)
+		toolsHandler := httpapi.NewToolsInvokeHandler(s.tools, s.agentStore)
 		mux.Handle("/v1/tools/invoke", toolsHandler)
 	}
 
@@ -329,10 +329,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	return mux
 }
 
-// bridgeContextMiddleware extracts X-Agent-ID and X-User-ID headers from the
-// MCP bridge request and injects them into the context so bridge tools can
-// access agent/user scope. When a gateway token is configured, the context
-// headers must be accompanied by a valid X-Bridge-Sig HMAC to prevent forgery.
+// bridgeContextMiddleware extracts X-Agent-ID, X-User-ID, and X-Workspace headers
+// from the MCP bridge request and injects them into the context so bridge tools can
+// access agent/user scope and resolve workspace-relative paths.
+// When a gateway token is configured, the context headers must be accompanied by
+// a valid X-Bridge-Sig HMAC to prevent forgery.
 func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -341,6 +342,7 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 		channel := r.Header.Get("X-Channel")
 		chatID := r.Header.Get("X-Chat-ID")
 		peerKind := r.Header.Get("X-Peer-Kind")
+		workspace := r.Header.Get("X-Workspace")
 
 		if agentIDStr != "" || userID != "" {
 			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
@@ -353,7 +355,7 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 
 			// Verify HMAC signature over all context fields.
 			sig := r.Header.Get("X-Bridge-Sig")
-			if !providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, sig) {
+			if !providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, sig) {
 				slog.Warn("security.mcp_bridge: invalid bridge context signature",
 					"agent_id", agentIDStr, "user_id", userID)
 				http.Error(w, `{"error":"invalid bridge context signature"}`, http.StatusForbidden)
@@ -379,6 +381,11 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 		}
 		if peerKind != "" {
 			ctx = tools.WithToolPeerKind(ctx, peerKind)
+		}
+		// Inject workspace so bridge tools (read_image, read_file, etc.) can resolve paths.
+		// Only when agent context is present (HMAC-protected) to prevent unauthenticated path injection.
+		if workspace != "" && (agentIDStr != "" || userID != "") {
+			ctx = tools.WithToolWorkspace(ctx, workspace)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -663,7 +670,7 @@ func StartTestServer(s *Server, ctx context.Context) (addr string, start func())
 	mux.HandleFunc("/health", s.handleHealth)
 
 	isManaged := s.agentStore != nil
-	chatHandler := httpapi.NewChatCompletionsHandler(s.agents, s.sessions, s.cfg.Gateway.Token, isManaged)
+	chatHandler := httpapi.NewChatCompletionsHandler(s.agents, s.sessions, isManaged)
 	if s.rateLimiter.Enabled() {
 		chatHandler.SetRateLimiter(s.rateLimiter.Allow)
 	}
@@ -672,14 +679,14 @@ func StartTestServer(s *Server, ctx context.Context) (addr string, start func())
 	}
 	mux.Handle("/v1/chat/completions", chatHandler)
 
-	responsesHandler := httpapi.NewResponsesHandler(s.agents, s.sessions, s.cfg.Gateway.Token)
+	responsesHandler := httpapi.NewResponsesHandler(s.agents, s.sessions)
 	if s.postTurn != nil {
 		responsesHandler.SetPostTurnProcessor(s.postTurn)
 	}
 	mux.Handle("/v1/responses", responsesHandler)
 
 	if s.tools != nil {
-		toolsHandler := httpapi.NewToolsInvokeHandler(s.tools, s.cfg.Gateway.Token, s.agentStore)
+		toolsHandler := httpapi.NewToolsInvokeHandler(s.tools, s.agentStore)
 		mux.Handle("/v1/tools/invoke", toolsHandler)
 	}
 

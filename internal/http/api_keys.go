@@ -19,13 +19,12 @@ import (
 // APIKeysHandler handles API key management endpoints.
 type APIKeysHandler struct {
 	apiKeys store.APIKeyStore
-	token   string          // gateway token for admin auth
 	msgBus  *bus.MessageBus // for cache invalidation events
 }
 
 // NewAPIKeysHandler creates a handler for API key management endpoints.
-func NewAPIKeysHandler(apiKeys store.APIKeyStore, token string, msgBus *bus.MessageBus) *APIKeysHandler {
-	return &APIKeysHandler{apiKeys: apiKeys, token: token, msgBus: msgBus}
+func NewAPIKeysHandler(apiKeys store.APIKeyStore, msgBus *bus.MessageBus) *APIKeysHandler {
+	return &APIKeysHandler{apiKeys: apiKeys, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all API key management routes on the given mux.
@@ -37,7 +36,7 @@ func (h *APIKeysHandler) RegisterRoutes(mux *http.ServeMux) {
 
 // adminAuth ensures the caller has admin access (gateway token or API key with admin scope).
 func (h *APIKeysHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, permissions.RoleAdmin, next)
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 func (h *APIKeysHandler) handleList(w http.ResponseWriter, r *http.Request) {

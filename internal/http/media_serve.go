@@ -14,12 +14,11 @@ import (
 // MediaServeHandler serves persisted media files by ID.
 type MediaServeHandler struct {
 	store *media.Store
-	token string
 }
 
 // NewMediaServeHandler creates a media serve handler.
-func NewMediaServeHandler(store *media.Store, token string) *MediaServeHandler {
-	return &MediaServeHandler{store: store, token: token}
+func NewMediaServeHandler(store *media.Store) *MediaServeHandler {
+	return &MediaServeHandler{store: store}
 }
 
 // RegisterRoutes registers the media serve endpoint.
@@ -41,7 +40,7 @@ func (h *MediaServeHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		// Priority 2: Bearer header (API clients only).
 		provided := extractBearerToken(r)
-		authedReq, ok := requireAuthBearer(h.token, "", provided, w, r)
+		authedReq, ok := requireAuthBearer("", provided, w, r)
 		if !ok {
 			return
 		}

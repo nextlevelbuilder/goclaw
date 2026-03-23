@@ -118,22 +118,25 @@ export function useMCP() {
   );
 
   const getUserCredentials = useCallback(
-    async (serverId: string) => {
-      return http.get<MCPUserCredentialStatus>(`/v1/mcp/servers/${serverId}/user-credentials`);
+    async (serverId: string, userId?: string) => {
+      const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+      return http.get<MCPUserCredentialStatus>(`/v1/mcp/servers/${serverId}/user-credentials${qs}`);
     },
     [http],
   );
 
   const setUserCredentials = useCallback(
-    async (serverId: string, creds: MCPUserCredentialInput) => {
-      await http.put(`/v1/mcp/servers/${serverId}/user-credentials`, creds);
+    async (serverId: string, creds: MCPUserCredentialInput, userId?: string) => {
+      const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+      await http.put(`/v1/mcp/servers/${serverId}/user-credentials${qs}`, creds);
     },
     [http],
   );
 
   const deleteUserCredentials = useCallback(
-    async (serverId: string) => {
-      await http.delete(`/v1/mcp/servers/${serverId}/user-credentials`);
+    async (serverId: string, userId?: string) => {
+      const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
+      await http.delete(`/v1/mcp/servers/${serverId}/user-credentials${qs}`);
     },
     [http],
   );

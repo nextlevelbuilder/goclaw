@@ -84,6 +84,9 @@ func (s *stubAgentStore) UpdateUserProfileMetadata(_ context.Context, _ uuid.UUI
 func (s *stubAgentStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
+func (s *stubAgentStore) PropagateContextFile(_ context.Context, _ uuid.UUID, _ string) (int, error) {
+	return 0, nil
+}
 
 // ---- Tests ----
 

@@ -21,7 +21,6 @@ import (
 type ChatCompletionsHandler struct {
 	agents      *agent.Router
 	sessions    store.SessionStore
-	token       string // expected bearer token (empty = no auth)
 	isManaged   bool
 	rateLimiter func(string) bool // rate limit check: key → allowed (nil = no limit)
 	postTurn    tools.PostTurnProcessor
@@ -33,11 +32,10 @@ func (h *ChatCompletionsHandler) SetPostTurnProcessor(pt tools.PostTurnProcessor
 }
 
 // NewChatCompletionsHandler creates a handler for the chat completions endpoint.
-func NewChatCompletionsHandler(agents *agent.Router, sess store.SessionStore, token string, isManaged bool) *ChatCompletionsHandler {
+func NewChatCompletionsHandler(agents *agent.Router, sess store.SessionStore, isManaged bool) *ChatCompletionsHandler {
 	return &ChatCompletionsHandler{
 		agents:    agents,
 		sessions:  sess,
-		token:     token,
 		isManaged: isManaged,
 	}
 }
@@ -91,7 +89,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Auth + RBAC check (gateway token or API key, operator required for POST)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s","type":"invalid_request_error"}}`, i18n.T(locale, i18n.MsgInvalidAuth)), http.StatusUnauthorized)
 		return

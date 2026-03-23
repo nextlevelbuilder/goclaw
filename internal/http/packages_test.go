@@ -163,18 +163,15 @@ func TestParseAndValidatePackage_BodySizeLimit(t *testing.T) {
 
 // TestNewPackagesHandler creates a handler.
 func TestNewPackagesHandler(t *testing.T) {
-	h := NewPackagesHandler("test-token")
+	h := NewPackagesHandler()
 	if h == nil {
 		t.Fatal("NewPackagesHandler() returned nil")
-	}
-	if h.token != "test-token" {
-		t.Errorf("token = %q, want 'test-token'", h.token)
 	}
 }
 
 // TestPackagesHandler_RegisterRoutes ensures routes are registered without panic.
 func TestPackagesHandler_RegisterRoutes(t *testing.T) {
-	h := NewPackagesHandler("test-token")
+	h := NewPackagesHandler()
 	mux := http.NewServeMux()
 
 	// Should not panic

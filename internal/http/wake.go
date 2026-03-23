@@ -20,7 +20,6 @@ import (
 // Allows orchestrators (Paperclip, n8n, etc.) to trigger agent runs via HTTP.
 type WakeHandler struct {
 	agents   *agent.Router
-	token    string
 	postTurn tools.PostTurnProcessor
 }
 
@@ -30,8 +29,8 @@ func (h *WakeHandler) SetPostTurnProcessor(pt tools.PostTurnProcessor) {
 }
 
 // NewWakeHandler creates a handler for the wake endpoint.
-func NewWakeHandler(agents *agent.Router, token string) *WakeHandler {
-	return &WakeHandler{agents: agents, token: token}
+func NewWakeHandler(agents *agent.Router) *WakeHandler {
+	return &WakeHandler{agents: agents}
 }
 
 // RegisterRoutes registers wake routes on the given mux.
@@ -62,7 +61,7 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 
 	// Auth + RBAC check (gateway token or API key, operator required for POST)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
 		return

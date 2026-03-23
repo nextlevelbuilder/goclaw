@@ -22,13 +22,12 @@ type ChannelInstancesHandler struct {
 	configPermStore store.ConfigPermissionStore
 	contactStore    store.ContactStore
 	tenantStore     store.TenantStore
-	token           string
 	msgBus          *bus.MessageBus
 }
 
 // NewChannelInstancesHandler creates a handler for channel instance management endpoints.
-func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, contactStore store.ContactStore, tenantStore store.TenantStore, token string, msgBus *bus.MessageBus) *ChannelInstancesHandler {
-	return &ChannelInstancesHandler{store: s, agentStore: agentStore, configPermStore: configPermStore, contactStore: contactStore, tenantStore: tenantStore, token: token, msgBus: msgBus}
+func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, contactStore store.ContactStore, tenantStore store.TenantStore, msgBus *bus.MessageBus) *ChannelInstancesHandler {
+	return &ChannelInstancesHandler{store: s, agentStore: agentStore, configPermStore: configPermStore, contactStore: contactStore, tenantStore: tenantStore, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all channel instance routes on the given mux.
@@ -61,7 +60,7 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ChannelInstancesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *ChannelInstancesHandler) emitCacheInvalidate() {

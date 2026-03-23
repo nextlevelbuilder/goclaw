@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyRound, Loader2 } from "lucide-react";
 import {
@@ -14,7 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { KeyValueEditor } from "@/components/shared/key-value-editor";
+import { Combobox } from "@/components/ui/combobox";
 import { toast } from "@/stores/use-toast-store";
+import { useAuthStore } from "@/stores/use-auth-store";
+import { useTenants } from "@/hooks/use-tenants";
+import { useTenantUsersList } from "@/pages/contacts/hooks/use-tenant-users-list";
 import i18next from "i18next";
 import type { MCPServerData, MCPUserCredentialStatus, MCPUserCredentialInput } from "./hooks/use-mcp";
 
@@ -30,9 +34,9 @@ interface MCPUserCredentialsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   server: MCPServerData;
-  onGetCredentials: (serverId: string) => Promise<MCPUserCredentialStatus>;
-  onSetCredentials: (serverId: string, creds: MCPUserCredentialInput) => Promise<void>;
-  onDeleteCredentials: (serverId: string) => Promise<void>;
+  onGetCredentials: (serverId: string, userId?: string) => Promise<MCPUserCredentialStatus>;
+  onSetCredentials: (serverId: string, creds: MCPUserCredentialInput, userId?: string) => Promise<void>;
+  onDeleteCredentials: (serverId: string, userId?: string) => Promise<void>;
 }
 
 export function MCPUserCredentialsDialog({
@@ -44,6 +48,18 @@ export function MCPUserCredentialsDialog({
   onDeleteCredentials,
 }: MCPUserCredentialsDialogProps) {
   const { t } = useTranslation("mcp");
+  const role = useAuthStore((s) => s.role);
+  const currentUserId = useAuthStore((s) => s.userId);
+  const { currentTenant } = useTenants();
+  const { users } = useTenantUsersList();
+
+  const canManageUsers =
+    role === "admin" ||
+    currentTenant?.role === "owner" ||
+    currentTenant?.role === "admin";
+
+  const [selectedUserId, setSelectedUserId] = useState(currentUserId);
+
   const [status, setStatus] = useState<MCPUserCredentialStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -53,6 +69,20 @@ export function MCPUserCredentialsDialog({
   const [headers, setHeaders] = useState<Record<string, string>>({});
   const [env, setEnv] = useState<Record<string, string>>({});
 
+  const userOptions = useMemo(
+    () =>
+      users.map((u) => ({
+        value: u.user_id,
+        label: u.display_name || u.user_id,
+      })),
+    [users],
+  );
+
+  // Reset selected user when dialog opens
+  useEffect(() => {
+    if (open) setSelectedUserId(currentUserId);
+  }, [open, currentUserId]);
+
   useEffect(() => {
     if (!open) return;
     setApiKey("");
@@ -60,11 +90,12 @@ export function MCPUserCredentialsDialog({
     setEnv({});
     setStatus(null);
     setLoadingStatus(true);
-    onGetCredentials(server.id)
+    const targetUser = canManageUsers ? selectedUserId : undefined;
+    onGetCredentials(server.id, targetUser)
       .then(setStatus)
       .catch(() => {})
       .finally(() => setLoadingStatus(false));
-  }, [open, server.id, onGetCredentials]);
+  }, [open, server.id, onGetCredentials, canManageUsers, selectedUserId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -73,7 +104,8 @@ export function MCPUserCredentialsDialog({
       if (apiKey.trim()) creds.api_key = apiKey.trim();
       if (Object.keys(headers).length > 0) creds.headers = headers;
       if (Object.keys(env).length > 0) creds.env = env;
-      await onSetCredentials(server.id, creds);
+      const targetUser = canManageUsers ? selectedUserId : undefined;
+      await onSetCredentials(server.id, creds, targetUser);
       toast.success(i18next.t("mcp:userCredentials.saved"));
       onOpenChange(false);
     } catch (err) {
@@ -86,7 +118,8 @@ export function MCPUserCredentialsDialog({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await onDeleteCredentials(server.id);
+      const targetUser = canManageUsers ? selectedUserId : undefined;
+      await onDeleteCredentials(server.id, targetUser);
       toast.success(i18next.t("mcp:userCredentials.deleted"));
       onOpenChange(false);
     } catch (err) {
@@ -102,9 +135,11 @@ export function MCPUserCredentialsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <KeyRound className="h-4 w-4" />
-            {t("userCredentials.title")}
+            {canManageUsers ? t("userCredentials.titleAdmin") : t("userCredentials.title")}
           </DialogTitle>
-          <DialogDescription>{t("userCredentials.description")}</DialogDescription>
+          <DialogDescription>
+            {canManageUsers ? t("userCredentials.descriptionAdmin") : t("userCredentials.description")}
+          </DialogDescription>
         </DialogHeader>
 
         {loadingStatus ? (
@@ -113,6 +148,19 @@ export function MCPUserCredentialsDialog({
           </div>
         ) : (
           <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
+            {/* User selector — admin only */}
+            {canManageUsers && (
+              <div className="flex flex-col gap-1.5">
+                <Label>{t("userCredentials.selectUser")}</Label>
+                <Combobox
+                  value={selectedUserId}
+                  onChange={(val) => setSelectedUserId(val)}
+                  options={userOptions}
+                  placeholder={t("userCredentials.selectUser")}
+                />
+              </div>
+            )}
+
             {/* Current status badges */}
             {status && (
               <div className="flex flex-wrap gap-2">

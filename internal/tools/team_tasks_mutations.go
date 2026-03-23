@@ -119,6 +119,12 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	if !isMember {
 		return ErrorResult(fmt.Sprintf("agent %q is not a member of this team", assigneeKey))
 	}
+	// Prevent lead from self-assigning — causes dual-session execution + loop.
+	// buildCreateHint already hides the lead from the member list hint,
+	// but weaker models may still attempt self-assignment.
+	if assigneeID == team.LeadAgentID {
+		return ErrorResult("team lead cannot assign tasks to itself — delegate to a team member instead. You are the team lead; handle this work directly or assign to one of your members.")
+	}
 
 	requireApproval, _ := args["require_approval"].(bool)
 	status := store.TeamTaskStatusPending
@@ -269,7 +275,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 					ActorType:     "system",
 					ActorID:       "fallback_dispatch",
 				})
-				t.manager.dispatchTaskToAgent(ctx, task, team.ID, assigneeID)
+				t.manager.dispatchTaskToAgent(ctx, task, team, assigneeID)
 			}
 		}
 	}

@@ -35,6 +35,8 @@ const (
 	CrossTenantKey contextKey = "goclaw_cross_tenant"
 	// TenantSlugKey stores the tenant's URL-safe slug for filesystem paths.
 	TenantSlugKey contextKey = "goclaw_tenant_slug"
+	// RoleKey is the context key for the caller's permission role (e.g. "admin", "operator", "viewer").
+	RoleKey contextKey = "goclaw_role"
 )
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
@@ -200,6 +202,19 @@ func WithTenantSlug(ctx context.Context, slug string) context.Context {
 // TenantSlugFromContext extracts the tenant slug from context. Returns "" if not set.
 func TenantSlugFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(TenantSlugKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// WithRole returns a new context with the caller's permission role.
+func WithRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, RoleKey, role)
+}
+
+// RoleFromContext extracts the permission role from context. Returns "" if not set.
+func RoleFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(RoleKey).(string); ok {
 		return v
 	}
 	return ""

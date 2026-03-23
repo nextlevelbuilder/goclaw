@@ -291,8 +291,10 @@ func (l *Loop) enrichVideoIDs(messages []providers.Message, refs []providers.Med
 }
 
 // enrichImageIDs updates the last user message to embed persisted media IDs
-// in <media:image> tags so the LLM knows images were received and stored.
-// Without this, the LLM sees plain <media:image> and cannot confirm image availability.
+// and file paths in <media:image> tags so the LLM knows images were received
+// and stored. The path attribute allows tools called via MCP bridge (e.g.
+// claude-cli) to access images via read_image(path=...) even though the
+// bridge context does not carry WithMediaImages.
 // Iterates refs in reverse order so that when multiple images are present,
 // each ref maps to the correct positional tag (last ref → last tag, etc.).
 func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.MediaRef) {
@@ -318,11 +320,15 @@ func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.Med
 			continue
 		}
 		idAttr := fmt.Sprintf(" id=%q", ref.ID)
+		pathAttr := ""
+		if ref.Path != "" {
+			pathAttr = fmt.Sprintf(" path=%q", ref.Path)
+		}
 
-		// Replace the LAST bare <media:image> with <media:image id="uuid">
+		// Replace the LAST bare <media:image> with <media:image id="uuid" path="...">
 		bare := "<media:image>"
 		if idx := strings.LastIndex(content, bare); idx >= 0 {
-			content = content[:idx] + "<media:image" + idAttr + ">" + content[idx+len(bare):]
+			content = content[:idx] + "<media:image" + idAttr + pathAttr + ">" + content[idx+len(bare):]
 			continue
 		}
 	}

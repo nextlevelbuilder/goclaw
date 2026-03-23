@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
@@ -21,7 +22,7 @@ import (
 // Safe because cron jobs only fire after Start(), well after this is set.
 var cronHeartbeatWakeFn func(agentID string)
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager) func(job *store.CronJob) (*store.CronJobResult, error) {
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
 		if agentID == "" {
@@ -63,6 +64,12 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		// Build context with tenant scope so agent loop events are scoped correctly.
 		cronCtx := store.WithTenantID(context.Background(), job.TenantID)
 
+		// Reset session before each cron run to prevent tool errors from previous
+		// runs from polluting the context and blocking future executions (#294).
+		// Save() persists the empty session to DB so stale data won't reload after restart.
+		sessionMgr.Reset(cronCtx, sessionKey)
+		sessionMgr.Save(cronCtx, sessionKey)
+
 		// Schedule through cron lane — scheduler handles agent resolution and concurrency
 		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
 			SessionKey:        sessionKey,
@@ -99,6 +106,9 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			}
 			appendMediaToOutbound(&outMsg, result.Media)
 			msgBus.PublishOutbound(outMsg)
+		} else if job.Payload.Deliver {
+			slog.Warn("cron: delivery configured but channel/chatID missing — output discarded",
+				"job_id", job.ID, "job_name", job.Name, "channel", job.Payload.Channel, "to", job.Payload.To)
 		}
 
 		cronResult := &store.CronJobResult{

@@ -26,13 +26,22 @@ func setupTestCache(t *testing.T, keys map[string]*store.APIKeyData) *mockAPIKey
 	return ms
 }
 
+// setupTestToken sets the package-level gateway token for testing.
+func setupTestToken(t *testing.T, token string) {
+	t.Helper()
+	old := pkgGatewayToken
+	pkgGatewayToken = token
+	t.Cleanup(func() { pkgGatewayToken = old })
+}
+
 func TestResolveAuth_GatewayToken(t *testing.T) {
 	setupTestCache(t, nil)
+	setupTestToken(t, "my-gateway-token")
 
 	r := httptest.NewRequest("GET", "/v1/agents", nil)
 	r.Header.Set("Authorization", "Bearer my-gateway-token")
 
-	auth := resolveAuth(r, "my-gateway-token")
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		t.Fatal("expected authenticated")
 	}
@@ -43,11 +52,12 @@ func TestResolveAuth_GatewayToken(t *testing.T) {
 
 func TestResolveAuth_WrongToken(t *testing.T) {
 	setupTestCache(t, nil)
+	setupTestToken(t, "correct-token")
 
 	r := httptest.NewRequest("GET", "/v1/agents", nil)
 	r.Header.Set("Authorization", "Bearer wrong-token")
 
-	auth := resolveAuth(r, "correct-token")
+	auth := resolveAuth(r)
 	if auth.Authenticated {
 		t.Fatal("expected unauthenticated for wrong token")
 	}
@@ -58,7 +68,7 @@ func TestResolveAuth_NoAuthConfigured(t *testing.T) {
 
 	r := httptest.NewRequest("GET", "/v1/agents", nil)
 
-	auth := resolveAuth(r, "") // no gateway token configured
+	auth := resolveAuth(r) // no gateway token configured
 	if !auth.Authenticated {
 		t.Fatal("expected authenticated when no token configured")
 	}
@@ -155,8 +165,9 @@ func TestHttpMinRole(t *testing.T) {
 
 func TestRequireAuth_Unauthorized(t *testing.T) {
 	setupTestCache(t, nil)
+	setupTestToken(t, "secret")
 
-	handler := requireAuth("secret", "", func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAuth("", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -171,8 +182,9 @@ func TestRequireAuth_Unauthorized(t *testing.T) {
 
 func TestRequireAuth_GatewayTokenPasses(t *testing.T) {
 	setupTestCache(t, nil)
+	setupTestToken(t, "secret")
 
-	handler := requireAuth("secret", "", func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAuth("", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -188,9 +200,10 @@ func TestRequireAuth_GatewayTokenPasses(t *testing.T) {
 
 func TestRequireAuth_InjectLocaleAndUserID(t *testing.T) {
 	setupTestCache(t, nil)
+	setupTestToken(t, "secret")
 
 	var gotLocale, gotUserID string
-	handler := requireAuth("secret", "", func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAuth("", func(w http.ResponseWriter, r *http.Request) {
 		gotLocale = store.LocaleFromContext(r.Context())
 		gotUserID = store.UserIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
@@ -218,7 +231,7 @@ func TestRequireAuth_AdminRoleEnforced(t *testing.T) {
 	// No auth configured → admin role (dev/single-user mode) → admin endpoint accessible
 	setupTestCache(t, nil)
 
-	handler := requireAuth("", permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAuth(permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -236,7 +249,7 @@ func TestRequireAuth_AutoDetectRole_GET(t *testing.T) {
 	// No auth configured → operator role. GET needs viewer → passes.
 	setupTestCache(t, nil)
 
-	handler := requireAuth("", "", func(w http.ResponseWriter, r *http.Request) {
+	handler := requireAuth("", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 

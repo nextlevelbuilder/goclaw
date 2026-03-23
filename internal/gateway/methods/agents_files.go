@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -215,9 +216,10 @@ func (m *AgentsMethods) handleFilesGet(ctx context.Context, client *gateway.Clie
 func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
-		AgentID string `json:"agentId"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
+		AgentID   string `json:"agentId"`
+		Name      string `json:"name"`
+		Content   string `json:"content"`
+		Propagate bool   `json:"propagate"` // push change to all existing user instances
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -248,6 +250,17 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 			return
 		}
 
+		// Propagate to all existing user instances if requested (#294).
+		var propagated int
+		if params.Propagate {
+			n, err := m.agentStore.PropagateContextFile(ctx, ag.ID, params.Name)
+			if err != nil {
+				slog.Warn("agents.files.set: propagation failed", "agent", params.AgentID, "file", params.Name, "error", err)
+			} else {
+				propagated = n
+			}
+		}
+
 		// Invalidate both caches so the new content is served immediately
 		// without waiting for the ContextFileInterceptor's 5-minute TTL to expire.
 		m.agents.InvalidateAgent(params.AgentID)
@@ -263,6 +276,7 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 				"size":    len(params.Content),
 				"content": params.Content,
 			},
+			"propagated": propagated,
 		}))
 		return
 	}

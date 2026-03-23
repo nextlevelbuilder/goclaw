@@ -126,6 +126,10 @@ func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *
 	if task.OwnerAgentID == nil {
 		return ErrorResult("task has no assignee — assign it first via update")
 	}
+	// Block retry to the lead agent — would cause self-dispatch loop.
+	if *task.OwnerAgentID == team.LeadAgentID {
+		return ErrorResult("cannot retry task assigned to the team lead — reassign to a team member first via update")
+	}
 
 	// Reset status to pending first (AssignTask only transitions from pending).
 	if err := t.manager.teamStore.ResetTaskStatus(ctx, taskID, team.ID); err != nil {
@@ -152,7 +156,7 @@ func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *
 	})
 
 	// Dispatch immediately (retry is an explicit action, not during a turn).
-	t.manager.dispatchTaskToAgent(ctx, task, team.ID, *task.OwnerAgentID)
+	t.manager.dispatchTaskToAgent(ctx, task, team, *task.OwnerAgentID)
 
 	assignee := t.manager.agentKeyFromID(ctx, *task.OwnerAgentID)
 	return NewResult(fmt.Sprintf("Task #%d \"%s\" (id: %s) retried and dispatched to %s. The assignee will receive the task with your recent comments.", task.TaskNumber, task.Subject, taskID, assignee))

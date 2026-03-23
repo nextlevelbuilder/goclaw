@@ -778,6 +778,17 @@ func (m *TeamsMethods) handleTaskDeleteBulk(ctx context.Context, client *gateway
 // gateway consumer picks it up and runs the assigned agent, then auto-completes
 // the task on success or auto-fails on error.
 func (m *TeamsMethods) dispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, taskID, teamID, agentID uuid.UUID, userID string) {
+	// Block dispatch to the lead agent — causes dual-session loop.
+	if team, err := m.teamStore.GetTeam(ctx, teamID); err == nil && team != nil && agentID == team.LeadAgentID {
+		slog.Warn("teams.tasks.dispatch: blocked dispatch to lead agent",
+			"task_id", taskID, "agent_id", agentID, "team_id", teamID)
+		_ = m.teamStore.UpdateTask(ctx, taskID, map[string]any{
+			"status": store.TeamTaskStatusFailed,
+			"result": "Cannot dispatch task to the team lead — reassign to a team member",
+		})
+		return
+	}
+
 	ag, err := m.agentStore.GetByID(ctx, agentID)
 	if err != nil {
 		slog.Warn("teams.tasks.dispatch: cannot resolve agent", "agent_id", agentID, "error", err)

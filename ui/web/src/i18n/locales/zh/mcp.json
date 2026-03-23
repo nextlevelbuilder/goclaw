@@ -103,6 +103,9 @@
   "userCredentials": {
     "title": "我的凭证",
     "description": "为此 MCP 服务器设置您的个人凭证，仅对您的账户生效。",
+    "titleAdmin": "用户凭证",
+    "descriptionAdmin": "为特定用户设置此 MCP 服务器的凭证。这些凭证仅覆盖所选用户的服务器默认值。",
+    "selectUser": "选择用户",
     "apiKey": "API 密钥",
     "apiKeyPlaceholder": "留空以保持当前值",
     "headers": "请求头",

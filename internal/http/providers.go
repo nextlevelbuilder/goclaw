@@ -20,7 +20,6 @@ import (
 type ProvidersHandler struct {
 	store           store.ProviderStore
 	secretStore     store.ConfigSecretsStore
-	token           string
 	providerReg     *providers.Registry
 	gatewayAddr     string                         // for injecting MCP bridge into Claude CLI providers
 	mcpLookup       providers.MCPServerLookup       // optional: resolves per-agent MCP servers
@@ -30,8 +29,8 @@ type ProvidersHandler struct {
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
-func NewProvidersHandler(s store.ProviderStore, secretStore store.ConfigSecretsStore, token string, providerReg *providers.Registry, gatewayAddr string) *ProvidersHandler {
-	return &ProvidersHandler{store: s, secretStore: secretStore, token: token, providerReg: providerReg, gatewayAddr: gatewayAddr}
+func NewProvidersHandler(s store.ProviderStore, secretStore store.ConfigSecretsStore, providerReg *providers.Registry, gatewayAddr string) *ProvidersHandler {
+	return &ProvidersHandler{store: s, secretStore: secretStore, providerReg: providerReg, gatewayAddr: gatewayAddr}
 }
 
 // SetMessageBus sets the message bus for audit event broadcasting.
@@ -95,7 +94,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 // maskAPIKey replaces non-empty API keys with "***".
@@ -125,7 +124,7 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 		var cliOpts []providers.ClaudeCLIOption
 		cliOpts = append(cliOpts, providers.WithClaudeCLISecurityHooks("", true))
 		if h.gatewayAddr != "" {
-			mcpData := providers.BuildCLIMCPConfigData(nil, h.gatewayAddr, h.token)
+			mcpData := providers.BuildCLIMCPConfigData(nil, h.gatewayAddr, pkgGatewayToken)
 			mcpData.AgentMCPLookup = h.mcpLookup
 			cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		}

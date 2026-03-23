@@ -28,8 +28,22 @@ const maxTaskDispatches = 3
 // falling back to ctx only for initial dispatch when the task is created and dispatched
 // in the same call. This ensures correct routing even when called from
 // DispatchUnblockedTasks (where ctx is the member agent's context, not the lead's).
-func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, teamID, agentID uuid.UUID) {
+func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, team *store.TeamData, agentID uuid.UUID) {
 	if m.msgBus == nil {
+		return
+	}
+	teamID := team.ID
+
+	// Safety net: never dispatch to the lead agent — causes dual-session loop.
+	// Self-assignment is blocked at create time, but catch edge cases
+	// from retry, ticker recovery, or manual DB edits.
+	if agentID == team.LeadAgentID {
+		slog.Warn("team_tasks.dispatch: blocked dispatch to lead agent",
+			"task_id", task.ID, "agent_id", agentID, "team_id", teamID)
+		_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
+			"status": store.TeamTaskStatusFailed,
+			"result": "Cannot dispatch task to the team lead — reassign to a team member",
+		})
 		return
 	}
 
@@ -100,10 +114,8 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	}
 	// Resolve lead agent key for completion announce routing.
 	fromAgent := ToolAgentKeyFromCtx(ctx)
-	if team, err := m.teamStore.GetTeamForAgent(ctx, store.AgentIDFromContext(ctx)); err == nil && team != nil {
-		if leadAg, err := m.cachedGetAgentByID(ctx, team.LeadAgentID); err == nil {
-			fromAgent = leadAg.AgentKey
-		}
+	if leadAg, err := m.cachedGetAgentByID(ctx, team.LeadAgentID); err == nil {
+		fromAgent = leadAg.AgentKey
 	}
 
 	// Resolve user ID: prefer context (available during leader's turn),
@@ -290,6 +302,10 @@ func (m *TeamToolManager) restoreTraceContext(ctx context.Context, task *store.T
 // Called after task completion/cancellation to start newly-unblocked work
 // instead of waiting for the ticker (up to 5 min delay).
 func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uuid.UUID) {
+	team, err := m.teamStore.GetTeam(ctx, teamID)
+	if err != nil || team == nil {
+		return
+	}
 	tasks, err := m.teamStore.ListRecoverableTasks(ctx, teamID)
 	if err != nil {
 		return
@@ -304,6 +320,17 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 			continue
 		}
 		ownerID := *task.OwnerAgentID
+		// Auto-fail tasks assigned to the lead agent — would cause self-dispatch loop.
+		// Don't just skip: pending lead-owned tasks would stay stuck until stale timeout.
+		if ownerID == team.LeadAgentID {
+			slog.Warn("DispatchUnblockedTasks: auto-failing lead-owned task",
+				"task_id", task.ID, "team_id", teamID)
+			_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
+				"status": store.TeamTaskStatusFailed,
+				"result": "Cannot dispatch task to the team lead — reassign to a team member",
+			})
+			continue
+		}
 		if dispatched[ownerID] {
 			continue // skip — this owner already has a higher-priority task dispatched
 		}
@@ -341,6 +368,6 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 		// Restore leader's trace context (stored in task metadata during creation)
 		// so the member agent's trace links back to the leader, not the completing member.
 		dispatchCtx := m.restoreTraceContext(ctx, task)
-		m.dispatchTaskToAgent(dispatchCtx, task, teamID, ownerID)
+		m.dispatchTaskToAgent(dispatchCtx, task, team, ownerID)
 	}
 }

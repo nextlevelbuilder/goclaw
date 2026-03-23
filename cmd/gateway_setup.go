@@ -467,7 +467,7 @@ func setupSkillsSystem(
 	toolsReg *tools.Registry,
 	providerRegistry *providers.Registry,
 	msgBus *bus.MessageBus,
-) (*skills.Loader, *tools.SkillSearchTool, string, string) {
+) (*skills.Loader, *tools.SkillSearchTool, string, string, string) {
 	var bundledSkillsDir string // resolved later; returned for HTTP handler fallback
 
 	// Skills loader + search tool
@@ -533,7 +533,7 @@ func setupSkillsSystem(
 		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
 			storeDirs := pgStores.Skills.Dirs()
 			if len(storeDirs) > 0 {
-				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], skillsLoader))
+				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("publish_skill tool registered")
 				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("skill_manage tool registered")
@@ -566,6 +566,6 @@ func setupSkillsSystem(
 		}
 	}
 
-	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir
+	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
 

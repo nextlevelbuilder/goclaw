@@ -19,7 +19,6 @@ import (
 
 // OAuthHandler handles OAuth-related HTTP endpoints for web UI.
 type OAuthHandler struct {
-	token       string // gateway auth token
 	provStore   store.ProviderStore
 	secretStore store.ConfigSecretsStore
 	providerReg *providers.Registry
@@ -30,9 +29,8 @@ type OAuthHandler struct {
 }
 
 // NewOAuthHandler creates a handler for OAuth endpoints.
-func NewOAuthHandler(token string, provStore store.ProviderStore, secretStore store.ConfigSecretsStore, providerReg *providers.Registry, msgBus *bus.MessageBus) *OAuthHandler {
+func NewOAuthHandler(provStore store.ProviderStore, secretStore store.ConfigSecretsStore, providerReg *providers.Registry, msgBus *bus.MessageBus) *OAuthHandler {
 	return &OAuthHandler{
-		token:       token,
 		provStore:   provStore,
 		secretStore: secretStore,
 		providerReg: providerReg,
@@ -49,7 +47,7 @@ func (h *OAuthHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *OAuthHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *OAuthHandler) newTokenSource(r *http.Request) *oauth.DBTokenSource {

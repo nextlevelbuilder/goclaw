@@ -9,12 +9,11 @@ import (
 // MemoryHandler handles memory document management endpoints.
 type MemoryHandler struct {
 	store store.MemoryStore
-	token string
 }
 
 // NewMemoryHandler creates a handler for memory management endpoints.
-func NewMemoryHandler(s store.MemoryStore, token string) *MemoryHandler {
-	return &MemoryHandler{store: s, token: token}
+func NewMemoryHandler(s store.MemoryStore) *MemoryHandler {
+	return &MemoryHandler{store: s}
 }
 
 // RegisterRoutes registers all memory routes on the given mux.
@@ -31,5 +30,5 @@ func (h *MemoryHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *MemoryHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }

@@ -103,6 +103,9 @@
   "userCredentials": {
     "title": "Thông tin xác thực",
     "description": "Đặt thông tin xác thực cá nhân của bạn cho máy chủ MCP này. Chỉ áp dụng cho tài khoản của bạn.",
+    "titleAdmin": "Thông tin xác thực",
+    "descriptionAdmin": "Đặt thông tin xác thực cho người dùng cụ thể trên máy chủ MCP này. Chúng ghi đè cài đặt mặc định của máy chủ chỉ cho người dùng được chọn.",
+    "selectUser": "Chọn người dùng",
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Để trống để giữ nguyên",
     "headers": "Headers",

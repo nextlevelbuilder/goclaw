@@ -16,11 +16,10 @@ import (
 type UsageHandler struct {
 	snapshots store.SnapshotStore
 	db        *sql.DB
-	token     string
 }
 
-func NewUsageHandler(snapshots store.SnapshotStore, db *sql.DB, token string) *UsageHandler {
-	return &UsageHandler{snapshots: snapshots, db: db, token: token}
+func NewUsageHandler(snapshots store.SnapshotStore, db *sql.DB) *UsageHandler {
+	return &UsageHandler{snapshots: snapshots, db: db}
 }
 
 func (h *UsageHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -30,7 +29,7 @@ func (h *UsageHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *UsageHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *UsageHandler) handleTimeSeries(w http.ResponseWriter, r *http.Request) {

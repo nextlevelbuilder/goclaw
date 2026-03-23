@@ -17,6 +17,60 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// fileEntry represents a file or directory in a skill version directory.
+type fileEntry struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
+	Size  int64  `json:"size"`
+}
+
+// walkSkillFiles returns all files/dirs under root, skipping system artifacts and symlinks.
+func walkSkillFiles(root string) []fileEntry {
+	var files []fileEntry
+	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, path)
+		if rel == "." {
+			return nil
+		}
+		if skills.IsSystemArtifact(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		entry := fileEntry{
+			Path:  rel,
+			Name:  d.Name(),
+			IsDir: d.IsDir(),
+		}
+		if !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				entry.Size = info.Size()
+			}
+		}
+		files = append(files, entry)
+		return nil
+	})
+	return files
+}
+
+// skillSlugDir derives the slug parent directory from a DB file_path.
+// file_path has the form .../slug/version — returns .../slug.
+// Returns empty string if filePath is empty or malformed.
+func skillSlugDir(filePath string) string {
+	if filePath == "" {
+		return ""
+	}
+	return filepath.Dir(filePath)
+}
+
 // handleListVersions returns all available version numbers for a skill.
 func (h *SkillsHandler) handleListVersions(w http.ResponseWriter, r *http.Request) {
 	locale := store.LocaleFromContext(r.Context())
@@ -26,13 +80,21 @@ func (h *SkillsHandler) handleListVersions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(r.Context(), id)
+	filePath, _, currentVersion, _, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return
 	}
 
-	slugDir := filepath.Join(h.baseDir, slug)
+	slugDir := skillSlugDir(filePath)
+	if slugDir == "" {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"versions": []int{currentVersion},
+			"current":  currentVersion,
+		})
+		return
+	}
+
 	entries, err := os.ReadDir(slugDir)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -73,7 +135,7 @@ func (h *SkillsHandler) handleListFiles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(r.Context(), id)
+	filePath, slug, currentVersion, isSystem, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return
@@ -89,52 +151,28 @@ func (h *SkillsHandler) handleListFiles(w http.ResponseWriter, r *http.Request) 
 		version = parsed
 	}
 
-	versionDir := filepath.Join(h.baseDir, slug, strconv.Itoa(version))
+	slugDir := skillSlugDir(filePath)
+	if slugDir == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgVersionNotFound)})
+		return
+	}
+
+	versionDir := filepath.Join(slugDir, strconv.Itoa(version))
 	if _, err := os.Stat(versionDir); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgVersionNotFound)})
 		return
 	}
 
-	type fileEntry struct {
-		Path  string `json:"path"`
-		Name  string `json:"name"`
-		IsDir bool   `json:"isDir"`
-		Size  int64  `json:"size"`
-	}
+	files := walkSkillFiles(versionDir)
 
-	var files []fileEntry
-	filepath.WalkDir(versionDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	// Fallback: if managed dir has no files (seeder CopyDir may have failed),
+	// try the bundled skills dir — only for system skills to prevent slug collision attacks.
+	if len(files) == 0 && isSystem && h.bundledDir != "" {
+		bundledDir := filepath.Join(h.bundledDir, slug)
+		if _, err := os.Stat(bundledDir); err == nil {
+			files = walkSkillFiles(bundledDir)
 		}
-		rel, _ := filepath.Rel(versionDir, path)
-		if rel == "." {
-			return nil
-		}
-		// Skip system artifacts (__MACOSX, .DS_Store, etc.)
-		if skills.IsSystemArtifact(rel) {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		// Skip symlinks — prevent escape from skill directory
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-		entry := fileEntry{
-			Path:  rel,
-			Name:  d.Name(),
-			IsDir: d.IsDir(),
-		}
-		if !d.IsDir() {
-			if info, err := d.Info(); err == nil {
-				entry.Size = info.Size()
-			}
-		}
-		files = append(files, entry)
-		return nil
-	})
+	}
 
 	if files == nil {
 		files = []fileEntry{}
@@ -162,7 +200,7 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, slug, currentVersion, ok := h.skills.GetSkillFilePath(r.Context(), id)
+	filePath, slug, currentVersion, isSystem, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return
@@ -178,7 +216,13 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		version = parsed
 	}
 
-	versionDir := filepath.Join(h.baseDir, slug, strconv.Itoa(version))
+	slugDir := skillSlugDir(filePath)
+	if slugDir == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		return
+	}
+
+	versionDir := filepath.Join(slugDir, strconv.Itoa(version))
 	absPath := filepath.Join(versionDir, filepath.Clean(relPath))
 
 	// Verify resolved path is within the version directory
@@ -188,27 +232,17 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use Lstat to detect symlinks — reject them to prevent directory escape
-	info, err := os.Lstat(absPath)
-	if err != nil || info.IsDir() {
+	// Try reading from managed dir; fall back to bundled dir for system skills.
+	data, info, readErr := readSkillFile(absPath)
+	if readErr != nil && isSystem && h.bundledDir != "" {
+		bundledPath := filepath.Join(h.bundledDir, slug, filepath.Clean(relPath))
+		bundledRoot := filepath.Join(h.bundledDir, slug)
+		if strings.HasPrefix(bundledPath, bundledRoot+string(filepath.Separator)) {
+			data, info, readErr = readSkillFile(bundledPath)
+		}
+	}
+	if readErr != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
-		return
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		slog.Warn("security.skill_files_symlink", "path", absPath)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
-		return
-	}
-
-	// Skip system artifacts
-	if skills.IsSystemArtifact(relPath) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
-		return
-	}
-
-	data, err := os.ReadFile(absPath)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToReadFile)})
 		return
 	}
 
@@ -217,4 +251,26 @@ func (h *SkillsHandler) handleReadFile(w http.ResponseWriter, r *http.Request) {
 		"path":    relPath,
 		"size":    info.Size(),
 	})
+}
+
+// readSkillFile reads a file with security checks (symlink rejection, artifact filtering).
+// Returns file data, file info, or error.
+func readSkillFile(absPath string) ([]byte, os.FileInfo, error) {
+	info, err := os.Lstat(absPath)
+	if err != nil || info.IsDir() {
+		return nil, nil, os.ErrNotExist
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		slog.Warn("security.skill_files_symlink", "path", absPath)
+		return nil, nil, os.ErrPermission
+	}
+	rel := filepath.Base(absPath)
+	if skills.IsSystemArtifact(rel) {
+		return nil, nil, os.ErrNotExist
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	return data, info, nil
 }
