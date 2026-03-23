@@ -52,10 +52,10 @@ done
 if [ -z "$VARIANT" ]; then
   echo "Select GoClaw Docker variant:"
   echo ""
-  echo "  1) alpine  — Base image (~50 MB), no runtimes"
-  echo "  2) node    — + Node.js (for JS/TS skills)"
-  echo "  3) python  — + Python (for Python skills)"
-  echo "  4) full    — + Node.js + Python + all skill deps"
+  echo "  1) alpine  — Base image (~50 MB), no runtimes (published as :latest)"
+  echo "  2) node    — + Node.js (published as :node)"
+  echo "  3) python  — + Python (published as :python)"
+  echo "  4) full    — + Node.js + Python + all skill deps (published as :full)"
   echo ""
   read -rp "Choice [1-4, default=1]: " choice
   case "${choice:-1}" in
