@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Loader2, Trash2, Download, CheckCircle2, XCircle } from "lucide-react";
+import { RefreshCw, Loader2, Trash2, Download, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { usePackages, type PackageInfo } from "./hooks/use-packages";
 import { usePackageRuntimes } from "./hooks/use-package-runtimes";
@@ -13,6 +14,7 @@ export function PackagesPage() {
   const { t } = useTranslation("packages");
   const { packages, loading, refresh, installPackage, uninstallPackage } = usePackages();
   const { runtimes, loading: runtimesLoading, refresh: refreshRuntimes } = usePackageRuntimes();
+  const hasMissingRuntimes = (runtimes?.runtimes?.some((rt) => !rt.available)) ?? false;
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
@@ -33,8 +35,18 @@ export function PackagesPage() {
       />
 
       {/* Runtimes Section */}
-      <section>
+      <section className="space-y-3">
         <h2 className="text-lg font-medium mb-3">{t("runtimes.title")}</h2>
+        <Alert className="border-sky-200/70 bg-sky-50/70 text-sky-950 dark:border-sky-900/50 dark:bg-sky-950/20 dark:text-sky-100">
+          <AlertTriangle className="h-4 w-4 text-sky-600 dark:text-sky-300" />
+          <AlertTitle className="text-sky-900 dark:text-sky-100">
+            {t("runtimes.scopeTitle")}
+          </AlertTitle>
+          <AlertDescription className="text-xs text-sky-800 dark:text-sky-200">
+            <p>{t("runtimes.scopeDesc")}</p>
+            {hasMissingRuntimes && <p>{t("runtimes.minimalImageHint")}</p>}
+          </AlertDescription>
+        </Alert>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {runtimes?.runtimes?.map((rt) => (
             <div
@@ -57,7 +69,7 @@ export function PackagesPage() {
                 <p className="text-xs text-muted-foreground mt-1 font-mono truncate">{rt.version}</p>
               )}
               {!rt.available && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t("runtimes.missing")}</p>
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">{t("runtimes.missingInContainer")}</p>
               )}
             </div>
           ))}
