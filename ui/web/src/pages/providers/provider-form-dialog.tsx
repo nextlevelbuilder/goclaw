@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { ProviderData, ProviderInput } from "./hooks/use-providers";
 import { slugify, isValidSlug } from "@/lib/slug";
-import { PROVIDER_TYPES } from "@/constants/providers";
+import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
@@ -134,10 +134,12 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
               const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
               setApiBase(preset?.apiBase || "");
               if (v === "chatgpt_oauth") {
-                if (!name || providerType !== "chatgpt_oauth") setName("chatgpt-main");
+                if (!name || providerType !== "chatgpt_oauth") {
+                  setName(suggestUniqueProviderAlias(existingProviders));
+                }
                 if (displayName === "ChatGPT (OAuth)") setDisplayName("");
               } else {
-                if (name === "chatgpt-main") setName("");
+                if (name === DEFAULT_CODEX_OAUTH_ALIAS) setName("");
               }
             }}
           />

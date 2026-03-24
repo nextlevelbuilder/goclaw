@@ -5,7 +5,7 @@ import type { ModelInfo } from "@/types/provider";
 
 export type { ModelInfo };
 
-// Hardcoded models for ChatGPT OAuth provider.
+// Hardcoded models for the OpenAI Codex OAuth provider.
 // OAuth token lacks api.model.read scope, so we can't call /v1/models.
 const CODEX_MODELS: ModelInfo[] = [
   { id: "gpt-5.4", name: "GPT-5.4" },

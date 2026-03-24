@@ -629,15 +629,15 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 
 ### Agent-Side Multi-Account Routing
 
-Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each provider name is one ChatGPT OAuth account alias. An agent can keep one alias as its normal `provider` value, then opt into extra ChatGPT OAuth accounts through `other_config.chatgpt_oauth_routing`.
+Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each provider name is one OpenAI Codex OAuth alias. An agent can keep one alias as its normal `provider` value, then opt into extra OpenAI Codex OAuth aliases through `other_config.chatgpt_oauth_routing`.
 
 ```json
 {
-  "provider": "chatgpt-main",
+  "provider": "openai-codex",
   "other_config": {
     "chatgpt_oauth_routing": {
       "strategy": "round_robin",
-      "extra_provider_names": ["chatgpt-work"]
+      "extra_provider_names": ["codex-work"]
     }
   }
 }
@@ -646,8 +646,9 @@ Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each
 Routing behavior:
 - The main `provider` field remains the preferred/default account.
 - `manual` keeps that preferred account fixed while preserving extra accounts in config.
-- `round_robin` rotates requests across the preferred account plus the configured extra authenticated ChatGPT OAuth accounts.
-- Retryable upstream failures can fall through to the next eligible ChatGPT OAuth account in the same request.
+- Provider aliases are arbitrary. `openai-codex` and `codex-work` are examples, not required prefixes.
+- `round_robin` rotates requests across the preferred account plus the configured extra authenticated OpenAI Codex OAuth accounts.
+- Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth account in the same request.
 - Explicit provider names remain explicit. OAuth auth/logout is still provider-scoped.
 
 ---
@@ -675,7 +676,7 @@ Routing behavior:
 | `internal/providers/codex.go` | CodexProvider: OAuth-based ChatGPT Responses API |
 | `internal/providers/codex_build.go` | Codex request builder: message formatting, phase handling |
 | `internal/providers/codex_types.go` | Codex request/response types and OAuth token management |
-| `internal/providers/chatgpt_oauth_router.go` | Agent-side routing across multiple authenticated ChatGPT OAuth providers |
+| `internal/providers/chatgpt_oauth_router.go` | Agent-side routing across multiple authenticated OpenAI Codex OAuth providers |
 | `internal/providers/dashscope.go` | DashScope provider: OpenAI-compat wrapper with thinking budget, tools+streaming fallback |
 | `internal/providers/acp_provider.go` | ACPProvider: orchestrates ACP-compatible agent subprocesses |
 | `internal/providers/acp/types.go` | ACP protocol types: InitializeRequest, SessionUpdate, ContentBlock, etc. |

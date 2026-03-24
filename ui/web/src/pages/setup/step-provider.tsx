@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROVIDER_TYPES } from "@/constants/providers";
+import { PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { CLISection } from "@/pages/providers/provider-cli-section";
 import { OAuthSection } from "@/pages/providers/provider-oauth-section";
@@ -29,7 +29,7 @@ interface StepProviderProps {
 export function StepProvider({ onComplete, existingProvider }: StepProviderProps) {
   const { t } = useTranslation("setup");
   const http = useHttp();
-  const { createProvider, updateProvider } = useProviders();
+  const { providers, createProvider, updateProvider } = useProviders();
 
   const isEditing = !!existingProvider;
 
@@ -52,7 +52,9 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
     setProviderType(value);
     const preset = PROVIDER_TYPES.find((t) => t.value === value);
     setName(value === "chatgpt_oauth"
-      ? (providerType === "chatgpt_oauth" ? name : "chatgpt-main")
+      ? (providerType === "chatgpt_oauth"
+        ? name
+        : suggestUniqueProviderAlias(providers, { excludeName: existingProvider?.name }))
       : slugify(value));
     setApiBase(preset?.apiBase || "");
     setApiKey("");
@@ -155,6 +157,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
               <Input
                 value={name}
                 onChange={(e) => setName(slugify(e.target.value))}
+                placeholder={isOAuth ? t("provider.oauthAliasPlaceholder") : undefined}
               />
             </div>
           </div>

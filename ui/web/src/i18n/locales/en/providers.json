@@ -50,12 +50,12 @@
     "alreadyAdded": "(already added)",
     "nameFixed": "Name",
     "configure": "Configure an LLM provider connection.",
-    "configureOauth": "Connect one named ChatGPT OAuth account. Each alias represents a separate ChatGPT account.",
+    "configureOauth": "Connect one named OpenAI Codex OAuth account. Each alias represents a separate OpenAI/Codex account.",
     "oauthAlias": "Account Alias *",
-    "oauthAliasPlaceholder": "e.g. chatgpt-main",
-    "oauthAliasHint": "Use a unique lowercase alias for this ChatGPT account. Add more aliases later for extra accounts or round robin.",
-    "oauthDisplayNamePlaceholder": "Main ChatGPT account",
-    "oauthDisplayNameHint": "Optional friendly label shown in the UI. Helpful when you have multiple ChatGPT OAuth accounts.",
+    "oauthAliasPlaceholder": "e.g. primary",
+    "oauthAliasHint": "Use a unique lowercase alias such as primary, work, or team for this OpenAI/Codex account. Add more aliases later for the pool or round robin.",
+    "oauthDisplayNamePlaceholder": "Primary Codex account",
+    "oauthDisplayNameHint": "Optional friendly label shown in the UI. Helpful when you have multiple OpenAI Codex OAuth accounts.",
     "lowercaseHint": "Lowercase, numbers, hyphens"
   },
   "delete": {
@@ -75,7 +75,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
-    "chatgpt_oauth": "ChatGPT OAuth Account",
+    "chatgpt_oauth": "OpenAI Codex OAuth",
     "yescale": "YesScale",
     "acp": "ACP"
   },
@@ -101,16 +101,16 @@
   "oauth": {
     "checkingStatus": "Checking authentication status...",
     "authSuccessful": "Authentication successful!",
-    "authSuccessfulDesc": "This named ChatGPT account is ready to use.",
+    "authSuccessfulDesc": "This named OpenAI/Codex account is ready to use.",
     "activeProvider": "Account alias",
     "authenticated": "Authenticated — account",
     "active": "active",
     "modelPrefixHint": "Use model prefix",
-    "modelPrefixExample": "in agent config (e.g. chatgpt-main/gpt-5.4). Token refreshes automatically.",
-    "multiAccountHint": "Add more named ChatGPT OAuth accounts to unlock preferred plus extra accounts or round robin routing on an agent.",
-    "aliasRequired": "Enter a valid lowercase account alias before starting ChatGPT OAuth.",
+    "modelPrefixExample": "in agent config (e.g. primary/gpt-5.4). Token refreshes automatically.",
+    "multiAccountHint": "Add more named OpenAI Codex OAuth aliases such as work or team to unlock a primary alias plus pool members or round robin on an agent.",
+    "aliasRequired": "Enter a valid lowercase account alias before starting OpenAI Codex OAuth.",
     "removeToken": "Disconnect Account",
-    "signInDesc": "Each ChatGPT OAuth provider is one named account. Sign in to use your ChatGPT subscription without a separate API key.",
+    "signInDesc": "Each OpenAI Codex OAuth provider is one named account. Sign in to use your ChatGPT/Codex subscription without a separate API key.",
     "waiting": "Waiting for authentication... Complete sign-in in the opened window.",
     "remoteVpsHint": "After signing in, your browser will try to open",
     "remoteVpsError": "and show a \"Can't reach this page\" error. That's normal — copy the full URL from the browser address bar and paste it below.",
@@ -120,7 +120,7 @@
     "starting": "Starting...",
     "remoteVps": "Remote/VPS?",
     "loggedOut": "Logged out",
-    "loggedOutDesc": "ChatGPT OAuth account disconnected",
+    "loggedOutDesc": "OpenAI Codex OAuth account disconnected",
     "oauthFailed": "OAuth failed",
     "exchangeFailed": "Exchange failed",
     "logoutFailed": "Logout failed",
@@ -150,8 +150,8 @@
     "acpConfigDesc": "Agent subprocess settings",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Local CLI authentication",
-    "oauthConfig": "ChatGPT OAuth Account",
-    "oauthConfigDesc": "Manage sign-in for this named ChatGPT account",
+    "oauthConfig": "OpenAI Codex OAuth",
+    "oauthConfigDesc": "Manage sign-in for this named OpenAI/Codex account",
     "nameReadonly": "Provider identifier, cannot be changed",
     "oauthAliasReadonly": "OAuth account alias, cannot be changed",
     "providerType": "Provider Type",
@@ -164,12 +164,12 @@
     "oauthAccountUsage": "Account Usage",
     "oauthAccountUsageDesc": "How this alias works as a preferred account and as an extra routed account.",
     "oauthAliasLabel": "Account Alias",
-    "oauthAccountBadge": "ChatGPT OAuth account",
+    "oauthAccountBadge": "OpenAI Codex OAuth",
     "oauthModelPrefix": "Model Prefix",
     "oauthModelPrefixCopied": "Model prefix copied",
-    "oauthPreferredHint": "Set an agent's Provider field to this alias to make it the preferred ChatGPT account.",
-    "oauthRoutingHint": "Add other authenticated ChatGPT OAuth aliases in Agent Advanced > ChatGPT OAuth Routing for extra accounts or round robin.",
-    "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple ChatGPT OAuth accounts appear in routing."
+    "oauthPreferredHint": "Set an agent's Provider field to this alias to make it the primary OpenAI alias.",
+    "oauthRoutingHint": "Open an agent using this alias, then use its OpenAI Account Pool page to add more signed-in aliases or round robin.",
+    "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple OpenAI Codex OAuth accounts appear in the pool."
   },
   "embedding": {
     "enable": "Enable Embedding",
@@ -182,8 +182,8 @@
     "verifyFailed": "Embedding verification failed"
   },
   "pageHint": {
-    "title": "Multiple ChatGPT OAuth accounts are supported",
-    "description": "Each ChatGPT OAuth provider is one named account. Create aliases like chatgpt-main or chatgpt-work, then add extra accounts from Agent Advanced > ChatGPT OAuth Routing."
+    "title": "Multiple OpenAI Codex OAuth accounts are supported",
+    "description": "Each OpenAI Codex OAuth provider is one named account. Create aliases like primary, work, or team, then add pool members from an agent's OpenAI Account Pool page."
   },
   "toast": {
     "created": "Provider created",

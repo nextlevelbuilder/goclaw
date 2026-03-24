@@ -15,13 +15,14 @@ import (
 )
 
 const (
-	// DefaultProviderName is the provider name for ChatGPT OAuth.
+	// DefaultProviderName is the default alias for the primary OpenAI Codex OAuth account.
 	DefaultProviderName = "openai-codex"
 
-	// DefaultProviderDisplayName is the default display name for ChatGPT OAuth providers.
-	DefaultProviderDisplayName = "ChatGPT (OAuth)"
+	// DefaultProviderDisplayName stays empty so the UI can fall back to the alias unless the
+	// user explicitly sets a friendlier label for this OpenAI Codex OAuth account.
+	DefaultProviderDisplayName = ""
 
-	// DefaultProviderAPIBase is the default API base for ChatGPT OAuth providers.
+	// DefaultProviderAPIBase is the default API base for OpenAI Codex OAuth providers.
 	DefaultProviderAPIBase = "https://chatgpt.com/backend-api"
 
 	// refreshTokenSecretKey is the config_secrets key for the refresh token.
