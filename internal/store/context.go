@@ -13,6 +13,8 @@ const (
 	UserIDKey contextKey = "goclaw_user_id"
 	// AgentIDKey is the context key for the agent UUID.
 	AgentIDKey contextKey = "goclaw_agent_id"
+	// AgentKeyKey is the context key for the agent string key.
+	AgentKeyKey contextKey = "goclaw_agent_key"
 	// AgentTypeKey is the context key for the agent type ("open" or "predefined").
 	AgentTypeKey contextKey = "goclaw_agent_type"
 	// SenderIDKey is the original individual sender's ID (not group-scoped).
@@ -74,6 +76,19 @@ func AgentIDFromContext(ctx context.Context) uuid.UUID {
 		return v
 	}
 	return uuid.Nil
+}
+
+// WithAgentKey returns a new context with the given agent key.
+func WithAgentKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, AgentKeyKey, key)
+}
+
+// AgentKeyFromContext extracts the agent key from context. Returns "" if not set.
+func AgentKeyFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(AgentKeyKey).(string); ok {
+		return v
+	}
+	return ""
 }
 
 // WithAgentType returns a new context with the given agent type.
