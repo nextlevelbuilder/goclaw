@@ -33,7 +33,7 @@ type SkillSearchTool struct {
 func NewSkillSearchTool(loader *skills.Loader) *SkillSearchTool {
 	idx := skills.NewIndex()
 	t := &SkillSearchTool{index: idx, loader: loader}
-	t.rebuildIndex(store.WithCrossTenant(context.Background()))
+	t.rebuildIndex(context.Background())
 	return t
 }
 

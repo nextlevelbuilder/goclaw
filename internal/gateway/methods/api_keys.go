@@ -101,7 +101,7 @@ func (m *APIKeysMethods) handleCreate(ctx context.Context, client *gateway.Clien
 
 	// Resolve tenant_id based on caller type.
 	var tenantID uuid.UUID // uuid.Nil = system-level (NULL in DB)
-	if client.IsCrossTenant() {
+	if client.IsOwner() {
 		if params.TenantID != "" {
 			tid, err := uuid.Parse(params.TenantID)
 			if err != nil {

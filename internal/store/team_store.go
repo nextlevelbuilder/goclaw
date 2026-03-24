@@ -197,6 +197,7 @@ type TeamStore interface {
 	// Team CRUD
 	CreateTeam(ctx context.Context, team *TeamData) error
 	GetTeam(ctx context.Context, teamID uuid.UUID) (*TeamData, error)
+	GetTeamUnscoped(ctx context.Context, id uuid.UUID) (*TeamData, error)
 	UpdateTeam(ctx context.Context, teamID uuid.UUID, updates map[string]any) error
 	DeleteTeam(ctx context.Context, teamID uuid.UUID) error
 	ListTeams(ctx context.Context) ([]TeamData, error)

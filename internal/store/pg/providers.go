@@ -124,6 +124,29 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 	return result, nil
 }
 
+// ListAllProviders returns all providers across all tenants. Server-internal only.
+func (s *PGProviderStore) ListAllProviders(ctx context.Context) ([]store.LLMProviderData, error) {
+	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
+		 FROM llm_providers WHERE true ORDER BY name`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.LLMProviderData
+	for rows.Next() {
+		var p store.LLMProviderData
+		var apiKey string
+		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt, &p.TenantID); err != nil {
+			continue
+		}
+		p.APIKey = s.decryptKey(apiKey, p.Name)
+		result = append(result, p)
+	}
+	return result, nil
+}
+
 func (s *PGProviderStore) UpdateProvider(ctx context.Context, id uuid.UUID, updates map[string]any) error {
 	if apiKey, ok := updates["api_key"]; ok && s.encKey != "" {
 		if keyStr, ok := apiKey.(string); ok && keyStr != "" {

@@ -25,7 +25,6 @@ func resolveEmbeddingProvider(
 	providerReg *providers.Registry,
 	sysConfigs store.SystemConfigStore,
 ) memory.EmbeddingProvider {
-	crossCtx := store.WithCrossTenant(context.Background())                      // for provider store (list all)
 	masterCtx := store.WithTenantID(context.Background(), store.MasterTenantID) // for system_configs (tenant-scoped)
 
 	// 1. System config: embedding.provider (set via UI / API)
@@ -39,7 +38,7 @@ func resolveEmbeddingProvider(
 			if sysModel != "" {
 				mcfg = &config.MemoryConfig{EmbeddingModel: sysModel}
 			}
-			p := resolveEmbeddingFromDB(crossCtx, providerStore, name, mcfg, providerReg)
+			p := resolveEmbeddingFromDB(masterCtx, providerStore, name, mcfg, providerReg)
 			if p != nil {
 				slog.Info("embedding provider from system_configs", "name", name, "model", p.Model())
 				return p
@@ -49,7 +48,7 @@ func resolveEmbeddingProvider(
 	}
 
 	// 2. Auto-detect: scan DB providers for first with settings.embedding.enabled
-	allProviders, err := providerStore.ListProviders(crossCtx)
+	allProviders, err := providerStore.ListAllProviders(context.Background())
 	if err != nil {
 		slog.Warn("failed to list providers for embedding auto-detect", "error", err)
 		return nil

@@ -94,7 +94,7 @@ func (h *SkillsHandler) adminMiddleware(next http.HandlerFunc) http.HandlerFunc 
 // that should only be accessible to the master tenant or cross-tenant admins.
 func (h *SkillsHandler) requireMasterTenant(w http.ResponseWriter, r *http.Request) bool {
 	ctx := r.Context()
-	if store.IsCrossTenant(ctx) {
+	if store.IsOwnerRole(ctx) {
 		return true
 	}
 	tid := store.TenantIDFromContext(ctx)
@@ -325,9 +325,11 @@ type depResult struct {
 	Missing []string `json:"missing,omitempty"`
 }
 
-// rescanAndUpdate re-checks all skills and updates their status + missing deps in DB.
+// rescanAndUpdate re-checks system skills and updates their status + missing deps in DB.
+// Only system skills have filesystem dependencies that need rescanning.
 func (h *SkillsHandler) rescanAndUpdate() (updated int, results []depResult) {
-	allSkills := h.skills.ListAllSkills(store.WithCrossTenant(context.Background()))
+	masterCtx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	allSkills := h.skills.ListAllSystemSkills(context.Background())
 
 	for _, sk := range allSkills {
 		manifest := h.scanWithFallback(sk)
@@ -341,7 +343,7 @@ func (h *SkillsHandler) rescanAndUpdate() (updated int, results []depResult) {
 			// No deps needed — if archived, recover to active and clear stale deps.
 			if sk.Status == "archived" {
 				_ = h.skills.StoreMissingDeps(id, nil)
-				_ = h.skills.UpdateSkill(store.WithCrossTenant(context.Background()), id, map[string]any{"status": "active"})
+				_ = h.skills.UpdateSkill(masterCtx, id, map[string]any{"status": "active"})
 				results = append(results, depResult{Slug: sk.Slug, Status: "active"})
 				updated++
 				slog.Debug("rescan: recovered archived skill (no deps)", "slug", sk.Slug)
@@ -356,11 +358,11 @@ func (h *SkillsHandler) rescanAndUpdate() (updated int, results []depResult) {
 
 		switch {
 		case ok && sk.Status == "archived":
-			_ = h.skills.UpdateSkill(store.WithCrossTenant(context.Background()), id, map[string]any{"status": "active"})
+			_ = h.skills.UpdateSkill(masterCtx, id, map[string]any{"status": "active"})
 			results = append(results, depResult{Slug: sk.Slug, Status: "active"})
 			updated++
 		case !ok && sk.Status == "active":
-			_ = h.skills.UpdateSkill(store.WithCrossTenant(context.Background()), id, map[string]any{"status": "archived"})
+			_ = h.skills.UpdateSkill(masterCtx, id, map[string]any{"status": "archived"})
 			results = append(results, depResult{Slug: sk.Slug, Status: "archived", Missing: missing})
 			updated++
 		case !ok:

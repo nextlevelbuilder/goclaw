@@ -108,6 +108,7 @@ type ProviderStore interface {
 	GetProvider(ctx context.Context, id uuid.UUID) (*LLMProviderData, error)
 	GetProviderByName(ctx context.Context, name string) (*LLMProviderData, error)
 	ListProviders(ctx context.Context) ([]LLMProviderData, error)
+	ListAllProviders(ctx context.Context) ([]LLMProviderData, error)
 	UpdateProvider(ctx context.Context, id uuid.UUID, updates map[string]any) error
 	DeleteProvider(ctx context.Context, id uuid.UUID) error
 }

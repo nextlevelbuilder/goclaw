@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -204,6 +205,75 @@ func TestRegistry_ExecuteWithContext_EmptyContextValues(t *testing.T) {
 	}
 	if gotSandboxKey != "" {
 		t.Errorf("empty sandboxKey should not be injected, got %q", gotSandboxKey)
+	}
+}
+
+// --- Panic recovery tests ---
+
+func TestRegistry_ExecuteWithContext_PanicRecovery(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&mockTool{
+		name: "panicking_tool",
+		execFn: func(ctx context.Context, args map[string]any) *Result {
+			panic("unexpected nil pointer")
+		},
+	})
+
+	// Without panic recovery this would crash the test process.
+	result := reg.ExecuteWithContext(context.Background(), "panicking_tool", nil,
+		"", "", "", "", nil)
+
+	if !result.IsError {
+		t.Fatal("expected error result from panicking tool")
+	}
+	if !strings.Contains(result.ForLLM, "panicked") {
+		t.Errorf("error should mention panic, got: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "panicking_tool") {
+		t.Errorf("error should mention tool name, got: %s", result.ForLLM)
+	}
+}
+
+func TestRegistry_Execute_PanicRecovery(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&mockTool{
+		name: "panic_via_execute",
+		execFn: func(ctx context.Context, args map[string]any) *Result {
+			var s []int
+			_ = s[10] // index out of range panic
+			return NewResult("unreachable")
+		},
+	})
+
+	result := reg.Execute(context.Background(), "panic_via_execute", nil)
+	if !result.IsError {
+		t.Fatal("expected error result from panicking tool")
+	}
+}
+
+func TestRegistry_ExecuteWithContext_PanicRecovery_Concurrent(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(&mockTool{
+		name: "concurrent_panic",
+		execFn: func(ctx context.Context, args map[string]any) *Result {
+			panic("boom")
+		},
+	})
+
+	const goroutines = 20
+	results := make(chan *Result, goroutines)
+	for range goroutines {
+		go func() {
+			results <- reg.ExecuteWithContext(context.Background(), "concurrent_panic", nil,
+				"", "", "", "session-1", nil)
+		}()
+	}
+
+	for range goroutines {
+		r := <-results
+		if !r.IsError {
+			t.Error("expected error result from panicking tool in concurrent execution")
+		}
 	}
 }
 

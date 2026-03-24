@@ -86,7 +86,7 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 
 		// Resolve tenant_id: cross-tenant callers must provide it; others inherit their own tenant.
 		var tenantID uuid.UUID
-		if client.IsCrossTenant() {
+		if client.IsOwner() {
 			if params.TenantID == "" {
 				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "tenant_id")))
 				return

@@ -59,6 +59,14 @@ func BuildDMThreadSessionKey(agentID, channel, peerID string, threadID int) stri
 	return fmt.Sprintf("agent:%s:%s:direct:%s:thread:%d", agentID, channel, peerID, threadID)
 }
 
+// BuildScopedThreadSessionKey builds a session key that includes a thread/topic ID.
+// Supports string-based thread IDs (e.g. Slack timestamps).
+//
+//	agent:{agentId}:{channel}:{kind}:{chatID}:thread:{threadID}
+func BuildScopedThreadSessionKey(agentID, channel string, kind PeerKind, chatID, threadID string) string {
+	return fmt.Sprintf("agent:%s:%s:%s:%s:thread:%s", agentID, channel, kind, chatID, threadID)
+}
+
 // BuildSubagentSessionKey builds the session key for a subagent.
 //
 //	agent:{agentId}:subagent:{label}

@@ -21,14 +21,17 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		return
 	}
 
-	// Dedup: app_mention may arrive alongside a message event
-	dedupKey := ev.Channel + ":" + ev.TimeStamp
-	if _, loaded := c.dedup.LoadOrStore(dedupKey, time.Now()); loaded {
+	// If requireMention is false, message handler already processes all channel messages.
+	// Return BEFORE storing dedup key so we don't block the message handler.
+	if !c.requireMention {
 		return
 	}
 
-	// If requireMention is false, message handler already processes all channel messages
-	if !c.requireMention {
+	// Dedup: app_mention may arrive alongside a message event.
+	// Shares the same key format as handleMessage so whichever arrives first
+	// processes the mention; the other is safely dropped.
+	dedupKey := ev.Channel + ":" + ev.TimeStamp
+	if _, loaded := c.dedup.LoadOrStore(dedupKey, time.Now()); loaded {
 		return
 	}
 

@@ -80,7 +80,7 @@ func (l *InstanceLoader) LoadAll(ctx context.Context) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	instances, err := l.store.ListEnabled(ctx)
+	instances, err := l.store.ListAllEnabled(ctx)
 	if err != nil {
 		return err
 	}
@@ -122,8 +122,8 @@ func (l *InstanceLoader) Reload(ctx context.Context) {
 	// Brief pause to let external APIs (e.g., Telegram getUpdates) release polling locks.
 	time.Sleep(500 * time.Millisecond)
 
-	// Reload from DB
-	instances, err := l.store.ListEnabled(ctx)
+	// Reload from DB (all tenants — server-internal)
+	instances, err := l.store.ListAllEnabled(ctx)
 	if err != nil {
 		slog.Error("failed to reload channel instances", "error", err)
 		return
@@ -223,10 +223,12 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 	}
 
 	// Resolve agent_key from UUID — the routing system (Router, session keys) uses agent_key, not UUID.
+	// Use the instance's tenant_id to scope the agent lookup.
+	instCtx := store.WithTenantID(ctx, inst.TenantID)
 	var ag *store.AgentData
 	if base, ok := ch.(interface{ SetAgentID(string) }); ok {
 		var err error
-		ag, err = l.agentStore.GetByID(ctx, inst.AgentID)
+		ag, err = l.agentStore.GetByID(instCtx, inst.AgentID)
 		if err != nil {
 			return fmt.Errorf("agent %s not found for channel %s: %w", inst.AgentID, inst.Name, err)
 		}

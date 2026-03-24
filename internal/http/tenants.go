@@ -44,7 +44,7 @@ func (h *TenantsHandler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *TenantsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.list")})
 		return
 	}
@@ -63,7 +63,7 @@ func (h *TenantsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 func (h *TenantsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.create")})
 		return
 	}
@@ -118,7 +118,7 @@ func (h *TenantsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 func (h *TenantsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.get")})
 		return
 	}
@@ -139,7 +139,7 @@ func (h *TenantsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 func (h *TenantsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.update")})
 		return
 	}
@@ -189,7 +189,7 @@ func (h *TenantsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (h *TenantsHandler) handleUsersList(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.users.list")})
 		return
 	}
@@ -214,7 +214,7 @@ func (h *TenantsHandler) handleUsersList(w http.ResponseWriter, r *http.Request)
 
 func (h *TenantsHandler) handleUsersAdd(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.users.add")})
 		return
 	}
@@ -263,7 +263,7 @@ func (h *TenantsHandler) handleUsersAdd(w http.ResponseWriter, r *http.Request) 
 
 func (h *TenantsHandler) handleUsersRemove(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
-	if !store.IsCrossTenant(r.Context()) {
+	if !store.IsOwnerRole(r.Context()) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "tenants.users.remove")})
 		return
 	}

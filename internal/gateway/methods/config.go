@@ -36,16 +36,16 @@ func (m *ConfigMethods) SetSystemConfigSync(fn func(ctx context.Context, cfg *co
 }
 
 func (m *ConfigMethods) Register(router *gateway.MethodRouter) {
-	router.Register(protocol.MethodConfigGet, m.requireCrossTenant(m.handleGet))
-	router.Register(protocol.MethodConfigApply, m.requireCrossTenant(m.handleApply))
-	router.Register(protocol.MethodConfigPatch, m.requireCrossTenant(m.handlePatch))
-	router.Register(protocol.MethodConfigSchema, m.requireCrossTenant(m.handleSchema))
+	router.Register(protocol.MethodConfigGet, m.requireOwner(m.handleGet))
+	router.Register(protocol.MethodConfigApply, m.requireOwner(m.handleApply))
+	router.Register(protocol.MethodConfigPatch, m.requireOwner(m.handlePatch))
+	router.Register(protocol.MethodConfigSchema, m.requireOwner(m.handleSchema))
 }
 
-// requireCrossTenant wraps a handler to only allow cross-tenant (owner/system) users.
-func (m *ConfigMethods) requireCrossTenant(next gateway.MethodHandler) gateway.MethodHandler {
+// requireOwner wraps a handler to only allow owner-role users.
+func (m *ConfigMethods) requireOwner(next gateway.MethodHandler) gateway.MethodHandler {
 	return func(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-		if !client.IsCrossTenant() {
+		if !client.IsOwner() {
 			locale := store.LocaleFromContext(ctx)
 			client.SendResponse(protocol.NewErrorResponse(
 				req.ID, protocol.ErrUnauthorized,

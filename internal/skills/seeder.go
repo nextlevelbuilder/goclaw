@@ -177,7 +177,7 @@ func (s *Seeder) CheckDepsAsync(skills []seededSkill, msgBus *bus.MessageBus) {
 			status := "active"
 			if !ok {
 				status = "archived"
-				_ = s.store.UpdateSkill(store.WithCrossTenant(context.Background()), sk.id, map[string]interface{}{"status": "archived"})
+				_ = s.store.UpdateSkill(store.WithTenantID(context.Background(), store.MasterTenantID), sk.id, map[string]interface{}{"status": "archived"})
 				s.store.BumpVersion()
 				slog.Warn("seeder: skill deps missing", "slug", sk.slug, "missing", FormatMissing(missing))
 			}

@@ -213,12 +213,8 @@ func tableHasUpdatedAt(table string) bool {
 // --- Tenant filter helpers ---
 
 // tenantClauseN returns an " AND tenant_id = $N" clause and the tenant UUID as the arg.
-// Returns ("", nil, nil) for cross-tenant callers (skip filter).
-// Returns error if tenant is missing from context (fail-closed).
+// Always requires tenant_id in context (fail-closed). No cross-tenant bypass.
 func tenantClauseN(ctx context.Context, paramN int) (clause string, args []any, err error) {
-	if store.IsCrossTenant(ctx) {
-		return "", nil, nil
-	}
 	tid := store.TenantIDFromContext(ctx)
 	if tid == uuid.Nil {
 		return "", nil, fmt.Errorf("tenant_id required")
@@ -235,9 +231,6 @@ func tenantClauseNAlias(ctx context.Context, paramN int, alias string) (clause s
 		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
 			return "", nil, fmt.Errorf("invalid table alias: %q", alias)
 		}
-	}
-	if store.IsCrossTenant(ctx) {
-		return "", nil, nil
 	}
 	tid := store.TenantIDFromContext(ctx)
 	if tid == uuid.Nil {

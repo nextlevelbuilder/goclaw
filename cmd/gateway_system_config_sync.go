@@ -18,11 +18,9 @@ func syncSystemConfigs(sc store.SystemConfigStore, ts store.TenantStore, cfg *co
 		return
 	}
 
-	crossCtx := store.WithCrossTenant(context.Background())
-
 	// Enumerate tenants and seed each one
 	if ts != nil {
-		tenants, err := ts.ListTenants(crossCtx)
+		tenants, err := ts.ListTenants(context.Background())
 		if err != nil {
 			slog.Warn("failed to list tenants for system config seed", "error", err)
 			// Fall back to master tenant only

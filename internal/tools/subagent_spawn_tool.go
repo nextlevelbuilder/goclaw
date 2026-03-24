@@ -100,13 +100,10 @@ func (t *SpawnTool) executeSpawn(ctx context.Context, args map[string]any) *Resu
 			agentKey, agentKey))
 	}
 
-	// Validate tenant isolation: non-cross-tenant callers must have a tenant in context.
+	// Validate tenant isolation: callers must have a tenant in context.
 	// Self-clone subagents inherit caller's context (WithoutCancel), so tenant propagates automatically.
-	if !store.IsCrossTenant(ctx) {
-		callerTenant := store.TenantIDFromContext(ctx)
-		if callerTenant == uuid.Nil {
-			return ErrorResult("spawn requires tenant context: no tenant ID found in request context")
-		}
+	if store.TenantIDFromContext(ctx) == uuid.Nil {
+		return ErrorResult("spawn requires tenant context: no tenant ID found in request context")
 	}
 
 	task, _ := args["task"].(string)

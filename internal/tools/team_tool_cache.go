@@ -108,12 +108,9 @@ func (m *TeamToolManager) InvalidateAgentCache() {
 // Agent keys (e.g. "my-agent") are unique per-tenant, not globally,
 // so the cache key must include tenant to prevent cross-tenant pollution.
 func agentKeyCacheKey(ctx context.Context, key string) string {
-	if store.IsCrossTenant(ctx) {
-		return "*:" + key
-	}
 	tid := store.TenantIDFromContext(ctx)
 	if tid == uuid.Nil {
-		return "*:" + key
+		return "0:" + key
 	}
 	return tid.String() + ":" + key
 }
