@@ -21,6 +21,14 @@ interface InstallResult {
   error: string;
 }
 
+/** Extract the last meaningful error line from verbose package manager output. */
+function shortError(msg: string): string {
+  // Look for "ERROR:" line (apk) or last non-empty line
+  const lines = msg.split("\n").map((l) => l.trim()).filter(Boolean);
+  const errLine = lines.find((l) => l.startsWith("ERROR:"));
+  return errLine ?? lines[lines.length - 1] ?? msg;
+}
+
 export function usePackages() {
   const http = useHttp();
   const qc = useQueryClient();
@@ -43,12 +51,12 @@ export function usePackages() {
         qc.invalidateQueries({ queryKey: queryKeys.packages.all });
         qc.invalidateQueries({ queryKey: queryKeys.packages.runtimes });
       } else {
-        toast.error(t("messages.installError", { name: pkg }) + (res.error ? `: ${res.error}` : ""));
+        toast.error(t("messages.installError", { name: pkg }) + (res.error ? `: ${shortError(res.error)}` : ""));
       }
       return res;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(t("messages.installError", { name: pkg }) + (msg ? `: ${msg}` : ""));
+      toast.error(t("messages.installError", { name: pkg }) + (msg ? `: ${shortError(msg)}` : ""));
       return { ok: false, error: msg } as InstallResult;
     }
   }, [http, qc]);
@@ -61,12 +69,12 @@ export function usePackages() {
         qc.invalidateQueries({ queryKey: queryKeys.packages.all });
         qc.invalidateQueries({ queryKey: queryKeys.packages.runtimes });
       } else {
-        toast.error(t("messages.uninstallError", { name: pkg }) + (res.error ? `: ${res.error}` : ""));
+        toast.error(t("messages.uninstallError", { name: pkg }) + (res.error ? `: ${shortError(res.error)}` : ""));
       }
       return res;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(t("messages.uninstallError", { name: pkg }) + (msg ? `: ${msg}` : ""));
+      toast.error(t("messages.uninstallError", { name: pkg }) + (msg ? `: ${shortError(msg)}` : ""));
       return { ok: false, error: msg } as InstallResult;
     }
   }, [http, qc]);
