@@ -25,9 +25,13 @@ function isSystemMessage(msg: ChatMessage): boolean {
 function isDisplayable(msg: ChatMessage): boolean {
   // Hide tool role messages (shown inline with assistant)
   if (msg.role === "tool") return false;
-  // Hide messages with empty/whitespace content
-  if (!msg.content?.trim()) return false;
-  return true;
+  // Show if there is text content
+  if (msg.content?.trim()) return true;
+  // Assistant messages with tool calls or thinking should still be displayed
+  if (msg.role === "assistant") {
+    return !!(msg.toolDetails?.length || msg.tool_calls?.length || msg.thinking?.trim());
+  }
+  return false;
 }
 
 interface SessionDetailPageProps {

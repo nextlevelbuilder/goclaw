@@ -185,6 +185,7 @@
     "docIndexFailed": "Không thể lập chỉ mục tài liệu",
     "allIndexed": "Đã lập chỉ mục tất cả tài liệu",
     "allIndexFailed": "Không thể lập chỉ mục tất cả",
-    "searchFailed": "Tìm kiếm thất bại"
+    "searchFailed": "Tìm kiếm thất bại",
+    "docLoadFailed": "Không thể tải tài liệu"
   }
 }

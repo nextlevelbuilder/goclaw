@@ -185,6 +185,7 @@
     "docIndexFailed": "Failed to index document",
     "allIndexed": "All documents indexed",
     "allIndexFailed": "Failed to index all",
-    "searchFailed": "Search failed"
+    "searchFailed": "Search failed",
+    "docLoadFailed": "Failed to load document"
   }
 }
