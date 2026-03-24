@@ -57,6 +57,9 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	if stores != nil && stores.Providers != nil {
 		providersH = httpapi.NewProvidersHandler(stores.Providers, stores.ConfigSecrets, providerReg, gatewayAddr)
 		providersH.SetMessageBus(msgBus)
+		if stores.SystemConfigs != nil {
+			providersH.SetSystemConfigStore(stores.SystemConfigs)
+		}
 		if stores.MCP != nil {
 			providersH.SetMCPServerLookup(buildMCPServerLookup(stores.MCP))
 		}

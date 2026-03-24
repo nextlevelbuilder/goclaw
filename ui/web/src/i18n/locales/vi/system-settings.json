@@ -1,0 +1,51 @@
+{
+  "title": "Cài đặt hệ thống",
+  "save": "Lưu",
+  "cancel": "Hủy",
+  "saving": "Đang lưu...",
+  "saved": "Đã lưu cài đặt",
+  "loadFailed": "Không thể tải cài đặt",
+  "saveFailed": "Không thể lưu cài đặt",
+  "embedding": {
+    "title": "Embedding",
+    "description": "Provider và model cho vector embedding và tìm kiếm ngữ nghĩa.",
+    "importance": "Embedding rất quan trọng cho khả năng nhớ, tìm kiếm kỹ năng, đồ thị tri thức và khớp tác vụ. Thay đổi ảnh hưởng toàn hệ thống.",
+    "provider": "Provider Embedding",
+    "model": "Model Embedding",
+    "providerTip": "Provider LLM dùng để tạo vector embedding.",
+    "modelTip": "Model embedding (vd: text-embedding-3-small). Phải hỗ trợ endpoint /embeddings.",
+    "providerPlaceholder": "Chọn provider",
+    "modelPlaceholder": "text-embedding-3-small",
+    "supportedProviders": "Đã xác minh 1536d: OpenAI (text-embedding-3-small), OpenRouter (openai/*), Mistral (codestral-embed). Các provider khác có thể hoạt động nếu hỗ trợ /embeddings với output 1536d.",
+    "verify": "Kiểm tra Embedding",
+    "verifyRequired": "Kiểm tra model embedding trước khi lưu.",
+    "verifyFailed": "Kiểm tra thất bại",
+    "dimensions": "{{count}} chiều"
+  },
+  "ux": {
+    "title": "Hành vi UX",
+    "description": "Điều khiển cách gateway hiển thị hoạt động của agent cho người dùng.",
+    "toolStatus": "Hiện tên công cụ khi thực thi",
+    "toolStatusHint": "Hiển thị tên công cụ đang chạy khi agent hoạt động.",
+    "toolStatusInfo": "Tên công cụ được hiện khi agent đang chạy.",
+    "blockReply": "Hiện văn bản trung gian khi gọi công cụ",
+    "blockReplyHint": "Gửi nội dung phụ trợ khi công cụ đang được gọi.",
+    "blockReplyInfo": "Văn bản trung gian được gửi cho người dùng khi thực thi công cụ.",
+    "intentClassify": "Phân loại ý định",
+    "intentClassifyHint": "Phân loại ý định người dùng trước khi chuyển tới agent.",
+    "intentClassifyInfo": "Tin nhắn được phân loại để tối ưu định tuyến agent."
+  },
+  "compaction": {
+    "title": "Nén tin nhắn chờ",
+    "description": "Tóm tắt lịch sử tin nhắn chờ dài để nằm trong giới hạn context.",
+    "providerPlaceholder": "(tự động)",
+    "threshold": "Ngưỡng",
+    "thresholdHint": "Số tin nhắn trước khi kích hoạt nén.",
+    "keepRecent": "Giữ lại gần đây",
+    "keepRecentHint": "Số tin nhắn được giữ sau khi nén.",
+    "maxTokens": "Token tối đa",
+    "maxTokensHint": "Giới hạn token cho bản tóm tắt.",
+    "info": "Khi nhóm chat vượt ngưỡng, LLM tự động tóm tắt các tin nhắn cũ thành một mục gọn, giữ nguyên các tin gần nhất cho ngữ cảnh."
+  },
+  "moreConfig": "Cấu hình thêm"
+}

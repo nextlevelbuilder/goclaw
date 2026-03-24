@@ -31,4 +31,5 @@ type Stores struct {
 	Tenants                TenantStore
 	BuiltinToolTenantCfgs  BuiltinToolTenantConfigStore
 	SkillTenantCfgs        SkillTenantConfigStore
+	SystemConfigs          SystemConfigStore
 }

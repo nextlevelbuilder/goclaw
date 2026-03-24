@@ -151,7 +151,18 @@
     "apiKeySectionDesc": "Authentication credentials",
     "statusSection": "Status",
     "statusSectionDesc": "Provider availability",
-    "enabledDesc": "Provider is active and available for agents"
+    "enabledDesc": "Provider is active and available for agents",
+    "embeddingSection": "Embedding"
+  },
+  "embedding": {
+    "enable": "Enable Embedding",
+    "enableDesc": "Allow this provider to generate text embeddings for memory, skills, and knowledge graph",
+    "model": "Embedding Model",
+    "apiBase": "Embedding API Base",
+    "apiBasePlaceholder": "(same as provider)",
+    "apiBaseHint": "Override if embedding endpoint differs from the provider's main API base",
+    "verify": "Verify Embedding",
+    "verifyFailed": "Embedding verification failed"
   },
   "toast": {
     "created": "Provider created",

@@ -26,6 +26,7 @@ type ProvidersHandler struct {
 	apiBaseFallback func(providerType string) string // optional: config/env fallback for api_base
 	cliMu           sync.Mutex                      // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
+	sysConfigStore  store.SystemConfigStore
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -37,6 +38,11 @@ func NewProvidersHandler(s store.ProviderStore, secretStore store.ConfigSecretsS
 // Must be called before serving requests (not thread-safe).
 func (h *ProvidersHandler) SetMessageBus(msgBus *bus.MessageBus) {
 	h.msgBus = msgBus
+}
+
+// SetSystemConfigStore sets the system config store for embedding status checks.
+func (h *ProvidersHandler) SetSystemConfigStore(s store.SystemConfigStore) {
+	h.sysConfigStore = s
 }
 
 // SetMCPServerLookup sets the per-agent MCP server lookup for Claude CLI providers.
@@ -88,6 +94,10 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Provider + model verification (pre-flight check)
 	mux.HandleFunc("POST /v1/providers/{id}/verify", h.auth(h.handleVerifyProvider))
+	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.auth(h.handleVerifyEmbedding))
+
+	// Embedding system status
+	mux.HandleFunc("GET /v1/embedding/status", h.auth(h.handleEmbeddingStatus))
 
 	// Claude CLI auth status (global — not per-provider)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))

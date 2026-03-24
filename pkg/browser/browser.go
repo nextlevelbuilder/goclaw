@@ -95,6 +95,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		l := launcher.New().
 			Headless(m.headless).
 			Set("disable-gpu").
+			Set("no-sandbox").
 			Set("no-first-run").
 			Set("no-default-browser-check")
 

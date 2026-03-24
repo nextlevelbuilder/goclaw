@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
@@ -13,18 +13,18 @@ export function useContactSearch(search: string) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Simple debounce via timeout
-  useMemo(() => {
+  useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 150);
     return () => clearTimeout(timer);
   }, [search]);
 
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.contacts.list({ search: debouncedSearch, limit: 20 }),
+    queryKey: queryKeys.contacts.search({ search: debouncedSearch, limit: 20 }),
     queryFn: async () => {
       const params: Record<string, string> = { limit: "20" };
       if (debouncedSearch) params.search = debouncedSearch;
       const res = await http.get<{ contacts: ChannelContact[] }>("/v1/contacts", params);
-      return Array.isArray(res.contacts) ? res.contacts : [];
+      return res.contacts ?? [];
     },
     enabled: debouncedSearch.length >= 2,
     staleTime: 30_000,

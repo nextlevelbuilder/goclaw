@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -169,7 +168,7 @@ func (s *PGMCPServerStore) RevokeFromUser(ctx context.Context, serverID uuid.UUI
 // --- Resolution ---
 
 func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.MCPAccessInfo, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, err := tenantClauseNAlias(ctx, 3, "ms")
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +180,7 @@ func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID
 		 INNER JOIN mcp_agent_grants mag ON ms.id = mag.server_id AND mag.agent_id = $1 AND mag.enabled = true
 		 LEFT JOIN mcp_user_grants mug ON ms.id = mug.server_id AND mug.user_id = $2
 		 WHERE ms.enabled = true
-		   AND (mug.id IS NULL OR mug.enabled = true)`+
-			strings.Replace(tClause, "tenant_id", "ms.tenant_id", 1),
+		   AND (mug.id IS NULL OR mug.enabled = true)`+tClause,
 		append([]any{agentID, userID}, tArgs...)...)
 	if err != nil {
 		return nil, err

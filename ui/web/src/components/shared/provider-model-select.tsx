@@ -36,6 +36,12 @@ interface ProviderModelSelectProps {
   onSaveBlockedChange?: (blocked: boolean) => void;
   /** When true, skip auto-selecting the first provider when none is set. Useful when empty means "use default". */
   allowEmpty?: boolean;
+  /** When true, only show providers with settings.embedding.enabled. */
+  filterEmbedding?: boolean;
+  /** Filter model list by keyword (case-insensitive). E.g. "embed" to show only embedding models. */
+  modelFilter?: string;
+  /** Extra models to prepend to the dropdown (e.g. curated embedding models not returned by API). */
+  extraModels?: { id: string; name: string }[];
 }
 
 export function ProviderModelSelect({
@@ -54,12 +60,23 @@ export function ProviderModelSelect({
   savedModel,
   onSaveBlockedChange,
   allowEmpty,
+  filterEmbedding,
+  modelFilter,
+  extraModels,
 }: ProviderModelSelectProps) {
   const { t } = useTranslation("common");
   const { providers } = useProviders();
   const enabledProviders = useMemo(
-    () => providers.filter((p) => p.enabled),
-    [providers],
+    () => providers.filter((p) => {
+      if (!p.enabled) return false;
+      if (filterEmbedding) {
+        const s = p.settings as Record<string, unknown> | undefined;
+        const emb = s?.embedding as { enabled?: boolean } | undefined;
+        return emb?.enabled === true;
+      }
+      return true;
+    }),
+    [providers, filterEmbedding],
   );
 
   // Stable ref for callback — prevents the auto-select effect from re-running
@@ -146,7 +163,23 @@ export function ProviderModelSelect({
             <Combobox
               value={model}
               onChange={onModelChange}
-              options={models.map((m) => ({ value: m.id, label: m.name }))}
+              options={(() => {
+                let list = modelFilter
+                  ? models.filter((m) => {
+                      const id = m.id.toLowerCase();
+                      const name = (m.name ?? "").toLowerCase();
+                      const f = modelFilter.toLowerCase();
+                      return id.includes(f) || name.includes(f);
+                    })
+                  : models;
+                // Prepend extra models, dedup by id
+                if (extraModels?.length) {
+                  const apiIds = new Set(list.map((m) => m.id));
+                  const extras = extraModels.filter((m) => !apiIds.has(m.id));
+                  list = [...extras, ...list];
+                }
+                return list.map((m) => ({ value: m.id, label: m.name }));
+              })()}
               placeholder={modelsLoading ? t("loadingModels") : (modelPlaceholder ?? t("enterOrSelectModel"))}
               allowCustom
               customLabel={t("useCustomModel")}

@@ -28,5 +28,6 @@
     "updateAvailable": "Có bản cập nhật: {{version}}",
     "viewRelease": "Xem chi tiết →"
   },
+  "systemSettings": "Cài đặt hệ thống",
   "toggleTheme": "Chuyển đổi giao diện"
 }

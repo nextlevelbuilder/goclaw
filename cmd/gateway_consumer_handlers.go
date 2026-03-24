@@ -68,7 +68,7 @@ func handleSubagentAnnounce(
 	sessionKey := msg.Metadata["origin_session_key"]
 	if sessionKey == "" {
 		// Fallback: rebuild session key from origin metadata (works for Telegram, Discord, etc.)
-		sessionKey = sessions.BuildScopedSessionKey(parentAgent, origChannel, sessions.PeerKind(origPeerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+		sessionKey = sessions.BuildScopedSessionKey(parentAgent, origChannel, sessions.PeerKind(origPeerKind), msg.ChatID)
 		sessionKey = overrideSessionKeyFromLocalKey(sessionKey, origLocalKey, parentAgent, origChannel, msg.ChatID, origPeerKind)
 	}
 
@@ -528,7 +528,7 @@ func handleTeammateMessage(
 		leadSessionKey := inMeta["origin_session_key"]
 		if leadSessionKey == "" {
 			// Fallback: rebuild session key from origin metadata (works for Telegram, Discord, etc.)
-			leadSessionKey = sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+			leadSessionKey = sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID)
 			leadSessionKey = overrideSessionKeyFromLocalKey(leadSessionKey, origLocalKey, leadAgent, origCh, origChatID, origPeerKind)
 		}
 
@@ -600,7 +600,7 @@ func handleResetCommand(
 	if peerKind == "" {
 		peerKind = string(sessions.PeerDirect)
 	}
-	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID)
 	if msg.Metadata["is_forum"] == "true" && peerKind == string(sessions.PeerGroup) {
 		var topicID int
 		fmt.Sscanf(msg.Metadata["message_thread_id"], "%d", &topicID)
@@ -639,7 +639,7 @@ func handleStopCommand(
 	if peerKind == "" {
 		peerKind = string(sessions.PeerDirect)
 	}
-	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID)
 	if msg.Metadata["is_forum"] == "true" && peerKind == string(sessions.PeerGroup) {
 		var topicID int
 		fmt.Sscanf(msg.Metadata["message_thread_id"], "%d", &topicID)

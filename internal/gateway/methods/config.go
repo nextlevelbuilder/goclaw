@@ -21,11 +21,18 @@ type ConfigMethods struct {
 	cfg          *config.Config
 	cfgPath      string
 	secretsStore store.ConfigSecretsStore
-	eventBus     bus.EventPublisher // nil-safe; broadcasts config change events
+	syncFn       func(ctx context.Context, cfg *config.Config) // nil-safe; syncs non-secret settings to system_configs
+	eventBus     bus.EventPublisher       // nil-safe; broadcasts config change events
 }
 
 func NewConfigMethods(cfg *config.Config, cfgPath string, secretsStore store.ConfigSecretsStore, eventBus bus.EventPublisher) *ConfigMethods {
 	return &ConfigMethods{cfg: cfg, cfgPath: cfgPath, secretsStore: secretsStore, eventBus: eventBus}
+}
+
+// SetSystemConfigSync sets a callback to sync config to system_configs after save.
+// The callback receives the final resolved config (with secrets + env applied).
+func (m *ConfigMethods) SetSystemConfigSync(fn func(ctx context.Context, cfg *config.Config)) {
+	m.syncFn = fn
 }
 
 func (m *ConfigMethods) Register(router *gateway.MethodRouter) {
@@ -106,6 +113,7 @@ func (m *ConfigMethods) handleApply(ctx context.Context, client *gateway.Client,
 		}
 	}
 	m.cfg.ApplyEnvOverrides()
+	m.syncToSystemConfigs(ctx)
 	m.broadcastChanged()
 	emitAudit(m.eventBus, client, "config.applied", "config", "gateway")
 
@@ -179,6 +187,7 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 		}
 	}
 	m.cfg.ApplyEnvOverrides()
+	m.syncToSystemConfigs(ctx)
 	m.broadcastChanged()
 	emitAudit(m.eventBus, client, "config.patched", "config", "gateway")
 
@@ -189,6 +198,13 @@ func (m *ConfigMethods) handlePatch(ctx context.Context, client *gateway.Client,
 		"hash":    m.cfg.Hash(),
 		"restart": false,
 	}))
+}
+
+// syncToSystemConfigs syncs the resolved config to system_configs table for the given tenant.
+func (m *ConfigMethods) syncToSystemConfigs(ctx context.Context) {
+	if m.syncFn != nil {
+		m.syncFn(ctx, m.cfg)
+	}
 }
 
 // broadcastChanged notifies subscribers that config has been updated.

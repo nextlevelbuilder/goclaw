@@ -95,6 +95,7 @@ const (
 	TopicTeamTaskAudit         = "team-task-audit"
 	TopicChannelStreaming      = "channel-streaming"
 	TopicConfigChanged         = "config:changed"
+	TopicSystemConfigChanged   = "system_config:changed"
 	TopicPairingRevoked        = "pairing:revoked"
 	TopicAgentStatusChanged    = "agent:status_changed"
 )

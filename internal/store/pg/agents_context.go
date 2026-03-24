@@ -165,7 +165,7 @@ func (s *PGAgentStore) EnsureUserProfile(ctx context.Context, agentID uuid.UUID,
 // --- User Instances ---
 
 func (s *PGAgentStore) ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]store.UserInstanceData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, err := tenantClauseNAlias(ctx, 2, "p")
 	if err != nil {
 		return nil, err
 	}

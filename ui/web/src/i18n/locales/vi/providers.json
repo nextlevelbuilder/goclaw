@@ -151,7 +151,18 @@
     "apiKeySectionDesc": "Thông tin xác thực",
     "statusSection": "Trạng thái",
     "statusSectionDesc": "Tình trạng hoạt động của provider",
-    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent"
+    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
+    "embeddingSection": "Embedding"
+  },
+  "embedding": {
+    "enable": "Bật Embedding",
+    "enableDesc": "Cho phép provider này tạo embedding cho bộ nhớ, kỹ năng và đồ thị tri thức",
+    "model": "Model Embedding",
+    "apiBase": "API Base Embedding",
+    "apiBasePlaceholder": "(giống provider)",
+    "apiBaseHint": "Ghi đè nếu endpoint embedding khác với API base chính của provider",
+    "verify": "Kiểm tra Embedding",
+    "verifyFailed": "Kiểm tra embedding thất bại"
   },
   "toast": {
     "created": "Đã tạo provider",

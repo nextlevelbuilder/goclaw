@@ -342,25 +342,13 @@ func setupStoresAndTracing(
 }
 
 // setupMemoryEmbeddings wires embedding provider to PGMemoryStore and triggers backfill.
-// Per-agent DB config takes priority over config file defaults.
+// Resolves embedding provider from DB providers with settings.embedding.enabled.
 func setupMemoryEmbeddings(
-	cfg *config.Config,
 	pgStores *store.Stores,
 	providerRegistry *providers.Registry,
 ) {
-	// Wire embedding provider to PGMemoryStore so IndexDocument generates vectors.
-	// Per-agent DB config takes priority over config file defaults.
 	if pgStores.Memory != nil {
-		memCfg := cfg.Agents.Defaults.Memory
-		if pgStores.Agents != nil {
-			if defaultAgent, agErr := pgStores.Agents.GetByKey(store.WithCrossTenant(context.Background()), "default"); agErr == nil {
-				if agentMemCfg := defaultAgent.ParseMemoryConfig(); agentMemCfg != nil {
-					memCfg = agentMemCfg
-					slog.Debug("using per-agent memory config from DB", "agent", defaultAgent.AgentKey)
-				}
-			}
-		}
-		if embProvider := resolveEmbeddingProvider(cfg, memCfg, providerRegistry); embProvider != nil {
+		if embProvider := resolveEmbeddingProvider(pgStores.Providers, providerRegistry, pgStores.SystemConfigs); embProvider != nil {
 			pgStores.Memory.SetEmbeddingProvider(embProvider)
 			slog.Info("memory embeddings enabled", "provider", embProvider.Name(), "model", embProvider.Model())
 
@@ -391,10 +379,28 @@ func setupMemoryEmbeddings(
 					}
 				}()
 			}
+
+			// Wire embedding provider into KG store for entity semantic search.
+			if pgKG, ok := pgStores.KnowledgeGraph.(*pg.PGKnowledgeGraphStore); ok {
+				pgKG.SetEmbeddingProvider(embProvider)
+				go func() {
+					if count, err := pgKG.BackfillKGEmbeddings(context.Background()); err != nil {
+						slog.Warn("KG embeddings backfill failed", "error", err)
+					} else if count > 0 {
+						slog.Info("KG embeddings backfill complete", "entities_updated", count)
+					}
+				}()
+			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")
 		}
 	}
+}
+
+// seedSystemConfigs ensures system_configs has all expected keys for all tenants.
+// Inserts missing keys from config.json without overwriting existing values.
+func seedSystemConfigs(sc store.SystemConfigStore, ts store.TenantStore, cfg *config.Config) {
+	syncSystemConfigs(sc, ts, cfg, true) // onlyMissing=true
 }
 
 // loadBootstrapFiles loads bootstrap files for the default agent's system prompt from DB.
@@ -547,8 +553,7 @@ func setupSkillsSystem(
 			skillSearchTool.SetSkillAccessStore(sas)
 		}
 		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
-			memCfg := cfg.Agents.Defaults.Memory
-			if embProvider := resolveEmbeddingProvider(cfg, memCfg, providerRegistry); embProvider != nil {
+			if embProvider := resolveEmbeddingProvider(pgStores.Providers, providerRegistry, pgStores.SystemConfigs); embProvider != nil {
 				pgSkills.SetEmbeddingProvider(embProvider)
 				skillSearchTool.SetEmbeddingSearcher(pgSkills, embProvider)
 				slog.Info("skill embeddings enabled", "provider", embProvider.Name())

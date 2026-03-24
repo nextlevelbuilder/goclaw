@@ -35,6 +35,7 @@ import enApiKeys from "./locales/en/api-keys.json";
 import enCliCredentials from "./locales/en/cli-credentials.json";
 import enPackages from "./locales/en/packages.json";
 import enTenants from "./locales/en/tenants.json";
+import enSystemSettings from "./locales/en/system-settings.json";
 
 // --- VI namespaces ---
 import viCommon from "./locales/vi/common.json";
@@ -70,6 +71,7 @@ import viApiKeys from "./locales/vi/api-keys.json";
 import viCliCredentials from "./locales/vi/cli-credentials.json";
 import viPackages from "./locales/vi/packages.json";
 import viTenants from "./locales/vi/tenants.json";
+import viSystemSettings from "./locales/vi/system-settings.json";
 
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
@@ -105,6 +107,7 @@ import zhApiKeys from "./locales/zh/api-keys.json";
 import zhCliCredentials from "./locales/zh/cli-credentials.json";
 import zhPackages from "./locales/zh/packages.json";
 import zhTenants from "./locales/zh/tenants.json";
+import zhSystemSettings from "./locales/zh/system-settings.json";
 
 const STORAGE_KEY = "goclaw:language";
 
@@ -123,7 +126,7 @@ const ns = [
   "channels", "providers", "traces", "events",
   "usage", "approvals", "nodes", "logs", "tools", "mcp", "tts",
   "setup", "memory", "storage", "pending-messages", "contacts", "activity", "api-keys",
-  "cli-credentials", "packages", "tenants",
+  "cli-credentials", "packages", "tenants", "system-settings",
 ] as const;
 
 i18n.use(initReactI18next).init({
@@ -141,6 +144,7 @@ i18n.use(initReactI18next).init({
       "cli-credentials": enCliCredentials,
       packages: enPackages,
       tenants: enTenants,
+      "system-settings": enSystemSettings,
     },
     vi: {
       common: viCommon, sidebar: viSidebar, topbar: viTopbar, login: viLogin,
@@ -155,6 +159,7 @@ i18n.use(initReactI18next).init({
       "cli-credentials": viCliCredentials,
       packages: viPackages,
       tenants: viTenants,
+      "system-settings": viSystemSettings,
     },
     zh: {
       common: zhCommon, sidebar: zhSidebar, topbar: zhTopbar, login: zhLogin,
@@ -169,6 +174,7 @@ i18n.use(initReactI18next).init({
       "cli-credentials": zhCliCredentials,
       packages: zhPackages,
       tenants: zhTenants,
+      "system-settings": zhSystemSettings,
     },
   },
   ns: [...ns],

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy } from "lucide-react";
+import { Copy, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { toast } from "@/stores/use-toast-store";
+import { useProviderVerify } from "../hooks/use-provider-verify";
+import { getEmbeddingSettings } from "@/types/provider";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
 interface ProviderOverviewProps {
@@ -17,6 +19,7 @@ interface ProviderOverviewProps {
 }
 
 const NO_API_KEY_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth"]);
+const NO_EMBEDDING_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth", "suno"]);
 
 export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) {
   const { t } = useTranslation("providers");
@@ -25,6 +28,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const typeInfo = PROVIDER_TYPES.find((pt) => pt.value === provider.provider_type);
   const typeLabel = typeInfo?.label ?? provider.provider_type;
   const showApiKey = !NO_API_KEY_TYPES.has(provider.provider_type);
+  const showEmbedding = !NO_EMBEDDING_TYPES.has(provider.provider_type);
 
   // Identity
   const [displayName, setDisplayName] = useState(provider.display_name || "");
@@ -34,6 +38,24 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
 
   // Status
   const [enabled, setEnabled] = useState(provider.enabled);
+
+  // Embedding
+  const initEmb = getEmbeddingSettings(provider.settings);
+  const [embEnabled, setEmbEnabled] = useState(initEmb?.enabled ?? false);
+  const [embModel, setEmbModel] = useState(initEmb?.model ?? "");
+  const [embApiBase, setEmbApiBase] = useState(initEmb?.api_base ?? "");
+
+  // Re-sync embedding state when provider changes (e.g. after save)
+  useEffect(() => {
+    const es = getEmbeddingSettings(provider.settings);
+    setEmbEnabled(es?.enabled ?? false);
+    setEmbModel(es?.model ?? "");
+    setEmbApiBase(es?.api_base ?? "");
+  }, [provider.settings]);
+
+  // Verify embedding
+  const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
+  useEffect(() => { resetEmb(); }, [embModel, resetEmb]);
 
   // Save state
   const [saving, setSaving] = useState(false);
@@ -51,6 +73,16 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       if (showApiKey && apiKey && apiKey !== "***") {
         data.api_key = apiKey;
       }
+      // Merge embedding settings into existing settings
+      if (showEmbedding) {
+        const existing = (provider.settings || {}) as Record<string, unknown>;
+        data.settings = {
+          ...existing,
+          embedding: embEnabled
+            ? { enabled: true, model: embModel.trim() || undefined, api_base: embApiBase.trim() || undefined }
+            : { enabled: false },
+        };
+      }
       await onUpdate(provider.id, data);
     } catch {
       // toast shown by hook
@@ -62,6 +94,10 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const handleCopyName = () => {
     navigator.clipboard.writeText(provider.name).catch(() => {});
     toast.success(tc("copy"));
+  };
+
+  const handleVerifyEmbedding = () => {
+    verifyEmbedding(provider.id, embModel.trim() || undefined);
   };
 
   return (
@@ -117,6 +153,77 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
             />
             <p className="text-xs text-muted-foreground">{t("form.apiKeySetHint")}</p>
           </div>
+        </section>
+      )}
+
+      {/* Embedding */}
+      {showEmbedding && (
+        <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
+          <h3 className="text-sm font-medium">{t("detail.embeddingSection")}</h3>
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="embEnabled" className="text-sm font-medium">
+                {t("embedding.enable")}
+              </Label>
+              <p className="text-xs text-muted-foreground">{t("embedding.enableDesc")}</p>
+            </div>
+            <Switch id="embEnabled" checked={embEnabled} onCheckedChange={setEmbEnabled} />
+          </div>
+
+          {embEnabled && (
+            <div className="space-y-3 pt-1">
+              <div className="space-y-2">
+                <Label htmlFor="embModel">{t("embedding.model")}</Label>
+                <Input
+                  id="embModel"
+                  value={embModel}
+                  onChange={(e) => setEmbModel(e.target.value)}
+                  placeholder="text-embedding-3-small"
+                  className="text-base md:text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="embApiBase">{t("embedding.apiBase")}</Label>
+                <Input
+                  id="embApiBase"
+                  value={embApiBase}
+                  onChange={(e) => setEmbApiBase(e.target.value)}
+                  placeholder={t("embedding.apiBasePlaceholder")}
+                  className="text-base md:text-sm"
+                />
+                <p className="text-xs text-muted-foreground">{t("embedding.apiBaseHint")}</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={embVerifying}
+                  onClick={handleVerifyEmbedding}
+                >
+                  {embVerifying ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  {t("embedding.verify")}
+                </Button>
+                {embResult && (
+                  <span className={`flex items-center gap-1 text-xs ${embResult.valid ? "text-success" : "text-destructive"}`}>
+                    {embResult.valid ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {embResult.dimensions} dimensions
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-3.5 w-3.5" />
+                        {embResult.error || t("embedding.verifyFailed")}
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 

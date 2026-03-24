@@ -25,3 +25,15 @@ export interface ModelInfo {
   id: string;
   name?: string;
 }
+
+export interface EmbeddingSettings {
+  enabled: boolean;
+  model?: string;
+  api_base?: string;
+}
+
+/** Extract embedding settings from provider.settings */
+export function getEmbeddingSettings(settings?: Record<string, unknown>): EmbeddingSettings | null {
+  if (!settings?.embedding) return null;
+  return settings.embedding as EmbeddingSettings;
+}

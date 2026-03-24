@@ -124,7 +124,26 @@ func runGateway() {
 		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP, cfg)
 	}
 
-	setupMemoryEmbeddings(cfg, pgStores, providerRegistry)
+	// Warn if deprecated session scope settings are configured
+	if cfg.Sessions.Scope != "" && cfg.Sessions.Scope != "per-sender" {
+		slog.Warn("sessions.scope config is deprecated and ignored — fixed to per-sender", "configured", cfg.Sessions.Scope)
+	}
+	if cfg.Sessions.DmScope != "" && cfg.Sessions.DmScope != "per-channel-peer" {
+		slog.Warn("sessions.dm_scope config is deprecated and ignored — fixed to per-channel-peer", "configured", cfg.Sessions.DmScope)
+	}
+
+	seedSystemConfigs(pgStores.SystemConfigs, pgStores.Tenants, cfg)
+	// Read back system_configs from DB and overlay onto in-memory config.
+	// This ensures runtime components read DB values via cfg.* without needing direct DB access.
+	if pgStores.SystemConfigs != nil {
+		if sysConfigs, err := pgStores.SystemConfigs.List(
+			store.WithTenantID(context.Background(), store.MasterTenantID),
+		); err == nil && len(sysConfigs) > 0 {
+			cfg.ApplySystemConfigs(sysConfigs)
+			slog.Info("system_configs applied to in-memory config", "keys", len(sysConfigs))
+		}
+	}
+	setupMemoryEmbeddings(pgStores, providerRegistry)
 
 	loadBootstrapFiles(pgStores, workspace, agentCfg)
 
@@ -375,6 +394,26 @@ func runGateway() {
 		server.SetActivityHandler(httpapi.NewActivityHandler(pgStores.Activity))
 	}
 
+	// System configs API
+	if pgStores.SystemConfigs != nil {
+		server.SetSystemConfigsHandler(httpapi.NewSystemConfigsHandler(pgStores.SystemConfigs, msgBus))
+
+		// Refresh in-memory config when system_configs change via HTTP API
+		msgBus.Subscribe(bus.TopicSystemConfigChanged, func(evt bus.Event) {
+			// Use tenant context from the request that triggered the change
+			ctx := context.Background()
+			if reqCtx, ok := evt.Payload.(context.Context); ok {
+				ctx = reqCtx
+			} else {
+				ctx = store.WithTenantID(ctx, store.MasterTenantID)
+			}
+			if sysConfigs, err := pgStores.SystemConfigs.List(ctx); err == nil && len(sysConfigs) > 0 {
+				cfg.ApplySystemConfigs(sysConfigs)
+				slog.Debug("system_configs refreshed to in-memory config", "keys", len(sysConfigs))
+			}
+		})
+	}
+
 	// Usage analytics API
 	if pgStores.Snapshots != nil {
 		server.SetUsageHandler(httpapi.NewUsageHandler(pgStores.Snapshots, pgStores.DB))
@@ -435,7 +474,7 @@ func runGateway() {
 
 	// Register all RPC methods
 	server.SetLogTee(logTee)
-	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions)
+	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants)
 
 	// Wire post-turn processor for team task dispatch (WS chat.send + HTTP API paths).
 	if postTurn != nil {

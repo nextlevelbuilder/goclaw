@@ -1,0 +1,51 @@
+{
+  "title": "系统设置",
+  "save": "保存",
+  "cancel": "取消",
+  "saving": "保存中...",
+  "saved": "设置已保存",
+  "loadFailed": "加载设置失败",
+  "saveFailed": "保存设置失败",
+  "embedding": {
+    "title": "Embedding",
+    "description": "用于向量嵌入和语义搜索的Provider和模型。",
+    "importance": "Embedding对记忆检索、技能搜索、知识图谱和任务匹配至关重要。更改将影响整个系统。",
+    "provider": "Embedding Provider",
+    "model": "Embedding模型",
+    "providerTip": "用于生成文本嵌入的LLM Provider。",
+    "modelTip": "Embedding模型（如text-embedding-3-small）。必须支持/embeddings端点。",
+    "providerPlaceholder": "选择Provider",
+    "modelPlaceholder": "text-embedding-3-small",
+    "supportedProviders": "已验证1536d：OpenAI (text-embedding-3-small)、OpenRouter (openai/*)、Mistral (codestral-embed)。其他Provider如支持/embeddings并输出1536d也可使用。",
+    "verify": "验证Embedding",
+    "verifyRequired": "保存前请先验证Embedding模型。",
+    "verifyFailed": "验证失败",
+    "dimensions": "{{count}}维"
+  },
+  "ux": {
+    "title": "UX行为",
+    "description": "控制网关如何向用户展示Agent活动。",
+    "toolStatus": "执行时显示工具名称",
+    "toolStatusHint": "Agent运行时显示当前工具名称。",
+    "toolStatusInfo": "Agent运行时在流式预览中显示工具名称。",
+    "blockReply": "工具调用时显示中间文本",
+    "blockReplyHint": "工具调用过程中流式传输部分助手文本。",
+    "blockReplyInfo": "工具执行期间向用户流式传输中间文本。",
+    "intentClassify": "意图分类",
+    "intentClassifyHint": "在路由到Agent之前分类用户意图。",
+    "intentClassifyInfo": "消息被分类以优化Agent路由和行为。"
+  },
+  "compaction": {
+    "title": "待处理消息压缩",
+    "description": "压缩长待处理消息历史以保持在上下文限制内。",
+    "providerPlaceholder": "(自动)",
+    "threshold": "阈值",
+    "thresholdHint": "触发压缩的消息数量。",
+    "keepRecent": "保留最近",
+    "keepRecentHint": "压缩后保留的消息数量。",
+    "maxTokens": "最大Token",
+    "maxTokensHint": "压缩摘要的Token限制。",
+    "info": "当群聊超过阈值时，LLM自动将旧消息总结为一条紧凑记录，保留最近的消息以保持上下文。"
+  },
+  "moreConfig": "更多配置"
+}

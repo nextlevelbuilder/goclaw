@@ -15,8 +15,8 @@ import (
 
 // CompactionConfig configures LLM-based history compaction.
 type CompactionConfig struct {
-	Threshold  int                // trigger compaction when entries exceed this (default 100)
-	KeepRecent int                // keep this many recent raw messages (default 15)
+	Threshold  int                // trigger compaction when entries exceed this (default 200)
+	KeepRecent int                // keep this many recent raw messages (default 40)
 	MaxTokens  int                // max output tokens for summarization (default 4096)
 	Provider   providers.Provider // LLM provider for summarization
 	Model      string             // model to use for summarization
@@ -57,7 +57,7 @@ func (ph *PendingHistory) MaybeCompact(historyKey string, currentCount int, cfg 
 // Returns the number of entries remaining after compaction.
 func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName, historyKey string, provider providers.Provider, model string, keepRecent, maxTokens int) (int, error) {
 	if keepRecent <= 0 {
-		keepRecent = 15
+		keepRecent = 40
 	}
 	if maxTokens <= 0 {
 		maxTokens = 4096

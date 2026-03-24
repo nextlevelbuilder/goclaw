@@ -17,12 +17,15 @@ import { MemoryCreateDialog } from "./memory-create-dialog";
 import { MemorySearchDialog } from "./memory-search-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
+import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
 import type { MemoryDocument } from "@/types/memory";
 
 export function MemoryPage() {
   const { t } = useTranslation("memory");
   const { t: tc } = useTranslation("common");
+  const { t: to } = useTranslation("overview");
   const { agents } = useAgents();
+  const { status: embStatus } = useEmbeddingStatus();
   const [agentId, setAgentId] = useState("");
   const [userIdFilter, setUserIdFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -106,7 +109,16 @@ export function MemoryPage() {
     <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("title")}
-        description={t("description")}
+        description={
+          <span className="flex items-center gap-2 flex-wrap">
+            {t("description")}
+            {embStatus && (
+              <Badge variant={embStatus.configured ? "outline" : "secondary"} className="text-xs font-normal">
+                {embStatus.configured ? `${to("embedding.title")}: ${embStatus.model}` : `${to("embedding.title")}: ${to("embedding.notConfigured")}`}
+              </Badge>
+            )}
+          </span>
+        }
         actions={
           <div className="flex gap-2">
             {agentId && (

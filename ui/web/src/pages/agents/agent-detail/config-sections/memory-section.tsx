@@ -36,11 +36,12 @@ export function MemorySection({ enabled, value, onToggle, onChange }: MemorySect
         onModelChange={(v) => onChange({ ...value, embedding_model: v || undefined })}
         providerLabel={t(`${s}.embeddingProvider`)}
         modelLabel={t(`${s}.embeddingModel`)}
-        providerTip="LLM provider used for generating text embeddings. Leave empty to auto-detect from the agent's main provider."
+        providerTip="LLM provider used for generating text embeddings. Leave empty to auto-detect. Only providers with embedding enabled are shown."
         modelTip="Embedding model name (e.g. text-embedding-3-small). Must be supported by the provider."
         providerPlaceholder="(auto)"
         modelPlaceholder="text-embedding-3-small"
         allowEmpty
+        filterEmbedding
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">

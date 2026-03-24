@@ -226,6 +226,26 @@ func tenantClauseN(ctx context.Context, paramN int) (clause string, args []any, 
 	return fmt.Sprintf(" AND tenant_id = $%d", paramN), []any{tid}, nil
 }
 
+// tenantClauseNAlias is like tenantClauseN but qualifies tenant_id with a table alias
+// to avoid ambiguity in JOIN queries (e.g. " AND d.tenant_id = $3").
+// SECURITY: alias is interpolated into SQL — callers MUST pass hardcoded string literals only.
+func tenantClauseNAlias(ctx context.Context, paramN int, alias string) (clause string, args []any, err error) {
+	// Guard: only allow simple alphanumeric aliases (a-z, 0-9, underscore) to prevent SQL injection.
+	for _, c := range alias {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+			return "", nil, fmt.Errorf("invalid table alias: %q", alias)
+		}
+	}
+	if store.IsCrossTenant(ctx) {
+		return "", nil, nil
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return "", nil, fmt.Errorf("tenant_id required")
+	}
+	return fmt.Sprintf(" AND %s.tenant_id = $%d", alias, paramN), []any{tid}, nil
+}
+
 // tenantIDForInsert returns the tenant UUID for INSERT operations.
 // Falls back to MasterTenantID when no tenant in context.
 func tenantIDForInsert(ctx context.Context) uuid.UUID {

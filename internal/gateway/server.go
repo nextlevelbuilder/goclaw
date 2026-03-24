@@ -60,6 +60,7 @@ type Server struct {
 	mediaUploadHandler      *httpapi.MediaUploadHandler      // media upload endpoint
 	mediaServeHandler       *httpapi.MediaServeHandler       // media serve endpoint
 	activityHandler         *httpapi.ActivityHandler         // activity audit log API
+	systemConfigsHandler    *httpapi.SystemConfigsHandler    // system configs API
 	usageHandler            *httpapi.UsageHandler            // usage analytics API
 	apiKeysHandler     *httpapi.APIKeysHandler      // API key management
 	apiKeyStore        store.APIKeyStore            // for API key auth lookup
@@ -290,6 +291,9 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	if s.activityHandler != nil {
 		s.activityHandler.RegisterRoutes(mux)
+	}
+	if s.systemConfigsHandler != nil {
+		s.systemConfigsHandler.RegisterRoutes(mux)
 	}
 
 	if s.usageHandler != nil {
@@ -565,6 +569,9 @@ func (s *Server) SetKnowledgeGraphHandler(h *httpapi.KnowledgeGraphHandler) { s.
 
 // SetActivityHandler sets the activity audit log handler.
 func (s *Server) SetActivityHandler(h *httpapi.ActivityHandler) { s.activityHandler = h }
+
+// SetSystemConfigsHandler sets the system configs handler.
+func (s *Server) SetSystemConfigsHandler(h *httpapi.SystemConfigsHandler) { s.systemConfigsHandler = h }
 
 // SetUsageHandler sets the usage analytics handler.
 func (s *Server) SetUsageHandler(h *httpapi.UsageHandler) { s.usageHandler = h }

@@ -10,6 +10,8 @@ import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
 import { CapabilitiesSection } from "./overview-sections/capabilities-section";
 import { HeartbeatCard } from "./overview-sections/heartbeat-card";
+import { MemorySection } from "./config-sections";
+import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type { UseAgentHeartbeatReturn } from "../hooks/use-agent-heartbeat";
 
 interface AgentOverviewTabProps {
@@ -45,9 +47,11 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
     typeof otherCfg.skill_nudge_interval === "number" ? otherCfg.skill_nudge_interval : 15,
   );
 
-  // Capabilities
+  // Memory (now standalone section)
   const [memEnabled, setMemEnabled] = useState(agent.memory_config != null);
   const [mem, setMem] = useState<MemoryConfig>(agent.memory_config ?? {});
+
+  // Capabilities (subagents + tool policy)
   const [subEnabled, setSubEnabled] = useState(agent.subagents_config != null);
   const [sub, setSub] = useState<SubagentsConfig>(agent.subagents_config ?? {});
   const [toolsEnabled, setToolsEnabled] = useState(agent.tools_config != null);
@@ -124,6 +128,20 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
         onSaveBlockedChange={setLlmSaveBlocked}
       />
 
+      {/* Memory — standalone section (was inside Capabilities) */}
+      <section className="space-y-4">
+        <ConfigGroupHeader
+          title={t("configSections.memory.title")}
+          description={t("configSections.memory.description")}
+        />
+        <MemorySection
+          enabled={memEnabled}
+          value={mem}
+          onToggle={(v) => { setMemEnabled(v); if (!v) setMem({}); }}
+          onChange={setMem}
+        />
+      </section>
+
       <HeartbeatCard heartbeat={heartbeat} />
 
       <SkillsSection agentId={agent.id} />
@@ -140,10 +158,6 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
       )}
 
       <CapabilitiesSection
-        memEnabled={memEnabled}
-        mem={mem}
-        onMemToggle={setMemEnabled}
-        onMemChange={setMem}
         subEnabled={subEnabled}
         sub={sub}
         onSubToggle={setSubEnabled}

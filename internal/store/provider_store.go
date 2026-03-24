@@ -72,6 +72,36 @@ type LLMProviderData struct {
 	Settings     json.RawMessage `json:"settings,omitempty"`
 }
 
+// EmbeddingSettings holds embedding-specific configuration stored in provider settings JSONB.
+type EmbeddingSettings struct {
+	Enabled bool   `json:"enabled"`
+	Model   string `json:"model,omitempty"`    // e.g. "text-embedding-3-small"
+	APIBase string `json:"api_base,omitempty"` // override if embedding endpoint differs from chat
+}
+
+// ParseEmbeddingSettings extracts embedding config from a provider's settings JSONB.
+// Returns nil if not configured.
+func ParseEmbeddingSettings(settings json.RawMessage) *EmbeddingSettings {
+	if len(settings) == 0 {
+		return nil
+	}
+	var s struct {
+		Embedding *EmbeddingSettings `json:"embedding"`
+	}
+	if json.Unmarshal(settings, &s) != nil || s.Embedding == nil {
+		return nil
+	}
+	return s.Embedding
+}
+
+// NoEmbeddingTypes lists provider types that cannot serve embeddings.
+var NoEmbeddingTypes = map[string]bool{
+	ProviderACP:        true,
+	ProviderClaudeCLI:  true,
+	ProviderChatGPTOAuth: true,
+	ProviderSuno:       true,
+}
+
 // ProviderStore manages LLM providers.
 type ProviderStore interface {
 	CreateProvider(ctx context.Context, p *LLMProviderData) error

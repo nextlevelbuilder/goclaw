@@ -107,41 +107,11 @@ func BuildAgentMainSessionKey(agentID, mainKey string) string {
 	return fmt.Sprintf("agent:%s:%s", agentID, mainKey)
 }
 
-// BuildScopedSessionKey builds session key based on scope config.
-// Matching TS src/routing/session-key.ts buildAgentPeerSessionKey().
-//
-// scope:
-//   - "global"     → "global"
-//   - "per-sender"  → depends on dmScope (default)
-//
-// dmScope (for DMs only — groups always use full key):
-//   - "main"                     → agent:{agentId}:{mainKey}
-//   - "per-peer"                 → agent:{agentId}:direct:{peerId}
-//   - "per-channel-peer"         → agent:{agentId}:{channel}:direct:{peerId}  (default)
-//   - "per-account-channel-peer" → agent:{agentId}:{channel}:{accountId}:direct:{peerId}
-func BuildScopedSessionKey(agentID, channel string, kind PeerKind, chatID, scope, dmScope, mainKey string) string {
-	// Global scope: one session for everything
-	if scope == "global" {
-		return "global"
-	}
-
-	// Groups always use full key (matching TS)
-	if kind == PeerGroup {
-		return BuildSessionKey(agentID, channel, kind, chatID)
-	}
-
-	// DM scope modes
-	switch dmScope {
-	case "main":
-		return BuildAgentMainSessionKey(agentID, mainKey)
-	case "per-peer":
-		return fmt.Sprintf("agent:%s:direct:%s", agentID, chatID)
-	case "per-account-channel-peer":
-		// accountId not yet wired — falls through to per-channel-peer behavior
-		return BuildSessionKey(agentID, channel, kind, chatID)
-	default: // "per-channel-peer" or empty
-		return BuildSessionKey(agentID, channel, kind, chatID)
-	}
+// BuildScopedSessionKey builds a session key using fixed scoping:
+//   - Groups: per-sender (full key with channel + group ID)
+//   - DMs: per-channel-peer (channel + peer user ID)
+func BuildScopedSessionKey(agentID, channel string, kind PeerKind, chatID string) string {
+	return BuildSessionKey(agentID, channel, kind, chatID)
 }
 
 // ParseSessionKey extracts the agentID and rest from a canonical session key.

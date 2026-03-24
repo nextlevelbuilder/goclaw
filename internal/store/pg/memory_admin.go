@@ -95,7 +95,7 @@ func (s *PGMemoryStore) GetDocumentDetail(ctx context.Context, agentID, userID, 
 	var q string
 	var args []any
 	if userID == "" {
-		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		tc, tcArgs, err := tenantClauseNAlias(ctx, 3, "d")
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +108,7 @@ func (s *PGMemoryStore) GetDocumentDetail(ctx context.Context, agentID, userID, 
 			 GROUP BY d.id`
 		args = append([]any{aid, path}, tcArgs...)
 	} else {
-		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		tc, tcArgs, err := tenantClauseNAlias(ctx, 4, "d")
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +148,7 @@ func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path st
 	var q string
 	var args []any
 	if userID == "" {
-		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		tc, tcArgs, err := tenantClauseNAlias(ctx, 3, "d")
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func (s *PGMemoryStore) ListChunks(ctx context.Context, agentID, userID, path st
 			 ORDER BY c.start_line`
 		args = append([]any{aid, path}, tcArgs...)
 	} else {
-		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		tc, tcArgs, err := tenantClauseNAlias(ctx, 4, "d")
 		if err != nil {
 			return nil, err
 		}

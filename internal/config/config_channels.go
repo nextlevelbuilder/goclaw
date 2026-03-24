@@ -4,8 +4,8 @@ package config
 // When a group accumulates more than Threshold pending messages, older messages are
 // summarized by an LLM and replaced with a compact summary, keeping KeepRecent raw messages.
 type PendingCompactionConfig struct {
-	Threshold  int    `json:"threshold,omitempty"`   // trigger compaction when entries exceed this (default 50)
-	KeepRecent int    `json:"keep_recent,omitempty"` // keep this many recent raw messages after compaction (default 15)
+	Threshold  int    `json:"threshold,omitempty"`   // trigger compaction when entries exceed this (default 200)
+	KeepRecent int    `json:"keep_recent,omitempty"` // keep this many recent raw messages after compaction (default 40)
 	MaxTokens  int    `json:"max_tokens,omitempty"`  // max output tokens for LLM summarization (default 4096)
 	Provider   string `json:"provider,omitempty"`    // LLM provider name (e.g. "openai"); empty = use agent's provider
 	Model      string `json:"model,omitempty"`       // model for summarization; empty = use agent's model

@@ -24,7 +24,7 @@ import (
 const maxHistoryKeys = 1000
 
 // DefaultGroupHistoryLimit is the default pending message limit per group.
-const DefaultGroupHistoryLimit = 100
+const DefaultGroupHistoryLimit = 200
 
 const (
 	flushInterval        = 3 * time.Second  // periodic flush interval

@@ -77,5 +77,10 @@
       "week": "Week"
     },
     "noLimit": "no limit"
+  },
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Not configured",
+    "configure": "Configure in Providers →"
   }
 }

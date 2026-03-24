@@ -1,0 +1,51 @@
+{
+  "title": "System Settings",
+  "save": "Save",
+  "cancel": "Cancel",
+  "saving": "Saving...",
+  "saved": "Settings saved",
+  "loadFailed": "Failed to load settings",
+  "saveFailed": "Failed to save settings",
+  "embedding": {
+    "title": "Embedding",
+    "description": "Provider and model for vector embedding and semantic search.",
+    "importance": "Embedding is critical for memory recall, skill search, knowledge graph, and task matching accuracy. Changes affect the entire system.",
+    "provider": "Embedding Provider",
+    "model": "Embedding Model",
+    "providerTip": "LLM provider used for generating text embeddings.",
+    "modelTip": "Embedding model (e.g. text-embedding-3-small). Must support /embeddings endpoint.",
+    "providerPlaceholder": "Select provider",
+    "modelPlaceholder": "text-embedding-3-small",
+    "supportedProviders": "Verified 1536d: OpenAI (text-embedding-3-small), OpenRouter (openai/*), Mistral (codestral-embed). Other providers may work if they support /embeddings with 1536d output.",
+    "verify": "Verify Embedding",
+    "verifyRequired": "Verify the embedding model before saving.",
+    "verifyFailed": "Verification failed",
+    "dimensions": "{{count}} dimensions"
+  },
+  "ux": {
+    "title": "UX Behavior",
+    "description": "Control how the gateway displays agent activity to users.",
+    "toolStatus": "Show tool name during execution",
+    "toolStatusHint": "Display the active tool name while the agent is running.",
+    "toolStatusInfo": "Tool names are shown in streaming preview while the agent runs.",
+    "blockReply": "Show intermediate text during tool calls",
+    "blockReplyHint": "Stream partial assistant text while tools are being invoked.",
+    "blockReplyInfo": "Intermediate text is streamed to users during tool execution.",
+    "intentClassify": "Intent classification",
+    "intentClassifyHint": "Classify user intent before routing to the agent.",
+    "intentClassifyInfo": "Messages are classified to optimize agent routing and behavior."
+  },
+  "compaction": {
+    "title": "Pending Message Compaction",
+    "description": "Summarize long pending message history to stay within context limits.",
+    "providerPlaceholder": "(auto)",
+    "threshold": "Threshold",
+    "thresholdHint": "Messages before compaction triggers.",
+    "keepRecent": "Keep recent",
+    "keepRecentHint": "Messages preserved after compaction.",
+    "maxTokens": "Max tokens",
+    "maxTokensHint": "Token limit for compacted summary.",
+    "info": "When a group chat exceeds the threshold, the LLM automatically summarizes older messages into a single compact entry, keeping the most recent ones intact for context."
+  },
+  "moreConfig": "More Config"
+}

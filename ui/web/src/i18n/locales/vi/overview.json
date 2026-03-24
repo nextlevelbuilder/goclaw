@@ -77,5 +77,10 @@
     "version": "Phiên bản",
     "runtimes": "Môi trường runtime"
   },
-  "title": "Bảng điều khiển"
+  "title": "Bảng điều khiển",
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Chưa cấu hình",
+    "configure": "Cấu hình trong Providers →"
+  }
 }
