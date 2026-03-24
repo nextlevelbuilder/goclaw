@@ -29,10 +29,10 @@ function ToastItem({ toast }: { toast: Toast }) {
       role="alert"
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-      <div className="flex-1 space-y-0.5">
-        <p className="text-sm font-medium">{toast.title}</p>
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <p className="text-sm font-medium break-words">{toast.title}</p>
         {toast.message && (
-          <p className="text-xs opacity-80">{toast.message}</p>
+          <p className="text-xs opacity-80 break-words">{toast.message}</p>
         )}
       </div>
       <button
