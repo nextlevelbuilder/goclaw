@@ -51,6 +51,24 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Local Ollama has no API key — fetch models via OpenAI-compat endpoint directly.
+	if p.ProviderType == store.ProviderOllama {
+		base := strings.TrimRight(h.resolveAPIBase(p), "/")
+		if base == "" {
+			base = "http://localhost:11434/v1"
+		}
+		ollamaCtx, ollamaCancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer ollamaCancel()
+		models, err := fetchOpenAIModels(ollamaCtx, base, "ollama")
+		if err != nil {
+			slog.Warn("providers.models", "provider", p.Name, "error", err)
+			writeJSON(w, http.StatusOK, map[string]any{"models": []ModelInfo{}})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"models": models})
+		return
+	}
+
 	if p.APIKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "API key")})
 		return

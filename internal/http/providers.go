@@ -125,6 +125,16 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	if p.ProviderType == store.ProviderACP {
 		return
 	}
+	// Local Ollama requires no API key — register immediately.
+	// DB/UI stores api_base as full URL (e.g. "http://localhost:11434/v1"), use directly.
+	if p.ProviderType == store.ProviderOllama {
+		base := p.APIBase
+		if base == "" {
+			base = "http://localhost:11434/v1"
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", base, "llama3.3"))
+		return
+	}
 	// Claude CLI doesn't need an API key — register immediately
 	if p.ProviderType == store.ProviderClaudeCLI {
 		cliPath := p.APIBase // reuse APIBase field for CLI path
