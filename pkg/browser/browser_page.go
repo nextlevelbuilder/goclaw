@@ -71,9 +71,10 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 	if err := page.Navigate(url); err != nil {
 		return fmt.Errorf("navigate: %w", err)
 	}
-	if err := page.WaitStable(300 * time.Millisecond); err != nil {
-		return fmt.Errorf("wait stable after navigate: %w", err)
-	}
+	// Wait for page load (DOMContentLoaded + initial resources)
+	_ = page.WaitLoad()
+	// Wait for DOM/network to stabilize (SPAs need more time for JS rendering)
+	_ = page.WaitStable(2 * time.Second)
 	return nil
 }
 
