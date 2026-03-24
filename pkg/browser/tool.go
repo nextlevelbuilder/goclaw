@@ -263,8 +263,12 @@ func (t *BrowserTool) handleScreenshot(ctx context.Context, args map[string]any)
 		return tools.ErrorResult(fmt.Sprintf("screenshot failed: %v", err))
 	}
 
-	// Save to temp file so the media pipeline can deliver it (e.g. Telegram sendPhoto)
-	imagePath := filepath.Join(os.TempDir(), fmt.Sprintf("goclaw_screenshot_%d.png", time.Now().UnixNano()))
+	// Try workspace first, fall back to /tmp for non-workspace contexts (e.g. Telegram)
+	screenshotDir := os.TempDir()
+	if ws := tools.ToolWorkspaceFromCtx(ctx); ws != "" {
+		screenshotDir = ws
+	}
+	imagePath := filepath.Join(screenshotDir, fmt.Sprintf("goclaw_screenshot_%d.png", time.Now().UnixNano()))
 	if err := os.WriteFile(imagePath, data, 0644); err != nil {
 		return tools.ErrorResult(fmt.Sprintf("failed to save screenshot: %v", err))
 	}
