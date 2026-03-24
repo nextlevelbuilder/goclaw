@@ -629,15 +629,15 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 
 ### Agent-Side Multi-Account Routing
 
-Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. An agent can keep one provider as its normal `provider` value, then opt into extra ChatGPT OAuth accounts through `other_config.chatgpt_oauth_routing`.
+Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each provider name is one ChatGPT OAuth account alias. An agent can keep one alias as its normal `provider` value, then opt into extra ChatGPT OAuth accounts through `other_config.chatgpt_oauth_routing`.
 
 ```json
 {
-  "provider": "openai-codex",
+  "provider": "chatgpt-main",
   "other_config": {
     "chatgpt_oauth_routing": {
       "strategy": "round_robin",
-      "extra_provider_names": ["openai-codex-backup"]
+      "extra_provider_names": ["chatgpt-work"]
     }
   }
 }
@@ -646,7 +646,7 @@ Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. An a
 Routing behavior:
 - The main `provider` field remains the preferred/default account.
 - `manual` keeps that preferred account fixed while preserving extra accounts in config.
-- `round_robin` rotates requests across the preferred account plus the configured extra authenticated Codex providers.
+- `round_robin` rotates requests across the preferred account plus the configured extra authenticated ChatGPT OAuth accounts.
 - Retryable upstream failures can fall through to the next eligible ChatGPT OAuth account in the same request.
 - Explicit provider names remain explicit. OAuth auth/logout is still provider-scoped.
 

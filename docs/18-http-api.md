@@ -141,16 +141,16 @@ Response: `{content, run_id, usage?}`. Used by orchestrators (n8n, Paperclip) to
 ### ChatGPT OAuth Routing in `other_config`
 
 For agents whose main `provider` is a `chatgpt_oauth` provider, `other_config.chatgpt_oauth_routing`
-can opt the agent into multi-account routing while keeping the main `provider` field as the preferred/default account.
+can opt the agent into multi-account routing while keeping the main `provider` field as the preferred/default account alias.
 
 ```json
 {
-  "provider": "openai-codex",
+  "provider": "chatgpt-main",
   "model": "gpt-5.4",
   "other_config": {
     "chatgpt_oauth_routing": {
       "strategy": "round_robin",
-      "extra_provider_names": ["openai-codex-backup", "openai-codex-team"]
+      "extra_provider_names": ["chatgpt-work", "chatgpt-team"]
     }
   }
 }
