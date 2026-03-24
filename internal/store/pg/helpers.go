@@ -212,10 +212,10 @@ func tableHasUpdatedAt(table string) bool {
 
 // --- Tenant filter helpers ---
 
-// tenantClauseN returns an " AND tenant_id = $N" clause and the tenant UUID as the arg.
+// tenantClauseForN returns an " AND <tenantColumn> = $N" clause and the tenant UUID as the arg.
 // Returns ("", nil, nil) for cross-tenant callers (skip filter).
 // Returns error if tenant is missing from context (fail-closed).
-func tenantClauseN(ctx context.Context, paramN int) (clause string, args []any, err error) {
+func tenantClauseForN(ctx context.Context, paramN int, tenantColumn string) (clause string, args []any, err error) {
 	if store.IsCrossTenant(ctx) {
 		return "", nil, nil
 	}
@@ -223,7 +223,14 @@ func tenantClauseN(ctx context.Context, paramN int) (clause string, args []any, 
 	if tid == uuid.Nil {
 		return "", nil, fmt.Errorf("tenant_id required")
 	}
-	return fmt.Sprintf(" AND tenant_id = $%d", paramN), []any{tid}, nil
+	return fmt.Sprintf(" AND %s = $%d", tenantColumn, paramN), []any{tid}, nil
+}
+
+// tenantClauseN returns an " AND tenant_id = $N" clause and the tenant UUID as the arg.
+// Returns ("", nil, nil) for cross-tenant callers (skip filter).
+// Returns error if tenant is missing from context (fail-closed).
+func tenantClauseN(ctx context.Context, paramN int) (clause string, args []any, err error) {
+	return tenantClauseForN(ctx, paramN, "tenant_id")
 }
 
 // tenantIDForInsert returns the tenant UUID for INSERT operations.
