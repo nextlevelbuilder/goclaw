@@ -393,7 +393,8 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 		return nil, dropped
 	}
 
-	// 2. Walk through messages ensuring tool_result follows matching tool_use.
+	// 2. Walk through messages ensuring tool_result follows matching tool_use
+	// and that roles alternate correctly (user↔assistant).
 	// Also dedup tool call IDs across the transcript for legacy sessions that
 	// may have persisted duplicates before the live uniquify fix was deployed.
 	var result []providers.Message
@@ -413,17 +414,25 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 			// results with the same raw ID pair correctly in encounter order.
 			idQueue := make(map[string][]string, len(msg.ToolCalls)) // origID → []newID
 			expectedIDs := make(map[string]bool, len(msg.ToolCalls))
+			didDedup := false
 			for j := range msg.ToolCalls {
 				origID := msg.ToolCalls[j].ID
 				newID := origID
 				if globalSeen[origID] {
 					newID = fmt.Sprintf("%s_dedup_%d", origID, j)
 					slog.Debug("sanitizeHistory: dedup tool call ID", "orig", origID, "new", newID)
+					didDedup = true
+					dropped++ // count as change so cleaned history is persisted back to DB
 				}
 				msg.ToolCalls[j].ID = newID
 				globalSeen[newID] = true
 				idQueue[origID] = append(idQueue[origID], newID)
 				expectedIDs[newID] = true
+			}
+			// When dedup rewrites IDs, clear RawAssistantContent so the provider
+			// uses the corrected ToolCalls instead of raw JSON with stale IDs.
+			if didDedup {
+				msg.RawAssistantContent = nil
 			}
 
 			result = append(result, msg)
@@ -465,6 +474,28 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 		} else {
 			result = append(result, msg)
 		}
+	}
+
+	// 3. Fix role alternation: LLM APIs require user↔assistant alternation.
+	// Merge consecutive same-role messages (e.g. two user messages) into one,
+	// which can happen from bootstrap nudges, inject channel, or session corruption.
+	if len(result) > 1 {
+		merged := make([]providers.Message, 0, len(result))
+		merged = append(merged, result[0])
+		for j := 1; j < len(result); j++ {
+			prev := &merged[len(merged)-1]
+			curr := result[j]
+			// Only merge plain messages (no tool_calls, no tool role)
+			if curr.Role == prev.Role && curr.Role != "tool" && len(curr.ToolCalls) == 0 && len(prev.ToolCalls) == 0 {
+				slog.Debug("sanitizeHistory: merging consecutive same-role messages",
+					"role", curr.Role, "index", j)
+				prev.Content += "\n\n" + curr.Content
+				dropped++
+			} else {
+				merged = append(merged, curr)
+			}
+		}
+		result = merged
 	}
 
 	return result, dropped
