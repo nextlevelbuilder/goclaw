@@ -14,6 +14,10 @@
     "deleting": "Deleting...",
     "confirmLabel": "Delete"
   },
+  "upload": {
+    "title": "Upload to Storage",
+    "description": "Upload files to the data directory"
+  },
   "toast": {
     "deleted": "File deleted",
     "deleteFailed": "Failed to delete file"

@@ -372,6 +372,7 @@ func runGateway() {
 	}
 	if pgStores != nil && pgStores.Teams != nil {
 		server.SetTeamAttachmentsHandler(httpapi.NewTeamAttachmentsHandler(pgStores.Teams, workspace))
+		server.SetWorkspaceUploadHandler(httpapi.NewWorkspaceUploadHandler(pgStores.Teams, workspace, msgBus))
 	}
 	if builtinToolsH != nil {
 		server.SetBuiltinToolsHandler(builtinToolsH)

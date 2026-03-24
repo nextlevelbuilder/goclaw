@@ -14,6 +14,10 @@
     "deleting": "删除中...",
     "confirmLabel": "删除"
   },
+  "upload": {
+    "title": "上传到存储",
+    "description": "上传文件到数据目录"
+  },
   "toast": {
     "deleted": "文件已删除",
     "deleteFailed": "删除文件失败"

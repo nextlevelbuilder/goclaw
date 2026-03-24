@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Info, RefreshCw } from "lucide-react";
+import { Info, RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,13 @@ import {
 } from "@/components/ui/dialog";
 import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile } from "@/lib/file-helpers";
 import { FileBrowser } from "@/components/shared/file-browser";
+import { FileUploadDialog } from "@/components/shared/file-upload-dialog";
 import { useStorage, useStorageSize } from "./hooks/use-storage";
+import { useHttp } from "@/hooks/use-ws";
 
 export function StoragePage() {
   const { t } = useTranslation("storage");
+  const http = useHttp();
   const { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob } = useStorage();
   const { totalSize, loading: sizeLoading, refreshSize } = useStorageSize();
 
@@ -32,6 +35,7 @@ export function StoragePage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; isDir: boolean } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   // Rebuild tree when files change from initial load or refresh
   useEffect(() => { setTree(buildTree(files)); }, [files]);
@@ -121,6 +125,29 @@ export function StoragePage() {
     refreshSize();
   }, [listFiles, refreshSize]);
 
+  /** Derive the folder containing the currently selected file (or "" for root). */
+  const activeFolder = useMemo(() => {
+    if (!activePath) return "";
+    const idx = activePath.lastIndexOf("/");
+    return idx > 0 ? activePath.slice(0, idx) : "";
+  }, [activePath]);
+
+  // uploadFolder is captured when user clicks Upload, so it won't change mid-dialog.
+  const [uploadFolder, setUploadFolder] = useState("");
+
+  const handleUploadFile = useCallback(async (file: File) => {
+    const params: Record<string, string> = {};
+    if (uploadFolder) params["path"] = uploadFolder;
+    const fd = new FormData();
+    fd.append("file", file);
+    await http.upload(`/v1/storage/files?` + new URLSearchParams(params).toString(), fd);
+  }, [http, uploadFolder]);
+
+  const handleUploadClose = useCallback((v: boolean) => {
+    setUploadOpen(v);
+    if (!v) handleRefresh();
+  }, [handleRefresh]);
+
   const deleteName = deleteTarget?.path.split("/").pop() ?? "";
 
   // Size description with cache tooltip
@@ -150,10 +177,16 @@ export function StoragePage() {
           </span>
         }
         actions={
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-            {t("common:refresh", "Refresh")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true); }}>
+              <Upload className="h-4 w-4 mr-1.5" />
+              {t("common:uploadLabel", "Upload")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              {t("common:refresh", "Refresh")}
+            </Button>
+          </div>
         }
       />
 
@@ -172,6 +205,14 @@ export function StoragePage() {
           showSize
         />
       </div>
+
+      <FileUploadDialog
+        open={uploadOpen}
+        onOpenChange={handleUploadClose}
+        onUpload={handleUploadFile}
+        title={t("upload.title")}
+        description={uploadFolder ? `${t("upload.description")} → ${uploadFolder}/` : t("upload.description")}
+      />
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>

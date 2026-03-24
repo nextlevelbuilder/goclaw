@@ -238,6 +238,38 @@ func httpMinRole(method string) permissions.Role {
 	}
 }
 
+// enrichContext injects locale, role, userID, and tenantID from authResult into ctx.
+// Used by requireAuth middleware and ServeHTTP handlers that do their own auth checks.
+func enrichContext(ctx context.Context, r *http.Request, auth authResult) context.Context {
+	ctx = store.WithLocale(ctx, extractLocale(r))
+	ctx = store.WithRole(ctx, string(auth.Role))
+	userID := extractUserID(r)
+	// If the API key has a bound owner, force user_id to owner regardless of header.
+	if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
+		if userID != "" && userID != auth.KeyData.OwnerID {
+			slog.Warn("security.api_key_owner_override",
+				"header_user_id", userID,
+				"owner_id", auth.KeyData.OwnerID,
+			)
+		}
+		userID = auth.KeyData.OwnerID
+	}
+	if userID != "" {
+		ctx = store.WithUserID(ctx, userID)
+	}
+	tenantID := auth.TenantID
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+	ctx = store.WithTenantID(ctx, tenantID)
+	slog.Debug("security.http_auth_resolved",
+		"path", r.URL.Path,
+		"role", string(auth.Role),
+		"tenant_id", tenantID.String(),
+	)
+	return ctx
+}
+
 // requireAuth is a middleware that checks authentication and minimum role.
 // Pass "" for minRole to auto-detect from HTTP method (GET→Viewer, POST→Operator).
 // Injects locale, role, userID and tenantID into request context.
@@ -265,32 +297,7 @@ func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFu
 			return
 		}
 
-		ctx := store.WithLocale(r.Context(), locale)
-		ctx = store.WithRole(ctx, string(auth.Role))
-		userID := extractUserID(r)
-		// If the API key has a bound owner, force user_id to owner regardless of header.
-		if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
-			if userID != "" && userID != auth.KeyData.OwnerID {
-				slog.Warn("security.api_key_owner_override",
-					"header_user_id", userID,
-					"owner_id", auth.KeyData.OwnerID,
-				)
-			}
-			userID = auth.KeyData.OwnerID
-		}
-		if userID != "" {
-			ctx = store.WithUserID(ctx, userID)
-		}
-		tenantID := auth.TenantID
-		if tenantID == uuid.Nil {
-			tenantID = store.MasterTenantID
-		}
-		ctx = store.WithTenantID(ctx, tenantID)
-		slog.Debug("security.http_auth_resolved",
-			"path", r.URL.Path,
-			"role", string(auth.Role),
-			"tenant_id", tenantID.String(),
-		)
+		ctx := enrichContext(r.Context(), r, auth)
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -321,28 +328,7 @@ func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseW
 		return r, false
 	}
 
-	// Apply user context + owner_id enforcement (same as requireAuth).
-	ctx := store.WithLocale(r.Context(), locale)
-	ctx = store.WithRole(ctx, string(auth.Role))
-	userID := extractUserID(r)
-	if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
-		if userID != "" && userID != auth.KeyData.OwnerID {
-			slog.Warn("security.api_key_owner_override",
-				"header_user_id", userID,
-				"owner_id", auth.KeyData.OwnerID,
-				"path", r.URL.Path,
-			)
-		}
-		userID = auth.KeyData.OwnerID
-	}
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
-	}
-	tenantID := auth.TenantID
-	if tenantID == uuid.Nil {
-		tenantID = store.MasterTenantID
-	}
-	ctx = store.WithTenantID(ctx, tenantID)
+	ctx := enrichContext(r.Context(), r, auth)
 	return r.WithContext(ctx), true
 }
 

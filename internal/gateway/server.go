@@ -47,6 +47,7 @@ type Server struct {
 	providersHandler        *httpapi.ProvidersHandler        // provider CRUD API
 	teamEventsHandler       *httpapi.TeamEventsHandler       // team event history API
 	teamAttachmentsHandler  *httpapi.TeamAttachmentsHandler  // team attachment download API
+	workspaceUploadHandler  *httpapi.WorkspaceUploadHandler  // team workspace file upload API
 	builtinToolsHandler     *httpapi.BuiltinToolsHandler     // builtin tool management API
 	pendingMessagesHandler  *httpapi.PendingMessagesHandler  // pending messages API
 	secureCLIHandler       *httpapi.SecureCLIHandler        // secure CLI credential CRUD API
@@ -238,6 +239,11 @@ func (s *Server) BuildMux() *http.ServeMux {
 	// Team attachment download API
 	if s.teamAttachmentsHandler != nil {
 		s.teamAttachmentsHandler.RegisterRoutes(mux)
+	}
+
+	// Team workspace file upload API
+	if s.workspaceUploadHandler != nil {
+		s.workspaceUploadHandler.RegisterRoutes(mux)
 	}
 
 	// Builtin tool management API
@@ -519,6 +525,11 @@ func (s *Server) SetTeamEventsHandler(h *httpapi.TeamEventsHandler) { s.teamEven
 // SetTeamAttachmentsHandler sets the team attachment download handler.
 func (s *Server) SetTeamAttachmentsHandler(h *httpapi.TeamAttachmentsHandler) {
 	s.teamAttachmentsHandler = h
+}
+
+// SetWorkspaceUploadHandler sets the team workspace file upload handler.
+func (s *Server) SetWorkspaceUploadHandler(h *httpapi.WorkspaceUploadHandler) {
+	s.workspaceUploadHandler = h
 }
 
 // SetPendingMessagesHandler sets the pending messages handler.

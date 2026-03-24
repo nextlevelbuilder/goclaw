@@ -31,6 +31,8 @@ const (
 	SharedKGKey contextKey = "goclaw_shared_kg"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
 	ShellDenyGroupsKey contextKey = "goclaw_shell_deny_groups"
+	// AgentKeyKey is the context key for the agent key/name (string identifier, e.g. "default").
+	AgentKeyKey contextKey = "goclaw_agent_key"
 	// TenantIDKey is the context key for the tenant UUID.
 	TenantIDKey contextKey = "goclaw_tenant_id"
 	// CrossTenantKey indicates the caller has cross-tenant access (owner/system admin).
@@ -99,6 +101,19 @@ func WithAgentType(ctx context.Context, t string) context.Context {
 // AgentTypeFromContext extracts the agent type from context. Returns "" if not set.
 func AgentTypeFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(AgentTypeKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// WithAgentKey returns a new context with the agent key/name (string identifier).
+func WithAgentKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, AgentKeyKey, key)
+}
+
+// AgentKeyFromContext extracts the agent key from context. Returns "" if not set.
+func AgentKeyFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(AgentKeyKey).(string); ok {
 		return v
 	}
 	return ""

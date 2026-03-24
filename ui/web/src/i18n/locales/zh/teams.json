@@ -158,6 +158,10 @@
     "detail": {
       "title": "文件内容",
       "empty": "文件为空或为二进制文件"
+    },
+    "upload": {
+      "title": "上传到工作区",
+      "description": "上传文件供 Agent 在协作中读取"
     }
   },
   "auditLogs": {

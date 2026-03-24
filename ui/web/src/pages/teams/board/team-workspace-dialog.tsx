@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { FileBrowser } from "@/components/shared/file-browser";
+import { FileUploadDialog } from "@/components/shared/file-upload-dialog";
 import { buildTree, isTextFile } from "@/lib/file-helpers";
 import { useTeamWorkspace } from "../hooks/use-team-workspace";
 import { useHttp } from "@/hooks/use-ws";
@@ -35,6 +36,7 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
   const [fileContent, setFileContent] = useState<{ content: string; path: string; size: number } | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [activePath, setActivePath] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const scopeValue = selectedScope === "__all__" ? "" : selectedScope;
   // Stable scope list: populated once from "all" listing, not recalculated on filter.
@@ -147,6 +149,21 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     } catch { /* silent */ }
   }, [fetchBlobByName]);
 
+  const handleUploadFile = useCallback(async (file: File) => {
+    const params: Record<string, string> = {};
+    if (scopeValue) params["chat_id"] = scopeValue;
+    await http.upload(`/v1/teams/${teamId}/workspace/upload?` + new URLSearchParams(params).toString(), (() => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return fd;
+    })());
+  }, [http, teamId, scopeValue]);
+
+  const handleUploadClose = useCallback((v: boolean) => {
+    setUploadOpen(v);
+    if (!v) load(); // refresh file list after upload dialog closes
+  }, [load]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[90vh] w-[95vw] overflow-hidden sm:max-w-6xl flex flex-col">
@@ -169,6 +186,9 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
                   </SelectContent>
                 </Select>
               )}
+              <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
+                <Upload className="h-3.5 w-3.5" />
+              </Button>
               <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1">
                 <RefreshCw className={"h-3.5 w-3.5" + (loading ? " animate-spin" : "")} />
               </Button>
@@ -187,6 +207,14 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
           onDownload={handleDownload}
           fetchBlob={fetchBlobByName}
           showSize
+        />
+
+        <FileUploadDialog
+          open={uploadOpen}
+          onOpenChange={handleUploadClose}
+          onUpload={handleUploadFile}
+          title={t("workspace.upload.title")}
+          description={t("workspace.upload.description")}
         />
       </DialogContent>
     </Dialog>

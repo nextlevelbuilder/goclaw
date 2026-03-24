@@ -9,10 +9,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// Workspace limits shared across workspace interceptor.
+// Workspace limits shared across workspace interceptor and HTTP upload handlers.
 const (
-	maxFileSizeBytes = 10 * 1024 * 1024 // 10MB
+	maxFileSizeBytes = 50 * 1024 * 1024 // 50MB
 	maxFilesPerScope = 100
+
+	// MaxFileSizeBytes is the exported form of maxFileSizeBytes for HTTP handlers.
+	MaxFileSizeBytes int64 = maxFileSizeBytes
+	// MaxFilesPerScope is the exported form of maxFilesPerScope for HTTP handlers.
+	MaxFilesPerScope = maxFilesPerScope
 )
 
 // WorkspaceDir returns the disk directory for a team workspace scope.
@@ -50,4 +55,9 @@ func IsSharedWorkspace(settings json.RawMessage) bool {
 var blockedExtensions = map[string]bool{
 	".exe": true, ".sh": true, ".bat": true, ".cmd": true,
 	".ps1": true, ".com": true, ".msi": true, ".scr": true,
+}
+
+// IsBlockedExtension returns true if the file extension is blocked for upload.
+func IsBlockedExtension(ext string) bool {
+	return blockedExtensions[ext]
 }

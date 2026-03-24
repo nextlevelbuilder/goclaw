@@ -158,6 +158,10 @@
     "detail": {
       "title": "File Content",
       "empty": "File is empty or binary"
+    },
+    "upload": {
+      "title": "Upload to Workspace",
+      "description": "Upload files for agents to read during collaboration"
     }
   },
   "auditLogs": {

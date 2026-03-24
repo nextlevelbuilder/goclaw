@@ -158,6 +158,10 @@
     "detail": {
       "title": "Nội dung file",
       "empty": "File trống hoặc là file nhị phân"
+    },
+    "upload": {
+      "title": "Tải lên Workspace",
+      "description": "Tải tệp lên để agent đọc trong quá trình cộng tác"
     }
   },
   "auditLogs": {
