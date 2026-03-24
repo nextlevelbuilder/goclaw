@@ -131,6 +131,7 @@ function PackageSection({ title, placeholder, packages, loading, onInstall, onUn
     const res = await onUninstall(name);
     if (res.ok) {
       setActionStatuses((s) => ({ ...s, [name]: "success" }));
+      setTimeout(() => setActionStatuses((s) => ({ ...s, [name]: "idle" })), 2000);
     } else {
       setActionStatuses((s) => ({ ...s, [name]: "error" }));
       setTimeout(() => setActionStatuses((s) => ({ ...s, [name]: "idle" })), 3000);
