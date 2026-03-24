@@ -31,6 +31,7 @@ const (
 	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
 	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
 	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
+	ProviderNovita          = "novita"       // Novita AI (OpenAI-compatible endpoint)
 )
 
 // ValidProviderTypes lists all accepted provider_type values.
@@ -57,6 +58,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderOllama:          true,
 	ProviderOllamaCloud:     true,
 	ProviderACP:             true,
+	ProviderNovita:          true,
 }
 
 // LLMProviderData represents an LLM provider configuration.

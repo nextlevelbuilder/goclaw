@@ -136,6 +136,16 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 		slog.Info("registered provider", "name", "ollama-cloud")
 	}
 
+	// Novita AI — OpenAI-compatible endpoint.
+	if cfg.Providers.Novita.APIKey != "" {
+		base := cfg.Providers.Novita.APIBase
+		if base == "" {
+			base = "https://api.novita.ai/openai"
+		}
+		registry.Register(providers.NewOpenAIProvider("novita", cfg.Providers.Novita.APIKey, base, "moonshotai/kimi-k2.5"))
+		slog.Info("registered provider", "name", "novita")
+	}
+
 	// Claude CLI provider (subscription-based, no API key needed)
 	if cfg.Providers.ClaudeCLI.CLIPath != "" {
 		cliPath := cfg.Providers.ClaudeCLI.CLIPath
@@ -338,6 +348,12 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, "")
 			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderNovita:
+			base := p.APIBase
+			if base == "" {
+				base = "https://api.novita.ai/openai"
+			}
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "moonshotai/kimi-k2.5"))
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
 			prov.WithProviderType(p.ProviderType)
