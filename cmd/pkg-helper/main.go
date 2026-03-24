@@ -157,10 +157,6 @@ func doInstall(pkg string) response {
 func doUninstall(pkg string) response {
 	slog.Info("pkg-helper: uninstalling", "package", pkg)
 
-	// Read other persisted packages before removing, so we can re-add any
-	// that apk del cascades away as orphaned dependencies.
-	others := persistedPackagesExcept(pkg)
-
 	cmd := exec.Command("apk", "del", pkg)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -170,53 +166,8 @@ func doUninstall(pkg string) response {
 	}
 
 	persistRemove(pkg)
-
-	// Re-add any persisted packages that were cascade-removed by apk del.
-	readdCascadedPackages(others)
-
 	slog.Info("pkg-helper: uninstalled", "package", pkg)
 	return response{OK: true}
-}
-
-// persistedPackagesExcept reads the persist file and returns all package names except the given one.
-func persistedPackagesExcept(exclude string) []string {
-	data, err := os.ReadFile(apkListFile())
-	if err != nil {
-		return nil
-	}
-	var others []string
-	for _, line := range strings.Split(string(data), "\n") {
-		name := strings.TrimSpace(line)
-		if name != "" && name != exclude {
-			others = append(others, name)
-		}
-	}
-	return others
-}
-
-// readdCascadedPackages re-installs any packages that were removed as orphaned
-// dependencies by a previous apk del. Only re-adds packages no longer installed.
-func readdCascadedPackages(pkgs []string) {
-	if len(pkgs) == 0 {
-		return
-	}
-	// Check which ones are still installed.
-	var missing []string
-	for _, pkg := range pkgs {
-		out, err := exec.Command("apk", "info", "-e", pkg).Output()
-		if err != nil || strings.TrimSpace(string(out)) == "" {
-			missing = append(missing, pkg)
-		}
-	}
-	if len(missing) == 0 {
-		return
-	}
-	slog.Warn("pkg-helper: re-adding cascade-removed packages", "packages", missing)
-	args := append([]string{"add", "--no-cache"}, missing...)
-	cmd := exec.Command("apk", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		slog.Error("pkg-helper: re-add failed", "packages", missing, "error", strings.TrimSpace(string(out)))
-	}
 }
 
 // persistAdd appends a package name to the apk persist file (dedup check).
