@@ -48,7 +48,13 @@ Act kinds: click, type, press, hover, wait, evaluate
 - wait: Wait for condition (request: {kind:"wait", timeMs:1000} or {kind:"wait", text:"loaded"})
 - evaluate: Run JavaScript (request: {kind:"evaluate", fn:"document.title"})
 
-Workflow: start → open URL → snapshot (get refs) → act (use refs) → snapshot again`
+Workflow: start → open URL → snapshot (get refs) → act (use refs) → snapshot again
+
+SPA sites (React/Angular/Vue): open loads the page and waits for network requests to finish.
+If snapshot shows empty fields, the page uses non-standard HTML that the accessibility tree cannot parse.
+Use act with kind evaluate and fn: () => document.body.innerText to get ALL visible text reliably.
+For specific data: fn: () => document.querySelector(selector)?.textContent
+IMPORTANT: evaluate fn MUST be an arrow function like () => expr, NOT raw statements like var x = ...`
 }
 
 func (t *BrowserTool) Parameters() map[string]any {
