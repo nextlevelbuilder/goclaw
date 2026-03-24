@@ -75,11 +75,12 @@ type TypeOpts struct {
 
 // WaitOpts controls wait behavior.
 type WaitOpts struct {
-	TimeMs   int
-	Text     string
-	TextGone string
-	URL      string
-	Fn       string
+	TimeMs      int
+	Text        string
+	TextGone    string
+	URL         string
+	Fn          string
+	NetworkIdle bool // wait for all XHR/fetch to complete
 }
 
 // ConsoleMessage is a captured browser console message.

@@ -87,7 +87,10 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 	if err := page.WaitLoad(); err != nil {
 		m.logger.Warn("page WaitLoad timeout (non-fatal)", "url", url, "error", err)
 	}
-	// Wait for DOM/network to stabilize (SPAs need more time for JS rendering)
+	// Wait for XHR/fetch requests to settle (critical for SPAs that load data via API)
+	wait := page.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)
+	wait()
+	// Wait for DOM to stabilize after data arrives
 	if err := page.WaitStable(2 * time.Second); err != nil {
 		m.logger.Warn("page WaitStable timeout (non-fatal)", "url", url, "error", err)
 	}

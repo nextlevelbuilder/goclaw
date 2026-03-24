@@ -125,6 +125,10 @@ func (t *BrowserTool) Parameters() map[string]any {
 						"type":        "number",
 						"description": "Wait time in milliseconds",
 					},
+					"networkIdle": map[string]any{
+						"type":        "boolean",
+						"description": "Wait for all network requests (XHR/fetch) to complete — use for SPA sites",
+					},
 				},
 			},
 		},
@@ -368,6 +372,9 @@ func (t *BrowserTool) handleAct(ctx context.Context, args map[string]any) *tools
 		opts := WaitOpts{}
 		if ms, ok := req["timeMs"].(float64); ok {
 			opts.TimeMs = int(ms)
+		}
+		if ni, ok := req["networkIdle"].(bool); ok {
+			opts.NetworkIdle = ni
 		}
 		if txt, ok := req["text"].(string); ok {
 			opts.Text = txt
