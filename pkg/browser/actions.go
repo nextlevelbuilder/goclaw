@@ -143,6 +143,14 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 		return nil
 	}
 
+	// Wait for network idle (all XHR/fetch requests completed)
+	if opts.NetworkIdle {
+		wait := page.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)
+		wait()
+		waitStable(page)
+		return nil
+	}
+
 	// Default: wait for page to stabilize
 	waitStable(page)
 	return nil

@@ -73,7 +73,10 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 	}
 	// Wait for page load (DOMContentLoaded + initial resources)
 	_ = page.WaitLoad()
-	// Wait for DOM/network to stabilize (SPAs need more time for JS rendering)
+	// Wait for XHR/fetch requests to settle (critical for SPAs that load data via API)
+	wait := page.WaitRequestIdle(500*time.Millisecond, nil, nil, nil)
+	wait()
+	// Wait for DOM to stabilize after data arrives
 	_ = page.WaitStable(2 * time.Second)
 	return nil
 }
