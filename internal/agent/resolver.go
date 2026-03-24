@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -120,7 +121,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		}
 
 		// Resolve provider (tenant-aware: tries tenant-specific first, falls back to master)
-		provider, err := deps.ProviderReg.GetForTenant(ag.TenantID, ag.Provider)
+		provider, err := providerresolve.ResolveConfiguredProvider(deps.ProviderReg, ag)
 		if err != nil {
 			// Fallback to any available provider for this tenant
 			names := deps.ProviderReg.ListForTenant(ag.TenantID)
@@ -257,11 +258,11 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				toolsReg = deps.Tools.Clone()
 			}
 			var mcpOpts []mcpbridge.ManagerOption
-		mcpOpts = append(mcpOpts, mcpbridge.WithStore(deps.MCPStore))
-		if deps.MCPPool != nil {
-			mcpOpts = append(mcpOpts, mcpbridge.WithPool(deps.MCPPool))
-		}
-		mcpMgr := mcpbridge.NewManager(toolsReg, mcpOpts...)
+			mcpOpts = append(mcpOpts, mcpbridge.WithStore(deps.MCPStore))
+			if deps.MCPPool != nil {
+				mcpOpts = append(mcpOpts, mcpbridge.WithPool(deps.MCPPool))
+			}
+			mcpMgr := mcpbridge.NewManager(toolsReg, mcpOpts...)
 			if err := mcpMgr.LoadForAgent(ctx, ag.ID, ""); err != nil {
 				slog.Warn("failed to load MCP servers for agent", "agent", agentKey, "error", err)
 			} else if mcpMgr.IsSearchMode() {
@@ -436,4 +437,3 @@ func derefInt(p *int) int {
 	}
 	return *p
 }
-

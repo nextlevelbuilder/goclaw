@@ -75,6 +75,11 @@ export interface WorkspaceSharingConfig {
   share_memory?: boolean;
 }
 
+export interface ChatGPTOAuthRoutingConfig {
+  strategy?: "manual" | "round_robin";
+  extra_provider_names?: string[];
+}
+
 export interface AgentData {
   id: string;
   agent_key: string;

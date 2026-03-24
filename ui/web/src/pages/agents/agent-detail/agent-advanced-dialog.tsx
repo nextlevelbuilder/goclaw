@@ -7,14 +7,15 @@ import {
 } from "@/components/ui/dialog";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type {
-  AgentData, CompactionConfig, ContextPruningConfig,
+  AgentData, ChatGPTOAuthRoutingConfig, CompactionConfig, ContextPruningConfig,
   SandboxConfig, WorkspaceSharingConfig,
 } from "@/types/agent";
 import {
-  ThinkingSection, WorkspaceSharingSection, CompactionSection,
+  ChatGPTOAuthRoutingSection, ThinkingSection, WorkspaceSharingSection, CompactionSection,
   ContextPruningSection, SandboxSection,
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
+import { useProviders } from "@/pages/providers/hooks/use-providers";
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -25,11 +26,19 @@ interface AgentAdvancedDialogProps {
 
 export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: AgentAdvancedDialogProps) {
   const { t } = useTranslation("agents");
+  const { providers } = useProviders();
 
   const deriveState = (a: AgentData) => {
     const otherObj = (a.other_config ?? {}) as Record<string, unknown>;
+    const routing = (otherObj.chatgpt_oauth_routing ?? {}) as ChatGPTOAuthRoutingConfig;
     return {
       thinkingLevel: typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off",
+      chatgptRouting: {
+        strategy: routing.strategy === "round_robin" ? "round_robin" : "manual",
+        extra_provider_names: Array.isArray(routing.extra_provider_names)
+          ? routing.extra_provider_names.filter((name): name is string => typeof name === "string")
+          : [],
+      } as ChatGPTOAuthRoutingConfig,
       wsSharing: (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig,
       comp: a.compaction_config ?? {},
       pruneEnabled: a.context_pruning != null,
@@ -42,6 +51,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const init = deriveState(agent);
   const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(init.wsSharing);
   const [thinkingLevel, setThinkingLevel] = useState(init.thinkingLevel);
+  const [chatgptRouting, setChatgptRouting] = useState<ChatGPTOAuthRoutingConfig>(init.chatgptRouting);
   const [comp, setComp] = useState<CompactionConfig>(init.comp);
   const [pruneEnabled, setPruneEnabled] = useState(init.pruneEnabled);
   const [prune, setPrune] = useState<ContextPruningConfig>(init.prune);
@@ -53,6 +63,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     if (!open) return;
     const s = deriveState(agent);
     setThinkingLevel(s.thinkingLevel);
+    setChatgptRouting(s.chatgptRouting);
     setWsSharing(s.wsSharing);
     setComp(s.comp);
     setPruneEnabled(s.pruneEnabled);
@@ -72,10 +83,25 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       // the latest agent data and merge our keys into it.
       const existing = (agent.other_config as Record<string, unknown> | null) ?? {};
       const otherBase: Record<string, unknown> = { ...existing };
+      const currentProvider = providers.find((provider) => provider.name === agent.provider);
+      const hadRoutingConfig = typeof existing.chatgpt_oauth_routing === "object" && existing.chatgpt_oauth_routing !== null;
       delete otherBase.thinking_level;
+      delete otherBase.chatgpt_oauth_routing;
       delete otherBase.workspace_sharing;
       if (thinkingLevel && thinkingLevel !== "off") {
         otherBase.thinking_level = thinkingLevel;
+      }
+      if (
+        (currentProvider?.provider_type === "chatgpt_oauth" || hadRoutingConfig)
+        && (
+          chatgptRouting.strategy === "round_robin"
+          || (chatgptRouting.extra_provider_names?.length ?? 0) > 0
+        )
+      ) {
+        otherBase.chatgpt_oauth_routing = {
+          strategy: chatgptRouting.strategy === "round_robin" ? "round_robin" : "manual",
+          extra_provider_names: chatgptRouting.extra_provider_names ?? [],
+        };
       }
       if (
         wsSharing.shared_dm || wsSharing.shared_group ||
@@ -117,6 +143,13 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
 
           {/* Thinking */}
           <ThinkingSection value={thinkingLevel} onChange={setThinkingLevel} />
+
+          <ChatGPTOAuthRoutingSection
+            currentProvider={agent.provider}
+            providers={providers}
+            value={chatgptRouting}
+            onChange={setChatgptRouting}
+          />
 
           {/* Performance */}
           <ConfigGroupHeader

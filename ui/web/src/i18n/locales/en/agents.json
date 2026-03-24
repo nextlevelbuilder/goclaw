@@ -124,6 +124,22 @@
     "saved": "Saved",
     "failedToSave": "Failed to save"
   },
+  "chatgptOAuthRouting": {
+    "title": "ChatGPT OAuth Routing",
+    "description": "Route one agent across multiple authenticated ChatGPT OAuth accounts without changing the primary provider model setup.",
+    "defaultAccount": "Preferred Account",
+    "defaultHint": "The agent Provider field stays the preferred/default account.",
+    "strategyLabel": "Routing Strategy",
+    "strategyHint": "Manual keeps the preferred account fixed. Round robin rotates requests across the selected extra accounts.",
+    "extraAccountsLabel": "Extra Accounts",
+    "extraHint": "Only enabled and authenticated ChatGPT OAuth providers can participate.",
+    "emptyExtras": "Authenticate another ChatGPT OAuth provider to enable rotation.",
+    "selectedAccountsLabel": "Accounts In Rotation",
+    "strategy": {
+      "manual": "Manual",
+      "roundRobin": "Round Robin"
+    }
+  },
   "identity": {
     "title": "Identity",
     "agentKey": "Agent Key",

@@ -32,9 +32,9 @@ const (
 
 // Agent status constants.
 const (
-	AgentStatusActive      = "active"
-	AgentStatusInactive    = "inactive"
-	AgentStatusSummoning   = "summoning"
+	AgentStatusActive       = "active"
+	AgentStatusInactive     = "inactive"
+	AgentStatusSummoning    = "summoning"
 	AgentStatusSummonFailed = "summon_failed"
 )
 
@@ -43,18 +43,18 @@ type AgentData struct {
 	BaseModel
 	TenantID            uuid.UUID `json:"tenant_id"`
 	AgentKey            string    `json:"agent_key"`
-	DisplayName         string `json:"display_name,omitempty"`
-	Frontmatter         string `json:"frontmatter,omitempty"` // short expertise summary (NOT other_config.description which is the summoning prompt)
-	OwnerID             string `json:"owner_id"`
-	Provider            string `json:"provider"`
-	Model               string `json:"model"`
-	ContextWindow       int    `json:"context_window"`
-	MaxToolIterations   int    `json:"max_tool_iterations"`
-	Workspace           string `json:"workspace"`
-	RestrictToWorkspace bool   `json:"restrict_to_workspace"`
-	AgentType           string `json:"agent_type"` // "open" or "predefined"
-	IsDefault           bool   `json:"is_default"`
-	Status              string `json:"status"`
+	DisplayName         string    `json:"display_name,omitempty"`
+	Frontmatter         string    `json:"frontmatter,omitempty"` // short expertise summary (NOT other_config.description which is the summoning prompt)
+	OwnerID             string    `json:"owner_id"`
+	Provider            string    `json:"provider"`
+	Model               string    `json:"model"`
+	ContextWindow       int       `json:"context_window"`
+	MaxToolIterations   int       `json:"max_tool_iterations"`
+	Workspace           string    `json:"workspace"`
+	RestrictToWorkspace bool      `json:"restrict_to_workspace"`
+	AgentType           string    `json:"agent_type"` // "open" or "predefined"
+	IsDefault           bool      `json:"is_default"`
+	Status              string    `json:"status"`
 
 	// Budget: optional monthly spending limit in cents (nil = unlimited)
 	BudgetMonthlyCents *int `json:"budget_monthly_cents,omitempty"`
@@ -239,11 +239,23 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.
 type WorkspaceSharingConfig struct {
-	SharedDM    bool     `json:"shared_dm"`
-	SharedGroup bool     `json:"shared_group"`
-	SharedUsers []string `json:"shared_users,omitempty"`
-	ShareMemory         bool `json:"share_memory"`
-	ShareKnowledgeGraph bool `json:"share_knowledge_graph"`
+	SharedDM            bool     `json:"shared_dm"`
+	SharedGroup         bool     `json:"shared_group"`
+	SharedUsers         []string `json:"shared_users,omitempty"`
+	ShareMemory         bool     `json:"share_memory"`
+	ShareKnowledgeGraph bool     `json:"share_knowledge_graph"`
+}
+
+const (
+	ChatGPTOAuthStrategyManual     = "manual"
+	ChatGPTOAuthStrategyRoundRobin = "round_robin"
+)
+
+// ChatGPTOAuthRoutingConfig controls optional multi-account selection for agents
+// whose primary provider is a ChatGPT OAuth-backed provider.
+type ChatGPTOAuthRoutingConfig struct {
+	Strategy           string   `json:"strategy,omitempty"`
+	ExtraProviderNames []string `json:"extra_provider_names,omitempty"`
 }
 
 // ParseWorkspaceSharing extracts workspace_sharing from other_config JSONB.
@@ -262,6 +274,58 @@ func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
 		return nil
 	}
 	return cfg.WS
+}
+
+// ParseChatGPTOAuthRouting extracts chatgpt_oauth_routing from other_config JSONB.
+// Returns nil when no routing is configured.
+func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var cfg struct {
+		Routing *ChatGPTOAuthRoutingConfig `json:"chatgpt_oauth_routing"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.Routing == nil {
+		return nil
+	}
+	routing := &ChatGPTOAuthRoutingConfig{
+		Strategy:           cfg.Routing.Strategy,
+		ExtraProviderNames: normalizeProviderNames(cfg.Routing.ExtraProviderNames),
+	}
+	switch routing.Strategy {
+	case "", ChatGPTOAuthStrategyManual:
+		routing.Strategy = ChatGPTOAuthStrategyManual
+	case ChatGPTOAuthStrategyRoundRobin:
+	default:
+		routing.Strategy = ChatGPTOAuthStrategyManual
+	}
+	if routing.Strategy == ChatGPTOAuthStrategyManual && len(routing.ExtraProviderNames) == 0 {
+		return nil
+	}
+	if routing.Strategy == ChatGPTOAuthStrategyRoundRobin && len(routing.ExtraProviderNames) == 0 {
+		return routing
+	}
+	return routing
+}
+
+func normalizeProviderNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ParseShellDenyGroups extracts shell_deny_groups from other_config JSONB.
@@ -350,7 +414,6 @@ type AgentStore interface {
 	EnsureUserProfile(ctx context.Context, agentID uuid.UUID, userID string) error
 	ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]UserInstanceData, error)
 	UpdateUserProfileMetadata(ctx context.Context, agentID uuid.UUID, userID string, metadata map[string]string) error
-
 }
 
 // UserInstanceData represents a user instance for a predefined agent.
@@ -361,4 +424,3 @@ type UserInstanceData struct {
 	FileCount   int               `json:"file_count"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
-

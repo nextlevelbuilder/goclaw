@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -27,16 +28,16 @@ type ChannelFactory func(name string, creds json.RawMessage, cfg json.RawMessage
 // InstanceLoader loads channel instances from the database and registers them with the Manager.
 // Follows a load-all-at-startup pattern with cache invalidation for reload.
 type InstanceLoader struct {
-	store       store.ChannelInstanceStore
-	agentStore  store.AgentStore
-	providerReg        *providers.Registry
-	pendingCompactCfg  *config.PendingCompactionConfig
-	factories          map[string]ChannelFactory
-	manager            *Manager
-	msgBus             *bus.MessageBus
-	pairingSvc         store.PairingStore
-	mu                 sync.Mutex
-	loaded             map[string]struct{} // channel names managed by this loader
+	store             store.ChannelInstanceStore
+	agentStore        store.AgentStore
+	providerReg       *providers.Registry
+	pendingCompactCfg *config.PendingCompactionConfig
+	factories         map[string]ChannelFactory
+	manager           *Manager
+	msgBus            *bus.MessageBus
+	pairingSvc        store.PairingStore
+	mu                sync.Mutex
+	loaded            map[string]struct{} // channel names managed by this loader
 }
 
 // NewInstanceLoader creates a new InstanceLoader.
@@ -265,7 +266,7 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		}
 		// Fallback: agent's provider/model.
 		if p == nil && ag != nil && ag.Provider != "" {
-			if ap, err := l.providerReg.Get(tctx, ag.Provider); err == nil {
+			if ap, err := providerresolve.ResolveConfiguredProvider(l.providerReg, ag); err == nil {
 				p = ap
 				model = ag.Model
 				if model == "" {

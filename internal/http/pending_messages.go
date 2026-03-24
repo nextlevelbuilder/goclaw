@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -183,7 +184,7 @@ func (h *PendingMessagesHandler) resolveProviderAndModel(ctx context.Context) (p
 	// Fallback: default agent's provider+model.
 	if h.agentStore != nil {
 		if ag, err := h.agentStore.GetDefault(ctx); err == nil && ag.Provider != "" {
-			if p, err := h.providerReg.GetForTenant(ag.TenantID, ag.Provider); err == nil {
+			if p, err := providerresolve.ResolveConfiguredProvider(h.providerReg, ag); err == nil {
 				model := ag.Model
 				if model == "" {
 					model = p.DefaultModel()
