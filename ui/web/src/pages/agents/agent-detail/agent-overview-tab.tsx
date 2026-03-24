@@ -19,10 +19,10 @@ interface AgentOverviewTabProps {
   agent: AgentData;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
   heartbeat: UseAgentHeartbeatReturn;
-  onOpenAdvanced: () => void;
+  onManageCodexPool: () => void;
 }
 
-export function AgentOverviewTab({ agent, onUpdate, heartbeat, onOpenAdvanced }: AgentOverviewTabProps) {
+export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool }: AgentOverviewTabProps) {
   const { t } = useTranslation("agents");
 
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
@@ -130,7 +130,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onOpenAdvanced }:
         onSaveBlockedChange={setLlmSaveBlocked}
       />
 
-      <ChatGPTOAuthRoutingSummarySection agent={agent} onOpenAdvanced={onOpenAdvanced} />
+      <ChatGPTOAuthRoutingSummarySection agent={agent} onManage={onManageCodexPool} />
 
       {/* Memory — standalone section (was inside Capabilities) */}
       <section className="space-y-4">

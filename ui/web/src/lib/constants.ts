@@ -5,6 +5,7 @@ export const ROUTES = {
   CHAT_PATTERN: "/chat/:sessionKey?",
   AGENTS: "/agents",
   AGENT_DETAIL: "/agents/:id",
+  AGENT_CODEX_POOL: "/agents/:id/codex-pool",
   SESSIONS: "/sessions",
   SESSION_DETAIL: "/sessions/:key",
   SKILLS: "/skills",

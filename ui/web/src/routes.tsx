@@ -21,6 +21,9 @@ const ChatPage = lazyWithRetry(() =>
 const AgentsPage = lazyWithRetry(() =>
   import("@/pages/agents/agents-page").then((m) => ({ default: m.AgentsPage })),
 );
+const AgentCodexPoolPage = lazyWithRetry(() =>
+  import("@/pages/agents/agent-detail/agent-codex-pool-page").then((m) => ({ default: m.AgentCodexPoolPage })),
+);
 const SessionsPage = lazyWithRetry(() =>
   import("@/pages/sessions/sessions-page").then((m) => ({ default: m.SessionsPage })),
 );
@@ -148,6 +151,7 @@ export function AppRoutes() {
           <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
           <Route path={ROUTES.CHAT_PATTERN} element={<ChatPage />} />
           <Route path={ROUTES.AGENTS} element={<AgentsPage key="list" />} />
+          <Route path={ROUTES.AGENT_CODEX_POOL} element={<AgentCodexPoolPage />} />
           <Route path={ROUTES.AGENT_DETAIL} element={<AgentsPage key="detail" />} />
           <Route path={ROUTES.TEAMS} element={<TeamsPage key="list" />} />
           <Route path={ROUTES.TEAM_DETAIL} element={<TeamsPage key="detail" />} />

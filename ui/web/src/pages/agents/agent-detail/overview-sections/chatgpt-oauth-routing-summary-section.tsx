@@ -14,7 +14,7 @@ import { normalizeChatGPTOAuthRouting } from "../agent-display-utils";
 
 interface ChatGPTOAuthRoutingSummarySectionProps {
   agent: AgentData;
-  onOpenAdvanced: () => void;
+  onManage: () => void;
 }
 
 function statusBadgeClass(availability: ChatGPTOAuthAvailability): string {
@@ -25,7 +25,7 @@ function statusBadgeClass(availability: ChatGPTOAuthAvailability): string {
 
 export function ChatGPTOAuthRoutingSummarySection({
   agent,
-  onOpenAdvanced,
+  onManage,
 }: ChatGPTOAuthRoutingSummarySectionProps) {
   const { t } = useTranslation("agents");
   const { providers } = useProviders();
@@ -68,7 +68,7 @@ export function ChatGPTOAuthRoutingSummarySection({
           <h3 className="text-sm font-medium">{t("chatgptOAuthRouting.summaryTitle")}</h3>
           <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.summaryDescription")}</p>
         </div>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onOpenAdvanced}>
+        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onManage}>
           <Settings2 className="h-4 w-4" />
           {t("chatgptOAuthRouting.manageAction")}
         </Button>

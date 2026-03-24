@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgentDetail } from "../hooks/use-agent-detail";
@@ -23,6 +24,7 @@ interface AgentDetailPageProps {
 
 export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const { t } = useTranslation("agents");
+  const navigate = useNavigate();
   const { agent, files, loading, updateAgent, getFile, setFile, regenerateAgent, resummonAgent, refresh } =
     useAgentDetail(agentId);
   const { deleteAgent: deleteAgentById } = useAgents();
@@ -83,7 +85,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
                 agent={agent}
                 onUpdate={updateAgent}
                 heartbeat={hb}
-                onOpenAdvanced={() => setAdvancedOpen(true)}
+                onManageCodexPool={() => navigate(`/agents/${agent.id}/codex-pool`)}
               />
             </TabsContent>
 

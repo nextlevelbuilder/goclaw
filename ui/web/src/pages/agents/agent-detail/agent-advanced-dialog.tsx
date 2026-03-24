@@ -16,6 +16,7 @@ import {
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
+import { buildAgentOtherConfigWithChatGPTOAuthRouting } from "./agent-display-utils";
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -81,27 +82,11 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       // Only send the keys this dialog owns to avoid overwriting keys managed by
       // the overview tab. The backend does a full column replace, so we must read
       // the latest agent data and merge our keys into it.
-      const existing = (agent.other_config as Record<string, unknown> | null) ?? {};
-      const otherBase: Record<string, unknown> = { ...existing };
-      const currentProvider = providers.find((provider) => provider.name === agent.provider);
-      const hadRoutingConfig = typeof existing.chatgpt_oauth_routing === "object" && existing.chatgpt_oauth_routing !== null;
+      const otherBase = buildAgentOtherConfigWithChatGPTOAuthRouting(agent, providers, chatgptRouting);
       delete otherBase.thinking_level;
-      delete otherBase.chatgpt_oauth_routing;
       delete otherBase.workspace_sharing;
       if (thinkingLevel && thinkingLevel !== "off") {
         otherBase.thinking_level = thinkingLevel;
-      }
-      if (
-        (currentProvider?.provider_type === "chatgpt_oauth" || hadRoutingConfig)
-        && (
-          chatgptRouting.strategy === "round_robin"
-          || (chatgptRouting.extra_provider_names?.length ?? 0) > 0
-        )
-      ) {
-        otherBase.chatgpt_oauth_routing = {
-          strategy: chatgptRouting.strategy === "round_robin" ? "round_robin" : "manual",
-          extra_provider_names: chatgptRouting.extra_provider_names ?? [],
-        };
       }
       if (
         wsSharing.shared_dm || wsSharing.shared_group ||

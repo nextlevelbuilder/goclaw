@@ -138,19 +138,19 @@ POST /v1/agents/{id}/wake
 
 Response: `{content, run_id, usage?}`. Used by orchestrators (n8n, Paperclip) to trigger agent runs.
 
-### ChatGPT OAuth Routing in `other_config`
+### Codex/OpenAI OAuth Routing in `other_config`
 
 For agents whose main `provider` is a `chatgpt_oauth` provider, `other_config.chatgpt_oauth_routing`
 can opt the agent into multi-account routing while keeping the main `provider` field as the preferred/default account alias.
 
 ```json
 {
-  "provider": "chatgpt-main",
+  "provider": "openai-codex",
   "model": "gpt-5.4",
   "other_config": {
     "chatgpt_oauth_routing": {
       "strategy": "round_robin",
-      "extra_provider_names": ["chatgpt-work", "chatgpt-team"]
+      "extra_provider_names": ["codex-work", "codex-team"]
     }
   }
 }
@@ -158,10 +158,25 @@ can opt the agent into multi-account routing while keeping the main `provider` f
 
 Rules:
 - `strategy: "manual"` keeps the main `provider` as the preferred account.
-- `strategy: "round_robin"` rotates requests across the main provider plus the listed extra authenticated ChatGPT OAuth providers.
-- Retryable upstream failures can fall through to the next eligible ChatGPT OAuth provider in the same request.
+- Provider aliases are arbitrary. `openai-codex`, `codex-work`, and `codex-team` are examples, not required prefixes.
+- `strategy: "round_robin"` rotates requests across the main provider plus the listed extra authenticated OpenAI Codex OAuth providers.
+- Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth provider in the same request.
 - Only enabled and authenticated `chatgpt_oauth` providers participate.
 - Provider-scoped auth remains unchanged: `cmd/auth` and `/v1/auth/chatgpt/{provider}/*` still operate on explicit providers.
+
+### Codex Pool Activity
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/agents/{id}/codex-pool-activity` | Summarize recent Codex/OpenAI OAuth pool usage for one agent |
+
+Response fields:
+- `strategy`: effective routing strategy (`manual` or `round_robin`)
+- `pool_providers`: configured primary + extra provider aliases in pool order
+- `provider_counts`: recent request counts and last-used timestamp per alias
+- `recent_requests`: recent root traces with provider, model, duration, status, pool call count, and failover aliases
+
+Use this endpoint to back a dashboard that verifies whether a configured pool is actually rotating across aliases.
 
 ---
 
@@ -686,7 +701,7 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 | `POST` | `/v1/auth/openai/callback` | Manual callback handler |
 | `POST` | `/v1/auth/openai/logout` | Revoke token |
 
-Legacy `/v1/auth/openai/*` routes remain as compatibility aliases for the default `openai-codex` ChatGPT OAuth provider.
+Legacy `/v1/auth/openai/*` routes remain as compatibility aliases for the default `openai-codex` OpenAI Codex OAuth provider.
 
 ---
 
