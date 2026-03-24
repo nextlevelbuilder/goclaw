@@ -316,6 +316,7 @@ type AgentStore interface {
 	Create(ctx context.Context, agent *AgentData) error
 	GetByKey(ctx context.Context, agentKey string) (*AgentData, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*AgentData, error)
+	GetByIDUnscoped(ctx context.Context, id uuid.UUID) (*AgentData, error)
 	GetByKeys(ctx context.Context, keys []string) ([]AgentData, error)
 	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]AgentData, error)
 	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error

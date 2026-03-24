@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -518,6 +519,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	// Summarize in background (holds the per-session lock until done)
 	go func() {
 		defer sessionMu.Unlock()
+		defer safego.Recover(nil, "session", sessionKey)
 
 		// Re-check: history may have been truncated by a concurrent summarize
 		// that finished between our threshold check and acquiring the lock.

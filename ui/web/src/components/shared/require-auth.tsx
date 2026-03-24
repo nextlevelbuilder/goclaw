@@ -9,7 +9,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const connected = useAuthStore((s) => s.connected);
   const tenantSelected = useAuthStore((s) => s.tenantSelected);
   const availableTenants = useAuthStore((s) => s.availableTenants);
-  const isCrossTenant = useAuthStore((s) => s.isCrossTenant);
+  const isOwner = useAuthStore((s) => s.isOwner);
   const location = useLocation();
 
   // Not authenticated
@@ -23,8 +23,8 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
     return <Navigate to={ROUTES.SELECT_TENANT} state={{ from: location }} replace />;
   }
 
-  // Connected, no tenants, not cross-tenant — blocked
-  if (connected && !tenantSelected && availableTenants.length === 0 && !isCrossTenant) {
+  // Connected, no tenants, not owner — blocked
+  if (connected && !tenantSelected && availableTenants.length === 0 && !isOwner) {
     return <Navigate to={ROUTES.SELECT_TENANT} replace />;
   }
 

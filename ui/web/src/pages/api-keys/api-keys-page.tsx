@@ -45,7 +45,7 @@ export function ApiKeysPage() {
   const { t } = useTranslation("api-keys");
   const { t: tc } = useTranslation("common");
   const { apiKeys, loading, refresh, createApiKey, revokeApiKey } = useApiKeys();
-  const { isCrossTenant, tenants } = useTenants();
+  const { isOwner, tenants } = useTenants();
 
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && apiKeys.length === 0);
@@ -124,7 +124,7 @@ export function ApiKeysPage() {
                 <tr className="border-b bg-muted/50">
                   <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
                   <th className="px-4 py-3 text-left font-medium">{t("columns.scopes")}</th>
-                  {isCrossTenant && (
+                  {isOwner && (
                     <th className="px-4 py-3 text-left font-medium">Tenant</th>
                   )}
                   <th className="px-4 py-3 text-left font-medium">{t("columns.status")}</th>
@@ -156,7 +156,7 @@ export function ApiKeysPage() {
                           ))}
                         </div>
                       </td>
-                      {isCrossTenant && (
+                      {isOwner && (
                         <td className="px-4 py-3">
                           <Badge variant="outline" className="text-xs gap-1">
                             <Building2 className="h-3 w-3" />

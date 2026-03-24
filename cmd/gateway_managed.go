@@ -479,7 +479,8 @@ func wireExtras(
 			return
 		}
 		// Re-register from DB if provider still exists and is ACP type
-		p, err := stores.Providers.GetProviderByName(context.Background(), payload.Key)
+		provCtx := store.WithTenantID(context.Background(), event.TenantID)
+		p, err := stores.Providers.GetProviderByName(provCtx, payload.Key)
 		if err != nil {
 			// Provider was deleted or not found — already unregistered by handler
 			return

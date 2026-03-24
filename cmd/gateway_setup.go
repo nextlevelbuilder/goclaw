@@ -492,7 +492,7 @@ func setupSkillsSystem(
 	skillSearchTool := tools.NewSkillSearchTool(skillsLoader)
 	toolsReg.Register(skillSearchTool)
 	toolsReg.Register(tools.NewUseSkillTool())
-	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(store.WithCrossTenant(context.Background()))))
+	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(context.Background())))
 
 	// Wire skills-store directory into filesystem loader so agents
 	// can discover uploaded skills in their system prompt and BM25 search index.

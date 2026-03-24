@@ -23,16 +23,16 @@ function ToastItem({ toast }: { toast: Toast }) {
   return (
     <div
       className={cn(
-        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border p-4 shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 fade-in duration-200",
+        "pointer-events-auto flex w-full items-start gap-3 overflow-hidden rounded-lg border p-4 shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 fade-in duration-200",
         styles[toast.variant],
       )}
       role="alert"
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
-      <div className="flex-1 space-y-0.5">
-        <p className="text-sm font-medium">{toast.title}</p>
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <p className="text-sm font-medium break-words">{toast.title}</p>
         {toast.message && (
-          <p className="text-xs opacity-80">{toast.message}</p>
+          <p className="text-xs opacity-80 break-words">{toast.message}</p>
         )}
       </div>
       <button
@@ -51,7 +51,7 @@ export function Toaster() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2 pointer-events-none sm:bottom-6 sm:right-6 safe-bottom safe-right">
+    <div className="fixed bottom-4 right-4 z-[100] flex max-w-sm flex-col-reverse gap-2 pointer-events-none sm:bottom-6 sm:right-6 safe-bottom safe-right">
       {toasts.slice(-3).map((t) => (
         <ToastItem key={t.id} toast={t} />
       ))}

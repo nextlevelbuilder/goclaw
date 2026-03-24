@@ -4,7 +4,7 @@ export function useTenants() {
   const tenantId = useAuthStore((s) => s.tenantId)
   const tenantName = useAuthStore((s) => s.tenantName)
   const tenantSlug = useAuthStore((s) => s.tenantSlug)
-  const isCrossTenant = useAuthStore((s) => s.isCrossTenant)
+  const isOwner = useAuthStore((s) => s.isOwner)
   const availableTenants = useAuthStore((s) => s.availableTenants)
 
   return {
@@ -12,8 +12,8 @@ export function useTenants() {
     currentTenantId: tenantId,
     currentTenantName: tenantName,
     currentTenantSlug: tenantSlug,
-    isCrossTenant,
-    isMultiTenant: availableTenants.length > 1 || isCrossTenant,
+    isOwner,
+    isMultiTenant: availableTenants.length > 1 || isOwner,
     currentTenant: availableTenants.find((t) => t.id === tenantId),
   }
 }

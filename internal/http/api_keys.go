@@ -98,7 +98,7 @@ func (h *APIKeysHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve tenant_id based on caller type.
 	var tenantID uuid.UUID // uuid.Nil = system-level (NULL in DB)
-	if store.IsCrossTenant(r.Context()) {
+	if store.IsOwnerRole(r.Context()) {
 		if input.TenantID != "" {
 			tid, err := uuid.Parse(input.TenantID)
 			if err != nil {

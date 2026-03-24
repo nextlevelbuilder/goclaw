@@ -82,6 +82,14 @@ func (m *mockProviderStore) DeleteProvider(_ context.Context, id uuid.UUID) erro
 	return fmt.Errorf("not found")
 }
 
+func (m *mockProviderStore) ListAllProviders(_ context.Context) ([]store.LLMProviderData, error) {
+	var out []store.LLMProviderData
+	for _, p := range m.providers {
+		out = append(out, *p)
+	}
+	return out, nil
+}
+
 type mockSecretsStore struct {
 	data map[string]string
 }

@@ -45,6 +45,9 @@ func (s *stubAgentStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _
 func (s *stubAgentStore) Create(_ context.Context, _ *store.AgentData) error              { return nil }
 func (s *stubAgentStore) GetByKey(_ context.Context, _ string) (*store.AgentData, error)  { return nil, nil }
 func (s *stubAgentStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) { return nil, nil }
+func (s *stubAgentStore) GetByIDUnscoped(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
+	return nil, nil
+}
 func (s *stubAgentStore) GetByKeys(_ context.Context, _ []string) ([]store.AgentData, error) {
 	return nil, nil
 }

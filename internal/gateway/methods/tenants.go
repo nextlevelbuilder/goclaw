@@ -46,7 +46,7 @@ func (m *TenantsMethods) Register(router *gateway.MethodRouter) {
 
 func (m *TenantsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() {
+	if !client.IsOwner() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.list")))
 		return
 	}
@@ -65,7 +65,7 @@ func (m *TenantsMethods) handleList(ctx context.Context, client *gateway.Client,
 
 func (m *TenantsMethods) handleGet(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() {
+	if !client.IsOwner() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.get")))
 		return
 	}
@@ -96,7 +96,7 @@ func (m *TenantsMethods) handleGet(ctx context.Context, client *gateway.Client, 
 
 func (m *TenantsMethods) handleCreate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() && !client.HasScope(permissions.ScopeProvision) {
+	if !client.IsOwner() && !client.HasScope(permissions.ScopeProvision) {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.create")))
 		return
 	}
@@ -154,7 +154,7 @@ func (m *TenantsMethods) handleCreate(ctx context.Context, client *gateway.Clien
 
 func (m *TenantsMethods) handleUpdate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() {
+	if !client.IsOwner() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.update")))
 		return
 	}
@@ -207,7 +207,7 @@ func (m *TenantsMethods) handleUpdate(ctx context.Context, client *gateway.Clien
 
 func (m *TenantsMethods) handleUsersList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() {
+	if !client.IsOwner() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.users.list")))
 		return
 	}
@@ -242,7 +242,7 @@ func (m *TenantsMethods) handleUsersList(ctx context.Context, client *gateway.Cl
 
 func (m *TenantsMethods) handleUsersAdd(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() && !client.HasScope(permissions.ScopeProvision) {
+	if !client.IsOwner() && !client.HasScope(permissions.ScopeProvision) {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.users.add")))
 		return
 	}
@@ -293,7 +293,7 @@ func (m *TenantsMethods) handleUsersAdd(ctx context.Context, client *gateway.Cli
 
 func (m *TenantsMethods) handleUsersRemove(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
-	if !client.IsCrossTenant() {
+	if !client.IsOwner() {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "tenants.users.remove")))
 		return
 	}
@@ -351,8 +351,8 @@ func (m *TenantsMethods) handleMine(ctx context.Context, client *gateway.Client,
 		Status string `json:"status"`
 	}
 
-	// Cross-tenant admin: return all tenants with "owner" role
-	if client.IsCrossTenant() {
+	// Owner: return all tenants with "owner" role
+	if client.IsOwner() {
 		tenants, err := m.tenantStore.ListTenants(ctx)
 		if err != nil {
 			slog.Error("tenants.mine failed (cross-tenant)", "error", err)

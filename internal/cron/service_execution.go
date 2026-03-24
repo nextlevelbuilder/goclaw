@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/adhocore/gronx"
+
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 )
 
 // RunJob manually triggers a job execution.
@@ -182,6 +184,7 @@ func (cs *Service) checkJobs() {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
+			defer safego.Recover(nil, "job_id", id)
 			cs.executeJobByID(id)
 		}(jobID)
 	}

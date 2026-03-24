@@ -25,24 +25,21 @@ func clientCanReceiveEvent(c *Client, event bus.Event) bool {
 		return true
 	}
 
-	// Tenant isolation: fail-closed, 3-mode filtering.
+	// Tenant isolation: fail-closed, 2-mode filtering.
 	//
-	// Mode 1: Unscoped admin (crossTenant=true, tenantID=Nil) → see everything
-	// Mode 2: Scoped admin  (crossTenant=true, tenantID=X)   → tenant X events + unscoped system events
-	// Mode 3: Regular user   (crossTenant=false, tenantID=X)  → ONLY tenant X events (fail-closed)
-	if !c.crossTenant && c.tenantID == uuid.Nil {
-		return false // fail-closed: no tenant assigned to non-admin client
-	} else if c.crossTenant && c.tenantID == uuid.Nil {
-		// Mode 1: unscoped cross-tenant admin → no tenant filtering
-	} else if c.tenantID != uuid.Nil {
-		// Event has explicit tenant → must match client's tenant
-		if event.TenantID != uuid.Nil && event.TenantID != c.tenantID {
-			return false
-		}
-		// Event has no tenant → only cross-tenant admin (scoped) can see unscoped events
-		if event.TenantID == uuid.Nil && !c.crossTenant {
-			return false // fail-closed: regular users blocked from unscoped events
-		}
+	// All clients (including owners) always have a concrete tenantID after connect.
+	// Mode 1: Owner role (role=owner) → see tenant X events + system events (tenantID=Nil on event)
+	// Mode 2: Regular client (tenantID=X) → ONLY tenant X events (fail-closed)
+	if c.tenantID == uuid.Nil {
+		return false // fail-closed: no tenant assigned
+	}
+	// Event has explicit tenant → must match client's tenant
+	if event.TenantID != uuid.Nil && event.TenantID != c.tenantID {
+		return false
+	}
+	// Event has no tenant → only owner role can see unscoped events
+	if event.TenantID == uuid.Nil && !c.IsOwner() {
+		return false // fail-closed: regular users blocked from unscoped events
 	}
 
 	// Admin sees everything (when not tenant-scoped, handled above).
