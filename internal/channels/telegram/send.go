@@ -161,6 +161,24 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		}
 	}
 
+	// Captured draft cleanup: if this message follows a DM stream that used the
+	// draft transport, we must clear the stale draft as soon as this bubble is sent.
+	if pID, ok := c.pendingDraftID.LoadAndDelete(localKey); ok {
+		draftID := pID.(int)
+		go func() {
+			params := &telego.SendMessageDraftParams{
+				ChatID:          chatID,
+				DraftID:         draftID,
+				Text:            "",
+				MessageThreadID: resolveThreadIDForSend(threadID),
+			}
+			// Best-effort with Background ctx — caller ctx may already be cancelled.
+			if err := c.bot.SendMessageDraft(context.Background(), params); err != nil {
+				slog.Debug("telegram: draft clear failed (cosmetic)", "chat_id", chatID, "draft_id", draftID, "error", err)
+			}
+		}()
+	}
+
 	// Placeholder update (e.g. LLM retry notification): edit the placeholder
 	// but keep it alive for the final response. Don't stop typing or cleanup.
 	if msg.Metadata["placeholder_update"] == "true" {

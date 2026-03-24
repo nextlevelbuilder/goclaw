@@ -602,6 +602,7 @@ func runGateway() {
 					AgentID:  meta.LeadAgent,
 					UserID:   meta.UserID,
 					Content:  leaderContent,
+					Metadata: map[string]string{"run_kind": tools.RunKindNotification},
 				})
 			} else {
 				msgBus.PublishOutbound(bus.OutboundMessage{
@@ -1056,6 +1057,14 @@ func runGateway() {
 	// Phase 1: suggest localhost binding when Tailscale is active
 	if cfg.Tailscale.Hostname != "" && cfg.Gateway.Host == "0.0.0.0" {
 		slog.Info("Tailscale enabled. Consider setting GOCLAW_HOST=127.0.0.1 for localhost-only + Tailscale access")
+	}
+
+	// Security warnings
+	if strings.Contains(cfg.Database.PostgresDSN, ":goclaw@") {
+		slog.Warn("security.default_db_password: using default Postgres password — run ./prepare-env.sh to generate a strong one")
+	}
+	if len(cfg.Gateway.AllowedOrigins) == 0 {
+		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins for production")
 	}
 
 	if err := server.Start(ctx); err != nil {

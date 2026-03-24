@@ -29,6 +29,7 @@ const (
 	ctxWorkspace   toolContextKey = "tool_workspace"
 	ctxAgentKey    toolContextKey = "tool_agent_key"
 	ctxSessionKey  toolContextKey = "tool_session_key" // origin session key for announce routing
+	ctxRunKind     toolContextKey = "tool_run_kind"    // "notification", "announce", "delegation"
 )
 
 // Well-known channel names used for routing and access control.
@@ -141,6 +142,21 @@ func ToolSessionKeyFromCtx(ctx context.Context) string {
 	v, _ := ctx.Value(ctxSessionKey).(string)
 	return v
 }
+
+// WithRunKind injects the run classification (e.g. "notification") into context.
+func WithRunKind(ctx context.Context, kind string) context.Context {
+	return context.WithValue(ctx, ctxRunKind, kind)
+}
+
+// RunKindFromCtx returns the run kind from context, or empty string.
+func RunKindFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxRunKind).(string)
+	return v
+}
+
+// RunKindNotification is the run kind for team task notification runs.
+// Leader agents in this mode can only relay status — mutations are blocked.
+const RunKindNotification = "notification"
 
 // --- Builtin tool settings (global DB overrides) ---
 

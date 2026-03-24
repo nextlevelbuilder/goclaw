@@ -46,6 +46,7 @@ type Channel struct {
 	pollDone         chan struct{}       // closed when polling goroutine exits
 	handlerWg        sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
 	handlerSem       chan struct{}       // bounded semaphore for concurrent handler goroutines
+	pendingDraftID   sync.Map           // localKey string → int (draftID)
 }
 
 type thinkingCancel struct {

@@ -263,7 +263,12 @@ func handleTeammateMessage(
 		taskRunSessions.Store(taskIDStr, sessionKey)
 	}
 
-	outCh := sched.Schedule(ctx, scheduler.LaneTeam, agent.RunRequest{
+	// Inject action flags into context so team_tasks tool calls record what happened.
+	// The post-turn goroutine reads these flags to decide auto-complete vs skip.
+	taskActionFlags := &tools.TaskActionFlags{}
+	schedCtx := tools.WithTaskActionFlags(ctx, taskActionFlags)
+
+	outCh := sched.Schedule(schedCtx, scheduler.LaneTeam, agent.RunRequest{
 		SessionKey:      sessionKey,
 		Message:         msg.Content,
 		Channel:         origChannel,
@@ -357,7 +362,11 @@ func handleTeammateMessage(
 								taskChatID = currentTask.ChatID
 							}
 						}
-						if outcome.Err != nil {
+						// Smart post-turn decision based on action flags.
+						// Priority: error > completed > escalated > reviewed > progress-only > no-action.
+						switch {
+						case outcome.Err != nil:
+							// Agent errored → auto-fail.
 							if err := teamStore.FailTask(ctx, teamTaskID, teamID, outcome.Err.Error()); err != nil {
 								slog.Warn("auto-complete: FailTask error", "task_id", teamTaskID, "error", err)
 							} else {
@@ -375,30 +384,51 @@ func handleTeammateMessage(
 									ActorID:    toAgent,
 								})
 							}
-						} else if outcome.Result != nil {
-							result := outcome.Result.Content
-							if len(outcome.Result.Deliverables) > 0 {
-								result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
-							}
-							if len(result) > 100_000 {
-								result = result[:100_000] + "\n[truncated]"
-							}
-							if err := teamStore.CompleteTask(ctx, teamTaskID, teamID, result); err != nil {
-								slog.Warn("auto-complete: CompleteTask error", "task_id", teamTaskID, "error", err)
-							} else {
-								bus.BroadcastForTenant(msgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), protocol.TeamTaskEventPayload{
-									TeamID:        teamID.String(),
-									TaskID:        teamTaskID.String(),
-									TaskNumber:    taskNumber,
-									Subject:       taskSubject,
-									Status:        store.TeamTaskStatusCompleted,
-									OwnerAgentKey: toAgent,
-									Channel:       taskChannel,
+
+						case taskActionFlags.Completed || taskActionFlags.Escalated:
+							// Tool already completed/failed the task — skip auto-complete.
+							slog.Info("post-turn: tool handled task", "task_id", teamTaskID,
+								"completed", taskActionFlags.Completed, "escalated", taskActionFlags.Escalated)
+
+						case taskActionFlags.Reviewed:
+							// Task submitted for review — skip auto-complete, renew lock.
+							_ = teamStore.RenewTaskLock(ctx, teamTaskID, teamID)
+							slog.Info("post-turn: task submitted for review", "task_id", teamTaskID)
+
+						case taskActionFlags.Progressed || taskActionFlags.Commented || taskActionFlags.Claimed:
+							// Member interacted but didn't take terminal action — renew lock.
+							_ = teamStore.RenewTaskLock(ctx, teamTaskID, teamID)
+							slog.Warn("post-turn: member did not take terminal action",
+								"task_id", teamTaskID, "progressed", taskActionFlags.Progressed,
+								"commented", taskActionFlags.Commented, "claimed", taskActionFlags.Claimed)
+
+						default:
+							// No task action flags recorded — backward compat: auto-complete.
+							if outcome.Result != nil {
+								result := outcome.Result.Content
+								if len(outcome.Result.Deliverables) > 0 {
+									result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
+								}
+								if len(result) > 100_000 {
+									result = result[:100_000] + "\n[truncated]"
+								}
+								if err := teamStore.CompleteTask(ctx, teamTaskID, teamID, result); err != nil {
+									slog.Warn("auto-complete: CompleteTask error", "task_id", teamTaskID, "error", err)
+								} else {
+									bus.BroadcastForTenant(msgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), protocol.TeamTaskEventPayload{
+										TeamID:        teamID.String(),
+										TaskID:        teamTaskID.String(),
+										TaskNumber:    taskNumber,
+										Subject:       taskSubject,
+										Status:        store.TeamTaskStatusCompleted,
+										OwnerAgentKey: toAgent,
+										Channel:       taskChannel,
 										ChatID:        taskChatID,
 										Timestamp:     now,
 										ActorType:     "agent",
 										ActorID:       toAgent,
-								})
+									})
+								}
 							}
 						}
 					}

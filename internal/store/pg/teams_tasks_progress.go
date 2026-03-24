@@ -78,7 +78,7 @@ func (s *PGTeamStore) RecoverAllStaleTasks(ctx context.Context) ([]store.Recover
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
 		`UPDATE team_tasks t
-		 SET status = $1, owner_agent_id = NULL, locked_at = NULL, lock_expires_at = NULL,
+		 SET status = $1, locked_at = NULL, lock_expires_at = NULL,
 		     followup_at = NULL, followup_count = 0, followup_message = NULL,
 		     followup_channel = NULL, followup_chat_id = NULL, updated_at = $2
 		 FROM agent_teams tm
@@ -101,7 +101,7 @@ func (s *PGTeamStore) ForceRecoverAllTasks(ctx context.Context) ([]store.Recover
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
 		`UPDATE team_tasks t
-		 SET status = $1, owner_agent_id = NULL, locked_at = NULL, lock_expires_at = NULL,
+		 SET status = $1, locked_at = NULL, lock_expires_at = NULL,
 		     followup_at = NULL, followup_count = 0, followup_message = NULL,
 		     followup_channel = NULL, followup_chat_id = NULL, updated_at = $2
 		 FROM agent_teams tm
@@ -162,6 +162,54 @@ func (s *PGTeamStore) MarkAllStaleTasks(ctx context.Context, olderThan time.Time
 	return scanRecoveredTaskInfoRows(rows)
 }
 
+// MarkInReviewStaleTasks marks in_review tasks older than olderThan as stale across all v2 active teams.
+func (s *PGTeamStore) MarkInReviewStaleTasks(ctx context.Context, olderThan time.Time) ([]store.RecoveredTaskInfo, error) {
+	now := time.Now()
+	rows, err := s.db.QueryContext(ctx,
+		`UPDATE team_tasks t
+		 SET status = $1, updated_at = $2
+		 FROM agent_teams tm
+		 WHERE t.team_id = tm.id AND tm.status = 'active'
+		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
+		   AND t.status = $3 AND t.updated_at < $4
+		 RETURNING t.id, t.team_id, t.tenant_id, t.task_number, t.subject, COALESCE(t.channel, ''), COALESCE(t.chat_id, '')`,
+		store.TeamTaskStatusStale, now, store.TeamTaskStatusInReview, olderThan,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecoveredTaskInfoRows(rows)
+}
+
+// FixOrphanedBlockedTasks unblocks blocked tasks where all blockers have reached terminal status.
+// Safety net for cases where unblockDependentTasks() transaction rolled back.
+func (s *PGTeamStore) FixOrphanedBlockedTasks(ctx context.Context) ([]store.RecoveredTaskInfo, error) {
+	now := time.Now()
+	rows, err := s.db.QueryContext(ctx,
+		`UPDATE team_tasks t
+		 SET blocked_by = '{}', status = $1, updated_at = $2
+		 FROM agent_teams tm
+		 WHERE t.team_id = tm.id AND tm.status = 'active'
+		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
+		   AND t.status = 'blocked'
+		   AND array_length(t.blocked_by, 1) > 0
+		   AND NOT EXISTS (
+		     SELECT 1 FROM unnest(t.blocked_by) AS bid(id)
+		     JOIN team_tasks bt ON bt.id = bid.id AND bt.tenant_id = t.tenant_id
+		     WHERE bt.status NOT IN ($3, $4, $5)
+		   )
+		 RETURNING t.id, t.team_id, t.tenant_id, t.task_number, t.subject, COALESCE(t.channel, ''), COALESCE(t.chat_id, '')`,
+		store.TeamTaskStatusPending, now,
+		store.TeamTaskStatusCompleted, store.TeamTaskStatusFailed, store.TeamTaskStatusCancelled,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRecoveredTaskInfoRows(rows)
+}
+
 func scanRecoveredTaskInfoRows(rows interface {
 	Next() bool
 	Scan(...any) error
@@ -187,9 +235,10 @@ func (s *PGTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uuid.U
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, locked_at = NULL, lock_expires_at = NULL, result = NULL,
 		 progress_percent = NULL, progress_step = NULL, updated_at = $2
-		 WHERE id = $3 AND team_id = $4 AND status IN ($5, $6) AND tenant_id = $7`,
+		 WHERE id = $3 AND team_id = $4 AND status IN ($5, $6, $7, $8) AND tenant_id = $9`,
 		store.TeamTaskStatusPending, now,
-		taskID, teamID, store.TeamTaskStatusStale, store.TeamTaskStatusFailed, tid,
+		taskID, teamID, store.TeamTaskStatusStale, store.TeamTaskStatusFailed,
+		store.TeamTaskStatusCancelled, store.TeamTaskStatusInReview, tid,
 	)
 	if err != nil {
 		return err
@@ -199,7 +248,7 @@ func (s *PGTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uuid.U
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("task not available for reset (not stale/failed or wrong team)")
+		return fmt.Errorf("task not available for reset (not stale/failed/cancelled/in_review or wrong team)")
 	}
 	return nil
 }

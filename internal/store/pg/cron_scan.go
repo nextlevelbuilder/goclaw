@@ -60,7 +60,11 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	}
 
 	var payload store.CronPayload
-	json.Unmarshal(payloadJSON, &payload)
+	if len(payloadJSON) > 0 {
+		if err := json.Unmarshal(payloadJSON, &payload); err != nil {
+			return nil, fmt.Errorf("failed to parse cron job payload: %w", err)
+		}
+	}
 
 	job := &store.CronJob{
 		ID:       id.String(),

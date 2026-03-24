@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -23,6 +24,8 @@ func (t *TeamTasksTool) executeClaim(ctx context.Context, args map[string]any) *
 	if err := t.manager.teamStore.ClaimTask(ctx, taskID, agentID, team.ID); err != nil {
 		return ErrorResult("failed to claim task: " + err.Error())
 	}
+	// Record action flag after successful store operation.
+	recordTaskAction(ctx, func(f *TaskActionFlags) { f.Claimed = true })
 
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
 	t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskClaimed, protocol.TeamTaskEventPayload{
@@ -70,6 +73,8 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	if err := t.manager.teamStore.CompleteTask(ctx, taskID, team.ID, result); err != nil {
 		return ErrorResult("failed to complete task: " + err.Error())
 	}
+	// Record action flag after successful store operation.
+	recordTaskAction(ctx, func(f *TaskActionFlags) { f.Completed = true })
 
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
 	// Fetch task for TaskNumber/Subject needed by notification subscriber.
@@ -173,6 +178,8 @@ func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) 
 	if err := t.manager.teamStore.ReviewTask(ctx, taskID, team.ID); err != nil {
 		return ErrorResult("failed to submit for review: " + err.Error())
 	}
+	// Record action flag after successful store operation.
+	recordTaskAction(ctx, func(f *TaskActionFlags) { f.Reviewed = true })
 
 	ownerKey := t.manager.agentKeyFromID(ctx, agentID)
 	t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskReviewed, protocol.TeamTaskEventPayload{
@@ -294,16 +301,71 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		return ErrorResult("task does not belong to your team")
 	}
 
-	// Reuse CancelTask (handles unblocking dependents, guards against completed)
-	if err := t.manager.teamStore.CancelTask(ctx, taskID, team.ID, reason); err != nil {
-		return ErrorResult("failed to reject task: " + err.Error())
+	// Record rejection as a task comment for audit trail (before status change).
+	rejectMsg := fmt.Sprintf("Task rejected. Reason: %s", reason)
+	_ = t.manager.teamStore.AddTaskComment(ctx, &store.TeamTaskCommentData{
+		TaskID:  taskID,
+		AgentID: &agentID,
+		Content: rejectMsg,
+	})
+
+	// Auto re-dispatch if task has an owner: skip RejectTask (which unblocks dependents)
+	// and instead reset in_review → pending → in_progress → dispatch.
+	// Dependents stay blocked until this task actually completes or circuit breaker fails it.
+	if task.OwnerAgentID != nil {
+		// Reset in_review → pending (ResetTaskStatus accepts in_review via store guard).
+		if err := t.manager.teamStore.ResetTaskStatus(ctx, taskID, team.ID); err != nil {
+			// Fallback: use RejectTask (cancels + unblocks) if reset fails.
+			slog.Warn("reject: reset failed, falling back to RejectTask", "task_id", taskID, "error", err)
+			if err := t.manager.teamStore.RejectTask(ctx, taskID, team.ID, reason); err != nil {
+				return ErrorResult("failed to reject task: " + err.Error())
+			}
+			t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskRejected, protocol.TeamTaskEventPayload{
+				TeamID:    team.ID.String(),
+				TaskID:    taskID.String(),
+				Subject:   task.Subject,
+				Status:    store.TeamTaskStatusCancelled,
+				Reason:    reason,
+				UserID:    store.UserIDFromContext(ctx),
+				Channel:   ToolChannelFromCtx(ctx),
+				ChatID:    ToolChatIDFromCtx(ctx),
+				Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+				ActorType: "agent",
+				ActorID:   t.manager.agentKeyFromID(ctx, agentID),
+			})
+			return NewResult(fmt.Sprintf("Task %s rejected (cancelled). Use retry to re-dispatch manually.", taskID))
+		}
+		if err := t.manager.teamStore.AssignTask(ctx, taskID, *task.OwnerAgentID, team.ID); err != nil {
+			slog.Warn("reject: assign task failed", "task_id", taskID, "error", err)
+			return NewResult(fmt.Sprintf("Task %s rejected but could not assign. Use retry to re-dispatch manually.", taskID))
+		}
+		t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskRejected, protocol.TeamTaskEventPayload{
+			TeamID:    team.ID.String(),
+			TaskID:    taskID.String(),
+			Subject:   task.Subject,
+			Status:    store.TeamTaskStatusInProgress,
+			Reason:    reason,
+			UserID:    store.UserIDFromContext(ctx),
+			Channel:   ToolChannelFromCtx(ctx),
+			ChatID:    ToolChatIDFromCtx(ctx),
+			Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+			ActorType: "agent",
+			ActorID:   t.manager.agentKeyFromID(ctx, agentID),
+		})
+		t.manager.dispatchTaskToAgent(ctx, task, team, *task.OwnerAgentID)
+		return NewResult(fmt.Sprintf("Task %s rejected and re-dispatched to %s with feedback.",
+			taskID, t.manager.agentKeyFromID(ctx, *task.OwnerAgentID)))
 	}
 
+	// No owner — use RejectTask to cancel + unblock dependents.
+	if err := t.manager.teamStore.RejectTask(ctx, taskID, team.ID, reason); err != nil {
+		return ErrorResult("failed to reject task: " + err.Error())
+	}
 	t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskRejected, protocol.TeamTaskEventPayload{
 		TeamID:    team.ID.String(),
 		TaskID:    taskID.String(),
 		Subject:   task.Subject,
-		Status:    "cancelled",
+		Status:    store.TeamTaskStatusCancelled,
 		Reason:    reason,
 		UserID:    store.UserIDFromContext(ctx),
 		Channel:   ToolChannelFromCtx(ctx),
@@ -312,14 +374,5 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		ActorType: "agent",
 		ActorID:   t.manager.agentKeyFromID(ctx, agentID),
 	})
-
-	// Record rejection as a task comment for audit trail.
-	rejectMsg := fmt.Sprintf("Task rejected. Reason: %s", reason)
-	_ = t.manager.teamStore.AddTaskComment(ctx, &store.TeamTaskCommentData{
-		TaskID:  taskID,
-		AgentID: &agentID,
-		Content: rejectMsg,
-	})
-
-	return NewResult(fmt.Sprintf("Task %s rejected. Dependent tasks have been unblocked.", taskID))
+	return NewResult(fmt.Sprintf("Task %s rejected.", taskID))
 }

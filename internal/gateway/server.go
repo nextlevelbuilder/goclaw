@@ -312,17 +312,22 @@ func (s *Server) BuildMux() *http.ServeMux {
 
 	// MCP bridge: expose GoClaw tools to Claude CLI via streamable-http.
 	// Only listens on localhost (CLI runs on the same machine).
-	// Protected by gateway token when configured.
-	// Agent context (X-Agent-ID, X-User-ID) is injected from request headers.
+	// Protected by gateway token; disabled when no token is configured to
+	// prevent unauthenticated tool invocations if port is exposed.
 	if s.tools != nil {
-		bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
-		var handler http.Handler = bridgeContextMiddleware(s.cfg.Gateway.Token, bridgeHandler)
 		if s.cfg.Gateway.Token != "" {
-			handler = tokenAuthMiddleware(s.cfg.Gateway.Token, handler)
+			bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
+			handler := tokenAuthMiddleware(s.cfg.Gateway.Token,
+				bridgeContextMiddleware(s.cfg.Gateway.Token, bridgeHandler))
+			mux.Handle("/mcp/bridge", handler)
 		} else {
-			slog.Warn("security.mcp_bridge: no gateway token configured, MCP bridge tools are unauthenticated")
+			slog.Warn("security.mcp_bridge_disabled: no gateway token configured, MCP bridge is disabled")
+			mux.HandleFunc("/mcp/bridge", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":"mcp bridge disabled: set GOCLAW_GATEWAY_TOKEN to enable"}`))
+			})
 		}
-		mux.Handle("/mcp/bridge", handler)
 	}
 
 	s.mux = mux

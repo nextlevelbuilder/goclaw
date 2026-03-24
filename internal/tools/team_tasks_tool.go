@@ -101,6 +101,16 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Result {
 	action, _ := args["action"].(string)
 
+	// Block mutations during notification runs — leader may only relay status.
+	if RunKindFromCtx(ctx) == RunKindNotification {
+		switch action {
+		case "list", "get", "search":
+			// Read-only actions allowed.
+		default:
+			return ErrorResult("This is a notification run. Your role is to relay task status to the user in a natural, conversational style. Do not modify tasks.")
+		}
+	}
+
 	switch action {
 	case "list":
 		return t.executeList(ctx, args)

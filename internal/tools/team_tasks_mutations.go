@@ -343,6 +343,14 @@ func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any)
 		ActorID:     t.manager.agentKeyFromID(ctx, agentID),
 	})
 
+	// Record action flag after successful store operation.
+	recordTaskAction(ctx, func(f *TaskActionFlags) {
+		f.Commented = true
+		if commentType == "blocker" {
+			f.Escalated = true
+		}
+	})
+
 	// Blocker escalation: auto-fail task + notify leader.
 	if commentType == "blocker" {
 		return t.handleBlockerComment(ctx, team, task, taskID, agentID, text)
@@ -404,6 +412,8 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 	if err := t.manager.teamStore.UpdateTaskProgress(ctx, taskID, team.ID, percent, step); err != nil {
 		return ErrorResult("failed to update progress: " + err.Error())
 	}
+	// Record action flag after successful store operation.
+	recordTaskAction(ctx, func(f *TaskActionFlags) { f.Progressed = true })
 
 	ownerKey := ""
 	if task.OwnerAgentID != nil {

@@ -315,6 +315,11 @@ func processNormalMessage(
 	ptd := tools.NewPendingTeamDispatch()
 	schedCtx := tools.WithPendingTeamDispatch(ctx, ptd)
 
+	// Propagate run_kind from metadata (e.g. "notification" for team task status relays).
+	if rk := msg.Metadata["run_kind"]; rk != "" {
+		schedCtx = tools.WithRunKind(schedCtx, rk)
+	}
+
 	// Schedule through main lane (per-session concurrency controlled by maxConcurrent)
 	outCh := sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
 		SessionKey:        sessionKey,
