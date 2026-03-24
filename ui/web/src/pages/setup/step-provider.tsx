@@ -50,7 +50,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const handleTypeChange = (value: string) => {
     setProviderType(value);
     const preset = PROVIDER_TYPES.find((t) => t.value === value);
-    setName(value === "chatgpt_oauth" ? "openai-codex" : slugify(value));
+    setName(value === "chatgpt_oauth" ? (name || "openai-codex") : slugify(value));
     setApiBase(preset?.apiBase || "");
     setApiKey("");
     setError("");
@@ -68,7 +68,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
     setError("");
     try {
       const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
-      const provider = res.providers?.find((p) => p.provider_type === "chatgpt_oauth" && p.name === "openai-codex");
+      const provider = res.providers?.find((p) => p.provider_type === "chatgpt_oauth" && p.name === name.trim());
       if (!provider) {
         setError(t("provider.errors.oauthProviderNotFound"));
         return;
@@ -152,13 +152,14 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
               <Input
                 value={name}
                 onChange={(e) => setName(slugify(e.target.value))}
-                disabled={isOAuth}
               />
             </div>
           </div>
 
           {isOAuth ? (
             <OAuthSection
+              providerName={name}
+              apiBase={apiBase}
               onSuccess={handleOAuthSuccess}
               authenticatedActionLabel={t("model.continue")}
             />

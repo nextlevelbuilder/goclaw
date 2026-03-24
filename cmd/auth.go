@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/spf13/cobra"
 )
 
@@ -74,21 +76,26 @@ func gatewayRequest(method, path string) (map[string]any, error) {
 
 func authStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
+		Use:   "status [provider]",
 		Short: "Show OAuth authentication status",
 		Long:  "Check if ChatGPT OAuth is configured on the running gateway.",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := gatewayRequest("GET", "/v1/auth/openai/status")
+			provider := resolveOAuthProviderArg(args)
+			result, err := gatewayRequest("GET", fmt.Sprintf("/v1/auth/chatgpt/%s/status", url.PathEscape(provider)))
 			if err != nil {
 				return err
 			}
 
 			if auth, _ := result["authenticated"].(bool); auth {
 				name, _ := result["provider_name"].(string)
+				if name == "" {
+					name = provider
+				}
 				fmt.Printf("OpenAI OAuth: active (provider: %s)\n", name)
-				fmt.Println("Use model prefix 'openai-codex/' in agent config (e.g. openai-codex/gpt-4o).")
+				fmt.Printf("Use model prefix '%s/' in agent config (e.g. %s/gpt-5.4).\n", name, name)
 			} else {
-				fmt.Println("No OAuth tokens found.")
+				fmt.Printf("No OAuth tokens found for provider '%s'.\n", provider)
 				fmt.Println("Use the web UI to authenticate with ChatGPT OAuth.")
 			}
 			return nil
@@ -102,22 +109,25 @@ func authLogoutCmd() *cobra.Command {
 		Short: "Remove stored OAuth tokens",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			provider := "openai"
-			if len(args) > 0 {
-				provider = args[0]
-			}
-
-			if provider != "openai" {
-				return fmt.Errorf("unknown provider: %s (supported: openai)", provider)
-			}
-
-			_, err := gatewayRequest("POST", "/v1/auth/openai/logout")
+			provider := resolveOAuthProviderArg(args)
+			_, err := gatewayRequest("POST", fmt.Sprintf("/v1/auth/chatgpt/%s/logout", url.PathEscape(provider)))
 			if err != nil {
 				return err
 			}
 
-			fmt.Println("OpenAI OAuth token removed.")
+			fmt.Printf("OpenAI OAuth token removed for provider '%s'.\n", provider)
 			return nil
 		},
 	}
+}
+
+func resolveOAuthProviderArg(args []string) string {
+	if len(args) == 0 {
+		return oauth.DefaultProviderName
+	}
+	provider := strings.TrimSpace(args[0])
+	if provider == "" || provider == "openai" {
+		return oauth.DefaultProviderName
+	}
+	return provider
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +17,12 @@ import (
 const (
 	// DefaultProviderName is the provider name for ChatGPT OAuth.
 	DefaultProviderName = "openai-codex"
+
+	// DefaultProviderDisplayName is the default display name for ChatGPT OAuth providers.
+	DefaultProviderDisplayName = "ChatGPT (OAuth)"
+
+	// DefaultProviderAPIBase is the default API base for ChatGPT OAuth providers.
+	DefaultProviderAPIBase = "https://chatgpt.com/backend-api"
 
 	// refreshTokenSecretKey is the config_secrets key for the refresh token.
 	refreshTokenSecretKey = "oauth.openai-codex.refresh_token"
@@ -30,6 +37,17 @@ type OAuthSettings struct {
 	Scopes    string `json:"scopes,omitempty"`
 }
 
+// ProviderTypeConflictError reports that the requested OAuth provider name is
+// already taken by a different provider type.
+type ProviderTypeConflictError struct {
+	ProviderName string
+	ProviderType string
+}
+
+func (e *ProviderTypeConflictError) Error() string {
+	return fmt.Sprintf("provider %q already exists as type %q", e.ProviderName, e.ProviderType)
+}
+
 // DBTokenSource provides a valid access token backed by the llm_providers + config_secrets tables.
 // Implements providers.TokenSource.
 type DBTokenSource struct {
@@ -38,6 +56,9 @@ type DBTokenSource struct {
 	providerName  string
 	tenantID      uuid.UUID // tenant context for DB queries
 
+	providerDisplayName string
+	providerAPIBase     string
+
 	mu          sync.Mutex
 	cachedToken string
 	expiresAt   time.Time
@@ -45,6 +66,9 @@ type DBTokenSource struct {
 
 // NewDBTokenSource creates a DB-backed token source.
 func NewDBTokenSource(provStore store.ProviderStore, secretsStore store.ConfigSecretsStore, providerName string) *DBTokenSource {
+	if strings.TrimSpace(providerName) == "" {
+		providerName = DefaultProviderName
+	}
 	return &DBTokenSource{
 		providerStore: provStore,
 		secretsStore:  secretsStore,
@@ -57,6 +81,54 @@ func NewDBTokenSource(provStore store.ProviderStore, secretsStore store.ConfigSe
 func (ts *DBTokenSource) WithTenantID(tenantID uuid.UUID) *DBTokenSource {
 	ts.tenantID = tenantID
 	return ts
+}
+
+// WithProviderMeta sets defaults used when creating or updating OAuth-backed providers.
+func (ts *DBTokenSource) WithProviderMeta(displayName, apiBase string) *DBTokenSource {
+	if strings.TrimSpace(displayName) != "" {
+		ts.providerDisplayName = strings.TrimSpace(displayName)
+	}
+	if strings.TrimSpace(apiBase) != "" {
+		ts.providerAPIBase = strings.TrimSpace(apiBase)
+	}
+	return ts
+}
+
+func (ts *DBTokenSource) resolvedDisplayName() string {
+	if ts.providerDisplayName != "" {
+		return ts.providerDisplayName
+	}
+	return DefaultProviderDisplayName
+}
+
+func (ts *DBTokenSource) resolvedAPIBase() string {
+	if ts.providerAPIBase != "" {
+		return ts.providerAPIBase
+	}
+	return DefaultProviderAPIBase
+}
+
+// RefreshTokenSecretKey returns the tenant-scoped secret key for a provider refresh token.
+func RefreshTokenSecretKey(providerName string) string {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" || providerName == DefaultProviderName {
+		return refreshTokenSecretKey
+	}
+	return fmt.Sprintf("oauth.%s.refresh_token", providerName)
+}
+
+func (ts *DBTokenSource) loadOAuthProvider(ctx context.Context) (*store.LLMProviderData, error) {
+	p, err := ts.providerStore.GetProviderByName(ctx, ts.providerName)
+	if err != nil {
+		return nil, err
+	}
+	if p.ProviderType != store.ProviderChatGPTOAuth {
+		return nil, &ProviderTypeConflictError{
+			ProviderName: ts.providerName,
+			ProviderType: p.ProviderType,
+		}
+	}
+	return p, nil
 }
 
 // Token returns a valid access token, refreshing if expired or about to expire.
@@ -73,7 +145,7 @@ func (ts *DBTokenSource) Token() (string, error) {
 
 	// Load from DB if not cached
 	if ts.cachedToken == "" {
-		p, err := ts.providerStore.GetProviderByName(ctx, ts.providerName)
+		p, err := ts.loadOAuthProvider(ctx)
 		if err != nil {
 			return "", fmt.Errorf("load oauth provider %q: %w", ts.providerName, err)
 		}
@@ -105,7 +177,7 @@ func (ts *DBTokenSource) Token() (string, error) {
 
 // refresh gets the refresh token from config_secrets, calls RefreshOpenAIToken, and updates DB.
 func (ts *DBTokenSource) refresh(ctx context.Context) error {
-	refreshToken, err := ts.secretsStore.Get(ctx, refreshTokenSecretKey)
+	refreshToken, err := ts.secretsStore.Get(ctx, RefreshTokenSecretKey(ts.providerName))
 	if err != nil {
 		return fmt.Errorf("get refresh token: %w", err)
 	}
@@ -121,7 +193,7 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 	ts.expiresAt = time.Now().Add(time.Duration(newToken.ExpiresIn) * time.Second)
 
 	// Update provider api_key (access token) in DB
-	p, err := ts.providerStore.GetProviderByName(ctx, ts.providerName)
+	p, err := ts.loadOAuthProvider(ctx)
 	if err != nil {
 		return fmt.Errorf("get provider for update: %w", err)
 	}
@@ -140,7 +212,7 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 
 	// Update refresh token if a new one was issued
 	if newToken.RefreshToken != "" {
-		if err := ts.secretsStore.Set(ctx, refreshTokenSecretKey, newToken.RefreshToken); err != nil {
+		if err := ts.secretsStore.Set(ctx, RefreshTokenSecretKey(ts.providerName), newToken.RefreshToken); err != nil {
 			slog.Warn("failed to persist new refresh token", "error", err)
 		}
 	}
@@ -166,33 +238,43 @@ func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAIT
 	ts.mu.Unlock()
 
 	// Check if provider already exists
-	existing, err := ts.providerStore.GetProviderByName(ctx, ts.providerName)
+	existing, err := ts.loadOAuthProvider(ctx)
 	if err == nil {
 		// Update existing provider
-		if err := ts.providerStore.UpdateProvider(ctx, existing.ID, map[string]any{
+		updates := map[string]any{
 			"api_key":  tokenResp.AccessToken,
 			"settings": json.RawMessage(settingsJSON),
 			"enabled":  true,
-		}); err != nil {
+		}
+		if ts.providerDisplayName != "" {
+			updates["display_name"] = ts.providerDisplayName
+		}
+		if ts.providerAPIBase != "" {
+			updates["api_base"] = ts.providerAPIBase
+		}
+		if err := ts.providerStore.UpdateProvider(ctx, existing.ID, updates); err != nil {
 			return uuid.Nil, fmt.Errorf("update provider: %w", err)
 		}
 
 		// Save refresh token
 		if tokenResp.RefreshToken != "" {
-			if err := ts.secretsStore.Set(ctx, refreshTokenSecretKey, tokenResp.RefreshToken); err != nil {
+			if err := ts.secretsStore.Set(ctx, RefreshTokenSecretKey(ts.providerName), tokenResp.RefreshToken); err != nil {
 				return uuid.Nil, fmt.Errorf("save refresh token: %w", err)
 			}
 		}
 
 		return existing.ID, nil
 	}
+	if _, ok := err.(*ProviderTypeConflictError); ok {
+		return uuid.Nil, err
+	}
 
 	// Create new provider
 	p := &store.LLMProviderData{
 		Name:         ts.providerName,
-		DisplayName:  "ChatGPT (OAuth)",
+		DisplayName:  ts.resolvedDisplayName(),
 		ProviderType: store.ProviderChatGPTOAuth,
-		APIBase:      "https://chatgpt.com/backend-api",
+		APIBase:      ts.resolvedAPIBase(),
 		APIKey:       tokenResp.AccessToken,
 		Enabled:      true,
 		Settings:     settingsJSON,
@@ -203,7 +285,7 @@ func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAIT
 
 	// Save refresh token
 	if tokenResp.RefreshToken != "" {
-		if err := ts.secretsStore.Set(ctx, refreshTokenSecretKey, tokenResp.RefreshToken); err != nil {
+		if err := ts.secretsStore.Set(ctx, RefreshTokenSecretKey(ts.providerName), tokenResp.RefreshToken); err != nil {
 			return uuid.Nil, fmt.Errorf("save refresh token: %w", err)
 		}
 	}
@@ -219,11 +301,14 @@ func (ts *DBTokenSource) Delete(ctx context.Context) error {
 	ts.mu.Unlock()
 
 	// Delete refresh token from config_secrets
-	_ = ts.secretsStore.Delete(ctx, refreshTokenSecretKey)
+	_ = ts.secretsStore.Delete(ctx, RefreshTokenSecretKey(ts.providerName))
 
 	// Delete provider from llm_providers
-	p, err := ts.providerStore.GetProviderByName(ctx, ts.providerName)
+	p, err := ts.loadOAuthProvider(ctx)
 	if err != nil {
+		if _, ok := err.(*ProviderTypeConflictError); ok {
+			return err
+		}
 		return nil // already gone
 	}
 	return ts.providerStore.DeleteProvider(ctx, p.ID)
@@ -231,6 +316,6 @@ func (ts *DBTokenSource) Delete(ctx context.Context) error {
 
 // Exists checks if an OAuth provider exists and has a valid token.
 func (ts *DBTokenSource) Exists(ctx context.Context) bool {
-	p, err := ts.providerStore.GetProviderByName(ctx, ts.providerName)
+	p, err := ts.loadOAuthProvider(ctx)
 	return err == nil && p.APIKey != ""
 }

@@ -134,8 +134,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
               const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
               setApiBase(preset?.apiBase || "");
               if (v === "chatgpt_oauth") {
-                setName("openai-codex");
-                setDisplayName("ChatGPT (OAuth)");
+                if (!name) setName("openai-codex");
+                if (!displayName) setDisplayName("ChatGPT (OAuth)");
               } else {
                 if (name === "openai-codex") setName("");
                 if (displayName === "ChatGPT (OAuth)") setDisplayName("");
@@ -147,15 +147,33 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>{t("form.nameFixed")}</Label>
-                  <Input value="openai-codex" disabled className="text-base md:text-sm" />
+                  <Label htmlFor="oauth-name">{t("form.name")}</Label>
+                  <Input
+                    id="oauth-name"
+                    value={name}
+                    onChange={(e) => setName(slugify(e.target.value))}
+                    placeholder={t("form.namePlaceholder")}
+                    className="text-base md:text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">{t("form.nameHint")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("form.displayName")}</Label>
-                  <Input value="ChatGPT (OAuth)" disabled className="text-base md:text-sm" />
+                  <Label htmlFor="oauth-display-name">{t("form.displayName")}</Label>
+                  <Input
+                    id="oauth-display-name"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder={t("form.displayNamePlaceholder")}
+                    className="text-base md:text-sm"
+                  />
                 </div>
               </div>
-              <OAuthSection onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }} />
+              <OAuthSection
+                providerName={name}
+                displayName={displayName}
+                apiBase={apiBase}
+                onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }}
+              />
             </>
           ) : (
             <>

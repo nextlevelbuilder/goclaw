@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -253,6 +254,52 @@ func TestDBTokenSourceDelete(t *testing.T) {
 	}
 }
 
+func TestDBTokenSourceExistsIgnoresNonOAuthProvider(t *testing.T) {
+	provStore := newMockProviderStore()
+	secretStore := newMockSecretsStore()
+	ctx := context.Background()
+
+	if err := provStore.CreateProvider(ctx, &store.LLMProviderData{
+		Name:         DefaultProviderName,
+		ProviderType: store.ProviderOpenRouter,
+		APIKey:       "sk-live",
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	ts := NewDBTokenSource(provStore, secretStore, DefaultProviderName)
+	if ts.Exists(ctx) {
+		t.Fatal("Exists() = true, want false for non-chatgpt_oauth provider")
+	}
+}
+
+func TestDBTokenSourceSaveOAuthResultRejectsProviderTypeConflict(t *testing.T) {
+	provStore := newMockProviderStore()
+	secretStore := newMockSecretsStore()
+	ctx := context.Background()
+
+	if err := provStore.CreateProvider(ctx, &store.LLMProviderData{
+		Name:         DefaultProviderName,
+		ProviderType: store.ProviderOpenRouter,
+		APIKey:       "sk-live",
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	ts := NewDBTokenSource(provStore, secretStore, DefaultProviderName)
+	_, err := ts.SaveOAuthResult(ctx, &OpenAITokenResponse{
+		AccessToken:  "oauth-token",
+		RefreshToken: "refresh-token",
+		ExpiresIn:    3600,
+	})
+	var conflict *ProviderTypeConflictError
+	if err == nil || !errors.As(err, &conflict) {
+		t.Fatalf("SaveOAuthResult() error = %v, want ProviderTypeConflictError", err)
+	}
+}
+
 func TestDBTokenSourceUpdateExisting(t *testing.T) {
 	provStore := newMockProviderStore()
 	secretStore := newMockSecretsStore()
@@ -320,5 +367,46 @@ func TestDBTokenSourceSettings(t *testing.T) {
 	expectedMin := time.Now().Add(3600 * time.Second).Unix()
 	if settings.ExpiresAt < expectedMin-5 {
 		t.Errorf("ExpiresAt = %d, expected >= %d", settings.ExpiresAt, expectedMin-5)
+	}
+}
+
+func TestDBTokenSourceProviderScopedRefreshTokens(t *testing.T) {
+	provStore := newMockProviderStore()
+	secretStore := newMockSecretsStore()
+	ctx := context.Background()
+
+	first := NewDBTokenSource(provStore, secretStore, "codex-work")
+	second := NewDBTokenSource(provStore, secretStore, "codex-personal")
+
+	if _, err := first.SaveOAuthResult(ctx, &OpenAITokenResponse{
+		AccessToken:  "token-work",
+		RefreshToken: "refresh-work",
+		ExpiresIn:    3600,
+	}); err != nil {
+		t.Fatalf("SaveOAuthResult work: %v", err)
+	}
+
+	if _, err := second.SaveOAuthResult(ctx, &OpenAITokenResponse{
+		AccessToken:  "token-personal",
+		RefreshToken: "refresh-personal",
+		ExpiresIn:    3600,
+	}); err != nil {
+		t.Fatalf("SaveOAuthResult personal: %v", err)
+	}
+
+	workToken, err := secretStore.Get(ctx, RefreshTokenSecretKey("codex-work"))
+	if err != nil {
+		t.Fatalf("Get work refresh token: %v", err)
+	}
+	if workToken != "refresh-work" {
+		t.Fatalf("work refresh token = %q, want %q", workToken, "refresh-work")
+	}
+
+	personalToken, err := secretStore.Get(ctx, RefreshTokenSecretKey("codex-personal"))
+	if err != nil {
+		t.Fatalf("Get personal refresh token: %v", err)
+	}
+	if personalToken != "refresh-personal" {
+		t.Fatalf("personal refresh token = %q, want %q", personalToken, "refresh-personal")
 	}
 }

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ExternalLink, CheckCircle, ClipboardPaste } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
+import { isValidSlug } from "@/lib/slug";
 import { toast } from "@/stores/use-toast-store";
 import i18next from "i18next";
 
@@ -21,11 +22,22 @@ interface StartResponse {
 interface OAuthSectionProps {
   onSuccess: () => void;
   authenticatedActionLabel?: string;
+  providerName?: string;
+  displayName?: string;
+  apiBase?: string;
 }
 
-export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSectionProps) {
+export function OAuthSection({
+  onSuccess,
+  authenticatedActionLabel,
+  providerName,
+  displayName,
+  apiBase,
+}: OAuthSectionProps) {
   const { t } = useTranslation("providers");
   const http = useHttp();
+  const resolvedProviderName = providerName?.trim() ?? "";
+  const hasValidProvider = resolvedProviderName.length > 0 && isValidSlug(resolvedProviderName);
   const [status, setStatus] = useState<OAuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -43,8 +55,13 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
   };
 
   const fetchStatus = useCallback(async () => {
+    if (!hasValidProvider) {
+      setStatus(null);
+      setLoading(false);
+      return null;
+    }
     try {
-      const res = await http.get<OAuthStatus>("/v1/auth/openai/status");
+      const res = await http.get<OAuthStatus>(`/v1/auth/chatgpt/${encodeURIComponent(resolvedProviderName)}/status`);
       setStatus(res);
       return res;
     } catch {
@@ -53,7 +70,7 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
     } finally {
       setLoading(false);
     }
-  }, [http]);
+  }, [hasValidProvider, http, resolvedProviderName]);
 
   useEffect(() => {
     fetchStatus();
@@ -83,9 +100,13 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
   };
 
   const handleStart = async () => {
+    if (!hasValidProvider) return;
     setStarting(true);
     try {
-      const res = await http.post<StartResponse>("/v1/auth/openai/start");
+      const res = await http.post<StartResponse>(`/v1/auth/chatgpt/${encodeURIComponent(resolvedProviderName)}/start`, {
+        display_name: displayName?.trim() || undefined,
+        api_base: apiBase?.trim() || undefined,
+      });
       if (res.status === "already_authenticated") {
         await fetchStatus();
         showSuccess();
@@ -116,10 +137,10 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
 
   const handlePasteSubmit = async () => {
     const url = pasteUrl.trim();
-    if (!url) return;
+    if (!url || !hasValidProvider) return;
     setSubmitting(true);
     try {
-      await http.post("/v1/auth/openai/callback", { redirect_url: url });
+      await http.post(`/v1/auth/chatgpt/${encodeURIComponent(resolvedProviderName)}/callback`, { redirect_url: url });
       stopPolling();
       setPasteUrl("");
       await fetchStatus();
@@ -132,8 +153,9 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
   };
 
   const handleLogout = async () => {
+    if (!hasValidProvider) return;
     try {
-      await http.post("/v1/auth/openai/logout");
+      await http.post(`/v1/auth/chatgpt/${encodeURIComponent(resolvedProviderName)}/logout`);
       setStatus({ authenticated: false });
       toast.success(i18next.t("providers:oauth.loggedOut"), i18next.t("providers:oauth.loggedOutDesc"));
     } catch (err) {
@@ -151,6 +173,7 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
 
   // Just authenticated — show success with countdown
   if (justAuthenticated) {
+    const activeProvider = status?.provider_name || resolvedProviderName;
     return (
       <div className="space-y-3 py-2">
         <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/5 px-4 py-3 text-sm text-green-700 dark:text-green-400">
@@ -158,7 +181,7 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
           <div>
             <p className="font-medium">{t("oauth.authSuccessful")}</p>
             <p className="text-xs mt-0.5 opacity-80">
-              {t("oauth.activeProvider")} <code className="rounded bg-muted px-1 font-mono text-xs">openai-codex</code>{" "}
+              {t("oauth.activeProvider")} <code className="rounded bg-muted px-1 font-mono text-xs">{activeProvider}</code>{" "}
               {t("oauth.closingIn", { count: countdown })}
             </p>
           </div>
@@ -169,16 +192,17 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
 
   // Already authenticated (opened dialog when already authed)
   if (status?.authenticated) {
+    const activeProvider = status.provider_name || resolvedProviderName;
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2 rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-700 dark:text-green-400">
           <CheckCircle className="h-4 w-4 shrink-0" />
           <span>
-            {t("oauth.authenticated")} <code className="rounded bg-muted px-1 font-mono text-xs">openai-codex</code> {t("oauth.active")}
+            {t("oauth.authenticated")} <code className="rounded bg-muted px-1 font-mono text-xs">{activeProvider}</code> {t("oauth.active")}
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
-          {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">openai-codex/</code>{" "}
+          {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{activeProvider}/</code>{" "}
           {t("oauth.modelPrefixExample")}
         </p>
         <div className="flex flex-wrap gap-2">
@@ -191,6 +215,17 @@ export function OAuthSection({ onSuccess, authenticatedActionLabel }: OAuthSecti
             {t("oauth.removeToken")}
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  if (!hasValidProvider) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">{t("oauth.signInDesc")}</p>
+        <p className="text-xs text-muted-foreground">
+          Enter a valid provider name before starting ChatGPT OAuth.
+        </p>
       </div>
     );
   }

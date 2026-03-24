@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -120,6 +121,16 @@ func newTestOAuthHandler(t *testing.T, token string) *OAuthHandler {
 	pkgGatewayToken = token
 	t.Cleanup(func() { pkgGatewayToken = old })
 	return NewOAuthHandler(newMockProviderStore(), newMockSecretsStore(), nil, nil)
+}
+
+func newTestOAuthHandlerWithStores(t *testing.T, token string) (*OAuthHandler, *mockProviderStore, *mockSecretsStore) {
+	t.Helper()
+	old := pkgGatewayToken
+	pkgGatewayToken = token
+	t.Cleanup(func() { pkgGatewayToken = old })
+	provStore := newMockProviderStore()
+	secretStore := newMockSecretsStore()
+	return NewOAuthHandler(provStore, secretStore, nil, nil), provStore, secretStore
 }
 
 // --- tests ---
@@ -240,5 +251,139 @@ func TestOAuthHandlerStartReturnsAuthURL(t *testing.T) {
 
 	if !hasURL && !hasStatus {
 		t.Fatal("response has neither auth_url nor status")
+	}
+}
+
+func TestOAuthHandlerProviderStatusRoute(t *testing.T) {
+	h, provStore, _ := newTestOAuthHandlerWithStores(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	if err := provStore.CreateProvider(context.Background(), &store.LLMProviderData{
+		Name:         "codex-work",
+		DisplayName:  "Codex Work",
+		ProviderType: store.ProviderChatGPTOAuth,
+		APIBase:      "https://chatgpt.com/backend-api",
+		APIKey:       "token-work",
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/v1/auth/chatgpt/codex-work/status", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if result["authenticated"] != true {
+		t.Fatalf("authenticated = %v, want true", result["authenticated"])
+	}
+	if result["provider_name"] != "codex-work" {
+		t.Fatalf("provider_name = %v, want codex-work", result["provider_name"])
+	}
+}
+
+func TestOAuthHandlerProviderStatusRouteRejectsTypeConflict(t *testing.T) {
+	h, provStore, _ := newTestOAuthHandlerWithStores(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	if err := provStore.CreateProvider(context.Background(), &store.LLMProviderData{
+		Name:         "codex-work",
+		DisplayName:  "Codex Work",
+		ProviderType: store.ProviderOpenRouter,
+		APIBase:      "https://openrouter.ai/api/v1",
+		APIKey:       "sk-live",
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/v1/auth/chatgpt/codex-work/status", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status code = %d, want %d", w.Code, http.StatusConflict)
+	}
+}
+
+func TestOAuthHandlerProviderLogoutRoute(t *testing.T) {
+	h, provStore, secretStore := newTestOAuthHandlerWithStores(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	if err := provStore.CreateProvider(context.Background(), &store.LLMProviderData{
+		Name:         "codex-work",
+		DisplayName:  "Codex Work",
+		ProviderType: store.ProviderChatGPTOAuth,
+		APIBase:      "https://chatgpt.com/backend-api",
+		APIKey:       "token-work",
+		Enabled:      true,
+	}); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+	if err := secretStore.Set(context.Background(), oauth.RefreshTokenSecretKey("codex-work"), "refresh-work"); err != nil {
+		t.Fatalf("Set refresh token: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-work/logout", nil)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", w.Code, http.StatusOK)
+	}
+	if _, err := provStore.GetProviderByName(context.Background(), "codex-work"); err == nil {
+		t.Fatal("provider still exists after logout")
+	}
+	if _, err := secretStore.Get(context.Background(), oauth.RefreshTokenSecretKey("codex-work")); err == nil {
+		t.Fatal("refresh token still exists after logout")
+	}
+}
+
+func TestOAuthHandlerStartReplacesPendingFlow(t *testing.T) {
+	h := newTestOAuthHandler(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req1 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-work/start", nil)
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
+
+	if w1.Code == http.StatusInternalServerError {
+		t.Skip("port 1455 unavailable, skipping")
+	}
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first start status = %d, want %d", w1.Code, http.StatusOK)
+	}
+	if h.pending != nil {
+		defer func() {
+			h.pending.cancel()
+			h.pending.login.Shutdown()
+		}()
+	}
+	firstPending := h.pending
+
+	req2 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-personal/start", nil)
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second start status = %d, want %d", w2.Code, http.StatusOK)
+	}
+	if h.pending == nil {
+		t.Fatal("pending flow = nil after replacement")
+	}
+	if h.pending == firstPending {
+		t.Fatal("pending flow was not replaced")
 	}
 }

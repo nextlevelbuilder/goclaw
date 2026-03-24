@@ -246,7 +246,12 @@ export function ProviderAdvancedDialog({
                 title={t("detail.oauthConfig")}
                 description={t("detail.oauthConfigDesc")}
               />
-              <OAuthSection onSuccess={() => onOpenChange(false)} />
+              <OAuthSection
+                providerName={provider.name}
+                displayName={provider.display_name}
+                apiBase={provider.api_base}
+                onSuccess={() => onOpenChange(false)}
+              />
             </>
           )}
         </div>
