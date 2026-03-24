@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ArrowLeft, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, CircleDashed, GitFork, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { ROUTES } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import {
   useChatGPTOAuthProviderStatuses,
@@ -29,6 +30,49 @@ function providerStatus(
   enabled?: boolean,
 ): ChatGPTOAuthAvailability {
   return statusByName.get(providerName)?.availability ?? (enabled === false ? "disabled" : "needs_sign_in");
+}
+
+function ConfidenceStep({
+  label,
+  detail,
+  tone,
+}: {
+  label: string;
+  detail: string;
+  tone: "done" | "warning" | "pending";
+}) {
+  return (
+    <div className="h-full rounded-lg border bg-muted/20 p-3">
+      <div className="flex items-start gap-2">
+        {tone === "done" ? (
+          <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        ) : tone === "warning" ? (
+          <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600 dark:text-amber-400" />
+        ) : (
+          <CircleDashed className="mt-0.5 h-4 w-4 text-muted-foreground" />
+        )}
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+          <p className="mt-1 text-sm font-medium">{detail}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/20 px-2.5 py-2">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-1 text-base font-semibold leading-tight">{value}</p>
+    </div>
+  );
 }
 
 export function AgentCodexPoolPage() {
@@ -75,12 +119,13 @@ export function AgentCodexPoolPage() {
       || savedRouting.strategy === "round_robin"
     ),
   );
+
   const {
     data: activity,
     isLoading: activityLoading,
     isFetching: activityFetching,
     refetch: refreshActivity,
-  } = useCodexPoolActivity(agent?.id ?? id, 18, Boolean(agent && isEligible));
+  } = useCodexPoolActivity(agent?.id ?? id, 8, Boolean(agent && isEligible));
 
   const liveEntries = useMemo<CodexPoolEntry[]>(() => {
     if (!agent) return [];
@@ -104,49 +149,108 @@ export function AgentCodexPoolPage() {
 
   const readyCount = liveEntries.filter((entry) => entry.availability === "ready").length;
   const observedCount = liveEntries.filter((entry) => entry.requestCount > 0).length;
+  const observedReadyCount = liveEntries.filter((entry) => entry.availability === "ready" && entry.requestCount > 0).length;
   const failoverCount = activity.recent_requests.filter((request) => (request.failover_providers?.length ?? 0) > 0).length;
   const attentionEntries = liveEntries.filter((entry) => entry.availability !== "ready");
+  const switchCount = activity.recent_requests.slice(1).reduce(
+    (count, request, index) => count + (request.provider_name !== activity.recent_requests[index]?.provider_name ? 1 : 0),
+    0,
+  );
   const title = agent ? agentDisplayName(agent, t("card.unnamedAgent")) : "";
   const isDirty = savedRouting.strategy !== (routing.strategy === "round_robin" ? "round_robin" : "manual")
     || JSON.stringify(savedRouting.extraProviderNames) !== JSON.stringify(routing.extra_provider_names ?? []);
+  const roundRobinVerified = savedStrategy === "round_robin"
+    && readyCount > 1
+    && observedReadyCount >= readyCount
+    && switchCount >= Math.max(1, readyCount - 1);
+  const showNextActionMeta = isDirty
+    || attentionEntries.length > 0
+    || !canManageProviders
+    || (savedStrategy === "round_robin" && switchCount > 0);
+  const lowerPanelHeightClass = "lg:h-full";
+
   const verdictTone = savedStrategy === "round_robin"
-    ? readyCount > 1 && observedCount >= readyCount && activity.recent_requests.length > 1
+    ? roundRobinVerified
       ? "healthy"
       : "warning"
     : "manual";
 
+  const nextAction = isDirty
+    ? {
+        title: t("chatgptOAuthRouting.nextAction.saveTitle"),
+        description: t("chatgptOAuthRouting.nextAction.saveDescription"),
+      }
+    : attentionEntries.length > 0
+      ? {
+          title: t("chatgptOAuthRouting.nextAction.attentionTitle"),
+          description: t("chatgptOAuthRouting.nextAction.attentionDescription"),
+        }
+      : liveEntries.length < 2
+        ? {
+            title: t("chatgptOAuthRouting.nextAction.addMembersTitle"),
+            description: t("chatgptOAuthRouting.nextAction.addMembersDescription"),
+          }
+        : savedStrategy === "round_robin" && !roundRobinVerified
+          ? {
+              title: t("chatgptOAuthRouting.nextAction.verifyTitle"),
+              description: t("chatgptOAuthRouting.nextAction.verifyDescription"),
+            }
+          : savedStrategy === "manual"
+            ? {
+                title: t("chatgptOAuthRouting.nextAction.manualTitle"),
+                description: t("chatgptOAuthRouting.nextAction.manualDescription"),
+              }
+            : {
+                title: t("chatgptOAuthRouting.nextAction.healthyTitle"),
+                description: t("chatgptOAuthRouting.nextAction.healthyDescription"),
+              };
+
+  const confidenceSteps = [
+    {
+      label: t("chatgptOAuthRouting.checkpoints.configured"),
+      detail: savedStrategy === "round_robin"
+        ? t("chatgptOAuthRouting.strategy.roundRobin")
+        : t("chatgptOAuthRouting.strategy.manual"),
+      tone: "done" as const,
+    },
+    {
+      label: t("chatgptOAuthRouting.checkpoints.ready"),
+      detail: t("chatgptOAuthRouting.metrics.readyOfTotal", { ready: readyCount, total: liveEntries.length }),
+      tone: readyCount === liveEntries.length && liveEntries.length > 0
+        ? "done" as const
+        : readyCount > 0
+          ? "warning" as const
+          : "pending" as const,
+    },
+    {
+      label: t("chatgptOAuthRouting.checkpoints.observed"),
+      detail: t("chatgptOAuthRouting.observedProviders", { observed: observedCount, total: liveEntries.length }),
+      tone: observedCount >= liveEntries.length && liveEntries.length > 0
+        ? "done" as const
+        : observedCount > 0
+          ? "warning" as const
+          : "pending" as const,
+    },
+    {
+      label: t("chatgptOAuthRouting.checkpoints.switching"),
+      detail: savedStrategy === "manual"
+        ? t("chatgptOAuthRouting.strategy.manual")
+        : activity.recent_requests.length > 1
+          ? t("chatgptOAuthRouting.switchRate", { switches: switchCount, total: activity.recent_requests.length - 1 })
+          : t("chatgptOAuthRouting.recentRequestsCount", { count: activity.recent_requests.length }),
+      tone: savedStrategy === "manual"
+        ? "done" as const
+        : roundRobinVerified
+          ? "done" as const
+          : switchCount > 0
+            ? "warning" as const
+            : "pending" as const,
+    },
+  ];
+
   if (loading || providersLoading || !agent) {
     return <DetailPageSkeleton tabs={0} />;
   }
-
-  const metricCards = [
-    {
-      key: "health",
-      label: t("chatgptOAuthRouting.metrics.poolHealth"),
-      value: attentionEntries.length === 0 ? t("chatgptOAuthRouting.metrics.healthy") : t("chatgptOAuthRouting.metrics.needsAttention"),
-      helper: t("chatgptOAuthRouting.metrics.readyOfTotal", { ready: readyCount, total: liveEntries.length }),
-    },
-    {
-      key: "policy",
-      label: t("chatgptOAuthRouting.metrics.policy"),
-      value: savedStrategy === "round_robin" ? t("chatgptOAuthRouting.strategy.roundRobin") : t("chatgptOAuthRouting.strategy.manual"),
-      helper: t("chatgptOAuthRouting.selectedAccountsLabel"),
-    },
-    {
-      key: "ready",
-      label: t("chatgptOAuthRouting.metrics.readyAccounts"),
-      value: `${readyCount}/${liveEntries.length || 1}`,
-      helper: t("chatgptOAuthRouting.recentRequestsCount", { count: activity.recent_requests.length }),
-    },
-    {
-      key: "observed",
-      label: t("chatgptOAuthRouting.metrics.observedRotation"),
-      value: `${observedCount}/${liveEntries.length || 1}`,
-      helper: failoverCount > 0
-        ? t("chatgptOAuthRouting.metrics.failovers", { count: failoverCount })
-        : t("chatgptOAuthRouting.metrics.noFailovers"),
-    },
-  ];
 
   const handleSave = async () => {
     setSaving(true);
@@ -163,7 +267,7 @@ export function AgentCodexPoolPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 pb-10">
+    <div className="flex min-h-full flex-col p-4 pb-8 sm:p-6 lg:h-full lg:min-h-0">
       <Button variant="ghost" size="sm" className="mb-3 gap-1.5 px-0" onClick={() => navigate(`/agents/${agent.id}`)}>
         <ArrowLeft className="h-4 w-4" />
         {t("chatgptOAuthRouting.backToAgent")}
@@ -186,127 +290,161 @@ export function AgentCodexPoolPage() {
           <AlertDescription>{t("chatgptOAuthRouting.pageUnsupportedDescription")}</AlertDescription>
         </Alert>
       ) : (
-        <>
-          {isDirty && (
-            <Alert className="mt-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>{t("chatgptOAuthRouting.unsavedChangesTitle")}</AlertTitle>
-              <AlertDescription>{t("chatgptOAuthRouting.unsavedChangesDescription")}</AlertDescription>
-            </Alert>
-          )}
-
-          {!canManageProviders && (
-            <Alert className="mt-4">
-              <ShieldCheck className="h-4 w-4" />
-              <AlertTitle>{t("chatgptOAuthRouting.providerAccessTitle")}</AlertTitle>
-              <AlertDescription>{t("chatgptOAuthRouting.providerAccessDescription")}</AlertDescription>
-            </Alert>
-          )}
-
-          <Alert className={`mt-4 ${verdictTone === "healthy" ? "border-emerald-500/30" : ""}`}>
-            <ShieldCheck className={`h-4 w-4 ${verdictTone === "healthy" ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
-            <AlertTitle>{t(`chatgptOAuthRouting.verdict.${verdictTone}.title`)}</AlertTitle>
-            <AlertDescription>{t(`chatgptOAuthRouting.verdict.${verdictTone}.description`, {
-              observed: observedCount,
-              ready: readyCount,
-              count: activity.recent_requests.length,
-            })}
-            </AlertDescription>
-          </Alert>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {metricCards.map((card) => (
-              <Card key={card.key}>
-                <CardContent className="space-y-1 pt-6">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{card.label}</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-semibold">{card.value}</span>
-                    {card.key === "policy" && (
-                      <Badge variant="outline">{currentProvider?.display_name || agent.provider}</Badge>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <Card className={cn(
+            "mt-4 gap-4 overflow-hidden",
+            verdictTone === "healthy" && "border-emerald-500/30",
+            verdictTone === "warning" && "border-amber-500/30",
+          )}>
+            <CardHeader className="border-b bg-muted/20 px-6 py-4">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="space-y-2 xl:max-w-[680px]">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline">
+                      {savedStrategy === "round_robin"
+                        ? t("chatgptOAuthRouting.strategy.roundRobin")
+                        : t("chatgptOAuthRouting.strategy.manual")}
+                    </Badge>
+                    {attentionEntries.length > 0 && (
+                      <Badge variant="warning">{t("chatgptOAuthRouting.needsAttentionTitle")}</Badge>
                     )}
+                    {failoverCount > 0 && (
+                      <Badge variant="warning">{t("chatgptOAuthRouting.metrics.failovers", { count: failoverCount })}</Badge>
+                    )}
+                    {isDirty && <Badge variant="warning">{t("chatgptOAuthRouting.draftBadge")}</Badge>}
                   </div>
-                  <p className="text-xs text-muted-foreground">{card.helper}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)]">
-            <div className="space-y-4">
-              <Alert>
-                <ShieldCheck className="h-4 w-4" />
-                <AlertTitle>{t("chatgptOAuthRouting.verificationTitle")}</AlertTitle>
-                <AlertDescription>{t("chatgptOAuthRouting.verificationDescription")}</AlertDescription>
-              </Alert>
-              <CodexPoolActivityPanel
-                entries={liveEntries}
-                strategy={savedStrategy}
-                recentRequests={activity.recent_requests}
-                loading={activityLoading}
-                fetching={activityFetching}
-                showProviderLinks={canManageProviders}
-                onRefresh={() => { void refreshActivity(); }}
-              />
-            </div>
+                  <div>
+                    <CardTitle>{t(`chatgptOAuthRouting.verdict.${verdictTone}.title`)}</CardTitle>
+                    <CardDescription>
+                      {t(`chatgptOAuthRouting.verdict.${verdictTone}.description`, {
+                        observed: observedCount,
+                        ready: readyCount,
+                        count: activity.recent_requests.length,
+                      })}
+                    </CardDescription>
+                  </div>
+                </div>
 
-            <div className="space-y-4">
-              <ChatGPTOAuthRoutingSection
-                currentProvider={agent.provider}
-                providers={providers}
-                value={routing}
-                onChange={setRouting}
-              />
+                <div className="grid gap-2 sm:grid-cols-3 xl:w-[400px]">
+                  <MiniStat
+                    label={t("chatgptOAuthRouting.metrics.policy")}
+                    value={savedStrategy === "round_robin"
+                      ? t("chatgptOAuthRouting.strategy.roundRobin")
+                      : t("chatgptOAuthRouting.strategy.manual")}
+                  />
+                  <MiniStat
+                    label={t("chatgptOAuthRouting.metrics.readyAccounts")}
+                    value={`${readyCount}/${liveEntries.length || 1}`}
+                  />
+                  <MiniStat
+                    label={t("chatgptOAuthRouting.metrics.observedRotation")}
+                    value={`${observedCount}/${liveEntries.length || 1}`}
+                  />
+                </div>
+              </div>
+            </CardHeader>
 
-              {attentionEntries.length > 0 ? (
-                <Card>
-                  <CardContent className="p-0">
-                    <div className="border-b p-4">
-                      <h3 className="text-sm font-medium">{t("chatgptOAuthRouting.needsAttentionTitle")}</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">{t("chatgptOAuthRouting.needsAttentionDescription", { count: attentionEntries.length })}</p>
-                    </div>
-                    <div className="divide-y">
-                      {attentionEntries.map((entry) => (
-                        <div key={entry.name} className="flex items-start justify-between gap-3 p-4">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-medium">{entry.label}</span>
-                              <Badge variant="outline">{t(`chatgptOAuthRouting.status.${entry.availability}`)}</Badge>
-                            </div>
-                            <p className="text-xs font-mono text-muted-foreground">{entry.name}</p>
-                          </div>
-                          {canManageProviders && (
-                            <Button asChild variant="ghost" size="sm" className="h-8 shrink-0">
-                              <Link to={ROUTES.PROVIDERS}>{t("chatgptOAuthRouting.openProviders")}</Link>
-                            </Button>
-                          )}
+            <CardContent className="space-y-3 px-6 pb-5 pt-4">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {confidenceSteps.map((step) => (
+                    <ConfidenceStep
+                      key={step.label}
+                      label={step.label}
+                      detail={step.detail}
+                      tone={step.tone}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex h-full flex-col rounded-lg border bg-muted/20 p-3.5">
+                  <div className="flex flex-1 flex-col gap-2.5">
+                    <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0 xl:flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            {t("chatgptOAuthRouting.nextActionTitle")}
+                          </p>
+                          <p className="text-sm font-medium leading-snug">{nextAction.title}</p>
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : liveEntries.length < 2 ? (
-                <Alert>
-                  <ShieldCheck className="h-4 w-4" />
-                  <AlertTitle>{t("chatgptOAuthRouting.addPoolMembersTitle")}</AlertTitle>
-                  <AlertDescription>{t("chatgptOAuthRouting.addPoolMembersDescription")}</AlertDescription>
-                </Alert>
-              ) : null}
+                        <p className="mt-1 text-sm leading-snug text-muted-foreground">{nextAction.description}</p>
+                      </div>
 
-              <Card>
-                <CardContent className="space-y-3 pt-6">
-                  <h3 className="text-sm font-medium">{t("chatgptOAuthRouting.howItWorksTitle")}</h3>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    <li>{t("chatgptOAuthRouting.howItWorks.primary")}</li>
-                    <li>{t("chatgptOAuthRouting.howItWorks.roundRobin")}</li>
-                    <li>{t("chatgptOAuthRouting.howItWorks.failover")}</li>
-                  </ul>
-                </CardContent>
-              </Card>
-            </div>
+                      <div className="flex flex-wrap gap-2 xl:shrink-0 xl:justify-end">
+                        {!isDirty && savedStrategy === "round_robin" && !roundRobinVerified && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => { void refreshActivity(); }}>
+                            {t("chatgptOAuthRouting.refreshEvidence")}
+                          </Button>
+                        )}
+                        {canManageProviders && (attentionEntries.length > 0 || liveEntries.length < 2) && (
+                          <Button asChild type="button" variant="outline" size="sm">
+                            <Link to={ROUTES.PROVIDERS}>{t("chatgptOAuthRouting.openProviders")}</Link>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {showNextActionMeta ? (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                        {isDirty && (
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                            <span>{t("chatgptOAuthRouting.savedPoolOnlyHint")}</span>
+                          </div>
+                        )}
+                        {attentionEntries.length > 0 && (
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                            <span>{t("chatgptOAuthRouting.needsAttentionDescription", { count: attentionEntries.length })}</span>
+                          </div>
+                        )}
+                        {!canManageProviders && (
+                          <div className="flex items-start gap-2">
+                            <ShieldCheck className="mt-0.5 h-3.5 w-3.5" />
+                            <span>{t("chatgptOAuthRouting.providerAccessInline")}</span>
+                          </div>
+                        )}
+                        {savedStrategy === "round_robin" && switchCount > 0 && (
+                          <div className="flex items-start gap-2">
+                            <GitFork className="mt-0.5 h-3.5 w-3.5" />
+                            <span>{t("chatgptOAuthRouting.switchRate", { switches: switchCount, total: activity.recent_requests.length - 1 })}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="mt-3 grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.95fr)] lg:items-stretch">
+            <ChatGPTOAuthRoutingSection
+              currentProvider={agent.provider}
+              providers={providers}
+              value={routing}
+              onChange={setRouting}
+              canManageProviders={canManageProviders}
+              className={lowerPanelHeightClass}
+            />
+
+            <CodexPoolActivityPanel
+              entries={liveEntries}
+              strategy={savedStrategy}
+              recentRequests={activity.recent_requests}
+              loading={activityLoading}
+              fetching={activityFetching}
+              showProviderLinks={canManageProviders}
+              onRefresh={() => { void refreshActivity(); }}
+              className={lowerPanelHeightClass}
+            />
           </div>
 
-          <StickySaveBar onSave={handleSave} saving={saving} disabled={!isDirty} />
-        </>
+          {isDirty ? (
+            <StickySaveBar onSave={handleSave} saving={saving} disabled={!isDirty} />
+          ) : null}
+        </div>
       )}
     </div>
   );

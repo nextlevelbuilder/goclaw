@@ -1,16 +1,10 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ConfigGroupHeader } from "@/components/shared/config-group-header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   useChatGPTOAuthProviderStatuses,
   type ChatGPTOAuthAvailability,
@@ -23,12 +17,14 @@ interface ChatGPTOAuthRoutingSectionProps {
   providers: ProviderData[];
   value: ChatGPTOAuthRoutingConfig;
   onChange: (value: ChatGPTOAuthRoutingConfig) => void;
+  canManageProviders?: boolean;
+  className?: string;
 }
 
-function statusBadgeClass(availability: ChatGPTOAuthAvailability): string {
-  if (availability === "ready") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  if (availability === "disabled") return "border-muted-foreground/30 bg-muted text-muted-foreground";
-  return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+function statusBadgeVariant(availability: ChatGPTOAuthAvailability): "success" | "warning" | "outline" {
+  if (availability === "ready") return "success";
+  if (availability === "needs_sign_in") return "warning";
+  return "outline";
 }
 
 export function ChatGPTOAuthRoutingSection({
@@ -36,6 +32,8 @@ export function ChatGPTOAuthRoutingSection({
   providers,
   value,
   onChange,
+  canManageProviders = true,
+  className,
 }: ChatGPTOAuthRoutingSectionProps) {
   const { t } = useTranslation("agents");
   const { statuses, isLoading } = useChatGPTOAuthProviderStatuses(providers);
@@ -48,6 +46,7 @@ export function ChatGPTOAuthRoutingSection({
     () => new Map(statuses.map((status) => [status.provider.name, status])),
     [statuses],
   );
+
   const getAvailability = (provider: ProviderData): ChatGPTOAuthAvailability => (
     statusByName.get(provider.name)?.availability
       ?? (provider.enabled ? "needs_sign_in" : "disabled")
@@ -62,6 +61,7 @@ export function ChatGPTOAuthRoutingSection({
       name: currentOAuthProvider.name,
       label: currentOAuthProvider.display_name || currentOAuthProvider.name,
       availability: preferredAvailability,
+      role: "preferred" as const,
     },
     ...allExtraProviders
       .filter((provider) => selectedExtras.has(provider.name))
@@ -69,8 +69,10 @@ export function ChatGPTOAuthRoutingSection({
         name: provider.name,
         label: provider.display_name || provider.name,
         availability: getAvailability(provider),
+        role: "extra" as const,
       })),
   ];
+
   const attentionEntries = allExtraProviders
     .filter((provider) => getAvailability(provider) !== "ready")
     .map((provider) => ({
@@ -98,45 +100,96 @@ export function ChatGPTOAuthRoutingSection({
   };
 
   return (
-    <>
-      <ConfigGroupHeader
-        title={t("chatgptOAuthRouting.title")}
-        description={t("chatgptOAuthRouting.description")}
-      />
+    <Card className={cn("gap-3 overflow-hidden", className)}>
+      <CardHeader className="border-b bg-muted/20">
+        <CardTitle>{t("chatgptOAuthRouting.title")}</CardTitle>
+        <CardDescription>{t("chatgptOAuthRouting.description")}</CardDescription>
+        {!canManageProviders && (
+          <p className="text-xs text-muted-foreground">
+            {t("chatgptOAuthRouting.providerAccessInline")}
+          </p>
+        )}
+      </CardHeader>
 
-      <div className="space-y-4 rounded-lg border p-3 sm:p-4">
-        <div className="space-y-2">
-          <Label>{t("chatgptOAuthRouting.defaultAccount")}</Label>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{currentOAuthProvider.display_name || currentOAuthProvider.name}</Badge>
-            <Badge variant="outline" className={statusBadgeClass(preferredAvailability)}>
-              {t(`chatgptOAuthRouting.status.${preferredAvailability}`)}
-            </Badge>
-            <span className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.defaultHint")}</span>
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <section className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {t("chatgptOAuthRouting.defaultAccount")}
+          </p>
+          <div className="rounded-lg border bg-muted/20 p-3.5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">
+                    {currentOAuthProvider.display_name || currentOAuthProvider.name}
+                  </span>
+                  <Badge variant="secondary">{t("chatgptOAuthRouting.role.preferred")}</Badge>
+                  <Badge variant={statusBadgeVariant(preferredAvailability)}>
+                    {t(`chatgptOAuthRouting.status.${preferredAvailability}`)}
+                  </Badge>
+                </div>
+                <p className="font-mono text-xs text-muted-foreground">{currentOAuthProvider.name}</p>
+              </div>
+              <p className="max-w-xs text-xs text-muted-foreground">
+                {t("chatgptOAuthRouting.defaultHint")}
+              </p>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-2">
-          <Label>{t("chatgptOAuthRouting.strategyLabel")}</Label>
-          <Select
-            value={value.strategy || "manual"}
-            onValueChange={(next) => setStrategy(next as "manual" | "round_robin")}
-          >
-            <SelectTrigger className="text-base md:text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="manual">{t("chatgptOAuthRouting.strategy.manual")}</SelectItem>
-              <SelectItem value="round_robin">{t("chatgptOAuthRouting.strategy.roundRobin")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.strategyHint")}</p>
-        </div>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {t("chatgptOAuthRouting.strategyLabel")}
+            </p>
+            <Badge variant="outline">
+              {value.strategy === "round_robin"
+                ? t("chatgptOAuthRouting.strategy.roundRobin")
+                : t("chatgptOAuthRouting.strategy.manual")}
+            </Badge>
+          </div>
 
-        <div className="space-y-2">
-          <Label>{t("chatgptOAuthRouting.extraAccountsLabel")}</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant={value.strategy === "manual" ? "default" : "outline"}
+              onClick={() => setStrategy("manual")}
+            >
+              {t("chatgptOAuthRouting.strategy.manual")}
+            </Button>
+            <Button
+              type="button"
+              variant={value.strategy === "round_robin" ? "default" : "outline"}
+              onClick={() => setStrategy("round_robin")}
+            >
+              {t("chatgptOAuthRouting.strategy.roundRobin")}
+            </Button>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {t("chatgptOAuthRouting.strategyHint")}
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {t("chatgptOAuthRouting.extraAccountsLabel")}
+            </p>
+            {readyExtraProviders.length > 0 && (
+              <Badge variant="outline">
+                {t("chatgptOAuthRouting.readySummary", {
+                  ready: readyExtraProviders.length,
+                  total: allExtraProviders.length,
+                })}
+              </Badge>
+            )}
+          </div>
+
           {isLoading ? (
-            <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.loadingAccounts")}</p>
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              {t("chatgptOAuthRouting.loadingAccounts")}
+            </div>
           ) : readyExtraProviders.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {readyExtraProviders.map((provider) => {
@@ -155,52 +208,77 @@ export function ChatGPTOAuthRoutingSection({
               })}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.noReadyExtras")}</p>
-          )}
-          <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.extraSelectableHint")}</p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>{t("chatgptOAuthRouting.selectedAccountsLabel")}</Label>
-          <div className="flex flex-wrap gap-2">
-            {selectedEntries.map((entry) => (
-              <div key={entry.name} className="flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1">
-                <span className="text-xs font-medium">{entry.label}</span>
-                <Badge variant="outline" className={statusBadgeClass(entry.availability)}>
-                  {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {attentionEntries.length > 0 && (
-          <div className="space-y-2">
-            <Label>{t("chatgptOAuthRouting.attentionTitle")}</Label>
-            <div className="flex flex-wrap gap-2">
-              {attentionEntries.map((entry) => (
-                entry.selected ? (
-                  <Button
-                    key={entry.name}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="border-amber-500/30 text-amber-700 dark:text-amber-300"
-                    onClick={() => toggleProvider(entry.name)}
-                  >
-                    {entry.label} · {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                  </Button>
-                ) : (
-                  <Badge key={entry.name} variant="outline" className={statusBadgeClass(entry.availability)}>
-                    {entry.label} · {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                  </Badge>
-                )
-              ))}
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              {t("chatgptOAuthRouting.noReadyExtras")}
             </div>
-            <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.attentionHint")}</p>
-          </div>
-        )}
-      </div>
-    </>
+          )}
+        </section>
+
+        <div className="space-y-4">
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t("chatgptOAuthRouting.selectedAccountsLabel")}
+              </p>
+              <Badge variant="outline">
+                {t("chatgptOAuthRouting.selectedCount", { count: selectedEntries.length })}
+              </Badge>
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-3.5">
+              <div className="flex flex-wrap gap-2">
+                {selectedEntries.map((entry) => (
+                  <div key={entry.name} className="flex flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1">
+                    <span className="text-xs font-medium">{entry.label}</span>
+                    <Badge variant={entry.role === "preferred" ? "secondary" : "outline"}>
+                      {t(`chatgptOAuthRouting.role.${entry.role}`)}
+                    </Badge>
+                    <Badge variant={statusBadgeVariant(entry.availability)}>
+                      {t(`chatgptOAuthRouting.status.${entry.availability}`)}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {attentionEntries.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {t("chatgptOAuthRouting.attentionTitle")}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {attentionEntries.map((entry) => (
+                  entry.selected ? (
+                    <Button
+                      key={entry.name}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-amber-500/30 text-amber-700 dark:text-amber-300"
+                      onClick={() => toggleProvider(entry.name)}
+                    >
+                      {entry.label} · {t(`chatgptOAuthRouting.status.${entry.availability}`)}
+                    </Button>
+                  ) : (
+                    <Badge key={entry.name} variant={statusBadgeVariant(entry.availability)}>
+                      {entry.label} · {t(`chatgptOAuthRouting.status.${entry.availability}`)}
+                    </Badge>
+                  )
+                ))}
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {t("chatgptOAuthRouting.attentionHint")}
+              </p>
+            </section>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
