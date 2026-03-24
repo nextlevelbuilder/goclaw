@@ -78,7 +78,13 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
             </TabsList>
 
             <TabsContent value="agent" className="mt-4">
-              <AgentOverviewTab key={agent.id + "-" + agent.updated_at} agent={agent} onUpdate={updateAgent} heartbeat={hb} />
+              <AgentOverviewTab
+                key={agent.id + "-" + agent.updated_at}
+                agent={agent}
+                onUpdate={updateAgent}
+                heartbeat={hb}
+                onOpenAdvanced={() => setAdvancedOpen(true)}
+              />
             </TabsContent>
 
             <TabsContent value="files" className="mt-4">

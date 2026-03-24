@@ -22,11 +22,8 @@
   "card": {
     "apiKeySet": "API key set",
     "authenticated": "Authenticated",
-    "oauthLinked": "OAuth linked"
-  },
-  "detail": {
-    "title": "Provider Details",
-    "advanced": "Advanced"
+    "oauthAccount": "OAuth account",
+    "oauthAlias": "Alias: {{name}}"
   },
   "form": {
     "createTitle": "Add Provider",
@@ -53,6 +50,12 @@
     "alreadyAdded": "(already added)",
     "nameFixed": "Name",
     "configure": "Configure an LLM provider connection.",
+    "configureOauth": "Connect one named ChatGPT OAuth account. Each alias represents a separate ChatGPT account.",
+    "oauthAlias": "Account Alias *",
+    "oauthAliasPlaceholder": "e.g. chatgpt-main",
+    "oauthAliasHint": "Use a unique lowercase alias for this ChatGPT account. Add more aliases later for extra accounts or round robin.",
+    "oauthDisplayNamePlaceholder": "Main ChatGPT account",
+    "oauthDisplayNameHint": "Optional friendly label shown in the UI. Helpful when you have multiple ChatGPT OAuth accounts.",
     "lowercaseHint": "Lowercase, numbers, hyphens"
   },
   "delete": {
@@ -72,7 +75,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
-    "chatgpt_oauth": "ChatGPT (OAuth)",
+    "chatgpt_oauth": "ChatGPT OAuth Account",
     "yescale": "YesScale",
     "acp": "ACP"
   },
@@ -98,14 +101,16 @@
   "oauth": {
     "checkingStatus": "Checking authentication status...",
     "authSuccessful": "Authentication successful!",
-    "activeProvider": "Provider",
-    "closingIn": "is now active. Closing in {{count}}s...",
-    "authenticated": "Authenticated — provider",
+    "authSuccessfulDesc": "This named ChatGPT account is ready to use.",
+    "activeProvider": "Account alias",
+    "authenticated": "Authenticated — account",
     "active": "active",
     "modelPrefixHint": "Use model prefix",
-    "modelPrefixExample": "in agent config (e.g. openai-codex/gpt-4o). Token refreshes automatically.",
-    "removeToken": "Remove Token",
-    "signInDesc": "Sign in with your ChatGPT account to use your subscription's models without a separate API key.",
+    "modelPrefixExample": "in agent config (e.g. chatgpt-main/gpt-5.4). Token refreshes automatically.",
+    "multiAccountHint": "Add more named ChatGPT OAuth accounts to unlock preferred plus extra accounts or round robin routing on an agent.",
+    "aliasRequired": "Enter a valid lowercase account alias before starting ChatGPT OAuth.",
+    "removeToken": "Disconnect Account",
+    "signInDesc": "Each ChatGPT OAuth provider is one named account. Sign in to use your ChatGPT subscription without a separate API key.",
     "waiting": "Waiting for authentication... Complete sign-in in the opened window.",
     "remoteVpsHint": "After signing in, your browser will try to open",
     "remoteVpsError": "and show a \"Can't reach this page\" error. That's normal — copy the full URL from the browser address bar and paste it below.",
@@ -115,10 +120,11 @@
     "starting": "Starting...",
     "remoteVps": "Remote/VPS?",
     "loggedOut": "Logged out",
-    "loggedOutDesc": "OpenAI OAuth token removed",
+    "loggedOutDesc": "ChatGPT OAuth account disconnected",
     "oauthFailed": "OAuth failed",
     "exchangeFailed": "Exchange failed",
-    "logoutFailed": "Logout failed"
+    "logoutFailed": "Logout failed",
+    "done": "Done"
   },
   "cli": {
     "description": "Claude CLI uses your local",
@@ -134,6 +140,7 @@
     "recheckButton": "Re-check"
   },
   "detail": {
+    "title": "Provider Details",
     "advanced": "Advanced",
     "identity": "Identity",
     "identityDesc": "Provider identification",
@@ -143,16 +150,26 @@
     "acpConfigDesc": "Agent subprocess settings",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Local CLI authentication",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "ChatGPT OAuth authentication",
+    "oauthConfig": "ChatGPT OAuth Account",
+    "oauthConfigDesc": "Manage sign-in for this named ChatGPT account",
     "nameReadonly": "Provider identifier, cannot be changed",
+    "oauthAliasReadonly": "OAuth account alias, cannot be changed",
     "providerType": "Provider Type",
     "apiKeySection": "API Key",
     "apiKeySectionDesc": "Authentication credentials",
     "statusSection": "Status",
     "statusSectionDesc": "Provider availability",
     "enabledDesc": "Provider is active and available for agents",
-    "embeddingSection": "Embedding"
+    "embeddingSection": "Embedding",
+    "oauthAccountUsage": "Account Usage",
+    "oauthAccountUsageDesc": "How this alias works as a preferred account and as an extra routed account.",
+    "oauthAliasLabel": "Account Alias",
+    "oauthAccountBadge": "ChatGPT OAuth account",
+    "oauthModelPrefix": "Model Prefix",
+    "oauthModelPrefixCopied": "Model prefix copied",
+    "oauthPreferredHint": "Set an agent's Provider field to this alias to make it the preferred ChatGPT account.",
+    "oauthRoutingHint": "Add other authenticated ChatGPT OAuth aliases in Agent Advanced > ChatGPT OAuth Routing for extra accounts or round robin.",
+    "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple ChatGPT OAuth accounts appear in routing."
   },
   "embedding": {
     "enable": "Enable Embedding",
@@ -163,6 +180,10 @@
     "apiBaseHint": "Override if embedding endpoint differs from the provider's main API base",
     "verify": "Verify Embedding",
     "verifyFailed": "Embedding verification failed"
+  },
+  "pageHint": {
+    "title": "Multiple ChatGPT OAuth accounts are supported",
+    "description": "Each ChatGPT OAuth provider is one named account. Create aliases like chatgpt-main or chatgpt-work, then add extra accounts from Agent Advanced > ChatGPT OAuth Routing."
   },
   "toast": {
     "created": "Provider created",

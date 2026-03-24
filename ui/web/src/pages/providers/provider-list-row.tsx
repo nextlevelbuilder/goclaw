@@ -13,8 +13,14 @@ interface ProviderListRowProps {
 
 export function ProviderListRow({ provider, onClick, onDelete }: ProviderListRowProps) {
   const { t: tc } = useTranslation("common");
+  const { t } = useTranslation("providers");
   const displayName = provider.display_name || provider.name;
   const tb = PROVIDER_TYPE_BADGE[provider.provider_type] ?? { label: provider.provider_type, variant: "outline" as const };
+  const subtitle = provider.provider_type === "chatgpt_oauth"
+    ? t("card.oauthAlias", { name: provider.name })
+    : provider.display_name
+      ? provider.name
+      : null;
 
   return (
     <div
@@ -35,8 +41,8 @@ export function ProviderListRow({ provider, onClick, onDelete }: ProviderListRow
           <span className="truncate text-sm font-semibold">{displayName}</span>
           <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${provider.enabled ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
         </div>
-        {provider.display_name && (
-          <div className="truncate text-xs text-muted-foreground">{provider.name}</div>
+        {subtitle && (
+          <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
         )}
       </div>
 

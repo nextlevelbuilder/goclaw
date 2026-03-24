@@ -124,6 +124,41 @@
     "saved": "Đã lưu",
     "failedToSave": "Lưu thất bại"
   },
+  "chatgptOAuthRouting": {
+    "title": "Định tuyến ChatGPT OAuth",
+    "description": "Cho phép một agent đi qua nhiều tài khoản ChatGPT OAuth đã xác thực mà không cần đổi thiết lập provider/model chính.",
+    "defaultAccount": "Tài khoản ưu tiên",
+    "defaultHint": "Trường Provider của agent vẫn là preferred/default account.",
+    "badge": "OAuth routing",
+    "badgeTooltip": "Agent này đang định tuyến qua nhiều tài khoản ChatGPT OAuth.",
+    "summaryTitle": "Các tài khoản ChatGPT OAuth",
+    "summaryDescription": "Agent này dùng một tài khoản ChatGPT OAuth ưu tiên và có thể thêm các tài khoản đã xác thực khác từ phần Advanced.",
+    "strategyLabel": "Chiến lược định tuyến",
+    "strategyHint": "Manual giữ nguyên preferred account. Round robin xoay vòng qua các extra accounts đã chọn.",
+    "extraAccountsLabel": "Extra Accounts",
+    "extraHint": "Chỉ các provider ChatGPT OAuth đã bật và đã xác thực mới có thể tham gia.",
+    "emptyExtras": "Xác thực thêm một provider ChatGPT OAuth để bật rotation.",
+    "noReadyExtras": "Xác thực và bật thêm một provider ChatGPT OAuth để thêm vào đây.",
+    "extraSelectableHint": "Chỉ các tài khoản ChatGPT OAuth đã bật và đã xác thực mới có thể chọn tại đây.",
+    "selectedAccountsLabel": "Các tài khoản trong rotation",
+    "emptySelected": "Chưa chọn extra account nào.",
+    "manageAction": "Quản lý trong Advanced",
+    "singleAccountHint": "Thêm một provider ChatGPT OAuth có bí danh khác trong trang Providers để mở khóa extra accounts hoặc round robin.",
+    "readySummary": "{{ready}} / {{total}} extra account đang sẵn sàng.",
+    "preferredNeedsAttention": "Preferred ChatGPT OAuth account cần được xử lý trước khi agent dùng ổn định.",
+    "loadingAccounts": "Đang kiểm tra trạng thái tài khoản ChatGPT OAuth...",
+    "attentionTitle": "Các tài khoản cần chú ý",
+    "attentionHint": "Các tài khoản đã chọn nhưng bị tắt hoặc đã đăng xuất vẫn hiển thị ở đây cho đến khi bạn gỡ ra hoặc đăng nhập lại.",
+    "status": {
+      "ready": "Sẵn sàng",
+      "needs_sign_in": "Cần đăng nhập",
+      "disabled": "Đã tắt"
+    },
+    "strategy": {
+      "manual": "Manual",
+      "roundRobin": "Round Robin"
+    }
+  },
   "identity": {
     "title": "Nhận dạng",
     "agentKey": "Khóa agent",

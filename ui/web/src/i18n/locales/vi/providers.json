@@ -22,7 +22,9 @@
   "card": {
     "apiKeySet": "Đã đặt API key",
     "authenticated": "Đã xác thực",
-    "oauthLinked": "Đã liên kết OAuth"
+    "oauthLinked": "Đã liên kết OAuth",
+    "oauthAccount": "Tài khoản OAuth",
+    "oauthAlias": "Bí danh: {{name}}"
   },
   "detail": {
     "title": "Chi tiết Provider",
@@ -53,6 +55,12 @@
     "alreadyAdded": "(đã thêm)",
     "nameFixed": "Tên",
     "configure": "Cấu hình kết nối provider LLM.",
+    "configureOauth": "Kết nối một tài khoản ChatGPT OAuth có bí danh riêng. Mỗi bí danh đại diện cho một tài khoản ChatGPT riêng.",
+    "oauthAlias": "Bí danh tài khoản *",
+    "oauthAliasPlaceholder": "vd: chatgpt-main",
+    "oauthAliasHint": "Dùng một bí danh chữ thường duy nhất cho tài khoản ChatGPT này. Sau đó bạn có thể thêm các bí danh khác cho extra accounts hoặc round robin.",
+    "oauthDisplayNamePlaceholder": "Tài khoản ChatGPT chính",
+    "oauthDisplayNameHint": "Nhãn thân thiện hiển thị trên giao diện. Hữu ích khi bạn có nhiều tài khoản ChatGPT OAuth.",
     "lowercaseHint": "Chữ thường, số, dấu gạch ngang"
   },
   "delete": {
@@ -72,7 +80,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
-    "chatgpt_oauth": "ChatGPT (OAuth)",
+    "chatgpt_oauth": "Tài khoản ChatGPT OAuth",
     "yescale": "YesScale",
     "acp": "ACP"
   },
@@ -98,14 +106,16 @@
   "oauth": {
     "checkingStatus": "Đang kiểm tra trạng thái xác thực...",
     "authSuccessful": "Xác thực thành công!",
+    "authSuccessfulDesc": "Tài khoản ChatGPT có tên này đã sẵn sàng để dùng.",
     "activeProvider": "Provider",
-    "closingIn": "đang hoạt động. Đóng sau {{count}} giây...",
     "authenticated": "Đã xác thực — provider",
     "active": "đang hoạt động",
     "modelPrefixHint": "Dùng tiền tố model",
-    "modelPrefixExample": "trong cấu hình agent (vd: openai-codex/gpt-4o). Token tự động làm mới.",
-    "removeToken": "Xóa Token",
-    "signInDesc": "Đăng nhập bằng tài khoản ChatGPT để sử dụng các model trong gói đăng ký mà không cần API key riêng.",
+    "modelPrefixExample": "trong cấu hình agent (vd: chatgpt-main/gpt-5.4). Token tự động làm mới.",
+    "multiAccountHint": "Thêm nhiều tài khoản ChatGPT OAuth có bí danh để mở khóa preferred + extra accounts hoặc round robin trên agent.",
+    "aliasRequired": "Nhập một bí danh tài khoản hợp lệ dạng chữ thường trước khi bắt đầu ChatGPT OAuth.",
+    "removeToken": "Ngắt kết nối tài khoản",
+    "signInDesc": "Mỗi provider ChatGPT OAuth là một tài khoản có tên riêng. Đăng nhập để dùng gói ChatGPT mà không cần API key riêng.",
     "waiting": "Đang chờ xác thực... Hoàn tất đăng nhập trong cửa sổ đã mở.",
     "remoteVpsHint": "Sau khi đăng nhập, trình duyệt sẽ cố mở",
     "remoteVpsError": "và hiển thị lỗi \"Không thể truy cập trang này\". Điều này là bình thường — sao chép URL đầy đủ từ thanh địa chỉ trình duyệt và dán vào bên dưới.",
@@ -115,10 +125,11 @@
     "starting": "Đang bắt đầu...",
     "remoteVps": "Remote/VPS?",
     "loggedOut": "Đã đăng xuất",
-    "loggedOutDesc": "Đã xóa OAuth token OpenAI",
+    "loggedOutDesc": "Đã ngắt kết nối tài khoản ChatGPT OAuth",
     "oauthFailed": "OAuth thất bại",
     "exchangeFailed": "Trao đổi thất bại",
-    "logoutFailed": "Đăng xuất thất bại"
+    "logoutFailed": "Đăng xuất thất bại",
+    "done": "Xong"
   },
   "cli": {
     "description": "Claude CLI sử dụng tệp nhị phân",
@@ -143,16 +154,30 @@
     "acpConfigDesc": "Cài đặt tiến trình con agent",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Xác thực CLI cục bộ",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "Xác thực OAuth ChatGPT",
+    "oauthConfig": "Tài khoản ChatGPT OAuth",
+    "oauthConfigDesc": "Quản lý đăng nhập cho tài khoản ChatGPT có bí danh này",
     "nameReadonly": "Định danh provider, không thể thay đổi",
+    "oauthAliasReadonly": "Bí danh tài khoản OAuth, không thể thay đổi",
     "providerType": "Loại provider",
     "apiKeySection": "API Key",
     "apiKeySectionDesc": "Thông tin xác thực",
     "statusSection": "Trạng thái",
     "statusSectionDesc": "Tình trạng hoạt động của provider",
     "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
-    "embeddingSection": "Embedding"
+    "embeddingSection": "Embedding",
+    "oauthAccountUsage": "Cách dùng tài khoản",
+    "oauthAccountUsageDesc": "Cách bí danh này hoạt động như preferred account và extra account.",
+    "oauthAliasLabel": "Bí danh tài khoản",
+    "oauthAccountBadge": "Tài khoản ChatGPT OAuth",
+    "oauthModelPrefix": "Tiền tố model",
+    "oauthModelPrefixCopied": "Đã sao chép tiền tố model",
+    "oauthPreferredHint": "Đặt trường Provider của agent thành bí danh này để biến nó thành preferred ChatGPT account.",
+    "oauthRoutingHint": "Thêm các bí danh ChatGPT OAuth đã xác thực khác trong Agent Advanced > ChatGPT OAuth Routing cho extra accounts hoặc round robin.",
+    "oauthDisplayNameRecommendation": "Thêm display name nếu bạn muốn nhãn dễ hiểu hơn khi nhiều tài khoản ChatGPT OAuth xuất hiện trong routing."
+  },
+  "pageHint": {
+    "title": "Hỗ trợ nhiều tài khoản ChatGPT OAuth",
+    "description": "Mỗi provider ChatGPT OAuth là một tài khoản có bí danh riêng. Tạo các bí danh như chatgpt-main hoặc chatgpt-work, rồi thêm extra accounts từ Agent Advanced > ChatGPT OAuth Routing."
   },
   "embedding": {
     "enable": "Bật Embedding",

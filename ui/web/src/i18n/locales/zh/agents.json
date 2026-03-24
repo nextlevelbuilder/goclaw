@@ -124,6 +124,41 @@
     "saved": "已保存",
     "failedToSave": "保存失败"
   },
+  "chatgptOAuthRouting": {
+    "title": "ChatGPT OAuth 路由",
+    "description": "让一个 agent 在多个已认证的 ChatGPT OAuth 账户之间路由，而无需更改主要 provider/model 设置。",
+    "defaultAccount": "首选账户",
+    "defaultHint": "Agent 的 Provider 字段仍然表示 preferred/default account。",
+    "badge": "OAuth routing",
+    "badgeTooltip": "这个 agent 正在跨多个 ChatGPT OAuth 账户进行路由。",
+    "summaryTitle": "ChatGPT OAuth 账户",
+    "summaryDescription": "这个 agent 使用一个首选 ChatGPT OAuth 账户，并且可以从 Advanced 中添加其他已认证账户。",
+    "strategyLabel": "路由策略",
+    "strategyHint": "Manual 会固定使用首选账户。Round robin 会在选中的 extra accounts 之间轮换。",
+    "extraAccountsLabel": "Extra Accounts",
+    "extraHint": "只有已启用且已认证的 ChatGPT OAuth provider 才能参与。",
+    "emptyExtras": "再认证一个 ChatGPT OAuth provider 以启用 rotation。",
+    "noReadyExtras": "请先认证并启用另一个 ChatGPT OAuth provider，然后再添加到这里。",
+    "extraSelectableHint": "这里只能选择已启用且已认证的 ChatGPT OAuth 账户。",
+    "selectedAccountsLabel": "参与轮换的账户",
+    "emptySelected": "还没有选择 extra account。",
+    "manageAction": "在 Advanced 中管理",
+    "singleAccountHint": "在 Providers 页面再添加一个具名的 ChatGPT OAuth provider，即可解锁 extra accounts 或 round robin。",
+    "readySummary": "{{ready}} / {{total}} 个 extra account 已就绪。",
+    "preferredNeedsAttention": "首选 ChatGPT OAuth 账户需要先处理，agent 才能稳定使用它。",
+    "loadingAccounts": "正在检查 ChatGPT OAuth 账户状态...",
+    "attentionTitle": "需要关注的账户",
+    "attentionHint": "已选中但被禁用或已退出登录的账户会继续显示在这里，直到您移除它们或重新登录。",
+    "status": {
+      "ready": "就绪",
+      "needs_sign_in": "需要登录",
+      "disabled": "已禁用"
+    },
+    "strategy": {
+      "manual": "Manual",
+      "roundRobin": "Round Robin"
+    }
+  },
   "identity": {
     "title": "身份",
     "agentKey": "Agent标识",

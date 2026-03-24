@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
+import { useChatGPTOAuthProviderStatuses } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { isSetupSkipped } from "@/lib/setup-skip";
@@ -12,18 +13,26 @@ export function useBootstrapStatus() {
   const tenantId = useAuthStore((s) => s.tenantId);
   const tenantSlug = useAuthStore((s) => s.tenantSlug);
   const { providers, loading: providersLoading } = useProviders();
+  const { statuses: oauthStatuses, isLoading: oauthStatusesLoading } = useChatGPTOAuthProviderStatuses(providers);
   const { agents, loading: agentsLoading } = useAgents();
 
   // Wait for WS to connect before considering agents loaded
-  const loading = providersLoading || agentsLoading || !connected;
+  const loading = providersLoading || agentsLoading || oauthStatusesLoading || !connected;
 
   const { needsSetup, currentStep } = useMemo(() => {
     if (loading) return { needsSetup: false, currentStep: "complete" as SetupStep };
 
-    // A provider is "configured" if enabled + has an API key set (masked as "***")
-    // Claude CLI, ChatGPT OAuth, and local Ollama don't require API keys — check type instead
-    const hasProvider = providers.some((p) => p.enabled &&
-      (p.api_key === "***" || p.provider_type === "claude_cli" || p.provider_type === "chatgpt_oauth" || p.provider_type === "ollama"));
+    const readyOAuthProviders = new Set(
+      oauthStatuses
+        .filter((status) => status.availability === "ready")
+        .map((status) => status.provider.name),
+    );
+    const hasProvider = providers.some((provider) => provider.enabled && (
+      provider.api_key === "***"
+      || provider.provider_type === "claude_cli"
+      || provider.provider_type === "ollama"
+      || (provider.provider_type === "chatgpt_oauth" && readyOAuthProviders.has(provider.name))
+    ));
     const hasAgent = agents.length > 0;
 
     // Allow skipping setup entirely via localStorage
@@ -33,7 +42,7 @@ export function useBootstrapStatus() {
     if (!hasProvider) return { needsSetup: true, currentStep: 1 as SetupStep };
     if (!hasAgent) return { needsSetup: true, currentStep: 2 as SetupStep };
     return { needsSetup: false, currentStep: "complete" as SetupStep };
-  }, [loading, providers, agents, userId, tenantId, tenantSlug]);
+  }, [agents, loading, oauthStatuses, providers, tenantId, tenantSlug, userId]);
 
   return { needsSetup, currentStep, loading, providers, agents };
 }

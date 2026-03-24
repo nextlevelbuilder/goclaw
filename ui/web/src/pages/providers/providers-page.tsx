@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Cpu, Plus } from "lucide-react";
+import { Cpu, Info, Plus } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -46,6 +47,7 @@ function ProviderListView() {
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProviderData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const hasChatGPTOAuthProviders = providers.some((provider) => provider.provider_type === "chatgpt_oauth");
 
   const filtered = providers.filter(
     (p) =>
@@ -88,6 +90,16 @@ function ProviderListView() {
           className="max-w-sm"
         />
       </div>
+
+      {hasChatGPTOAuthProviders && (
+        <Alert className="mt-4">
+          <Info className="h-4 w-4" />
+          <AlertTitle>{t("pageHint.title")}</AlertTitle>
+          <AlertDescription>
+            <p>{t("pageHint.description")}</p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="mt-6">
         {showSkeleton ? (

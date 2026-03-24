@@ -5,6 +5,7 @@ export const queryKeys = {
   providers: {
     all: ["providers"] as const,
     models: (providerId: string) => ["providers", providerId, "models"] as const,
+    chatgptOAuthStatuses: (providerKeys: string[]) => ["providers", "chatgpt-oauth-statuses", ...providerKeys] as const,
   },
   agents: {
     all: ["agents"] as const,

@@ -26,7 +26,7 @@ export function ProviderApiKeyBadge({ provider }: { provider: ProviderData }) {
   if (provider.provider_type === "chatgpt_oauth") {
     return (
       <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-        <Link2 className="h-3 w-3" />{t("card.oauthLinked")}
+        <Link2 className="h-3 w-3" />{t("card.oauthAccount")}
       </span>
     );
   }

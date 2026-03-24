@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
+import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
 
 interface AgentCardProps {
   agent: AgentData;
@@ -12,15 +13,13 @@ interface AgentCardProps {
   onDelete?: () => void;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardProps) {
   const { t } = useTranslation("agents");
-  const displayName = agent.display_name
-    || (UUID_RE.test(agent.agent_key) ? t("card.unnamedAgent") : agent.agent_key);
+  const displayName = agentDisplayName(agent, t("card.unnamedAgent"));
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
   const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
   const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
 
   // Show agent_key as subtitle only if there's a display_name and agent_key is meaningful
   const showSubtitle = agent.display_name && !UUID_RE.test(agent.agent_key);
@@ -105,6 +104,11 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
                 : t("card.staticTooltip")}
             </TooltipContent>
           </Tooltip>
+        )}
+        {hasOAuthRouting && (
+          <Badge variant="outline" className="text-[11px]">
+            {t("chatgptOAuthRouting.badge")}
+          </Badge>
         )}
         {agent.context_window > 0 && (
           <span className="text-[11px] text-muted-foreground">

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { AgentData } from "@/types/agent";
 import type { HeartbeatConfig } from "@/pages/agents/hooks/use-agent-heartbeat";
 import { useCountdown } from "@/hooks/use-countdown";
-import { agentDisplayName, agentKeyDisplay } from "./agent-display-utils";
+import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting } from "./agent-display-utils";
 import { cn } from "@/lib/utils";
 
 interface AgentHeaderProps {
@@ -26,6 +26,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
   const selfEvolve = Boolean(otherCfg.self_evolve);
   const title = agentDisplayName(agent, t("card.unnamedAgent"));
   const keyDisplay = agentKeyDisplay(agent.agent_key);
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
 
   const hbConfigured = heartbeat != null;
   const hbEnabled = heartbeat?.enabled ?? false;
@@ -93,6 +94,18 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-[240px] text-xs">
                   {selfEvolve ? t("detail.evolvingTooltipDetail") : t("detail.staticTooltipDetail")}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {hasOAuthRouting && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-[10px]">
+                    {t("chatgptOAuthRouting.badge")}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+                  {t("chatgptOAuthRouting.badgeTooltip")}
                 </TooltipContent>
               </Tooltip>
             )}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ExternalLink, CheckCircle, ClipboardPaste } from "lucide-react";
@@ -35,6 +36,7 @@ export function OAuthSection({
   apiBase,
 }: OAuthSectionProps) {
   const { t } = useTranslation("providers");
+  const queryClient = useQueryClient();
   const http = useHttp();
   const resolvedProviderName = providerName?.trim() ?? "";
   const hasValidProvider = resolvedProviderName.length > 0 && isValidSlug(resolvedProviderName);
@@ -45,9 +47,9 @@ export function OAuthSection({
   const [pasteUrl, setPasteUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [justAuthenticated, setJustAuthenticated] = useState(false);
-  const [countdown, setCountdown] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const actionLabel = authenticatedActionLabel || t("oauth.done");
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -77,26 +79,10 @@ export function OAuthSection({
     return stopPolling;
   }, [fetchStatus]);
 
-  // Countdown timer — auto-close dialog after auth success
-  useEffect(() => {
-    if (!justAuthenticated) return;
-    setCountdown(3);
-    const iv = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(iv);
-          onSuccess();
-          return 0;
-        }
-        return c - 1;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [justAuthenticated, onSuccess]);
-
   const showSuccess = () => {
     setWaitingCallback(false);
     setJustAuthenticated(true);
+    queryClient.invalidateQueries({ queryKey: ["providers"] });
   };
 
   const handleStart = async () => {
@@ -157,6 +143,7 @@ export function OAuthSection({
     try {
       await http.post(`/v1/auth/chatgpt/${encodeURIComponent(resolvedProviderName)}/logout`);
       setStatus({ authenticated: false });
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
       toast.success(i18next.t("providers:oauth.loggedOut"), i18next.t("providers:oauth.loggedOutDesc"));
     } catch (err) {
       toast.error(i18next.t("providers:oauth.logoutFailed"), err instanceof Error ? err.message : "");
@@ -180,11 +167,21 @@ export function OAuthSection({
           <CheckCircle className="h-5 w-5 shrink-0" />
           <div>
             <p className="font-medium">{t("oauth.authSuccessful")}</p>
-            <p className="text-xs mt-0.5 opacity-80">
-              {t("oauth.activeProvider")} <code className="rounded bg-muted px-1 font-mono text-xs">{activeProvider}</code>{" "}
-              {t("oauth.closingIn", { count: countdown })}
+            <p className="mt-0.5 text-xs opacity-80">
+              {t("oauth.activeProvider")} <code className="rounded bg-muted px-1 font-mono text-xs">{activeProvider}</code>.{" "}
+              {t("oauth.authSuccessfulDesc")}
             </p>
           </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{activeProvider}/</code>{" "}
+          {t("oauth.modelPrefixExample")}
+        </p>
+        <p className="text-xs text-muted-foreground">{t("oauth.multiAccountHint")}</p>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={onSuccess}>
+            {actionLabel}
+          </Button>
         </div>
       </div>
     );
@@ -205,12 +202,11 @@ export function OAuthSection({
           {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{activeProvider}/</code>{" "}
           {t("oauth.modelPrefixExample")}
         </p>
+        <p className="text-xs text-muted-foreground">{t("oauth.multiAccountHint")}</p>
         <div className="flex flex-wrap gap-2">
-          {authenticatedActionLabel && (
-            <Button size="sm" onClick={onSuccess}>
-              {authenticatedActionLabel}
-            </Button>
-          )}
+          <Button size="sm" onClick={onSuccess}>
+            {actionLabel}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1.5">
             {t("oauth.removeToken")}
           </Button>
@@ -224,7 +220,7 @@ export function OAuthSection({
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{t("oauth.signInDesc")}</p>
         <p className="text-xs text-muted-foreground">
-          Enter a valid provider name before starting ChatGPT OAuth.
+          {t("oauth.aliasRequired")}
         </p>
       </div>
     );
@@ -233,6 +229,7 @@ export function OAuthSection({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">{t("oauth.signInDesc")}</p>
+      <p className="text-xs text-muted-foreground">{t("oauth.multiAccountHint")}</p>
       {waitingCallback ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-sm text-blue-700 dark:text-blue-400">

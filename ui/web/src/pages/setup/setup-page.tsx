@@ -12,6 +12,7 @@ import { SetupCompleteModal } from "./setup-complete-modal";
 import { Building2 } from "lucide-react";
 import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, LOCAL_STORAGE_KEYS } from "@/lib/constants";
 import { markSetupSkipped } from "@/lib/setup-skip";
+import { useChatGPTOAuthProviderStatuses } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useTenants } from "@/hooks/use-tenants";
@@ -83,6 +84,7 @@ export function SetupPage() {
   const userId = useAuthStore((s) => s.userId);
   const { currentTenantId, currentTenantSlug } = useTenants();
   const { currentStep, loading, providers, agents } = useBootstrapStatus();
+  const { statuses: oauthStatuses } = useChatGPTOAuthProviderStatuses(providers);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [createdProvider, setCreatedProvider] = useState<ProviderData | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -112,8 +114,17 @@ export function SetupPage() {
   if (showComplete) { completedSteps.push(1, 2, 3, 4); }
 
   // For resuming: find existing provider/agent from server data
-  const activeProvider = createdProvider ?? providers.find((p) => p.enabled &&
-    (p.api_key === "***" || p.provider_type === "claude_cli" || p.provider_type === "chatgpt_oauth")) ?? null;
+  const readyOAuthProviders = new Set(
+    oauthStatuses
+      .filter((status) => status.availability === "ready")
+      .map((status) => status.provider.name),
+  );
+  const activeProvider = createdProvider ?? providers.find((provider) => provider.enabled && (
+    provider.api_key === "***"
+    || provider.provider_type === "claude_cli"
+    || provider.provider_type === "ollama"
+    || (provider.provider_type === "chatgpt_oauth" && readyOAuthProviders.has(provider.name))
+  )) ?? null;
   const activeAgent = createdAgent ?? agents[0] ?? null;
 
   const handleFinish = () => setShowComplete(true);

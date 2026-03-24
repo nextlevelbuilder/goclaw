@@ -126,13 +126,15 @@ export function ProviderAdvancedDialog({
             description={t("detail.identityDesc")}
           />
           <div className="space-y-2">
-            <Label>{t("form.name")}</Label>
+            <Label>{isOAuth ? t("form.oauthAlias") : t("form.name")}</Label>
             <Input
               value={provider.name}
               disabled
               className="text-base md:text-sm font-mono"
             />
-            <p className="text-xs text-muted-foreground">{t("detail.nameReadonly")}</p>
+            <p className="text-xs text-muted-foreground">
+              {isOAuth ? t("detail.oauthAliasReadonly") : t("detail.nameReadonly")}
+            </p>
           </div>
 
           {/* Connection — standard providers only */}
@@ -250,6 +252,7 @@ export function ProviderAdvancedDialog({
                 providerName={provider.name}
                 displayName={provider.display_name}
                 apiBase={provider.api_base}
+                authenticatedActionLabel={t("form.close")}
                 onSuccess={() => onOpenChange(false)}
               />
             </>

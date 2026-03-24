@@ -16,8 +16,8 @@ import (
 func authCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Authenticate with LLM providers via OAuth",
-		Long:  "Manage OAuth authentication via the running gateway. Requires the gateway to be running.",
+		Short: "Authenticate named ChatGPT OAuth accounts",
+		Long:  "Manage ChatGPT OAuth authentication via the running gateway. Requires the gateway to be running.",
 	}
 	cmd.AddCommand(authStatusCmd())
 	cmd.AddCommand(authLogoutCmd())
@@ -78,7 +78,7 @@ func authStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status [provider]",
 		Short: "Show OAuth authentication status",
-		Long:  "Check if ChatGPT OAuth is configured on the running gateway.",
+		Long:  "Check if a named ChatGPT OAuth account is authenticated on the running gateway.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			provider := resolveOAuthProviderArg(args)
@@ -92,11 +92,11 @@ func authStatusCmd() *cobra.Command {
 				if name == "" {
 					name = provider
 				}
-				fmt.Printf("OpenAI OAuth: active (provider: %s)\n", name)
+				fmt.Printf("ChatGPT OAuth account: active (alias: %s)\n", name)
 				fmt.Printf("Use model prefix '%s/' in agent config (e.g. %s/gpt-5.4).\n", name, name)
 			} else {
-				fmt.Printf("No OAuth tokens found for provider '%s'.\n", provider)
-				fmt.Println("Use the web UI to authenticate with ChatGPT OAuth.")
+				fmt.Printf("No ChatGPT OAuth tokens found for alias '%s'.\n", provider)
+				fmt.Println("Use the web UI to authenticate this ChatGPT OAuth account.")
 			}
 			return nil
 		},
@@ -106,7 +106,7 @@ func authStatusCmd() *cobra.Command {
 func authLogoutCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "logout [provider]",
-		Short: "Remove stored OAuth tokens",
+		Short: "Disconnect stored ChatGPT OAuth tokens",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			provider := resolveOAuthProviderArg(args)
@@ -115,7 +115,7 @@ func authLogoutCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("OpenAI OAuth token removed for provider '%s'.\n", provider)
+			fmt.Printf("ChatGPT OAuth account disconnected for alias '%s'.\n", provider)
 			return nil
 		},
 	}

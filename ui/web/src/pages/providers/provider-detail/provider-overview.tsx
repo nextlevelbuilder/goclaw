@@ -10,6 +10,7 @@ import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { toast } from "@/stores/use-toast-store";
 import { useProviderVerify } from "../hooks/use-provider-verify";
+import { ProviderOAuthAccountSection } from "./provider-oauth-account-section";
 import { getEmbeddingSettings } from "@/types/provider";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
@@ -29,6 +30,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const typeLabel = typeInfo?.label ?? provider.provider_type;
   const showApiKey = !NO_API_KEY_TYPES.has(provider.provider_type);
   const showEmbedding = !NO_EMBEDDING_TYPES.has(provider.provider_type);
+  const isOAuth = provider.provider_type === "chatgpt_oauth";
 
   // Identity
   const [displayName, setDisplayName] = useState(provider.display_name || "");
@@ -112,9 +114,12 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
             id="displayName"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder={t("form.displayNamePlaceholder")}
+            placeholder={isOAuth ? t("form.oauthDisplayNamePlaceholder") : t("form.displayNamePlaceholder")}
             className="text-base md:text-sm"
           />
+          {isOAuth && (
+            <p className="text-xs text-muted-foreground">{t("form.oauthDisplayNameHint")}</p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -125,7 +130,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
         </div>
 
         <div className="space-y-2">
-          <Label>{t("form.name")}</Label>
+          <Label>{isOAuth ? t("form.oauthAlias") : t("form.name")}</Label>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-sm text-muted-foreground">
               {provider.name}
@@ -136,6 +141,8 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
           </div>
         </div>
       </section>
+
+      {isOAuth && <ProviderOAuthAccountSection provider={provider} />}
 
       {/* API Key */}
       {showApiKey && (
