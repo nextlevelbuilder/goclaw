@@ -640,7 +640,21 @@
           "description": { "type": "string" },
           "provider": { "type": "string", "description": "LLM provider name" },
           "model": { "type": "string", "description": "Model ID" },
-          "system_prompt": { "type": "string" }
+          "system_prompt": { "type": "string" },
+          "other_config": {
+            "type": "object",
+            "description": "Optional per-agent JSON config.",
+            "properties": {
+              "chatgpt_oauth_routing": {
+                "type": "object",
+                "description": "Optional agent-side routing for ChatGPT OAuth providers. The main provider field remains the preferred/default account.",
+                "properties": {
+                  "strategy": { "type": "string", "enum": ["manual", "round_robin"] },
+                  "extra_provider_names": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
         }
       },
       "ProviderInput": {
@@ -649,7 +663,7 @@
         "properties": {
           "name": { "type": "string", "description": "Unique provider slug" },
           "display_name": { "type": "string" },
-          "provider_type": { "type": "string", "enum": ["anthropic_native", "openai_compat", "gemini_native", "groq", "deepseek", "mistral", "xai", "ollama"] },
+          "provider_type": { "type": "string", "enum": ["anthropic_native", "openai_compat", "gemini_native", "openrouter", "groq", "deepseek", "mistral", "xai", "minimax_native", "cohere", "perplexity", "dashscope", "bailian", "chatgpt_oauth", "claude_cli", "suno", "yescale", "zai", "zai_coding", "ollama", "ollama_cloud", "acp"] },
           "api_base": { "type": "string" },
           "api_key": { "type": "string" },
           "enabled": { "type": "boolean", "default": true }

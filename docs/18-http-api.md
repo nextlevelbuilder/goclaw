@@ -138,6 +138,31 @@ POST /v1/agents/{id}/wake
 
 Response: `{content, run_id, usage?}`. Used by orchestrators (n8n, Paperclip) to trigger agent runs.
 
+### ChatGPT OAuth Routing in `other_config`
+
+For agents whose main `provider` is a `chatgpt_oauth` provider, `other_config.chatgpt_oauth_routing`
+can opt the agent into multi-account routing while keeping the main `provider` field as the preferred/default account.
+
+```json
+{
+  "provider": "openai-codex",
+  "model": "gpt-5.4",
+  "other_config": {
+    "chatgpt_oauth_routing": {
+      "strategy": "round_robin",
+      "extra_provider_names": ["openai-codex-backup", "openai-codex-team"]
+    }
+  }
+}
+```
+
+Rules:
+- `strategy: "manual"` keeps the main `provider` as the preferred account.
+- `strategy: "round_robin"` rotates requests across the main provider plus the listed extra authenticated ChatGPT OAuth providers.
+- Retryable upstream failures can fall through to the next eligible ChatGPT OAuth provider in the same request.
+- Only enabled and authenticated `chatgpt_oauth` providers participate.
+- Provider-scoped auth remains unchanged: `cmd/auth` and `/v1/auth/chatgpt/{provider}/*` still operate on explicit providers.
+
 ---
 
 ## 5. Skills
@@ -652,10 +677,16 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET` | `/v1/auth/chatgpt/{provider}/status` | Check ChatGPT OAuth status for a provider |
+| `POST` | `/v1/auth/chatgpt/{provider}/start` | Start ChatGPT OAuth flow for a provider |
+| `POST` | `/v1/auth/chatgpt/{provider}/callback` | Manual callback handler for a provider |
+| `POST` | `/v1/auth/chatgpt/{provider}/logout` | Revoke ChatGPT OAuth token for a provider |
 | `GET` | `/v1/auth/openai/status` | Check OpenAI auth status |
 | `POST` | `/v1/auth/openai/start` | Start OAuth flow |
 | `POST` | `/v1/auth/openai/callback` | Manual callback handler |
 | `POST` | `/v1/auth/openai/logout` | Revoke token |
+
+Legacy `/v1/auth/openai/*` routes remain as compatibility aliases for the default `openai-codex` ChatGPT OAuth provider.
 
 ---
 
