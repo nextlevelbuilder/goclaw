@@ -183,6 +183,10 @@ func persistAdd(pkg string) {
 		}
 	}
 
+	created := false
+	if _, err := os.Stat(listFile); os.IsNotExist(err) {
+		created = true
+	}
 	f, err := os.OpenFile(listFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
 	if err != nil {
 		slog.Warn("pkg-helper: persist add failed", "error", err)
@@ -190,6 +194,10 @@ func persistAdd(pkg string) {
 	}
 	defer f.Close()
 	fmt.Fprintln(f, pkg)
+	// Ensure group ownership allows the goclaw process to read the file.
+	if created {
+		os.Chown(listFile, 0, 1000) //nolint:errcheck
+	}
 }
 
 // persistRemove removes a package name from the apk persist file.
@@ -217,7 +225,12 @@ func persistRemove(pkg string) {
 	if err := os.Rename(tmpFile, listFile); err != nil {
 		slog.Warn("pkg-helper: persist remove rename failed", "error", err)
 		os.Remove(tmpFile) //nolint:errcheck
+		return
 	}
+	// Restore group ownership so the goclaw process (uid 1000, gid 1000) can read the file.
+	// Without this, the renamed file inherits root:root from the temp file,
+	// causing ListInstalledPackages to return nil for system packages.
+	os.Chown(listFile, 0, 1000) //nolint:errcheck
 }
 
 func apkListFile() string {
