@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import type { SecureCLIBinary, CLICredentialInput, CLIPreset } from "./hooks/use-cli-credentials";
+import { GwsOAuthWizard } from "./gws-oauth-wizard";
 
 interface Props {
   open: boolean;
@@ -42,12 +43,12 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const [error, setError] = useState("");
 
   const isEdit = !!credential;
-  // Build typed entry list to avoid noUncheckedIndexedAccess issues
+  const isGws = selectedPreset === "gws";
+
   const presetEntries: Array<[string, CLIPreset]> = Object.entries(presets).filter(
     (e): e is [string, CLIPreset] => e[1] !== undefined,
   );
 
-  // Current preset definition (for env var fields)
   const activePreset: CLIPreset | null =
     selectedPreset !== NONE_PRESET ? (presets[selectedPreset] ?? null) : null;
 
@@ -139,9 +140,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                {t("form.presetHint")}
-              </p>
+              <p className="text-xs text-muted-foreground">{t("form.presetHint")}</p>
             </div>
           )}
 
@@ -150,6 +149,15 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
             <p className="text-xs text-muted-foreground rounded-md border border-dashed p-2">
               {t("form.encryptedHint")}
             </p>
+          )}
+
+          {/* gws: OAuth wizard above env var inputs — create mode only */}
+          {isGws && !isEdit && (
+            <GwsOAuthWizard
+              onAuthorized={(credPath) =>
+                setEnvValues((prev) => ({ ...prev, GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE: credPath }))
+              }
+            />
           )}
 
           {/* Env var inputs from preset */}
@@ -164,16 +172,14 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
                   </Label>
                   <Input
                     id={`env-${ev.name}`}
-                    type="password"
+                    type={ev.is_file ? "text" : "password"}
                     autoComplete="off"
                     placeholder={ev.desc}
                     value={envValues[ev.name] ?? ""}
                     onChange={(e) => setEnvValues((prev) => ({ ...prev, [ev.name]: e.target.value }))}
                     className="text-base md:text-sm"
                   />
-                  {ev.desc && (
-                    <p className="text-xs text-muted-foreground">{ev.desc}</p>
-                  )}
+                  {ev.desc && <p className="text-xs text-muted-foreground">{ev.desc}</p>}
                 </div>
               ))}
             </div>

@@ -37,6 +37,9 @@ func (h *SecureCLIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/cli-credentials/{id}", h.auth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/cli-credentials/{id}", h.auth(h.handleDelete))
 	mux.HandleFunc("POST /v1/cli-credentials/{id}/test", h.auth(h.handleDryRun))
+	// gws Google OAuth helper endpoints
+	mux.HandleFunc("POST /v1/cli-credentials/gws/oauth-url", h.auth(h.handleGwsOAuthURL))
+	mux.HandleFunc("POST /v1/cli-credentials/gws/oauth-exchange", h.auth(h.handleGwsOAuthExchange))
 }
 
 func (h *SecureCLIHandler) auth(next http.HandlerFunc) http.HandlerFunc {

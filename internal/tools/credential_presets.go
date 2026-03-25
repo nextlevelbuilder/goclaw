@@ -80,6 +80,17 @@ var CLIPresets = map[string]CLIPreset{
 		Timeout:     300,
 		Tips:        "Use -json flag for structured output",
 	},
+	"gws": {
+		BinaryName:  "gws",
+		Description: "Google Workspace CLI — Gmail, Calendar, Drive, Sheets, Docs",
+		EnvVars: []EnvVarDef{
+			{Name: "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE", Desc: "Path to authorized credentials JSON (auto-generated from OAuth)", IsFile: true},
+		},
+		DenyArgs:    []string{`auth\s+setup`, `auth\s+login`, `auth\s+logout`, `auth\s+revoke`},
+		DenyVerbose: []string{`--debug`},
+		Timeout:     30,
+		Tips:        "Gmail: gws gmail +send --to X --subject Y --body Z | gws gmail +triage | gws gmail +reply --message-id ID --body Z",
+	},
 }
 
 // GetPreset returns a preset by name, or nil if not found.
