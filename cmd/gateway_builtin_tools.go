@@ -86,6 +86,12 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		// messaging
 		{Name: "message", DisplayName: "Message", Description: "Send a proactive message to a user on a connected channel (Telegram, Discord, etc.)", Category: "messaging", Enabled: true},
 
+		// google-workspace
+		{Name: "gws", DisplayName: "Google Workspace", Description: "Interact with Google Workspace (Gmail, Calendar, Drive) via the gws CLI", Category: "google-workspace", Enabled: true,
+			Settings: json.RawMessage(`{"client_id":"","client_secret":"","refresh_token":""}`),
+			Metadata: json.RawMessage(`{"config_hint":"Built-in Tools → Google Workspace → Settings"}`),
+		},
+
 		// scheduling
 		{Name: "cron", DisplayName: "Cron Scheduler", Description: "Schedule or manage recurring tasks using cron expressions, at-times, or intervals", Category: "scheduling", Enabled: true,
 			Metadata: json.RawMessage(`{"config_hint":"Config → Cron"}`),

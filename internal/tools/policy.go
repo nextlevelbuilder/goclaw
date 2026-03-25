@@ -22,6 +22,7 @@ var toolGroups = map[string][]string{
 	"ui":         {"browser"},
 	"automation": {"cron"},
 	"messaging":  {"message", "create_forum_topic", "list_group_members"},
+	"google":     {"gws"},
 	"team": {"team_tasks"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
@@ -34,6 +35,7 @@ var toolGroups = map[string][]string{
 		"create_image", "create_video",
 		"skill_search", "mcp_tool_search", "tts",
 		"team_tasks",
+		"gws",
 	},
 }
 

@@ -195,6 +195,12 @@ func runGateway() {
 	toolsReg.Register(tools.NewCronTool(pgStores.Cron))
 	slog.Info("cron tool registered")
 
+	// Google Workspace CLI tool
+	if pgStores.BuiltinTools != nil {
+		toolsReg.Register(tools.NewGWSTool(pgStores.BuiltinTools))
+		slog.Info("gws tool registered")
+	}
+
 	// Heartbeat tool (agent-facing)
 	heartbeatTool := tools.NewHeartbeatTool(pgStores.Heartbeats, pgStores.ConfigPermissions)
 	heartbeatTool.SetAgentStore(pgStores.Agents)

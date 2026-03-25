@@ -33,6 +33,8 @@ func (h *BuiltinToolsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/tools/builtin/{name}", h.auth(h.handleUpdate))
 	mux.HandleFunc("PUT /v1/tools/builtin/{name}/tenant-config", h.auth(h.handleSetTenantConfig))
 	mux.HandleFunc("DELETE /v1/tools/builtin/{name}/tenant-config", h.auth(h.handleDeleteTenantConfig))
+	mux.HandleFunc("POST /v1/tools/builtin/gws/oauth-url", h.auth(h.handleGWSAuthURL))
+	mux.HandleFunc("POST /v1/tools/builtin/gws/oauth-exchange", h.auth(h.handleGWSExchange))
 }
 
 func (h *BuiltinToolsHandler) auth(next http.HandlerFunc) http.HandlerFunc {

@@ -25,7 +25,7 @@ import { useTenants } from "@/hooks/use-tenants";
 
 const CATEGORY_ORDER = [
   "filesystem", "runtime", "web", "memory", "media", "browser",
-  "sessions", "messaging", "scheduling", "subagents", "skills", "delegation", "teams",
+  "sessions", "messaging", "google-workspace", "scheduling", "subagents", "skills", "delegation", "teams",
 ];
 
 function hasEditableSettings(tool: BuiltinToolData): boolean {

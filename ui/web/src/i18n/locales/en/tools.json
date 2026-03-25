@@ -96,6 +96,7 @@
       "browser": "Browser",
       "sessions": "Sessions",
       "messaging": "Messaging",
+      "google-workspace": "Google Workspace",
       "scheduling": "Scheduling",
       "subagents": "Agents",
       "skills": "Skills",

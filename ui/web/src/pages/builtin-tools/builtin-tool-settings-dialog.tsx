@@ -16,9 +16,11 @@ import { MEDIA_TOOLS } from "./media-provider-params-schema";
 import { MediaProviderChainForm } from "./media-provider-chain-form";
 import { KGSettingsForm } from "./kg-settings-form";
 import { WebFetchExtractorChainForm } from "./web-fetch-extractor-chain-form";
+import { GWSSettingsForm } from "./gws-settings-form";
 
 const KG_TOOL = "knowledge_graph_search";
 const WEB_FETCH_TOOL = "web_fetch";
+const GWS_TOOL = "gws";
 
 interface Props {
   tool: BuiltinToolData | null;
@@ -31,12 +33,19 @@ export function BuiltinToolSettingsDialog({ tool, open, onOpenChange, onSave }: 
   const isMedia = tool ? MEDIA_TOOLS.has(tool.name) : false;
   const isKG = tool?.name === KG_TOOL;
   const isWebFetch = tool?.name === WEB_FETCH_TOOL;
+  const isGWS = tool?.name === GWS_TOOL;
   const wide = isMedia || isKG || isWebFetch;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={wide ? "sm:max-w-2xl" : "sm:max-w-md"}>
-        {isWebFetch && tool ? (
+        {isGWS && tool ? (
+          <GWSSettingsForm
+            initialSettings={tool.settings ?? {}}
+            onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
+            onCancel={() => onOpenChange(false)}
+          />
+        ) : isWebFetch && tool ? (
           <WebFetchExtractorChainForm
             initialSettings={tool.settings ?? {}}
             onSave={(settings) => onSave(tool.name, settings).then(() => onOpenChange(false))}
