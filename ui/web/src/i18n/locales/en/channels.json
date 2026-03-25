@@ -184,6 +184,7 @@
     "dm_policy": { "label": "DM Policy" },
     "group_policy": { "label": "Group Policy" },
     "require_mention": { "label": "Require @mention in groups" },
+    "mention_mode": { "label": "Mention Mode", "help": "Strict: only respond when @mentioned. Yield: respond to all messages unless another bot is explicitly mentioned." },
     "history_limit": { "label": "Group History Limit", "help": "Max pending group messages for context (0 = disabled)" },
     "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },
     "group_stream": { "label": "Group Streaming", "help": "Stream response progressively in groups" },
@@ -227,6 +228,10 @@
       "pairing": "Pairing (require approval)",
       "allowlist": "Allowlist only",
       "disabled": "Disabled"
+    },
+    "mention_mode": {
+      "strict": "Strict (only when mentioned)",
+      "yield": "Yield (respond unless another bot is mentioned)"
     },
     "reaction_level": {
       "off": "Off",

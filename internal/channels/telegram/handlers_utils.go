@@ -59,6 +59,51 @@ func (c *Channel) detectMention(msg *telego.Message, botUsername string) bool {
 	return false
 }
 
+// hasOtherBotMention checks if the message mentions any bot other than ours.
+// Used by "yield" mention mode: if another bot is explicitly mentioned, this bot yields.
+// Telegram marks bot mentions as entity type "mention" with text "@username";
+// we detect bots by checking if the mentioned user is a bot via the reply-to context,
+// or by checking for any @mention that is not our own username.
+func (c *Channel) hasOtherBotMention(msg *telego.Message, myUsername string) bool {
+	lowerMy := strings.ToLower(myUsername)
+
+	for _, pair := range []struct {
+		entities []telego.MessageEntity
+		text     string
+	}{
+		{msg.Entities, msg.Text},
+		{msg.CaptionEntities, msg.Caption},
+	} {
+		if pair.text == "" {
+			continue
+		}
+		for _, entity := range pair.entities {
+			if entity.Type == "mention" {
+				mentioned := pair.text[entity.Offset : entity.Offset+entity.Length]
+				mentionedLower := strings.ToLower(mentioned)
+				// Skip our own mention
+				if mentionedLower == "@"+lowerMy {
+					continue
+				}
+				// Any other @mention in the message → another bot/user was called
+				return true
+			}
+			if entity.Type == "bot_command" {
+				cmdText := pair.text[entity.Offset : entity.Offset+entity.Length]
+				cmdLower := strings.ToLower(cmdText)
+				// Commands addressed to another bot: /cmd@other_bot
+				if atIdx := strings.Index(cmdLower, "@"); atIdx > 0 {
+					target := cmdLower[atIdx+1:]
+					if target != lowerMy {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 // isServiceMessage returns true if the Telegram message is a service/system message
 // (member added/removed, title changed, pinned, etc.) rather than a user-sent message.
 // Service messages have no text, caption, or media content.

@@ -36,6 +36,11 @@ export const groupPolicyOptions = [
   { value: "disabled", label: "Disabled" },
 ];
 
+const mentionModeOptions = [
+  { value: "strict", label: "Strict (only when mentioned)" },
+  { value: "yield", label: "Yield (respond unless another bot is mentioned)" },
+];
+
 // --- Credentials schemas ---
 
 export const credentialsSchema: Record<string, FieldDef[]> = {
@@ -75,6 +80,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
+    { key: "mention_mode", label: "Mention Mode", type: "select", options: mentionModeOptions, defaultValue: "strict", help: "Strict: only respond when @mentioned. Yield: respond to all messages unless another bot is explicitly mentioned." },
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
     { key: "dm_stream", label: "DM Streaming", type: "boolean", defaultValue: true, help: "Stream response progressively in DMs" },
     { key: "group_stream", label: "Group Streaming", type: "boolean", defaultValue: false, help: "Stream response progressively in groups" },
@@ -156,6 +162,7 @@ export const configSchema: Record<string, FieldDef[]> = {
 export const groupOverrideSchema: FieldDef[] = [
   { key: "group_policy", label: "Group Policy", type: "tristate", options: groupPolicyOptions },
   { key: "require_mention", label: "Require @mention", type: "tristate" },
+  { key: "mention_mode", label: "Mention Mode", type: "tristate", options: mentionModeOptions },
   { key: "enabled", label: "Enabled", type: "tristate" },
   { key: "allow_from", label: "Allowed Users", type: "tags", placeholder: "User IDs, one per line", help: "Restrict which users can interact in this group" },
   { key: "skills", label: "Skills Filter", type: "skill-select", help: "Limit available skills for this group" },

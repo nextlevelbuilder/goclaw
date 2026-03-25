@@ -4,6 +4,7 @@ import { groupOverrideSchema } from "./channel-schemas";
 export interface TelegramGroupConfigValues {
   group_policy?: string;
   require_mention?: boolean;
+  mention_mode?: string;
   enabled?: boolean;
   allow_from?: string[];
   skills?: string[];

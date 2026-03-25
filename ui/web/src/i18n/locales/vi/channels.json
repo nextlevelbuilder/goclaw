@@ -184,6 +184,7 @@
     "dm_policy": { "label": "Chính sách DM" },
     "group_policy": { "label": "Chính sách nhóm" },
     "require_mention": { "label": "Yêu cầu @đề cập trong nhóm" },
+    "mention_mode": { "label": "Chế độ đề cập", "help": "Nghiêm ngặt: chỉ phản hồi khi được @đề cập. Nhường: phản hồi tất cả tin nhắn trừ khi bot khác được đề cập." },
     "history_limit": { "label": "Giới hạn lịch sử nhóm", "help": "Số tin nhắn nhóm chờ tối đa cho ngữ cảnh (0 = tắt)" },
     "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },
     "group_stream": { "label": "Stream nhóm", "help": "Truyền phản hồi liên tục trong nhóm" },
@@ -227,6 +228,10 @@
       "pairing": "Ghép nối (yêu cầu phê duyệt)",
       "allowlist": "Chỉ danh sách cho phép",
       "disabled": "Tắt"
+    },
+    "mention_mode": {
+      "strict": "Nghiêm ngặt (chỉ khi được đề cập)",
+      "yield": "Nhường (phản hồi trừ khi bot khác được đề cập)"
     },
     "reaction_level": {
       "off": "Tắt",
