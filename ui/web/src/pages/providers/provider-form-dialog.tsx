@@ -156,7 +156,6 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                     placeholder={t("form.oauthAliasPlaceholder")}
                     className="text-base md:text-sm"
                   />
-                  <p className="text-xs text-muted-foreground">{t("form.oauthAliasHint")}</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="oauth-display-name">{t("form.displayName")}</Label>
@@ -167,7 +166,6 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                     placeholder={t("form.oauthDisplayNamePlaceholder")}
                     className="text-base md:text-sm"
                   />
-                  <p className="text-xs text-muted-foreground">{t("form.oauthDisplayNameHint")}</p>
                 </div>
               </div>
               <OAuthSection

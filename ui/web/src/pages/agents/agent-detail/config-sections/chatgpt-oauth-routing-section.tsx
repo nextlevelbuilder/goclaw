@@ -1,16 +1,28 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   useChatGPTOAuthProviderStatuses,
   type ChatGPTOAuthAvailability,
 } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
+import type { ChatGPTOAuthProviderQuota } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
 import type { ChatGPTOAuthRoutingConfig } from "@/types/agent";
 import type { ProviderData } from "@/types/provider";
+import type { CodexPoolEntry } from "../codex-pool-activity-panel";
+import {
+  getQuotaFailureKind,
+  getRouteReadiness,
+} from "../chatgpt-oauth-quota-utils";
 
 interface ChatGPTOAuthRoutingSectionProps {
   currentProvider: string;
@@ -18,13 +30,81 @@ interface ChatGPTOAuthRoutingSectionProps {
   value: ChatGPTOAuthRoutingConfig;
   onChange: (value: ChatGPTOAuthRoutingConfig) => void;
   canManageProviders?: boolean;
+  quotaByName?: Map<string, ChatGPTOAuthProviderQuota>;
+  quotaLoading?: boolean;
+  entries?: CodexPoolEntry[];
+  isDirty?: boolean;
+  saving?: boolean;
+  onSave?: () => void;
   className?: string;
 }
 
-function statusBadgeVariant(availability: ChatGPTOAuthAvailability): "success" | "warning" | "outline" {
+function statusBadgeVariant(
+  availability: ChatGPTOAuthAvailability,
+): "success" | "warning" | "outline" {
   if (availability === "ready") return "success";
   if (availability === "needs_sign_in") return "warning";
   return "outline";
+}
+
+function routeBadgeVariant(
+  readiness: ReturnType<typeof getRouteReadiness>,
+): "success" | "warning" | "outline" | "destructive" {
+  if (readiness === "healthy") return "success";
+  if (readiness === "fallback") return "warning";
+  if (readiness === "checking") return "outline";
+  return "destructive";
+}
+
+function routeLabelKey(
+  readiness: ReturnType<typeof getRouteReadiness>,
+): string {
+  if (readiness === "healthy") return "chatgptOAuthRouting.routerActiveTitle";
+  if (readiness === "fallback") return "chatgptOAuthRouting.fallbackTitle";
+  if (readiness === "checking") return "chatgptOAuthRouting.checkingTitle";
+  return "chatgptOAuthRouting.blockedNowTitle";
+}
+
+function StateGroup({
+  title,
+  count,
+  variant,
+  entries,
+  emptyLabel,
+}: {
+  title: string;
+  count: number;
+  variant: "success" | "warning" | "outline" | "destructive";
+  entries: Array<{ name: string; label: string; detail?: string }>;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="self-start rounded-lg border bg-muted/10 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </p>
+        <Badge variant={variant}>{count}</Badge>
+      </div>
+      {entries.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {entries.map((entry) => (
+            <div
+              key={entry.name}
+              className="rounded-md border bg-background/80 px-2 py-1 text-xs"
+            >
+              <span className="font-medium">{entry.label}</span>
+              {entry.detail ? (
+                <span className="text-muted-foreground"> · {entry.detail}</span>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">{emptyLabel}</p>
+      )}
+    </div>
+  );
 }
 
 export function ChatGPTOAuthRoutingSection({
@@ -33,13 +113,24 @@ export function ChatGPTOAuthRoutingSection({
   value,
   onChange,
   canManageProviders = true,
+  quotaByName,
+  quotaLoading = false,
+  entries = [],
+  isDirty = false,
+  saving = false,
+  onSave,
   className,
 }: ChatGPTOAuthRoutingSectionProps) {
   const { t } = useTranslation("agents");
+  const { t: tc } = useTranslation("common");
   const { statuses, isLoading } = useChatGPTOAuthProviderStatuses(providers);
 
-  const oauthProviders = providers.filter((provider) => provider.provider_type === "chatgpt_oauth");
-  const currentOAuthProvider = oauthProviders.find((provider) => provider.name === currentProvider);
+  const oauthProviders = providers.filter(
+    (provider) => provider.provider_type === "chatgpt_oauth",
+  );
+  const currentOAuthProvider = oauthProviders.find(
+    (provider) => provider.name === currentProvider,
+  );
   if (!currentOAuthProvider) return null;
 
   const statusByName = useMemo(
@@ -47,40 +138,36 @@ export function ChatGPTOAuthRoutingSection({
     [statuses],
   );
 
-  const getAvailability = (provider: ProviderData): ChatGPTOAuthAvailability => (
-    statusByName.get(provider.name)?.availability
-      ?? (provider.enabled ? "needs_sign_in" : "disabled")
+  const getAvailability = (provider: ProviderData): ChatGPTOAuthAvailability =>
+    statusByName.get(provider.name)?.availability ??
+    (provider.enabled ? "needs_sign_in" : "disabled");
+
+  const allExtraProviders = oauthProviders.filter(
+    (provider) => provider.name !== currentProvider,
   );
-
-  const allExtraProviders = oauthProviders.filter((provider) => provider.name !== currentProvider);
-  const readyExtraProviders = allExtraProviders.filter((provider) => getAvailability(provider) === "ready");
+  const readyExtraProviders = allExtraProviders.filter(
+    (provider) => getAvailability(provider) === "ready",
+  );
   const selectedExtras = new Set(value.extra_provider_names ?? []);
-  const preferredAvailability = getAvailability(currentOAuthProvider);
-  const selectedEntries = [
-    {
-      name: currentOAuthProvider.name,
-      label: currentOAuthProvider.display_name || currentOAuthProvider.name,
-      availability: preferredAvailability,
-      role: "preferred" as const,
-    },
-    ...allExtraProviders
-      .filter((provider) => selectedExtras.has(provider.name))
-      .map((provider) => ({
-        name: provider.name,
-        label: provider.display_name || provider.name,
-        availability: getAvailability(provider),
-        role: "extra" as const,
-      })),
-  ];
-
-  const attentionEntries = allExtraProviders
-    .filter((provider) => getAvailability(provider) !== "ready")
-    .map((provider) => ({
-      name: provider.name,
-      label: provider.display_name || provider.name,
-      availability: getAvailability(provider),
-      selected: selectedExtras.has(provider.name),
-    }));
+  const selectedEntries = entries.map((entry) => ({
+    ...entry,
+    routeReadiness: getRouteReadiness(entry.availability, entry.quota),
+    failureKind: getQuotaFailureKind(entry.quota),
+  }));
+  const healthyEntries = selectedEntries.filter(
+    (entry) => entry.routeReadiness === "healthy",
+  );
+  const fallbackEntries = selectedEntries.filter(
+    (entry) => entry.routeReadiness === "fallback",
+  );
+  const checkingEntries = selectedEntries.filter(
+    (entry) => entry.routeReadiness === "checking",
+  );
+  const blockedEntries = selectedEntries.filter(
+    (entry) => entry.routeReadiness === "blocked",
+  );
+  const routerActiveEntries = healthyEntries;
+  const standbyEntries = [...fallbackEntries, ...checkingEntries];
 
   const setStrategy = (strategy: "manual" | "round_robin") => {
     onChange({ ...value, strategy });
@@ -99,47 +186,68 @@ export function ChatGPTOAuthRoutingSection({
     });
   };
 
-  return (
-    <Card className={cn("gap-3 overflow-hidden", className)}>
-      <CardHeader className="border-b bg-muted/20">
-        <CardTitle>{t("chatgptOAuthRouting.title")}</CardTitle>
-        <CardDescription>{t("chatgptOAuthRouting.description")}</CardDescription>
-        {!canManageProviders && (
-          <p className="text-xs text-muted-foreground">
-            {t("chatgptOAuthRouting.providerAccessInline")}
-          </p>
-        )}
-      </CardHeader>
+  const routeDetail = (
+    entry: (typeof selectedEntries)[number],
+  ): string | undefined => {
+    if (entry.availability !== "ready") {
+      return t(`chatgptOAuthRouting.status.${entry.availability}`);
+    }
+    if (entry.failureKind) {
+      return t(`chatgptOAuthRouting.quota.failure.${entry.failureKind}.label`);
+    }
+    if (entry.routeReadiness === "checking") {
+      return t("chatgptOAuthRouting.quota.checking");
+    }
+    return undefined;
+  };
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        <section className="space-y-3">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {t("chatgptOAuthRouting.defaultAccount")}
-          </p>
-          <div className="rounded-lg border bg-muted/20 p-3.5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">
-                    {currentOAuthProvider.display_name || currentOAuthProvider.name}
-                  </span>
-                  <Badge variant="secondary">{t("chatgptOAuthRouting.role.preferred")}</Badge>
-                  <Badge variant={statusBadgeVariant(preferredAvailability)}>
-                    {t(`chatgptOAuthRouting.status.${preferredAvailability}`)}
-                  </Badge>
-                </div>
-                <p className="font-mono text-xs text-muted-foreground">{currentOAuthProvider.name}</p>
-              </div>
-              <p className="max-w-xs text-xs text-muted-foreground">
-                {t("chatgptOAuthRouting.defaultHint")}
-              </p>
+  return (
+    <Card className={cn("flex h-full min-h-0 flex-col gap-0 overflow-hidden", className)}>
+      <CardHeader className="border-b bg-muted/20 px-4 py-3">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-base">
+                {t("chatgptOAuthRouting.controlTitle")}
+              </CardTitle>
+              <CardDescription>
+                {t("chatgptOAuthRouting.controlDescription")}
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {!canManageProviders && (
+                <Badge variant="outline">
+                  {t("chatgptOAuthRouting.viewerMode")}
+                </Badge>
+              )}
+              {isDirty && (
+                <Badge variant="warning">
+                  {t("chatgptOAuthRouting.draftBadge")}
+                </Badge>
+              )}
+              {(quotaLoading || isLoading) && (
+                <Badge variant="outline">
+                  {t("chatgptOAuthRouting.quota.checking")}
+                </Badge>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                onClick={onSave}
+                disabled={!canManageProviders || !isDirty || saving}
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {saving ? tc("saving") : tc("save")}
+              </Button>
             </div>
           </div>
-        </section>
+        </div>
+      </CardHeader>
 
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-3">
         <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("chatgptOAuthRouting.strategyLabel")}
             </p>
             <Badge variant="outline">
@@ -154,6 +262,7 @@ export function ChatGPTOAuthRoutingSection({
               type="button"
               variant={value.strategy === "manual" ? "default" : "outline"}
               onClick={() => setStrategy("manual")}
+              disabled={!canManageProviders}
             >
               {t("chatgptOAuthRouting.strategy.manual")}
             </Button>
@@ -161,123 +270,158 @@ export function ChatGPTOAuthRoutingSection({
               type="button"
               variant={value.strategy === "round_robin" ? "default" : "outline"}
               onClick={() => setStrategy("round_robin")}
+              disabled={!canManageProviders}
             >
               {t("chatgptOAuthRouting.strategy.roundRobin")}
             </Button>
           </div>
-
-          <p className="text-xs text-muted-foreground">
-            {t("chatgptOAuthRouting.strategyHint")}
-          </p>
         </section>
 
         <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t("chatgptOAuthRouting.extraAccountsLabel")}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t("chatgptOAuthRouting.availableExtraAccountsLabel")}
             </p>
-            {readyExtraProviders.length > 0 && (
-              <Badge variant="outline">
-                {t("chatgptOAuthRouting.readySummary", {
-                  ready: readyExtraProviders.length,
-                  total: allExtraProviders.length,
-                })}
-              </Badge>
-            )}
+            <Badge variant="outline">
+              {t("chatgptOAuthRouting.readySummary", {
+                ready: readyExtraProviders.length,
+                total: allExtraProviders.length,
+              })}
+            </Badge>
           </div>
 
           {isLoading ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
               {t("chatgptOAuthRouting.loadingAccounts")}
             </div>
           ) : readyExtraProviders.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {readyExtraProviders.map((provider) => {
                 const selected = selectedExtras.has(provider.name);
+                const failureKind = getQuotaFailureKind(
+                  quotaByName?.get(provider.name),
+                );
                 return (
                   <Button
                     key={provider.name}
                     type="button"
-                    variant={selected ? "default" : "outline"}
+                    variant="outline"
                     size="sm"
+                    className={cn(
+                      "h-10 justify-start gap-1.5 rounded-lg px-3 text-left",
+                      selected &&
+                        "border-primary/40 bg-primary/10 text-foreground hover:bg-primary/15 dark:border-primary/30 dark:bg-primary/10",
+                      !selected &&
+                        failureKind &&
+                        "border-amber-500/40 text-amber-700 dark:text-amber-300",
+                      selected &&
+                        failureKind &&
+                        "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:bg-amber-500/15 dark:text-amber-200",
+                    )}
                     onClick={() => toggleProvider(provider.name)}
+                    disabled={!canManageProviders}
                   >
+                    {selected ? <Check className="h-3.5 w-3.5" /> : null}
                     {provider.display_name || provider.name}
                   </Button>
                 );
               })}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
               {t("chatgptOAuthRouting.noReadyExtras")}
             </div>
           )}
         </section>
 
-        <div className="space-y-4">
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t("chatgptOAuthRouting.selectedAccountsLabel")}
-              </p>
-              <Badge variant="outline">
-                {t("chatgptOAuthRouting.selectedCount", { count: selectedEntries.length })}
-              </Badge>
-            </div>
+        <section className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t("chatgptOAuthRouting.selectedAccountsLabel")}
+            </p>
+            <Badge variant="outline">
+              {t("chatgptOAuthRouting.selectedCount", {
+                count: selectedEntries.length,
+              })}
+            </Badge>
+          </div>
 
-            <div className="rounded-lg border bg-muted/20 p-3.5">
-              <div className="flex flex-wrap gap-2">
+          {selectedEntries.length > 0 ? (
+            <div className="rounded-lg border bg-muted/10 p-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {selectedEntries.map((entry) => (
-                  <div key={entry.name} className="flex flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1">
-                    <span className="text-xs font-medium">{entry.label}</span>
-                    <Badge variant={entry.role === "preferred" ? "secondary" : "outline"}>
-                      {t(`chatgptOAuthRouting.role.${entry.role}`)}
-                    </Badge>
-                    <Badge variant={statusBadgeVariant(entry.availability)}>
-                      {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                    </Badge>
+                  <div
+                    key={entry.name}
+                    className="rounded-lg border bg-background/80 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{entry.label}</span>
+                      <Badge
+                        variant={
+                          entry.role === "preferred" ? "secondary" : "outline"
+                        }
+                      >
+                        {t(`chatgptOAuthRouting.role.${entry.role}`)}
+                      </Badge>
+                      <Badge variant={statusBadgeVariant(entry.availability)}>
+                        {t(`chatgptOAuthRouting.status.${entry.availability}`)}
+                      </Badge>
+                      <Badge variant={routeBadgeVariant(entry.routeReadiness)}>
+                        {t(routeLabelKey(entry.routeReadiness))}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          </section>
-
-          {attentionEntries.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {t("chatgptOAuthRouting.attentionTitle")}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {attentionEntries.map((entry) => (
-                  entry.selected ? (
-                    <Button
-                      key={entry.name}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="border-amber-500/30 text-amber-700 dark:text-amber-300"
-                      onClick={() => toggleProvider(entry.name)}
-                    >
-                      {entry.label} · {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                    </Button>
-                  ) : (
-                    <Badge key={entry.name} variant={statusBadgeVariant(entry.availability)}>
-                      {entry.label} · {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                    </Badge>
-                  )
-                ))}
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                {t("chatgptOAuthRouting.attentionHint")}
-              </p>
-            </section>
+          ) : (
+            <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
+              {t("chatgptOAuthRouting.emptySelected")}
+            </div>
           )}
-        </div>
+        </section>
+
+        <section className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("chatgptOAuthRouting.poolStateTitle")}
+          </p>
+
+          <div className="grid items-start gap-2 xl:grid-cols-3">
+            <StateGroup
+              title={t("chatgptOAuthRouting.routerActiveTitle")}
+              count={routerActiveEntries.length}
+              variant="success"
+              entries={routerActiveEntries.map((entry) => ({
+                name: entry.name,
+                label: entry.label,
+                detail: routeDetail(entry),
+              }))}
+              emptyLabel={t("chatgptOAuthRouting.emptyGroup")}
+            />
+            <StateGroup
+              title={t("chatgptOAuthRouting.fallbackTitle")}
+              count={standbyEntries.length}
+              variant="warning"
+              entries={standbyEntries.map((entry) => ({
+                name: entry.name,
+                label: entry.label,
+                detail: routeDetail(entry),
+              }))}
+              emptyLabel={t("chatgptOAuthRouting.emptyGroup")}
+            />
+            <StateGroup
+              title={t("chatgptOAuthRouting.blockedNowTitle")}
+              count={blockedEntries.length}
+              variant="destructive"
+              entries={blockedEntries.map((entry) => ({
+                name: entry.name,
+                label: entry.label,
+                detail: routeDetail(entry),
+              }))}
+              emptyLabel={t("chatgptOAuthRouting.emptyGroup")}
+            />
+          </div>
+        </section>
       </CardContent>
     </Card>
   );

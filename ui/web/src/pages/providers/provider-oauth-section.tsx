@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, ExternalLink, CheckCircle, ClipboardPaste } from "lucide-react";
@@ -50,6 +51,19 @@ export function OAuthSection({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionLabel = authenticatedActionLabel || t("oauth.done");
+  const renderUsageHint = (provider: string) => (
+    <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-1.5">
+        <Badge variant="outline" className="bg-background/80">{t("oauth.poolBadge")}</Badge>
+        <Badge variant="outline" className="bg-background/80">{t("oauth.roundRobinBadge")}</Badge>
+      </div>
+      <p className="mt-2">{t("oauth.multiAccountHint")}</p>
+      <p className="mt-1">
+        {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{provider}/</code>{" "}
+        {t("oauth.modelPrefixExample")}
+      </p>
+    </div>
+  );
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -173,11 +187,7 @@ export function OAuthSection({
             </p>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{activeProvider}/</code>{" "}
-          {t("oauth.modelPrefixExample")}
-        </p>
-        <p className="text-xs text-muted-foreground">{t("oauth.multiAccountHint")}</p>
+        {renderUsageHint(activeProvider)}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={onSuccess}>
             {actionLabel}
@@ -198,11 +208,7 @@ export function OAuthSection({
             {t("oauth.authenticated")} <code className="rounded bg-muted px-1 font-mono text-xs">{activeProvider}</code> {t("oauth.active")}
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{activeProvider}/</code>{" "}
-          {t("oauth.modelPrefixExample")}
-        </p>
-        <p className="text-xs text-muted-foreground">{t("oauth.multiAccountHint")}</p>
+        {renderUsageHint(activeProvider)}
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={onSuccess}>
             {actionLabel}
@@ -217,19 +223,27 @@ export function OAuthSection({
 
   if (!hasValidProvider) {
     return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">{t("oauth.signInDesc")}</p>
-        <p className="text-xs text-muted-foreground">
-          {t("oauth.aliasRequired")}
-        </p>
+      <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        <p className="text-sm text-foreground">{t("oauth.signInDesc")}</p>
+        <p className="mt-1">{t("oauth.aliasRequired")}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">{t("oauth.signInDesc")}</p>
-      <p className="text-xs text-muted-foreground">{t("oauth.multiAccountHint")}</p>
+      <div className="rounded-md border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        <p className="text-sm text-foreground">{t("oauth.signInDesc")}</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <Badge variant="outline" className="bg-background/80">{t("oauth.poolBadge")}</Badge>
+          <Badge variant="outline" className="bg-background/80">{t("oauth.roundRobinBadge")}</Badge>
+        </div>
+        <p className="mt-2">{t("oauth.multiAccountHint")}</p>
+        <p className="mt-1">
+          {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{resolvedProviderName}/</code>{" "}
+          {t("oauth.modelPrefixExample")}
+        </p>
+      </div>
       {waitingCallback ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-sm text-blue-700 dark:text-blue-400">

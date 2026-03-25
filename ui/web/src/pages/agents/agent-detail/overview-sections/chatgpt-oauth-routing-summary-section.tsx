@@ -9,8 +9,11 @@ import {
   useChatGPTOAuthProviderStatuses,
   type ChatGPTOAuthAvailability,
 } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
+import { useChatGPTOAuthProviderQuotas } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
 import type { AgentData } from "@/types/agent";
+import { ChatGPTOAuthQuotaBadges } from "../chatgpt-oauth-quota-badges";
 import { normalizeChatGPTOAuthRouting } from "../agent-display-utils";
+import { summarizeQuotaHealth } from "../chatgpt-oauth-quota-utils";
 
 interface ChatGPTOAuthRoutingSummarySectionProps {
   agent: AgentData;
@@ -43,6 +46,16 @@ export function ChatGPTOAuthRoutingSummarySection({
   const shouldShow = currentProvider?.provider_type === "chatgpt_oauth"
     || routing.extraProviderNames.length > 0
     || routing.strategy === "round_robin";
+  const providerNames = useMemo(
+    () => Array.from(new Set(
+      [agent.provider, ...routing.extraProviderNames].filter((providerName): providerName is string => {
+        if (!providerName) return false;
+        return providerByName.get(providerName)?.provider_type === "chatgpt_oauth";
+      }),
+    )),
+    [agent.provider, providerByName, routing.extraProviderNames],
+  );
+  const { quotaByName } = useChatGPTOAuthProviderQuotas(providerNames, shouldShow);
 
   if (!shouldShow) return null;
 
@@ -57,9 +70,15 @@ export function ChatGPTOAuthRoutingSummarySection({
       providerName,
       label: provider?.display_name || providerName,
       availability,
+      quota: quotaByName.get(providerName),
     };
   });
   const readyExtraCount = extraEntries.filter((entry) => entry.availability === "ready").length;
+  const quotaEntries = [
+    { availability: preferredAvailability, quota: quotaByName.get(agent.provider) },
+    ...extraEntries.map((entry) => ({ availability: entry.availability, quota: entry.quota })),
+  ];
+  const quotaSummary = summarizeQuotaHealth(quotaEntries.filter((entry) => entry.availability === "ready"));
 
   return (
     <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
@@ -84,6 +103,7 @@ export function ChatGPTOAuthRoutingSummarySection({
             <Badge variant="outline" className={statusBadgeClass(preferredAvailability)}>
               {t(`chatgptOAuthRouting.status.${preferredAvailability}`)}
             </Badge>
+            <ChatGPTOAuthQuotaBadges quota={quotaByName.get(agent.provider)} />
           </div>
         </div>
 
@@ -111,6 +131,7 @@ export function ChatGPTOAuthRoutingSummarySection({
                 <Badge variant="outline" className={statusBadgeClass(entry.availability)}>
                   {t(`chatgptOAuthRouting.status.${entry.availability}`)}
                 </Badge>
+                <ChatGPTOAuthQuotaBadges quota={entry.quota} />
               </div>
             ))}
           </div>
@@ -124,6 +145,8 @@ export function ChatGPTOAuthRoutingSummarySection({
           <p>
             {preferredAvailability !== "ready"
               ? t("chatgptOAuthRouting.preferredNeedsAttention")
+              : quotaSummary.attention > 0
+                ? t("chatgptOAuthRouting.quota.needsAttention", { count: quotaSummary.attention })
               : extraEntries.length === 0
                 ? t("chatgptOAuthRouting.singleAccountHint")
                 : t("chatgptOAuthRouting.readySummary", { ready: readyExtraCount, total: extraEntries.length })}

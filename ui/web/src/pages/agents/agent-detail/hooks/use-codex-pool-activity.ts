@@ -5,17 +5,24 @@ import { queryKeys } from "@/lib/query-keys";
 export interface CodexPoolProviderCount {
   provider_name: string;
   request_count: number;
+  direct_selection_count: number;
+  failover_serve_count: number;
+  last_selected_at?: string;
+  last_failover_at?: string;
   last_used_at?: string;
 }
 
 export interface CodexPoolRecentRequest {
+  span_id: string;
   trace_id: string;
   started_at: string;
   status: string;
   duration_ms: number;
   provider_name: string;
+  selected_provider?: string;
   model: string;
-  pool_llm_calls: number;
+  attempt_count: number;
+  used_failover: boolean;
   failover_providers?: string[];
 }
 
