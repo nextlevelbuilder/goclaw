@@ -27,23 +27,23 @@ type Channel struct {
 	config           config.TelegramConfig
 	httpClient       *http.Client
 	transport        *http.Transport
-	ipv4Once         sync.Once          // guards enableIPv4Only to prevent data race
+	ipv4Once         sync.Once // guards enableIPv4Only to prevent data race
 	pairingService   store.PairingStore
-	agentStore      store.AgentStore              // for agent key lookup (nil if not configured)
-	configPermStore store.ConfigPermissionStore   // for group file writer management (nil if not configured)
-	teamStore       store.TeamStore               // for /tasks, /task_detail commands (nil if not configured)
-	placeholders     sync.Map         // localKey string → messageID int
-	stopThinking     sync.Map         // localKey string → *thinkingCancel
-	typingCtrls      sync.Map         // localKey string → *typing.Controller
-	reactions        sync.Map         // localKey string → *StatusReactionController
-	pairingReplySent sync.Map         // userID string → time.Time (debounce pairing replies)
-	threadIDs        sync.Map         // localKey string → messageThreadID int (for forum topic routing)
-	approvedGroups   sync.Map         // chatIDStr string → true (cached group pairing approval)
+	agentStore       store.AgentStore            // for agent key lookup (nil if not configured)
+	configPermStore  store.ConfigPermissionStore // for group file writer management (nil if not configured)
+	teamStore        store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
+	placeholders     sync.Map                    // localKey string → messageID int
+	stopThinking     sync.Map                    // localKey string → *thinkingCancel
+	typingCtrls      sync.Map                    // localKey string → *typing.Controller
+	reactions        sync.Map                    // localKey string → *StatusReactionController
+	pairingReplySent sync.Map                    // userID string → time.Time (debounce pairing replies)
+	threadIDs        sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
+	approvedGroups   sync.Map                    // chatIDStr string → true (cached group pairing approval)
 	groupHistory     *channels.PendingHistory
 	historyLimit     int
 	requireMention   bool
 	pollCancel       context.CancelFunc // cancels the long polling context
-	pollDone         chan struct{}       // closed when polling goroutine exits
+	pollDone         chan struct{}      // closed when polling goroutine exits
 	handlerWg        sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
 	handlerSem       chan struct{}       // bounded semaphore for concurrent handler goroutines
 	pendingDraftID   sync.Map           // localKey string → int (draftID)
@@ -114,7 +114,7 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
 
-	return &Channel{
+	c := &Channel{
 		BaseChannel:     base,
 		bot:             bot,
 		config:          cfg,
@@ -127,7 +127,14 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		groupHistory:    channels.MakeHistory(channels.TypeTelegram, pendingStore, base.TenantID()),
 		historyLimit:    historyLimit,
 		requireMention:  requireMention,
-	}, nil
+	}
+
+	// Security alert: warn on "Open Pairing" configuration (matching openclaw #48813)
+	if (cfg.DMPolicy == "" || cfg.DMPolicy == "pairing") && len(cfg.AllowFrom) == 0 {
+		slog.Warn("telegram: security risk — bot is in 'pairing' mode with no allowed users. Unsolicited pairing requests are possible.", "bot", bot.Username())
+	}
+
+	return c, nil
 }
 
 // Start begins long polling for Telegram updates.

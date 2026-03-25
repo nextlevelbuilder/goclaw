@@ -63,6 +63,14 @@ func channelsListCmd() *cobra.Command {
 				fmt.Fprintf(tw, "%s\t%v\t%s\n", e.Name, e.Enabled, creds)
 			}
 			tw.Flush()
+
+			// Security alert: warn on "Open Pairing" configuration (matching openclaw #48813)
+			if cfg.Channels.Telegram.Enabled && (cfg.Channels.Telegram.DMPolicy == "" || cfg.Channels.Telegram.DMPolicy == "pairing") && len(cfg.Channels.Telegram.AllowFrom) == 0 {
+				fmt.Println("\n⚠️  Telegram DM access warning")
+				fmt.Println("   Your bot is using the default DM policy (pairing) with no allowlist.")
+				fmt.Println("   Any Telegram user who discovers the bot can send pairing requests.")
+				fmt.Println("   For security, consider adding your user id to 'allow_from' in config.json.")
+			}
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "output as JSON")

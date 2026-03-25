@@ -72,7 +72,7 @@ export const configSchema: Record<string, FieldDef[]> = {
   telegram: [
     { key: "api_server", label: "API Server URL", type: "text", placeholder: "http://127.0.0.1:8081", help: "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
     { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://proxy:8080", help: "Route bot traffic through an HTTP proxy" },
-    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing", help: "WARNING: 'Pairing' with an empty allowlist (Allowed Users) exposes your bot to unsolicited requests from anyone who finds it." },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
