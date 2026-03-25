@@ -105,8 +105,12 @@ func buildEmbeddingProvider(
 	memCfg *config.MemoryConfig,
 	providerReg *providers.Registry,
 ) memory.EmbeddingProvider {
-	// Resolve model: embedding settings → memCfg override → default
-	model := "text-embedding-3-small"
+	// Resolve model: embedding settings → memCfg override → default (per-provider)
+	defaultModel := "text-embedding-3-small"
+	if dbp.ProviderType == store.ProviderVoyage {
+		defaultModel = "voyage-4"
+	}
+	model := defaultModel
 	if es != nil && es.Model != "" {
 		model = es.Model
 	}
@@ -121,6 +125,15 @@ func buildEmbeddingProvider(
 	}
 	if memCfg != nil && memCfg.EmbeddingAPIBase != "" {
 		apiBase = memCfg.EmbeddingAPIBase
+	}
+
+	// Voyage AI: dedicated embedding provider (not OpenAI-compatible chat provider).
+	if dbp.ProviderType == store.ProviderVoyage {
+		if dbp.APIKey == "" {
+			slog.Warn("voyage embedding provider missing API key", "name", dbp.Name)
+			return nil
+		}
+		return memory.NewVoyageEmbeddingProvider(dbp.Name, dbp.APIKey, apiBase, model)
 	}
 
 	// Gemini requires dimension truncation to match pgvector(1536) index.
