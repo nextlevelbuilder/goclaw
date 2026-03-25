@@ -21,7 +21,11 @@
     "verifyRequired": "Kiểm tra model embedding trước khi lưu.",
     "verifyFailed": "Kiểm tra thất bại",
     "dimensions": "{{count}} chiều",
-    "dimensionsMismatch": "{{count}} chiều — không khớp yêu cầu 1536"
+    "dimensionsMismatch": "{{count}} chiều — không khớp yêu cầu 1536",
+    "maxChunkLen": "Độ dài chunk tối đa",
+    "maxChunkLenHint": "Số ký tự tối đa mỗi chunk trước khi chia nhỏ.",
+    "chunkOverlap": "Chunk Overlap",
+    "chunkOverlapHint": "Số ký tự chồng lấp giữa các chunk liên tiếp để giữ ngữ cảnh."
   },
   "ux": {
     "title": "Hành vi UX",

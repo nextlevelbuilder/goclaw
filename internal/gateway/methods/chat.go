@@ -45,6 +45,34 @@ func (m *ChatMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodChatHistory, m.handleHistory)
 	router.Register(protocol.MethodChatAbort, m.handleAbort)
 	router.Register(protocol.MethodChatInject, m.handleInject)
+	router.Register(protocol.MethodChatSessionStatus, m.handleSessionStatus)
+}
+
+// handleSessionStatus returns the running state and activity for a session.
+// Used by the frontend to restore UI state after switching between sessions.
+func (m *ChatMethods) handleSessionStatus(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params struct {
+		SessionKey string `json:"sessionKey"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil || params.SessionKey == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "sessionKey required"))
+		return
+	}
+
+	isRunning := m.agents.IsSessionBusy(params.SessionKey)
+	var activity map[string]any
+	if status := m.agents.GetActivity(params.SessionKey); status != nil {
+		activity = map[string]any{
+			"phase":     status.Phase,
+			"tool":      status.Tool,
+			"iteration": status.Iteration,
+		}
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"isRunning": isRunning,
+		"activity":  activity,
+	}))
 }
 
 // chatMediaItem represents a media file attached to a chat message.

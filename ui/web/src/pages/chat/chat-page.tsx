@@ -216,7 +216,7 @@ export function ChatPage() {
       )}
 
       {/* Main chat area */}
-      <div className="flex flex-1 min-h-0 flex-col">
+      <div className="flex min-w-0 flex-1 min-h-0 flex-col">
         {isMobile && (
           <div className="flex shrink-0 items-center border-b px-3 py-2 landscape-compact">
             <button

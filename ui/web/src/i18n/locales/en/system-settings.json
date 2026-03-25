@@ -21,7 +21,11 @@
     "verifyRequired": "Verify the embedding model before saving.",
     "verifyFailed": "Verification failed",
     "dimensions": "{{count}} dimensions",
-    "dimensionsMismatch": "{{count}} dimensions — does not match required 1536"
+    "dimensionsMismatch": "{{count}} dimensions — does not match required 1536",
+    "maxChunkLen": "Max Chunk Length",
+    "maxChunkLenHint": "Maximum characters per memory chunk before splitting.",
+    "chunkOverlap": "Chunk Overlap",
+    "chunkOverlapHint": "Overlap characters between consecutive chunks for context continuity."
   },
   "ux": {
     "title": "UX Behavior",

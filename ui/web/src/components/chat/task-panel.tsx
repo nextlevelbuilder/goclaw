@@ -19,7 +19,7 @@ export function TaskPanel({ tasks, open, onClose }: TaskPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 py-2">
         <span className="text-sm font-medium">
-          Tasks ({tasks.length})
+          Running Tasks ({tasks.length})
         </span>
         <button
           type="button"

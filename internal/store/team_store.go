@@ -231,6 +231,7 @@ type TaskStore interface {
 	UpdateTaskProgress(ctx context.Context, taskID, teamID uuid.UUID, percent int, step string) error
 	RenewTaskLock(ctx context.Context, taskID, teamID uuid.UUID) error
 	ResetTaskStatus(ctx context.Context, taskID, teamID uuid.UUID) error
+	ListActiveTasksByChatID(ctx context.Context, chatID string) ([]TeamTaskData, error)
 }
 
 // TaskCommentStore manages task comments, audit events, and attachments.

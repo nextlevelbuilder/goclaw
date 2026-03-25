@@ -165,6 +165,11 @@ export function toFileUrl(path: string): string {
   return `/v1/files/${basename}`;
 }
 
+/** Append ?download=true to a URL for Content-Disposition: attachment. */
+export function toDownloadUrl(url: string): string {
+  return url + (url.includes("?") ? "&" : "?") + "download=true";
+}
+
 /** Determine MediaItem kind from MIME type */
 export function mediaKindFromMime(mime: string): "image" | "video" | "audio" | "document" | "code" {
   if (mime.startsWith("image/")) return "image";

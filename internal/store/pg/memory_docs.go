@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,12 +18,14 @@ import (
 type PGMemoryStore struct {
 	db       *sql.DB
 	provider store.EmbeddingProvider
+	mu       sync.RWMutex   // protects cfg from concurrent read/write
 	cfg      PGMemoryConfig
 }
 
 // PGMemoryConfig configures the PG memory store.
 type PGMemoryConfig struct {
 	MaxChunkLen  int
+	ChunkOverlap int
 	MaxResults   int
 	VectorWeight float64
 	TextWeight   float64
@@ -32,6 +35,7 @@ type PGMemoryConfig struct {
 func DefaultPGMemoryConfig() PGMemoryConfig {
 	return PGMemoryConfig{
 		MaxChunkLen:  1000,
+		ChunkOverlap: 200,
 		MaxResults:   6,
 		VectorWeight: 0.7,
 		TextWeight:   0.3,
@@ -222,8 +226,19 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 	// Delete old chunks
 	s.db.ExecContext(ctx, "DELETE FROM memory_chunks WHERE document_id = $1", docID)
 
+	// Resolve chunk parameters: per-agent override → global default
+	chunkLen, chunkOverlap := s.chunkConfig()
+	if rc := store.RunContextFromCtx(ctx); rc != nil && rc.MemoryCfg != nil {
+		if rc.MemoryCfg.MaxChunkLen > 0 {
+			chunkLen = rc.MemoryCfg.MaxChunkLen
+		}
+		if rc.MemoryCfg.ChunkOverlap > 0 {
+			chunkOverlap = rc.MemoryCfg.ChunkOverlap
+		}
+	}
+
 	// Chunk text
-	chunks := memory.ChunkText(content, s.cfg.MaxChunkLen)
+	chunks := memory.ChunkText(content, chunkLen, chunkOverlap)
 	if len(chunks) == 0 {
 		return nil
 	}
@@ -363,6 +378,25 @@ func (s *PGMemoryStore) IndexAll(ctx context.Context, agentID, userID string) er
 
 func (s *PGMemoryStore) SetEmbeddingProvider(provider store.EmbeddingProvider) {
 	s.provider = provider
+}
+
+// UpdateChunkConfig updates chunk splitting parameters at runtime (e.g. after system config change).
+func (s *PGMemoryStore) UpdateChunkConfig(maxChunkLen, chunkOverlap int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if maxChunkLen > 0 {
+		s.cfg.MaxChunkLen = maxChunkLen
+	}
+	if chunkOverlap >= 0 {
+		s.cfg.ChunkOverlap = chunkOverlap
+	}
+}
+
+// chunkConfig returns a snapshot of the current chunk parameters (thread-safe).
+func (s *PGMemoryStore) chunkConfig() (maxLen, overlap int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.MaxChunkLen, s.cfg.ChunkOverlap
 }
 
 // BackfillEmbeddings finds all chunks without embeddings and generates them.

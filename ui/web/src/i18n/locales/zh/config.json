@@ -87,6 +87,10 @@
   "agents.memory.embeddingModelTip": "嵌入模型名称。留空则使用提供商默认值。",
   "agents.memory.maxResults": "最大结果数",
   "agents.memory.maxResultsTip": "每次召回查询返回的最大记忆条目数。",
+  "agents.memory.maxChunkLen": "最大块长度",
+  "agents.memory.maxChunkLenTip": "每个记忆块分割前的最大字符数。",
+  "agents.memory.chunkOverlap": "块重叠",
+  "agents.memory.chunkOverlapTip": "连续块之间的重叠字符数，用于保持上下文连续性。",
   "agents.memory.minScore": "最低分数",
   "agents.memory.minScoreTip": "记忆条目被纳入结果的最低相似度分数（0-1）。",
 

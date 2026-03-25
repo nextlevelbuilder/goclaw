@@ -64,6 +64,8 @@ interface SystemSettingsModalProps {
 interface InitState {
   embProvider: string;
   embModel: string;
+  embMaxChunkLen: string;
+  embChunkOverlap: string;
   toolStatus: boolean;
   blockReply: boolean;
   intentClassify: boolean;
@@ -76,6 +78,7 @@ interface InitState {
 
 const DEFAULTS: InitState = {
   embProvider: "", embModel: "",
+  embMaxChunkLen: "", embChunkOverlap: "",
   toolStatus: true, blockReply: false, intentClassify: true,
   compProvider: "", compModel: "",
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
@@ -98,6 +101,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   // Embedding
   const [embProvider, setEmbProvider] = useState("");
   const [embModel, setEmbModel] = useState("");
+  const [embMaxChunkLen, setEmbMaxChunkLen] = useState("");
+  const [embChunkOverlap, setEmbChunkOverlap] = useState("");
   const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
 
   // UX Behavior
@@ -116,6 +121,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     const s: InitState = {
       embProvider: configs["embedding.provider"] ?? "",
       embModel: configs["embedding.model"] ?? "",
+      embMaxChunkLen: configs["embedding.max_chunk_len"] ?? "",
+      embChunkOverlap: configs["embedding.chunk_overlap"] ?? "",
       toolStatus: parseBool(configs["gateway.tool_status"], true),
       blockReply: parseBool(configs["gateway.block_reply"], false),
       intentClassify: parseBool(configs["gateway.intent_classify"], true),
@@ -128,6 +135,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setInit(s);
     setEmbProvider(s.embProvider);
     setEmbModel(s.embModel);
+    setEmbMaxChunkLen(s.embMaxChunkLen);
+    setEmbChunkOverlap(s.embChunkOverlap);
     setToolStatus(s.toolStatus);
     setBlockReply(s.blockReply);
     setIntentClassify(s.intentClassify);
@@ -172,6 +181,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       const updates: Record<string, string> = {};
       if (embProvider !== init.embProvider) updates["embedding.provider"] = embProvider;
       if (embModel !== init.embModel) updates["embedding.model"] = embModel;
+      if (embMaxChunkLen !== init.embMaxChunkLen) updates["embedding.max_chunk_len"] = embMaxChunkLen;
+      if (embChunkOverlap !== init.embChunkOverlap) updates["embedding.chunk_overlap"] = embChunkOverlap;
       if (toolStatus !== init.toolStatus) updates["gateway.tool_status"] = String(toolStatus);
       if (blockReply !== init.blockReply) updates["gateway.block_reply"] = String(blockReply);
       if (intentClassify !== init.intentClassify) updates["gateway.intent_classify"] = String(intentClassify);
@@ -316,6 +327,19 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                       )}
                     </span>
                   )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="embMaxChunkLen" className="text-xs">{t("embedding.maxChunkLen")}</Label>
+                    <Input id="embMaxChunkLen" type="number" placeholder="1000" value={embMaxChunkLen} onChange={(e) => setEmbMaxChunkLen(e.target.value)} className="text-base md:text-sm" />
+                    <p className="text-xs text-muted-foreground">{t("embedding.maxChunkLenHint")}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="embChunkOverlap" className="text-xs">{t("embedding.chunkOverlap")}</Label>
+                    <Input id="embChunkOverlap" type="number" placeholder="200" value={embChunkOverlap} onChange={(e) => setEmbChunkOverlap(e.target.value)} className="text-base md:text-sm" />
+                    <p className="text-xs text-muted-foreground">{t("embedding.chunkOverlapHint")}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

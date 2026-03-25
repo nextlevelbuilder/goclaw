@@ -21,7 +21,11 @@
     "verifyRequired": "保存前请先验证Embedding模型。",
     "verifyFailed": "验证失败",
     "dimensions": "{{count}}维",
-    "dimensionsMismatch": "{{count}}维 — 不符合要求的1536"
+    "dimensionsMismatch": "{{count}}维 — 不符合要求的1536",
+    "maxChunkLen": "最大块长度",
+    "maxChunkLenHint": "每个记忆块分割前的最大字符数。",
+    "chunkOverlap": "块重叠",
+    "chunkOverlapHint": "连续块之间的重叠字符数，用于保持上下文连续性。"
   },
   "ux": {
     "title": "UX行为",

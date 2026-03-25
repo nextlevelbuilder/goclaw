@@ -383,12 +383,20 @@
     "memory": {
       "title": "Bộ nhớ",
       "description": "Tìm kiếm bộ nhớ ngữ nghĩa và cấu hình nhúng",
-      "embeddingProvider": "Provider nhúng",
-      "embeddingModel": "Model nhúng",
-      "maxResults": "Kết quả tối đa",
+      "enabled": "Đã bật",
+      "enabledTip": "Bật/tắt hệ thống bộ nhớ cho agent này.",
       "maxChunkLen": "Độ dài chunk tối đa",
+      "maxChunkLenTip": "Số ký tự tối đa mỗi chunk. Để trống dùng mặc định hệ thống.",
+      "chunkOverlap": "Chunk Overlap",
+      "chunkOverlapTip": "Số ký tự chồng lấp giữa các chunk để giữ ngữ cảnh. Để trống dùng mặc định.",
+      "maxResults": "Kết quả tối đa",
+      "maxResultsTip": "Số kết quả tối đa trả về mỗi truy vấn tìm kiếm.",
+      "minScore": "Điểm tối thiểu",
+      "minScoreTip": "Ngưỡng điểm tối thiểu cho kết quả tìm kiếm.",
       "vectorWeight": "Trọng số vector",
-      "textWeight": "Trọng số văn bản"
+      "vectorWeightTip": "Trọng số tương đồng ngữ nghĩa trong tìm kiếm hỗn hợp.",
+      "textWeight": "Trọng số văn bản",
+      "textWeightTip": "Trọng số từ khóa trong tìm kiếm hỗn hợp."
     },
     "thinking": {
       "title": "Suy nghĩ mở rộng",

@@ -87,6 +87,8 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	if m := cfg.Agents.Defaults.Memory; m != nil {
 		set("embedding.provider", m.EmbeddingProvider)
 		set("embedding.model", m.EmbeddingModel)
+		setInt("embedding.max_chunk_len", m.MaxChunkLen)
+		setInt("embedding.chunk_overlap", m.ChunkOverlap)
 	}
 
 	// Agent defaults

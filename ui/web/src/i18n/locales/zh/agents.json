@@ -383,12 +383,20 @@
     "memory": {
       "title": "记忆",
       "description": "语义记忆搜索和嵌入配置",
-      "embeddingProvider": "嵌入Provider",
-      "embeddingModel": "嵌入模型",
-      "maxResults": "最大结果数",
+      "enabled": "已启用",
+      "enabledTip": "启用或禁用此Agent的记忆系统。",
       "maxChunkLen": "最大块长度",
+      "maxChunkLenTip": "每个记忆块的最大字符数。留空使用系统默认值。",
+      "chunkOverlap": "块重叠",
+      "chunkOverlapTip": "连续块之间的重叠字符数。留空使用系统默认值。",
+      "maxResults": "最大结果数",
+      "maxResultsTip": "每次搜索返回的最大记忆条目数。",
+      "minScore": "最低分数",
+      "minScoreTip": "搜索结果的最低相关性分数阈值。",
       "vectorWeight": "向量权重",
-      "textWeight": "文本权重"
+      "vectorWeightTip": "混合搜索中语义相似度的权重。",
+      "textWeight": "文本权重",
+      "textWeightTip": "混合搜索中关键词相似度的权重。"
     },
     "thinking": {
       "title": "扩展思考",

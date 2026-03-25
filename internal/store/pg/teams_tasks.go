@@ -456,6 +456,36 @@ func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, team
 	return deleted, rows.Err()
 }
 
+// ListActiveTasksByChatID returns non-terminal tasks for a given chat_id (session key).
+// Used to restore the active tasks sidebar when switching back to a session.
+func (s *PGTeamStore) ListActiveTasksByChatID(ctx context.Context, chatID string) ([]store.TeamTaskData, error) {
+	if chatID == "" {
+		return nil, nil
+	}
+	args := []any{chatID}
+	tenantWhere := ""
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return nil, fmt.Errorf("tenant_id required")
+		}
+		tenantWhere = fmt.Sprintf(" AND t.tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+taskSelectCols+`
+		 `+taskJoinClause+`
+		 WHERE COALESCE(t.chat_id,'') = $1
+		   AND t.status IN ('pending','in_progress','blocked','in_review')`+tenantWhere+`
+		 ORDER BY t.task_number ASC
+		 LIMIT 50`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTaskRowsJoined(rows)
+}
+
 func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 	var tasks []store.TeamTaskData
 	for rows.Next() {

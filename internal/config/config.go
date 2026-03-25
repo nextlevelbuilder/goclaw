@@ -181,6 +181,7 @@ type MemoryConfig struct {
 	EmbeddingAPIBase  string  `json:"embedding_api_base,omitempty"` // custom endpoint URL
 	MaxResults        int     `json:"max_results,omitempty"`        // default 6
 	MaxChunkLen       int     `json:"max_chunk_len,omitempty"`      // default 1000
+	ChunkOverlap      int     `json:"chunk_overlap,omitempty"`      // overlap chars between chunks (default 200)
 	VectorWeight      float64 `json:"vector_weight,omitempty"`      // hybrid search vector weight (default 0.7)
 	TextWeight        float64 `json:"text_weight,omitempty"`        // hybrid search FTS weight (default 0.3)
 	MinScore          float64 `json:"min_score,omitempty"`          // minimum relevance score (default 0.35)

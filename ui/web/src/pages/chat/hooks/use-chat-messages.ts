@@ -139,12 +139,33 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     }
   }, [ws, agentId, sessionKey]);
 
-  // Load history when session changes
+  // Load history, restore running state and active tasks when session changes.
+  // Cancelled flag prevents stale RPC responses from overwriting state on rapid switches.
   useEffect(() => {
+    let cancelled = false;
     if (sessionKey) {
       loadHistory();
+      // Restore session running state
+      ws.call<{ isRunning?: boolean; activity?: RunActivity }>(Methods.CHAT_SESSION_STATUS, { sessionKey })
+        .then((res) => {
+          if (cancelled) return;
+          if (res.isRunning) setIsRunning(true);
+          if (res.activity) {
+            setActivity(res.activity);
+            activityRef.current = res.activity;
+          }
+        })
+        .catch(() => {});
+      // Restore active team tasks (teams module may not be configured)
+      ws.call<{ tasks?: ActiveTeamTask[] }>(Methods.TEAMS_TASK_ACTIVE_BY_SESSION, { sessionKey })
+        .then((res) => {
+          if (cancelled) return;
+          if (res.tasks && res.tasks.length > 0) setTeamTasks(res.tasks);
+        })
+        .catch(() => {});
     }
-  }, [sessionKey, loadHistory]);
+    return () => { cancelled = true; };
+  }, [sessionKey, loadHistory, ws]);
 
   // Called before sending a message so the event handler knows to capture run.started
   const expectRun = useCallback(() => {

@@ -383,12 +383,20 @@
     "memory": {
       "title": "Memory",
       "description": "Semantic memory search and embedding configuration",
-      "embeddingProvider": "Embedding Provider",
-      "embeddingModel": "Embedding Model",
-      "maxResults": "Max Results",
+      "enabled": "Enabled",
+      "enabledTip": "Enable or disable the memory system for this agent.",
       "maxChunkLen": "Max Chunk Length",
+      "maxChunkLenTip": "Maximum characters per memory chunk. Leave empty for system default.",
+      "chunkOverlap": "Chunk Overlap",
+      "chunkOverlapTip": "Overlap characters between chunks for context continuity. Leave empty for system default.",
+      "maxResults": "Max Results",
+      "maxResultsTip": "Maximum memory entries returned per search query.",
+      "minScore": "Min Score",
+      "minScoreTip": "Minimum relevance score for search results.",
       "vectorWeight": "Vector Weight",
-      "textWeight": "Text Weight"
+      "vectorWeightTip": "Weight for semantic similarity in hybrid search.",
+      "textWeight": "Text Weight",
+      "textWeightTip": "Weight for keyword similarity in hybrid search."
     },
     "thinking": {
       "title": "Extended Thinking",

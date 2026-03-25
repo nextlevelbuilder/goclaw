@@ -1,6 +1,7 @@
 package http
 
 import (
+	"fmt"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -130,6 +131,11 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 	ct := mime.TypeByExtension(ext)
 	if ct != "" {
 		w.Header().Set("Content-Type", ct)
+	}
+
+	// Trigger browser download with original filename when ?download=true
+	if r.URL.Query().Get("download") == "true" {
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(absPath)))
 	}
 
 	http.ServeFile(w, r, absPath)
