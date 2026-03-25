@@ -18,6 +18,10 @@ func (s *testTokenSource) Token() (string, error) {
 	return s.token, nil
 }
 
+func (s *testTokenSource) RouteEligibility(context.Context) providers.RouteEligibility {
+	return providers.RouteEligibility{Class: providers.RouteEligibilityHealthy}
+}
+
 type stubProvider struct {
 	name  string
 	model string
@@ -106,5 +110,53 @@ func TestResolveConfiguredProviderUsesRouterForCodexAgents(t *testing.T) {
 	}
 	if router.Name() != "openai-codex" {
 		t.Fatalf("router.Name() = %q, want %q", router.Name(), "openai-codex")
+	}
+}
+
+type blockedTokenSource struct {
+	token string
+}
+
+func (s *blockedTokenSource) Token() (string, error) {
+	return s.token, nil
+}
+
+func (s *blockedTokenSource) RouteEligibility(context.Context) providers.RouteEligibility {
+	return providers.RouteEligibility{Class: providers.RouteEligibilityBlocked, Reason: "reauth"}
+}
+
+func TestResolveConfiguredProviderReturnsRouterEvenWhenPrimaryNeedsFailover(t *testing.T) {
+	tenantID := uuid.New()
+	registry := providers.NewRegistry(nil)
+	registry.RegisterForTenant(tenantID, providers.NewCodexProvider(
+		"openai-codex",
+		&blockedTokenSource{token: "primary-token"},
+		"http://127.0.0.1",
+		"gpt-5.4",
+	))
+	registry.RegisterForTenant(tenantID, providers.NewCodexProvider(
+		"openai-codex-backup",
+		&testTokenSource{token: "backup-token"},
+		"http://127.0.0.1",
+		"gpt-5.4",
+	))
+
+	agent := &store.AgentData{
+		TenantID: tenantID,
+		Provider: "openai-codex",
+		OtherConfig: json.RawMessage(`{
+			"chatgpt_oauth_routing": {
+				"strategy": "round_robin",
+				"extra_provider_names": ["openai-codex-backup"]
+			}
+		}`),
+	}
+
+	resolved, err := ResolveConfiguredProvider(registry, agent)
+	if err != nil {
+		t.Fatalf("ResolveConfiguredProvider() error = %v", err)
+	}
+	if _, ok := resolved.(*providers.ChatGPTOAuthRouter); !ok {
+		t.Fatalf("ResolveConfiguredProvider() returned %T, want *providers.ChatGPTOAuthRouter", resolved)
 	}
 }

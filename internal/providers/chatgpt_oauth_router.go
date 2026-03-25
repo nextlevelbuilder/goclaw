@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -25,6 +26,11 @@ type ChatGPTOAuthRouter struct {
 	next int
 }
 
+type chatGPTOAuthRouteCandidate struct {
+	provider    Provider
+	eligibility RouteEligibility
+}
+
 // NewChatGPTOAuthRouter creates a provider wrapper for agent-side ChatGPT OAuth routing.
 func NewChatGPTOAuthRouter(
 	tenantID uuid.UUID,
@@ -43,37 +49,32 @@ func NewChatGPTOAuthRouter(
 }
 
 func (p *ChatGPTOAuthRouter) Name() string {
-	candidates := p.availableProviders()
-	if len(candidates) == 0 {
+	selection, err := p.orderedProviders(context.Background(), false)
+	if err != nil || len(selection) == 0 {
 		return p.defaultProviderName
 	}
-	if p.strategy != chatGPTOAuthStrategyRoundRobin {
-		return candidates[0].Name()
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return candidates[p.next%len(candidates)].Name()
+	return selection[0].Name()
 }
 
 func (p *ChatGPTOAuthRouter) DefaultModel() string {
-	candidates := p.availableProviders()
-	if len(candidates) == 0 {
+	selection, err := p.orderedProviders(context.Background(), false)
+	if err != nil || len(selection) == 0 {
 		return ""
 	}
-	if p.strategy != chatGPTOAuthStrategyRoundRobin {
-		return candidates[0].DefaultModel()
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return candidates[p.next%len(candidates)].DefaultModel()
+	return selection[0].DefaultModel()
 }
 
 func (p *ChatGPTOAuthRouter) SupportsThinking() bool { return true }
 
-// HasAvailableProviders reports whether at least one authenticated Codex provider
-// is currently available for this router.
+func (p *ChatGPTOAuthRouter) HasRegisteredProviders() bool {
+	return len(p.registeredProviders()) > 0
+}
+
+// HasAvailableProviders reports whether at least one registered Codex provider is
+// route-eligible right now after auth/quota readiness filtering.
 func (p *ChatGPTOAuthRouter) HasAvailableProviders() bool {
-	return len(p.availableProviders()) > 0
+	_, err := p.orderedProviders(context.Background(), false)
+	return err == nil
 }
 
 func (p *ChatGPTOAuthRouter) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
@@ -89,14 +90,27 @@ func (p *ChatGPTOAuthRouter) ChatStream(ctx context.Context, req ChatRequest, on
 }
 
 func (p *ChatGPTOAuthRouter) call(ctx context.Context, fn func(Provider) (*ChatResponse, error)) (*ChatResponse, error) {
-	ordered, err := p.orderedProviders()
+	ordered, err := p.orderedProviders(ctx, true)
 	if err != nil {
 		return nil, err
 	}
+	if observation := ChatGPTOAuthRoutingObservationFromContext(ctx); observation != nil {
+		poolProviders := make([]string, 0, len(p.registeredProviders()))
+		for _, provider := range p.registeredProviders() {
+			poolProviders = append(poolProviders, provider.Name())
+		}
+		observation.SetPool(p.strategy, poolProviders)
+	}
 	var lastErr error
 	for i, provider := range ordered {
+		if observation := ChatGPTOAuthRoutingObservationFromContext(ctx); observation != nil {
+			observation.RecordAttempt(provider.Name())
+		}
 		resp, callErr := fn(provider)
 		if callErr == nil {
+			if observation := ChatGPTOAuthRoutingObservationFromContext(ctx); observation != nil {
+				observation.RecordSuccess(provider.Name())
+			}
 			return resp, nil
 		}
 		lastErr = callErr
@@ -112,27 +126,78 @@ func (p *ChatGPTOAuthRouter) call(ctx context.Context, fn func(Provider) (*ChatR
 	return nil, lastErr
 }
 
-func (p *ChatGPTOAuthRouter) orderedProviders() ([]Provider, error) {
-	candidates := p.availableProviders()
+func (p *ChatGPTOAuthRouter) orderedProviders(ctx context.Context, advance bool) ([]Provider, error) {
+	candidates := p.routeCandidates(ctx)
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no authenticated chatgpt_oauth providers available")
 	}
-	if p.strategy != chatGPTOAuthStrategyRoundRobin || len(candidates) == 1 {
-		return candidates, nil
+
+	healthy := make([]Provider, 0, len(candidates))
+	unknown := make([]Provider, 0, len(candidates))
+	blocked := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		switch candidate.eligibility.Class {
+		case RouteEligibilityHealthy:
+			healthy = append(healthy, candidate.provider)
+		case RouteEligibilityBlocked:
+			blocked = append(blocked, formatRouteBlockReason(candidate.provider.Name(), candidate.eligibility.Reason))
+		default:
+			unknown = append(unknown, candidate.provider)
+		}
 	}
 
+	active := healthy
+	fallback := unknown
+	if len(active) == 0 {
+		active = unknown
+		fallback = nil
+	}
+	if len(active) == 0 {
+		return nil, fmt.Errorf("no route-eligible chatgpt_oauth providers available: %s", strings.Join(blocked, ", "))
+	}
+	if p.strategy != chatGPTOAuthStrategyRoundRobin || len(active) == 1 {
+		ordered := append([]Provider(nil), active...)
+		ordered = append(ordered, fallback...)
+		return ordered, nil
+	}
+
+	start := 0
 	p.mu.Lock()
-	start := p.next % len(candidates)
-	p.next = (p.next + 1) % len(candidates)
+	if len(active) > 0 {
+		start = p.next % len(active)
+		if advance {
+			p.next = (p.next + 1) % len(active)
+		}
+	}
 	p.mu.Unlock()
 
-	ordered := make([]Provider, 0, len(candidates))
-	ordered = append(ordered, candidates[start:]...)
-	ordered = append(ordered, candidates[:start]...)
+	ordered := make([]Provider, 0, len(active)+len(fallback))
+	ordered = append(ordered, active[start:]...)
+	ordered = append(ordered, active[:start]...)
+	ordered = append(ordered, fallback...)
 	return ordered, nil
 }
 
-func (p *ChatGPTOAuthRouter) availableProviders() []Provider {
+func (p *ChatGPTOAuthRouter) routeCandidates(ctx context.Context) []chatGPTOAuthRouteCandidate {
+	registered := p.registeredProviders()
+	candidates := make([]chatGPTOAuthRouteCandidate, 0, len(registered))
+	for _, provider := range registered {
+		eligibility := RouteEligibility{Class: RouteEligibilityHealthy}
+		if aware, ok := provider.(RouteEligibilityAware); ok {
+			eligibility = aware.RouteEligibility(ctx)
+			if eligibility.Class == "" {
+				eligibility.Class = RouteEligibilityUnknown
+			}
+		}
+		candidates = append(candidates, chatGPTOAuthRouteCandidate{
+			provider:    provider,
+			eligibility: eligibility,
+		})
+	}
+	return candidates
+}
+
+func (p *ChatGPTOAuthRouter) registeredProviders() []Provider {
 	if p.registry == nil {
 		return nil
 	}
@@ -162,4 +227,11 @@ func (p *ChatGPTOAuthRouter) availableProviders() []Provider {
 		providers = append(providers, provider)
 	}
 	return providers
+}
+
+func formatRouteBlockReason(providerName, reason string) string {
+	if reason == "" {
+		return providerName
+	}
+	return providerName + ":" + reason
 }

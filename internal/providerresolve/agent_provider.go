@@ -29,7 +29,7 @@ func ResolveConfiguredProvider(registry *providers.Registry, agent *store.AgentD
 			routing.Strategy,
 			routing.ExtraProviderNames,
 		)
-		if router != nil && router.HasAvailableProviders() {
+		if router != nil && router.HasRegisteredProviders() {
 			return router, nil
 		}
 	}

@@ -17,8 +17,8 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -506,13 +506,13 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 	totalToolCalls := 0
 	var finalContent string
 	var finalThinking string
-	var asyncToolCalls []string    // track async spawn tool names for fallback
+	var asyncToolCalls []string     // track async spawn tool names for fallback
 	var bootstrapWriteDetected bool // track if write_file was called during bootstrap
-	var mediaResults []MediaResult // media files from tool MEDIA: results
-	var deliverables []string      // actual content from tool outputs (for team task results)
-	var blockReplies int           // count of block.reply events emitted (for dedup in consumer)
-	var lastBlockReply string      // last block reply content
-	var checkpointFlushedMsgs int  // messages flushed mid-run for crash safety (#294)
+	var mediaResults []MediaResult  // media files from tool MEDIA: results
+	var deliverables []string       // actual content from tool outputs (for team task results)
+	var blockReplies int            // count of block.reply events emitted (for dedup in consumer)
+	var lastBlockReply string       // last block reply content
+	var checkpointFlushedMsgs int   // messages flushed mid-run for crash safety (#294)
 
 	// Mid-loop compaction: summarize in-memory messages when context exceeds threshold.
 	// Uses same config as maybeSummarize (contextWindow * historyShare).
@@ -741,11 +741,12 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 		var resp *providers.ChatResponse
 		var err error
 
+		callCtx := providers.WithChatGPTOAuthRoutingObservation(ctx, providers.NewChatGPTOAuthRoutingObservation())
 		llmSpanStart := time.Now().UTC()
-		llmSpanID := l.emitLLMSpanStart(ctx, llmSpanStart, iteration, messages)
+		llmSpanID := l.emitLLMSpanStart(callCtx, llmSpanStart, iteration, messages)
 
 		if req.Stream {
-			resp, err = l.provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
+			resp, err = l.provider.ChatStream(callCtx, chatReq, func(chunk providers.StreamChunk) {
 				if chunk.Thinking != "" {
 					emitRun(AgentEvent{
 						Type:    protocol.ChatEventThinking,
@@ -764,15 +765,15 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				}
 			})
 		} else {
-			resp, err = l.provider.Chat(ctx, chatReq)
+			resp, err = l.provider.Chat(callCtx, chatReq)
 		}
 
 		if err != nil {
-			l.emitLLMSpanEnd(ctx, llmSpanID, llmSpanStart, nil, err)
+			l.emitLLMSpanEnd(callCtx, llmSpanID, llmSpanStart, nil, err)
 			return nil, fmt.Errorf("LLM call failed (iteration %d): %w", iteration, err)
 		}
 
-		l.emitLLMSpanEnd(ctx, llmSpanID, llmSpanStart, resp, nil)
+		l.emitLLMSpanEnd(callCtx, llmSpanID, llmSpanStart, resp, nil)
 
 		// For non-streaming responses, emit thinking and content as single events
 		if !req.Stream {

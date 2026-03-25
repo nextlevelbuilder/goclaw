@@ -46,6 +46,12 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
+func (p *CodexProvider) RouteEligibility(ctx context.Context) RouteEligibility {
+	if aware, ok := p.tokenSource.(RouteEligibilityAware); ok {
+		return aware.RouteEligibility(ctx)
+	}
+	return RouteEligibility{Class: RouteEligibilityHealthy}
+}
 
 func (p *CodexProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	// Codex Responses API requires stream=true; delegate to ChatStream with no chunk handler.

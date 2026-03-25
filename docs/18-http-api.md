@@ -170,13 +170,24 @@ Rules:
 |--------|------|-------------|
 | `GET` | `/v1/agents/{id}/codex-pool-activity` | Summarize recent Codex/OpenAI OAuth pool usage for one agent |
 
+Query parameters:
+- `limit` optional, defaults to `18`, max `50`
+
 Response fields:
 - `strategy`: effective routing strategy (`manual` or `round_robin`)
 - `pool_providers`: configured primary + extra provider aliases in pool order
-- `provider_counts`: recent request counts and last-used timestamp per alias
-- `recent_requests`: recent root traces with provider, model, duration, status, pool call count, and failover aliases
+- `provider_counts`: per-alias routing evidence:
+  - `request_count`: backward-compatible count of direct selections
+  - `direct_selection_count`: times the router selected that alias first
+  - `failover_serve_count`: times that alias only served as failover
+  - `last_selected_at`, `last_failover_at`, `last_used_at`: latest timestamps for each evidence type
+- `recent_requests`: recent routed Codex calls:
+  - `span_id`, `trace_id`, `started_at`, `status`, `duration_ms`, `model`
+  - `selected_provider`: alias chosen first by the router
+  - `provider_name`: alias that actually served the request
+  - `attempt_count`, `used_failover`, `failover_providers`
 
-Use this endpoint to back a dashboard that verifies whether a configured pool is actually rotating across aliases.
+Use `direct_selection_count` plus the `selected_provider` sequence to verify real round-robin behavior. A provider with `failover_serve_count > 0` and `direct_selection_count = 0` was only observed as a rescue target, not as a confirmed round-robin selection.
 
 ---
 
@@ -693,15 +704,85 @@ Admin-only endpoints for managing gateway API keys. See [20 — API Keys & Auth]
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/auth/chatgpt/{provider}/status` | Check ChatGPT OAuth status for a provider |
+| `GET` | `/v1/auth/chatgpt/{provider}/quota` | Fetch Codex/OpenAI quota state for a provider |
 | `POST` | `/v1/auth/chatgpt/{provider}/start` | Start ChatGPT OAuth flow for a provider |
 | `POST` | `/v1/auth/chatgpt/{provider}/callback` | Manual callback handler for a provider |
 | `POST` | `/v1/auth/chatgpt/{provider}/logout` | Revoke ChatGPT OAuth token for a provider |
 | `GET` | `/v1/auth/openai/status` | Check OpenAI auth status |
+| `GET` | `/v1/auth/openai/quota` | Fetch quota state for the default `openai-codex` provider |
 | `POST` | `/v1/auth/openai/start` | Start OAuth flow |
 | `POST` | `/v1/auth/openai/callback` | Manual callback handler |
 | `POST` | `/v1/auth/openai/logout` | Revoke token |
 
 Legacy `/v1/auth/openai/*` routes remain as compatibility aliases for the default `openai-codex` OpenAI Codex OAuth provider.
+
+### Provider Quota Response
+
+`GET /v1/auth/chatgpt/{provider}/quota` and `GET /v1/auth/openai/quota` always return a provider-scoped quota envelope.
+
+Success payload:
+
+```json
+{
+  "provider_name": "openai-codex",
+  "success": true,
+  "plan_type": "team",
+  "windows": [
+    {
+      "label": "Primary",
+      "used_percent": 24,
+      "remaining_percent": 76,
+      "reset_after_seconds": 3600,
+      "reset_at": "2026-03-24T20:15:00Z"
+    },
+    {
+      "label": "Secondary",
+      "used_percent": 38,
+      "remaining_percent": 62,
+      "reset_after_seconds": 604800,
+      "reset_at": "2026-03-31T19:15:00Z"
+    }
+  ],
+  "core_usage": {
+    "five_hour": {
+      "label": "Primary",
+      "remaining_percent": 76,
+      "reset_after_seconds": 3600,
+      "reset_at": "2026-03-24T20:15:00Z"
+    },
+    "weekly": {
+      "label": "Secondary",
+      "remaining_percent": 62,
+      "reset_after_seconds": 604800,
+      "reset_at": "2026-03-31T19:15:00Z"
+    }
+  },
+  "last_updated": "2026-03-24T19:15:00Z"
+}
+```
+
+Failure payload:
+
+```json
+{
+  "provider_name": "openai-codex",
+  "success": false,
+  "windows": [],
+  "error": "Quota metadata is missing for this account.",
+  "error_code": "missing_account_id",
+  "action_hint": "Sign in again so GoClaw can restore the ChatGPT account workspace metadata.",
+  "last_updated": "2026-03-24T19:15:00Z"
+}
+```
+
+Notes:
+- Invalid provider slugs return `400`.
+- Missing provider still returns `404`, and provider type conflicts still return `409`.
+- Missing quota metadata, expired workspace access, upstream `402`, upstream `403`, and upstream `429` return `200` with a structured failure payload so the dashboard can render actionable state inline.
+- `needs_reauth`, `is_forbidden`, and `retryable` are boolean hints for UI/state-machine handling.
+- `error_code` can be `missing_account_id`, `reauth_required`, `payment_required`, `quota_api_forbidden`, `quota_endpoint_not_found`, `rate_limited`, `provider_unavailable`, `network_timeout`, `network_error`, `quota_request_failed`, or `unknown_upstream_error`.
+- Failure payloads still include `windows: []` so clients can treat the envelope consistently.
+- `core_usage.five_hour` and `core_usage.weekly` are derived from upstream windows. When labels drift, GoClaw falls back to shortest-reset and longest-reset usage windows.
 
 ---
 

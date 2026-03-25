@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -30,12 +30,18 @@ const (
 
 	// refreshMargin is how early before expiry we refresh the token.
 	refreshMargin = 5 * time.Minute
+
+	routeEligibilityTTL = 20 * time.Second
 )
+
+var refreshOpenAITokenFunc = RefreshOpenAIToken
 
 // OAuthSettings is stored in llm_providers.settings JSONB (non-sensitive metadata).
 type OAuthSettings struct {
 	ExpiresAt int64  `json:"expires_at"` // unix timestamp
 	Scopes    string `json:"scopes,omitempty"`
+	AccountID string `json:"account_id,omitempty"`
+	PlanType  string `json:"plan_type,omitempty"`
 }
 
 // ProviderTypeConflictError reports that the requested OAuth provider name is
@@ -63,6 +69,9 @@ type DBTokenSource struct {
 	mu          sync.Mutex
 	cachedToken string
 	expiresAt   time.Time
+
+	cachedRouteEligibility   providers.RouteEligibility
+	cachedRouteEligibilityAt time.Time
 }
 
 // NewDBTokenSource creates a DB-backed token source.
@@ -109,6 +118,40 @@ func (ts *DBTokenSource) resolvedAPIBase() string {
 	return DefaultProviderAPIBase
 }
 
+func (ts *DBTokenSource) RouteEligibility(ctx context.Context) providers.RouteEligibility {
+	ts.mu.Lock()
+	cached := ts.cachedRouteEligibility
+	cachedAt := ts.cachedRouteEligibilityAt
+	ts.mu.Unlock()
+
+	if cached.Class != "" && time.Since(cachedAt) < routeEligibilityTTL {
+		return cached
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if store.TenantIDFromContext(ctx) == uuid.Nil {
+		ctx = store.WithTenantID(ctx, ts.tenantID)
+	}
+
+	eligibility := providers.RouteEligibility{Class: providers.RouteEligibilityUnknown, Reason: "unavailable"}
+	provider, err := ts.loadOAuthProvider(ctx)
+	if err == nil {
+		if !provider.Enabled {
+			eligibility = providers.RouteEligibility{Class: providers.RouteEligibilityBlocked, Reason: "disabled"}
+		} else {
+			eligibility = OpenAIQuotaRouteEligibility(FetchOpenAIQuota(ctx, provider, ts))
+		}
+	}
+
+	ts.mu.Lock()
+	ts.cachedRouteEligibility = eligibility
+	ts.cachedRouteEligibilityAt = time.Now()
+	ts.mu.Unlock()
+	return eligibility
+}
+
 // RefreshTokenSecretKey returns the tenant-scoped secret key for a provider refresh token.
 func RefreshTokenSecretKey(providerName string) string {
 	providerName = strings.TrimSpace(providerName)
@@ -132,6 +175,90 @@ func (ts *DBTokenSource) loadOAuthProvider(ctx context.Context) (*store.LLMProvi
 	return p, nil
 }
 
+func (ts *DBTokenSource) withTenantContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if store.TenantIDFromContext(ctx) == uuid.Nil {
+		ctx = store.WithTenantID(ctx, ts.tenantID)
+	}
+	return ctx
+}
+
+func (ts *DBTokenSource) persistProviderMetadata(ctx context.Context, provider *store.LLMProviderData, metadata openAITokenMetadata) (*store.LLMProviderData, bool, error) {
+	settings := parseOAuthSettings(provider.Settings)
+	changed := false
+
+	if settings.AccountID == "" && strings.TrimSpace(metadata.AccountID) != "" {
+		settings.AccountID = strings.TrimSpace(metadata.AccountID)
+		changed = true
+	}
+	if settings.PlanType == "" && strings.TrimSpace(metadata.PlanType) != "" {
+		settings.PlanType = strings.TrimSpace(metadata.PlanType)
+		changed = true
+	}
+
+	if changed {
+		raw := marshalOAuthSettings(settings)
+		if err := ts.providerStore.UpdateProvider(ctx, provider.ID, map[string]any{
+			"settings": raw,
+		}); err != nil {
+			return provider, false, err
+		}
+		provider.Settings = raw
+		ts.mu.Lock()
+		ts.cachedRouteEligibility = providers.RouteEligibility{}
+		ts.cachedRouteEligibilityAt = time.Time{}
+		ts.mu.Unlock()
+	}
+
+	return provider, strings.TrimSpace(settings.AccountID) != "", nil
+}
+
+func (ts *DBTokenSource) backfillProviderMetadataFromToken(ctx context.Context, provider *store.LLMProviderData, token string) (*store.LLMProviderData, bool, error) {
+	metadata, ok := parseOpenAIJWTMetadata(token)
+	if !ok {
+		return provider, false, nil
+	}
+	return ts.persistProviderMetadata(ctx, provider, metadata)
+}
+
+// BackfillProviderMetadata restores missing ChatGPT workspace metadata for legacy OAuth providers.
+// It first tries to recover metadata from the currently stored access token, then forces a token refresh
+// so modern refresh responses can repopulate account settings when older providers were saved without them.
+func (ts *DBTokenSource) BackfillProviderMetadata(ctx context.Context, provider *store.LLMProviderData) (*store.LLMProviderData, error) {
+	if provider == nil {
+		return nil, nil
+	}
+
+	ctx = ts.withTenantContext(ctx)
+	settings := parseOAuthSettings(provider.Settings)
+	if strings.TrimSpace(settings.AccountID) != "" {
+		return provider, nil
+	}
+
+	updatedProvider, recovered, err := ts.backfillProviderMetadataFromToken(ctx, provider, provider.APIKey)
+	if err != nil {
+		return provider, err
+	}
+	if recovered {
+		return updatedProvider, nil
+	}
+
+	ts.mu.Lock()
+	refreshErr := ts.refresh(ctx)
+	ts.mu.Unlock()
+	if refreshErr != nil {
+		return provider, refreshErr
+	}
+
+	refreshedProvider, err := ts.loadOAuthProvider(ctx)
+	if err != nil {
+		return provider, err
+	}
+	return refreshedProvider, nil
+}
+
 // Token returns a valid access token, refreshing if expired or about to expire.
 func (ts *DBTokenSource) Token() (string, error) {
 	ts.mu.Lock()
@@ -152,10 +279,7 @@ func (ts *DBTokenSource) Token() (string, error) {
 		}
 		ts.cachedToken = p.APIKey
 
-		var settings OAuthSettings
-		if len(p.Settings) > 0 {
-			_ = json.Unmarshal(p.Settings, &settings)
-		}
+		settings := parseOAuthSettings(p.Settings)
 		if settings.ExpiresAt > 0 {
 			ts.expiresAt = time.Unix(settings.ExpiresAt, 0)
 		}
@@ -184,7 +308,7 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 	}
 
 	slog.Info("refreshing OpenAI OAuth token")
-	newToken, err := RefreshOpenAIToken(refreshToken)
+	newToken, err := refreshOpenAITokenFunc(refreshToken)
 	if err != nil {
 		return err
 	}
@@ -192,6 +316,8 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 	// Update cached values
 	ts.cachedToken = newToken.AccessToken
 	ts.expiresAt = time.Now().Add(time.Duration(newToken.ExpiresIn) * time.Second)
+	ts.cachedRouteEligibility = providers.RouteEligibility{}
+	ts.cachedRouteEligibilityAt = time.Time{}
 
 	// Update provider api_key (access token) in DB
 	p, err := ts.loadOAuthProvider(ctx)
@@ -199,14 +325,11 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 		return fmt.Errorf("get provider for update: %w", err)
 	}
 
-	settings := OAuthSettings{
-		ExpiresAt: ts.expiresAt.Unix(),
-	}
-	settingsJSON, _ := json.Marshal(settings)
+	settings := mergeOAuthSettings(parseOAuthSettings(p.Settings), newToken, ts.expiresAt)
 
 	if err := ts.providerStore.UpdateProvider(ctx, p.ID, map[string]any{
 		"api_key":  newToken.AccessToken,
-		"settings": json.RawMessage(settingsJSON),
+		"settings": marshalOAuthSettings(settings),
 	}); err != nil {
 		slog.Warn("failed to persist refreshed access token", "error", err)
 	}
@@ -226,25 +349,23 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 // Returns the provider ID.
 func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAITokenResponse) (uuid.UUID, error) {
 	expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-	settings := OAuthSettings{
-		ExpiresAt: expiresAt.Unix(),
-		Scopes:    tokenResp.Scope,
-	}
-	settingsJSON, _ := json.Marshal(settings)
 
 	// Update cache
 	ts.mu.Lock()
 	ts.cachedToken = tokenResp.AccessToken
 	ts.expiresAt = expiresAt
+	ts.cachedRouteEligibility = providers.RouteEligibility{}
+	ts.cachedRouteEligibilityAt = time.Time{}
 	ts.mu.Unlock()
 
 	// Check if provider already exists
 	existing, err := ts.loadOAuthProvider(ctx)
 	if err == nil {
+		settings := mergeOAuthSettings(parseOAuthSettings(existing.Settings), tokenResp, expiresAt)
 		// Update existing provider
 		updates := map[string]any{
 			"api_key":  tokenResp.AccessToken,
-			"settings": json.RawMessage(settingsJSON),
+			"settings": marshalOAuthSettings(settings),
 			"enabled":  true,
 		}
 		if ts.providerDisplayName != "" {
@@ -270,6 +391,7 @@ func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAIT
 		return uuid.Nil, err
 	}
 
+	settings := mergeOAuthSettings(OAuthSettings{}, tokenResp, expiresAt)
 	// Create new provider
 	p := &store.LLMProviderData{
 		Name:         ts.providerName,
@@ -278,7 +400,7 @@ func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAIT
 		APIBase:      ts.resolvedAPIBase(),
 		APIKey:       tokenResp.AccessToken,
 		Enabled:      true,
-		Settings:     settingsJSON,
+		Settings:     marshalOAuthSettings(settings),
 	}
 	if err := ts.providerStore.CreateProvider(ctx, p); err != nil {
 		return uuid.Nil, fmt.Errorf("create provider: %w", err)
@@ -299,6 +421,8 @@ func (ts *DBTokenSource) Delete(ctx context.Context) error {
 	ts.mu.Lock()
 	ts.cachedToken = ""
 	ts.expiresAt = time.Time{}
+	ts.cachedRouteEligibility = providers.RouteEligibility{}
+	ts.cachedRouteEligibilityAt = time.Time{}
 	ts.mu.Unlock()
 
 	// Delete refresh token from config_secrets

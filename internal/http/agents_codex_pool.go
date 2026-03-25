@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -11,40 +12,32 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 type codexPoolProviderCount struct {
-	ProviderName string     `json:"provider_name"`
-	RequestCount int        `json:"request_count"`
-	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
+	ProviderName         string     `json:"provider_name"`
+	RequestCount         int        `json:"request_count"`
+	DirectSelectionCount int        `json:"direct_selection_count"`
+	FailoverServeCount   int        `json:"failover_serve_count"`
+	LastSelectedAt       *time.Time `json:"last_selected_at,omitempty"`
+	LastFailoverAt       *time.Time `json:"last_failover_at,omitempty"`
+	LastUsedAt           *time.Time `json:"last_used_at,omitempty"`
 }
 
 type codexPoolRecentRequest struct {
+	SpanID            uuid.UUID `json:"span_id"`
 	TraceID           uuid.UUID `json:"trace_id"`
 	StartedAt         time.Time `json:"started_at"`
 	Status            string    `json:"status"`
 	DurationMS        int       `json:"duration_ms"`
 	ProviderName      string    `json:"provider_name"`
+	SelectedProvider  string    `json:"selected_provider,omitempty"`
 	Model             string    `json:"model"`
-	PoolLLMCalls      int       `json:"pool_llm_calls"`
+	AttemptCount      int       `json:"attempt_count"`
+	UsedFailover      bool      `json:"used_failover"`
 	FailoverProviders []string  `json:"failover_providers,omitempty"`
-}
-
-func markCodexPoolProviderUsed(countsByProvider map[string]*codexPoolProviderCount, providerName string, usedAt time.Time) {
-	if providerName == "" {
-		return
-	}
-	stat := countsByProvider[providerName]
-	if stat == nil {
-		stat = &codexPoolProviderCount{ProviderName: providerName}
-		countsByProvider[providerName] = stat
-	}
-	stat.RequestCount++
-	if stat.LastUsedAt == nil || usedAt.After(*stat.LastUsedAt) {
-		seenAt := usedAt
-		stat.LastUsedAt = &seenAt
-	}
 }
 
 func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.Request) {
@@ -92,62 +85,29 @@ func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.R
 	}
 
 	const query = `
-WITH candidate_traces AS (
-	SELECT id, start_time, duration_ms, status, llm_call_count
-	FROM traces
-	WHERE agent_id = $1
-	  AND tenant_id = $2
-	  AND parent_trace_id IS NULL
-	  AND EXISTS (
-		SELECT 1
-		FROM spans sp
-		WHERE sp.trace_id = traces.id
-		  AND sp.tenant_id = $2
-		  AND sp.span_type = 'llm_call'
-		  AND sp.provider = ANY($3)
-	  )
-	ORDER BY start_time DESC
-	LIMIT $4
-),
-pool_spans AS (
-	SELECT
-		sp.trace_id,
-		sp.provider,
-		sp.model,
-		sp.start_time,
-		ROW_NUMBER() OVER (PARTITION BY sp.trace_id ORDER BY sp.start_time ASC, sp.id ASC) AS rn
-	FROM spans sp
-	JOIN candidate_traces ct ON ct.id = sp.trace_id
-	WHERE sp.span_type = 'llm_call'
-	  AND sp.tenant_id = $2
-	  AND sp.provider = ANY($3)
-)
 SELECT
-	ct.id,
-	ct.start_time,
-	ct.duration_ms,
-	ct.status,
-	first_span.provider,
-	first_span.model,
-	COALESCE((
-		SELECT ARRAY_AGG(provider_name ORDER BY provider_name)
-		FROM (
-			SELECT DISTINCT ps.provider AS provider_name
-			FROM pool_spans ps
-			WHERE ps.trace_id = ct.id
-			  AND ps.rn > 1
-			  AND ps.provider <> first_span.provider
-		) dedup
-	), ARRAY[]::text[]),
-	COALESCE((SELECT COUNT(*) FROM pool_spans ps WHERE ps.trace_id = ct.id), 0)
-FROM candidate_traces ct
-JOIN LATERAL (
-	SELECT ps.provider, ps.model
-	FROM pool_spans ps
-	WHERE ps.trace_id = ct.id AND ps.rn = 1
-	LIMIT 1
-) first_span ON true
-ORDER BY ct.start_time DESC`
+	sp.id,
+	sp.trace_id,
+	sp.start_time,
+	COALESCE(sp.duration_ms, 0),
+	sp.status,
+	COALESCE(sp.provider, ''),
+	COALESCE(sp.model, ''),
+	COALESCE(sp.metadata, '{}'::jsonb)
+FROM spans sp
+JOIN traces t ON t.id = sp.trace_id
+WHERE t.agent_id = $1
+  AND t.tenant_id = $2
+  AND t.parent_trace_id IS NULL
+  AND sp.tenant_id = $2
+  AND sp.span_type = 'llm_call'
+  AND (
+	sp.provider = ANY($3)
+	OR COALESCE(sp.metadata->'chatgpt_oauth_routing'->>'selected_provider', '') = ANY($3)
+	OR COALESCE(sp.metadata->'chatgpt_oauth_routing'->>'serving_provider', '') = ANY($3)
+  )
+ORDER BY sp.start_time DESC
+LIMIT $4`
 
 	rows, err := h.db.QueryContext(r.Context(), query, agent.ID, agent.TenantID, pq.Array(poolProviders), limit)
 	if err != nil {
@@ -156,48 +116,39 @@ ORDER BY ct.start_time DESC`
 	}
 	defer rows.Close()
 
-	recent := make([]codexPoolRecentRequest, 0, limit)
-	countsByProvider := make(map[string]*codexPoolProviderCount, len(poolProviders))
-	for _, name := range poolProviders {
-		countsByProvider[name] = &codexPoolProviderCount{ProviderName: name}
-	}
-
+	spans := make([]codexPoolSpanActivity, 0, limit)
 	for rows.Next() {
-		var item codexPoolRecentRequest
-		var failovers pq.StringArray
+		var item codexPoolSpanActivity
+		var metadata json.RawMessage
 		if err := rows.Scan(
+			&item.SpanID,
 			&item.TraceID,
 			&item.StartedAt,
 			&item.DurationMS,
 			&item.Status,
-			&item.ProviderName,
+			&item.Provider,
 			&item.Model,
-			&failovers,
-			&item.PoolLLMCalls,
+			&metadata,
 		); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		item.FailoverProviders = []string(failovers)
-		recent = append(recent, item)
-		markCodexPoolProviderUsed(countsByProvider, item.ProviderName, item.StartedAt)
-		for _, providerName := range item.FailoverProviders {
-			if providerName != item.ProviderName {
-				markCodexPoolProviderUsed(countsByProvider, providerName, item.StartedAt)
+		item.Metadata = metadata
+		if evidence := providers.ExtractChatGPTOAuthRoutingEvidence(metadata); evidence.HasData() {
+			if !providerInPool(poolProviders, evidence.SelectedProvider) && !providerInPool(poolProviders, evidence.ServingProvider) {
+				continue
 			}
+		} else if !providerInPool(poolProviders, item.Provider) {
+			continue
 		}
+		spans = append(spans, item)
 	}
 	if err := rows.Err(); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	providerCounts := make([]codexPoolProviderCount, 0, len(poolProviders))
-	for _, name := range poolProviders {
-		if stat := countsByProvider[name]; stat != nil {
-			providerCounts = append(providerCounts, *stat)
-		}
-	}
+	providerCounts, recent := buildCodexPoolActivity(poolProviders, spans)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"strategy":        strategy,

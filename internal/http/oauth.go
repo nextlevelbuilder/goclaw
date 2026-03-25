@@ -51,11 +51,13 @@ func NewOAuthHandler(provStore store.ProviderStore, secretStore store.ConfigSecr
 // RegisterRoutes registers OAuth routes on the given mux.
 func (h *OAuthHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/auth/chatgpt/{provider}/status", h.auth(h.handleStatus))
+	mux.HandleFunc("GET /v1/auth/chatgpt/{provider}/quota", h.auth(h.handleQuota))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/start", h.auth(h.handleStart))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/callback", h.auth(h.handleManualCallback))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/logout", h.auth(h.handleLogout))
 
 	mux.HandleFunc("GET /v1/auth/openai/status", h.auth(h.handleStatus))
+	mux.HandleFunc("GET /v1/auth/openai/quota", h.auth(h.handleQuota))
 	mux.HandleFunc("POST /v1/auth/openai/start", h.auth(h.handleStart))
 	mux.HandleFunc("POST /v1/auth/openai/callback", h.auth(h.handleManualCallback))
 	mux.HandleFunc("POST /v1/auth/openai/logout", h.auth(h.handleLogout))
