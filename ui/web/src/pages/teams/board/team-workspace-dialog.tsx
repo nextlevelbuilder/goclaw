@@ -13,6 +13,7 @@ import { FileUploadDialog } from "@/components/shared/file-upload-dialog";
 import { buildTree, isTextFile } from "@/lib/file-helpers";
 import { useTeamWorkspace } from "../hooks/use-team-workspace";
 import { useHttp } from "@/hooks/use-ws";
+import { toast } from "@/stores/use-toast-store";
 import type { ScopeEntry } from "@/types/team";
 
 /** Strip chatID prefix from name for WS file ops (backend already scopes by chat_id). */
@@ -43,8 +44,9 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
   const [cachedScopes, setCachedScopes] = useState<ScopeEntry[]>([]);
 
   // Load files for the selected scope. On "all" load, also cache scope list.
-  const load = useCallback(() => {
-    listFiles(teamId, scopeValue || undefined).then((result) => {
+  // silent=true skips loading spinner (used after move to avoid tree flash).
+  const load = useCallback((opts?: { silent?: boolean }) => {
+    listFiles(teamId, scopeValue || undefined, opts).then((result) => {
       // Only update cached scopes from the "all" listing (no filter applied).
       if (!scopeValue && result.length > 0) {
         const seen = new Set<string>();
@@ -59,8 +61,10 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
         setCachedScopes(derived);
       }
     });
-    setFileContent(null);
-    setActivePath(null);
+    if (!opts?.silent) {
+      setFileContent(null);
+      setActivePath(null);
+    }
   }, [teamId, listFiles, scopeValue]);
 
   useEffect(() => {
@@ -168,6 +172,16 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     // In workspace, file names may have chatID prefix — strip it for the API call.
     const match = files.find((f) => f.name === fromPath);
     if (!match) return;
+
+    // Prevent cross-scope moves (e.g. dragging from chat123/ to chat456/).
+    if (match.chat_id && toFolder) {
+      const toMatch = files.find((f) => f.name === toFolder && f.is_dir);
+      if (toMatch && toMatch.chat_id && toMatch.chat_id !== match.chat_id) {
+        toast.error(t("workspace.crossScopeMoveError"));
+        return;
+      }
+    }
+
     const fromName = wsFileName(match.name, match.chat_id);
     const fileName = fromName.split("/").pop() ?? fromName;
     // toFolder may also have chatID prefix — strip it.
@@ -184,9 +198,12 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
 
     try {
       await http.put(`/v1/teams/${teamId}/workspace/move?${params.toString()}`);
-      load();
-    } catch { /* silent — server error shown via toast if needed */ }
-  }, [http, teamId, files, load]);
+      load({ silent: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t("workspace.moveFailed");
+      toast.error(msg);
+    }
+  }, [http, teamId, files, load, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -213,7 +230,7 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
               <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
                 <Upload className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1">
+              <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="gap-1">
                 <RefreshCw className={"h-3.5 w-3.5" + (loading ? " animate-spin" : "")} />
               </Button>
             </div>

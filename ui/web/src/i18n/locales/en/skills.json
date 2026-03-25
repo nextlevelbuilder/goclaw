@@ -73,6 +73,13 @@
     "disable": "Disable skill",
     "disabled": "Disabled"
   },
+  "tenant": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "default": "Default",
+    "overrideHint": "Per-tenant override for this skill",
+    "resetDefault": "Reset to default"
+  },
   "deps": {
     "rescan": "Rescan Deps",
     "rescanning": "Scanning...",

@@ -1,5 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import {
+  DndContext,
+  DragOverlay,
+  useDroppable,
+  useDraggable,
+} from "@dnd-kit/core";
 import {
   Folder,
   FolderOpen,
@@ -21,37 +28,74 @@ import {
   Trash2,
 } from "lucide-react";
 import { extOf, CODE_EXTENSIONS, IMAGE_EXTENSIONS, formatSize, type TreeNode } from "@/lib/file-helpers";
+import { useTreeDnd } from "@/hooks/use-tree-dnd";
+import { DragPreview } from "@/components/shared/drag-preview";
 
 const cls = "h-4 w-4 shrink-0";
 
 function FileIcon({ name }: { name: string }) {
   const ext = extOf(name);
-
-  // Markdown
   if (ext === "md" || ext === "mdx") return <FileText className={`${cls} text-blue-500`} />;
-  // JSON / YAML config
   if (ext === "json" || ext === "json5") return <FileJson2 className={`${cls} text-yellow-600`} />;
   if (ext === "yaml" || ext === "yml" || ext === "toml") return <FileCog className={`${cls} text-orange-500`} />;
-  // Spreadsheet / CSV
   if (ext === "csv") return <FileSpreadsheet className={`${cls} text-green-600`} />;
-  // Shell / terminal
   if (ext === "sh" || ext === "bash" || ext === "zsh") return <FileTerminal className={`${cls} text-lime-600`} />;
-  // Images
   if (IMAGE_EXTENSIONS.has(ext)) return <FileImage className={`${cls} text-emerald-500`} />;
-  // Video
   if (ext === "mp4" || ext === "webm" || ext === "mov" || ext === "avi" || ext === "mkv") return <FileVideo className={`${cls} text-pink-500`} />;
-  // Audio
   if (ext === "mp3" || ext === "wav" || ext === "ogg" || ext === "flac" || ext === "m4a") return <FileAudio className={`${cls} text-orange-500`} />;
-  // Archive
   if (ext === "zip" || ext === "tar" || ext === "gz" || ext === "rar" || ext === "7z" || ext === "bz2") return <FileArchive className={`${cls} text-amber-600`} />;
-  // Font
   if (ext === "ttf" || ext === "otf" || ext === "woff" || ext === "woff2") return <FileType className={`${cls} text-slate-500`} />;
-  // Env / secrets
   if (ext === "env" || ext === "pem" || ext === "key" || ext === "crt") return <FileLock className={`${cls} text-red-500`} />;
-  // Code (generic)
   if (CODE_EXTENSIONS.has(ext)) return <FileCode2 className={`${cls} text-orange-500`} />;
-  // Default
   return <File className={`${cls} text-muted-foreground`} />;
+}
+
+/** Draggable wrapper for tree items (files and folders). */
+function DraggableItem({
+  id,
+  enabled,
+  children,
+}: {
+  id: string;
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id,
+    disabled: !enabled,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...(enabled ? { ...listeners, ...attributes } : {})}
+      className={isDragging ? "opacity-40" : ""}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Droppable wrapper for folder items. */
+function DroppableFolder({
+  id,
+  enabled,
+  children,
+}: {
+  id: string;
+  enabled: boolean;
+  children: (props: { isDropTarget: boolean }) => React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id,
+    disabled: !enabled,
+  });
+
+  return (
+    <div ref={setNodeRef}>
+      {children({ isDropTarget: isOver })}
+    </div>
+  );
 }
 
 export function TreeItem({
@@ -61,7 +105,8 @@ export function TreeItem({
   onSelect,
   onDelete,
   onLoadMore,
-  onMove,
+  dndEnabled,
+  autoExpandPath,
   showSize,
 }: {
   node: TreeNode;
@@ -70,22 +115,31 @@ export function TreeItem({
   onSelect: (path: string) => void;
   onDelete?: (path: string, isDir: boolean) => void;
   onLoadMore?: (path: string) => void;
-  onMove?: (fromPath: string, toFolder: string) => void;
+  dndEnabled: boolean;
+  autoExpandPath: string | null;
   showSize?: boolean;
 }) {
   const { t } = useTranslation("common");
   const [expanded, setExpanded] = useState(depth === 0);
-  const [dragOver, setDragOver] = useState(false);
   const isActive = activePath === node.path;
 
-  const handleToggle = () => {
+  // Auto-expand folder when hovered during drag for 800ms.
+  useEffect(() => {
+    if (autoExpandPath === node.path && node.isDir && !expanded) {
+      setExpanded(true);
+      if (node.hasChildren && node.children.length === 0 && !node.loading) {
+        onLoadMore?.(node.path);
+      }
+    }
+  }, [autoExpandPath, node.path, node.isDir, expanded, node.hasChildren, node.children.length, node.loading, onLoadMore]);
+
+  const handleToggle = useCallback(() => {
     const willExpand = !expanded;
     setExpanded(willExpand);
-    // Lazy load: if expanding a folder with hasChildren but no loaded children
     if (willExpand && node.isDir && node.hasChildren && node.children.length === 0 && !node.loading) {
       onLoadMore?.(node.path);
     }
-  };
+  }, [expanded, node.isDir, node.hasChildren, node.children.length, node.loading, node.path, onLoadMore]);
 
   const deleteBtn = onDelete && !node.protected && (
     <button
@@ -105,30 +159,14 @@ export function TreeItem({
   );
 
   if (node.isDir) {
-    return (
-      <div>
+    const folderContent = (isDropTargetActive: boolean) => (
+      <>
         <div
           className={`group/tree-item flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm cursor-pointer ${
-            dragOver ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-accent"
+            isDropTargetActive ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-accent"
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
-          draggable={!!onMove}
-          onDragStart={onMove ? (e) => {
-            e.dataTransfer.setData("text/x-tree-path", node.path);
-            e.dataTransfer.effectAllowed = "move";
-          } : undefined}
           onClick={handleToggle}
-          onDragOver={onMove ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOver(true); } : undefined}
-          onDragEnter={onMove ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
-          onDragLeave={onMove ? () => setDragOver(false) : undefined}
-          onDrop={onMove ? (e) => {
-            e.preventDefault();
-            setDragOver(false);
-            const src = e.dataTransfer.getData("text/x-tree-path");
-            if (src && src !== node.path && !node.path.startsWith(src + "/")) {
-              onMove(src, node.path);
-            }
-          } : undefined}
         >
           <ChevronRight
             className={`h-3 w-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -152,11 +190,12 @@ export function TreeItem({
             onSelect={onSelect}
             onDelete={onDelete}
             onLoadMore={onLoadMore}
-            onMove={onMove}
+            dndEnabled={dndEnabled}
+
+            autoExpandPath={autoExpandPath}
             showSize={showSize}
           />
         ))}
-        {/* Show chevron hint for loadable but not-yet-expanded empty folders */}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
           <div
             className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer hover:text-foreground"
@@ -167,21 +206,29 @@ export function TreeItem({
             <span>{t("loadMore")}</span>
           </div>
         )}
-      </div>
+      </>
     );
+
+    if (dndEnabled) {
+      return (
+        <DraggableItem id={node.path} enabled>
+          <DroppableFolder id={node.path} enabled>
+            {({ isDropTarget: active }) => folderContent(active)}
+          </DroppableFolder>
+        </DraggableItem>
+      );
+    }
+
+    return <div>{folderContent(false)}</div>;
   }
 
-  return (
+  // File node
+  const fileContent = (
     <div
       className={`group/tree-item flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm cursor-pointer ${
         isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
       }`}
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
-      draggable={!!onMove}
-      onDragStart={onMove ? (e) => {
-        e.dataTransfer.setData("text/x-tree-path", node.path);
-        e.dataTransfer.effectAllowed = "move";
-      } : undefined}
       onClick={() => onSelect(node.path)}
     >
       <FileIcon name={node.name} />
@@ -190,6 +237,28 @@ export function TreeItem({
       {deleteBtn}
     </div>
   );
+
+  if (dndEnabled) {
+    return (
+      <DraggableItem id={node.path} enabled>
+        {fileContent}
+      </DraggableItem>
+    );
+  }
+
+  return fileContent;
+}
+
+/** Find a node by path in the tree. */
+function findNode(tree: TreeNode[], path: string): TreeNode | undefined {
+  for (const node of tree) {
+    if (node.path === path) return node;
+    if (node.children.length > 0) {
+      const found = findNode(node.children, path);
+      if (found) return found;
+    }
+  }
+  return undefined;
 }
 
 export function FileTreePanel({
@@ -212,7 +281,14 @@ export function FileTreePanel({
   showSize?: boolean;
 }) {
   const { t } = useTranslation("common");
-  const [rootDragOver, setRootDragOver] = useState(false);
+  const { sensors, activeId, autoExpandPath, handlers } = useTreeDnd(onMove);
+  const dndEnabled = !!onMove;
+
+  // Find the active node for DragOverlay preview.
+  const activeNode = useMemo(
+    () => (activeId ? findNode(tree, activeId) : undefined),
+    [activeId, tree],
+  );
 
   if (filesLoading) {
     return (
@@ -224,30 +300,59 @@ export function FileTreePanel({
   if (tree.length === 0) {
     return <p className="px-3 py-4 text-sm text-muted-foreground">{t("noFiles")}</p>;
   }
+
+  const treeContent = (
+    <div className="flex-1 min-h-0">
+      {/* Root-level drop target for moving to root */}
+      {dndEnabled ? (
+        <RootDropZone>
+          {tree.map((node) => (
+            <TreeItem
+              key={node.path} node={node} depth={0} activePath={activePath}
+              onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
+              dndEnabled={dndEnabled} autoExpandPath={autoExpandPath}
+              showSize={showSize}
+            />
+          ))}
+        </RootDropZone>
+      ) : (
+        tree.map((node) => (
+          <TreeItem
+            key={node.path} node={node} depth={0} activePath={activePath}
+            onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore}
+            dndEnabled={false} autoExpandPath={null}
+            showSize={showSize}
+          />
+        ))
+      )}
+    </div>
+  );
+
+  if (!dndEnabled) return treeContent;
+
   return (
-    <div
-      className={`flex-1 min-h-0 ${rootDragOver ? "bg-primary/5" : ""}`}
-      onDragOver={onMove ? (e) => {
-        // Only highlight root when dragging over empty space (not over a child node).
-        if (e.currentTarget === e.target) {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          setRootDragOver(true);
-        }
-      } : undefined}
-      onDragLeave={onMove ? (e) => {
-        if (e.currentTarget === e.target) setRootDragOver(false);
-      } : undefined}
-      onDrop={onMove ? (e) => {
-        e.preventDefault();
-        setRootDragOver(false);
-        const src = e.dataTransfer.getData("text/x-tree-path");
-        if (src) onMove(src, ""); // "" = root
-      } : undefined}
-    >
-      {tree.map((node) => (
-        <TreeItem key={node.path} node={node} depth={0} activePath={activePath} onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore} onMove={onMove} showSize={showSize} />
-      ))}
+    <DndContext sensors={sensors} {...handlers}>
+      {treeContent}
+      {/* Portal to document.body so DragOverlay isn't offset by Radix Dialog's CSS transform. */}
+      {createPortal(
+        <DragOverlay dropAnimation={null}>
+          {activeNode ? (
+            <DragPreview name={activeNode.name} isDir={activeNode.isDir} />
+          ) : null}
+        </DragOverlay>,
+        document.body,
+      )}
+    </DndContext>
+  );
+}
+
+/** Root-level droppable zone — dropping here moves to root (""). */
+function RootDropZone({ children }: { children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: "__root__" });
+
+  return (
+    <div ref={setNodeRef} className={`min-h-full ${isOver ? "bg-primary/5" : ""}`}>
+      {children}
     </div>
   );
 }

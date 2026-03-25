@@ -162,7 +162,9 @@
     "upload": {
       "title": "上传到工作区",
       "description": "上传文件供 Agent 在协作中读取"
-    }
+    },
+    "crossScopeMoveError": "无法在不同范围之间移动文件",
+    "moveFailed": "移动文件失败"
   },
   "auditLogs": {
     "title": "审计日志",

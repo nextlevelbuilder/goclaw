@@ -162,7 +162,9 @@
     "upload": {
       "title": "Upload to Workspace",
       "description": "Upload files for agents to read during collaboration"
-    }
+    },
+    "crossScopeMoveError": "Cannot move files between different scopes",
+    "moveFailed": "Failed to move file"
   },
   "auditLogs": {
     "title": "Audit Logs",

@@ -73,6 +73,13 @@
     "disable": "禁用Skill",
     "disabled": "已禁用"
   },
+  "tenant": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "default": "默认",
+    "overrideHint": "此租户的技能覆盖设置",
+    "resetDefault": "恢复默认"
+  },
   "deps": {
     "rescan": "Rescan Deps",
     "rescanning": "Scanning...",

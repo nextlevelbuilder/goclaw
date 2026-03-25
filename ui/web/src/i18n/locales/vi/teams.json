@@ -162,7 +162,9 @@
     "upload": {
       "title": "Tải lên Workspace",
       "description": "Tải tệp lên để agent đọc trong quá trình cộng tác"
-    }
+    },
+    "crossScopeMoveError": "Không thể di chuyển tệp giữa các phạm vi khác nhau",
+    "moveFailed": "Di chuyển tệp thất bại"
   },
   "auditLogs": {
     "title": "Nhật ký hoạt động",

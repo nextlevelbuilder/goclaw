@@ -573,8 +573,9 @@ func (h *StorageHandler) handleMove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
 		return
 	}
-	if _, err := os.Stat(destDir); os.IsNotExist(err) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "destination directory does not exist"})
+	if err := os.MkdirAll(destDir, 0750); err != nil {
+		slog.Error("storage.move_mkdir_failed", "dir", destDir, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create directory")})
 		return
 	}
 

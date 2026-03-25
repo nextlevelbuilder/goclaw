@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -54,11 +55,14 @@ func (h *WorkspaceUploadHandler) handleUpload(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Team membership check.
+	// Team membership check (admins bypass — same pattern as RPC handlers).
 	userID := store.UserIDFromContext(ctx)
-	if has, err := h.teamStore.HasTeamAccess(ctx, teamID, userID); err != nil || !has {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "team workspace")})
-		return
+	role := permissions.Role(store.RoleFromContext(ctx))
+	if !permissions.HasMinRole(role, permissions.RoleAdmin) {
+		if has, err := h.teamStore.HasTeamAccess(ctx, teamID, userID); err != nil || !has {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "team workspace")})
+			return
+		}
 	}
 
 	// Determine workspace mode (shared vs isolated).
@@ -197,11 +201,14 @@ func (h *WorkspaceUploadHandler) handleMove(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Team membership check.
+	// Team membership check (admins bypass — same pattern as RPC handlers).
 	userID := store.UserIDFromContext(ctx)
-	if has, err := h.teamStore.HasTeamAccess(ctx, teamID, userID); err != nil || !has {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "team workspace")})
-		return
+	role := permissions.Role(store.RoleFromContext(ctx))
+	if !permissions.HasMinRole(role, permissions.RoleAdmin) {
+		if has, err := h.teamStore.HasTeamAccess(ctx, teamID, userID); err != nil || !has {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, "team workspace")})
+			return
+		}
 	}
 
 	fromName := r.URL.Query().Get("from")
@@ -265,10 +272,11 @@ func (h *WorkspaceUploadHandler) handleMove(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Ensure destination parent exists.
+	// Auto-create destination parent directories (security already validated above).
 	destDir := filepath.Dir(destPath)
-	if _, err := os.Stat(destDir); os.IsNotExist(err) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "destination directory does not exist"})
+	if err := os.MkdirAll(destDir, 0750); err != nil {
+		slog.Error("workspace_move: mkdir failed", "dir", destDir, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create directory")})
 		return
 	}
 

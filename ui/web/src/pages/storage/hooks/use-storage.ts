@@ -30,14 +30,14 @@ export function useStorage() {
   const [baseDir, setBaseDir] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const listFiles = useCallback(async () => {
-    setLoading(true);
+  const listFiles = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await http.get<StorageListResponse>("/v1/storage/files");
       setFiles(res.files ?? []);
       setBaseDir(res.baseDir ?? "");
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [http]);
 

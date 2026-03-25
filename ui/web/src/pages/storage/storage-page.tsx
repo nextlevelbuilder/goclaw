@@ -155,12 +155,17 @@ export function StoragePage() {
     if (fromPath === newPath) return; // no-op: same location
     try {
       await http.put(`/v1/storage/move?from=${encodeURIComponent(fromPath)}&to=${encodeURIComponent(newPath)}`);
-      handleRefresh();
+      // Clear stale selection if the moved item was active.
+      if (activePath === fromPath || activePath?.startsWith(fromPath + "/")) {
+        setActivePath(null);
+        setFileContent(null);
+      }
+      listFiles({ silent: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Move failed";
       toast.error(msg);
     }
-  }, [http, handleRefresh]);
+  }, [http, listFiles, activePath]);
 
   const handleSaveFile = useCallback(async (filePath: string, content: string) => {
     await writeFile(filePath, content);

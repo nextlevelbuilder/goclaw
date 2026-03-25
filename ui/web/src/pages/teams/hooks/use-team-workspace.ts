@@ -12,8 +12,8 @@ export function useTeamWorkspace() {
   const [loading, setLoading] = useState(false);
 
   const listFiles = useCallback(
-    async (teamId: string, chatId?: string) => {
-      setLoading(true);
+    async (teamId: string, chatId?: string, opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
       try {
         const res = await ws.call<{ files: TeamWorkspaceFile[]; count: number }>(
           Methods.TEAMS_WORKSPACE_LIST,
@@ -24,7 +24,7 @@ export function useTeamWorkspace() {
       } catch {
         return [];
       } finally {
-        setLoading(false);
+        if (!opts?.silent) setLoading(false);
       }
     },
     [ws],
