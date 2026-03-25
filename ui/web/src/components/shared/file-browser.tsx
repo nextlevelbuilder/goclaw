@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Download } from "lucide-react";
-import { formatSize, sizeBadgeVariant, type TreeNode } from "@/lib/file-helpers";
+import { Download, Pencil, Save, X } from "lucide-react";
+import { formatSize, sizeBadgeVariant, isTextFile, type TreeNode } from "@/lib/file-helpers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileTreePanel } from "@/components/shared/file-tree";
@@ -17,22 +17,55 @@ function useIsMobile(breakpoint = 640) {
   return mobile;
 }
 
-/** File size badge + download button row. */
 function FileActions({
   size,
+  isEditing,
+  saving,
+  canEdit,
   onDownload,
+  onEdit,
+  onSave,
+  onCancel,
 }: {
   size: number;
+  isEditing: boolean;
+  saving: boolean;
+  canEdit: boolean;
   onDownload?: () => void;
+  onEdit?: () => void;
+  onSave?: () => void;
+  onCancel?: () => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation("storage");
+  const { t: tc } = useTranslation("common");
+
+  if (isEditing) {
+    return (
+      <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onCancel} disabled={saving}>
+          <X className="h-3 w-3 mr-1" />
+          {tc("cancel", "Cancel")}
+        </Button>
+        <Button variant="default" size="sm" className="h-6 px-2 text-xs" onClick={onSave} disabled={saving}>
+          <Save className="h-3 w-3 mr-1" />
+          {saving ? t("edit.saving") : t("edit.save")}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-1.5 shrink-0 ml-auto">
       <Badge variant={sizeBadgeVariant(size)} className="text-[10px] px-1.5 py-0">
         {formatSize(size)}
       </Badge>
+      {canEdit && onEdit && (
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} title={t("edit.title")}>
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+      )}
       {onDownload && (
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDownload} title={t("download")}>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDownload} title={tc("download")}>
           <Download className="h-3.5 w-3.5" />
         </Button>
       )}
@@ -51,6 +84,7 @@ export function FileBrowser({
   onLoadMore,
   onMove,
   onDownload,
+  onSave,
   fetchBlob,
   showSize,
 }: {
@@ -64,6 +98,7 @@ export function FileBrowser({
   onLoadMore?: (path: string) => void;
   onMove?: (fromPath: string, toFolder: string) => void;
   onDownload?: (path: string) => void;
+  onSave?: (path: string, content: string) => Promise<void>;
   fetchBlob?: (path: string) => Promise<Blob>;
   showSize?: boolean;
 }) {
@@ -74,7 +109,46 @@ export function FileBrowser({
   const [mobileShowTree, setMobileShowTree] = useState(true);
   const dragging = useRef(false);
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Reset edit mode whenever the selected file changes.
+  useEffect(() => {
+    setIsEditing(false);
+    setEditContent("");
+    setSaving(false);
+  }, [fileContent?.path]);
+
+  const canEdit = !!(onSave && fileContent && isTextFile(fileContent.path) && !contentLoading);
+
+  const handleEdit = useCallback(() => {
+    if (!fileContent) return;
+    setEditContent(fileContent.content);
+    setIsEditing(true);
+  }, [fileContent]);
+
+  const handleCancel = useCallback(() => {
+    setIsEditing(false);
+    setEditContent("");
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!onSave || !fileContent) return;
+    setSaving(true);
+    try {
+      await onSave(fileContent.path, editContent);
+      setIsEditing(false);
+    } catch {
+      // toast is shown inside onSave
+    } finally {
+      setSaving(false);
+    }
+  }, [onSave, fileContent, editContent]);
+
   const handleSelect = useCallback((path: string) => {
+    setIsEditing(false);
+    setEditContent("");
     onSelect(path);
     if (isMobile) setMobileShowTree(false);
   }, [onSelect, isMobile]);
@@ -102,7 +176,7 @@ export function FileBrowser({
     document.addEventListener("mouseup", onUp);
   }, [treeWidth]);
 
-  // Mobile: stacked layout — tree first, tap file -> content view
+  // Mobile: stacked layout
   if (isMobile) {
     return (
       <div className="flex-1 flex flex-col border rounded-md overflow-hidden min-h-0">
@@ -123,12 +197,34 @@ export function FileBrowser({
               {fileContent && (
                 <>
                   <span className="font-mono truncate">{fileContent.path}</span>
-                  <FileActions size={fileContent.size} onDownload={onDownload ? () => onDownload(fileContent.path) : undefined} />
+                  <FileActions
+                    size={fileContent.size}
+                    isEditing={isEditing}
+                    saving={saving}
+                    canEdit={canEdit}
+                    onDownload={onDownload ? () => onDownload(fileContent.path) : undefined}
+                    onEdit={handleEdit}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                  />
                 </>
               )}
             </div>
             <div className="flex-1 overflow-auto p-3 min-h-0">
-              <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} fetchBlob={fetchBlob} onDownload={onDownload} />
+              {isEditing ? (
+                <textarea
+                  className="w-full h-full min-h-[400px] resize-none rounded-md border bg-muted/30 p-3 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  disabled={saving}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                />
+              ) : (
+                <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} fetchBlob={fetchBlob} onDownload={onDownload} />
+              )}
             </div>
           </div>
         )}
@@ -152,11 +248,33 @@ export function FileBrowser({
         {fileContent && (
           <div className="flex items-center justify-between text-xs text-muted-foreground border-b px-3 py-2 shrink-0">
             <span className="font-mono truncate">{fileContent.path}</span>
-            <FileActions size={fileContent.size} onDownload={onDownload ? () => onDownload(fileContent.path) : undefined} />
+            <FileActions
+              size={fileContent.size}
+              isEditing={isEditing}
+              saving={saving}
+              canEdit={canEdit}
+              onDownload={onDownload ? () => onDownload(fileContent.path) : undefined}
+              onEdit={handleEdit}
+              onSave={handleSave}
+              onCancel={handleCancel}
+            />
           </div>
         )}
         <div className="flex-1 overflow-auto p-3 min-h-0">
-          <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} fetchBlob={fetchBlob} onDownload={onDownload} />
+          {isEditing ? (
+            <textarea
+              className="w-full h-full min-h-[400px] resize-none rounded-md border bg-muted/30 p-3 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              disabled={saving}
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+            />
+          ) : (
+            <FileContentPanel fileContent={fileContent} contentLoading={contentLoading} fetchBlob={fetchBlob} onDownload={onDownload} />
+          )}
         </div>
       </div>
     </div>

@@ -27,7 +27,7 @@ import { useHttp } from "@/hooks/use-ws";
 export function StoragePage() {
   const { t } = useTranslation("storage");
   const http = useHttp();
-  const { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob } = useStorage();
+  const { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob, writeFile } = useStorage();
   const { totalSize, loading: sizeLoading, refreshSize } = useStorageSize();
 
   const [tree, setTree] = useState(buildTree(files));
@@ -162,6 +162,15 @@ export function StoragePage() {
     }
   }, [http, handleRefresh]);
 
+  const handleSaveFile = useCallback(async (filePath: string, content: string) => {
+    await writeFile(filePath, content);
+    // Refresh the displayed content after a successful save.
+    try {
+      const res = await readFile(filePath);
+      setFileContent(res);
+    } catch { /* silent — content was saved, preview refresh is best-effort */ }
+  }, [writeFile, readFile]);
+
   const deleteName = deleteTarget?.path.split("/").pop() ?? "";
 
   // Size description with cache tooltip
@@ -215,6 +224,7 @@ export function StoragePage() {
           onDelete={handleDeleteRequest}
           onLoadMore={handleLoadMore}
           onMove={handleMove}
+          onSave={handleSaveFile}
           onDownload={handleDownload}
           fetchBlob={handleFetchBlob}
           showSize

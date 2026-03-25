@@ -20,6 +20,13 @@
   },
   "toast": {
     "deleted": "File deleted",
-    "deleteFailed": "Failed to delete file"
+    "deleteFailed": "Failed to delete file",
+    "saved": "File saved",
+    "saveFailed": "Failed to save file"
+  },
+  "edit": {
+    "title": "Edit",
+    "save": "Save",
+    "saving": "Saving..."
   }
 }
