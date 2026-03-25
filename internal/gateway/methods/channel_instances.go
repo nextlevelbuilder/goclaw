@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -252,11 +253,5 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 	return result
 }
 
-// isValidChannelType checks if the channel type is supported.
-func isValidChannelType(ct string) bool {
-	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu":
-		return true
-	}
-	return false
-}
+// isValidChannelType delegates to the canonical check in the channels package.
+func isValidChannelType(ct string) bool { return channels.IsValidChannelType(ct) }

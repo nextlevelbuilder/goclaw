@@ -7,7 +7,7 @@
 
 services:
   goclaw-ui:
-    image: ghcr.io/nextlevelbuilder/goclaw-web:latest
+    image: goclaw-web:local
     build:
       context: ./ui/web
       dockerfile: Dockerfile

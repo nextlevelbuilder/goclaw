@@ -64,6 +64,10 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
   whatsapp: [
     { key: "bridge_url", label: "Bridge URL", type: "text", required: true, placeholder: "http://bridge:3000" },
   ],
+  google_chat: [
+    { key: "service_account_json", label: "Service Account JSON", type: "textarea", required: true, placeholder: '{"type": "service_account", "project_id": "...", ...}', help: "Paste the entire JSON content of your Google Cloud Service Account key file" },
+    { key: "project_number", label: "Project Number", type: "text", placeholder: "123456789012", help: "Google Cloud project number for OIDC webhook verification (leave empty to skip in dev)" },
+  ],
 };
 
 // --- Config schemas ---
@@ -144,6 +148,16 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "WhatsApp user IDs" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
+  ],
+  google_chat: [
+    { key: "webhook_path", label: "Webhook Path", type: "text", defaultValue: "/googlechat/events", help: "HTTP endpoint path for Google Chat events" },
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
+    { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
+    { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "off", help: "Emoji reaction on user messages while bot processes (off recommended due to 60 req/min rate limit)" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Google Chat user IDs (users/123456789), one per line" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
 };

@@ -52,6 +52,7 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Channels.Feishu.AppSecret)
 	maskNonEmpty(&cp.Channels.Feishu.EncryptKey)
 	maskNonEmpty(&cp.Channels.Feishu.VerificationToken)
+	maskNonEmpty(&cp.Channels.GoogleChat.ServiceAccountJSON)
 
 	// Mask TTS API keys
 	maskNonEmpty(&cp.Tts.OpenAI.APIKey)
@@ -102,6 +103,7 @@ func (c *Config) StripSecrets() {
 	c.Channels.Feishu.AppSecret = ""
 	c.Channels.Feishu.EncryptKey = ""
 	c.Channels.Feishu.VerificationToken = ""
+	c.Channels.GoogleChat.ServiceAccountJSON = ""
 
 	// TTS API keys
 	c.Tts.OpenAI.APIKey = ""
@@ -157,6 +159,7 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Channels.Feishu.AppSecret)
 	stripIfMasked(&c.Channels.Feishu.EncryptKey)
 	stripIfMasked(&c.Channels.Feishu.VerificationToken)
+	stripIfMasked(&c.Channels.GoogleChat.ServiceAccountJSON)
 
 	// TTS API keys
 	stripIfMasked(&c.Tts.OpenAI.APIKey)

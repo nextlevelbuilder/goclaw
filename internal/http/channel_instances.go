@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -523,11 +524,5 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 	writeJSON(w, http.StatusOK, map[string]any{"contacts": result})
 }
 
-// isValidChannelType checks if the channel type is supported.
-func isValidChannelType(ct string) bool {
-	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu":
-		return true
-	}
-	return false
-}
+// isValidChannelType delegates to the canonical check in the channels package.
+func isValidChannelType(ct string) bool { return channels.IsValidChannelType(ct) }

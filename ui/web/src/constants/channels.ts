@@ -6,4 +6,5 @@ export const CHANNEL_TYPES = [
   { value: "zalo_oa", label: "Zalo OA" },
   { value: "zalo_personal", label: "Zalo Personal" },
   { value: "whatsapp", label: "WhatsApp" },
+  { value: "google_chat", label: "Google Chat" },
 ] as const;

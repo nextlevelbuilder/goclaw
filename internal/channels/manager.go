@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 
 	"github.com/google/uuid"
@@ -54,6 +55,8 @@ type Manager struct {
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector
+	webhookMap       map[string]http.Handler // path → current handler (protected by mu)
+	mountedPaths     map[string]struct{}     // paths already on mux (protected by mu)
 }
 
 type asyncTask struct {
@@ -64,8 +67,10 @@ type asyncTask struct {
 // Channels are registered externally via RegisterChannel.
 func NewManager(msgBus *bus.MessageBus) *Manager {
 	return &Manager{
-		channels: make(map[string]Channel),
-		bus:      msgBus,
+		channels:     make(map[string]Channel),
+		bus:          msgBus,
+		webhookMap:   make(map[string]http.Handler),
+		mountedPaths: make(map[string]struct{}),
 	}
 }
 
@@ -168,6 +173,7 @@ func (m *Manager) RegisterChannel(name string, channel Channel) {
 		}
 	}
 	m.channels[name] = channel
+	m.rebuildWebhookMap()
 }
 
 // SetContactCollector sets the contact collector for all current and future channels.
@@ -229,4 +235,47 @@ func (m *Manager) UnregisterChannel(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.channels, name)
+	m.rebuildWebhookMap()
+}
+
+// rebuildWebhookMap rebuilds path→handler map from current channels.
+// Caller must hold m.mu write lock.
+func (m *Manager) rebuildWebhookMap() {
+	m.webhookMap = make(map[string]http.Handler)
+	for name, ch := range m.channels {
+		if wh, ok := ch.(WebhookChannel); ok {
+			if path, handler := wh.WebhookHandler(); path != "" && handler != nil {
+				if _, exists := m.webhookMap[path]; exists {
+					slog.Warn("webhook path collision: multiple channels claim same path", "path", path, "channel", name)
+				}
+				m.webhookMap[path] = handler
+			}
+		}
+	}
+}
+
+// WebhookServeHTTP dynamically dispatches webhook requests to the current channel handler.
+func (m *Manager) WebhookServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.mu.RLock()
+	h := m.webhookMap[r.URL.Path]
+	m.mu.RUnlock()
+	if h != nil {
+		h.ServeHTTP(w, r)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+// MountNewWebhookRoutes mounts wrapper handlers for any webhook paths not yet on the mux.
+func (m *Manager) MountNewWebhookRoutes(mux *http.ServeMux) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for path := range m.webhookMap {
+		if _, ok := m.mountedPaths[path]; ok {
+			continue
+		}
+		mux.Handle(path, http.HandlerFunc(m.WebhookServeHTTP))
+		m.mountedPaths[path] = struct{}{}
+		slog.Info("webhook route mounted on gateway", "path", path)
+	}
 }

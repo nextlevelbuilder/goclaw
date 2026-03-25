@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
+	googlechatchannel "github.com/nextlevelbuilder/goclaw/internal/channels/googlechat"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
@@ -95,6 +96,17 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		} else {
 			channelMgr.RegisterChannel(channels.TypeFeishu, f)
 			slog.Info("feishu/lark channel enabled (config)")
+		}
+	}
+
+	gcCfg := cfg.Channels.GoogleChat
+	if gcCfg.Enabled && gcCfg.ServiceAccountJSON != "" && instanceLoader == nil {
+		gc, err := googlechatchannel.New(gcCfg, msgBus, pgStores.Pairing)
+		if err != nil {
+			slog.Error("failed to initialize googlechat channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel(channels.TypeGoogleChat, gc)
+			slog.Info("google chat channel enabled (config)")
 		}
 	}
 }

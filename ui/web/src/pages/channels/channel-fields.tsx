@@ -69,7 +69,7 @@ function FieldRenderer({
   const label = t(`fieldConfig.${field.key}.label`, { defaultValue: field.label });
   const help = field.help ? t(`fieldConfig.${field.key}.help`, { defaultValue: field.help }) : "";
   const labelSuffix = field.required && !isEdit ? " *" : "";
-  const editHint = isEdit && field.type === "password" ? ` ${t("form.credentialsHint")}` : "";
+  const editHint = isEdit && (field.type === "password" || field.type === "textarea") ? ` ${t("form.credentialsHint")}` : "";
 
   switch (field.type) {
     case "text":
@@ -247,6 +247,24 @@ function FieldRenderer({
             placeholder={field.placeholder}
           />
           {help && <p className="text-xs text-muted-foreground">{help}</p>}
+        </div>
+      );
+
+    case "textarea":
+      return (
+        <div className="grid gap-1.5">
+          <Label htmlFor={id}>
+            {field.label}{labelSuffix}{editHint}
+          </Label>
+          <Textarea
+            id={id}
+            value={(value as string) ?? ""}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={field.placeholder}
+            rows={6}
+            className="font-mono text-xs"
+          />
+          {field.help && <p className="text-xs text-muted-foreground">{field.help}</p>}
         </div>
       );
 

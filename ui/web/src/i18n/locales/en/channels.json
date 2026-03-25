@@ -169,46 +169,158 @@
     }
   },
   "fieldConfig": {
-    "token": { "label": "Bot Token", "help": "From @BotFather" },
-    "bot_token": { "label": "Bot Token" },
-    "app_token": { "label": "App-Level Token", "help": "App-Level Token with connections:write scope (required for Socket Mode)" },
-    "user_token": { "label": "User Token (Optional)", "help": "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity." },
-    "app_id": { "label": "App ID" },
-    "app_secret": { "label": "App Secret" },
-    "encrypt_key": { "label": "Encrypt Key", "help": "For webhook mode" },
-    "verification_token": { "label": "Verification Token", "help": "For webhook mode" },
-    "webhook_secret": { "label": "Webhook Secret" },
-    "bridge_url": { "label": "Bridge URL" },
-    "api_server": { "label": "API Server URL", "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
-    "proxy": { "label": "HTTP Proxy", "help": "Route bot traffic through an HTTP proxy" },
-    "dm_policy": { "label": "DM Policy" },
-    "group_policy": { "label": "Group Policy" },
-    "require_mention": { "label": "Require @mention in groups" },
-    "history_limit": { "label": "Group History Limit", "help": "Max pending group messages for context (0 = disabled)" },
-    "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },
-    "group_stream": { "label": "Group Streaming", "help": "Stream response progressively in groups" },
-    "draft_transport": { "label": "Draft Preview", "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)" },
-    "reasoning_stream": { "label": "Show Reasoning", "help": "Display AI thinking as a separate message before the answer (requires streaming)" },
-    "reaction_level": { "label": "Reaction Level" },
-    "media_max_mb": { "label": "Max Media Size (MB)" },
-    "link_preview": { "label": "Link Preview" },
-    "allow_from": { "label": "Allowed Users" },
-    "block_reply": { "label": "Block Reply", "help": "Deliver intermediate text during tool iterations" },
-    "domain": { "label": "Domain" },
-    "connection_mode": { "label": "Connection Mode", "help": "WebSocket needs no public IP — outbound connection only" },
-    "webhook_port": { "label": "Webhook Port", "help": "0 = share main gateway port (recommended)" },
-    "webhook_path": { "label": "Webhook Path", "help": "Path on main server for Lark events" },
-    "webhook_url": { "label": "Webhook URL" },
-    "topic_session_mode": { "label": "Topic Session Mode", "help": "Use thread root_id for session isolation" },
-    "render_mode": { "label": "Render Mode" },
-    "text_chunk_limit": { "label": "Text Chunk Limit", "help": "Max characters per message" },
-    "group_allow_from": { "label": "Group Allowed Users", "help": "Separate allowlist for group senders" },
-    "native_stream": { "label": "Native Streaming (Agents & AI Apps)", "help": "Use Slack's ChatStreamer API for native streaming. Falls back to edit-in-place if unavailable." },
-    "debounce_delay": { "label": "Debounce Delay (ms)", "help": "Milliseconds to wait before dispatching rapid messages. Set 0 to disable." },
-    "thread_ttl": { "label": "Thread Participation TTL (hours)", "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
-    "skills": { "label": "Skills Filter", "help": "Limit available skills for this group" },
-    "tools": { "label": "Tool Allowlist", "help": "Restrict which tools the agent can use in this group" },
-    "system_prompt": { "label": "System Prompt" }
+    "token": {
+      "label": "Bot Token",
+      "help": "From @BotFather"
+    },
+    "bot_token": {
+      "label": "Bot Token"
+    },
+    "app_token": {
+      "label": "App-Level Token",
+      "help": "App-Level Token with connections:write scope (required for Socket Mode)"
+    },
+    "user_token": {
+      "label": "User Token (Optional)",
+      "help": "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity."
+    },
+    "app_id": {
+      "label": "App ID"
+    },
+    "app_secret": {
+      "label": "App Secret"
+    },
+    "encrypt_key": {
+      "label": "Encrypt Key",
+      "help": "For webhook mode"
+    },
+    "verification_token": {
+      "label": "Verification Token",
+      "help": "For webhook mode"
+    },
+    "webhook_secret": {
+      "label": "Webhook Secret"
+    },
+    "bridge_url": {
+      "label": "Bridge URL"
+    },
+    "api_server": {
+      "label": "API Server URL",
+      "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default."
+    },
+    "proxy": {
+      "label": "HTTP Proxy",
+      "help": "Route bot traffic through an HTTP proxy"
+    },
+    "dm_policy": {
+      "label": "DM Policy"
+    },
+    "group_policy": {
+      "label": "Group Policy"
+    },
+    "require_mention": {
+      "label": "Require @mention in groups"
+    },
+    "history_limit": {
+      "label": "Group History Limit",
+      "help": "Max pending group messages for context (0 = disabled)"
+    },
+    "dm_stream": {
+      "label": "DM Streaming",
+      "help": "Stream response progressively in DMs"
+    },
+    "group_stream": {
+      "label": "Group Streaming",
+      "help": "Stream response progressively in groups"
+    },
+    "draft_transport": {
+      "label": "Draft Preview",
+      "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)"
+    },
+    "reasoning_stream": {
+      "label": "Show Reasoning",
+      "help": "Display AI thinking as a separate message before the answer (requires streaming)"
+    },
+    "reaction_level": {
+      "label": "Reaction Level"
+    },
+    "media_max_mb": {
+      "label": "Max Media Size (MB)"
+    },
+    "link_preview": {
+      "label": "Link Preview"
+    },
+    "allow_from": {
+      "label": "Allowed Users"
+    },
+    "block_reply": {
+      "label": "Block Reply",
+      "help": "Deliver intermediate text during tool iterations"
+    },
+    "domain": {
+      "label": "Domain"
+    },
+    "connection_mode": {
+      "label": "Connection Mode",
+      "help": "WebSocket needs no public IP — outbound connection only"
+    },
+    "webhook_port": {
+      "label": "Webhook Port",
+      "help": "0 = share main gateway port (recommended)"
+    },
+    "webhook_path": {
+      "label": "Webhook Path",
+      "help": "Path on main server for Lark events"
+    },
+    "webhook_url": {
+      "label": "Webhook URL"
+    },
+    "topic_session_mode": {
+      "label": "Topic Session Mode",
+      "help": "Use thread root_id for session isolation"
+    },
+    "render_mode": {
+      "label": "Render Mode"
+    },
+    "text_chunk_limit": {
+      "label": "Text Chunk Limit",
+      "help": "Max characters per message"
+    },
+    "group_allow_from": {
+      "label": "Group Allowed Users",
+      "help": "Separate allowlist for group senders"
+    },
+    "native_stream": {
+      "label": "Native Streaming (Agents & AI Apps)",
+      "help": "Use Slack's ChatStreamer API for native streaming. Falls back to edit-in-place if unavailable."
+    },
+    "debounce_delay": {
+      "label": "Debounce Delay (ms)",
+      "help": "Milliseconds to wait before dispatching rapid messages. Set 0 to disable."
+    },
+    "thread_ttl": {
+      "label": "Thread Participation TTL (hours)",
+      "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention."
+    },
+    "skills": {
+      "label": "Skills Filter",
+      "help": "Limit available skills for this group"
+    },
+    "tools": {
+      "label": "Tool Allowlist",
+      "help": "Restrict which tools the agent can use in this group"
+    },
+    "system_prompt": {
+      "label": "System Prompt"
+    },
+    "service_account_json": {
+      "label": "Service Account JSON",
+      "help": "Paste the entire JSON content of your Google Cloud Service Account key file"
+    },
+    "project_number": {
+      "label": "Project Number",
+      "help": "Google Cloud project number for OIDC webhook verification (leave empty to skip in dev)"
+    }
   },
   "fieldOptions": {
     "block_reply": {
@@ -264,10 +376,22 @@
     "addTopicPlaceholder": "Topic thread ID",
     "addTopic": "Add Topic",
     "fieldConfig": {
-      "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },
-      "group_stream": { "label": "Group Streaming", "help": "Stream response progressively in groups" },
-      "draft_transport": { "label": "Draft Preview", "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)" },
-      "reasoning_stream": { "label": "Show Reasoning", "help": "Display AI thinking as a separate message before the answer (requires streaming)" }
+      "dm_stream": {
+        "label": "DM Streaming",
+        "help": "Stream response progressively in DMs"
+      },
+      "group_stream": {
+        "label": "Group Streaming",
+        "help": "Stream response progressively in groups"
+      },
+      "draft_transport": {
+        "label": "Draft Preview",
+        "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)"
+      },
+      "reasoning_stream": {
+        "label": "Show Reasoning",
+        "help": "Display AI thinking as a separate message before the answer (requires streaming)"
+      }
     },
     "fields": {
       "groupPolicy": "Group Policy",

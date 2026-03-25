@@ -1,0 +1,115 @@
+# docker-compose.coolify.yml
+# Custom compose for Coolify deployment — builds from fork source.
+# Point Coolify to this file instead of docker-compose.yml.
+#
+# Required env vars in Coolify dashboard:
+#   SERVICE_FQDN_GOCLAW        → e.g. goclaw.yourdomain.com   (Coolify auto-sets)
+#   SERVICE_FQDN_GOCLAW_UI     → e.g. app.yourdomain.com      (Coolify auto-sets)
+#   GOCLAW_GATEWAY_TOKEN       → gateway auth token
+#   GOCLAW_ENCRYPTION_KEY      → 32-byte hex key
+#   POSTGRES_PASSWORD          → strong password for production
+#
+# Optional:
+#   POSTGRES_USER    (default: goclaw)
+#   POSTGRES_DB      (default: goclaw)
+#   GOCLAW_UI_PORT   (default: 3000)
+#   GOCLAW_PORT      (default: 18790)
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-goclaw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-goclaw}
+      POSTGRES_DB: ${POSTGRES_DB:-goclaw}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-goclaw} -d ${POSTGRES_DB:-goclaw}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - internal
+
+  # ── GoClaw API ──────────────────────────────────────────────────────────────
+  goclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GOCLAW_HOST=0.0.0.0
+      - GOCLAW_PORT=18790
+      - GOCLAW_CONFIG=/app/data/config.json
+      - GOCLAW_SKILLS_DIR=/app/data/skills
+      - GOCLAW_GATEWAY_TOKEN=${GOCLAW_GATEWAY_TOKEN:-}
+      - GOCLAW_ENCRYPTION_KEY=${GOCLAW_ENCRYPTION_KEY:-}
+      - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
+    volumes:
+      - goclaw-data:/app/data
+      - goclaw-workspace:/app/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    restart: unless-stopped
+    networks:
+      - internal
+      - default
+
+  # ── Web Dashboard UI ────────────────────────────────────────────────────────
+  goclaw-ui:
+    build:
+      context: ./ui/web
+      dockerfile: Dockerfile
+    depends_on:
+      - goclaw
+    restart: unless-stopped
+    networks:
+      - internal
+      - default
+
+  # ── DB Migration (one-shot) ─────────────────────────────────────────────────
+  upgrade:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD:-goclaw}@postgres:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
+      - GOCLAW_CONFIG=/app/data/config.json
+      - GOCLAW_MIGRATIONS_DIR=/app/migrations
+      - GOCLAW_ENCRYPTION_KEY=${GOCLAW_ENCRYPTION_KEY:-}
+    volumes:
+      - goclaw-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/app/goclaw"]
+    command: ["upgrade"]
+    restart: "no"
+    networks:
+      - internal
+
+volumes:
+  postgres-data:
+  goclaw-data:
+  goclaw-workspace:
+
+networks:
+  internal:
+    driver: bridge
+  default:
+    driver: bridge

@@ -63,7 +63,18 @@ const (
 	TypeWhatsApp     = "whatsapp"
 	TypeZaloOA       = "zalo_oa"
 	TypeZaloPersonal = "zalo_personal"
+	TypeGoogleChat   = "google_chat"
 )
+
+// IsValidChannelType reports whether ct is a recognised external channel type.
+func IsValidChannelType(ct string) bool {
+	switch ct {
+	case TypeTelegram, TypeDiscord, TypeSlack, TypeWhatsApp,
+		TypeZaloOA, TypeZaloPersonal, TypeFeishu, TypeGoogleChat:
+		return true
+	}
+	return false
+}
 
 // Channel defines the interface that all channel implementations must satisfy.
 type Channel interface {

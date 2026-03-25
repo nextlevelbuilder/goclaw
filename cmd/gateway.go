@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
+	googlechatchannel "github.com/nextlevelbuilder/goclaw/internal/channels/googlechat"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
@@ -532,6 +533,7 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeZaloPersonal, zalopersonal.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeWhatsApp, whatsapp.Factory)
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
+		instanceLoader.RegisterFactory(channels.TypeGoogleChat, googlechatchannel.Factory)
 		if err := instanceLoader.LoadAll(context.Background()); err != nil {
 			slog.Error("failed to load channel instances from DB", "error", err)
 		}
@@ -1091,11 +1093,13 @@ func runGateway() {
 	// Compiled via build tags: `go build -tags tsnet` to enable.
 	mux := server.BuildMux()
 
-	// Mount channel webhook handlers on the main mux (e.g. Feishu /feishu/events).
-	// This allows webhook-based channels to share the main server port.
-	for _, route := range channelMgr.WebhookHandlers() {
-		mux.Handle(route.Path, route.Handler)
-		slog.Info("webhook route mounted on gateway", "path", route.Path)
+	// Mount channel webhook handlers dynamically (e.g. Feishu /feishu/events, Google Chat).
+	// Uses wrapper handlers so channels added later via Reload() are served without re-mounting.
+	channelMgr.MountNewWebhookRoutes(mux)
+
+	// Pass mux to instanceLoader so Reload() can mount webhook routes for new channels.
+	if instanceLoader != nil {
+		instanceLoader.SetMux(mux)
 	}
 
 	tsCleanup := initTailscale(ctx, cfg, mux)

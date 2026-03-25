@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"sync"
 	"time"
 
@@ -37,6 +38,7 @@ type InstanceLoader struct {
 	pairingSvc         store.PairingStore
 	mu                 sync.Mutex
 	loaded             map[string]struct{} // channel names managed by this loader
+	mux                *http.ServeMux      // gateway mux for mounting webhook routes after Reload
 }
 
 // NewInstanceLoader creates a new InstanceLoader.
@@ -68,6 +70,13 @@ func (l *InstanceLoader) SetProviderRegistry(reg *providers.Registry) {
 // Must be called before LoadAll/Reload.
 func (l *InstanceLoader) SetPendingCompactionConfig(cfg *config.PendingCompactionConfig) {
 	l.pendingCompactCfg = cfg
+}
+
+// SetMux stores the gateway mux so Reload() can mount new webhook routes.
+func (l *InstanceLoader) SetMux(mux *http.ServeMux) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.mux = mux
 }
 
 // RegisterFactory registers a factory for a channel type (e.g., "telegram", "discord").
@@ -141,6 +150,11 @@ func (l *InstanceLoader) Reload(ctx context.Context) {
 	}
 
 	slog.Info("channel instances reloaded", "count", registered)
+
+	// Mount webhook routes for newly loaded channels (paths not yet on the mux).
+	if l.mux != nil {
+		l.manager.MountNewWebhookRoutes(l.mux)
+	}
 }
 
 // Stop stops all managed channels.

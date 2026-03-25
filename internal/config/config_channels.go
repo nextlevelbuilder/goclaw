@@ -20,7 +20,22 @@ type ChannelsConfig struct {
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
+	GoogleChat        GoogleChatConfig         `json:"google_chat"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
+}
+
+type GoogleChatConfig struct {
+	Enabled            bool                `json:"enabled"`
+	ServiceAccountJSON string              `json:"service_account_json,omitempty"` // inline SA JSON content
+	ProjectNumber      string              `json:"project_number"`                // for OIDC verification
+	WebhookPath        string              `json:"webhook_path,omitempty"`       // default "/googlechat/events"
+	AllowFrom          FlexibleStringSlice `json:"allow_from"`
+	DMPolicy           string              `json:"dm_policy,omitempty"`          // "pairing" (default), "allowlist", "open", "disabled"
+	GroupPolicy        string              `json:"group_policy,omitempty"`       // "pairing" (default), "allowlist", "open", "disabled"
+	RequireMention     *bool               `json:"require_mention,omitempty"`    // require @bot in spaces (default true)
+	HistoryLimit       int                 `json:"history_limit,omitempty"`      // pending group messages (default 50)
+	ReactionLevel      string              `json:"reaction_level,omitempty"`     // "off" (default), "minimal", "full"
+	BlockReply         *bool               `json:"block_reply,omitempty"`        // override gateway block_reply (nil = inherit)
 }
 
 type TelegramConfig struct {
