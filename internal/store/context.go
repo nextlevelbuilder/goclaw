@@ -13,8 +13,6 @@ const (
 	UserIDKey contextKey = "goclaw_user_id"
 	// AgentIDKey is the context key for the agent UUID.
 	AgentIDKey contextKey = "goclaw_agent_id"
-	// AgentKeyKey is the context key for the agent string key.
-	AgentKeyKey contextKey = "goclaw_agent_key"
 	// AgentTypeKey is the context key for the agent type ("open" or "predefined").
 	AgentTypeKey contextKey = "goclaw_agent_type"
 	// SenderIDKey is the original individual sender's ID (not group-scoped).
@@ -31,6 +29,8 @@ const (
 	SharedKGKey contextKey = "goclaw_shared_kg"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
 	ShellDenyGroupsKey contextKey = "goclaw_shell_deny_groups"
+	// AgentKeyKey is the context key for the agent key/name (string identifier, e.g. "default").
+	AgentKeyKey contextKey = "goclaw_agent_key"
 	// TenantIDKey is the context key for the tenant UUID.
 	TenantIDKey contextKey = "goclaw_tenant_id"
 	// CrossTenantKey indicates the caller has cross-tenant access (owner/system admin).
@@ -78,19 +78,6 @@ func AgentIDFromContext(ctx context.Context) uuid.UUID {
 	return uuid.Nil
 }
 
-// WithAgentKey returns a new context with the given agent key.
-func WithAgentKey(ctx context.Context, key string) context.Context {
-	return context.WithValue(ctx, AgentKeyKey, key)
-}
-
-// AgentKeyFromContext extracts the agent key from context. Returns "" if not set.
-func AgentKeyFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(AgentKeyKey).(string); ok {
-		return v
-	}
-	return ""
-}
-
 // WithAgentType returns a new context with the given agent type.
 func WithAgentType(ctx context.Context, t string) context.Context {
 	return context.WithValue(ctx, AgentTypeKey, t)
@@ -99,6 +86,19 @@ func WithAgentType(ctx context.Context, t string) context.Context {
 // AgentTypeFromContext extracts the agent type from context. Returns "" if not set.
 func AgentTypeFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(AgentTypeKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// WithAgentKey returns a new context with the agent key/name (string identifier).
+func WithAgentKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, AgentKeyKey, key)
+}
+
+// AgentKeyFromContext extracts the agent key from context. Returns "" if not set.
+func AgentKeyFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(AgentKeyKey).(string); ok {
 		return v
 	}
 	return ""
@@ -198,16 +198,29 @@ func TenantIDFromContext(ctx context.Context) uuid.UUID {
 }
 
 // WithCrossTenant returns a context flagged for cross-tenant access.
-// Used by owner/system admin callers who can access all tenants.
+// Deprecated: Only used by skills store (is_system dual-visibility pattern).
+// All other callers must use explicit tenant context or unscoped store methods.
 func WithCrossTenant(ctx context.Context) context.Context {
 	return context.WithValue(ctx, CrossTenantKey, true)
 }
 
 // IsCrossTenant returns true if the caller has cross-tenant access.
+// Deprecated: Only used by skills store and inline pg/*.go tenant checks.
+// Permission guards should use IsOwnerRole(). SQL queries use tenantClauseN() (no bypass).
 func IsCrossTenant(ctx context.Context) bool {
 	v, _ := ctx.Value(CrossTenantKey).(bool)
 	return v
 }
+
+// IsOwnerRole returns true if the caller has the "owner" role.
+// Replaces IsCrossTenant for permission guards.
+func IsOwnerRole(ctx context.Context) bool {
+	return RoleFromContext(ctx) == string(RoleOwner)
+}
+
+// RoleOwner is the owner role constant for context checks.
+// Must match permissions.RoleOwner.
+const RoleOwner = "owner"
 
 // WithTenantSlug returns a new context with the given tenant slug.
 func WithTenantSlug(ctx context.Context, slug string) context.Context {
