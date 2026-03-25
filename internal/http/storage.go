@@ -52,6 +52,7 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/storage/size", h.auth(h.handleSize))
 	mux.HandleFunc("POST /v1/storage/files", requireAuth(permissions.RoleAdmin, h.handleUpload))
 	mux.HandleFunc("PUT /v1/storage/move", requireAuth(permissions.RoleAdmin, h.handleMove))
+	mux.HandleFunc("PUT /v1/storage/files/{path...}", requireAuth(permissions.RoleAdmin, h.handleWrite))
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -594,5 +595,72 @@ func (h *StorageHandler) handleMove(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"from": fromRel,
 		"to":   toRel,
+	})
+}
+
+// handleWrite overwrites the content of an existing text file.
+// Admin-only. Rejects writes to protected directories.
+// Body: {"content": "..."}
+func (h *StorageHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	relPath := r.PathValue("path")
+	if relPath == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "path")})
+		return
+	}
+	if strings.Contains(relPath, "..") {
+		slog.Warn("security.storage_traversal", "path", relPath)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	if isProtectedPath(relPath) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgCannotDeleteSkillsDir)})
+		return
+	}
+
+	writeBase := h.tenantBaseDir(r)
+	absPath := filepath.Join(writeBase, filepath.Clean(relPath))
+	if !strings.HasPrefix(absPath, writeBase+string(filepath.Separator)) {
+		slog.Warn("security.storage_escape", "resolved", absPath, "root", writeBase)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Only editing existing files — not creating new ones via this endpoint.
+	info, err := os.Lstat(absPath)
+	if err != nil || info.IsDir() {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		return
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		slog.Warn("security.storage_symlink_write", "path", absPath)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Enforce body size limit.
+	r.Body = http.MaxBytesReader(w, r.Body, tools.MaxFileSizeBytes)
+	var body struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "invalid request body")})
+		return
+	}
+
+	if err := os.WriteFile(absPath, []byte(body.Content), 0640); err != nil {
+		slog.Error("storage.write_failed", "path", absPath, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to write file")})
+		return
+	}
+
+	// Invalidate size cache for this tenant.
+	h.sizeCache.Delete(writeBase)
+
+	slog.Info("storage.written", "path", relPath, "bytes", len(body.Content))
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "saved",
+		"path":   relPath,
+		"size":   len(body.Content),
 	})
 }

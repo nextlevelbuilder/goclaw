@@ -20,6 +20,13 @@
   },
   "toast": {
     "deleted": "文件已删除",
-    "deleteFailed": "删除文件失败"
+    "deleteFailed": "删除文件失败",
+    "saved": "文件已保存",
+    "saveFailed": "保存文件失败"
+  },
+  "edit": {
+    "title": "编辑",
+    "save": "保存",
+    "saving": "保存中..."
   }
 }

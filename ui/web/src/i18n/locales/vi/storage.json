@@ -20,6 +20,13 @@
   },
   "toast": {
     "deleted": "Đã xóa file",
-    "deleteFailed": "Không thể xóa file"
+    "deleteFailed": "Không thể xóa file",
+    "saved": "Đã lưu file",
+    "saveFailed": "Không thể lưu file"
+  },
+  "edit": {
+    "title": "Chỉnh sửa",
+    "save": "Lưu",
+    "saving": "Đang lưu..."
   }
 }

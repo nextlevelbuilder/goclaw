@@ -80,7 +80,23 @@ export function useStorage() {
     [http],
   );
 
-  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob };
+  const writeFile = useCallback(
+    async (path: string, content: string) => {
+      try {
+        await http.put<{ status: string }>(
+          `/v1/storage/files/${encodeURIComponent(path)}`,
+          { content },
+        );
+        toast.success(i18next.t("storage:toast.saved"));
+      } catch (err) {
+        toast.error(i18next.t("storage:toast.saveFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http],
+  );
+
+  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, fetchRawBlob, writeFile };
 }
 
 interface SizeState {
