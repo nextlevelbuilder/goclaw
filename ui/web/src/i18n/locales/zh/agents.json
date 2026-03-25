@@ -208,7 +208,7 @@
     "emptyGroup": "无",
     "viewerMode": "仅查看",
     "consoleSummary": "{{active}} 个可路由 · {{observed}} 个已直接使用 · {{blocked}} 个被阻塞",
-    "monitorDirectLabel": "直接",
+    "monitorDirectLabel": "已选",
     "monitorDirectUseLabel": "直接使用",
     "monitorFailoverLabel": "Failover",
     "lastSeenLabel": "最近出现",

@@ -10,7 +10,7 @@ import { formatDuration, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ChatGPTOAuthAvailability } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import type { ChatGPTOAuthProviderQuota } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
-import { ChatGPTOAuthQuotaBadges } from "./chatgpt-oauth-quota-badges";
+import { ChatGPTOAuthQuotaStrip } from "./chatgpt-oauth-quota-strip";
 import {
   getQuotaFailureKind,
   getRouteReadiness,
@@ -300,9 +300,10 @@ export function CodexPoolActivityPanel({
                       )}
                     </div>
 
-                    <ChatGPTOAuthQuotaBadges
+                    <ChatGPTOAuthQuotaStrip
                       quota={entry.quota}
                       className="mt-2.5"
+                      compact
                     />
 
                     <div className="mt-2.5 grid gap-2 sm:grid-cols-3">

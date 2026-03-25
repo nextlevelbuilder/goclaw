@@ -19,6 +19,7 @@ import {
 interface ChatGPTOAuthQuotaStripProps {
   quota?: ChatGPTOAuthProviderQuota | null;
   className?: string;
+  compact?: boolean;
 }
 
 const failureVariantByKind = {
@@ -40,6 +41,7 @@ function quotaBarClass(remaining: number): string {
 export function ChatGPTOAuthQuotaStrip({
   quota,
   className,
+  compact = false,
 }: ChatGPTOAuthQuotaStripProps) {
   const { t } = useTranslation("agents");
 
@@ -55,7 +57,9 @@ export function ChatGPTOAuthQuotaStrip({
         <TooltipTrigger asChild>
           <div
             className={cn(
-              "space-y-1.5 rounded-md border bg-background/70 px-2.5 py-2",
+              compact
+                ? "space-y-1 rounded-md border bg-background/70 px-2.5 py-1.5"
+                : "space-y-1.5 rounded-md border bg-background/70 px-2.5 py-2",
               className,
             )}
           >
@@ -67,14 +71,15 @@ export function ChatGPTOAuthQuotaStrip({
               ) : (
                 <>
                   {planLabel && <Badge variant="outline">{planLabel}</Badge>}
-                  {signals.map((signal) => (
-                    <Badge
-                      key={signal.shortLabel}
-                      variant={getQuotaBadgeVariant(signal.remaining)}
-                    >
-                      {signal.shortLabel} {signal.remaining}%
-                    </Badge>
-                  ))}
+                  {!compact &&
+                    signals.map((signal) => (
+                      <Badge
+                        key={signal.shortLabel}
+                        variant={getQuotaBadgeVariant(signal.remaining)}
+                      >
+                        {signal.shortLabel} {signal.remaining}%
+                      </Badge>
+                    ))}
                 </>
               )}
             </div>
@@ -84,12 +89,20 @@ export function ChatGPTOAuthQuotaStrip({
                 {signals.map((signal) => (
                   <div
                     key={signal.shortLabel}
-                    className="flex items-center gap-2"
+                    className={cn(
+                      "flex items-center gap-2",
+                      compact && "gap-1.5",
+                    )}
                   >
                     <span className="w-7 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       {signal.shortLabel}
                     </span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={cn(
+                        "flex-1 overflow-hidden rounded-full bg-muted",
+                        compact ? "h-1.5" : "h-1.5",
+                      )}
+                    >
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
@@ -100,9 +113,11 @@ export function ChatGPTOAuthQuotaStrip({
                         }}
                       />
                     </div>
-                    <span className="w-10 text-right text-[11px] font-medium">
-                      {signal.remaining}%
-                    </span>
+                    {!compact && (
+                      <span className="w-10 text-right text-[11px] font-medium">
+                        {signal.remaining}%
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>

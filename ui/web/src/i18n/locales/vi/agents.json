@@ -208,7 +208,7 @@
     "emptyGroup": "Không có",
     "viewerMode": "Chỉ xem",
     "consoleSummary": "{{active}} đang route · {{observed}} đã dùng trực tiếp · {{blocked}} đang chặn",
-    "monitorDirectLabel": "Trực tiếp",
+    "monitorDirectLabel": "Đã chọn",
     "monitorDirectUseLabel": "Dùng trực tiếp",
     "monitorFailoverLabel": "Failover",
     "lastSeenLabel": "Lần thấy cuối",

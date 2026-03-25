@@ -208,7 +208,7 @@
     "emptyGroup": "None",
     "viewerMode": "View only",
     "consoleSummary": "{{active}} active · {{observed}} used directly · {{blocked}} blocked",
-    "monitorDirectLabel": "Direct",
+    "monitorDirectLabel": "Selected",
     "monitorDirectUseLabel": "Direct Use",
     "monitorFailoverLabel": "Failover",
     "lastSeenLabel": "Last Seen",
