@@ -30,10 +30,11 @@ func MediaImagesFromCtx(ctx context.Context) []providers.ImageContent {
 // --- ReadImageTool ---
 
 // visionProviderPriority is the order in which providers are tried for vision.
-var visionProviderPriority = []string{"openrouter", "gemini", "anthropic", "dashscope"}
+var visionProviderPriority = []string{"minimax", "openrouter", "gemini", "anthropic", "dashscope"}
 
 // visionModelDefaults maps provider names to preferred vision models.
 var visionModelDefaults = map[string]string{
+	"minimax":    "MiniMax-M2.7",
 	"openrouter": "google/gemini-2.5-flash-image",
 	"gemini":     "gemini-2.5-flash",
 	"anthropic":  "",

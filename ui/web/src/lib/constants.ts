@@ -51,6 +51,7 @@ export const LOCAL_STORAGE_KEYS = {
   TENANT_HINT: "goclaw:tenant_hint",
   SETUP_SKIPPED: "goclaw:setup_skipped",
   THEME: "goclaw:theme",
+  COLOR_SCHEME: "goclaw:colorScheme",
   SIDEBAR_COLLAPSED: "goclaw:sidebarCollapsed",
   LANGUAGE: "goclaw:language",
   TIMEZONE: "goclaw:timezone",

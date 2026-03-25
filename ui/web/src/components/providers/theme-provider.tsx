@@ -1,33 +1,36 @@
 import { useEffect } from "react";
 import { useUiStore, type Theme } from "@/stores/use-ui-store";
 
-function applyTheme(theme: Theme) {
-  const root = document.documentElement;
-  root.classList.remove("light", "dark");
-
+function getBrightnessMode(theme: Theme): "light" | "dark" {
   if (theme === "system") {
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    root.classList.add(systemDark ? "dark" : "light");
-  } else {
-    root.classList.add(theme);
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
+  return theme;
+}
+
+function applyTheme(theme: Theme, colorScheme: string) {
+  const root = document.documentElement;
+  const brightnessMode = getBrightnessMode(theme);
+  // Apply class order: colorScheme brightnessMode (e.g., "neon dark" or "default light")
+  root.className = `${colorScheme} ${brightnessMode}`;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useUiStore((s) => s.theme);
+  const colorScheme = useUiStore((s) => s.colorScheme);
 
   useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
+    applyTheme(theme, colorScheme);
+  }, [theme, colorScheme]);
 
   // Listen for system theme changes when in "system" mode
   useEffect(() => {
     if (theme !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => applyTheme("system");
+    const handler = () => applyTheme(theme, colorScheme);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
-  }, [theme]);
+  }, [theme, colorScheme]);
 
   return <>{children}</>;
 }

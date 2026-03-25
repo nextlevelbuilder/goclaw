@@ -3,15 +3,18 @@ import i18n from "@/i18n";
 import { LOCAL_STORAGE_KEYS, type Language } from "@/lib/constants";
 
 export type Theme = "light" | "dark" | "system";
+export type ColorScheme = "default" | "neon";
 
 interface UiState {
   theme: Theme;
+  colorScheme: ColorScheme;
   language: Language;
   timezone: string; // IANA timezone or "auto"
   sidebarCollapsed: boolean;
   mobileSidebarOpen: boolean;
 
   setTheme: (theme: Theme) => void;
+  setColorScheme: (scheme: ColorScheme) => void;
   setLanguage: (language: Language) => void;
   setTimezone: (tz: string) => void;
   toggleSidebar: () => void;
@@ -21,6 +24,7 @@ interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   theme: (localStorage.getItem(LOCAL_STORAGE_KEYS.THEME) as Theme) ?? "dark",
+  colorScheme: (localStorage.getItem(LOCAL_STORAGE_KEYS.COLOR_SCHEME) as ColorScheme) ?? "default",
   language: (i18n.language as Language) ?? "en",
   timezone: localStorage.getItem(LOCAL_STORAGE_KEYS.TIMEZONE) ?? "auto",
   sidebarCollapsed:
@@ -30,6 +34,11 @@ export const useUiStore = create<UiState>((set) => ({
   setTheme: (theme) => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.THEME, theme);
     set({ theme });
+  },
+
+  setColorScheme: (colorScheme) => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.COLOR_SCHEME, colorScheme);
+    set({ colorScheme });
   },
 
   setLanguage: (language) => {
