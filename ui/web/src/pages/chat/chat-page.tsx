@@ -15,6 +15,7 @@ import { useChatMessages } from "./hooks/use-chat-messages";
 import { useChatSend } from "./hooks/use-chat-send";
 import { isOwnSession, parseSessionKey } from "@/lib/session-key";
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard";
+import { TaskPanel } from "@/components/chat/task-panel";
 
 export function ChatPage() {
   const { t } = useTranslation("chat");
@@ -147,6 +148,17 @@ export function ChatPage() {
   const isMobile = useIsMobile();
   useVirtualKeyboard();
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+
+  // Auto-open task panel when first task appears, auto-close when all done.
+  const prevTaskCountRef = useRef(0);
+  useEffect(() => {
+    const prev = prevTaskCountRef.current;
+    const curr = teamTasks.length;
+    if (prev === 0 && curr > 0) setTaskPanelOpen(true);
+    if (curr === 0 && prev > 0) setTaskPanelOpen(false);
+    prevTaskCountRef.current = curr;
+  }, [teamTasks.length]);
 
   const handleSessionSelectMobile = useCallback(
     (key: string) => {
@@ -218,7 +230,7 @@ export function ChatPage() {
         )}
 
         <div className="shrink-0">
-          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} />
+          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)} taskPanelOpen={taskPanelOpen} />
         </div>
 
         {sendError && (
@@ -240,6 +252,7 @@ export function ChatPage() {
             isBusy={isBusy}
             loading={messagesLoading}
             scrollTrigger={scrollTrigger}
+            onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)}
           />
 
           {isOwn ? (
@@ -259,6 +272,14 @@ export function ChatPage() {
           )}
         </DropZone>
       </div>
+
+      {/* Mobile overlay backdrop — must render before TaskPanel so panel sits above */}
+      {isMobile && taskPanelOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setTaskPanelOpen(false)} />
+      )}
+
+      {/* Task panel — toggleable sidebar on the right */}
+      <TaskPanel tasks={teamTasks} open={taskPanelOpen} onClose={() => setTaskPanelOpen(false)} />
     </div>
   );
 }

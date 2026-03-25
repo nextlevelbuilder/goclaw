@@ -161,6 +161,18 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 		}
 	}
 
+	// Apply per-action timeout for heavy operations
+	switch action {
+	case "open", "navigate", "snapshot", "screenshot", "act":
+		timeout := t.manager.ActionTimeout()
+		if ms, ok := args["timeoutMs"].(float64); ok && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	switch action {
 	case "status":
 		return t.handleStatus()
@@ -273,12 +285,16 @@ func (t *BrowserTool) handleScreenshot(ctx context.Context, args map[string]any)
 		return tools.ErrorResult(fmt.Sprintf("screenshot failed: %v", err))
 	}
 
-	// Try workspace first, fall back to /tmp for non-workspace contexts (e.g. Telegram)
-	screenshotDir := os.TempDir()
+	// Save to workspace/screenshots/ so the agent can access the file.
+	// Falls back to os.TempDir() if workspace is not available.
+	screenshotDir := filepath.Join(os.TempDir(), "goclaw_screenshots")
 	if ws := tools.ToolWorkspaceFromCtx(ctx); ws != "" {
-		screenshotDir = ws
+		screenshotDir = filepath.Join(ws, "screenshots")
 	}
-	imagePath := filepath.Join(screenshotDir, fmt.Sprintf("goclaw_screenshot_%d.png", time.Now().UnixNano()))
+	if err := os.MkdirAll(screenshotDir, 0755); err != nil {
+		return tools.ErrorResult(fmt.Sprintf("failed to create screenshots directory: %v", err))
+	}
+	imagePath := filepath.Join(screenshotDir, fmt.Sprintf("screenshot_%d.png", time.Now().UnixNano()))
 	if err := os.WriteFile(imagePath, data, 0644); err != nil {
 		return tools.ErrorResult(fmt.Sprintf("failed to save screenshot: %v", err))
 	}

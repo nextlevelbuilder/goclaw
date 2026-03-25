@@ -101,9 +101,16 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return &Result{ForLLM: fmt.Sprintf("error: tts failed: %s", err.Error()), IsError: true}
 	}
 
-	// Write audio to temp file
-	tmpDir := os.TempDir()
-	audioPath := filepath.Join(tmpDir, fmt.Sprintf("tts-%d.%s", time.Now().UnixNano(), result.Extension))
+	// Write audio to workspace/tts/ so the agent can access the file.
+	// Falls back to os.TempDir() if workspace is not available.
+	ttsDir := os.TempDir()
+	if ws := ToolWorkspaceFromCtx(ctx); ws != "" {
+		ttsDir = filepath.Join(ws, "tts")
+	}
+	if err := os.MkdirAll(ttsDir, 0755); err != nil {
+		return &Result{ForLLM: fmt.Sprintf("error: create tts directory: %s", err.Error()), IsError: true}
+	}
+	audioPath := filepath.Join(ttsDir, fmt.Sprintf("tts-%d.%s", time.Now().UnixNano(), result.Extension))
 	if err := os.WriteFile(audioPath, result.Audio, 0644); err != nil {
 		return &Result{ForLLM: fmt.Sprintf("error: write tts audio: %s", err.Error()), IsError: true}
 	}

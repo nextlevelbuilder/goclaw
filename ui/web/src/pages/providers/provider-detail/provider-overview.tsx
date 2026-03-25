@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Copy, Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -19,7 +19,7 @@ interface ProviderOverviewProps {
 }
 
 const NO_API_KEY_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth"]);
-const NO_EMBEDDING_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth", "suno"]);
+const NO_EMBEDDING_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth", "suno", "anthropic_native"]);
 
 export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) {
   const { t } = useTranslation("providers");
@@ -44,6 +44,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const [embEnabled, setEmbEnabled] = useState(initEmb?.enabled ?? false);
   const [embModel, setEmbModel] = useState(initEmb?.model ?? "");
   const [embApiBase, setEmbApiBase] = useState(initEmb?.api_base ?? "");
+  const [embDimensions, setEmbDimensions] = useState(initEmb?.dimensions ? String(initEmb.dimensions) : "");
 
   // Re-sync embedding state when provider changes (e.g. after save)
   useEffect(() => {
@@ -51,11 +52,12 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     setEmbEnabled(es?.enabled ?? false);
     setEmbModel(es?.model ?? "");
     setEmbApiBase(es?.api_base ?? "");
+    setEmbDimensions(es?.dimensions ? String(es.dimensions) : "");
   }, [provider.settings]);
 
   // Verify embedding
   const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
-  useEffect(() => { resetEmb(); }, [embModel, resetEmb]);
+  useEffect(() => { resetEmb(); }, [embModel, embDimensions, resetEmb]);
 
   // Save state
   const [saving, setSaving] = useState(false);
@@ -76,10 +78,16 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       // Merge embedding settings into existing settings
       if (showEmbedding) {
         const existing = (provider.settings || {}) as Record<string, unknown>;
+        const parsedDims = embDimensions ? parseInt(embDimensions, 10) : 0;
         data.settings = {
           ...existing,
           embedding: embEnabled
-            ? { enabled: true, model: embModel.trim() || undefined, api_base: embApiBase.trim() || undefined }
+            ? {
+                enabled: true,
+                model: embModel.trim() || undefined,
+                api_base: embApiBase.trim() || undefined,
+                dimensions: parsedDims > 0 ? parsedDims : undefined,
+              }
             : { enabled: false },
         };
       }
@@ -97,7 +105,8 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   };
 
   const handleVerifyEmbedding = () => {
-    verifyEmbedding(provider.id, embModel.trim() || undefined);
+    const parsedDims = embDimensions ? parseInt(embDimensions, 10) : 0;
+    verifyEmbedding(provider.id, embModel.trim() || undefined, parsedDims > 0 ? parsedDims : undefined);
   };
 
   return (
@@ -184,6 +193,20 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="embDimensions">{t("embedding.dimensions")}</Label>
+                <Input
+                  id="embDimensions"
+                  type="number"
+                  value={embDimensions}
+                  onChange={(e) => setEmbDimensions(e.target.value)}
+                  placeholder="1536"
+                  min={1}
+                  className="text-base md:text-sm"
+                />
+                <p className="text-xs text-muted-foreground">{t("embedding.dimensionsHint")}</p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="embApiBase">{t("embedding.apiBase")}</Label>
                 <Input
                   id="embApiBase"
@@ -207,11 +230,23 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
                   {t("embedding.verify")}
                 </Button>
                 {embResult && (
-                  <span className={`flex items-center gap-1 text-xs ${embResult.valid ? "text-success" : "text-destructive"}`}>
+                  <span className={`flex items-center gap-1 text-xs ${
+                    embResult.valid
+                      ? embResult.dimension_mismatch
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-success"
+                      : "text-destructive"
+                  }`}>
                     {embResult.valid ? (
                       <>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {embResult.dimensions} dimensions
+                        {embResult.dimension_mismatch ? (
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                        ) : (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        )}
+                        {embResult.dimension_mismatch
+                          ? t("embedding.dimensionsMismatch", { count: embResult.dimensions })
+                          : `${embResult.dimensions} dimensions`}
                       </>
                     ) : (
                       <>

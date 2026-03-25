@@ -1,0 +1,10 @@
+# Optional overlay: sync Claude CLI credentials from host into container.
+# Mounts host ~/.claude as read-only; entrypoint copies credentials to the data volume.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.claude-cli.yml up -d
+
+services:
+  goclaw:
+    volumes:
+      - ${HOME}/.claude:/app/.claude-host:ro

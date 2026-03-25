@@ -311,8 +311,8 @@ type UserAgentOverrideData struct {
 	Model    string    `json:"model,omitempty"`
 }
 
-// AgentStore manages agents and access control.
-type AgentStore interface {
+// AgentCRUDStore manages core agent CRUD operations.
+type AgentCRUDStore interface {
 	Create(ctx context.Context, agent *AgentData) error
 	GetByKey(ctx context.Context, agentKey string) (*AgentData, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*AgentData, error)
@@ -323,35 +323,44 @@ type AgentStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, ownerID string) ([]AgentData, error)
 	GetDefault(ctx context.Context) (*AgentData, error) // agent with is_default=true, or first available
+}
 
-	// Access control
+// AgentAccessStore manages agent sharing and access control.
+type AgentAccessStore interface {
 	ShareAgent(ctx context.Context, agentID uuid.UUID, userID, role, grantedBy string) error
 	RevokeShare(ctx context.Context, agentID uuid.UUID, userID string) error
 	ListShares(ctx context.Context, agentID uuid.UUID) ([]AgentShareData, error)
 	CanAccess(ctx context.Context, agentID uuid.UUID, userID string) (bool, string, error) // (allowed, role, err)
 	ListAccessible(ctx context.Context, userID string) ([]AgentData, error)
+}
 
-	// Agent-level context files
+// AgentContextStore manages agent-level and per-user context files and overrides.
+type AgentContextStore interface {
 	GetAgentContextFiles(ctx context.Context, agentID uuid.UUID) ([]AgentContextFileData, error)
 	SetAgentContextFile(ctx context.Context, agentID uuid.UUID, fileName, content string) error
-
-	// Propagate agent-level file content to all existing user instances that have this file.
-	// Returns count of updated user rows.
 	PropagateContextFile(ctx context.Context, agentID uuid.UUID, fileName string) (int, error)
-
-	// Per-user context files + overrides
 	GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]UserContextFileData, error)
 	SetUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName, content string) error
 	DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error
 	GetUserOverride(ctx context.Context, agentID uuid.UUID, userID string) (*UserAgentOverrideData, error)
 	SetUserOverride(ctx context.Context, override *UserAgentOverrideData) error
+}
 
-	// User-agent profiles + instances
+// AgentProfileStore manages user-agent profiles and instances.
+type AgentProfileStore interface {
 	GetOrCreateUserProfile(ctx context.Context, agentID uuid.UUID, userID, workspace, channel string) (isNew bool, effectiveWorkspace string, err error)
 	EnsureUserProfile(ctx context.Context, agentID uuid.UUID, userID string) error
 	ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]UserInstanceData, error)
 	UpdateUserProfileMetadata(ctx context.Context, agentID uuid.UUID, userID string, metadata map[string]string) error
+}
 
+// AgentStore composes all agent sub-interfaces for backward compatibility.
+// New code should depend on the specific sub-interface it needs.
+type AgentStore interface {
+	AgentCRUDStore
+	AgentAccessStore
+	AgentContextStore
+	AgentProfileStore
 }
 
 // UserInstanceData represents a user instance for a predefined agent.

@@ -164,6 +164,30 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     if (!v) load(); // refresh file list after upload dialog closes
   }, [load]);
 
+  const handleMove = useCallback(async (fromPath: string, toFolder: string) => {
+    // In workspace, file names may have chatID prefix — strip it for the API call.
+    const match = files.find((f) => f.name === fromPath);
+    if (!match) return;
+    const fromName = wsFileName(match.name, match.chat_id);
+    const fileName = fromName.split("/").pop() ?? fromName;
+    // toFolder may also have chatID prefix — strip it.
+    const toClean = match.chat_id && toFolder.startsWith(match.chat_id + "/")
+      ? toFolder.slice(match.chat_id.length + 1)
+      : toFolder;
+    const toName = toClean ? `${toClean}/${fileName}` : fileName;
+    if (fromName === toName) return;
+
+    const params = new URLSearchParams();
+    params.set("from", fromName);
+    params.set("to", toName);
+    if (match.chat_id) params.set("chat_id", match.chat_id);
+
+    try {
+      await http.put(`/v1/teams/${teamId}/workspace/move?${params.toString()}`);
+      load();
+    } catch { /* silent — server error shown via toast if needed */ }
+  }, [http, teamId, files, load]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[90vh] w-[95vw] overflow-hidden sm:max-w-6xl flex flex-col">
@@ -204,6 +228,7 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
           contentLoading={contentLoading}
           fileContent={fileContent}
           onDelete={handleDelete}
+          onMove={handleMove}
           onDownload={handleDownload}
           fetchBlob={fetchBlobByName}
           showSize

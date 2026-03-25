@@ -188,7 +188,7 @@ func (s *PGSkillStore) scanSkillInfoList(rows *sql.Rows) []store.SkillInfo {
 
 // StoreMissingDeps persists the missing_deps list for a skill into the deps JSONB column.
 // Only updates system skills unscoped; custom skills require tenant match.
-func (s *PGSkillStore) StoreMissingDeps(id uuid.UUID, missing []string) error {
+func (s *PGSkillStore) StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error {
 	if missing == nil {
 		missing = []string{}
 	}
@@ -198,7 +198,7 @@ func (s *PGSkillStore) StoreMissingDeps(id uuid.UUID, missing []string) error {
 	}
 	// System skills can be updated without tenant; custom skills need tenant scope.
 	// Use is_system check to ensure cross-tenant safety for custom skills.
-	_, err = s.db.Exec(
+	_, err = s.db.ExecContext(ctx,
 		`UPDATE skills SET deps = $1, updated_at = NOW() WHERE id = $2 AND is_system = true`,
 		encoded, id,
 	)

@@ -38,7 +38,7 @@ export function KGExtractDialog({ open, onOpenChange, onExtract }: KGExtractDial
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t("kg.extractDialog.title")}</DialogTitle>
         </DialogHeader>

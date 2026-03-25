@@ -104,7 +104,7 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 	if userID != "" {
 		// fixed params: $1=query, $2=agentID, $3=query, $4=userID
 		// tenant clause appended at $5 (if filtered), then LIMIT at $5 or $6
-		tc, tcArgs, err := tenantClauseN(ctx, 5)
+		tc, tcArgs, _, err := scopeClause(ctx, 5)
 		if err != nil {
 			return nil, err
 		}
@@ -120,7 +120,7 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 	} else {
 		// fixed params: $1=query, $2=agentID, $3=query
 		// tenant clause at $4 (if filtered), then LIMIT at $4 or $5
-		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		tc, tcArgs, _, err := scopeClause(ctx, 4)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +159,7 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 	if userID != "" {
 		// fixed params: $1=vec, $2=agentID, $3=userID
 		// tenant clause at $4, then ORDER vec at $4+len(tcArgs), LIMIT after
-		tc, tcArgs, err := tenantClauseN(ctx, 4)
+		tc, tcArgs, _, err := scopeClause(ctx, 4)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +176,7 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 	} else {
 		// fixed params: $1=vec, $2=agentID
 		// tenant clause at $3, then ORDER vec at $3+len(tcArgs), LIMIT after
-		tc, tcArgs, err := tenantClauseN(ctx, 3)
+		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
 			return nil, err
 		}

@@ -96,7 +96,7 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
 
   return (
     <Dialog open={open} onOpenChange={(v) => !loading && onOpenChange(v)}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent aria-describedby={undefined} className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t("createDialog.title")}</DialogTitle>
         </DialogHeader>

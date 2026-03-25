@@ -4,28 +4,38 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// embeddedMediaPattern matches "MEDIA:" followed by a non-whitespace path.
+// Duplicated from agent.mediaPathPattern to avoid tools→agent import cycle.
+var embeddedMediaPattern = regexp.MustCompile(`MEDIA:\S+`)
+
 // MessageTool allows the agent to proactively send messages to channels.
 type MessageTool struct {
-	workspace string
-	restrict  bool
-	sender    ChannelSender
-	msgBus    *bus.MessageBus
+	workspace     string
+	restrict      bool
+	sender        ChannelSender
+	msgBus        *bus.MessageBus
+	tenantChecker ChannelTenantChecker
 }
 
 func NewMessageTool(workspace string, restrict bool) *MessageTool {
 	return &MessageTool{workspace: workspace, restrict: restrict}
 }
 
-func (t *MessageTool) SetChannelSender(s ChannelSender) { t.sender = s }
-func (t *MessageTool) SetMessageBus(b *bus.MessageBus)  { t.msgBus = b }
+func (t *MessageTool) SetChannelSender(s ChannelSender)              { t.sender = s }
+func (t *MessageTool) SetMessageBus(b *bus.MessageBus)               { t.msgBus = b }
+func (t *MessageTool) SetChannelTenantChecker(c ChannelTenantChecker) { t.tenantChecker = c }
 
 func (t *MessageTool) Name() string { return "message" }
 func (t *MessageTool) Description() string {
@@ -85,9 +95,33 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 		return ErrorResult("target chat ID is required (no current chat in context)")
 	}
 
+	// Tenant isolation: validate channel belongs to current tenant.
+	if err := t.validateChannelTenant(ctx, channel, target); err != nil {
+		return err
+	}
+
 	// Handle MEDIA: prefix — send file as attachment instead of text.
 	if filePath, ok := t.resolveMediaPath(ctx, message); ok {
 		return t.sendMedia(ctx, channel, target, filePath)
+	}
+
+	// Extract embedded MEDIA: paths from multi-line messages.
+	// LLMs may include MEDIA: in conversational text rather than as a standalone prefix.
+	message, embeddedMedia := t.extractEmbeddedMedia(ctx, message)
+
+	// If we found embedded media and bus is available, prefer bus path (supports media attachments).
+	if len(embeddedMedia) > 0 && t.msgBus != nil {
+		outMsg := bus.OutboundMessage{
+			Channel: channel,
+			ChatID:  target,
+			Content: message,
+			Media:   embeddedMedia,
+		}
+		if isGroupContext(ctx) {
+			outMsg.Metadata = map[string]string{"group_id": target}
+		}
+		t.msgBus.PublishOutbound(outMsg)
+		return SilentResult(fmt.Sprintf(`{"status":"sent","channel":"%s","target":"%s"}`, channel, target))
 	}
 
 	// Prefer direct channel sender for immediate delivery.
@@ -126,6 +160,33 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	return ErrorResult("no channel sender or message bus available")
 }
 
+// validateChannelTenant checks the target channel belongs to the current tenant.
+// Returns an error Result if the send should be blocked, nil if allowed.
+func (t *MessageTool) validateChannelTenant(ctx context.Context, channel, target string) *Result {
+	if t.tenantChecker == nil {
+		return nil
+	}
+	chTenant, chExists := t.tenantChecker(channel)
+	if !chExists {
+		return ErrorResult(fmt.Sprintf("channel %q not found", channel))
+	}
+	// Allow: legacy/config-based channels (zero tenant) or master tenant context (system ops).
+	if chTenant == uuid.Nil {
+		return nil
+	}
+	ctxTenant := store.TenantIDFromContext(ctx)
+	if ctxTenant == uuid.Nil {
+		return nil // master tenant / system context
+	}
+	if chTenant != ctxTenant {
+		slog.Warn("security.cross_tenant_send_blocked",
+			"channel", channel, "target", target,
+			"ctx_tenant", ctxTenant, "ch_tenant", chTenant)
+		return ErrorResult("channel not accessible from this tenant")
+	}
+	return nil
+}
+
 // sendMedia sends a file as a media attachment via the outbound message bus.
 func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath string) *Result {
 	if _, err := os.Stat(filePath); err != nil {
@@ -144,7 +205,7 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 	t.msgBus.PublishOutbound(bus.OutboundMessage{
 		Channel:  channel,
 		ChatID:   target,
-		Media:    []bus.MediaAttachment{{URL: filePath}},
+		Media:    []bus.MediaAttachment{{URL: filePath, ContentType: mimeFromPath(filePath)}},
 		Metadata: meta,
 	})
 	out, _ := json.Marshal(map[string]string{
@@ -154,6 +215,85 @@ func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath s
 		"media":   filepath.Base(filePath),
 	})
 	return SilentResult(string(out))
+}
+
+// extractEmbeddedMedia scans a multi-line message for embedded MEDIA: path references.
+// Returns cleaned text (MEDIA: lines removed) and resolved media attachments.
+// Prevents raw MEDIA: paths from leaking to channels when LLMs embed them
+// in conversational text instead of using a standalone MEDIA: prefix.
+func (t *MessageTool) extractEmbeddedMedia(ctx context.Context, message string) (string, []bus.MediaAttachment) {
+	if !strings.Contains(message, "MEDIA:") {
+		return message, nil
+	}
+
+	lines := strings.Split(message, "\n")
+	var cleaned []string
+	var media []bus.MediaAttachment
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip [[audio_as_voice]] tags (TTS voice messages).
+		if strings.HasPrefix(trimmed, "[[audio_as_voice]]") {
+			continue
+		}
+		// Find all MEDIA: tokens on this line.
+		matches := embeddedMediaPattern.FindAllString(trimmed, -1)
+		if len(matches) == 0 {
+			cleaned = append(cleaned, line)
+			continue
+		}
+		// Extract each MEDIA: path and resolve via security-checked path resolution.
+		for _, raw := range matches {
+			if resolved, ok := t.resolveMediaPath(ctx, raw); ok {
+				media = append(media, bus.MediaAttachment{
+					URL:         resolved,
+					ContentType: mimeFromPath(resolved),
+				})
+			}
+		}
+		// Strip MEDIA: tokens from line, keep surrounding text.
+		remainder := strings.TrimSpace(embeddedMediaPattern.ReplaceAllString(line, ""))
+		if remainder != "" {
+			cleaned = append(cleaned, remainder)
+		}
+	}
+
+	return strings.TrimSpace(strings.Join(cleaned, "\n")), media
+}
+
+// mimeFromPath returns a MIME type based on file extension.
+// Duplicated from agent.mimeFromExt to avoid tools→agent import cycle.
+func mimeFromPath(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".mp4":
+		return "video/mp4"
+	case ".ogg", ".opus":
+		return "audio/ogg"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".wav":
+		return "audio/wav"
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // isGroupContext returns true if the current context indicates a group conversation.

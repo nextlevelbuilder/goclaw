@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -97,6 +99,16 @@ type ChannelSender func(ctx context.Context, channel, chatID, content string) er
 // ChannelSenderAware tools can receive a channel sender function.
 type ChannelSenderAware interface {
 	SetChannelSender(ChannelSender)
+}
+
+// ChannelTenantChecker returns the tenant UUID for a channel instance.
+// Used by the message tool to prevent cross-tenant sends.
+// Returns (tenantID, exists). Zero tenantID means legacy/config-based channel.
+type ChannelTenantChecker func(channelName string) (tenantID uuid.UUID, exists bool)
+
+// ChannelTenantCheckerAware tools can receive a channel tenant checker.
+type ChannelTenantCheckerAware interface {
+	SetChannelTenantChecker(ChannelTenantChecker)
 }
 
 // ChannelAware is optionally implemented by tools that only work on specific channel types.

@@ -15,7 +15,7 @@ services:
       - "${GOCLAW_UI_PORT:-3000}:80"
     networks:
       - default
-      - shared
+      - goclaw-net
     depends_on:
       - goclaw
     restart: unless-stopped

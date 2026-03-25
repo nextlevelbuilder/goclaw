@@ -22,6 +22,8 @@ export interface ActiveTeamTask {
   ownerDisplayName?: string;
   progressPercent?: number;
   progressStep?: string;
+  commentCount?: number;
+  attachmentCount?: number;
 }
 
 /** Media item for gallery display */
@@ -50,6 +52,8 @@ export interface AgentEventPayload {
   agentId: string;
   runId: string;
   runKind?: string; // "delegation" | "announce" — omitted for user-initiated runs
+  channel?: string; // "ws", "telegram", "cron", etc.
+  sessionKey?: string; // session this event belongs to
   payload?: {
     content?: string;
     name?: string;

@@ -216,6 +216,7 @@ export const Events = {
   TEAM_TASK_ASSIGNED: "team.task.assigned",
   TEAM_TASK_DISPATCHED: "team.task.dispatched",
   TEAM_TASK_DELETED: "team.task.deleted",
+  TEAM_TASK_ATTACHMENT_ADDED: "team.task.attachment_added",
 
   // Team leader processing (bridges gap between last task.completed and announce run.started)
   TEAM_LEADER_PROCESSING: "team.leader.processing",
@@ -261,7 +262,7 @@ export const TEAM_RELATED_EVENTS: Set<string> = new Set([
   Events.TEAM_TASK_COMPLETED, Events.TEAM_TASK_CANCELLED,
   Events.TEAM_TASK_REVIEWED, Events.TEAM_TASK_APPROVED,
   Events.TEAM_TASK_REJECTED, Events.TEAM_TASK_PROGRESS,
-  Events.TEAM_TASK_COMMENTED, Events.TEAM_TASK_ASSIGNED, Events.TEAM_TASK_DISPATCHED, Events.TEAM_TASK_DELETED,
+  Events.TEAM_TASK_COMMENTED, Events.TEAM_TASK_ASSIGNED, Events.TEAM_TASK_DISPATCHED, Events.TEAM_TASK_DELETED, Events.TEAM_TASK_ATTACHMENT_ADDED,
   Events.TEAM_MESSAGE_SENT,
   Events.TEAM_CREATED, Events.TEAM_UPDATED, Events.TEAM_DELETED,
   Events.TEAM_MEMBER_ADDED, Events.TEAM_MEMBER_REMOVED,

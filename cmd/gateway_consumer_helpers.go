@@ -126,7 +126,13 @@ func mediaToMarkdown(media []agent.MediaResult, cfg *config.Config) string {
 		}
 		// Store clean path only — no auth tokens in persisted session messages.
 		// Frontend adds auth (Bearer header or ?ft= signed token) at render time.
-		fileURL := "/v1/files/" + urlPath
+		// Guard: if path is already a /v1/ URL (e.g. from mutated media), don't double-prefix.
+		var fileURL string
+		if strings.HasPrefix(urlPath, "v1/files/") || strings.HasPrefix(urlPath, "v1/media/") {
+			fileURL = "/" + strings.SplitN(urlPath, "?", 2)[0] // strip any existing query params
+		} else {
+			fileURL = "/v1/files/" + urlPath
+		}
 		if strings.HasPrefix(mr.ContentType, "image/") {
 			parts = append(parts, fmt.Sprintf("![image](%s)", fileURL))
 		} else {

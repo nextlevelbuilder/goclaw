@@ -158,11 +158,14 @@
     "enable": "Bật Embedding",
     "enableDesc": "Cho phép provider này tạo embedding cho bộ nhớ, kỹ năng và đồ thị tri thức",
     "model": "Model Embedding",
+    "dimensions": "Số chiều đầu ra",
+    "dimensionsHint": "Cắt ngắn đầu ra về N chiều (VD: 1536). Bắt buộc với model có chiều gốc > 1536 như gemini-embedding-001 (3072d).",
     "apiBase": "API Base Embedding",
     "apiBasePlaceholder": "(giống provider)",
     "apiBaseHint": "Ghi đè nếu endpoint embedding khác với API base chính của provider",
     "verify": "Kiểm tra Embedding",
-    "verifyFailed": "Kiểm tra embedding thất bại"
+    "verifyFailed": "Kiểm tra embedding thất bại",
+    "dimensionsMismatch": "{{count}} chiều — không khớp yêu cầu 1536"
   },
   "toast": {
     "created": "Đã tạo provider",

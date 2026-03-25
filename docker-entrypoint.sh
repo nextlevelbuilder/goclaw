@@ -72,6 +72,15 @@ if [ -x /app/pkg-helper ] && [ "$(id -u)" = "0" ]; then
   fi
 fi
 
+# Copy Claude CLI credentials from root-owned read-only mount to goclaw-accessible location.
+# /app/.claude is a symlink → /app/data/.claude (writable volume, see Dockerfile).
+# Uses install(1) for atomic copy with correct ownership+permissions (no temp file needed).
+if [ -f /app/.claude-host/.credentials.json ]; then
+  (mkdir -p /app/data/.claude \
+    && install -m 600 -o goclaw -g goclaw /app/.claude-host/.credentials.json /app/data/.claude/.credentials.json \
+    && echo "Claude CLI credentials synced from host.") || echo "WARNING: Claude credentials copy failed (non-fatal)"
+fi
+
 # Run command with privilege drop (su-exec in Docker, direct otherwise).
 run_as_goclaw() {
   if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then

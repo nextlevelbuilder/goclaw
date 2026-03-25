@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -95,6 +96,18 @@ func setupToolRegistry(
 		} else {
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
 			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+		}
+		if cfg.Tools.Browser.ActionTimeoutMs > 0 {
+			opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
+		}
+		if cfg.Tools.Browser.IdleTimeoutMs > 0 {
+			opts = append(opts, browser.WithIdleTimeout(time.Duration(cfg.Tools.Browser.IdleTimeoutMs)*time.Millisecond))
+		} else if cfg.Tools.Browser.IdleTimeoutMs < 0 {
+			// Explicitly disable idle reaper with negative value
+			opts = append(opts, browser.WithIdleTimeout(0))
+		}
+		if cfg.Tools.Browser.MaxPages > 0 {
+			opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
 		}
 		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))

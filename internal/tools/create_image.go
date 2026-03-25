@@ -63,6 +63,10 @@ func (t *CreateImageTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Aspect ratio: '1:1' (default), '3:4', '4:3', '9:16', '16:9'.",
 			},
+			"filename_hint": map[string]any{
+				"type":        "string",
+				"description": "Short descriptive filename (no extension). Example: 'sunset-beach', 'company-logo'.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -77,6 +81,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	if aspectRatio == "" {
 		aspectRatio = "1:1"
 	}
+	filenameHint, _ := args["filename_hint"].(string)
 
 	chain := ResolveMediaProviderChain(ctx, "create_image", "", "",
 		imageGenProviderPriority, imageGenModelDefaults, t.registry)
@@ -104,7 +109,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	if err := os.MkdirAll(dateDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create output directory: %v", err))
 	}
-	imagePath := filepath.Join(dateDir, fmt.Sprintf("goclaw_gen_%d.png", time.Now().UnixNano()))
+	imagePath := filepath.Join(dateDir, mediaFileName(ctx, "image", filenameHint, "png"))
 	if err := os.WriteFile(imagePath, chainResult.Data, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save generated image: %v", err))
 	}

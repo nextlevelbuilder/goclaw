@@ -123,8 +123,12 @@ func buildEmbeddingProvider(
 		apiBase = memCfg.EmbeddingAPIBase
 	}
 
-	// Gemini requires dimension truncation to match pgvector(1536) index.
-	needsDimTruncate := dbp.ProviderType == store.ProviderGeminiNative
+	// Dimension truncation: provider settings override, default to 1536 to match pgvector schema.
+	// Models that natively output 1536 ignore the parameter; models with larger native dims get truncated.
+	dims := 1536
+	if es != nil && es.Dimensions > 0 {
+		dims = es.Dimensions
+	}
 
 	// Try registry first for the actual API key / base (handles runtime-registered providers)
 	if providerReg != nil {
@@ -134,9 +138,7 @@ func buildEmbeddingProvider(
 					apiBase = op.APIBase()
 				}
 				ep := memory.NewOpenAIEmbeddingProvider(dbp.Name, op.APIKey(), apiBase, model)
-				if needsDimTruncate {
-					ep.WithDimensions(1536)
-				}
+				ep.WithDimensions(dims)
 				return ep
 			}
 			slog.Debug("embedding provider in registry is not OpenAI-compatible, using DB record", "name", dbp.Name)
@@ -146,9 +148,7 @@ func buildEmbeddingProvider(
 	// Fallback: build directly from DB record
 	if dbp.APIKey != "" {
 		ep := memory.NewOpenAIEmbeddingProvider(dbp.Name, dbp.APIKey, apiBase, model)
-		if needsDimTruncate {
-			ep.WithDimensions(1536)
-		}
+		ep.WithDimensions(dims)
 		return ep
 	}
 

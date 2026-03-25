@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -88,13 +87,15 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	// When workspace sharing is enabled, show the base workspace without user subfolder.
 	promptWorkspace := l.workspace
 	if l.agentUUID != uuid.Nil && userID != "" && l.workspace != "" {
+		shared := l.shouldShareWorkspace(userID, peerKind)
 		if cachedWs, ok := l.userWorkspaces.Load(userID); ok {
-			promptWorkspace = cachedWs.(string)
-			if !l.shouldShareWorkspace(userID, peerKind) {
-				promptWorkspace = filepath.Join(promptWorkspace, sanitizePathSegment(userID))
-			}
-		} else if !l.shouldShareWorkspace(userID, peerKind) {
-			promptWorkspace = filepath.Join(l.workspace, sanitizePathSegment(userID))
+			promptWorkspace = tools.ResolveWorkspace(cachedWs.(string),
+				tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
+			)
+		} else {
+			promptWorkspace = tools.ResolveWorkspace(l.workspace,
+				tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
+			)
 		}
 	}
 

@@ -354,7 +354,7 @@ func (s *PGSessionStore) getOrInit(ctx context.Context, key string) *store.Sessi
 
 	msgsJSON, _ := json.Marshal([]providers.Message{})
 	tid := tenantIDForInsert(ctx)
-	s.db.Exec(
+	s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, session_key, messages, created_at, updated_at, tenant_id)
 		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (tenant_id, session_key) DO NOTHING`,
 		uuid.Must(uuid.NewV7()), key, msgsJSON, now, now, tid,

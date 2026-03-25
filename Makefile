@@ -37,7 +37,7 @@ COMPOSE = $(COMPOSE_BASE) $(COMPOSE_EXTRA)
 UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml
 
 net:
-	docker network inspect shared >/dev/null 2>&1 || docker network create shared
+	docker network inspect goclaw-net >/dev/null 2>&1 || docker network create goclaw-net
 
 version-file:
 	@echo $(VERSION) > VERSION

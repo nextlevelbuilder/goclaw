@@ -51,6 +51,7 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/storage/files/{path...}", h.auth(h.handleDelete))
 	mux.HandleFunc("GET /v1/storage/size", h.auth(h.handleSize))
 	mux.HandleFunc("POST /v1/storage/files", requireAuth(permissions.RoleAdmin, h.handleUpload))
+	mux.HandleFunc("PUT /v1/storage/move", requireAuth(permissions.RoleAdmin, h.handleMove))
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -502,5 +503,96 @@ func (h *StorageHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		"path":     relPath,
 		"filename": origName,
 		"size":     written,
+	})
+}
+
+// handleMove moves/renames a file within the storage data directory.
+// Admin-only. Rejects moves involving protected directories.
+// Query params: ?from=relPath&to=relPath
+func (h *StorageHandler) handleMove(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+
+	fromRel := r.URL.Query().Get("from")
+	toRel := r.URL.Query().Get("to")
+	if fromRel == "" || toRel == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "from, to")})
+		return
+	}
+
+	// Reject path traversal in both paths.
+	if strings.Contains(fromRel, "..") || strings.Contains(toRel, "..") {
+		slog.Warn("security.storage_move_traversal", "from", fromRel, "to", toRel)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Reject moves involving protected directories.
+	if isProtectedPath(fromRel) || isProtectedPath(toRel) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgCannotDeleteSkillsDir)})
+		return
+	}
+
+	base := h.tenantBaseDir(r)
+
+	// Resolve and validate source path.
+	srcAbs := filepath.Join(base, filepath.Clean(fromRel))
+	if !strings.HasPrefix(srcAbs, base+string(filepath.Separator)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	srcReal, err := filepath.EvalSymlinks(srcAbs)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		return
+	}
+	baseReal, _ := filepath.EvalSymlinks(base)
+	if baseReal == "" {
+		baseReal = base
+	}
+	if !strings.HasPrefix(srcReal, baseReal+string(filepath.Separator)) {
+		slog.Warn("security.storage_move_src_escape", "resolved", srcReal, "base", baseReal)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Resolve and validate destination path.
+	destAbs := filepath.Join(base, filepath.Clean(toRel))
+	if !strings.HasPrefix(destAbs, base+string(filepath.Separator)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	// Ensure destination parent exists.
+	destDir := filepath.Dir(destAbs)
+	destDirReal, _ := filepath.EvalSymlinks(destDir)
+	if destDirReal == "" {
+		destDirReal = destDir
+	}
+	if !strings.HasPrefix(destDirReal+string(filepath.Separator), baseReal+string(filepath.Separator)) {
+		slog.Warn("security.storage_move_dest_escape", "resolved", destDirReal, "base", baseReal)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	if _, err := os.Stat(destDir); os.IsNotExist(err) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "destination directory does not exist"})
+		return
+	}
+
+	// Prevent overwriting existing file.
+	if _, err := os.Stat(destAbs); err == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "a file with that name already exists at the destination"})
+		return
+	}
+
+	// Atomic move.
+	if err := os.Rename(srcAbs, destAbs); err != nil {
+		slog.Error("storage.move_failed", "from", fromRel, "to", toRel, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to move file")})
+		return
+	}
+
+	slog.Info("storage.moved", "from", fromRel, "to", toRel)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"from": fromRel,
+		"to":   toRel,
 	})
 }

@@ -81,7 +81,7 @@ func (s *PGConfigPermissionStore) CheckPermission(ctx context.Context, agentID u
 	s.mu.RUnlock()
 
 	// Fetch from DB.
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return false, err
 	}
@@ -171,7 +171,7 @@ func (s *PGConfigPermissionStore) Grant(ctx context.Context, perm *store.ConfigP
 }
 
 func (s *PGConfigPermissionStore) Revoke(ctx context.Context, agentID uuid.UUID, scope, configType, userID string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 5)
+	tClause, tArgs, _, err := scopeClause(ctx, 5)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func (s *PGConfigPermissionStore) Revoke(ctx context.Context, agentID uuid.UUID,
 }
 
 func (s *PGConfigPermissionStore) List(ctx context.Context, agentID uuid.UUID, configType, scope string) ([]store.ConfigPermission, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 0) // paramN unused; we append manually
+	tClause, tArgs, _, err := scopeClause(ctx, 0) // paramN unused; we append manually
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (s *PGConfigPermissionStore) ListFileWriters(ctx context.Context, agentID u
 	}
 	s.fwMu.RUnlock()
 
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}

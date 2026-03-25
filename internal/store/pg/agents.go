@@ -263,7 +263,7 @@ func (s *PGAgentStore) List(ctx context.Context, ownerID string) ([]store.AgentD
 		argIdx++
 	}
 
-	if clause, targs, err := tenantClauseN(ctx, argIdx); err == nil && clause != "" {
+	if clause, targs, _, err := scopeClause(ctx, argIdx); err == nil && clause != "" {
 		q += clause
 		args = append(args, targs...)
 		argIdx++

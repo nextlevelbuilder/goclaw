@@ -17,7 +17,7 @@ import (
 // --- Agent-level Context Files ---
 
 func (s *PGAgentStore) GetAgentContextFiles(ctx context.Context, agentID uuid.UUID) ([]store.AgentContextFileData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *PGAgentStore) SetAgentContextFile(ctx context.Context, agentID uuid.UUI
 // PropagateContextFile copies an agent-level context file to all existing user
 // instances that already have that file (seeded users). Returns updated row count.
 func (s *PGAgentStore) PropagateContextFile(ctx context.Context, agentID uuid.UUID, fileName string) (int, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 4)
+	tClause, tArgs, _, err := scopeClause(ctx, 4)
 	if err != nil {
 		return 0, err
 	}
@@ -79,7 +79,7 @@ func (s *PGAgentStore) PropagateContextFile(ctx context.Context, agentID uuid.UU
 // --- Per-user Context Files ---
 
 func (s *PGAgentStore) GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]store.UserContextFileData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (s *PGAgentStore) SetUserContextFile(ctx context.Context, agentID uuid.UUID
 }
 
 func (s *PGAgentStore) DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 4)
+	tClause, tArgs, _, err := scopeClause(ctx, 4)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (s *PGAgentStore) EnsureUserProfile(ctx context.Context, agentID uuid.UUID,
 // --- User Instances ---
 
 func (s *PGAgentStore) ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]store.UserInstanceData, error) {
-	tClause, tArgs, err := tenantClauseNAlias(ctx, 2, "p")
+	tClause, tArgs, _, err := scopeClauseAlias(ctx, 2, "p")
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (s *PGAgentStore) UpdateUserProfileMetadata(ctx context.Context, agentID uu
 	if err != nil {
 		return err
 	}
-	tClause, tArgs, err := tenantClauseN(ctx, 4)
+	tClause, tArgs, _, err := scopeClause(ctx, 4)
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (s *PGAgentStore) UpdateUserProfileMetadata(ctx context.Context, agentID uu
 // --- User Overrides ---
 
 func (s *PGAgentStore) GetUserOverride(ctx context.Context, agentID uuid.UUID, userID string) (*store.UserAgentOverrideData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}

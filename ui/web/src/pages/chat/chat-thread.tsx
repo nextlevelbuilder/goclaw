@@ -22,6 +22,7 @@ interface ChatThreadProps {
   isBusy: boolean;
   loading?: boolean;
   scrollTrigger?: number;
+  onToggleTaskPanel?: () => void;
 }
 
 /** Check if a message is tool-only (no user-visible text content) */
@@ -73,7 +74,7 @@ function buildDisplayItems(messages: ChatMessage[]): DisplayItem[] {
 
 export const ChatThread = memo(function ChatThread({
   messages, streamText, thinkingText, toolStream, blockReplies,
-  activity, teamTasks, isRunning, isBusy, loading, scrollTrigger = 0,
+  activity, teamTasks, isRunning, isBusy, loading, scrollTrigger = 0, onToggleTaskPanel,
 }: ChatThreadProps) {
   const { t } = useTranslation("chat");
   const { ref, onScroll } = useAutoScroll<HTMLDivElement>(
@@ -122,7 +123,7 @@ export const ChatThread = memo(function ChatThread({
           }
         })}
 
-        {teamTasks.length > 0 && <TeamActivityPanel tasks={teamTasks} />}
+        {teamTasks.length > 0 && <TeamActivityPanel tasks={teamTasks} onTogglePanel={onToggleTaskPanel} />}
 
         <ActiveRunZone
           isRunning={isRunning}

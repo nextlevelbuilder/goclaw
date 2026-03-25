@@ -120,11 +120,10 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	req.OwnerID = userID
 
-	// Resolve tenant_id: cross-tenant callers must provide it; others inherit their own tenant.
+	// Resolve tenant_id: explicit body field for cross-tenant; otherwise inherit from auth context.
 	if store.IsOwnerRole(r.Context()) {
 		if req.TenantID == uuid.Nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "tenant_id")})
-			return
+			req.TenantID = store.TenantIDFromContext(r.Context())
 		}
 	} else {
 		req.TenantID = store.TenantIDFromContext(r.Context())

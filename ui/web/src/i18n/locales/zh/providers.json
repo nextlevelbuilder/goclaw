@@ -158,11 +158,14 @@
     "enable": "启用Embedding",
     "enableDesc": "允许此Provider为记忆、技能和知识图谱生成文本嵌入",
     "model": "Embedding模型",
+    "dimensions": "输出维度",
+    "dimensionsHint": "将输出截断为N维（如1536）。对于原生维度 > 1536的模型（如gemini-embedding-001 3072d）必须设置。",
     "apiBase": "Embedding API地址",
     "apiBasePlaceholder": "(与Provider相同)",
     "apiBaseHint": "如果Embedding端点与Provider的主API地址不同，可在此覆盖",
     "verify": "验证Embedding",
-    "verifyFailed": "Embedding验证失败"
+    "verifyFailed": "Embedding验证失败",
+    "dimensionsMismatch": "{{count}}维 — 不符合要求的1536"
   },
   "toast": {
     "created": "Provider已创建",

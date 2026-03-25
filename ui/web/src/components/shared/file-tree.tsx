@@ -61,6 +61,7 @@ export function TreeItem({
   onSelect,
   onDelete,
   onLoadMore,
+  onMove,
   showSize,
 }: {
   node: TreeNode;
@@ -69,10 +70,12 @@ export function TreeItem({
   onSelect: (path: string) => void;
   onDelete?: (path: string, isDir: boolean) => void;
   onLoadMore?: (path: string) => void;
+  onMove?: (fromPath: string, toFolder: string) => void;
   showSize?: boolean;
 }) {
   const { t } = useTranslation("common");
   const [expanded, setExpanded] = useState(depth === 0);
+  const [dragOver, setDragOver] = useState(false);
   const isActive = activePath === node.path;
 
   const handleToggle = () => {
@@ -105,9 +108,27 @@ export function TreeItem({
     return (
       <div>
         <div
-          className="group/tree-item flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm hover:bg-accent cursor-pointer"
+          className={`group/tree-item flex w-full items-center gap-1 rounded px-2 py-1 text-left text-sm cursor-pointer ${
+            dragOver ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-accent"
+          }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          draggable={!!onMove}
+          onDragStart={onMove ? (e) => {
+            e.dataTransfer.setData("text/x-tree-path", node.path);
+            e.dataTransfer.effectAllowed = "move";
+          } : undefined}
           onClick={handleToggle}
+          onDragOver={onMove ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOver(true); } : undefined}
+          onDragEnter={onMove ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+          onDragLeave={onMove ? () => setDragOver(false) : undefined}
+          onDrop={onMove ? (e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const src = e.dataTransfer.getData("text/x-tree-path");
+            if (src && src !== node.path && !node.path.startsWith(src + "/")) {
+              onMove(src, node.path);
+            }
+          } : undefined}
         >
           <ChevronRight
             className={`h-3 w-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -131,6 +152,7 @@ export function TreeItem({
             onSelect={onSelect}
             onDelete={onDelete}
             onLoadMore={onLoadMore}
+            onMove={onMove}
             showSize={showSize}
           />
         ))}
@@ -155,6 +177,11 @@ export function TreeItem({
         isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
       }`}
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
+      draggable={!!onMove}
+      onDragStart={onMove ? (e) => {
+        e.dataTransfer.setData("text/x-tree-path", node.path);
+        e.dataTransfer.effectAllowed = "move";
+      } : undefined}
       onClick={() => onSelect(node.path)}
     >
       <FileIcon name={node.name} />
@@ -172,6 +199,7 @@ export function FileTreePanel({
   onSelect,
   onDelete,
   onLoadMore,
+  onMove,
   showSize,
 }: {
   tree: TreeNode[];
@@ -180,9 +208,12 @@ export function FileTreePanel({
   onSelect: (path: string) => void;
   onDelete?: (path: string, isDir: boolean) => void;
   onLoadMore?: (path: string) => void;
+  onMove?: (fromPath: string, toFolder: string) => void;
   showSize?: boolean;
 }) {
   const { t } = useTranslation("common");
+  const [rootDragOver, setRootDragOver] = useState(false);
+
   if (filesLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -194,10 +225,29 @@ export function FileTreePanel({
     return <p className="px-3 py-4 text-sm text-muted-foreground">{t("noFiles")}</p>;
   }
   return (
-    <>
+    <div
+      className={`flex-1 min-h-0 ${rootDragOver ? "bg-primary/5" : ""}`}
+      onDragOver={onMove ? (e) => {
+        // Only highlight root when dragging over empty space (not over a child node).
+        if (e.currentTarget === e.target) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          setRootDragOver(true);
+        }
+      } : undefined}
+      onDragLeave={onMove ? (e) => {
+        if (e.currentTarget === e.target) setRootDragOver(false);
+      } : undefined}
+      onDrop={onMove ? (e) => {
+        e.preventDefault();
+        setRootDragOver(false);
+        const src = e.dataTransfer.getData("text/x-tree-path");
+        if (src) onMove(src, ""); // "" = root
+      } : undefined}
+    >
       {tree.map((node) => (
-        <TreeItem key={node.path} node={node} depth={0} activePath={activePath} onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore} showSize={showSize} />
+        <TreeItem key={node.path} node={node} depth={0} activePath={activePath} onSelect={onSelect} onDelete={onDelete} onLoadMore={onLoadMore} onMove={onMove} showSize={showSize} />
       ))}
-    </>
+    </div>
   );
 }

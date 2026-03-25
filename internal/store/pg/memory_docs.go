@@ -48,7 +48,7 @@ func (s *PGMemoryStore) GetDocument(ctx context.Context, agentID, userID, path s
 
 	var err error
 	if userID == "" {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 3)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return "", tcErr
 		}
@@ -56,7 +56,7 @@ func (s *PGMemoryStore) GetDocument(ctx context.Context, agentID, userID, path s
 			"SELECT content FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL"+tc,
 			append([]any{aid, path}, tcArgs...)...).Scan(&content)
 	} else {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 4)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
 		if tcErr != nil {
 			return "", tcErr
 		}
@@ -112,7 +112,7 @@ func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, pat
 	var res sql.Result
 	var err error
 	if userID == "" {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 3)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return tcErr
 		}
@@ -120,7 +120,7 @@ func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, pat
 			"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL"+tc,
 			append([]any{aid, path}, tcArgs...)...)
 	} else {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 4)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
 		if tcErr != nil {
 			return tcErr
 		}
@@ -144,7 +144,7 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 	var rows *sql.Rows
 	var err error
 	if userID == "" {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 2)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 2)
 		if tcErr != nil {
 			return nil, tcErr
 		}
@@ -152,7 +152,7 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 			"SELECT path, hash, user_id, updated_at FROM memory_documents WHERE agent_id = $1 AND user_id IS NULL"+tc,
 			append([]any{aid}, tcArgs...)...)
 	} else {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 3)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return nil, tcErr
 		}
@@ -199,7 +199,7 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 	// Get document ID
 	var docID uuid.UUID
 	if userID == "" {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 3)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return tcErr
 		}
@@ -207,7 +207,7 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 			"SELECT id FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL"+tc,
 			append([]any{aid, path}, tcArgs...)...).Scan(&docID)
 	} else {
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 4)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
 		if tcErr != nil {
 			return tcErr
 		}

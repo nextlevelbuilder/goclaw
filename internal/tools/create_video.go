@@ -59,6 +59,10 @@ func (t *CreateVideoTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Aspect ratio: '16:9' (default) or '9:16'.",
 			},
+			"filename_hint": map[string]any{
+				"type":        "string",
+				"description": "Short descriptive filename (no extension). Example: 'cat-playing-piano', 'product-demo'.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -69,6 +73,7 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 	if prompt == "" {
 		return ErrorResult("prompt is required")
 	}
+	filenameHint, _ := args["filename_hint"].(string)
 
 	// Parse and enforce duration. Veo supports 4, 6, or 8 seconds.
 	duration := 8
@@ -122,7 +127,7 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 	if err := os.MkdirAll(dateDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create output directory: %v", err))
 	}
-	videoPath := filepath.Join(dateDir, fmt.Sprintf("goclaw_gen_%d.mp4", time.Now().UnixNano()))
+	videoPath := filepath.Join(dateDir, mediaFileName(ctx, "video", filenameHint, "mp4"))
 	if err := os.WriteFile(videoPath, chainResult.Data, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save generated video: %v", err))
 	}

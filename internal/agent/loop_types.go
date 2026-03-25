@@ -160,10 +160,11 @@ type AgentEvent struct {
 	TeamTaskID    string `json:"teamTaskId,omitempty"`
 	ParentAgentID string `json:"parentAgentId,omitempty"`
 
-	// Routing context (helps WS clients filter by user/channel)
-	UserID  string `json:"userId,omitempty"`
-	Channel string `json:"channel,omitempty"`
-	ChatID  string `json:"chatId,omitempty"`
+	// Routing context (helps WS clients filter by user/channel/session)
+	UserID     string `json:"userId,omitempty"`
+	Channel    string `json:"channel,omitempty"`
+	ChatID     string `json:"chatId,omitempty"`
+	SessionKey string `json:"sessionKey,omitempty"`
 
 	// TenantID scopes this event to a specific tenant for filtering (not serialized).
 	TenantID uuid.UUID `json:"-"`
@@ -435,4 +436,45 @@ type MediaResult struct {
 	ContentType string `json:"content_type,omitempty"` // MIME type
 	Size        int64  `json:"size,omitempty"`          // file size in bytes
 	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
+}
+
+// runState encapsulates all mutable state for a single runLoop execution.
+// Grouping these fields enables extracting loop sub-operations into methods
+// on *runState without passing 20+ individual variables.
+type runState struct {
+	// Loop control
+	loopDetector toolLoopState
+	totalUsage   providers.Usage
+	iteration    int
+	totalToolCalls int
+
+	// Output accumulators
+	finalContent   string
+	finalThinking  string
+	asyncToolCalls []string    // async spawn tool names for fallback
+	mediaResults   []MediaResult
+	deliverables   []string   // tool output content for team task results
+	pendingMsgs    []providers.Message
+
+	// Event state
+	blockReplies   int
+	lastBlockReply string
+
+	// Crash safety
+	checkpointFlushedMsgs int
+
+	// Mid-loop compaction
+	midLoopCompacted bool
+
+	// Bootstrap detection
+	bootstrapWriteDetected bool
+
+	// Team task orphan detection
+	teamTaskCreates int
+	teamTaskSpawns  int
+
+	// Skill evolution nudge state
+	skillNudge70Sent    bool
+	skillNudge90Sent    bool
+	skillPostscriptSent bool
 }

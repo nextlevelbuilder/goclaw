@@ -198,7 +198,7 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 	if manifest != nil && !manifest.IsEmpty() {
 		ok, missing := skills.CheckSkillDeps(manifest)
 		if !ok {
-			_ = t.skills.StoreMissingDeps(id, missing)
+			_ = t.skills.StoreMissingDeps(ctx, id, missing)
 			depsWarning = skills.FormatMissing(missing)
 		}
 	}

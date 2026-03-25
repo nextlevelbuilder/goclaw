@@ -35,7 +35,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 	var args []any
 	if store.IsSharedKG(ctx) {
 		// fixed params: $1=startID, $2=aid; tenant at $3 (if needed); maxDepth last
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 3)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return nil, tcErr
 		}
@@ -80,7 +80,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		args = append(args, maxDepth)
 	} else {
 		// fixed params: $1=startID, $2=aid, $3=userID; tenant at $4 (if needed); maxDepth last
-		tc, tcArgs, tcErr := tenantClauseN(ctx, 4)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
 		if tcErr != nil {
 			return nil, tcErr
 		}

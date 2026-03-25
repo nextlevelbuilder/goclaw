@@ -61,7 +61,7 @@ func (s *PGProviderStore) CreateProvider(ctx context.Context, p *store.LLMProvid
 }
 
 func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store.LLMProviderData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store
 }
 
 func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*store.LLMProviderData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*
 }
 
 func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProviderData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 1)
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (s *PGProviderStore) UpdateProvider(ctx context.Context, id uuid.UUID, upda
 }
 
 func (s *PGProviderStore) DeleteProvider(ctx context.Context, id uuid.UUID) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return err
 	}

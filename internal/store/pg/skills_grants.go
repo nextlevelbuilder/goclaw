@@ -44,7 +44,7 @@ func (s *PGSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uuid.U
 // RevokeFromAgent revokes a skill grant from an agent.
 // Auto-demotes visibility from 'internal' back to 'private' when no agent grants remain.
 func (s *PGSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uuid.UUID) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (s *PGSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uui
 
 // ListAgentGrants returns all skill grants for an agent.
 func (s *PGSkillStore) ListAgentGrants(ctx context.Context, agentID uuid.UUID) ([]SkillGrantInfo, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (s *PGSkillStore) GrantToUser(ctx context.Context, skillID uuid.UUID, userI
 
 // RevokeFromUser revokes a skill grant from a user.
 func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, userID string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, us
 // System skills (is_system=true) are always visible regardless of tenant.
 func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.SkillInfo, error) {
 	// tenant filter: system skills bypass it, tenant-owned skills are filtered
-	tc, tcArgs, err := tenantClauseN(ctx, 3)
+	tc, tcArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ type SkillWithGrantStatus struct {
 
 // ListWithGrantStatus returns all active skills with grant status for a specific agent.
 func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]SkillWithGrantStatus, error) {
-	tc, tcArgs, err := tenantClauseN(ctx, 2)
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
