@@ -7,8 +7,10 @@ import { SystemNotification } from "@/components/chat/system-notification";
 import { TeamActivityPanel } from "@/components/chat/team-activity-panel";
 import { ToolCallCard } from "@/components/chat/tool-call-card";
 import { ThinkingBlock } from "@/components/chat/thinking-block";
+import { ChatImageGalleryProvider } from "@/components/chat/chat-image-gallery-context";
 import { useAutoScroll } from "@/hooks/use-auto-scroll";
 import type { ChatMessage, ToolStreamEntry, RunActivity, ActiveTeamTask } from "@/types/chat";
+import type { LightboxImage } from "@/components/shared/image-lightbox";
 
 interface ChatThreadProps {
   messages: ChatMessage[];
@@ -22,6 +24,7 @@ interface ChatThreadProps {
   isBusy: boolean;
   loading?: boolean;
   scrollTrigger?: number;
+  onToggleTaskPanel?: () => void;
 }
 
 /** Check if a message is tool-only (no user-visible text content) */
@@ -73,7 +76,7 @@ function buildDisplayItems(messages: ChatMessage[]): DisplayItem[] {
 
 export const ChatThread = memo(function ChatThread({
   messages, streamText, thinkingText, toolStream, blockReplies,
-  activity, teamTasks, isRunning, isBusy, loading, scrollTrigger = 0,
+  activity, teamTasks, isRunning, isBusy, loading, scrollTrigger = 0, onToggleTaskPanel,
 }: ChatThreadProps) {
   const { t } = useTranslation("chat");
   const { ref, onScroll } = useAutoScroll<HTMLDivElement>(
@@ -83,6 +86,42 @@ export const ChatThread = memo(function ChatThread({
   );
 
   const displayItems = useMemo(() => buildDisplayItems(messages), [messages]);
+
+  // Collect all images from all messages for conversation-wide gallery.
+  // Sources: mediaItems (attached files) + markdown inline images ![alt](src).
+  const allImages = useMemo<LightboxImage[]>(() => {
+    const seen = new Set<string>();
+    const imgs: LightboxImage[] = [];
+    const add = (src: string, alt?: string, fileName?: string, size?: number) => {
+      const key = src.split("?")[0] ?? src; // dedupe by path without query params
+      if (seen.has(key)) return;
+      seen.add(key);
+      imgs.push({ src, alt, fileName, size });
+    };
+    for (const msg of messages) {
+      // From mediaItems (attached files)
+      if (msg.mediaItems) {
+        for (const item of msg.mediaItems) {
+          if (item.kind === "image") add(item.path, item.fileName ?? "", item.fileName, item.size);
+        }
+      }
+      // From markdown inline images: ![alt](src)
+      if (msg.content) {
+        const re = /!\[([^\]]*)\]\(([^)]+)\)/g;
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(msg.content)) !== null) {
+          const alt = match[1] ?? "";
+          let src = match[2] ?? "";
+          // Resolve relative file paths to API URL
+          if (src && !src.startsWith("http") && !src.startsWith("/v1/files/")) {
+            src = `/v1/files/${encodeURIComponent(src)}`;
+          }
+          if (src) add(src, alt, alt || (src.split("/").pop() ?? "image"));
+        }
+      }
+    }
+    return imgs;
+  }, [messages]);
 
   if (messages.length === 0 && !isBusy) {
     if (loading) {
@@ -101,39 +140,41 @@ export const ChatThread = memo(function ChatThread({
   }
 
   return (
-    <div
-      ref={ref}
-      onScroll={onScroll}
-      className="flex-1 overflow-y-auto overscroll-contain px-4 py-4"
-      style={{
-        backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
-      }}
-    >
-      <div className="mx-auto max-w-3xl space-y-3">
-        {displayItems.map((item) => {
-          switch (item.kind) {
-            case "notification":
-              return <SystemNotification key={`notif-${item.idx}`} message={item.msg} />;
-            case "message":
-              return <MessageBubble key={`msg-${item.idx}`} message={item.msg} />;
-            case "merged-tools":
-              return <MergedToolGroup key={`tools-${item.idx}`} msgs={item.msgs} />;
-          }
-        })}
+    <ChatImageGalleryProvider images={allImages}>
+      <div
+        ref={ref}
+        onScroll={onScroll}
+        className="flex-1 overflow-y-auto overscroll-contain px-4 py-4"
+        style={{
+          backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      >
+        <div className="mx-auto max-w-3xl space-y-3">
+          {displayItems.map((item) => {
+            switch (item.kind) {
+              case "notification":
+                return <SystemNotification key={`notif-${item.idx}`} message={item.msg} />;
+              case "message":
+                return <MessageBubble key={`msg-${item.idx}`} message={item.msg} />;
+              case "merged-tools":
+                return <MergedToolGroup key={`tools-${item.idx}`} msgs={item.msgs} />;
+            }
+          })}
 
-        {teamTasks.length > 0 && <TeamActivityPanel tasks={teamTasks} />}
+          {teamTasks.length > 0 && <TeamActivityPanel tasks={teamTasks} onTogglePanel={onToggleTaskPanel} />}
 
-        <ActiveRunZone
-          isRunning={isRunning}
-          activity={activity}
-          thinkingText={thinkingText}
-          streamText={streamText}
-          toolStream={toolStream}
-          blockReplies={blockReplies}
-        />
+          <ActiveRunZone
+            isRunning={isRunning}
+            activity={activity}
+            thinkingText={thinkingText}
+            streamText={streamText}
+            toolStream={toolStream}
+            blockReplies={blockReplies}
+          />
+        </div>
       </div>
-    </div>
+    </ChatImageGalleryProvider>
   );
 });
 

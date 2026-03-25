@@ -61,7 +61,7 @@ func (s *PGSkillStore) Dirs() []string { return []string{s.baseDir} }
 func (s *PGSkillStore) ListSkills(ctx context.Context) []store.SkillInfo {
 	currentVer := s.version.Load()
 	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil && !store.IsCrossTenant(ctx) {
+	if tid == uuid.Nil {
 		tid = store.MasterTenantID
 	}
 
@@ -78,18 +78,10 @@ func (s *PGSkillStore) ListSkills(ctx context.Context) []store.SkillInfo {
 	// Returns active + archived + system skills. Archived skills are shown dimmed in the UI
 	// so admins can see missing deps and re-activate after installing them.
 	// Tenant filter: system skills visible globally, custom skills scoped to tenant.
-	var rows *sql.Rows
-	var err error
-	if store.IsCrossTenant(ctx) {
-		rows, err = s.db.QueryContext(ctx,
-			`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path
-			 FROM skills WHERE status IN ('active', 'archived') OR is_system = true ORDER BY name`)
-	} else {
-		rows, err = s.db.QueryContext(ctx,
-			`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path
-			 FROM skills WHERE (status IN ('active', 'archived') OR is_system = true) AND (is_system = true OR tenant_id = $1)
-			 ORDER BY name`, tid)
-	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, frontmatter, file_path
+		 FROM skills WHERE (status IN ('active', 'archived') OR is_system = true) AND (is_system = true OR tenant_id = $1)
+		 ORDER BY name`, tid)
 	if err != nil {
 		return nil
 	}
@@ -130,16 +122,42 @@ func (s *PGSkillStore) ListSkills(ctx context.Context) []store.SkillInfo {
 	return result
 }
 
-// ListAllSkills returns all enabled skills regardless of status (for admin operations like rescan-deps).
+// ListAllSkills returns system skills + custom skills for the given tenant (for admin operations like rescan-deps).
 // Disabled skills are excluded — no point scanning or updating them.
 func (s *PGSkillStore) ListAllSkills(ctx context.Context) []store.SkillInfo {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		tid = store.MasterTenantID
+	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path FROM skills WHERE enabled = true AND status != 'deleted' ORDER BY name`)
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path
+		 FROM skills WHERE enabled = true AND status != 'deleted' AND (is_system = true OR tenant_id = $1)
+		 ORDER BY name`, tid)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 
+	return s.scanSkillInfoList(rows)
+}
+
+// ListAllSystemSkills returns only system skills (for startup dependency scanning).
+// No tenant filter — system skills belong to MasterTenantID and are globally visible.
+func (s *PGSkillStore) ListAllSystemSkills(ctx context.Context) []store.SkillInfo {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, slug, description, visibility, tags, version, is_system, status, enabled, deps, file_path
+		 FROM skills WHERE is_system = true AND enabled = true AND status != 'deleted'
+		 ORDER BY name`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	return s.scanSkillInfoList(rows)
+}
+
+// scanSkillInfoList scans rows into a []SkillInfo slice. Shared by list methods.
+func (s *PGSkillStore) scanSkillInfoList(rows *sql.Rows) []store.SkillInfo {
 	var result []store.SkillInfo
 	for rows.Next() {
 		var id uuid.UUID
@@ -163,13 +181,14 @@ func (s *PGSkillStore) ListAllSkills(ctx context.Context) []store.SkillInfo {
 		result = append(result, info)
 	}
 	if err := rows.Err(); err != nil {
-		slog.Warn("ListAllSkills: rows iteration error", "error", err)
+		slog.Warn("scanSkillInfoList: rows iteration error", "error", err)
 	}
 	return result
 }
 
 // StoreMissingDeps persists the missing_deps list for a skill into the deps JSONB column.
-func (s *PGSkillStore) StoreMissingDeps(id uuid.UUID, missing []string) error {
+// Only updates system skills unscoped; custom skills require tenant match.
+func (s *PGSkillStore) StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error {
 	if missing == nil {
 		missing = []string{}
 	}
@@ -177,8 +196,10 @@ func (s *PGSkillStore) StoreMissingDeps(id uuid.UUID, missing []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(
-		`UPDATE skills SET deps = $1, updated_at = NOW() WHERE id = $2`,
+	// System skills can be updated without tenant; custom skills need tenant scope.
+	// Use is_system check to ensure cross-tenant safety for custom skills.
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE skills SET deps = $1, updated_at = NOW() WHERE id = $2 AND is_system = true`,
 		encoded, id,
 	)
 	if err == nil {

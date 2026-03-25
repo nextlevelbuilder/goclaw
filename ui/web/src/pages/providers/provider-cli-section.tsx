@@ -9,6 +9,7 @@ interface CLIAuthStatus {
   email?: string;
   subscription_type?: string;
   error?: string;
+  in_docker?: boolean;
 }
 
 export function CLISection({ open }: { open: boolean }) {
@@ -70,7 +71,11 @@ export function CLISection({ open }: { open: boolean }) {
             <summary className="cursor-pointer hover:text-foreground">{t("cli.switchAccount")}</summary>
             <div className="mt-1.5 space-y-1 rounded-md border bg-muted/50 px-3 py-2">
               <p>{t("cli.switchAccountInstructions")}</p>
-              <code className="block rounded bg-muted px-2 py-1 font-mono">claude auth logout && claude auth login</code>
+              <code className="block rounded bg-muted px-2 py-1 font-mono">
+                {cliAuth?.in_docker
+                  ? "docker compose exec goclaw claude auth logout && docker compose exec goclaw claude auth login"
+                  : "claude auth logout && claude auth login"}
+              </code>
               <p>{t("cli.switchAccountRecheck")} <RefreshCw className="inline h-3 w-3" /> {t("cli.switchAccountRecheckSuffix")}</p>
             </div>
           </details>
@@ -97,7 +102,7 @@ export function CLISection({ open }: { open: boolean }) {
             {t("cli.runOnServer")}
           </p>
           <code className="mt-1 block rounded bg-amber-100 px-2 py-1 text-xs font-mono dark:bg-amber-900 dark:text-amber-300">
-            claude auth login
+            {cliAuth.in_docker ? "docker compose exec goclaw claude auth login" : "claude auth login"}
           </code>
           {cliAuth.error && (
             <p className="mt-1 text-xs text-amber-500">{cliAuth.error}</p>

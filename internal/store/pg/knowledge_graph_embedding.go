@@ -19,7 +19,7 @@ func (s *PGKnowledgeGraphStore) BackfillKGEmbeddings(ctx context.Context) (int, 
 	total := 0
 
 	// $1=batchSize (LIMIT), tenant at $2 if not cross-tenant
-	tc, tcArgs, tcErr := tenantClauseN(ctx, 2)
+	tc, tcArgs, _, tcErr := scopeClause(ctx, 2)
 	if tcErr != nil {
 		return 0, tcErr
 	}

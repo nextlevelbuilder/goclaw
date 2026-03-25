@@ -33,7 +33,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		if pgSkills, ok := stores.Skills.(*pg.PGSkillStore); ok {
 			dirs := pgSkills.Dirs()
 			if len(dirs) > 0 {
-				skillsH = httpapi.NewSkillsHandler(pgSkills, dirs[0], dataDir, bundledSkillsDir, msgBus)
+				skillsH = httpapi.NewSkillsHandler(pgSkills, dirs[0], dataDir, bundledSkillsDir, msgBus, stores.SkillTenantCfgs, stores.Tenants)
 			}
 		}
 	}
@@ -72,7 +72,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.BuiltinTools != nil {
-		builtinToolsH = httpapi.NewBuiltinToolsHandler(stores.BuiltinTools, stores.BuiltinToolTenantCfgs, msgBus)
+		builtinToolsH = httpapi.NewBuiltinToolsHandler(stores.BuiltinTools, stores.BuiltinToolTenantCfgs, stores.Tenants, msgBus)
 	}
 
 	if stores != nil && stores.PendingMessages != nil {

@@ -249,7 +249,7 @@ function ToolRow({
   const configHint = getConfigHint(tool);
   const editable = hasEditableSettings(tool);
   const deprecated = isDeprecated(tool);
-  const hasTenantScope = !!tenantId && tenantId !== "00000000-0000-0000-0000-000000000000";
+  const hasTenantScope = !!tenantId && tenantId !== "0193a5b0-7000-7000-8000-000000000001";
   const hasOverride = tool.tenant_enabled !== null && tool.tenant_enabled !== undefined;
 
   return (

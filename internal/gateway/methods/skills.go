@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -20,11 +21,12 @@ type skillOwnerGetter interface {
 
 // SkillsMethods handles skills.list, skills.get, skills.update.
 type SkillsMethods struct {
-	store store.SkillStore
+	store          store.SkillStore
+	tenantCfgStore store.SkillTenantConfigStore
 }
 
-func NewSkillsMethods(s store.SkillStore) *SkillsMethods {
-	return &SkillsMethods{store: s}
+func NewSkillsMethods(s store.SkillStore, tenantCfg store.SkillTenantConfigStore) *SkillsMethods {
+	return &SkillsMethods{store: s, tenantCfgStore: tenantCfg}
 }
 
 func (m *SkillsMethods) Register(router *gateway.MethodRouter) {
@@ -66,6 +68,28 @@ func (m *SkillsMethods) handleList(ctx context.Context, client *gateway.Client, 
 			entry["missing_deps"] = s.MissingDeps
 		}
 		result = append(result, entry)
+	}
+
+	// Merge per-tenant overrides when tenant-scoped
+	tid := store.TenantIDFromContext(ctx)
+	if tid != uuid.Nil && m.tenantCfgStore != nil {
+		overrides, err := m.tenantCfgStore.ListAll(ctx, tid)
+		if err != nil {
+			slog.Warn("skill tenant config list failed", "tenant", tid, "error", err)
+		}
+		if err == nil && len(overrides) > 0 {
+			for i, entry := range result {
+				idStr, _ := entry["id"].(string)
+				if idStr == "" {
+					continue
+				}
+				if skID, err := uuid.Parse(idStr); err == nil {
+					if enabled, ok := overrides[skID]; ok {
+						result[i]["tenant_enabled"] = enabled
+					}
+				}
+			}
+		}
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

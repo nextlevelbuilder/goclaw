@@ -31,7 +31,7 @@ export function Topbar() {
   const { status: embStatus } = useEmbeddingStatus();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const role = useAuthStore((s) => s.role);
-  const isAdmin = role === "admin";
+  const isAdmin = role === "admin" || role === "owner";
 
   const handleSidebarToggle = isMobile
     ? () => setMobileSidebarOpen(true)
@@ -122,7 +122,7 @@ function UserMenu() {
   const { t: tt } = useTranslation("tenants");
   const logout = useAuthStore((s) => s.logout);
   const userId = useAuthStore((s) => s.userId);
-  const { currentTenant, currentTenantName, tenants, isCrossTenant, isMultiTenant, currentTenantId } = useTenants();
+  const { currentTenant, currentTenantName, tenants, isOwner, isMultiTenant, currentTenantId } = useTenants();
   const [open, setOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
@@ -131,9 +131,9 @@ function UserMenu() {
   const tenantLabel = currentTenant?.name || currentTenantName || "";
 
   const handleSwitchTenant = (_tenantId: string, slug: string) => {
-    // Cross-tenant admin: narrow scope to specific tenant
-    // Non-cross-tenant: use tenant_hint for pairing
-    if (isCrossTenant) {
+    // Owner: narrow scope to specific tenant
+    // Non-owner: use tenant_hint for pairing
+    if (isOwner) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.TENANT_ID, slug);
     } else {
       localStorage.setItem(LOCAL_STORAGE_KEYS.TENANT_HINT, slug);

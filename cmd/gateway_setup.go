@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -95,6 +96,18 @@ func setupToolRegistry(
 		} else {
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
 			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+		}
+		if cfg.Tools.Browser.ActionTimeoutMs > 0 {
+			opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
+		}
+		if cfg.Tools.Browser.IdleTimeoutMs > 0 {
+			opts = append(opts, browser.WithIdleTimeout(time.Duration(cfg.Tools.Browser.IdleTimeoutMs)*time.Millisecond))
+		} else if cfg.Tools.Browser.IdleTimeoutMs < 0 {
+			// Explicitly disable idle reaper with negative value
+			opts = append(opts, browser.WithIdleTimeout(0))
+		}
+		if cfg.Tools.Browser.MaxPages > 0 {
+			opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
 		}
 		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
@@ -492,7 +505,7 @@ func setupSkillsSystem(
 	skillSearchTool := tools.NewSkillSearchTool(skillsLoader)
 	toolsReg.Register(skillSearchTool)
 	toolsReg.Register(tools.NewUseSkillTool())
-	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(store.WithCrossTenant(context.Background()))))
+	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(context.Background())))
 
 	// Wire skills-store directory into filesystem loader so agents
 	// can discover uploaded skills in their system prompt and BM25 search index.

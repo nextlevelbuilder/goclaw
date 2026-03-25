@@ -166,9 +166,31 @@ func wireExtras(
 		OnEvent: func(event agent.AgentEvent) {
 			// Sign /v1/files/ and /v1/media/ URLs in content before delivery.
 			// Sessions store clean paths; signing happens only at delivery time.
-			if m, ok := event.Payload.(map[string]string); ok {
+			secret := httpapi.FileSigningKey()
+			switch m := event.Payload.(type) {
+			case map[string]string:
 				if c, has := m["content"]; has && strings.Contains(c, "/v1/") {
-					m["content"] = httpapi.SignFileURLs(c, httpapi.FileSigningKey())
+					m["content"] = httpapi.SignFileURLs(c, secret)
+				}
+			case map[string]any:
+				// Sign /v1/ URLs in content text (run.completed payload is map[string]any).
+				if c, ok := m["content"].(string); ok && strings.Contains(c, "/v1/") {
+					m["content"] = httpapi.SignFileURLs(c, secret)
+				}
+				// Convert media local paths → signed /v1/files/basename?ft=hash
+				if rawMedia, ok := m["media"].([]agent.MediaResult); ok {
+					// Clone slice — the original is shared with RunResult.Media;
+					// mutating in-place corrupts paths for downstream consumers
+					// (announce queue, outbound channels) that expect local paths.
+					signed := make([]agent.MediaResult, len(rawMedia))
+					for i, mr := range rawMedia {
+						signed[i] = mr
+						basename := filepath.Base(mr.Path)
+						url := "/v1/files/" + basename
+						ft := httpapi.SignFileToken(url, secret, httpapi.FileTokenTTL)
+						signed[i].Path = url + "?ft=" + ft
+					}
+					m["media"] = signed
 				}
 			}
 			msgBus.Broadcast(bus.Event{
@@ -479,7 +501,8 @@ func wireExtras(
 			return
 		}
 		// Re-register from DB if provider still exists and is ACP type
-		p, err := stores.Providers.GetProviderByName(context.Background(), payload.Key)
+		provCtx := store.WithTenantID(context.Background(), event.TenantID)
+		p, err := stores.Providers.GetProviderByName(provCtx, payload.Key)
 		if err != nil {
 			// Provider was deleted or not found — already unregistered by handler
 			return

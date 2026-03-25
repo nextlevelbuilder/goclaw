@@ -34,6 +34,8 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	}
 	str("embedding.provider", &c.Agents.Defaults.Memory.EmbeddingProvider)
 	str("embedding.model", &c.Agents.Defaults.Memory.EmbeddingModel)
+	integer("embedding.max_chunk_len", &c.Agents.Defaults.Memory.MaxChunkLen)
+	integer("embedding.chunk_overlap", &c.Agents.Defaults.Memory.ChunkOverlap)
 
 	// Agent defaults
 	str("agent.default_provider", &c.Agents.Defaults.Provider)

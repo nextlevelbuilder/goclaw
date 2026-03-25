@@ -55,6 +55,9 @@ func (h *ToolsInvokeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Inject tenant, role, user, and locale into context for downstream stores/tools.
+	r = r.WithContext(enrichContext(r.Context(), r, auth))
+
 	var req toolsInvokeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
@@ -86,12 +89,9 @@ func (h *ToolsInvokeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Inject userID and agentID into context for interceptors (bootstrap, memory).
+	// Inject agentID into context for interceptors (bootstrap, memory).
+	// Note: userID, tenantID, role, locale already injected by enrichContext above.
 	ctx := r.Context()
-
-	if userID := extractUserID(r); userID != "" {
-		ctx = store.WithUserID(ctx, userID)
-	}
 
 	agentIDStr := req.AgentID
 	if agentIDStr == "" {

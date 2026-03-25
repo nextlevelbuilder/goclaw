@@ -17,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -35,6 +36,7 @@ func handleSubagentAnnounce(
 	channelMgr *channels.Manager,
 	msgBus *bus.MessageBus,
 	getAnnounceMu func(string) *sync.Mutex,
+	bgWg *sync.WaitGroup,
 ) bool {
 	if !(msg.Channel == tools.ChannelSystem && strings.HasPrefix(msg.SenderID, "subagent:")) {
 		return false
@@ -128,7 +130,10 @@ func handleSubagentAnnounce(
 	// Handle announce asynchronously with per-session serialization.
 	// The mutex ensures concurrent announces for the same session wait for
 	// each other, so each reads up-to-date session history.
+	bgWg.Add(1)
 	go func(sessionKey, origCh, chatID, senderID, label string, meta map[string]string, req agent.RunRequest) {
+		defer bgWg.Done()
+		defer safego.Recover(nil, "component", "subagent_announce", "session", sessionKey)
 		mu := getAnnounceMu(sessionKey)
 		mu.Lock()
 		defer mu.Unlock()
@@ -193,6 +198,7 @@ func handleTeammateMessage(
 	msgBus *bus.MessageBus,
 	postTurn tools.PostTurnProcessor,
 	taskRunSessions *sync.Map,
+	bgWg *sync.WaitGroup,
 ) bool {
 	if !(msg.Channel == tools.ChannelSystem && strings.HasPrefix(msg.SenderID, "teammate:")) {
 		return false
@@ -286,7 +292,10 @@ func handleTeammateMessage(
 		LinkedTraceID:   linkedTraceID,
 	})
 
+	bgWg.Add(1)
 	go func(origCh, origChatID, senderID, taskID string, meta, inMeta map[string]string) {
+		defer bgWg.Done()
+		defer safego.Recover(nil, "component", "teammate_message", "task_id", taskID)
 		// Lock renewal heartbeat: extend task lock every 10 min to prevent
 		// the ticker from recovering long-running tasks as stale.
 		var lockStop chan struct{}

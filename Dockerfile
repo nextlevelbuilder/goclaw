@@ -103,15 +103,17 @@ RUN chmod +x /app/docker-entrypoint.sh && \
 # Create data directories.
 # .runtime has split ownership: root owns the dir (so pkg-helper can write apk-packages),
 # while pip/npm subdirs are goclaw-owned (runtime installs by the app process).
+# Symlink .claude → data volume so Claude CLI credentials persist across container recreates.
 RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
-        /app/data/.runtime/pip-cache /app/skills /app/tsnet-state /app/.goclaw \
+        /app/data/.runtime/pip-cache /app/data/.claude /app/skills /app/tsnet-state /app/.goclaw \
+    && ln -s /app/data/.claude /app/.claude \
     && touch /app/data/.runtime/apk-packages \
     && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw \
     && chown goclaw:goclaw /app/bundled-skills /app/data \
     && chown root:goclaw /app/data/.runtime /app/data/.runtime/apk-packages \
     && chmod 0750 /app/data/.runtime \
     && chmod 0640 /app/data/.runtime/apk-packages \
-    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache
+    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.claude
 
 # Default environment
 ENV GOCLAW_CONFIG=/app/config.json \

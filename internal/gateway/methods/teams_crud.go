@@ -195,6 +195,68 @@ func (m *TeamsMethods) handleTaskList(ctx context.Context, client *gateway.Clien
 	}))
 }
 
+// --- Active Tasks by Session ---
+
+func (m *TeamsMethods) handleTaskActiveBySession(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	if m.teamStore == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgTeamsNotConfigured)))
+		return
+	}
+
+	var params struct {
+		SessionKey string `json:"sessionKey"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+		return
+	}
+	if params.SessionKey == "" {
+		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"tasks": []any{}}))
+		return
+	}
+
+	tasks, err := m.teamStore.ListActiveTasksByChatID(ctx, params.SessionKey)
+	if err != nil {
+		slog.Warn("teams.tasks.active-by-session failed", "session_key", params.SessionKey, "error", err)
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
+		return
+	}
+
+	// Map to lightweight ActiveTeamTask shape for the sidebar
+	type activeTask struct {
+		TaskID           string `json:"taskId"`
+		TaskNumber       int    `json:"taskNumber"`
+		Subject          string `json:"subject"`
+		Status           string `json:"status"`
+		OwnerAgentKey    string `json:"ownerAgentKey,omitempty"`
+		OwnerDisplayName string `json:"ownerDisplayName,omitempty"`
+		ProgressPercent  int    `json:"progressPercent,omitempty"`
+		ProgressStep     string `json:"progressStep,omitempty"`
+		CommentCount     int    `json:"commentCount,omitempty"`
+		AttachmentCount  int    `json:"attachmentCount,omitempty"`
+	}
+
+	result := make([]activeTask, 0, len(tasks))
+	for _, t := range tasks {
+		result = append(result, activeTask{
+			TaskID:          t.ID.String(),
+			TaskNumber:      t.TaskNumber,
+			Subject:         t.Subject,
+			Status:          t.Status,
+			OwnerAgentKey:   t.OwnerAgentKey,
+			ProgressPercent: t.ProgressPercent,
+			ProgressStep:    t.ProgressStep,
+			CommentCount:    t.CommentCount,
+			AttachmentCount: t.AttachmentCount,
+		})
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"tasks": result,
+	}))
+}
+
 // --- Update (settings) ---
 
 type teamsUpdateParams struct {

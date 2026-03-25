@@ -34,6 +34,8 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   const toolStreamRef = useRef<ToolStreamEntry[]>([]);
   const agentIdRef = useRef(agentId);
   agentIdRef.current = agentId;
+  const sessionKeyRef = useRef(sessionKey);
+  sessionKeyRef.current = sessionKey;
   const activityRef = useRef<RunActivity | null>(null);
   const blockRepliesRef = useRef<ChatMessage[]>([]);
   const rafPendingRef = useRef(false);
@@ -137,12 +139,33 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     }
   }, [ws, agentId, sessionKey]);
 
-  // Load history when session changes
+  // Load history, restore running state and active tasks when session changes.
+  // Cancelled flag prevents stale RPC responses from overwriting state on rapid switches.
   useEffect(() => {
+    let cancelled = false;
     if (sessionKey) {
       loadHistory();
+      // Restore session running state
+      ws.call<{ isRunning?: boolean; activity?: RunActivity }>(Methods.CHAT_SESSION_STATUS, { sessionKey })
+        .then((res) => {
+          if (cancelled) return;
+          if (res.isRunning) setIsRunning(true);
+          if (res.activity) {
+            setActivity(res.activity);
+            activityRef.current = res.activity;
+          }
+        })
+        .catch(() => {});
+      // Restore active team tasks (teams module may not be configured)
+      ws.call<{ tasks?: ActiveTeamTask[] }>(Methods.TEAMS_TASK_ACTIVE_BY_SESSION, { sessionKey })
+        .then((res) => {
+          if (cancelled) return;
+          if (res.tasks && res.tasks.length > 0) setTeamTasks(res.tasks);
+        })
+        .catch(() => {});
     }
-  }, [sessionKey, loadHistory]);
+    return () => { cancelled = true; };
+  }, [sessionKey, loadHistory, ws]);
 
   // Called before sending a message so the event handler knows to capture run.started
   const expectRun = useCallback(() => {
@@ -154,6 +177,15 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     (payload: unknown) => {
       const event = payload as AgentEventPayload;
       if (!event) return;
+
+      // Only process events from WS channel targeting the active session.
+      // Delegations/announces (runKind set) are allowed regardless of channel.
+      if (event.channel && event.channel !== "ws" && !event.runKind) {
+        return;
+      }
+      if (event.sessionKey && event.sessionKey !== sessionKeyRef.current) {
+        return;
+      }
 
       // Capture run.started when we are expecting a run for this agent,
       // OR when an announce run starts (leader summarising team results).
@@ -412,6 +444,18 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           return prev.filter((t) => t.taskId !== event.task_id);
         }
 
+        // Increment counters for comment/attachment events
+        if (eventName === "team.task.commented" && existing) {
+          return prev.map((t) =>
+            t.taskId === event.task_id ? { ...t, commentCount: (t.commentCount ?? 0) + 1 } : t,
+          );
+        }
+        if (eventName === "team.task.attachment_added" && existing) {
+          return prev.map((t) =>
+            t.taskId === event.task_id ? { ...t, attachmentCount: (t.attachmentCount ?? 0) + 1 } : t,
+          );
+        }
+
         return prev;
       });
 
@@ -419,7 +463,9 @@ export function useChatMessages(sessionKey: string, agentId: string) {
       if (
         eventName === "team.task.dispatched" ||
         eventName === "team.task.completed" ||
-        eventName === "team.task.failed"
+        eventName === "team.task.failed" ||
+        eventName === "team.task.commented" ||
+        eventName === "team.task.attachment_added"
       ) {
         let icon = "📋";
         let text = "";
@@ -429,6 +475,12 @@ export function useChatMessages(sessionKey: string, agentId: string) {
         } else if (eventName === "team.task.failed") {
           icon = "❌";
           text = `Task #${event.task_number} "${event.subject}" failed${event.reason ? ": " + event.reason : ""}`;
+        } else if (eventName === "team.task.commented") {
+          icon = "💬";
+          text = `Comment on #${event.task_number} "${event.subject}"`;
+        } else if (eventName === "team.task.attachment_added") {
+          icon = "📎";
+          text = `File attached to #${event.task_number} "${event.subject}"`;
         } else {
           icon = "📋";
           text = `Task #${event.task_number} "${event.subject}" → ${event.owner_display_name || event.owner_agent_key}`;
@@ -456,6 +508,8 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   const onTaskCancelled = useMemo(() => handleTeamTaskEvent("team.task.cancelled"), [handleTeamTaskEvent]);
   const onTaskProgress = useMemo(() => handleTeamTaskEvent("team.task.progress"), [handleTeamTaskEvent]);
   const onTaskAssigned = useMemo(() => handleTeamTaskEvent("team.task.assigned"), [handleTeamTaskEvent]);
+  const onTaskCommented = useMemo(() => handleTeamTaskEvent("team.task.commented"), [handleTeamTaskEvent]);
+  const onTaskAttached = useMemo(() => handleTeamTaskEvent("team.task.attachment_added"), [handleTeamTaskEvent]);
 
   useWsEvent(Events.TEAM_TASK_DISPATCHED, onTaskDispatched);
   useWsEvent(Events.TEAM_TASK_COMPLETED, onTaskCompleted);
@@ -463,6 +517,8 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   useWsEvent(Events.TEAM_TASK_CANCELLED, onTaskCancelled);
   useWsEvent(Events.TEAM_TASK_PROGRESS, onTaskProgress);
   useWsEvent(Events.TEAM_TASK_ASSIGNED, onTaskAssigned);
+  useWsEvent(Events.TEAM_TASK_COMMENTED, onTaskCommented);
+  useWsEvent(Events.TEAM_TASK_ATTACHMENT_ADDED, onTaskAttached);
 
   // Leader processing: backend emits when announce queue drains (before announce run starts).
   const handleLeaderProcessing = useCallback((payload: unknown) => {

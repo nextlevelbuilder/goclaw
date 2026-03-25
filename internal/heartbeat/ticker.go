@@ -153,10 +153,9 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	agentIDStr := hb.AgentID.String()
 
 	// Resolve agent to get tenant scope + display key.
-	// System-level lookup (cross-tenant) since ticker is a global scheduler.
-	sysCtx := store.WithCrossTenant(context.Background())
+	// Unscoped lookup since ticker is a global scheduler.
 	agentKey := agentIDStr
-	ag, agErr := t.agents.GetByID(sysCtx, hb.AgentID)
+	ag, agErr := t.agents.GetByIDUnscoped(context.Background(), hb.AgentID)
 	if agErr != nil {
 		slog.Warn("heartbeat.agent_not_found", "agent_id", agentIDStr, "error", agErr)
 		return

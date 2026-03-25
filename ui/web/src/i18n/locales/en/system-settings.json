@@ -16,11 +16,16 @@
     "modelTip": "Embedding model (e.g. text-embedding-3-small). Must support /embeddings endpoint.",
     "providerPlaceholder": "Select provider",
     "modelPlaceholder": "text-embedding-3-small",
-    "supportedProviders": "Verified 1536d: OpenAI (text-embedding-3-small), OpenRouter (openai/*), Mistral (codestral-embed). Other providers may work if they support /embeddings with 1536d output.",
+    "supportedProviders": "Verified 1536d: OpenAI (text-embedding-3-small/large), Gemini (gemini-embedding-001 + dimensions), Mistral (codestral-embed), Cohere (embed-v4), DashScope (text-embedding-v3 + dimensions). Configure dimensions in provider settings for models with native dims > 1536.",
     "verify": "Verify Embedding",
     "verifyRequired": "Verify the embedding model before saving.",
     "verifyFailed": "Verification failed",
-    "dimensions": "{{count}} dimensions"
+    "dimensions": "{{count}} dimensions",
+    "dimensionsMismatch": "{{count}} dimensions — does not match required 1536",
+    "maxChunkLen": "Max Chunk Length",
+    "maxChunkLenHint": "Maximum characters per memory chunk before splitting.",
+    "chunkOverlap": "Chunk Overlap",
+    "chunkOverlapHint": "Overlap characters between consecutive chunks for context continuity."
   },
   "ux": {
     "title": "UX Behavior",

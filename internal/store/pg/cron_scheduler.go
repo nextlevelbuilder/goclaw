@@ -33,7 +33,7 @@ func (s *PGCronStore) GetDueJobs(now time.Time) []store.CronJob {
 
 // refreshJobCache reloads all enabled jobs from DB. Must be called with mu held.
 func (s *PGCronStore) refreshJobCache() {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.baseCtx,
 		`SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE enabled = true`)
@@ -65,7 +65,7 @@ func (s *PGCronStore) InvalidateCache() {
 // This happens when the gateway was stopped/crashed while a job was executing,
 // or when the previously computed next_run_at was consumed but never recomputed.
 func (s *PGCronStore) recomputeStaleJobs() {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.baseCtx,
 		`SELECT id, schedule_kind, cron_expression, run_at, timezone, interval_ms
 		 FROM cron_jobs WHERE enabled = true AND next_run_at IS NULL`)
 	if err != nil {
@@ -105,12 +105,12 @@ func (s *PGCronStore) recomputeStaleJobs() {
 		next := computeNextRun(&schedule, now, s.defaultTZ)
 		if next == nil {
 			if scheduleKind == "at" {
-				s.db.Exec("UPDATE cron_jobs SET enabled = false, updated_at = $1 WHERE id = $2", now, id)
+				s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET enabled = false, updated_at = $1 WHERE id = $2", now, id)
 			}
 			continue
 		}
 
-		s.db.Exec("UPDATE cron_jobs SET next_run_at = $1, updated_at = $2 WHERE id = $3", *next, now, id)
+		s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = $1, updated_at = $2 WHERE id = $3", *next, now, id)
 		fixed++
 	}
 
@@ -149,7 +149,7 @@ func (s *PGCronStore) checkAndRunDueJobs() {
 	// Clear next_run for all due jobs first to prevent duplicate fires
 	for _, job := range dueJobs {
 		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
-			s.db.Exec("UPDATE cron_jobs SET next_run_at = NULL WHERE id = $1", id)
+			s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = NULL WHERE id = $1", id)
 		}
 	}
 
@@ -222,7 +222,7 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 		if aid, aidErr := uuid.Parse(job.AgentID); aidErr == nil {
 			agentUUID = &aid
 		}
-		s.db.Exec(
+		s.db.ExecContext(s.baseCtx,
 			`INSERT INTO cron_run_logs (id, job_id, agent_id, status, error, summary, duration_ms, input_tokens, output_tokens, ran_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 			logID, id, agentUUID, status, lastError, summary, durationMS, inputTokens, outputTokens, now,
@@ -232,12 +232,12 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 	// Recompute next run or delete
 	if job.DeleteAfterRun {
 		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
-			s.db.Exec("DELETE FROM cron_jobs WHERE id = $1", id)
+			s.db.ExecContext(s.baseCtx, "DELETE FROM cron_jobs WHERE id = $1", id)
 		}
 	} else if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		schedule := job.Schedule
 		next := computeNextRun(&schedule, now, s.defaultTZ)
-		s.db.Exec(
+		s.db.ExecContext(s.baseCtx,
 			"UPDATE cron_jobs SET last_run_at = $1, last_status = $2, last_error = $3, next_run_at = $4, updated_at = $5 WHERE id = $6",
 			now, status, lastError, next, now, id,
 		)

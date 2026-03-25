@@ -87,6 +87,10 @@
   "agents.memory.embeddingModelTip": "Embedding model name. Leave empty to use the provider default.",
   "agents.memory.maxResults": "Max Results",
   "agents.memory.maxResultsTip": "Maximum number of memory entries returned per recall query.",
+  "agents.memory.maxChunkLen": "Max Chunk Length",
+  "agents.memory.maxChunkLenTip": "Maximum characters per memory chunk before splitting.",
+  "agents.memory.chunkOverlap": "Chunk Overlap",
+  "agents.memory.chunkOverlapTip": "Overlap characters between chunks for context continuity.",
   "agents.memory.minScore": "Min Score",
   "agents.memory.minScoreTip": "Minimum similarity score (0-1) for a memory entry to be included in results.",
 

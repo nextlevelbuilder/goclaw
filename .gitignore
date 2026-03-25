@@ -3,6 +3,7 @@ tests/integration/testdata/
 
 # Binary
 openclaw-go
+pkg-helper
 
 # IDE
 .idea/

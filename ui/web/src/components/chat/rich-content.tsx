@@ -177,7 +177,9 @@ function isMarkdownFile(name: string, mime: string): boolean {
   return /\.(md|mdx|markdown)$/i.test(name) || mime.startsWith("text/markdown");
 }
 
-function FileBlock({ name, mime, content }: { name: string; mime: string; content: string }) {
+function FileBlock({ name: rawName, mime, content }: { name: string; mime: string; content: string }) {
+  // Strip query params (e.g. ?ft=token) from filename for display and extension detection
+  const name = rawName.replace(/\?.*$/, "");
   const [open, setOpen] = useState(false);
 
   const handleDownload = useCallback(() => {
@@ -251,6 +253,55 @@ function VideoNoticeBadge({ content }: { content: string }) {
   );
 }
 
+// --- Media link dedup ---
+
+/** Extract basename from a markdown link/image URL, stripping query params. */
+function linkBasename(line: string): string | null {
+  const m = line.match(/\]\(([^)]+)\)/);
+  if (!m?.[1]) return null;
+  const url = m[1].split("?")[0] ?? "";
+  const slash = url.lastIndexOf("/");
+  return slash >= 0 ? url.slice(slash + 1) : url;
+}
+
+/**
+ * Remove duplicate media links from content. When the same file (by basename)
+ * appears in both the agent's body text and an appended ContentSuffix block,
+ * keep the first occurrence and drop later duplicates.
+ */
+function deduplicateMediaLinks(content: string): string {
+  const lines = content.split("\n");
+  // Pass 1: collect first occurrence index of each media basename (inline or standalone).
+  const firstSeen = new Map<string, number>();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (!line.includes("](/")) continue;
+    const base = linkBasename(line);
+    if (base && !firstSeen.has(base)) firstSeen.set(base, i);
+  }
+  // Pass 2: drop STANDALONE link/image lines whose basename appeared in an earlier line.
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const trimmed = line.trim();
+    const isStandaloneLink = (trimmed.startsWith("![") || trimmed.startsWith("[")) &&
+      trimmed.includes("](/") && trimmed.endsWith(")");
+    if (isStandaloneLink) {
+      const base = linkBasename(trimmed);
+      if (base) {
+        if (seen.has(base)) continue; // duplicate standalone — drop
+        seen.add(base);
+        // Also skip if this basename appeared inline in an earlier line
+        const first = firstSeen.get(base);
+        if (first !== undefined && first < i) continue;
+      }
+    }
+    result.push(line);
+  }
+  return result.join("\n");
+}
+
 // --- Main component ---
 
 interface RichContentProps {
@@ -259,12 +310,13 @@ interface RichContentProps {
 }
 
 export function RichContent({ content, role }: RichContentProps) {
-  const blocks = parseRichContent(content);
+  const cleaned = deduplicateMediaLinks(content);
+  const blocks = parseRichContent(cleaned);
 
   // If no special blocks found, render as plain markdown (fast path)
   const first = blocks[0];
   if (blocks.length === 1 && first?.type === "markdown") {
-    return <MarkdownRenderer content={content} className={role === "user" ? "text-sm" : ""} />;
+    return <MarkdownRenderer content={cleaned} className={role === "user" ? "text-sm" : ""} />;
   }
 
   return (

@@ -27,7 +27,7 @@ func (s *PGCronStore) RunJob(ctx context.Context, jobID string, force bool) (boo
 
 	// Mark job as running before execution
 	if id, parseErr := uuid.Parse(jobID); parseErr == nil {
-		s.db.Exec("UPDATE cron_jobs SET last_status = 'running', updated_at = $1 WHERE id = $2", time.Now(), id)
+		s.db.ExecContext(ctx, "UPDATE cron_jobs SET last_status = 'running', updated_at = $1 WHERE id = $2", time.Now(), id)
 	}
 	s.mu.Lock()
 	s.cacheLoaded = false

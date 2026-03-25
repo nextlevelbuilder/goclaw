@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Zap, Pencil, RefreshCw, Upload, Trash2, ScanSearch } from "lucide-react";
+import { Zap, Pencil, RefreshCw, Upload, Trash2, ScanSearch, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchInput } from "@/components/shared/search-input";
@@ -20,6 +21,9 @@ import { useRuntimes } from "./hooks/use-runtimes";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
+import { useTenants } from "@/hooks/use-tenants";
+
+const MASTER_TENANT_ID = "0193a5b0-7000-7000-8000-000000000001";
 
 const visibilityColor: Record<string, string> = {
   public: "default",
@@ -34,8 +38,11 @@ export function SkillsPage() {
   const {
     skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installSingleDep, toggleSkill,
+    setTenantConfig, deleteTenantConfig,
   } = useSkills();
   const { runtimes } = useRuntimes();
+  const { currentTenantId } = useTenants();
+  const hasTenantScope = !!currentTenantId && currentTenantId !== MASTER_TENANT_ID;
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && skills.length === 0);
   const [tab, setTab] = useState<Tab>("core");
@@ -286,13 +293,28 @@ export function SkillsPage() {
                       <div className="flex items-center justify-end gap-2">
                         {skill.id && (
                           <>
-                            <Switch
-                              size="sm"
-                              checked={skill.enabled !== false}
-                              disabled={toggling === skill.id}
-                              onCheckedChange={(checked) => handleToggle(skill, checked)}
-                              title={skill.enabled !== false ? t("toggle.disable") : t("toggle.enable")}
-                            />
+                            {hasTenantScope ? (
+                              <SkillTenantOverride
+                                skill={skill}
+                                toggling={toggling === skill.id}
+                                onSetTenantConfig={async (id, enabled) => {
+                                  setToggling(id);
+                                  try { await setTenantConfig(id, enabled); } finally { setToggling(null); }
+                                }}
+                                onDeleteTenantConfig={async (id) => {
+                                  setToggling(id);
+                                  try { await deleteTenantConfig(id); } finally { setToggling(null); }
+                                }}
+                              />
+                            ) : (
+                              <Switch
+                                size="sm"
+                                checked={skill.enabled !== false}
+                                disabled={toggling === skill.id}
+                                onCheckedChange={(checked) => handleToggle(skill, checked)}
+                                title={skill.enabled !== false ? t("toggle.disable") : t("toggle.enable")}
+                              />
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -369,6 +391,75 @@ export function SkillsPage() {
         onConfirm={handleDelete}
         loading={deleteLoading}
       />
+    </div>
+  );
+}
+
+function SkillTenantOverride({
+  skill,
+  toggling,
+  onSetTenantConfig,
+  onDeleteTenantConfig,
+}: {
+  skill: SkillInfo;
+  toggling: boolean;
+  onSetTenantConfig: (id: string, enabled: boolean) => Promise<void>;
+  onDeleteTenantConfig: (id: string) => Promise<void>;
+}) {
+  const { t } = useTranslation("skills");
+  const hasOverride = skill.tenant_enabled !== null && skill.tenant_enabled !== undefined;
+  const checked = hasOverride ? (skill.tenant_enabled ?? false) : (skill.enabled !== false);
+  const label = hasOverride
+    ? skill.tenant_enabled ? t("tenant.enabled") : t("tenant.disabled")
+    : t("tenant.default");
+  const badgeVariant = hasOverride
+    ? skill.tenant_enabled ? "default" : "secondary"
+    : "outline";
+
+  return (
+    <div className="flex items-center gap-1">
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant={badgeVariant as "default" | "secondary" | "outline"}
+              className="h-5 cursor-default px-1.5 text-[10px] leading-none"
+            >
+              {label}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <p className="text-xs">{t("tenant.overrideHint")}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <Switch
+        size="sm"
+        checked={checked}
+        disabled={toggling}
+        onCheckedChange={(val) => onSetTenantConfig(skill.id!, val)}
+        aria-label={t("tenant.overrideHint")}
+      />
+      {hasOverride && (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={toggling}
+                onClick={() => onDeleteTenantConfig(skill.id!)}
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="text-xs">{t("tenant.resetDefault")}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }

@@ -228,10 +228,11 @@ func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[str
 
 	// Regenerate embedding when frontmatter changes
 	if _, hasFrontmatter := updates["frontmatter"]; hasFrontmatter && s.embProvider != nil {
+		bgCtx := store.WithTenantID(context.Background(), store.TenantIDFromContext(ctx))
 		go func() {
-			ag, agErr := s.GetByID(context.Background(), id)
+			ag, agErr := s.GetByID(bgCtx, id)
 			if agErr == nil {
-				s.generateAgentEmbedding(context.Background(), id, ag.DisplayName, ag.Frontmatter)
+				s.generateAgentEmbedding(bgCtx, id, ag.DisplayName, ag.Frontmatter)
 			}
 		}()
 	}
@@ -262,7 +263,7 @@ func (s *PGAgentStore) List(ctx context.Context, ownerID string) ([]store.AgentD
 		argIdx++
 	}
 
-	if clause, targs, err := tenantClauseN(ctx, argIdx); err == nil && clause != "" {
+	if clause, targs, _, err := scopeClause(ctx, argIdx); err == nil && clause != "" {
 		q += clause
 		args = append(args, targs...)
 		argIdx++

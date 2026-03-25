@@ -86,8 +86,8 @@ type SessionListRichResult struct {
 	Total    int               `json:"total"`
 }
 
-// SessionStore manages conversation sessions.
-type SessionStore interface {
+// SessionCoreStore manages session lifecycle, messages, and history.
+type SessionCoreStore interface {
 	GetOrCreate(ctx context.Context, key string) *SessionData
 	// Get returns the session if it exists (cache or DB), nil otherwise. Never creates.
 	Get(ctx context.Context, key string) *SessionData
@@ -98,6 +98,15 @@ type SessionStore interface {
 	GetLabel(ctx context.Context, key string) string
 	SetLabel(ctx context.Context, key, label string)
 	SetAgentInfo(ctx context.Context, key string, agentUUID uuid.UUID, userID string)
+	TruncateHistory(ctx context.Context, key string, keepLast int)
+	SetHistory(ctx context.Context, key string, msgs []providers.Message)
+	Reset(ctx context.Context, key string)
+	Delete(ctx context.Context, key string) error
+	Save(ctx context.Context, key string) error
+}
+
+// SessionMetadataStore manages session metadata, token tracking, and calibration.
+type SessionMetadataStore interface {
 	UpdateMetadata(ctx context.Context, key, model, provider, channel string)
 	AccumulateTokens(ctx context.Context, key string, input, output int64)
 	IncrementCompaction(ctx context.Context, key string)
@@ -111,13 +120,20 @@ type SessionStore interface {
 	GetContextWindow(ctx context.Context, key string) int
 	SetLastPromptTokens(ctx context.Context, key string, tokens, msgCount int)
 	GetLastPromptTokens(ctx context.Context, key string) (tokens, msgCount int)
-	TruncateHistory(ctx context.Context, key string, keepLast int)
-	SetHistory(ctx context.Context, key string, msgs []providers.Message)
-	Reset(ctx context.Context, key string)
-	Delete(ctx context.Context, key string) error
+}
+
+// SessionListingStore manages session listing, search, and discovery.
+type SessionListingStore interface {
 	List(ctx context.Context, agentID string) []SessionInfo
 	ListPaged(ctx context.Context, opts SessionListOpts) SessionListResult
 	ListPagedRich(ctx context.Context, opts SessionListOpts) SessionListRichResult
-	Save(ctx context.Context, key string) error
 	LastUsedChannel(ctx context.Context, agentID string) (channel, chatID string)
+}
+
+// SessionStore composes all session sub-interfaces for backward compatibility.
+// New code should depend on the specific sub-interface it needs.
+type SessionStore interface {
+	SessionCoreStore
+	SessionMetadataStore
+	SessionListingStore
 }

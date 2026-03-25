@@ -23,7 +23,7 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 	vecStr := vectorToString(embedding)
 
 	// $1=vec, $2=vec → tenant at $3 (if needed), ORDER vec at $3+len(tcArgs), LIMIT after
-	tc, tcArgs, err := tenantClauseN(ctx, 3)
+	tc, tcArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}

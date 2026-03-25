@@ -212,40 +212,6 @@ func tableHasUpdatedAt(table string) bool {
 
 // --- Tenant filter helpers ---
 
-// tenantClauseN returns an " AND tenant_id = $N" clause and the tenant UUID as the arg.
-// Returns ("", nil, nil) for cross-tenant callers (skip filter).
-// Returns error if tenant is missing from context (fail-closed).
-func tenantClauseN(ctx context.Context, paramN int) (clause string, args []any, err error) {
-	if store.IsCrossTenant(ctx) {
-		return "", nil, nil
-	}
-	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil {
-		return "", nil, fmt.Errorf("tenant_id required")
-	}
-	return fmt.Sprintf(" AND tenant_id = $%d", paramN), []any{tid}, nil
-}
-
-// tenantClauseNAlias is like tenantClauseN but qualifies tenant_id with a table alias
-// to avoid ambiguity in JOIN queries (e.g. " AND d.tenant_id = $3").
-// SECURITY: alias is interpolated into SQL — callers MUST pass hardcoded string literals only.
-func tenantClauseNAlias(ctx context.Context, paramN int, alias string) (clause string, args []any, err error) {
-	// Guard: only allow simple alphanumeric aliases (a-z, 0-9, underscore) to prevent SQL injection.
-	for _, c := range alias {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-			return "", nil, fmt.Errorf("invalid table alias: %q", alias)
-		}
-	}
-	if store.IsCrossTenant(ctx) {
-		return "", nil, nil
-	}
-	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil {
-		return "", nil, fmt.Errorf("tenant_id required")
-	}
-	return fmt.Sprintf(" AND %s.tenant_id = $%d", alias, paramN), []any{tid}, nil
-}
-
 // tenantIDForInsert returns the tenant UUID for INSERT operations.
 // Falls back to MasterTenantID when no tenant in context.
 func tenantIDForInsert(ctx context.Context) uuid.UUID {
@@ -263,4 +229,30 @@ func requireTenantID(ctx context.Context) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("tenant_id required")
 	}
 	return tid, nil
+}
+
+// --- Scope-based query helpers ---
+// Generate WHERE clauses for tenant + optional project-level isolation.
+// Uses store.QueryScope which extracts scope from context (fail-closed).
+
+// scopeClause extracts QueryScope from context and generates WHERE conditions.
+// Drop-in replacement for tenantClauseN that supports future project-level scoping.
+func scopeClause(ctx context.Context, startParam int) (clause string, args []any, nextParam int, err error) {
+	scope, err := store.ScopeFromContext(ctx)
+	if err != nil {
+		return "", nil, startParam, err
+	}
+	clause, args, nextParam = scope.WhereClause(startParam)
+	return clause, args, nextParam, nil
+}
+
+// scopeClauseAlias is like scopeClause but qualifies columns with a table alias.
+// SECURITY: alias is interpolated into SQL — callers MUST pass hardcoded string literals only.
+func scopeClauseAlias(ctx context.Context, startParam int, alias string) (clause string, args []any, nextParam int, err error) {
+	scope, err := store.ScopeFromContext(ctx)
+	if err != nil {
+		return "", nil, startParam, err
+	}
+	clause, args, nextParam = scope.WhereClauseAlias(startParam, alias)
+	return clause, args, nextParam, nil
 }

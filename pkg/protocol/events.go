@@ -50,7 +50,8 @@ const (
 	EventTeamTaskDispatched = "team.task.dispatched"
 	EventTeamTaskUpdated   = "team.task.updated"
 	EventTeamTaskDeleted   = "team.task.deleted"
-	EventTeamTaskStale     = "team.task.stale"
+	EventTeamTaskStale          = "team.task.stale"
+	EventTeamTaskAttachmentAdded = "team.task.attachment_added"
 
 	// Emitted when leader starts processing completed team task results (before announce run).
 	EventTeamLeaderProcessing = "team.leader.processing"

@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -15,8 +16,10 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // StorageHandler provides HTTP endpoints for browsing and managing
@@ -47,6 +50,8 @@ func (h *StorageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/storage/files/{path...}", h.auth(h.handleRead))
 	mux.HandleFunc("DELETE /v1/storage/files/{path...}", h.auth(h.handleDelete))
 	mux.HandleFunc("GET /v1/storage/size", h.auth(h.handleSize))
+	mux.HandleFunc("POST /v1/storage/files", requireAuth(permissions.RoleAdmin, h.handleUpload))
+	mux.HandleFunc("PUT /v1/storage/move", requireAuth(permissions.RoleAdmin, h.handleMove))
 }
 
 func (h *StorageHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -61,9 +66,10 @@ func (h *StorageHandler) tenantBaseDir(r *http.Request) string {
 	return config.TenantDataDir(h.baseDir, tid, slug)
 }
 
-// protectedDirs are top-level directories where deletion is blocked
-// (managed separately via the Skills page).
-var protectedDirs = []string{"skills", "skills-store"}
+// protectedDirs are top-level directories where upload, move, and deletion are blocked.
+// These are system-managed: skills (managed via Skills page), media (managed via media handler),
+// tenants (tenant isolation root — each tenant's data is scoped internally).
+var protectedDirs = []string{"skills", "skills-store", "media", "tenants"}
 
 func isProtectedPath(rel string) bool {
 	top := rel
@@ -385,4 +391,209 @@ func (h *StorageHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("storage.deleted", "path", relPath)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// handleUpload uploads a file into the storage data directory.
+// Admin-only. Rejects uploads into protected directories (skills, skills-store).
+func (h *StorageHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+
+	subPath := r.URL.Query().Get("path")
+	if strings.Contains(subPath, "..") {
+		slog.Warn("security.storage_upload_traversal", "path", subPath)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Reject upload into protected directories.
+	if subPath != "" && isProtectedPath(subPath) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgCannotDeleteSkillsDir)})
+		return
+	}
+
+	// Enforce file size limit.
+	r.Body = http.MaxBytesReader(w, r.Body, tools.MaxFileSizeBytes)
+	if err := r.ParseMultipartForm(tools.MaxFileSizeBytes); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgFileTooLarge)})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgMissingFileField)})
+		return
+	}
+	defer file.Close()
+
+	// Sanitize filename.
+	origName := filepath.Base(header.Filename)
+	if origName == "." || origName == "/" || strings.Contains(origName, "..") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidFilename)})
+		return
+	}
+
+	// Check blocked extensions.
+	ext := strings.ToLower(filepath.Ext(origName))
+	if tools.IsBlockedExtension(ext) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("file type %s is not allowed", ext)})
+		return
+	}
+
+	// Resolve target directory within tenant-scoped data dir.
+	base := h.tenantBaseDir(r)
+	targetDir := base
+	if subPath != "" {
+		targetDir = filepath.Join(base, filepath.Clean(subPath))
+		if !strings.HasPrefix(targetDir, base) {
+			slog.Warn("security.storage_upload_escape", "resolved", targetDir, "root", base)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+			return
+		}
+	}
+
+	if err := os.MkdirAll(targetDir, 0750); err != nil {
+		slog.Error("storage.upload_mkdir_failed", "dir", targetDir, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create directory")})
+		return
+	}
+
+	diskPath := filepath.Join(targetDir, origName)
+
+	// Symlink escape check on resolved path.
+	realTarget, _ := filepath.EvalSymlinks(targetDir)
+	if realTarget == "" {
+		realTarget = targetDir
+	}
+	realBase, _ := filepath.EvalSymlinks(base)
+	if realBase == "" {
+		realBase = base
+	}
+	if !strings.HasPrefix(realTarget, realBase) {
+		slog.Warn("security.storage_upload_symlink_escape", "target", realTarget, "base", realBase)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Write file.
+	out, err := os.Create(diskPath)
+	if err != nil {
+		slog.Error("storage.upload_create_failed", "path", diskPath, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to save file")})
+		return
+	}
+	defer out.Close()
+
+	written, err := io.Copy(out, file)
+	if err != nil {
+		os.Remove(diskPath)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to save file")})
+		return
+	}
+
+	// Invalidate size cache for this tenant.
+	h.sizeCache.Delete(base)
+
+	relPath := origName
+	if subPath != "" {
+		relPath = filepath.Join(subPath, origName)
+	}
+
+	slog.Info("storage.uploaded", "path", relPath, "size", written)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":     relPath,
+		"filename": origName,
+		"size":     written,
+	})
+}
+
+// handleMove moves/renames a file within the storage data directory.
+// Admin-only. Rejects moves involving protected directories.
+// Query params: ?from=relPath&to=relPath
+func (h *StorageHandler) handleMove(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+
+	fromRel := r.URL.Query().Get("from")
+	toRel := r.URL.Query().Get("to")
+	if fromRel == "" || toRel == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "from, to")})
+		return
+	}
+
+	// Reject path traversal in both paths.
+	if strings.Contains(fromRel, "..") || strings.Contains(toRel, "..") {
+		slog.Warn("security.storage_move_traversal", "from", fromRel, "to", toRel)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Reject moves involving protected directories.
+	if isProtectedPath(fromRel) || isProtectedPath(toRel) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgCannotDeleteSkillsDir)})
+		return
+	}
+
+	base := h.tenantBaseDir(r)
+
+	// Resolve and validate source path.
+	srcAbs := filepath.Join(base, filepath.Clean(fromRel))
+	if !strings.HasPrefix(srcAbs, base+string(filepath.Separator)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	srcReal, err := filepath.EvalSymlinks(srcAbs)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		return
+	}
+	baseReal, _ := filepath.EvalSymlinks(base)
+	if baseReal == "" {
+		baseReal = base
+	}
+	if !strings.HasPrefix(srcReal, baseReal+string(filepath.Separator)) {
+		slog.Warn("security.storage_move_src_escape", "resolved", srcReal, "base", baseReal)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+
+	// Resolve and validate destination path.
+	destAbs := filepath.Join(base, filepath.Clean(toRel))
+	if !strings.HasPrefix(destAbs, base+string(filepath.Separator)) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	// Ensure destination parent exists.
+	destDir := filepath.Dir(destAbs)
+	destDirReal, _ := filepath.EvalSymlinks(destDir)
+	if destDirReal == "" {
+		destDirReal = destDir
+	}
+	if !strings.HasPrefix(destDirReal+string(filepath.Separator), baseReal+string(filepath.Separator)) {
+		slog.Warn("security.storage_move_dest_escape", "resolved", destDirReal, "base", baseReal)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		return
+	}
+	if err := os.MkdirAll(destDir, 0750); err != nil {
+		slog.Error("storage.move_mkdir_failed", "dir", destDir, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create directory")})
+		return
+	}
+
+	// Prevent overwriting existing file.
+	if _, err := os.Stat(destAbs); err == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "a file with that name already exists at the destination"})
+		return
+	}
+
+	// Atomic move.
+	if err := os.Rename(srcAbs, destAbs); err != nil {
+		slog.Error("storage.move_failed", "from", fromRel, "to", toRel, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to move file")})
+		return
+	}
+
+	slog.Info("storage.moved", "from", fromRel, "to", toRel)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"from": fromRel,
+		"to":   toRel,
+	})
 }

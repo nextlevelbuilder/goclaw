@@ -174,9 +174,38 @@ export function useSkills() {
     [http, invalidate],
   );
 
+  const setTenantConfig = useCallback(
+    async (id: string, enabled: boolean) => {
+      try {
+        await http.put(`/v1/skills/${id}/tenant-config`, { enabled });
+        await invalidate();
+        toast.success(i18next.t("skills:toast.updated"));
+      } catch (err) {
+        toast.error(i18next.t("skills:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
+  const deleteTenantConfig = useCallback(
+    async (id: string) => {
+      try {
+        await http.delete(`/v1/skills/${id}/tenant-config`);
+        await invalidate();
+        toast.success(i18next.t("skills:toast.updated"));
+      } catch (err) {
+        toast.error(i18next.t("skills:toast.updateFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
   return {
     skills, loading, refresh: invalidate, getSkill,
     uploadSkill, updateSkill, deleteSkill,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
+    setTenantConfig, deleteTenantConfig,
   };
 }

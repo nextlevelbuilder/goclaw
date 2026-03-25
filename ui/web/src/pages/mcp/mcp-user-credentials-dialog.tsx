@@ -54,7 +54,7 @@ export function MCPUserCredentialsDialog({
   const { users } = useTenantUsersList();
 
   const canManageUsers =
-    role === "admin" ||
+    role === "admin" || role === "owner" ||
     currentTenant?.role === "owner" ||
     currentTenant?.role === "admin";
 

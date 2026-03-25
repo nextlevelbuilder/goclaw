@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -87,13 +87,15 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	// When workspace sharing is enabled, show the base workspace without user subfolder.
 	promptWorkspace := l.workspace
 	if l.agentUUID != uuid.Nil && userID != "" && l.workspace != "" {
+		shared := l.shouldShareWorkspace(userID, peerKind)
 		if cachedWs, ok := l.userWorkspaces.Load(userID); ok {
-			promptWorkspace = cachedWs.(string)
-			if !l.shouldShareWorkspace(userID, peerKind) {
-				promptWorkspace = filepath.Join(promptWorkspace, sanitizePathSegment(userID))
-			}
-		} else if !l.shouldShareWorkspace(userID, peerKind) {
-			promptWorkspace = filepath.Join(l.workspace, sanitizePathSegment(userID))
+			promptWorkspace = tools.ResolveWorkspace(cachedWs.(string),
+				tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
+			)
+		} else {
+			promptWorkspace = tools.ResolveWorkspace(l.workspace,
+				tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
+			)
 		}
 	}
 
@@ -518,6 +520,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 	// Summarize in background (holds the per-session lock until done)
 	go func() {
 		defer sessionMu.Unlock()
+		defer safego.Recover(nil, "session", sessionKey)
 
 		// Re-check: history may have been truncated by a concurrent summarize
 		// that finished between our threshold check and acquiring the lock.

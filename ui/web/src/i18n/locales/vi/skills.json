@@ -73,6 +73,13 @@
     "disable": "Tắt skill",
     "disabled": "Đã tắt"
   },
+  "tenant": {
+    "enabled": "Đã bật",
+    "disabled": "Đã tắt",
+    "default": "Mặc định",
+    "overrideHint": "Ghi đè riêng cho tenant này",
+    "resetDefault": "Đặt lại mặc định"
+  },
   "deps": {
     "rescan": "Rescan Deps",
     "rescanning": "Scanning...",

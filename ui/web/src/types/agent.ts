@@ -64,8 +64,10 @@ export interface MemoryConfig {
   embedding_model?: string;
   max_results?: number;
   max_chunk_len?: number;
+  chunk_overlap?: number;
   vector_weight?: number;
   text_weight?: number;
+  min_score?: number;
 }
 
 export interface WorkspaceSharingConfig {

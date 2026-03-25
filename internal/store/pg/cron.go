@@ -1,6 +1,7 @@
 package pg
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 	"sync"
@@ -15,12 +16,14 @@ const defaultCronCacheTTL = 2 * time.Minute
 // PGCronStore implements store.CronStore backed by Postgres.
 // GetDueJobs() uses an in-memory cache with TTL to reduce DB polling (1s interval).
 type PGCronStore struct {
-	db      *sql.DB
-	mu      sync.Mutex
-	onJob   func(job *store.CronJob) (*store.CronJobResult, error)
-	onEvent func(event store.CronEvent)
-	running bool
-	stop    chan struct{}
+	db        *sql.DB
+	mu        sync.Mutex
+	baseCtx   context.Context    // lifecycle context for background DB operations
+	cancelCtx context.CancelFunc // cancelled on Stop()
+	onJob     func(job *store.CronJob) (*store.CronJobResult, error)
+	onEvent   func(event store.CronEvent)
+	running   bool
+	stop      chan struct{}
 
 	// Job cache: reduces GetDueJobs polling from 86,400 queries/day to ~720/day
 	jobCache    []store.CronJob
@@ -57,6 +60,7 @@ func (s *PGCronStore) Start() error {
 	if s.running {
 		return nil
 	}
+	s.baseCtx, s.cancelCtx = context.WithCancel(context.Background())
 	s.stop = make(chan struct{})
 	s.running = true
 	s.recomputeStaleJobs()
@@ -72,6 +76,9 @@ func (s *PGCronStore) Stop() {
 		return
 	}
 	close(s.stop)
+	if s.cancelCtx != nil {
+		s.cancelCtx()
+	}
 	s.running = false
 }
 

@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { FileBrowser } from "@/components/shared/file-browser";
+import { FileUploadDialog } from "@/components/shared/file-upload-dialog";
 import { buildTree, isTextFile } from "@/lib/file-helpers";
 import { useTeamWorkspace } from "../hooks/use-team-workspace";
 import { useHttp } from "@/hooks/use-ws";
+import { toast } from "@/stores/use-toast-store";
 import type { ScopeEntry } from "@/types/team";
 
 /** Strip chatID prefix from name for WS file ops (backend already scopes by chat_id). */
@@ -35,14 +37,16 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
   const [fileContent, setFileContent] = useState<{ content: string; path: string; size: number } | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [activePath, setActivePath] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const scopeValue = selectedScope === "__all__" ? "" : selectedScope;
   // Stable scope list: populated once from "all" listing, not recalculated on filter.
   const [cachedScopes, setCachedScopes] = useState<ScopeEntry[]>([]);
 
   // Load files for the selected scope. On "all" load, also cache scope list.
-  const load = useCallback(() => {
-    listFiles(teamId, scopeValue || undefined).then((result) => {
+  // silent=true skips loading spinner (used after move to avoid tree flash).
+  const load = useCallback((opts?: { silent?: boolean }) => {
+    listFiles(teamId, scopeValue || undefined, opts).then((result) => {
       // Only update cached scopes from the "all" listing (no filter applied).
       if (!scopeValue && result.length > 0) {
         const seen = new Set<string>();
@@ -57,8 +61,10 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
         setCachedScopes(derived);
       }
     });
-    setFileContent(null);
-    setActivePath(null);
+    if (!opts?.silent) {
+      setFileContent(null);
+      setActivePath(null);
+    }
   }, [teamId, listFiles, scopeValue]);
 
   useEffect(() => {
@@ -147,6 +153,58 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
     } catch { /* silent */ }
   }, [fetchBlobByName]);
 
+  const handleUploadFile = useCallback(async (file: File) => {
+    const params: Record<string, string> = {};
+    if (scopeValue) params["chat_id"] = scopeValue;
+    await http.upload(`/v1/teams/${teamId}/workspace/upload?` + new URLSearchParams(params).toString(), (() => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return fd;
+    })());
+  }, [http, teamId, scopeValue]);
+
+  const handleUploadClose = useCallback((v: boolean) => {
+    setUploadOpen(v);
+    if (!v) load(); // refresh file list after upload dialog closes
+  }, [load]);
+
+  const handleMove = useCallback(async (fromPath: string, toFolder: string) => {
+    // In workspace, file names may have chatID prefix — strip it for the API call.
+    const match = files.find((f) => f.name === fromPath);
+    if (!match) return;
+
+    // Prevent cross-scope moves (e.g. dragging from chat123/ to chat456/).
+    if (match.chat_id && toFolder) {
+      const toMatch = files.find((f) => f.name === toFolder && f.is_dir);
+      if (toMatch && toMatch.chat_id && toMatch.chat_id !== match.chat_id) {
+        toast.error(t("workspace.crossScopeMoveError"));
+        return;
+      }
+    }
+
+    const fromName = wsFileName(match.name, match.chat_id);
+    const fileName = fromName.split("/").pop() ?? fromName;
+    // toFolder may also have chatID prefix — strip it.
+    const toClean = match.chat_id && toFolder.startsWith(match.chat_id + "/")
+      ? toFolder.slice(match.chat_id.length + 1)
+      : toFolder;
+    const toName = toClean ? `${toClean}/${fileName}` : fileName;
+    if (fromName === toName) return;
+
+    const params = new URLSearchParams();
+    params.set("from", fromName);
+    params.set("to", toName);
+    if (match.chat_id) params.set("chat_id", match.chat_id);
+
+    try {
+      await http.put(`/v1/teams/${teamId}/workspace/move?${params.toString()}`);
+      load({ silent: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t("workspace.moveFailed");
+      toast.error(msg);
+    }
+  }, [http, teamId, files, load, t]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[90vh] w-[95vw] overflow-hidden sm:max-w-6xl flex flex-col">
@@ -169,7 +227,10 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
                   </SelectContent>
                 </Select>
               )}
-              <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1">
+              <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
+                <Upload className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => load()} disabled={loading} className="gap-1">
                 <RefreshCw className={"h-3.5 w-3.5" + (loading ? " animate-spin" : "")} />
               </Button>
             </div>
@@ -184,9 +245,18 @@ export function TeamWorkspaceDialog({ open, onOpenChange, teamId, scopes }: Team
           contentLoading={contentLoading}
           fileContent={fileContent}
           onDelete={handleDelete}
+          onMove={handleMove}
           onDownload={handleDownload}
           fetchBlob={fetchBlobByName}
           showSize
+        />
+
+        <FileUploadDialog
+          open={uploadOpen}
+          onOpenChange={handleUploadClose}
+          onUpload={handleUploadFile}
+          title={t("workspace.upload.title")}
+          description={t("workspace.upload.description")}
         />
       </DialogContent>
     </Dialog>

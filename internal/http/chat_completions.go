@@ -99,6 +99,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Inject tenant, role, user, and locale into context for downstream stores/tools.
+	r = r.WithContext(enrichContext(r.Context(), r, auth))
+
 	// Rate limit check (per IP or bearer token)
 	if h.rateLimiter != nil {
 		key := r.RemoteAddr
@@ -128,7 +131,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	agentID := extractAgentID(r, req.Model)
-	userID := extractUserID(r)
+	userID := store.UserIDFromContext(r.Context()) // resolved by enrichContext (respects API key owner binding)
 	if h.isManaged && userID == "" {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s"}}`, i18n.T(locale, i18n.MsgUserIDHeader)), http.StatusBadRequest)
 		return
@@ -153,12 +156,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Inject user_id and locale into context for downstream stores/tools
-	ctx := store.WithLocale(r.Context(), extractLocale(r))
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
-	}
-
 	runID := uuid.NewString()
 	// Include userID in session key for multi-tenant isolation
 	sessionSuffix := "http-" + runID[:8]
@@ -170,9 +167,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	slog.Info("chat completions request", "agent", agentID, "stream", req.Stream, "user", userID)
 
 	if req.Stream {
-		h.handleStream(w, r.WithContext(ctx), loop, runID, sessionKey, lastMessage, req.Model, userID)
+		h.handleStream(w, r, loop, runID, sessionKey, lastMessage, req.Model, userID)
 	} else {
-		h.handleNonStream(w, r.WithContext(ctx), loop, runID, sessionKey, lastMessage, req.Model, userID)
+		h.handleNonStream(w, r, loop, runID, sessionKey, lastMessage, req.Model, userID)
 	}
 }
 

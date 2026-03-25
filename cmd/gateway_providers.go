@@ -233,8 +233,7 @@ func jsonToStringMap(data json.RawMessage) map[string]string {
 // mcpStore is optional; when provided, per-agent MCP servers are injected into CLI config.
 // cfg provides fallback api_base values from config/env when DB providers have none set.
 func registerProvidersFromDB(registry *providers.Registry, provStore store.ProviderStore, secretStore store.ConfigSecretsStore, gatewayAddr, gatewayToken string, mcpStore store.MCPServerStore, cfg *config.Config) {
-	ctx := store.WithCrossTenant(context.Background())
-	dbProviders, err := provStore.ListProviders(ctx)
+	dbProviders, err := provStore.ListAllProviders(context.Background())
 	if err != nil {
 		slog.Warn("failed to load providers from DB", "error", err)
 		return

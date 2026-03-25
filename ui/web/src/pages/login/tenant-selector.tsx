@@ -10,7 +10,7 @@ export function TenantSelectorPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const availableTenants = useAuthStore((s) => s.availableTenants);
-  const isCrossTenant = useAuthStore((s) => s.isCrossTenant);
+  const isOwner = useAuthStore((s) => s.isOwner);
   const logout = useAuthStore((s) => s.logout);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
@@ -27,8 +27,8 @@ export function TenantSelectorPage() {
     navigate(ROUTES.LOGIN, { replace: true });
   };
 
-  // No access state: not cross-tenant and no tenants
-  if (!isCrossTenant && availableTenants.length === 0) {
+  // No access state: not owner and no tenants
+  if (!isOwner && availableTenants.length === 0) {
     return (
       <LoginLayout subtitle={t("noAccess")}>
         <div className="space-y-5 text-center">

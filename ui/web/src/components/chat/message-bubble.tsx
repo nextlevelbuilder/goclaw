@@ -69,7 +69,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
               ))}
             </div>
           )}
-          <MessageContent content={message.content} role={message.role} />
+          <MessageContent content={message.content} role={message.role} mediaBasenames={message.mediaItems?.map((m) => m.path.split("/").pop() ?? "").filter(Boolean)} />
           {message.mediaItems && message.mediaItems.length > 0 && (
             <div className="mt-2">
               <MediaGallery items={message.mediaItems} />

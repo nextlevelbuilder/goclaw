@@ -60,6 +60,9 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Inject tenant, role, user, and locale into context for downstream stores/tools.
+	r = r.WithContext(enrichContext(r.Context(), r, auth))
+
 	// Limit request body size to prevent DoS
 	const maxRequestBodySize = 1 << 20 // 1MB
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
@@ -76,7 +79,7 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agentID := extractAgentID(r, req.Model)
-	userID := extractUserID(r)
+	userID := store.UserIDFromContext(r.Context()) // resolved by enrichContext (respects API key owner binding)
 
 	loop, err := h.agents.Get(r.Context(), agentID)
 	if err != nil {
@@ -96,12 +99,6 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Inject user_id into context for downstream stores/tools
-	ctx := r.Context()
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
-	}
-
 	runID := uuid.NewString()
 	responseID := "resp-" + runID[:8]
 	sessionSuffix := "responses-" + runID[:8]
@@ -113,9 +110,9 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.Info("responses request", "agent", agentID, "stream", req.Stream, "user", userID)
 
 	if req.Stream {
-		h.handleStream(w, r.WithContext(ctx), loop, runID, responseID, sessionKey, lastMessage, userID)
+		h.handleStream(w, r, loop, runID, responseID, sessionKey, lastMessage, userID)
 	} else {
-		h.handleNonStream(w, r.WithContext(ctx), loop, runID, responseID, sessionKey, lastMessage, userID)
+		h.handleNonStream(w, r, loop, runID, responseID, sessionKey, lastMessage, userID)
 	}
 }
 

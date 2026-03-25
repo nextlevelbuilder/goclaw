@@ -71,6 +71,9 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Inject tenant, role, user, and locale into context for downstream stores/tools.
+	r = r.WithContext(enrichContext(r.Context(), r, auth))
+
 	agentID := r.PathValue("id")
 	if agentID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "agent")})
@@ -104,14 +107,19 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 		sessionKey = sessions.SessionKey(agentID, "wake-"+uuid.NewString()[:8])
 	}
 
-	userID := req.UserID
-	if userID == "" {
-		userID = extractUserID(r)
-	}
-
-	ctx := store.WithLocale(r.Context(), locale)
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
+	// Body user_id override: allowed only when API key has no bound owner (prevents impersonation).
+	userID := store.UserIDFromContext(r.Context())
+	ctx := r.Context()
+	if req.UserID != "" && req.UserID != userID {
+		if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
+			slog.Warn("security.wake_owner_override_blocked",
+				"req_user_id", req.UserID,
+				"owner_id", auth.KeyData.OwnerID,
+			)
+		} else {
+			userID = req.UserID
+			ctx = store.WithUserID(ctx, req.UserID)
+		}
 	}
 
 	runID := uuid.NewString()

@@ -13,7 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
+func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
 	router := server.Router()
 
 	// Phase 1: Core methods
@@ -36,7 +36,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	configMethods.Register(router)
 
 	// Phase 2: Skills (uses SkillStore interface — PG or File)
-	methods.NewSkillsMethods(skillStore).Register(router)
+	methods.NewSkillsMethods(skillStore, skillTenantCfgStore).Register(router)
 
 	// Phase 2: Cron (store created externally, shared with gateway)
 	methods.NewCronMethods(cronStore, msgBus, cfg).Register(router)

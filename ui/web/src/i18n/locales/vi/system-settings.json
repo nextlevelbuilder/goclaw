@@ -16,11 +16,16 @@
     "modelTip": "Model embedding (vd: text-embedding-3-small). Phải hỗ trợ endpoint /embeddings.",
     "providerPlaceholder": "Chọn provider",
     "modelPlaceholder": "text-embedding-3-small",
-    "supportedProviders": "Đã xác minh 1536d: OpenAI (text-embedding-3-small), OpenRouter (openai/*), Mistral (codestral-embed). Các provider khác có thể hoạt động nếu hỗ trợ /embeddings với output 1536d.",
+    "supportedProviders": "Đã xác minh 1536d: OpenAI (text-embedding-3-small/large), Gemini (gemini-embedding-001 + dimensions), Mistral (codestral-embed), Cohere (embed-v4), DashScope (text-embedding-v3 + dimensions). Cấu hình dimensions trong provider settings cho model có chiều gốc > 1536.",
     "verify": "Kiểm tra Embedding",
     "verifyRequired": "Kiểm tra model embedding trước khi lưu.",
     "verifyFailed": "Kiểm tra thất bại",
-    "dimensions": "{{count}} chiều"
+    "dimensions": "{{count}} chiều",
+    "dimensionsMismatch": "{{count}} chiều — không khớp yêu cầu 1536",
+    "maxChunkLen": "Độ dài chunk tối đa",
+    "maxChunkLenHint": "Số ký tự tối đa mỗi chunk trước khi chia nhỏ.",
+    "chunkOverlap": "Chunk Overlap",
+    "chunkOverlapHint": "Số ký tự chồng lấp giữa các chunk liên tiếp để giữ ngữ cảnh."
   },
   "ux": {
     "title": "Hành vi UX",

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 )
 
 // Registry manages tool registration and execution.
@@ -178,7 +179,7 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 	}
 
 	start := time.Now()
-	result := tool.Execute(ctx, args)
+	result := safeExecute(tool, ctx, args)
 	duration := time.Since(start)
 
 	// Scrub credentials from tool output before returning to LLM
@@ -199,6 +200,15 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 	)
 
 	return result
+}
+
+// safeExecute runs tool.Execute with panic recovery. A panicking tool returns
+// an error result instead of crashing the process.
+func safeExecute(tool Tool, ctx context.Context, args map[string]any) (result *Result) {
+	defer safego.Recover(func(v any) {
+		result = ErrorResult(fmt.Sprintf("tool %q panicked: %v", tool.Name(), v))
+	}, "tool", tool.Name())
+	return tool.Execute(ctx, args)
 }
 
 // ProviderDefs returns tool definitions for LLM provider APIs.

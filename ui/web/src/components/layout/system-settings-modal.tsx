@@ -27,16 +27,30 @@ const EMBEDDING_MODELS: Record<string, { id: string; name: string }[]> = {
   // OpenAI — native 1536d
   openai_compat: [
     { id: "text-embedding-3-small", name: "text-embedding-3-small (1536d)" },
+    { id: "text-embedding-3-large", name: "text-embedding-3-large (3072d → 1536 via dimensions)" },
     { id: "text-embedding-ada-002", name: "text-embedding-ada-002 (1536d)" },
   ],
   // OpenRouter — proxied OpenAI models
   openrouter: [
     { id: "openai/text-embedding-3-small", name: "openai/text-embedding-3-small (1536d)" },
+    { id: "openai/text-embedding-3-large", name: "openai/text-embedding-3-large (3072d → 1536)" },
     { id: "openai/text-embedding-ada-002", name: "openai/text-embedding-ada-002 (1536d)" },
   ],
-  // Mistral — mistral-embed native 1024d, codestral-embed native 1536d (MRL)
+  // Gemini — gemini-embedding-001 (3072d native, truncate to 1536 via dimensions param)
+  gemini_native: [
+    { id: "gemini-embedding-001", name: "gemini-embedding-001 (3072d → 1536 via dimensions)" },
+  ],
+  // Mistral — codestral-embed defaults to 1536d (MRL)
   mistral: [
-    { id: "codestral-embed", name: "codestral-embed (1536d)" },
+    { id: "codestral-embed", name: "codestral-embed (1536d default)" },
+  ],
+  // DashScope/Qwen — text-embedding-v3 (custom dimensions support)
+  dashscope: [
+    { id: "text-embedding-v3", name: "text-embedding-v3 (1536 via dimensions)" },
+  ],
+  // Cohere — embed-v4 native 1536d
+  cohere: [
+    { id: "embed-v4", name: "embed-v4 (1536d native)" },
   ],
 };
 // Fallback for unlisted provider types — no curated models
@@ -50,6 +64,8 @@ interface SystemSettingsModalProps {
 interface InitState {
   embProvider: string;
   embModel: string;
+  embMaxChunkLen: string;
+  embChunkOverlap: string;
   toolStatus: boolean;
   blockReply: boolean;
   intentClassify: boolean;
@@ -62,6 +78,7 @@ interface InitState {
 
 const DEFAULTS: InitState = {
   embProvider: "", embModel: "",
+  embMaxChunkLen: "", embChunkOverlap: "",
   toolStatus: true, blockReply: false, intentClassify: true,
   compProvider: "", compModel: "",
   compThreshold: "", compKeepRecent: "", compMaxTokens: "",
@@ -84,6 +101,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   // Embedding
   const [embProvider, setEmbProvider] = useState("");
   const [embModel, setEmbModel] = useState("");
+  const [embMaxChunkLen, setEmbMaxChunkLen] = useState("");
+  const [embChunkOverlap, setEmbChunkOverlap] = useState("");
   const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
 
   // UX Behavior
@@ -102,6 +121,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     const s: InitState = {
       embProvider: configs["embedding.provider"] ?? "",
       embModel: configs["embedding.model"] ?? "",
+      embMaxChunkLen: configs["embedding.max_chunk_len"] ?? "",
+      embChunkOverlap: configs["embedding.chunk_overlap"] ?? "",
       toolStatus: parseBool(configs["gateway.tool_status"], true),
       blockReply: parseBool(configs["gateway.block_reply"], false),
       intentClassify: parseBool(configs["gateway.intent_classify"], true),
@@ -114,6 +135,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setInit(s);
     setEmbProvider(s.embProvider);
     setEmbModel(s.embModel);
+    setEmbMaxChunkLen(s.embMaxChunkLen);
+    setEmbChunkOverlap(s.embChunkOverlap);
     setToolStatus(s.toolStatus);
     setBlockReply(s.blockReply);
     setIntentClassify(s.intentClassify);
@@ -148,7 +171,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
 
   const handleVerifyEmb = () => {
     if (!selectedEmbProviderData) return;
-    verifyEmbedding(selectedEmbProviderData.id, embModel.trim() || undefined);
+    // Always request 1536 dims — pgvector schema requires vector(1536).
+    verifyEmbedding(selectedEmbProviderData.id, embModel.trim() || undefined, 1536);
   };
 
   const handleSave = async () => {
@@ -157,6 +181,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       const updates: Record<string, string> = {};
       if (embProvider !== init.embProvider) updates["embedding.provider"] = embProvider;
       if (embModel !== init.embModel) updates["embedding.model"] = embModel;
+      if (embMaxChunkLen !== init.embMaxChunkLen) updates["embedding.max_chunk_len"] = embMaxChunkLen;
+      if (embChunkOverlap !== init.embChunkOverlap) updates["embedding.chunk_overlap"] = embChunkOverlap;
       if (toolStatus !== init.toolStatus) updates["gateway.tool_status"] = String(toolStatus);
       if (blockReply !== init.blockReply) updates["gateway.block_reply"] = String(blockReply);
       if (intentClassify !== init.intentClassify) updates["gateway.intent_classify"] = String(intentClassify);
@@ -275,11 +301,23 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                     {t("embedding.verify")}
                   </Button>
                   {embResult && (
-                    <span className={`flex items-center gap-1 text-xs ${embResult.valid ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+                    <span className={`flex items-center gap-1 text-xs ${
+                      embResult.valid
+                        ? embResult.dimension_mismatch
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                        : "text-destructive"
+                    }`}>
                       {embResult.valid ? (
                         <>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          {t("embedding.dimensions", { count: embResult.dimensions })}
+                          {embResult.dimension_mismatch ? (
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                          ) : (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          )}
+                          {embResult.dimension_mismatch
+                            ? t("embedding.dimensionsMismatch", { count: embResult.dimensions })
+                            : t("embedding.dimensions", { count: embResult.dimensions })}
                         </>
                       ) : (
                         <>
@@ -289,6 +327,19 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
                       )}
                     </span>
                   )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="embMaxChunkLen" className="text-xs">{t("embedding.maxChunkLen")}</Label>
+                    <Input id="embMaxChunkLen" type="number" placeholder="1000" value={embMaxChunkLen} onChange={(e) => setEmbMaxChunkLen(e.target.value)} className="text-base md:text-sm" />
+                    <p className="text-xs text-muted-foreground">{t("embedding.maxChunkLenHint")}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="embChunkOverlap" className="text-xs">{t("embedding.chunkOverlap")}</Label>
+                    <Input id="embChunkOverlap" type="number" placeholder="200" value={embChunkOverlap} onChange={(e) => setEmbChunkOverlap(e.target.value)} className="text-base md:text-sm" />
+                    <p className="text-xs text-muted-foreground">{t("embedding.chunkOverlapHint")}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

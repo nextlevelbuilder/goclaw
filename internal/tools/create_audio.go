@@ -71,6 +71,10 @@ func (t *CreateAudioTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Force a specific provider (e.g. 'minimax').",
 			},
+			"filename_hint": map[string]any{
+				"type":        "string",
+				"description": "Short descriptive filename (no extension). Example: 'epic-battle-theme', 'rain-ambience'.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -95,6 +99,7 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 	lyrics, _ := args["lyrics"].(string)
 	instrumental, _ := args["instrumental"].(bool)
 	forceProvider, _ := args["provider"].(string)
+	filenameHint, _ := args["filename_hint"].(string)
 
 	var audioBytes []byte
 	var usage *providers.Usage
@@ -153,7 +158,7 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 	if err := os.MkdirAll(dateDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create output directory: %v", err))
 	}
-	audioPath := filepath.Join(dateDir, fmt.Sprintf("goclaw_gen_%d.mp3", time.Now().UnixNano()))
+	audioPath := filepath.Join(dateDir, mediaFileName(ctx, "audio", filenameHint, "mp3"))
 	if err := os.WriteFile(audioPath, audioBytes, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save generated audio: %v", err))
 	}

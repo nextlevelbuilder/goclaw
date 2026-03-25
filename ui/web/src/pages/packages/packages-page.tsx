@@ -100,8 +100,8 @@ interface PackageSectionProps {
   placeholder: string;
   packages: PackageInfo[] | null | undefined;
   loading: boolean;
-  onInstall: (pkg: string) => Promise<unknown>;
-  onUninstall: (pkg: string) => Promise<unknown>;
+  onInstall: (pkg: string) => Promise<{ ok: boolean }>;
+  onUninstall: (pkg: string) => Promise<{ ok: boolean }>;
 }
 
 function PackageSection({ title, placeholder, packages, loading, onInstall, onUninstall }: PackageSectionProps) {
@@ -115,12 +115,12 @@ function PackageSection({ title, placeholder, packages, loading, onInstall, onUn
     const pkg = input.trim();
     if (!pkg) return;
     setInstallStatus("loading");
-    try {
-      await onInstall(pkg);
+    const res = await onInstall(pkg);
+    if (res.ok) {
       setInstallStatus("success");
       setInput("");
       setTimeout(() => setInstallStatus("idle"), 2000);
-    } catch {
+    } else {
       setInstallStatus("error");
       setTimeout(() => setInstallStatus("idle"), 3000);
     }
@@ -128,10 +128,11 @@ function PackageSection({ title, placeholder, packages, loading, onInstall, onUn
 
   async function handleUninstall(name: string) {
     setActionStatuses((s) => ({ ...s, [name]: "loading" }));
-    try {
-      await onUninstall(name);
+    const res = await onUninstall(name);
+    if (res.ok) {
       setActionStatuses((s) => ({ ...s, [name]: "success" }));
-    } catch {
+      setTimeout(() => setActionStatuses((s) => ({ ...s, [name]: "idle" })), 2000);
+    } else {
       setActionStatuses((s) => ({ ...s, [name]: "error" }));
       setTimeout(() => setActionStatuses((s) => ({ ...s, [name]: "idle" })), 3000);
     }

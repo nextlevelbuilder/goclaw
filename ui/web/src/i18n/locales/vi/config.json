@@ -87,6 +87,10 @@
   "agents.memory.embeddingModelTip": "Tên model nhúng. Để trống để dùng mặc định của provider.",
   "agents.memory.maxResults": "Kết quả tối đa",
   "agents.memory.maxResultsTip": "Số mục bộ nhớ tối đa trả về cho mỗi truy vấn.",
+  "agents.memory.maxChunkLen": "Độ dài chunk tối đa",
+  "agents.memory.maxChunkLenTip": "Số ký tự tối đa mỗi chunk trước khi chia nhỏ.",
+  "agents.memory.chunkOverlap": "Chunk Overlap",
+  "agents.memory.chunkOverlapTip": "Số ký tự chồng lấp giữa các chunk để giữ ngữ cảnh.",
   "agents.memory.minScore": "Điểm tối thiểu",
   "agents.memory.minScoreTip": "Điểm tương đồng tối thiểu (0-1) để đưa mục bộ nhớ vào kết quả.",
 

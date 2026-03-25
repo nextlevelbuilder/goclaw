@@ -185,6 +185,7 @@
     "docIndexFailed": "索引文档失败",
     "allIndexed": "所有文档已索引",
     "allIndexFailed": "索引所有文档失败",
-    "searchFailed": "搜索失败"
+    "searchFailed": "搜索失败",
+    "docLoadFailed": "加载文档失败"
   }
 }

@@ -18,12 +18,13 @@ import (
 type BuiltinToolsHandler struct {
 	store          store.BuiltinToolStore
 	tenantCfgStore store.BuiltinToolTenantConfigStore
+	tenantStore    store.TenantStore
 	msgBus         *bus.MessageBus
 }
 
 // NewBuiltinToolsHandler creates a handler for built-in tool management endpoints.
-func NewBuiltinToolsHandler(s store.BuiltinToolStore, tenantCfgs store.BuiltinToolTenantConfigStore, msgBus *bus.MessageBus) *BuiltinToolsHandler {
-	return &BuiltinToolsHandler{store: s, tenantCfgStore: tenantCfgs, msgBus: msgBus}
+func NewBuiltinToolsHandler(s store.BuiltinToolStore, tenantCfgs store.BuiltinToolTenantConfigStore, tenantStore store.TenantStore, msgBus *bus.MessageBus) *BuiltinToolsHandler {
+	return &BuiltinToolsHandler{store: s, tenantCfgStore: tenantCfgs, tenantStore: tenantStore, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all built-in tool routes on the given mux.
@@ -144,17 +145,16 @@ func (h *BuiltinToolsHandler) handleSetTenantConfig(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "tenant config not available"})
 		return
 	}
-	name := r.PathValue("name")
-	tid := store.TenantIDFromContext(r.Context())
-	if tid == uuid.Nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant context required"})
+	if !requireTenantAdmin(w, r, h.tenantStore) {
 		return
 	}
+	name := r.PathValue("name")
+	tid := store.TenantIDFromContext(r.Context())
 
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
@@ -165,6 +165,7 @@ func (h *BuiltinToolsHandler) handleSetTenantConfig(w http.ResponseWriter, r *ht
 		return
 	}
 
+	emitAudit(h.msgBus, r, "builtin_tool.tenant_config.set", "builtin_tool", name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -174,17 +175,17 @@ func (h *BuiltinToolsHandler) handleDeleteTenantConfig(w http.ResponseWriter, r 
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "tenant config not available"})
 		return
 	}
-	name := r.PathValue("name")
-	tid := store.TenantIDFromContext(r.Context())
-	if tid == uuid.Nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant context required"})
+	if !requireTenantAdmin(w, r, h.tenantStore) {
 		return
 	}
+	name := r.PathValue("name")
+	tid := store.TenantIDFromContext(r.Context())
 
 	if err := h.tenantCfgStore.Delete(r.Context(), tid, name); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
+	emitAudit(h.msgBus, r, "builtin_tool.tenant_config.deleted", "builtin_tool", name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

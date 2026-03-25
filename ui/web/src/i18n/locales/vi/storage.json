@@ -14,6 +14,10 @@
     "deleting": "Đang xóa...",
     "confirmLabel": "Xóa"
   },
+  "upload": {
+    "title": "Tải lên Lưu trữ",
+    "description": "Tải tệp lên thư mục dữ liệu"
+  },
   "toast": {
     "deleted": "Đã xóa file",
     "deleteFailed": "Không thể xóa file"

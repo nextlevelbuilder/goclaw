@@ -77,8 +77,8 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParam
 
 // ListSystemSkillDirs returns slug->file_path map for all enabled system skills.
 // Disabled system skills are excluded — dep checking and injection are skipped for them.
-func (s *PGSkillStore) ListSystemSkillDirs() map[string]string {
-	rows, err := s.db.Query(
+func (s *PGSkillStore) ListSystemSkillDirs(ctx context.Context) map[string]string {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT slug, file_path FROM skills WHERE is_system = true AND enabled = true`)
 	if err != nil {
 		return nil

@@ -79,6 +79,14 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 
 	slog.Info("inbound debounce configured", "debounce_ms", debounceMs)
 
+	// Track background goroutines (subagent announces, teammate messages)
+	// so shutdown can wait for in-flight work to complete.
+	var bgWg sync.WaitGroup
+	defer func() {
+		bgWg.Wait()
+		slog.Info("inbound consumer: all background goroutines drained")
+	}()
+
 	for {
 		msg, ok := msgBus.ConsumeInbound(ctx)
 		if !ok {
@@ -95,10 +103,10 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 			}
 		}
 
-		if handleSubagentAnnounce(ctx, msg, cfg, sched, channelMgr, msgBus, getAnnounceMu) {
+		if handleSubagentAnnounce(ctx, msg, cfg, sched, channelMgr, msgBus, getAnnounceMu, &bgWg) {
 			continue
 		}
-		if handleTeammateMessage(ctx, msg, cfg, sched, channelMgr, teamStore, agentStore, msgBus, postTurn, &taskRunSessions) {
+		if handleTeammateMessage(ctx, msg, cfg, sched, channelMgr, teamStore, agentStore, msgBus, postTurn, &taskRunSessions, &bgWg) {
 			continue
 		}
 		if handleResetCommand(msg, cfg, sessStore) {

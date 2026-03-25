@@ -12,7 +12,6 @@ import { CapabilitiesSection } from "./overview-sections/capabilities-section";
 import { ChatGPTOAuthRoutingSummarySection } from "./overview-sections/chatgpt-oauth-routing-summary-section";
 import { HeartbeatCard } from "./overview-sections/heartbeat-card";
 import { MemorySection } from "./config-sections";
-import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type { UseAgentHeartbeatReturn } from "../hooks/use-agent-heartbeat";
 
 interface AgentOverviewTabProps {
@@ -49,8 +48,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
     typeof otherCfg.skill_nudge_interval === "number" ? otherCfg.skill_nudge_interval : 15,
   );
 
-  // Memory (now standalone section)
-  const [memEnabled, setMemEnabled] = useState(agent.memory_config != null);
+  // Memory (always shown — per-agent overrides, empty = use system defaults)
   const [mem, setMem] = useState<MemoryConfig>(agent.memory_config ?? {});
 
   // Capabilities (subagents + tool policy)
@@ -85,7 +83,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         is_default: isDefault,
         other_config: updatedOtherConfig,
         budget_monthly_cents: budgetCents,
-        memory_config: memEnabled ? mem : null,
+        memory_config: mem,
         subagents_config: subEnabled ? sub : null,
         tools_config: toolsEnabled
           ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
@@ -132,19 +130,11 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
 
       <ChatGPTOAuthRoutingSummarySection agent={agent} onManage={onManageCodexPool} />
 
-      {/* Memory — standalone section (was inside Capabilities) */}
-      <section className="space-y-4">
-        <ConfigGroupHeader
-          title={t("configSections.memory.title")}
-          description={t("configSections.memory.description")}
-        />
-        <MemorySection
-          enabled={memEnabled}
-          value={mem}
-          onToggle={(v) => { setMemEnabled(v); if (!v) setMem({}); }}
-          onChange={setMem}
-        />
-      </section>
+      {/* Memory — always visible, per-agent overrides */}
+      <MemorySection
+        value={mem}
+        onChange={setMem}
+      />
 
       <HeartbeatCard heartbeat={heartbeat} />
 
