@@ -183,7 +183,7 @@
     "proxy": { "label": "Proxy HTTP", "help": "Định tuyến lưu lượng bot qua proxy HTTP" },
     "dm_policy": { "label": "Chính sách DM" },
     "group_policy": { "label": "Chính sách nhóm" },
-    "require_mention": { "label": "Yêu cầu @đề cập trong nhóm" },
+    "require_mention": { "label": "Yêu cầu @đề cập trong nhóm", "disabledHint": "Chế độ nhường tự động lắng nghe tất cả tin nhắn" },
     "mention_mode": { "label": "Chế độ đề cập", "help": "Nghiêm ngặt: chỉ phản hồi khi được @đề cập. Nhường: phản hồi tất cả tin nhắn trừ khi bot khác được đề cập." },
     "history_limit": { "label": "Giới hạn lịch sử nhóm", "help": "Số tin nhắn nhóm chờ tối đa cho ngữ cảnh (0 = tắt)" },
     "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },

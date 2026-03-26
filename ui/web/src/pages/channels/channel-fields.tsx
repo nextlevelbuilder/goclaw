@@ -84,6 +84,7 @@ function FieldRenderer({
   // i18n: try "fieldConfig.<key>.label" / "fieldConfig.<key>.help", fall back to hardcoded schema string
   const label = t(`fieldConfig.${field.key}.label`, { defaultValue: field.label });
   const help = field.help ? t(`fieldConfig.${field.key}.help`, { defaultValue: field.help }) : "";
+  const resolvedHint = disabledHint ? t(disabledHint, { defaultValue: disabledHint }) : undefined;
   const labelSuffix = field.required && !isEdit ? " *" : "";
   const editHint = isEdit && field.type === "password" ? ` ${t("form.credentialsHint")}` : "";
 
@@ -131,8 +132,8 @@ function FieldRenderer({
             disabled={disabled}
           />
           <Label htmlFor={id}>{label}</Label>
-          {disabledHint && <span className="text-xs text-muted-foreground ml-1">— {disabledHint}</span>}
-          {!disabledHint && help && <span className="text-xs text-muted-foreground ml-1">— {help}</span>}
+          {resolvedHint && <span className="text-xs text-muted-foreground ml-1">— {resolvedHint}</span>}
+          {!resolvedHint && help && <span className="text-xs text-muted-foreground ml-1">— {help}</span>}
         </div>
       );
 

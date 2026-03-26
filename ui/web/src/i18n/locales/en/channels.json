@@ -183,7 +183,7 @@
     "proxy": { "label": "HTTP Proxy", "help": "Route bot traffic through an HTTP proxy" },
     "dm_policy": { "label": "DM Policy" },
     "group_policy": { "label": "Group Policy" },
-    "require_mention": { "label": "Require @mention in groups" },
+    "require_mention": { "label": "Require @mention in groups", "disabledHint": "Yield mode automatically listens to all messages" },
     "mention_mode": { "label": "Mention Mode", "help": "Strict: only respond when @mentioned. Yield: respond to all messages unless another bot is explicitly mentioned." },
     "history_limit": { "label": "Group History Limit", "help": "Max pending group messages for context (0 = disabled)" },
     "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },

@@ -82,7 +82,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
     { key: "mention_mode", label: "Mention Mode", type: "select", options: mentionModeOptions, defaultValue: "strict", help: "Strict: only respond when @mentioned. Yield: respond to all messages unless another bot is explicitly mentioned." },
-    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true, disabledWhen: { key: "mention_mode", value: "yield", hint: "Yield mode automatically listens to all messages" } },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true, disabledWhen: { key: "mention_mode", value: "yield", hint: "fieldConfig.require_mention.disabledHint" } },
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
     { key: "dm_stream", label: "DM Streaming", type: "boolean", defaultValue: true, help: "Stream response progressively in DMs" },
     { key: "group_stream", label: "Group Streaming", type: "boolean", defaultValue: false, help: "Stream response progressively in groups" },
