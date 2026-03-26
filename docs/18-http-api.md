@@ -141,7 +141,7 @@ Response: `{content, run_id, usage?}`. Used by orchestrators (n8n, Paperclip) to
 ### Codex/OpenAI OAuth Routing in `other_config`
 
 For agents whose main `provider` is a `chatgpt_oauth` provider, `other_config.chatgpt_oauth_routing`
-can opt the agent into multi-account routing while keeping the main `provider` field as the preferred/default account alias.
+can override or inherit multi-account routing while keeping the main `provider` field as the preferred/default account alias.
 
 ```json
 {
@@ -149,6 +149,7 @@ can opt the agent into multi-account routing while keeping the main `provider` f
   "model": "gpt-5.4",
   "other_config": {
     "chatgpt_oauth_routing": {
+      "override_mode": "custom",
       "strategy": "round_robin",
       "extra_provider_names": ["codex-work", "codex-team"]
     }
@@ -157,12 +158,31 @@ can opt the agent into multi-account routing while keeping the main `provider` f
 ```
 
 Rules:
-- `strategy: "manual"` keeps the main `provider` as the preferred account.
+- Provider settings may define reusable `settings.codex_pool` defaults for a primary alias.
+- `override_mode: "inherit"` tells the agent to follow those provider defaults.
+- `override_mode: "custom"` stores an agent-local override.
+- `strategy: "primary_first"` keeps the main `provider` as the preferred account.
 - Provider aliases are arbitrary. `openai-codex`, `codex-work`, and `codex-team` are examples, not required prefixes.
 - `strategy: "round_robin"` rotates requests across the main provider plus the listed extra authenticated OpenAI Codex OAuth providers.
+- `strategy: "priority_order"` tries the main provider first, then drains the listed extra providers in order.
 - Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth provider in the same request.
 - Only enabled and authenticated `chatgpt_oauth` providers participate.
 - Provider-scoped auth remains unchanged: `cmd/auth` and `/v1/auth/chatgpt/{provider}/*` still operate on explicit providers.
+
+Provider-level defaults example:
+
+```json
+{
+  "name": "openai-codex",
+  "provider_type": "chatgpt_oauth",
+  "settings": {
+    "codex_pool": {
+      "strategy": "round_robin",
+      "extra_provider_names": ["codex-work", "codex-team"]
+    }
+  }
+}
+```
 
 ### Codex Pool Activity
 
@@ -174,7 +194,7 @@ Query parameters:
 - `limit` optional, defaults to `18`, max `50`
 
 Response fields:
-- `strategy`: effective routing strategy (`manual` or `round_robin`)
+- `strategy`: effective routing strategy (`primary_first`, `round_robin`, or `priority_order`)
 - `pool_providers`: configured primary + extra provider aliases in pool order
 - `stats_sample_size`: number of recent routed `llm_call` spans used to derive runtime health. The server derives health from `max(limit, 120)` recent spans even when `recent_requests` is still capped by the requested `limit`.
 - `provider_counts`: per-alias routing evidence:

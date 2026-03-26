@@ -1,3 +1,4 @@
+import type { EffectiveChatGPTOAuthRoutingStrategy } from "@/types/agent";
 import { useQuery } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
@@ -35,7 +36,7 @@ export interface CodexPoolRecentRequest {
 }
 
 interface CodexPoolActivityResponse {
-  strategy: "manual" | "round_robin";
+  strategy: EffectiveChatGPTOAuthRoutingStrategy;
   pool_providers: string[];
   stats_sample_size: number;
   provider_counts: CodexPoolProviderCount[];
@@ -57,7 +58,7 @@ export function useCodexPoolActivity(agentId: string, limit = 18, enabled = true
   return {
     ...query,
     data: query.data ?? {
-      strategy: "manual" as const,
+      strategy: "primary_first" as const,
       pool_providers: [],
       stats_sample_size: 0,
       provider_counts: [],

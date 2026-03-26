@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -188,6 +189,59 @@ func TestOAuthHandlerAuth(t *testing.T) {
 
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status code with token = %d, want %d", w2.Code, http.StatusOK)
+	}
+}
+
+func TestOAuthHandlerSaveAndRegisterAppliesCodexPoolDefaults(t *testing.T) {
+	provStore := newMockProviderStore()
+	secretStore := newMockSecretsStore()
+	providerReg := providers.NewRegistry(nil)
+	handler := NewOAuthHandler(provStore, secretStore, providerReg, nil)
+
+	tenantID := uuid.New()
+	ctx := store.WithTenantID(context.Background(), tenantID)
+	if err := provStore.CreateProvider(ctx, &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		TenantID:     tenantID,
+		Name:         oauth.DefaultProviderName,
+		ProviderType: store.ProviderChatGPTOAuth,
+		APIBase:      oauth.DefaultProviderAPIBase,
+		Enabled:      true,
+		Settings: json.RawMessage(`{
+			"codex_pool": {
+				"strategy": "priority_order",
+				"extra_provider_names": ["openai-codex-team"]
+			}
+		}`),
+	}); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	if _, err := handler.saveAndRegister(ctx, oauth.DefaultProviderName, "", "", &oauth.OpenAITokenResponse{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+		ExpiresIn:    3600,
+	}); err != nil {
+		t.Fatalf("saveAndRegister: %v", err)
+	}
+
+	runtimeProvider, err := providerReg.GetForTenant(tenantID, oauth.DefaultProviderName)
+	if err != nil {
+		t.Fatalf("GetForTenant: %v", err)
+	}
+	codex, ok := runtimeProvider.(*providers.CodexProvider)
+	if !ok {
+		t.Fatalf("runtime provider = %T, want *providers.CodexProvider", runtimeProvider)
+	}
+	defaults := codex.RoutingDefaults()
+	if defaults == nil {
+		t.Fatal("RoutingDefaults() = nil, want defaults")
+	}
+	if defaults.Strategy != store.ChatGPTOAuthStrategyPriority {
+		t.Fatalf("Strategy = %q, want %q", defaults.Strategy, store.ChatGPTOAuthStrategyPriority)
+	}
+	if len(defaults.ExtraProviderNames) != 1 || defaults.ExtraProviderNames[0] != "openai-codex-team" {
+		t.Fatalf("ExtraProviderNames = %#v, want [\"openai-codex-team\"]", defaults.ExtraProviderNames)
 	}
 }
 

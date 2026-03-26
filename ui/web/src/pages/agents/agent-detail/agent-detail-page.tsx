@@ -113,13 +113,15 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
         </div>
       </div>
 
-      <AgentAdvancedDialog
-        key={agent.id}
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        agent={agent}
-        onUpdate={updateAgent}
-      />
+      {advancedOpen ? (
+        <AgentAdvancedDialog
+          key={agent.id}
+          open={advancedOpen}
+          onOpenChange={setAdvancedOpen}
+          agent={agent}
+          onUpdate={updateAgent}
+        />
+      ) : null}
 
       <SummoningModal
         open={summoningOpen}

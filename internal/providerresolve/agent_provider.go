@@ -21,16 +21,27 @@ func ResolveConfiguredProvider(registry *providers.Registry, agent *store.AgentD
 		}
 	}
 
-	if routing := agent.ParseChatGPTOAuthRouting(); routing != nil {
-		router := providers.NewChatGPTOAuthRouter(
-			agent.TenantID,
-			registry,
-			agent.Provider,
-			routing.Strategy,
-			routing.ExtraProviderNames,
-		)
-		if router != nil && router.HasRegisteredProviders() {
-			return router, nil
+	var providerDefaults *store.ChatGPTOAuthRoutingConfig
+	if codex, ok := baseProvider.(*providers.CodexProvider); ok {
+		if defaults := codex.RoutingDefaults(); defaults != nil {
+			providerDefaults = &store.ChatGPTOAuthRoutingConfig{
+				Strategy:           defaults.Strategy,
+				ExtraProviderNames: defaults.ExtraProviderNames,
+			}
+		}
+	}
+	if routing := store.ResolveEffectiveChatGPTOAuthRouting(providerDefaults, agent.ParseChatGPTOAuthRouting()); routing != nil {
+		if routing.Strategy != store.ChatGPTOAuthStrategyPrimaryFirst || len(routing.ExtraProviderNames) > 0 {
+			router := providers.NewChatGPTOAuthRouter(
+				agent.TenantID,
+				registry,
+				agent.Provider,
+				routing.Strategy,
+				routing.ExtraProviderNames,
+			)
+			if router != nil && router.HasRegisteredProviders() {
+				return router, nil
+			}
 		}
 	}
 

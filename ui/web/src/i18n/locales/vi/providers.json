@@ -168,13 +168,16 @@
     "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
     "embeddingSection": "Embedding",
     "oauthAccountUsage": "Cách dùng tài khoản",
-    "oauthAccountUsageDesc": "Cách bí danh này hoạt động như preferred account và extra account.",
+    "oauthAccountUsageDesc": "Cách bí danh này hoạt động như tài khoản chính cho pool mặc định ở cấp provider.",
     "oauthAliasLabel": "Bí danh tài khoản",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "Tiền tố model",
     "oauthModelPrefixCopied": "Đã sao chép tiền tố model",
     "oauthPreferredHint": "Đặt trường Provider của agent thành bí danh này để biến nó thành bí danh OpenAI chính.",
-    "oauthRoutingHint": "Mở một agent đang dùng bí danh này, rồi vào trang OpenAI Account Pool của agent đó để thêm các bí danh đã đăng nhập khác hoặc round robin.",
+    "oauthProviderDefaultHint": "Dùng phần Pool Defaults bên dưới để định nghĩa chính sách routing OpenAI Codex dùng lại cho mọi agent trỏ vào bí danh này.",
+    "oauthRoutingHint": "Trang agent giờ sẽ hiển thị pool hiệu lực của agent đó, cùng việc nó đang kế thừa mặc định này hay đang dùng override riêng.",
+    "codexPoolDefaultsTitle": "Pool Defaults",
+    "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại cho các agent dùng bí danh này làm provider chính.",
     "oauthDisplayNameRecommendation": "Thêm display name nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool."
   },
   "pageHint": {

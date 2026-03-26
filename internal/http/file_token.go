@@ -60,7 +60,7 @@ func VerifyFileToken(token, path, secret string) bool {
 // fileTokenHMAC computes the HMAC signature component.
 func fileTokenHMAC(path, secret string, expiry int64) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(fmt.Sprintf("%s:%d", path, expiry)))
+	mac.Write(fmt.Appendf(nil, "%s:%d", path, expiry))
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:16])
 }
 

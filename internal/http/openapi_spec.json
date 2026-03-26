@@ -373,7 +373,7 @@
                   "type": "object",
                   "required": ["strategy", "pool_providers", "stats_sample_size", "provider_counts", "recent_requests"],
                   "properties": {
-                    "strategy": { "type": "string", "enum": ["manual", "round_robin"] },
+                    "strategy": { "type": "string", "enum": ["primary_first", "round_robin", "priority_order"] },
                     "pool_providers": {
                       "type": "array",
                       "items": { "type": "string" }
@@ -844,9 +844,10 @@
             "properties": {
               "chatgpt_oauth_routing": {
                 "type": "object",
-                "description": "Optional agent-side routing for ChatGPT OAuth providers. The main provider field remains the preferred/default account.",
+                "description": "Optional agent-side routing override for ChatGPT OAuth providers. The main provider field remains the preferred/default account, while provider settings may supply inherited defaults.",
                 "properties": {
-                  "strategy": { "type": "string", "enum": ["manual", "round_robin"] },
+                  "override_mode": { "type": "string", "enum": ["inherit", "custom"] },
+                  "strategy": { "type": "string", "enum": ["manual", "primary_first", "round_robin", "priority_order"] },
                   "extra_provider_names": { "type": "array", "items": { "type": "string" } }
                 }
               }

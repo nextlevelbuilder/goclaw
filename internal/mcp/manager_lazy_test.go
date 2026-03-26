@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"slices"
 	"sync"
 	"testing"
 
@@ -245,13 +246,7 @@ func TestRegistry_WiredToManager_ActivatedToolAppearsInList(t *testing.T) {
 	reg.TryActivateDeferred(name)
 
 	// Appears in List() after activation.
-	found := false
-	for _, n := range reg.List() {
-		if n == name {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(reg.List(), name)
 	if !found {
 		t.Errorf("tool %q should appear in registry.List() after activation", name)
 	}

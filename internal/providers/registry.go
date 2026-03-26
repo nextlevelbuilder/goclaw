@@ -139,8 +139,8 @@ func (r *Registry) ListForTenant(tenantID uuid.UUID) []string {
 	// Add tenant-specific providers first
 	if tenantID != MasterTenantID {
 		for key := range r.providers {
-			if strings.HasPrefix(key, tenantPrefix) {
-				name := strings.TrimPrefix(key, tenantPrefix)
+			if after, ok := strings.CutPrefix(key, tenantPrefix); ok {
+				name := after
 				if !seen[name] {
 					seen[name] = true
 					names = append(names, name)
@@ -151,8 +151,8 @@ func (r *Registry) ListForTenant(tenantID uuid.UUID) []string {
 
 	// Add master tenant providers (not already overridden)
 	for key := range r.providers {
-		if strings.HasPrefix(key, masterPrefix) {
-			name := strings.TrimPrefix(key, masterPrefix)
+		if after, ok := strings.CutPrefix(key, masterPrefix); ok {
+			name := after
 			if !seen[name] {
 				seen[name] = true
 				names = append(names, name)

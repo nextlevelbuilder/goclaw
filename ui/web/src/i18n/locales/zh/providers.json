@@ -186,13 +186,16 @@
     "enabledDesc": "Provider已激活并可供Agent使用",
     "embeddingSection": "Embedding",
     "oauthAccountUsage": "账户用法",
-    "oauthAccountUsageDesc": "这个别名如何作为 preferred account 和 extra account 使用。",
+    "oauthAccountUsageDesc": "这个别名如何作为 provider 级默认池中的主账户使用。",
     "oauthAliasLabel": "账户别名",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "模型前缀",
     "oauthModelPrefixCopied": "模型前缀已复制",
     "oauthPreferredHint": "把 agent 的 Provider 字段设为这个别名，就能把它作为主 OpenAI 别名。",
-    "oauthRoutingHint": "打开一个正在使用该别名的 agent，然后进入它的 OpenAI 账户池页面以添加其他已登录别名或启用 round robin。",
+    "oauthProviderDefaultHint": "使用下方的 Pool Defaults，为所有把这个别名设为主 provider 的 agent 定义可复用的 OpenAI Codex 路由策略。",
+    "oauthRoutingHint": "Agent 页面现在会展示该 agent 的最终生效账户池，以及它是继承这里的默认值还是使用自己的覆盖配置。",
+    "codexPoolDefaultsTitle": "Pool Defaults",
+    "codexPoolDefaultsDescription": "为使用这个别名作为主 provider 的 agent 定义可复用的 OpenAI Codex 账户池。",
     "oauthDisplayNameRecommendation": "如果您希望多个 OpenAI Codex OAuth 账户在池里显示得更清楚，可以补充 display name。"
   },
   "pageHint": {

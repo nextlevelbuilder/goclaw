@@ -76,10 +76,9 @@ func StaggerOffset(agentID uuid.UUID, intervalSec int) time.Duration {
 		h ^= uint32(b)
 		h *= 16777619 // FNV prime
 	}
-	maxOffset := intervalSec / 10 // 10% of interval
-	if maxOffset < 1 {
-		maxOffset = 1
-	}
+	maxOffset := max(
+		// 10% of interval
+		intervalSec/10, 1)
 	offset := int(h) % maxOffset
 	if offset < 0 {
 		offset = -offset
@@ -89,7 +88,7 @@ func StaggerOffset(agentID uuid.UUID, intervalSec int) time.Duration {
 
 // HeartbeatEvent represents a heartbeat lifecycle event sent to subscribers.
 type HeartbeatEvent struct {
-	Action   string `json:"action"`             // "running", "completed", "suppressed", "error", "skipped"
+	Action   string `json:"action"` // "running", "completed", "suppressed", "error", "skipped"
 	AgentID  string `json:"agentId"`
 	AgentKey string `json:"agentKey,omitempty"`
 	Status   string `json:"status,omitempty"`

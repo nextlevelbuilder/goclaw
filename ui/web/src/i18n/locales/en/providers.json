@@ -164,13 +164,16 @@
     "enabledDesc": "Provider is active and available for agents",
     "embeddingSection": "Embedding",
     "oauthAccountUsage": "Account Usage",
-    "oauthAccountUsageDesc": "How this alias works as a preferred account and as an extra routed account.",
+    "oauthAccountUsageDesc": "How this alias works as the primary account for a provider-level default pool.",
     "oauthAliasLabel": "Account Alias",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "Model Prefix",
     "oauthModelPrefixCopied": "Model prefix copied",
     "oauthPreferredHint": "Set an agent's Provider field to this alias to make it the primary OpenAI alias.",
-    "oauthRoutingHint": "Open an agent using this alias, then use its OpenAI Account Pool page to add more signed-in aliases or round robin.",
+    "oauthProviderDefaultHint": "Use the pool defaults below to define the reusable OpenAI Codex routing policy for every agent that points at this alias.",
+    "oauthRoutingHint": "Agent pages now show the effective pool for that agent, plus whether it inherits these defaults or saves a custom override.",
+    "codexPoolDefaultsTitle": "Pool Defaults",
+    "codexPoolDefaultsDescription": "Define the reusable OpenAI Codex pool for agents that use this alias as their primary provider.",
     "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple OpenAI Codex OAuth accounts appear in the pool."
   },
   "embedding": {

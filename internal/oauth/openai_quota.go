@@ -277,6 +277,37 @@ func marshalOAuthSettings(settings OAuthSettings) json.RawMessage {
 	return json.RawMessage(data)
 }
 
+func marshalOAuthSettingsInto(raw json.RawMessage, settings OAuthSettings) json.RawMessage {
+	if len(raw) == 0 {
+		return marshalOAuthSettings(settings)
+	}
+
+	next := make(map[string]any)
+	if err := json.Unmarshal(raw, &next); err != nil {
+		return marshalOAuthSettings(settings)
+	}
+
+	next["expires_at"] = settings.ExpiresAt
+	if settings.Scopes != "" {
+		next["scopes"] = settings.Scopes
+	} else {
+		delete(next, "scopes")
+	}
+	if settings.AccountID != "" {
+		next["account_id"] = settings.AccountID
+	} else {
+		delete(next, "account_id")
+	}
+	if settings.PlanType != "" {
+		next["plan_type"] = settings.PlanType
+	} else {
+		delete(next, "plan_type")
+	}
+
+	data, _ := json.Marshal(next)
+	return json.RawMessage(data)
+}
+
 func firstUsageWindows(values ...*openAIUsageWindows) *openAIUsageWindows {
 	for _, value := range values {
 		if value != nil {

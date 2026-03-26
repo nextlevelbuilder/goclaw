@@ -16,7 +16,11 @@ import {
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
-import { buildAgentOtherConfigWithChatGPTOAuthRouting } from "./agent-display-utils";
+import { getChatGPTOAuthProviderRouting } from "@/types/provider";
+import {
+  buildAgentOtherConfigWithChatGPTOAuthRouting,
+  normalizeChatGPTOAuthRouting,
+} from "./agent-display-utils";
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -28,17 +32,23 @@ interface AgentAdvancedDialogProps {
 export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: AgentAdvancedDialogProps) {
   const { t } = useTranslation("agents");
   const { providers } = useProviders();
+  const providerByName = new Map(providers.map((provider) => [provider.name, provider]));
+  const currentProvider = providerByName.get(agent.provider);
+  const providerDefaults = getChatGPTOAuthProviderRouting(currentProvider?.settings);
 
   const deriveState = (a: AgentData) => {
     const otherObj = (a.other_config ?? {}) as Record<string, unknown>;
-    const routing = (otherObj.chatgpt_oauth_routing ?? {}) as ChatGPTOAuthRoutingConfig;
+    const routing = normalizeChatGPTOAuthRouting(a.other_config);
     return {
       thinkingLevel: typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off",
       chatgptRouting: {
-        strategy: routing.strategy === "round_robin" ? "round_robin" : "manual",
-        extra_provider_names: Array.isArray(routing.extra_provider_names)
-          ? routing.extra_provider_names.filter((name): name is string => typeof name === "string")
-          : [],
+        override_mode: routing.isExplicit
+          ? routing.overrideMode
+          : providerDefaults
+            ? "inherit"
+            : "custom",
+        strategy: routing.strategy,
+        extra_provider_names: routing.extraProviderNames,
       } as ChatGPTOAuthRoutingConfig,
       wsSharing: (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig,
       comp: a.compaction_config ?? {},
@@ -82,7 +92,11 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       // Only send the keys this dialog owns to avoid overwriting keys managed by
       // the overview tab. The backend does a full column replace, so we must read
       // the latest agent data and merge our keys into it.
-      const otherBase = buildAgentOtherConfigWithChatGPTOAuthRouting(agent, providers, chatgptRouting);
+      const otherBase = buildAgentOtherConfigWithChatGPTOAuthRouting(
+        agent,
+        chatgptRouting,
+        currentProvider?.settings,
+      );
       delete otherBase.thinking_level;
       delete otherBase.workspace_sharing;
       if (thinkingLevel && thinkingLevel !== "off") {
@@ -134,6 +148,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
             providers={providers}
             value={chatgptRouting}
             onChange={setChatgptRouting}
+            defaultRouting={providerDefaults}
           />
 
           {/* Performance */}

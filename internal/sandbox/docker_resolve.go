@@ -109,9 +109,9 @@ func detectContainerID() string {
 	// Strategy 1: Parse /proc/self/mountinfo for docker container ID.
 	// Lines contain paths like /docker/containers/<id>/...
 	if data, err := os.ReadFile("/proc/self/mountinfo"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			if idx := strings.Index(line, "/docker/containers/"); idx != -1 {
-				rest := line[idx+len("/docker/containers/"):]
+		for line := range strings.SplitSeq(string(data), "\n") {
+			if _, after, ok := strings.Cut(line, "/docker/containers/"); ok {
+				rest := after
 				if slashIdx := strings.IndexByte(rest, '/'); slashIdx > 0 {
 					id := rest[:slashIdx]
 					if len(id) >= 12 { // Docker IDs are 64 hex chars, short form 12

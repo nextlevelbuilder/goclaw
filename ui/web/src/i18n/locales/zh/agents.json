@@ -132,9 +132,9 @@
     "badge": "Codex 池",
     "badgeTooltip": "这个 agent 可以在多个 OpenAI OAuth 别名之间分发 Codex 流量。",
     "summaryTitle": "OpenAI 账户池",
-    "summaryDescription": "保留一个主别名，再把更多已登录的 ChatGPT Subscription (OAuth) 账户加入池。",
+    "summaryDescription": "查看这个 agent 当前生效的 OpenAI Codex 账户池，然后决定它是继承 provider 默认值，还是使用自己的覆盖配置。",
     "strategyLabel": "流量策略",
-    "strategyHint": "Primary Only 会把流量固定在主别名。Round Robin 会在主别名和选中的池成员之间轮换。",
+    "strategyHint": "Primary First 会始终先使用主别名。Round Robin 会在所有可用账户之间轮换。Priority Order 会在主别名之后按配置顺序依次尝试。",
     "extraAccountsLabel": "额外账户",
     "availableExtraAccountsLabel": "可添加的额外账户",
     "extraHint": "只有已启用且已登录的 OpenAI Codex OAuth 别名才能参与。",
@@ -151,7 +151,7 @@
     "attentionTitle": "需要关注的账户",
     "attentionHint": "已选中但被禁用或已退出登录的账户会继续显示在这里，直到您移除它们或重新登录。",
     "pageTitle": "OpenAI 账户池",
-    "pageDescription": "选择 {{name}} 可以使用的已登录 ChatGPT Subscription (OAuth) 账户，然后直接验证池状态。",
+    "pageDescription": "查看 {{name}} 当前生效的 OpenAI Codex 账户池，并在 provider 默认值与 agent 自定义覆盖之间切换。",
     "backToAgent": "返回 Agent",
     "openProviders": "打开 Providers",
     "pageUnsupportedTitle": "这个 agent 当前未使用 OpenAI Codex OAuth provider",
@@ -207,7 +207,16 @@
     "selectedCount": "{{count}} 个在池中",
     "productLabel": "ChatGPT Subscription (OAuth)",
     "controlTitle": "池设置",
-    "controlDescription": "策略、池成员，然后保存。",
+    "controlDescription": "选择这个 agent 是继承 provider 默认值还是使用自定义池，然后在下方查看最终生效成员。",
+    "mode": {
+      "label": "Agent 路由模式",
+      "inherit": "使用 Provider 默认值",
+      "custom": "仅此 Agent 自定义",
+      "noProviderDefault": "这个 provider 还没有保存默认账户池。请先去 Providers 页面配置，或继续保持此 agent 为自定义模式。",
+      "providerDefaultSummary": "Provider 默认池包含 {{count}} 个账户",
+      "summaryInherited": "这个 agent 当前正在使用 provider 默认账户池。",
+      "summaryCustom": "这个 agent 当前正在使用自己的覆盖账户池。"
+    },
     "poolStateTitle": "池状态",
     "routerActiveTitle": "路由中",
     "fallbackTitle": "仅备用",
@@ -258,8 +267,8 @@
       "verifyDescription": "池已经保存且处于就绪状态，但最近调用还没有显示所有就绪别名都被直接选中。",
       "healthyTitle": "当前不需要额外操作",
       "healthyDescription": "最近调用已经直接选中了已保存池中的所有就绪别名。",
-      "manualTitle": "当前策略仍然是 Primary Only",
-      "manualDescription": "在您切换流量策略之前，持续使用主别名是预期行为。"
+      "manualTitle": "当前启用的是有序路由",
+      "manualDescription": "这个 agent 并不会在每个请求上轮换。未启用 round robin 时，重复命中主别名是正常现象。"
     },
     "howItWorksTitle": "这个池如何工作",
     "howItWorks": {
@@ -339,8 +348,8 @@
         "description": "最近 {{count}} 个追踪 span 中，只有 {{observed}} 个就绪账户有直接路由证据。"
       },
       "manual": {
-        "title": "当前是 Primary Only",
-        "description": "当流量策略仍为 Primary Only 时，持续命中主别名是正常现象。"
+        "title": "当前启用的是有序路由",
+        "description": "这个 agent 并不会在每个请求上轮换。未启用 round robin 时，重复命中主别名是正常现象。"
       }
     },
     "role": {
@@ -353,8 +362,10 @@
       "disabled": "已禁用"
     },
     "strategy": {
-      "manual": "Primary Only",
-      "roundRobin": "Round Robin"
+      "manual": "Primary First",
+      "primaryFirst": "Primary First",
+      "roundRobin": "Round Robin",
+      "priorityOrder": "Priority Order"
     }
   },
   "identity": {

@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/shared/page-header";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
+import { PageHeader } from "@/components/shared/page-header";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -16,12 +16,22 @@ import {
 } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import { useChatGPTOAuthProviderQuotas } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
 import { useAuthStore } from "@/stores/use-auth-store";
-import type { ChatGPTOAuthRoutingConfig } from "@/types/agent";
+import type {
+  ChatGPTOAuthRoutingConfig,
+  EffectiveChatGPTOAuthRoutingStrategy,
+} from "@/types/agent";
+import {
+  getChatGPTOAuthProviderRouting,
+  normalizeChatGPTOAuthStrategy,
+} from "@/types/provider";
 import { useAgentDetail } from "../hooks/use-agent-detail";
 import {
-  buildAgentOtherConfigWithChatGPTOAuthRouting,
   agentDisplayName,
+  buildAgentOtherConfigWithChatGPTOAuthRouting,
   normalizeChatGPTOAuthRouting,
+  normalizeChatGPTOAuthRoutingInput,
+  resolveEffectiveChatGPTOAuthRouting,
+  type NormalizedChatGPTOAuthRouting,
 } from "./agent-display-utils";
 import { getRouteReadiness } from "./chatgpt-oauth-quota-utils";
 import { ChatGPTOAuthRoutingSection } from "./config-sections";
@@ -42,6 +52,56 @@ function providerStatus(
   );
 }
 
+function strategyLabelKey(
+  strategy: EffectiveChatGPTOAuthRoutingStrategy,
+): string {
+  if (strategy === "round_robin") return "chatgptOAuthRouting.strategy.roundRobin";
+  if (strategy === "priority_order") return "chatgptOAuthRouting.strategy.priorityOrder";
+  return "chatgptOAuthRouting.strategy.primaryFirst";
+}
+
+function buildDraftRouting(
+  savedRouting: NormalizedChatGPTOAuthRouting,
+  hasProviderDefaults: boolean,
+): ChatGPTOAuthRoutingConfig {
+  if (savedRouting.isExplicit) {
+    return {
+      override_mode: savedRouting.overrideMode,
+      strategy: savedRouting.strategy,
+      extra_provider_names: savedRouting.extraProviderNames,
+    };
+  }
+
+  if (hasProviderDefaults) {
+    return {
+      override_mode: "inherit",
+      strategy: "primary_first",
+      extra_provider_names: [],
+    };
+  }
+
+  return {
+    override_mode: "custom",
+    strategy: "primary_first",
+    extra_provider_names: [],
+  };
+}
+
+function routingDraftSignature(
+  routing: ChatGPTOAuthRoutingConfig,
+  hasProviderDefaults: boolean,
+): string {
+  const normalized = normalizeChatGPTOAuthRoutingInput(routing);
+  if (normalized.overrideMode === "inherit" && hasProviderDefaults) {
+    return JSON.stringify({ override_mode: "inherit" });
+  }
+  return JSON.stringify({
+    override_mode: "custom",
+    strategy: normalized.strategy,
+    extra_provider_names: normalized.extraProviderNames,
+  });
+}
+
 export function AgentCodexPoolPage() {
   const { id = "" } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -51,23 +111,6 @@ export function AgentCodexPoolPage() {
   const { agent, loading, updateAgent } = useAgentDetail(id);
   const { providers, loading: providersLoading } = useProviders();
   const { statuses } = useChatGPTOAuthProviderStatuses(providers);
-  const savedRouting = useMemo(
-    () => normalizeChatGPTOAuthRouting(agent?.other_config),
-    [agent?.other_config],
-  );
-  const [routing, setRouting] = useState<ChatGPTOAuthRoutingConfig>({
-    strategy: "manual",
-    extra_provider_names: [],
-  });
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setRouting({
-      strategy: savedRouting.strategy,
-      extra_provider_names: savedRouting.extraProviderNames,
-    });
-  }, [savedRouting]);
-
   const providerByName = useMemo(
     () => new Map(providers.map((provider) => [provider.name, provider])),
     [providers],
@@ -76,40 +119,93 @@ export function AgentCodexPoolPage() {
     () => new Map(statuses.map((status) => [status.provider.name, status])),
     [statuses],
   );
-  const currentProvider = agent
-    ? providerByName.get(agent.provider)
-    : undefined;
+  const currentProvider = agent ? providerByName.get(agent.provider) : undefined;
+  const providerDefaults = useMemo(
+    () => getChatGPTOAuthProviderRouting(currentProvider?.settings),
+    [currentProvider?.settings],
+  );
   const isEligible = Boolean(
-    agent &&
-    (currentProvider?.provider_type === "chatgpt_oauth" ||
-      savedRouting.extraProviderNames.length > 0 ||
-      savedRouting.strategy === "round_robin"),
+    agent && currentProvider?.provider_type === "chatgpt_oauth",
+  );
+  const savedRouting = useMemo(
+    () => normalizeChatGPTOAuthRouting(agent?.other_config),
+    [agent?.other_config],
+  );
+  const savedEffectiveRouting = useMemo(
+    () =>
+      resolveEffectiveChatGPTOAuthRouting(
+        agent?.provider ?? "",
+        currentProvider?.settings,
+        savedRouting,
+      ),
+    [agent?.provider, currentProvider?.settings, savedRouting],
+  );
+  const savedDraftRouting = useMemo(
+    () => buildDraftRouting(savedRouting, Boolean(providerDefaults)),
+    [providerDefaults, savedRouting],
+  );
+  const savedDraftSignature = useMemo(
+    () => routingDraftSignature(savedDraftRouting, Boolean(providerDefaults)),
+    [providerDefaults, savedDraftRouting],
+  );
+  const [routing, setRouting] = useState<ChatGPTOAuthRoutingConfig>(savedDraftRouting);
+  const [saving, setSaving] = useState(false);
+  const syncedAgentIDRef = useRef(agent?.id ?? "");
+  const savedDraftSignatureRef = useRef(savedDraftSignature);
+
+  const draftSignature = useMemo(
+    () => routingDraftSignature(routing, Boolean(providerDefaults)),
+    [providerDefaults, routing],
+  );
+
+  useEffect(() => {
+    const nextAgentID = agent?.id ?? "";
+    if (nextAgentID !== syncedAgentIDRef.current) {
+      syncedAgentIDRef.current = nextAgentID;
+      savedDraftSignatureRef.current = savedDraftSignature;
+      setRouting(savedDraftRouting);
+      return;
+    }
+
+    const previousSavedSignature = savedDraftSignatureRef.current;
+    if (savedDraftSignature === previousSavedSignature) {
+      return;
+    }
+
+    if (draftSignature === previousSavedSignature) {
+      setRouting(savedDraftRouting);
+    }
+    savedDraftSignatureRef.current = savedDraftSignature;
+  }, [agent?.id, draftSignature, savedDraftRouting, savedDraftSignature]);
+
+  const draftRouting = useMemo(
+    () => normalizeChatGPTOAuthRoutingInput(routing),
+    [routing],
+  );
+  const draftEffectiveRouting = useMemo(
+    () =>
+      resolveEffectiveChatGPTOAuthRouting(
+        agent?.provider ?? "",
+        currentProvider?.settings,
+        draftRouting,
+      ),
+    [agent?.provider, currentProvider?.settings, draftRouting],
   );
   const quotaProviderNames = useMemo(
     () =>
       Array.from(
         new Set(
           [
-            agent?.provider,
-            ...savedRouting.extraProviderNames,
-            ...(routing.extra_provider_names ?? []),
+            ...savedEffectiveRouting.poolProviderNames,
+            ...draftEffectiveRouting.poolProviderNames,
           ].filter(
-            (providerName): providerName is string => {
-              if (!providerName) return false;
-              return (
-                providerByName.get(providerName)?.provider_type ===
-                "chatgpt_oauth"
-              );
-            },
+            (providerName): providerName is string =>
+              Boolean(providerName) &&
+              providerByName.get(providerName)?.provider_type === "chatgpt_oauth",
           ),
         ),
       ),
-    [
-      agent?.provider,
-      providerByName,
-      routing.extra_provider_names,
-      savedRouting.extraProviderNames,
-    ],
+    [draftEffectiveRouting.poolProviderNames, providerByName, savedEffectiveRouting.poolProviderNames],
   );
   const {
     quotaByName,
@@ -126,17 +222,15 @@ export function AgentCodexPoolPage() {
     refetch: refreshActivity,
   } = useCodexPoolActivity(agent?.id ?? id, 8, Boolean(agent && isEligible));
 
-  const liveEntries = useMemo<CodexPoolEntry[]>(() => {
+  const buildEntries = (
+    poolNames: string[],
+  ): CodexPoolEntry[] => {
     if (!agent) return [];
     const countsByName = new Map(
       activity.provider_counts.map((item) => [item.provider_name, item]),
     );
-    const poolNames = [
-      agent.provider,
-      ...savedRouting.extraProviderNames,
-    ].filter(Boolean);
-    const uniqueNames = Array.from(new Set(poolNames));
-    return uniqueNames.map((providerName) => {
+
+    return poolNames.map((providerName) => {
       const provider = providerByName.get(providerName);
       const count = countsByName.get(providerName);
       return {
@@ -167,63 +261,16 @@ export function AgentCodexPoolPage() {
         quota: quotaByName.get(providerName),
       };
     });
-  }, [
-    activity.provider_counts,
-    agent,
-    providerByName,
-    quotaByName,
-    savedRouting.extraProviderNames,
-    statusByName,
-  ]);
-  const draftEntries = useMemo<CodexPoolEntry[]>(() => {
-    if (!agent) return [];
-    const countsByName = new Map(
-      activity.provider_counts.map((item) => [item.provider_name, item]),
-    );
-    const poolNames = [
-      agent.provider,
-      ...(routing.extra_provider_names ?? []),
-    ].filter(Boolean);
-    const uniqueNames = Array.from(new Set(poolNames));
-    return uniqueNames.map((providerName) => {
-      const provider = providerByName.get(providerName);
-      const count = countsByName.get(providerName);
-      return {
-        name: providerName,
-        label: provider?.display_name || providerName,
-        availability: providerStatus(
-          providerName,
-          statusByName,
-          provider?.enabled,
-        ),
-        role: providerName === agent.provider ? "preferred" : "extra",
-        requestCount: count?.request_count ?? 0,
-        directSelectionCount:
-          count?.direct_selection_count ?? count?.request_count ?? 0,
-        failoverServeCount: count?.failover_serve_count ?? 0,
-        successCount: count?.success_count ?? 0,
-        failureCount: count?.failure_count ?? 0,
-        consecutiveFailures: count?.consecutive_failures ?? 0,
-        successRate: count?.success_rate ?? 0,
-        healthScore: count?.health_score ?? 0,
-        healthState: count?.health_state ?? "idle",
-        lastSelectedAt: count?.last_selected_at,
-        lastFailoverAt: count?.last_failover_at,
-        lastUsedAt: count?.last_used_at,
-        lastSuccessAt: count?.last_success_at,
-        lastFailureAt: count?.last_failure_at,
-        providerHref: provider?.id ? `/providers/${provider.id}` : undefined,
-        quota: quotaByName.get(providerName),
-      };
-    });
-  }, [
-    activity.provider_counts,
-    agent,
-    providerByName,
-    quotaByName,
-    routing.extra_provider_names,
-    statusByName,
-  ]);
+  };
+
+  const liveEntries = useMemo(
+    () => buildEntries(savedEffectiveRouting.poolProviderNames),
+    [activity.provider_counts, agent, providerByName, quotaByName, savedEffectiveRouting.poolProviderNames, statusByName],
+  );
+  const draftEntries = useMemo(
+    () => buildEntries(draftEffectiveRouting.poolProviderNames),
+    [activity.provider_counts, agent, draftEffectiveRouting.poolProviderNames, providerByName, quotaByName, statusByName],
+  );
 
   const routeEntries = useMemo(
     () =>
@@ -264,13 +311,10 @@ export function AgentCodexPoolPage() {
           : 0),
       0,
     );
-  const savedStrategy =
-    savedRouting.strategy === "round_robin" ? "round_robin" : "manual";
-  const isDirty =
-    savedRouting.strategy !==
-      (routing.strategy === "round_robin" ? "round_robin" : "manual") ||
-    JSON.stringify(savedRouting.extraProviderNames) !==
-      JSON.stringify(routing.extra_provider_names ?? []);
+  const savedStrategy = normalizeChatGPTOAuthStrategy(
+    activity.strategy || savedEffectiveRouting.strategy,
+  );
+  const isDirty = draftSignature !== savedDraftSignature;
   const roundRobinVerified =
     savedStrategy === "round_robin" &&
     readyEntries.length > 1 &&
@@ -291,8 +335,8 @@ export function AgentCodexPoolPage() {
       await updateAgent({
         other_config: buildAgentOtherConfigWithChatGPTOAuthRouting(
           agent,
-          providers,
           routing,
+          currentProvider?.settings,
         ),
       });
       await Promise.all([refreshActivity(), refreshQuotas()]);
@@ -304,7 +348,7 @@ export function AgentCodexPoolPage() {
   };
 
   const summaryTone =
-    savedStrategy === "manual"
+    savedStrategy !== "round_robin"
       ? "manual"
       : roundRobinVerified
         ? "healthy"
@@ -359,9 +403,12 @@ export function AgentCodexPoolPage() {
           >
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">
-                {savedStrategy === "round_robin"
-                  ? t("chatgptOAuthRouting.strategy.roundRobin")
-                  : t("chatgptOAuthRouting.strategy.manual")}
+                {t(strategyLabelKey(savedStrategy))}
+              </Badge>
+              <Badge variant="outline">
+                {savedEffectiveRouting.overrideMode === "inherit"
+                  ? t("chatgptOAuthRouting.mode.inherit")
+                  : t("chatgptOAuthRouting.mode.custom")}
               </Badge>
               <Badge variant="outline">
                 {recentRequestCount > 0
@@ -370,27 +417,27 @@ export function AgentCodexPoolPage() {
                     })
                   : t("chatgptOAuthRouting.noSampleBadge")}
               </Badge>
-              {isDirty && (
+              {isDirty ? (
                 <Badge variant="warning">
                   {t("chatgptOAuthRouting.draftBadge")}
                 </Badge>
-              )}
+              ) : null}
               <Badge variant="success">
                 {t("chatgptOAuthRouting.healthState.healthy")}{" "}
                 {runtimeHealthyEntries.length}
               </Badge>
-              {runtimeDegradedEntries.length > 0 && (
+              {runtimeDegradedEntries.length > 0 ? (
                 <Badge variant="warning">
                   {t("chatgptOAuthRouting.healthState.degraded")}{" "}
                   {runtimeDegradedEntries.length}
                 </Badge>
-              )}
-              {runtimeCriticalEntries.length > 0 && (
+              ) : null}
+              {runtimeCriticalEntries.length > 0 ? (
                 <Badge variant="destructive">
                   {t("chatgptOAuthRouting.healthState.critical")}{" "}
                   {runtimeCriticalEntries.length}
                 </Badge>
-              )}
+              ) : null}
             </div>
             <p className="mt-2 text-base font-semibold leading-snug">
               {t(`chatgptOAuthRouting.verdict.${summaryTone}.title`)}
@@ -423,6 +470,14 @@ export function AgentCodexPoolPage() {
                 providers={providers}
                 value={routing}
                 onChange={setRouting}
+                defaultRouting={
+                  providerDefaults
+                    ? {
+                        strategy: providerDefaults.strategy,
+                        extraProviderNames: providerDefaults.extraProviderNames,
+                      }
+                    : null
+                }
                 canManageProviders={canManageProviders}
                 quotaByName={quotaByName}
                 quotaLoading={quotasLoading || quotasFetching}

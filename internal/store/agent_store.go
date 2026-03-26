@@ -247,13 +247,21 @@ type WorkspaceSharingConfig struct {
 }
 
 const (
-	ChatGPTOAuthStrategyManual     = "manual"
-	ChatGPTOAuthStrategyRoundRobin = "round_robin"
+	ChatGPTOAuthStrategyManual       = "manual" // legacy alias
+	ChatGPTOAuthStrategyPrimaryFirst = "primary_first"
+	ChatGPTOAuthStrategyRoundRobin   = "round_robin"
+	ChatGPTOAuthStrategyPriority     = "priority_order"
+)
+
+const (
+	ChatGPTOAuthOverrideInherit = "inherit"
+	ChatGPTOAuthOverrideCustom  = "custom"
 )
 
 // ChatGPTOAuthRoutingConfig controls optional multi-account selection for agents
 // whose primary provider is a ChatGPT OAuth-backed provider.
 type ChatGPTOAuthRoutingConfig struct {
+	OverrideMode       string   `json:"override_mode,omitempty"`
 	Strategy           string   `json:"strategy,omitempty"`
 	ExtraProviderNames []string `json:"extra_provider_names,omitempty"`
 }
@@ -288,24 +296,104 @@ func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
 	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.Routing == nil {
 		return nil
 	}
-	routing := &ChatGPTOAuthRoutingConfig{
-		Strategy:           cfg.Routing.Strategy,
-		ExtraProviderNames: normalizeProviderNames(cfg.Routing.ExtraProviderNames),
+	explicitOverrideMode := strings.TrimSpace(cfg.Routing.OverrideMode) != ""
+	explicitStrategy := strings.TrimSpace(cfg.Routing.Strategy) != ""
+	explicitExtras := cfg.Routing.ExtraProviderNames != nil
+	routing := normalizeChatGPTOAuthRoutingConfig(cfg.Routing)
+	if routing == nil {
+		if !explicitOverrideMode && !explicitStrategy && !explicitExtras {
+			return nil
+		}
+		overrideMode := ChatGPTOAuthOverrideCustom
+		if explicitOverrideMode {
+			overrideMode = normalizeChatGPTOAuthOverrideMode(cfg.Routing.OverrideMode)
+		}
+		return &ChatGPTOAuthRoutingConfig{
+			OverrideMode:       overrideMode,
+			Strategy:           normalizeChatGPTOAuthStrategy(cfg.Routing.Strategy),
+			ExtraProviderNames: normalizeProviderNames(cfg.Routing.ExtraProviderNames),
+		}
 	}
-	switch routing.Strategy {
-	case "", ChatGPTOAuthStrategyManual:
-		routing.Strategy = ChatGPTOAuthStrategyManual
-	case ChatGPTOAuthStrategyRoundRobin:
-	default:
-		routing.Strategy = ChatGPTOAuthStrategyManual
-	}
-	if routing.Strategy == ChatGPTOAuthStrategyManual && len(routing.ExtraProviderNames) == 0 {
-		return nil
-	}
-	if routing.Strategy == ChatGPTOAuthStrategyRoundRobin && len(routing.ExtraProviderNames) == 0 {
+	if explicitOverrideMode {
 		return routing
 	}
+	if explicitStrategy || explicitExtras {
+		routing.OverrideMode = ChatGPTOAuthOverrideCustom
+		return routing
+	}
+	routing.OverrideMode = ""
+	if routing.Strategy == ChatGPTOAuthStrategyPrimaryFirst && len(routing.ExtraProviderNames) == 0 {
+		return nil
+	}
 	return routing
+}
+
+func normalizeChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	if cfg == nil {
+		return nil
+	}
+	routing := &ChatGPTOAuthRoutingConfig{
+		OverrideMode:       normalizeChatGPTOAuthOverrideMode(cfg.OverrideMode),
+		Strategy:           normalizeChatGPTOAuthStrategy(cfg.Strategy),
+		ExtraProviderNames: normalizeProviderNames(cfg.ExtraProviderNames),
+	}
+	if routing.OverrideMode == "" && routing.Strategy == ChatGPTOAuthStrategyPrimaryFirst && len(routing.ExtraProviderNames) == 0 {
+		return nil
+	}
+	return routing
+}
+
+func normalizeChatGPTOAuthOverrideMode(value string) string {
+	switch value {
+	case ChatGPTOAuthOverrideInherit:
+		return ChatGPTOAuthOverrideInherit
+	case "", ChatGPTOAuthOverrideCustom:
+		return ChatGPTOAuthOverrideCustom
+	default:
+		return ChatGPTOAuthOverrideCustom
+	}
+}
+
+func normalizeChatGPTOAuthStrategy(value string) string {
+	switch value {
+	case "", ChatGPTOAuthStrategyManual, ChatGPTOAuthStrategyPrimaryFirst:
+		return ChatGPTOAuthStrategyPrimaryFirst
+	case ChatGPTOAuthStrategyRoundRobin, ChatGPTOAuthStrategyPriority:
+		return value
+	default:
+		return ChatGPTOAuthStrategyPrimaryFirst
+	}
+}
+
+func CloneChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := *cfg
+	clone.ExtraProviderNames = append([]string(nil), cfg.ExtraProviderNames...)
+	return &clone
+}
+
+func ResolveEffectiveChatGPTOAuthRouting(defaults, agentRouting *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	normalizedDefaults := normalizeChatGPTOAuthRoutingConfig(defaults)
+	normalizedAgent := normalizeChatGPTOAuthRoutingConfig(agentRouting)
+	if normalizedAgent == nil {
+		return CloneChatGPTOAuthRoutingConfig(normalizedDefaults)
+	}
+	if normalizedAgent.OverrideMode == ChatGPTOAuthOverrideInherit {
+		return CloneChatGPTOAuthRoutingConfig(normalizedDefaults)
+	}
+	effective := CloneChatGPTOAuthRoutingConfig(normalizedAgent)
+	if effective == nil {
+		return nil
+	}
+	effective.OverrideMode = ""
+	if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
+		len(effective.ExtraProviderNames) == 0 &&
+		normalizedAgent.OverrideMode != ChatGPTOAuthOverrideCustom {
+		return nil
+	}
+	return effective
 }
 
 func normalizeProviderNames(names []string) []string {

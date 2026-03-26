@@ -132,9 +132,9 @@
     "badge": "Pool Codex",
     "badgeTooltip": "Agent này có thể định tuyến lưu lượng Codex qua nhiều bí danh OpenAI OAuth.",
     "summaryTitle": "Pool tài khoản OpenAI",
-    "summaryDescription": "Giữ một bí danh chính rồi thêm các tài khoản ChatGPT Subscription (OAuth) đã đăng nhập vào pool.",
+    "summaryDescription": "Xem pool OpenAI Codex đang hiệu lực cho agent này, rồi quyết định dùng mặc định từ provider hay override riêng.",
     "strategyLabel": "Chính sách lưu lượng",
-    "strategyHint": "Primary Only giữ toàn bộ lưu lượng ở bí danh chính. Round Robin xoay vòng qua bí danh chính và các pool member đã chọn.",
+    "strategyHint": "Primary First luôn ưu tiên bí danh chính. Round Robin xoay vòng qua mọi tài khoản sẵn sàng. Priority Order sẽ đi theo thứ tự đã cấu hình sau bí danh chính.",
     "extraAccountsLabel": "Tài khoản phụ",
     "availableExtraAccountsLabel": "Tài khoản phụ có thể thêm",
     "extraHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được tham gia.",
@@ -151,7 +151,7 @@
     "attentionTitle": "Các tài khoản cần chú ý",
     "attentionHint": "Các tài khoản đã chọn nhưng bị tắt hoặc đã đăng xuất vẫn hiển thị ở đây cho đến khi bạn gỡ ra hoặc đăng nhập lại.",
     "pageTitle": "Pool tài khoản OpenAI",
-    "pageDescription": "Chọn các tài khoản ChatGPT Subscription (OAuth) đã đăng nhập mà {{name}} có thể dùng, rồi xác minh pool trực tiếp.",
+    "pageDescription": "Xem pool OpenAI Codex đang hiệu lực cho {{name}}, rồi chuyển giữa mặc định từ provider và override riêng cho agent.",
     "backToAgent": "Quay lại Agent",
     "openProviders": "Mở Providers",
     "pageUnsupportedTitle": "Agent này chưa dùng provider OpenAI Codex OAuth",
@@ -207,7 +207,16 @@
     "selectedCount": "{{count}} trong pool",
     "productLabel": "ChatGPT Subscription (OAuth)",
     "controlTitle": "Thiết lập Pool",
-    "controlDescription": "Policy, thành viên trong pool, rồi lưu.",
+    "controlDescription": "Chọn agent sẽ kế thừa mặc định từ provider hay dùng pool riêng, rồi kiểm tra các thành viên hiệu lực bên dưới.",
+    "mode": {
+      "label": "Chế độ routing của agent",
+      "inherit": "Dùng mặc định từ provider",
+      "custom": "Tùy chỉnh riêng cho agent",
+      "noProviderDefault": "Provider này chưa lưu pool mặc định. Hãy cấu hình ở trang Providers hoặc giữ agent ở chế độ custom.",
+      "providerDefaultSummary": "Mặc định từ provider có {{count}} tài khoản",
+      "summaryInherited": "Agent này hiện đang dùng pool mặc định của provider.",
+      "summaryCustom": "Agent này hiện đang dùng pool override riêng."
+    },
     "poolStateTitle": "Trạng thái Pool",
     "routerActiveTitle": "Đang route",
     "fallbackTitle": "Chỉ fallback",
@@ -258,8 +267,8 @@
       "verifyDescription": "Pool đã lưu và đã sẵn sàng, nhưng các lần gọi gần đây vẫn chưa cho thấy mọi bí danh sẵn sàng đều được chọn trực tiếp.",
       "healthyTitle": "Hiện chưa cần thao tác thêm",
       "healthyDescription": "Các lần gọi gần đây đang chọn trực tiếp mọi bí danh sẵn sàng trong pool đã lưu.",
-      "manualTitle": "Primary Only vẫn là chính sách đang chạy",
-      "manualDescription": "Việc lặp lại bí danh chính là bình thường cho đến khi bạn chuyển sang chính sách khác."
+      "manualTitle": "Routing có thứ tự đang hoạt động",
+      "manualDescription": "Agent này không xoay vòng ở mọi request. Việc bí danh chính được dùng lặp lại là bình thường cho đến khi bật round robin."
     },
     "howItWorksTitle": "Pool này hoạt động thế nào",
     "howItWorks": {
@@ -339,8 +348,8 @@
         "description": "Mới chỉ có {{observed}} tài khoản sẵn sàng có bằng chứng dùng trực tiếp trong {{count}} span gần đây."
       },
       "manual": {
-        "title": "Primary only đang hoạt động",
-        "description": "Việc lặp lại bí danh chính là bình thường khi chính sách lưu lượng vẫn để Primary Only."
+        "title": "Routing có thứ tự đang hoạt động",
+        "description": "Agent này không xoay vòng ở mọi request. Việc bí danh chính được dùng lặp lại là bình thường cho đến khi bật round robin."
       }
     },
     "role": {
@@ -353,8 +362,10 @@
       "disabled": "Đã tắt"
     },
     "strategy": {
-      "manual": "Primary Only",
-      "roundRobin": "Round Robin"
+      "manual": "Primary First",
+      "primaryFirst": "Primary First",
+      "roundRobin": "Round Robin",
+      "priorityOrder": "Priority Order"
     }
   },
   "identity": {

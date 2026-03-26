@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -123,12 +124,7 @@ func isHTTPOwnerID(userID string, ownerIDs []string) bool {
 	if len(ownerIDs) == 0 {
 		return userID == "system"
 	}
-	for _, id := range ownerIDs {
-		if id == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ownerIDs, userID)
 }
 
 // InitTenantStore sets the tenant cache for HTTP auth with TTL and pubsub invalidation.

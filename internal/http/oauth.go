@@ -378,7 +378,20 @@ func (h *OAuthHandler) saveAndRegister(ctx context.Context, providerName, displa
 	// Register CodexProvider in-memory for immediate use
 	if h.providerReg != nil {
 		tid := oauthTenantID(ctx)
-		codex := providers.NewCodexProvider(providerName, ts, apiBase, "")
+		providerAPIBase := apiBase
+		codex := providers.NewCodexProvider(providerName, ts, providerAPIBase, "")
+		if h.provStore != nil {
+			providerCtx := store.WithTenantID(ctx, tid)
+			if providerData, err := h.provStore.GetProviderByName(providerCtx, providerName); err == nil {
+				if providerData.APIBase != "" {
+					providerAPIBase = providerData.APIBase
+					codex = providers.NewCodexProvider(providerName, ts, providerAPIBase, "")
+				}
+				if oauthSettings := store.ParseChatGPTOAuthProviderSettings(providerData.Settings); oauthSettings != nil {
+					codex.WithRoutingDefaults(oauthSettings.CodexPool.Strategy, oauthSettings.CodexPool.ExtraProviderNames)
+				}
+			}
+		}
 		h.providerReg.RegisterForTenant(tid, codex)
 	}
 

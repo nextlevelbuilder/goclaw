@@ -192,7 +192,7 @@ func TestChatGPTOAuthRouterRoundRobinPrefersHealthyBeforeUnknown(t *testing.T) {
 	registry.RegisterForTenant(tenantID, providerC)
 
 	router := NewChatGPTOAuthRouter(tenantID, registry, "acct-a", "round_robin", []string{"acct-b", "acct-c"})
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if _, err := router.Chat(context.Background(), ChatRequest{
 			Messages: []Message{{Role: "user", Content: "prefer healthy"}},
 		}); err != nil {
@@ -232,5 +232,49 @@ func TestChatGPTOAuthRouterReportsWhenAllProvidersBlocked(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "reauth") || !strings.Contains(err.Error(), "exhausted") {
 		t.Fatalf("router.Chat() error = %q, want both block reasons", err.Error())
+	}
+}
+
+func TestChatGPTOAuthRouterPriorityOrderKeepsPrimaryAheadOfHealthyFallbacks(t *testing.T) {
+	var hitsA, hitsB int
+	serverA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsA++
+		writeSSEDone(w)
+	}))
+	defer serverA.Close()
+
+	serverB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitsB++
+		writeSSEDone(w)
+	}))
+	defer serverB.Close()
+
+	tenantID := uuid.New()
+	registry := NewRegistry(nil)
+	providerA := NewCodexProvider("acct-a", &routeEligibilityTokenSource{
+		token:       "token-a",
+		eligibility: RouteEligibility{Class: RouteEligibilityUnknown, Reason: "retry_later"},
+	}, serverA.URL, "gpt-5.4")
+	providerB := NewCodexProvider("acct-b", &routeEligibilityTokenSource{
+		token:       "token-b",
+		eligibility: RouteEligibility{Class: RouteEligibilityHealthy},
+	}, serverB.URL, "gpt-5.4")
+	providerA.retryConfig.Attempts = 1
+	providerB.retryConfig.Attempts = 1
+	registry.RegisterForTenant(tenantID, providerA)
+	registry.RegisterForTenant(tenantID, providerB)
+
+	router := NewChatGPTOAuthRouter(tenantID, registry, "acct-a", "priority_order", []string{"acct-b"})
+	if _, err := router.Chat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "priority first"}},
+	}); err != nil {
+		t.Fatalf("chat failed: %v", err)
+	}
+
+	if hitsA != 1 {
+		t.Fatalf("hitsA = %d, want 1", hitsA)
+	}
+	if hitsB != 0 {
+		t.Fatalf("hitsB = %d, want 0", hitsB)
 	}
 }

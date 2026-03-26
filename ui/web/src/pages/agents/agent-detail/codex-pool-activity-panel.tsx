@@ -10,6 +10,7 @@ import { formatDuration, formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { ChatGPTOAuthAvailability } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import type { ChatGPTOAuthProviderQuota } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
+import type { EffectiveChatGPTOAuthRoutingStrategy } from "@/types/agent";
 import { ChatGPTOAuthQuotaStrip } from "./chatgpt-oauth-quota-strip";
 import {
   getQuotaFailureKind,
@@ -42,7 +43,7 @@ export interface CodexPoolEntry {
 
 interface CodexPoolActivityPanelProps {
   entries: CodexPoolEntry[];
-  strategy: "manual" | "round_robin";
+  strategy: EffectiveChatGPTOAuthRoutingStrategy;
   recentRequests: CodexPoolRecentRequest[];
   statsSampleSize: number;
   fetching: boolean;
@@ -90,6 +91,14 @@ function routeLabelKey(state: ReturnType<typeof getRouteReadiness>): string {
   if (state === "fallback") return "chatgptOAuthRouting.fallbackTitle";
   if (state === "checking") return "chatgptOAuthRouting.checkingTitle";
   return "chatgptOAuthRouting.blockedNowTitle";
+}
+
+function strategyLabelKey(
+  strategy: EffectiveChatGPTOAuthRoutingStrategy,
+): string {
+  if (strategy === "round_robin") return "chatgptOAuthRouting.strategy.roundRobin";
+  if (strategy === "priority_order") return "chatgptOAuthRouting.strategy.priorityOrder";
+  return "chatgptOAuthRouting.strategy.primaryFirst";
 }
 
 function runtimeHealthVariant(
@@ -576,9 +585,7 @@ export function CodexPoolActivityPanel({
 
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">
-              {strategy === "round_robin"
-                ? t("chatgptOAuthRouting.strategy.roundRobin")
-                : t("chatgptOAuthRouting.strategy.manual")}
+              {t(strategyLabelKey(strategy))}
             </Badge>
             {blockedEntries.length > 0 && (
               <Badge variant="warning">

@@ -16,7 +16,10 @@ import {
   type ChatGPTOAuthAvailability,
 } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import type { ChatGPTOAuthProviderQuota } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
-import type { ChatGPTOAuthRoutingConfig } from "@/types/agent";
+import type {
+  ChatGPTOAuthRoutingConfig,
+  EffectiveChatGPTOAuthRoutingStrategy,
+} from "@/types/agent";
 import type { ProviderData } from "@/types/provider";
 import type { CodexPoolEntry } from "../codex-pool-activity-panel";
 import {
@@ -25,10 +28,17 @@ import {
 } from "../chatgpt-oauth-quota-utils";
 
 interface ChatGPTOAuthRoutingSectionProps {
+  title?: string;
+  description?: string;
   currentProvider: string;
   providers: ProviderData[];
   value: ChatGPTOAuthRoutingConfig;
   onChange: (value: ChatGPTOAuthRoutingConfig) => void;
+  showOverrideMode?: boolean;
+  defaultRouting?: {
+    strategy: EffectiveChatGPTOAuthRoutingStrategy;
+    extraProviderNames: string[];
+  } | null;
   canManageProviders?: boolean;
   quotaByName?: Map<string, ChatGPTOAuthProviderQuota>;
   quotaLoading?: boolean;
@@ -63,6 +73,14 @@ function routeLabelKey(
   if (readiness === "fallback") return "chatgptOAuthRouting.fallbackTitle";
   if (readiness === "checking") return "chatgptOAuthRouting.checkingTitle";
   return "chatgptOAuthRouting.blockedNowTitle";
+}
+
+function strategyLabelKey(
+  strategy: EffectiveChatGPTOAuthRoutingStrategy,
+): string {
+  if (strategy === "round_robin") return "chatgptOAuthRouting.strategy.roundRobin";
+  if (strategy === "priority_order") return "chatgptOAuthRouting.strategy.priorityOrder";
+  return "chatgptOAuthRouting.strategy.primaryFirst";
 }
 
 function roleBadgeClass(role: "preferred" | "extra"): string {
@@ -115,10 +133,14 @@ function StateGroup({
 }
 
 export function ChatGPTOAuthRoutingSection({
+  title,
+  description,
   currentProvider,
   providers,
   value,
   onChange,
+  showOverrideMode = true,
+  defaultRouting = null,
   canManageProviders = true,
   quotaByName,
   quotaLoading = false,
@@ -155,6 +177,11 @@ export function ChatGPTOAuthRoutingSection({
   const readyExtraProviders = allExtraProviders.filter(
     (provider) => getAvailability(provider) === "ready",
   );
+  const mode = value.override_mode === "inherit" ? "inherit" : "custom";
+  const providerDefaultsAvailable =
+    defaultRouting != null &&
+    (defaultRouting.strategy !== "primary_first" ||
+      defaultRouting.extraProviderNames.length > 0);
   const selectedExtras = new Set(value.extra_provider_names ?? []);
   const selectedEntries = entries.map((entry) => ({
     ...entry,
@@ -175,8 +202,19 @@ export function ChatGPTOAuthRoutingSection({
   );
   const routerActiveEntries = healthyEntries;
   const standbyEntries = [...fallbackEntries, ...checkingEntries];
+  const selectedStrategy: EffectiveChatGPTOAuthRoutingStrategy =
+    value.strategy === "round_robin" || value.strategy === "priority_order"
+      ? value.strategy
+      : "primary_first";
 
-  const setStrategy = (strategy: "manual" | "round_robin") => {
+  const setMode = (overrideMode: "inherit" | "custom") => {
+    onChange({
+      ...value,
+      override_mode: overrideMode,
+    });
+  };
+
+  const setStrategy = (strategy: EffectiveChatGPTOAuthRoutingStrategy) => {
     onChange({ ...value, strategy });
   };
 
@@ -214,61 +252,130 @@ export function ChatGPTOAuthRoutingSection({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className="text-base">
-              {t("chatgptOAuthRouting.controlTitle")}
+              {title ?? t("chatgptOAuthRouting.controlTitle")}
             </CardTitle>
             <CardDescription>
-              {t("chatgptOAuthRouting.controlDescription")}
+              {description ?? t("chatgptOAuthRouting.controlDescription")}
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {!canManageProviders && (
+            {showOverrideMode ? (
+              <Badge variant={mode === "inherit" ? "secondary" : "outline"}>
+                {mode === "inherit"
+                  ? t("chatgptOAuthRouting.mode.inherit")
+                  : t("chatgptOAuthRouting.mode.custom")}
+              </Badge>
+            ) : null}
+            {!canManageProviders ? (
               <Badge variant="outline">
                 {t("chatgptOAuthRouting.viewerMode")}
               </Badge>
-            )}
-            {isDirty && (
+            ) : null}
+            {isDirty ? (
               <Badge variant="warning">
                 {t("chatgptOAuthRouting.draftBadge")}
               </Badge>
-            )}
-            {(quotaLoading || isLoading) && (
+            ) : null}
+            {(quotaLoading || isLoading) ? (
               <Badge variant="outline">
                 {t("chatgptOAuthRouting.quota.checking")}
               </Badge>
-            )}
+            ) : null}
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3">
+        {showOverrideMode ? (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t("chatgptOAuthRouting.mode.label")}
+              </p>
+              {providerDefaultsAvailable ? (
+                <Badge variant="outline">
+                  {t("chatgptOAuthRouting.mode.providerDefaultSummary", {
+                    count: 1 + defaultRouting.extraProviderNames.length,
+                  })}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant={mode === "inherit" ? "default" : "outline"}
+                onClick={() => setMode("inherit")}
+                disabled={!canManageProviders || !providerDefaultsAvailable}
+              >
+                {t("chatgptOAuthRouting.mode.inherit")}
+              </Button>
+              <Button
+                type="button"
+                variant={mode === "custom" ? "default" : "outline"}
+                onClick={() => setMode("custom")}
+                disabled={!canManageProviders}
+              >
+                {t("chatgptOAuthRouting.mode.custom")}
+              </Button>
+            </div>
+
+            {providerDefaultsAvailable ? (
+              <div className="rounded-lg border bg-muted/10 px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">
+                    {t(strategyLabelKey(defaultRouting.strategy))}
+                  </Badge>
+                  <Badge variant="outline">
+                    {t("chatgptOAuthRouting.readySummary", {
+                      ready: defaultRouting.extraProviderNames.length,
+                      total: defaultRouting.extraProviderNames.length,
+                    })}
+                  </Badge>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
+                {t("chatgptOAuthRouting.mode.noProviderDefault")}
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("chatgptOAuthRouting.strategyLabel")}
             </p>
             <Badge variant="outline">
-              {value.strategy === "round_robin"
-                ? t("chatgptOAuthRouting.strategy.roundRobin")
-                : t("chatgptOAuthRouting.strategy.manual")}
+              {t(strategyLabelKey(selectedStrategy))}
             </Badge>
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             <Button
               type="button"
-              variant={value.strategy === "manual" ? "default" : "outline"}
-              onClick={() => setStrategy("manual")}
-              disabled={!canManageProviders}
+              variant={selectedStrategy === "primary_first" ? "default" : "outline"}
+              onClick={() => setStrategy("primary_first")}
+              disabled={!canManageProviders || mode === "inherit"}
             >
-              {t("chatgptOAuthRouting.strategy.manual")}
+              {t("chatgptOAuthRouting.strategy.primaryFirst")}
             </Button>
             <Button
               type="button"
-              variant={value.strategy === "round_robin" ? "default" : "outline"}
+              variant={selectedStrategy === "round_robin" ? "default" : "outline"}
               onClick={() => setStrategy("round_robin")}
-              disabled={!canManageProviders}
+              disabled={!canManageProviders || mode === "inherit"}
             >
               {t("chatgptOAuthRouting.strategy.roundRobin")}
+            </Button>
+            <Button
+              type="button"
+              variant={selectedStrategy === "priority_order" ? "default" : "outline"}
+              onClick={() => setStrategy("priority_order")}
+              disabled={!canManageProviders || mode === "inherit"}
+            >
+              {t("chatgptOAuthRouting.strategy.priorityOrder")}
             </Button>
           </div>
         </section>
@@ -315,7 +422,7 @@ export function ChatGPTOAuthRoutingSection({
                         "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:bg-amber-500/15 dark:text-amber-200",
                     )}
                     onClick={() => toggleProvider(provider.name)}
-                    disabled={!canManageProviders}
+                    disabled={!canManageProviders || mode === "inherit"}
                   >
                     {selected ? <Check className="h-3.5 w-3.5" /> : null}
                     {provider.display_name || provider.name}

@@ -199,7 +199,7 @@ func (ts *DBTokenSource) persistProviderMetadata(ctx context.Context, provider *
 	}
 
 	if changed {
-		raw := marshalOAuthSettings(settings)
+		raw := marshalOAuthSettingsInto(provider.Settings, settings)
 		if err := ts.providerStore.UpdateProvider(ctx, provider.ID, map[string]any{
 			"settings": raw,
 		}); err != nil {
@@ -329,7 +329,7 @@ func (ts *DBTokenSource) refresh(ctx context.Context) error {
 
 	if err := ts.providerStore.UpdateProvider(ctx, p.ID, map[string]any{
 		"api_key":  newToken.AccessToken,
-		"settings": marshalOAuthSettings(settings),
+		"settings": marshalOAuthSettingsInto(p.Settings, settings),
 	}); err != nil {
 		slog.Warn("failed to persist refreshed access token", "error", err)
 	}
@@ -365,7 +365,7 @@ func (ts *DBTokenSource) SaveOAuthResult(ctx context.Context, tokenResp *OpenAIT
 		// Update existing provider
 		updates := map[string]any{
 			"api_key":  tokenResp.AccessToken,
-			"settings": marshalOAuthSettings(settings),
+			"settings": marshalOAuthSettingsInto(existing.Settings, settings),
 			"enabled":  true,
 		}
 		if ts.providerDisplayName != "" {

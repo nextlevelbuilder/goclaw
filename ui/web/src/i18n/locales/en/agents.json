@@ -132,9 +132,9 @@
     "badge": "Codex pool",
     "badgeTooltip": "This agent can route Codex traffic across multiple OpenAI OAuth aliases.",
     "summaryTitle": "OpenAI Account Pool",
-    "summaryDescription": "Keep one primary alias, then add more signed-in ChatGPT Subscription (OAuth) accounts to the pool.",
+    "summaryDescription": "See the effective OpenAI Codex pool for this agent, then decide whether it should inherit provider defaults or use a custom override.",
     "strategyLabel": "Traffic Policy",
-    "strategyHint": "Primary Only stays on the primary alias. Round Robin rotates across the primary alias plus the selected pool members.",
+    "strategyHint": "Primary First keeps the primary alias first. Round Robin rotates across all ready accounts. Priority Order drains accounts in the listed order after the primary alias.",
     "extraAccountsLabel": "Extra Accounts",
     "availableExtraAccountsLabel": "Available Extra Accounts",
     "extraHint": "Only enabled and signed-in OpenAI Codex OAuth aliases can participate.",
@@ -151,7 +151,7 @@
     "attentionTitle": "Accounts Needing Attention",
     "attentionHint": "Selected accounts that are disabled or signed out stay visible here until you remove them or sign in again.",
     "pageTitle": "OpenAI Account Pool",
-    "pageDescription": "Choose which signed-in ChatGPT Subscription (OAuth) accounts {{name}} can use, then verify the pool live.",
+    "pageDescription": "Review the live OpenAI Codex pool for {{name}}, then switch between provider defaults and a custom agent override.",
     "backToAgent": "Back To Agent",
     "openProviders": "Open Providers",
     "pageUnsupportedTitle": "This agent is not using an OpenAI Codex OAuth provider",
@@ -207,7 +207,16 @@
     "selectedCount": "{{count}} in pool",
     "productLabel": "ChatGPT Subscription (OAuth)",
     "controlTitle": "Pool Setup",
-    "controlDescription": "Policy, pool members, save.",
+    "controlDescription": "Choose whether this agent inherits provider defaults or uses a custom pool, then verify the effective members below.",
+    "mode": {
+      "label": "Agent Routing Mode",
+      "inherit": "Use Provider Defaults",
+      "custom": "Custom For This Agent",
+      "noProviderDefault": "No provider-level pool defaults are saved yet. Configure reusable defaults on the Providers page or keep this agent custom.",
+      "providerDefaultSummary": "{{count}} accounts in provider default",
+      "summaryInherited": "This agent currently follows the provider default pool.",
+      "summaryCustom": "This agent currently uses its own saved pool override."
+    },
     "poolStateTitle": "Pool State",
     "routerActiveTitle": "Router Active",
     "fallbackTitle": "Fallback Only",
@@ -258,8 +267,8 @@
       "verifyDescription": "The pool is saved and ready, but recent routed calls have not yet shown direct selection across every ready alias.",
       "healthyTitle": "No operator action needed right now",
       "healthyDescription": "Recent routed calls are directly selecting every ready alias in the saved pool.",
-      "manualTitle": "Primary Only is still the active policy",
-      "manualDescription": "Repeated use of the primary alias is expected until you switch the traffic policy."
+      "manualTitle": "Ordered routing is active",
+      "manualDescription": "This agent is not rotating every request. Repeated use of the primary alias is expected until round robin is enabled."
     },
     "howItWorksTitle": "How this pool works",
     "howItWorks": {
@@ -339,8 +348,8 @@
         "description": "Only {{observed}} ready accounts have direct routing evidence across {{count}} traced spans so far."
       },
       "manual": {
-        "title": "Primary only is active",
-        "description": "Repeated use of the primary alias is expected while the traffic policy stays on Primary Only."
+        "title": "Ordered routing is active",
+        "description": "This agent is not rotating every request. Repeated use of the primary alias is expected until round robin is enabled."
       }
     },
     "role": {
@@ -353,8 +362,10 @@
       "disabled": "Disabled"
     },
     "strategy": {
-      "manual": "Primary Only",
-      "roundRobin": "Round Robin"
+      "manual": "Primary First",
+      "primaryFirst": "Primary First",
+      "roundRobin": "Round Robin",
+      "priorityOrder": "Priority Order"
     }
   },
   "identity": {

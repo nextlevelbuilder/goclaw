@@ -80,6 +80,11 @@ type EmbeddingSettings struct {
 	Dimensions int    `json:"dimensions,omitempty"` // truncate output to N dims (e.g. 1536); 0 = model default
 }
 
+// ChatGPTOAuthProviderSettings holds provider-level defaults for Codex account pooling.
+type ChatGPTOAuthProviderSettings struct {
+	CodexPool *ChatGPTOAuthRoutingConfig `json:"codex_pool,omitempty"`
+}
+
 // ParseEmbeddingSettings extracts embedding config from a provider's settings JSONB.
 // Returns nil if not configured.
 func ParseEmbeddingSettings(settings json.RawMessage) *EmbeddingSettings {
@@ -93,6 +98,23 @@ func ParseEmbeddingSettings(settings json.RawMessage) *EmbeddingSettings {
 		return nil
 	}
 	return s.Embedding
+}
+
+// ParseChatGPTOAuthProviderSettings extracts provider-level Codex pool defaults from settings JSONB.
+func ParseChatGPTOAuthProviderSettings(settings json.RawMessage) *ChatGPTOAuthProviderSettings {
+	if len(settings) == 0 {
+		return nil
+	}
+	var s ChatGPTOAuthProviderSettings
+	if json.Unmarshal(settings, &s) != nil {
+		return nil
+	}
+	s.CodexPool = normalizeChatGPTOAuthRoutingConfig(s.CodexPool)
+	if s.CodexPool == nil {
+		return nil
+	}
+	s.CodexPool.OverrideMode = ""
+	return &s
 }
 
 // NoEmbeddingTypes lists provider types that cannot serve embeddings.

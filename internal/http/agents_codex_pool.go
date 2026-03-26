@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -48,6 +49,138 @@ type codexPoolRecentRequest struct {
 	FailoverProviders []string  `json:"failover_providers,omitempty"`
 }
 
+const runtimeNonCodexProviderType = "runtime_non_codex"
+
+func lookupProviderByNameWithMasterFallback(
+	ctx context.Context,
+	providerStore store.ProviderStore,
+	tenantID uuid.UUID,
+	name string,
+) (*store.LLMProviderData, error) {
+	if providerStore == nil || name == "" {
+		return nil, errors.New("provider store unavailable")
+	}
+
+	tenantIDs := []uuid.UUID{tenantID}
+	if tenantID != store.MasterTenantID {
+		tenantIDs = append(tenantIDs, store.MasterTenantID)
+	}
+
+	var lastErr error
+	for _, scopedTenantID := range tenantIDs {
+		providerCtx := store.WithTenantID(ctx, scopedTenantID)
+		providerData, err := providerStore.GetProviderByName(providerCtx, name)
+		if err == nil {
+			return providerData, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("provider not found")
+	}
+	return nil, lastErr
+}
+
+func registeredCodexPoolProviders(
+	providerReg *providers.Registry,
+	tenantID uuid.UUID,
+	names []string,
+) []string {
+	if providerReg == nil || len(names) == 0 {
+		return nil
+	}
+
+	poolProviders := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" || slices.Contains(poolProviders, name) {
+			continue
+		}
+		provider, err := providerReg.GetForTenant(tenantID, name)
+		if err != nil {
+			continue
+		}
+		if _, ok := provider.(*providers.CodexProvider); !ok {
+			continue
+		}
+		poolProviders = append(poolProviders, name)
+	}
+	return poolProviders
+}
+
+func resolveCodexPoolRouting(
+	ctx context.Context,
+	providerStore store.ProviderStore,
+	providerReg *providers.Registry,
+	agent *store.AgentData,
+) (string, *store.ChatGPTOAuthRoutingConfig, []string) {
+	if agent == nil {
+		return "", nil, nil
+	}
+
+	agentRouting := agent.ParseChatGPTOAuthRouting()
+
+	baseProviderType := ""
+	var defaults *store.ChatGPTOAuthRoutingConfig
+
+	if providerData, err := lookupProviderByNameWithMasterFallback(ctx, providerStore, agent.TenantID, agent.Provider); err == nil {
+		baseProviderType = providerData.ProviderType
+		if providerData.ProviderType != store.ProviderChatGPTOAuth {
+			return providerData.ProviderType, nil, nil
+		}
+		if settings := store.ParseChatGPTOAuthProviderSettings(providerData.Settings); settings != nil {
+			defaults = settings.CodexPool
+		}
+	}
+
+	if providerReg != nil && agent.Provider != "" {
+		runtimeProvider, err := providerReg.GetForTenant(agent.TenantID, agent.Provider)
+		if err == nil {
+			codex, ok := runtimeProvider.(*providers.CodexProvider)
+			if !ok {
+				if baseProviderType == "" {
+					baseProviderType = runtimeNonCodexProviderType
+				}
+				return baseProviderType, nil, nil
+			}
+			baseProviderType = store.ProviderChatGPTOAuth
+			defaults = nil
+			if runtimeDefaults := codex.RoutingDefaults(); runtimeDefaults != nil {
+				defaults = &store.ChatGPTOAuthRoutingConfig{
+					Strategy:           runtimeDefaults.Strategy,
+					ExtraProviderNames: runtimeDefaults.ExtraProviderNames,
+				}
+			}
+		}
+	}
+
+	routing := store.ResolveEffectiveChatGPTOAuthRouting(defaults, agentRouting)
+	poolCandidates := make([]string, 0, 1+len(agentRoutingExtraNames(routing)))
+	if agent.Provider != "" && (baseProviderType == store.ProviderChatGPTOAuth || (baseProviderType == "" && routing != nil)) {
+		poolCandidates = append(poolCandidates, agent.Provider)
+	}
+	if routing != nil {
+		for _, name := range routing.ExtraProviderNames {
+			if name != "" && !slices.Contains(poolCandidates, name) {
+				poolCandidates = append(poolCandidates, name)
+			}
+		}
+	}
+	if providerReg != nil {
+		return baseProviderType, routing, registeredCodexPoolProviders(providerReg, agent.TenantID, poolCandidates)
+	}
+	if baseProviderType != store.ProviderChatGPTOAuth {
+		return baseProviderType, routing, nil
+	}
+	return baseProviderType, routing, poolCandidates
+}
+
+func agentRoutingExtraNames(routing *store.ChatGPTOAuthRoutingConfig) []string {
+	if routing == nil {
+		return nil
+	}
+	return routing.ExtraProviderNames
+}
+
 func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.Request) {
 	locale := store.LocaleFromContext(r.Context())
 	if h.db == nil {
@@ -69,21 +202,16 @@ func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.R
 	}
 	statsLimit := maxInt(limit, codexPoolRuntimeHealthSampleSize)
 
-	routing := agent.ParseChatGPTOAuthRouting()
-	strategy := store.ChatGPTOAuthStrategyManual
+	baseProviderType, routing, poolProviders := resolveCodexPoolRouting(r.Context(), h.providers, h.providerReg, agent)
+	strategy := store.ChatGPTOAuthStrategyPrimaryFirst
 	if routing != nil && routing.Strategy != "" {
 		strategy = routing.Strategy
 	}
-	poolProviders := []string{agent.Provider}
-	if routing != nil {
-		for _, name := range routing.ExtraProviderNames {
-			if name != "" && !slices.Contains(poolProviders, name) {
-				poolProviders = append(poolProviders, name)
-			}
-		}
-	}
 
-	if len(poolProviders) == 0 || agent.Provider == "" {
+	if baseProviderType != "" && baseProviderType != store.ProviderChatGPTOAuth {
+		poolProviders = nil
+	}
+	if len(poolProviders) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"strategy":          strategy,
 			"pool_providers":    []string{},

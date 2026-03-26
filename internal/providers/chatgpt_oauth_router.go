@@ -11,6 +11,7 @@ import (
 )
 
 const chatGPTOAuthStrategyRoundRobin = "round_robin"
+const chatGPTOAuthStrategyPriorityOrder = "priority_order"
 
 // ChatGPTOAuthRouter routes a ChatGPT OAuth-backed agent across multiple
 // authenticated Codex providers while keeping the agent's primary provider as
@@ -132,6 +133,10 @@ func (p *ChatGPTOAuthRouter) orderedProviders(ctx context.Context, advance bool)
 		return nil, fmt.Errorf("no authenticated chatgpt_oauth providers available")
 	}
 
+	if p.strategy == chatGPTOAuthStrategyPriorityOrder {
+		return p.priorityOrderedProviders(candidates)
+	}
+
 	healthy := make([]Provider, 0, len(candidates))
 	unknown := make([]Provider, 0, len(candidates))
 	blocked := make([]string, 0, len(candidates))
@@ -175,6 +180,22 @@ func (p *ChatGPTOAuthRouter) orderedProviders(ctx context.Context, advance bool)
 	ordered = append(ordered, active[start:]...)
 	ordered = append(ordered, active[:start]...)
 	ordered = append(ordered, fallback...)
+	return ordered, nil
+}
+
+func (p *ChatGPTOAuthRouter) priorityOrderedProviders(candidates []chatGPTOAuthRouteCandidate) ([]Provider, error) {
+	ordered := make([]Provider, 0, len(candidates))
+	blocked := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.eligibility.Class == RouteEligibilityBlocked {
+			blocked = append(blocked, formatRouteBlockReason(candidate.provider.Name(), candidate.eligibility.Reason))
+			continue
+		}
+		ordered = append(ordered, candidate.provider)
+	}
+	if len(ordered) == 0 {
+		return nil, fmt.Errorf("no route-eligible chatgpt_oauth providers available: %s", strings.Join(blocked, ", "))
+	}
 	return ordered, nil
 }
 

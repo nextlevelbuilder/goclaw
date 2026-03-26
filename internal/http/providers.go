@@ -149,7 +149,11 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	switch p.ProviderType {
 	case store.ProviderChatGPTOAuth:
 		ts := oauth.NewDBTokenSource(h.store, h.secretStore, p.Name).WithTenantID(p.TenantID)
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewCodexProvider(p.Name, ts, apiBase, ""))
+		codex := providers.NewCodexProvider(p.Name, ts, apiBase, "")
+		if oauthSettings := store.ParseChatGPTOAuthProviderSettings(p.Settings); oauthSettings != nil {
+			codex.WithRoutingDefaults(oauthSettings.CodexPool.Strategy, oauthSettings.CodexPool.ExtraProviderNames)
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, codex)
 	case store.ProviderAnthropicNative:
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewAnthropicProvider(p.APIKey,
 			providers.WithAnthropicBaseURL(apiBase)))

@@ -181,7 +181,7 @@ func persistAdd(pkg string) {
 
 	// Check if already persisted (avoid duplicates).
 	if data, err := os.ReadFile(listFile); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.TrimSpace(line) == pkg {
 				return // already persisted
 			}
@@ -217,7 +217,7 @@ func persistRemove(pkg string) {
 	}
 
 	var kept []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" && line != pkg {
 			kept = append(kept, line)

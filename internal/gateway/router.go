@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -320,12 +321,7 @@ func isOwnerID(userID string, ownerIDs []string) bool {
 	if len(ownerIDs) == 0 {
 		return userID == "system"
 	}
-	for _, id := range ownerIDs {
-		if id == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ownerIDs, userID)
 }
 
 // resolveTenantHint resolves a tenant slug/UUID hint to a UUID with membership validation.

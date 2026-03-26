@@ -10,16 +10,22 @@ import (
 	"strings"
 )
 
+type CodexRoutingDefaults struct {
+	Strategy           string
+	ExtraProviderNames []string
+}
+
 // CodexProvider implements Provider for the OpenAI Responses API,
 // used with ChatGPT subscription via OAuth (Codex flow).
 // Wire format: POST /codex/responses on chatgpt.com backend.
 type CodexProvider struct {
-	name         string
-	apiBase      string // e.g. "https://api.openai.com/v1" or "https://chatgpt.com/backend-api"
-	defaultModel string
-	client       *http.Client
-	retryConfig  RetryConfig
-	tokenSource  TokenSource
+	name            string
+	apiBase         string // e.g. "https://api.openai.com/v1" or "https://chatgpt.com/backend-api"
+	defaultModel    string
+	client          *http.Client
+	retryConfig     RetryConfig
+	tokenSource     TokenSource
+	routingDefaults *CodexRoutingDefaults
 }
 
 // NewCodexProvider creates a provider for the OpenAI Responses API with OAuth token.
@@ -46,6 +52,22 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
+func (p *CodexProvider) WithRoutingDefaults(strategy string, extraProviderNames []string) *CodexProvider {
+	p.routingDefaults = &CodexRoutingDefaults{
+		Strategy:           strategy,
+		ExtraProviderNames: append([]string(nil), extraProviderNames...),
+	}
+	return p
+}
+func (p *CodexProvider) RoutingDefaults() *CodexRoutingDefaults {
+	if p.routingDefaults == nil {
+		return nil
+	}
+	return &CodexRoutingDefaults{
+		Strategy:           p.routingDefaults.Strategy,
+		ExtraProviderNames: append([]string(nil), p.routingDefaults.ExtraProviderNames...),
+	}
+}
 func (p *CodexProvider) RouteEligibility(ctx context.Context) RouteEligibility {
 	if aware, ok := p.tokenSource.(RouteEligibilityAware); ok {
 		return aware.RouteEligibility(ctx)

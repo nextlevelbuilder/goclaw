@@ -206,7 +206,7 @@ func (c *Config) applyEnvOverrides() {
 	// Owner IDs from env (comma-separated, whitespace-trimmed)
 	if v := os.Getenv("GOCLAW_OWNER_IDS"); v != "" {
 		var ids []string
-		for _, id := range strings.Split(v, ",") {
+		for id := range strings.SplitSeq(v, ",") {
 			if trimmed := strings.TrimSpace(id); trimmed != "" {
 				ids = append(ids, trimmed)
 			}

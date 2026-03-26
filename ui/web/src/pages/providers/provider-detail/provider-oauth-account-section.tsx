@@ -52,6 +52,7 @@ export function ProviderOAuthAccountSection({ provider }: ProviderOAuthAccountSe
         <AlertTitle>{t("detail.oauthAccountBadge")}</AlertTitle>
         <AlertDescription>
           <p>{t("detail.oauthPreferredHint")}</p>
+          <p>{t("detail.oauthProviderDefaultHint")}</p>
           <p>{t("detail.oauthRoutingHint")}</p>
           {!provider.display_name && (
             <p>{t("detail.oauthDisplayNameRecommendation")}</p>

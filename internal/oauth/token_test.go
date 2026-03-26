@@ -210,6 +210,54 @@ func TestDBTokenSourceCaching(t *testing.T) {
 	provStore.providers[DefaultProviderName] = p
 }
 
+func TestDBTokenSourceSaveOAuthResultPreservesCodexPoolSettings(t *testing.T) {
+	provStore := newMockProviderStore()
+	secretStore := newMockSecretsStore()
+	ctx := context.Background()
+	existing := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         DefaultProviderName,
+		ProviderType: store.ProviderChatGPTOAuth,
+		APIBase:      DefaultProviderAPIBase,
+		APIKey:       "old-token",
+		Enabled:      true,
+		Settings: json.RawMessage(`{
+			"codex_pool": {
+				"strategy": "round_robin",
+				"extra_provider_names": ["openai-codex-backup"]
+			},
+			"expires_at": 100
+		}`),
+	}
+	if err := provStore.CreateProvider(ctx, existing); err != nil {
+		t.Fatalf("CreateProvider: %v", err)
+	}
+
+	ts := NewDBTokenSource(provStore, secretStore, DefaultProviderName)
+	if _, err := ts.SaveOAuthResult(ctx, &OpenAITokenResponse{
+		AccessToken:  "new-token",
+		RefreshToken: "refresh-token",
+		ExpiresIn:    3600,
+	}); err != nil {
+		t.Fatalf("SaveOAuthResult: %v", err)
+	}
+
+	updated, err := provStore.GetProviderByName(ctx, DefaultProviderName)
+	if err != nil {
+		t.Fatalf("GetProviderByName: %v", err)
+	}
+	settings := store.ParseChatGPTOAuthProviderSettings(updated.Settings)
+	if settings == nil || settings.CodexPool == nil {
+		t.Fatal("CodexPool settings lost after SaveOAuthResult")
+	}
+	if settings.CodexPool.Strategy != store.ChatGPTOAuthStrategyRoundRobin {
+		t.Fatalf("Strategy = %q, want %q", settings.CodexPool.Strategy, store.ChatGPTOAuthStrategyRoundRobin)
+	}
+	if len(settings.CodexPool.ExtraProviderNames) != 1 || settings.CodexPool.ExtraProviderNames[0] != "openai-codex-backup" {
+		t.Fatalf("ExtraProviderNames = %#v, want [\"openai-codex-backup\"]", settings.CodexPool.ExtraProviderNames)
+	}
+}
+
 func TestDBTokenSourceExists(t *testing.T) {
 	provStore := newMockProviderStore()
 	secretStore := newMockSecretsStore()
