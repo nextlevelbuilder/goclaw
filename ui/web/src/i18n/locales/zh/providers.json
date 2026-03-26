@@ -24,7 +24,10 @@
     "authenticated": "已认证",
     "oauthLinked": "已链接OAuth",
     "oauthAccount": "OAuth 账户",
-    "oauthAlias": "别名：{{name}}"
+    "oauthAlias": "别名：{{name}}",
+    "connected": "已连接",
+    "signInNeeded": "需要登录",
+    "disabled": "已禁用"
   },
   "detail": {
     "title": "提供商详情",
@@ -186,7 +189,14 @@
     "enabledDesc": "Provider已激活并可供Agent使用",
     "embeddingSection": "Embedding",
     "oauthAccountUsage": "账户用法",
-    "oauthAccountUsageDesc": "这个别名如何作为 provider 级默认池中的主账户使用。",
+    "oauthAccountUsageDesc": "这个别名如何参与由 provider 拥有的 OpenAI Codex 账户池。",
+    "oauthAccountUsageManagedDesc": "这个别名当前是由 {{provider}} 管理的池成员。",
+    "oauthAccountUsageOwnerDesc": "这个别名当前拥有一个可复用账户池，包含 {{count}} 个附加账户。",
+    "oauthPoolRole": {
+      "member": "池成员",
+      "owner": "池拥有者",
+      "standalone": "独立账户"
+    },
     "oauthAliasLabel": "账户别名",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "模型前缀",
@@ -194,13 +204,38 @@
     "oauthPreferredHint": "把 agent 的 Provider 字段设为这个别名，就能把它作为主 OpenAI 别名。",
     "oauthProviderDefaultHint": "使用下方的 Pool Defaults，为所有把这个别名设为主 provider 的 agent 定义可复用的 OpenAI Codex 路由策略。",
     "oauthRoutingHint": "Agent 页面现在会展示该 agent 的最终生效账户池，以及它是继承这里的默认值还是使用自己的覆盖配置。",
+    "oauthManagedByHint": "这个别名由 provider {{provider}} 管理。请到那个 provider 上编辑池成员，而不是在这个账户上修改。",
     "codexPoolDefaultsTitle": "Pool Defaults",
-    "codexPoolDefaultsDescription": "为使用这个别名作为主 provider 的 agent 定义可复用的 OpenAI Codex 账户池。",
+    "codexPoolDefaultsDescription": "为把这个别名作为主 provider 的 agent 定义由该别名拥有的可复用 OpenAI Codex 账户池。",
     "oauthDisplayNameRecommendation": "如果您希望多个 OpenAI Codex OAuth 账户在池里显示得更清楚，可以补充 display name。"
   },
+  "list": {
+    "poolOwner": "池拥有者",
+    "poolMember": "池成员",
+    "standalone": "独立账户",
+    "managedBy": "由 {{provider}} 管理",
+    "memberCount_one": "{{count}} 个成员",
+    "memberCount_other": "{{count}} 个成员",
+    "memberOverflow": "+{{count}}",
+    "strategy": {
+      "roundRobin": "Round robin",
+      "priorityOrder": "Priority order",
+      "primaryFirst": "Primary first"
+    },
+    "status": {
+      "needsSignIn": "需要登录",
+      "disabled": "已禁用"
+    }
+  },
   "pageHint": {
-    "title": "支持多个 OpenAI Codex OAuth 账户",
-    "description": "每个 OpenAI Codex OAuth provider 都是一个具名账户。创建如 primary、work 或 team 这样的别名，然后从 agent 的 OpenAI 账户池页面添加池成员。"
+    "title": "ChatGPT Subscription (OAuth) 账户",
+    "description": "每个别名就是一个 Codex 账户。池拥有者在这里管理成员账户，而 agent 页面只展示最终生效的路由。",
+    "connected_one": "{{count}} 个已连接账户",
+    "connected_other": "{{count}} 个已连接账户",
+    "owners_one": "{{count}} 个池拥有者",
+    "owners_other": "{{count}} 个池拥有者",
+    "members_one": "{{count}} 个成员",
+    "members_other": "{{count}} 个成员"
   },
   "embedding": {
     "enable": "启用Embedding",

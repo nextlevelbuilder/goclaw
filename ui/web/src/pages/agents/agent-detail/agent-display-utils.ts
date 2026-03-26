@@ -139,6 +139,17 @@ export function resolveEffectiveChatGPTOAuthRouting(
     overrideMode = "inherit";
   }
 
+  if (
+    providerDefaults?.extraProviderNames.length &&
+    source === "agent_custom"
+  ) {
+    if (strategy === "primary_first" && extraProviderNames.length === 0) {
+      extraProviderNames = [];
+    } else {
+      extraProviderNames = providerDefaults.extraProviderNames;
+    }
+  }
+
   return {
     source,
     overrideMode,
@@ -174,10 +185,19 @@ export function buildAgentOtherConfigWithChatGPTOAuthRouting(
     normalized.strategy !== "primary_first" ||
     normalized.extraProviderNames.length > 0
   ) {
-    otherBase.chatgpt_oauth_routing = {
+    const customRouting: Record<string, unknown> = {
       override_mode: "custom",
       strategy: normalized.strategy,
-      extra_provider_names: normalized.extraProviderNames,
+    };
+    if (
+      !providerDefaults ||
+      (normalized.strategy === "primary_first" &&
+        normalized.extraProviderNames.length === 0)
+    ) {
+      customRouting.extra_provider_names = normalized.extraProviderNames;
+    }
+    otherBase.chatgpt_oauth_routing = {
+      ...customRouting,
     };
   }
 

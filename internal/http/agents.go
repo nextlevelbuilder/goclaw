@@ -174,6 +174,16 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		req.Status = store.AgentStatusActive
 	}
 
+	if err := validateChatGPTOAuthAgentRouting(
+		r.Context(),
+		h.providers,
+		req.Provider,
+		req.ParseChatGPTOAuthRouting(),
+	); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	if err := h.agents.Create(r.Context(), &req); err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505") {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": i18n.T(locale, i18n.MsgAlreadyExists, "agent", req.AgentKey)})
@@ -267,6 +277,31 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Defense-in-depth against column injection via arbitrary JSON keys.
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
 	allowed["restrict_to_workspace"] = true
+
+	validationProvider := ag.Provider
+	if providerName, ok := allowed["provider"].(string); ok && providerName != "" {
+		validationProvider = providerName
+	}
+	validationAgent := *ag
+	validationAgent.Provider = validationProvider
+	if otherConfig, ok := allowed["other_config"]; ok {
+		rawOtherConfig, err := marshalJSONRaw(otherConfig)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+			return
+		}
+		validationAgent.OtherConfig = rawOtherConfig
+	}
+
+	if err := validateChatGPTOAuthAgentRouting(
+		r.Context(),
+		h.providers,
+		validationAgent.Provider,
+		validationAgent.ParseChatGPTOAuthRouting(),
+	); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 
 	if err := h.agents.Update(r.Context(), id, allowed); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

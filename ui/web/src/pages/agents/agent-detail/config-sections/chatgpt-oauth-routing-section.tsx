@@ -40,12 +40,15 @@ interface ChatGPTOAuthRoutingSectionProps {
     extraProviderNames: string[];
   } | null;
   canManageProviders?: boolean;
+  membershipEditable?: boolean;
+  membershipManagedByLabel?: string;
   quotaByName?: Map<string, ChatGPTOAuthProviderQuota>;
   quotaLoading?: boolean;
   entries?: CodexPoolEntry[];
   isDirty?: boolean;
   saving?: boolean;
   onSave?: () => void;
+  contentScrollable?: boolean;
   className?: string;
 }
 
@@ -134,12 +137,15 @@ export function ChatGPTOAuthRoutingSection({
   showOverrideMode = true,
   defaultRouting = null,
   canManageProviders = true,
+  membershipEditable = true,
+  membershipManagedByLabel,
   quotaByName,
   quotaLoading = false,
   entries = [],
   isDirty = false,
   saving = false,
   onSave,
+  contentScrollable = false,
   className,
 }: ChatGPTOAuthRoutingSectionProps) {
   const { t } = useTranslation("agents");
@@ -171,9 +177,7 @@ export function ChatGPTOAuthRoutingSection({
   );
   const mode = value.override_mode === "inherit" ? "inherit" : "custom";
   const providerDefaultsAvailable =
-    defaultRouting != null &&
-    (defaultRouting.strategy !== "primary_first" ||
-      defaultRouting.extraProviderNames.length > 0);
+    defaultRouting != null && defaultRouting.extraProviderNames.length > 0;
   const selectedExtras = new Set(value.extra_provider_names ?? []);
   const selectedEntries = entries.map((entry) => ({
     ...entry,
@@ -198,6 +202,11 @@ export function ChatGPTOAuthRoutingSection({
     value.strategy === "round_robin" || value.strategy === "priority_order"
       ? value.strategy
       : "primary_first";
+  const canEditMembership = canManageProviders && membershipEditable;
+  const canUsePoolStrategies =
+    canManageProviders &&
+    mode !== "inherit" &&
+    (membershipEditable || providerDefaultsAvailable || selectedEntries.length > 1);
 
   const setMode = (overrideMode: "inherit" | "custom") => {
     onChange({
@@ -280,7 +289,12 @@ export function ChatGPTOAuthRoutingSection({
         </div>
       </CardHeader>
 
-      <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-2.5 lg:px-4 lg:py-3 [@media(max-height:760px)]:space-y-2 [@media(max-height:760px)]:py-2">
+      <CardContent
+        className={cn(
+          "min-h-0 flex-1 space-y-3 px-3 py-2.5 lg:px-4 lg:py-3 [@media(max-height:760px)]:space-y-2 [@media(max-height:760px)]:py-2",
+          contentScrollable ? "overflow-y-auto" : "overflow-visible",
+        )}
+      >
         {showOverrideMode ? (
           <section className="space-y-2.5 [@media(max-height:760px)]:space-y-2">
             <div className="flex flex-wrap items-center gap-1.5">
@@ -339,7 +353,7 @@ export function ChatGPTOAuthRoutingSection({
               type="button"
               variant={selectedStrategy === "round_robin" ? "default" : "outline"}
               onClick={() => setStrategy("round_robin")}
-              disabled={!canManageProviders || mode === "inherit"}
+              disabled={!canUsePoolStrategies}
               className="h-9 text-xs sm:text-sm [@media(max-height:760px)]:h-8"
             >
               {t("chatgptOAuthRouting.strategy.roundRobin")}
@@ -348,7 +362,7 @@ export function ChatGPTOAuthRoutingSection({
               type="button"
               variant={selectedStrategy === "priority_order" ? "default" : "outline"}
               onClick={() => setStrategy("priority_order")}
-              disabled={!canManageProviders || mode === "inherit"}
+              disabled={!canUsePoolStrategies}
               className="h-9 text-xs sm:text-sm [@media(max-height:760px)]:h-8"
             >
               {t("chatgptOAuthRouting.strategy.priorityOrder")}
@@ -359,11 +373,23 @@ export function ChatGPTOAuthRoutingSection({
         <section className="space-y-2.5 [@media(max-height:760px)]:space-y-2">
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("chatgptOAuthRouting.availableExtraAccountsLabel")}
+              {membershipEditable
+                ? t("chatgptOAuthRouting.availableExtraAccountsLabel")
+                : t("chatgptOAuthRouting.poolMembershipLabel")}
             </p>
           </div>
 
-          {isLoading ? (
+          {!membershipEditable ? (
+            <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
+              {selectedEntries.length > 1
+                ? t("chatgptOAuthRouting.membershipManagedAtProvider", {
+                    provider: membershipManagedByLabel || currentProvider,
+                  })
+                : t("chatgptOAuthRouting.membershipConfigureProviderFirst", {
+                    provider: membershipManagedByLabel || currentProvider,
+                  })}
+            </div>
+          ) : isLoading ? (
             <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
               {t("chatgptOAuthRouting.loadingAccounts")}
             </div>
@@ -392,7 +418,7 @@ export function ChatGPTOAuthRoutingSection({
                         "border-amber-500/40 bg-amber-500/10 text-amber-900 hover:bg-amber-500/15 dark:text-amber-200",
                     )}
                     onClick={() => toggleProvider(provider.name)}
-                    disabled={!canManageProviders || mode === "inherit"}
+                    disabled={!canEditMembership || mode === "inherit"}
                   >
                     {selected ? <Check className="h-3.5 w-3.5" /> : null}
                     {provider.display_name || provider.name}

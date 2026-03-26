@@ -105,11 +105,24 @@ export function ChatGPTOAuthRoutingSummarySection({
 
   return (
     <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-0.5">
-          <h3 className="text-sm font-medium">{t("chatgptOAuthRouting.summaryTitle")}</h3>
-          <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.summaryDescription")}</p>
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <h3 className="text-sm font-medium">{t("chatgptOAuthRouting.summaryTitle")}</h3>
+            <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.summaryDescription")}</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto shrink-0 gap-1.5 self-start"
+            onClick={onManage}
+          >
+            <Settings2 className="h-4 w-4" />
+            {t("chatgptOAuthRouting.manageAction")}
+          </Button>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline">{t(strategyLabelKey(effectiveRouting.strategy))}</Badge>
           <Badge variant={effectiveRouting.overrideMode === "inherit" ? "secondary" : "outline"}>
@@ -117,10 +130,6 @@ export function ChatGPTOAuthRoutingSummarySection({
               ? t("chatgptOAuthRouting.mode.inherit")
               : t("chatgptOAuthRouting.mode.custom")}
           </Badge>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onManage}>
-            <Settings2 className="h-4 w-4" />
-            {t("chatgptOAuthRouting.manageAction")}
-          </Button>
         </div>
       </div>
 

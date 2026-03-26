@@ -629,7 +629,7 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 
 ### Provider-Level Defaults + Agent Overrides
 
-Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each provider name is one OpenAI Codex OAuth alias. The primary alias can now define reusable pool defaults in provider `settings`, while each agent may either inherit them or save its own override.
+Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each provider name is one OpenAI Codex OAuth alias. Pool membership is authoritative at the provider layer: one alias owns the reusable pool, while member aliases stay leaf accounts.
 
 Provider default example:
 
@@ -654,8 +654,7 @@ Agent override example:
   "other_config": {
     "chatgpt_oauth_routing": {
       "override_mode": "custom",
-      "strategy": "round_robin",
-      "extra_provider_names": ["codex-work"]
+      "strategy": "round_robin"
     }
   }
 }
@@ -664,11 +663,13 @@ Agent override example:
 Routing behavior:
 - The main `provider` field remains the preferred/default account.
 - Provider aliases are arbitrary. `openai-codex` and `codex-work` are examples, not required prefixes.
+- `settings.codex_pool.extra_provider_names` is the authoritative membership list for that pool owner.
+- A provider listed in another pool cannot also manage its own pool.
 - `override_mode: "inherit"` uses the primary provider's `settings.codex_pool`.
-- `override_mode: "custom"` stores an agent-local override.
-- `primary_first` keeps that preferred account fixed while preserving extra accounts in config.
-- `round_robin` rotates requests across the preferred account plus the configured extra authenticated OpenAI Codex OAuth accounts.
-- `priority_order` tries the preferred account first, then drains the configured extra accounts in order.
+- `override_mode: "custom"` is limited to routing behavior for that provider-owned pool.
+- `primary_first` keeps the preferred account fixed. When saved as a custom override with no extra names, it disables the pool for that agent and keeps the agent on the primary account only.
+- `round_robin` rotates requests across the preferred account plus the provider-owned extra authenticated OpenAI Codex OAuth accounts.
+- `priority_order` tries the preferred account first, then drains the provider-owned extra accounts in order.
 - Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth account in the same request.
 - Explicit provider names remain explicit. OAuth auth/logout is still provider-scoped.
 - Runtime observability for one agent is available at `GET /v1/agents/{id}/codex-pool-activity`, which exposes recent routed traces plus per-alias health derived from those traces.

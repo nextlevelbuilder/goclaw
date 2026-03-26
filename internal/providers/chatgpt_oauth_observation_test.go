@@ -6,12 +6,15 @@ import (
 
 func TestChatGPTOAuthRoutingObservationRoundTrip(t *testing.T) {
 	observation := NewChatGPTOAuthRoutingObservation()
-	observation.SetPool("round_robin", []string{"openai-codex", "codex-work"})
+	observation.SetPool("openai-codex", "round_robin", []string{"openai-codex", "codex-work"})
 	observation.RecordAttempt("openai-codex")
 	observation.RecordAttempt("codex-work")
 	observation.RecordSuccess("codex-work")
 
 	snapshot := observation.Snapshot()
+	if snapshot.PoolOwnerProvider != "openai-codex" {
+		t.Fatalf("PoolOwnerProvider = %q, want openai-codex", snapshot.PoolOwnerProvider)
+	}
 	if snapshot.Strategy != "round_robin" {
 		t.Fatalf("Strategy = %q, want round_robin", snapshot.Strategy)
 	}

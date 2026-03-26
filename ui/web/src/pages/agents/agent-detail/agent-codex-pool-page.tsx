@@ -486,12 +486,17 @@ export function AgentCodexPoolPage() {
                     : null
                 }
                 canManageProviders={canManageProviders}
+                membershipEditable={false}
+                membershipManagedByLabel={
+                  currentProvider?.display_name || agent.provider
+                }
                 quotaByName={quotaByName}
                 quotaLoading={quotasLoading || quotasFetching}
                 entries={draftEntries}
                 isDirty={isDirty}
                 saving={saving}
                 onSave={handleSave}
+                contentScrollable
                 className="h-full min-h-0"
               />
             </div>

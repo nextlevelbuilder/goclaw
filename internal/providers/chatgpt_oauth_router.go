@@ -100,7 +100,7 @@ func (p *ChatGPTOAuthRouter) call(ctx context.Context, fn func(Provider) (*ChatR
 		for _, provider := range p.registeredProviders() {
 			poolProviders = append(poolProviders, provider.Name())
 		}
-		observation.SetPool(p.strategy, poolProviders)
+		observation.SetPool(p.defaultProviderName, p.strategy, poolProviders)
 	}
 	var lastErr error
 	for i, provider := range ordered {

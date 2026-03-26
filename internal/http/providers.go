@@ -241,6 +241,11 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	if err := validateChatGPTOAuthProviderCandidate(r.Context(), h.store, uuid.Nil, &p); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	if err := h.store.CreateProvider(r.Context(), &p); err != nil {
 		slog.Error("providers.create", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -317,12 +322,49 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 	// Allowlist: only permit known provider columns.
 	updates = filterAllowedKeys(updates, providerAllowedFields)
 
+	currentProvider, err := h.store.GetProvider(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "provider", id.String())})
+		return
+	}
+
+	candidate := *currentProvider
+	if name, ok := updates["name"].(string); ok && name != "" {
+		candidate.Name = name
+	}
+	if providerType, ok := updates["provider_type"].(string); ok && providerType != "" {
+		candidate.ProviderType = providerType
+	}
+	if apiKey, ok := updates["api_key"].(string); ok {
+		candidate.APIKey = apiKey
+	}
+	if apiBase, ok := updates["api_base"].(string); ok {
+		candidate.APIBase = apiBase
+	}
+	if enabled, ok := updates["enabled"].(bool); ok {
+		candidate.Enabled = enabled
+	}
+	if displayName, ok := updates["display_name"].(string); ok {
+		candidate.DisplayName = displayName
+	}
+	if settings, ok := updates["settings"]; ok {
+		rawSettings, err := marshalJSONRaw(settings)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+			return
+		}
+		candidate.Settings = rawSettings
+	}
+
+	if err := validateChatGPTOAuthProviderCandidate(r.Context(), h.store, id, &candidate); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
 	// Track old name before update for registry cleanup
 	var oldName string
 	if h.providerReg != nil {
-		if old, err := h.store.GetProvider(r.Context(), id); err == nil {
-			oldName = old.Name
-		}
+		oldName = currentProvider.Name
 	}
 
 	if err := h.store.UpdateProvider(r.Context(), id, updates); err != nil {

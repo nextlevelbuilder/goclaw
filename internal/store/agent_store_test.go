@@ -134,3 +134,45 @@ func TestResolveEffectiveChatGPTOAuthRoutingAllowsCustomSingleAccountToDisableDe
 		t.Fatalf("ExtraProviderNames = %#v, want empty", got.ExtraProviderNames)
 	}
 }
+
+func TestResolveEffectiveChatGPTOAuthRoutingKeepsProviderOwnedMembersForStrategyOverride(t *testing.T) {
+	defaults := &ChatGPTOAuthRoutingConfig{
+		Strategy:           ChatGPTOAuthStrategyRoundRobin,
+		ExtraProviderNames: []string{"codex-work", "codex-team"},
+	}
+	override := &ChatGPTOAuthRoutingConfig{
+		OverrideMode: ChatGPTOAuthOverrideCustom,
+		Strategy:     ChatGPTOAuthStrategyPriority,
+	}
+
+	got := ResolveEffectiveChatGPTOAuthRouting(defaults, override)
+	if got == nil {
+		t.Fatal("ResolveEffectiveChatGPTOAuthRouting() = nil, want config")
+	}
+	if got.Strategy != ChatGPTOAuthStrategyPriority {
+		t.Fatalf("Strategy = %q, want %q", got.Strategy, ChatGPTOAuthStrategyPriority)
+	}
+	if !reflect.DeepEqual(got.ExtraProviderNames, defaults.ExtraProviderNames) {
+		t.Fatalf("ExtraProviderNames = %#v, want %#v", got.ExtraProviderNames, defaults.ExtraProviderNames)
+	}
+}
+
+func TestResolveEffectiveChatGPTOAuthRoutingIgnoresCustomMembersWhenProviderOwnsPool(t *testing.T) {
+	defaults := &ChatGPTOAuthRoutingConfig{
+		Strategy:           ChatGPTOAuthStrategyRoundRobin,
+		ExtraProviderNames: []string{"codex-work", "codex-team"},
+	}
+	override := &ChatGPTOAuthRoutingConfig{
+		OverrideMode:       ChatGPTOAuthOverrideCustom,
+		Strategy:           ChatGPTOAuthStrategyRoundRobin,
+		ExtraProviderNames: []string{"rogue-provider"},
+	}
+
+	got := ResolveEffectiveChatGPTOAuthRouting(defaults, override)
+	if got == nil {
+		t.Fatal("ResolveEffectiveChatGPTOAuthRouting() = nil, want config")
+	}
+	if !reflect.DeepEqual(got.ExtraProviderNames, defaults.ExtraProviderNames) {
+		t.Fatalf("ExtraProviderNames = %#v, want provider defaults %#v", got.ExtraProviderNames, defaults.ExtraProviderNames)
+	}
+}

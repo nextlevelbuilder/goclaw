@@ -12,6 +12,7 @@ const ChatGPTOAuthRoutingMetadataKey = "chatgpt_oauth_routing"
 type chatGPTOAuthRoutingObservationKey struct{}
 
 type ChatGPTOAuthRoutingEvidence struct {
+	PoolOwnerProvider  string   `json:"pool_owner_provider,omitempty"`
 	Strategy           string   `json:"strategy,omitempty"`
 	PoolProviders      []string `json:"pool_providers,omitempty"`
 	SelectedProvider   string   `json:"selected_provider,omitempty"`
@@ -43,12 +44,13 @@ func ChatGPTOAuthRoutingObservationFromContext(ctx context.Context) *ChatGPTOAut
 	return observation
 }
 
-func (o *ChatGPTOAuthRoutingObservation) SetPool(strategy string, poolProviders []string) {
+func (o *ChatGPTOAuthRoutingObservation) SetPool(poolOwnerProvider, strategy string, poolProviders []string) {
 	if o == nil {
 		return
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.evidence.PoolOwnerProvider = poolOwnerProvider
 	o.evidence.Strategy = strategy
 	o.evidence.PoolProviders = append([]string(nil), poolProviders...)
 }

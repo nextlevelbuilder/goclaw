@@ -24,7 +24,10 @@
     "authenticated": "Đã xác thực",
     "oauthLinked": "Đã liên kết OAuth",
     "oauthAccount": "Tài khoản OAuth",
-    "oauthAlias": "Bí danh: {{name}}"
+    "oauthAlias": "Bí danh: {{name}}",
+    "connected": "Đã kết nối",
+    "signInNeeded": "Cần đăng nhập",
+    "disabled": "Đã tắt"
   },
   "detail": {
     "title": "Chi tiết Provider",
@@ -168,7 +171,14 @@
     "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
     "embeddingSection": "Embedding",
     "oauthAccountUsage": "Cách dùng tài khoản",
-    "oauthAccountUsageDesc": "Cách bí danh này hoạt động như tài khoản chính cho pool mặc định ở cấp provider.",
+    "oauthAccountUsageDesc": "Cách bí danh này hoạt động trong mô hình OpenAI Codex pool do provider sở hữu.",
+    "oauthAccountUsageManagedDesc": "Bí danh này hiện là pool member được quản lý bởi {{provider}}.",
+    "oauthAccountUsageOwnerDesc": "Bí danh này hiện đang sở hữu một reusable pool với {{count}} tài khoản phụ.",
+    "oauthPoolRole": {
+      "member": "Pool Member",
+      "owner": "Pool Owner",
+      "standalone": "Độc lập"
+    },
     "oauthAliasLabel": "Bí danh tài khoản",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "Tiền tố model",
@@ -176,13 +186,38 @@
     "oauthPreferredHint": "Đặt trường Provider của agent thành bí danh này để biến nó thành bí danh OpenAI chính.",
     "oauthProviderDefaultHint": "Dùng phần Pool Defaults bên dưới để định nghĩa chính sách routing OpenAI Codex dùng lại cho mọi agent trỏ vào bí danh này.",
     "oauthRoutingHint": "Trang agent giờ sẽ hiển thị pool hiệu lực của agent đó, cùng việc nó đang kế thừa mặc định này hay đang dùng override riêng.",
+    "oauthManagedByHint": "Bí danh này đang được quản lý bởi provider {{provider}}. Hãy chỉnh membership ở provider đó thay vì tại tài khoản này.",
     "codexPoolDefaultsTitle": "Pool Defaults",
-    "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại cho các agent dùng bí danh này làm provider chính.",
+    "codexPoolDefaultsDescription": "Định nghĩa reusable OpenAI Codex pool do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
     "oauthDisplayNameRecommendation": "Thêm display name nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool."
   },
+  "list": {
+    "poolOwner": "Pool Owner",
+    "poolMember": "Pool Member",
+    "standalone": "Độc lập",
+    "managedBy": "Được quản lý bởi {{provider}}",
+    "memberCount_one": "{{count}} tài khoản",
+    "memberCount_other": "{{count}} tài khoản",
+    "memberOverflow": "+{{count}}",
+    "strategy": {
+      "roundRobin": "Round robin",
+      "priorityOrder": "Priority order",
+      "primaryFirst": "Primary first"
+    },
+    "status": {
+      "needsSignIn": "Cần đăng nhập",
+      "disabled": "Đã tắt"
+    }
+  },
   "pageHint": {
-    "title": "Hỗ trợ nhiều tài khoản OpenAI Codex OAuth",
-    "description": "Mỗi provider OpenAI Codex OAuth là một tài khoản có bí danh riêng. Tạo các bí danh như primary, work hoặc team, rồi thêm pool members từ trang OpenAI Account Pool của agent."
+    "title": "Tài khoản ChatGPT Subscription (OAuth)",
+    "description": "Mỗi bí danh là một tài khoản Codex. Pool owner quản lý các member tại đây, còn trang agent chỉ hiển thị route đang có hiệu lực.",
+    "connected_one": "{{count}} tài khoản đã kết nối",
+    "connected_other": "{{count}} tài khoản đã kết nối",
+    "owners_one": "{{count}} pool owner",
+    "owners_other": "{{count}} pool owner",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} member"
   },
   "embedding": {
     "enable": "Bật Embedding",

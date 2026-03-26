@@ -126,10 +126,36 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     () => new Map(providers.map((item) => [item.name, item])),
     [providers],
   );
+  const poolOwnership = useMemo(() => {
+    const membersByOwner = new Map<string, string[]>();
+    const ownerByMember = new Map<string, string>();
+    for (const item of providers) {
+      if (item.provider_type !== "chatgpt_oauth") continue;
+      const routing = getChatGPTOAuthProviderRouting(item.settings);
+      if (!routing || routing.extraProviderNames.length === 0) continue;
+      membersByOwner.set(item.name, routing.extraProviderNames);
+      for (const memberName of routing.extraProviderNames) {
+        if (!ownerByMember.has(memberName)) {
+          ownerByMember.set(memberName, item.name);
+        }
+      }
+    }
+    return { membersByOwner, ownerByMember };
+  }, [providers]);
   const statusByName = useMemo(
     () => new Map(statuses.map((status) => [status.provider.name, status])),
     [statuses],
   );
+  const managedByOwnerName = isOAuth
+    ? poolOwnership.ownerByMember.get(provider.name)
+    : undefined;
+  const managedByProvider = managedByOwnerName
+    ? providerByName.get(managedByOwnerName)
+    : undefined;
+  const managedMemberCount = isOAuth
+    ? poolOwnership.membersByOwner.get(provider.name)?.length ?? 0
+    : 0;
+  const canEditPoolRouting = isOAuth && !managedByOwnerName;
 
   const initialRouting = getChatGPTOAuthProviderRouting(provider.settings);
 
@@ -225,14 +251,14 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
 
   const quotaProviderNames = useMemo(
     () =>
-      isOAuth
+      canEditPoolRouting
         ? Array.from(
             new Set(
               [provider.name, ...(poolRouting.extra_provider_names ?? [])].filter(Boolean),
             ),
           )
         : [],
-    [isOAuth, poolRouting.extra_provider_names, provider.name],
+    [canEditPoolRouting, poolRouting.extra_provider_names, provider.name],
   );
   const {
     quotaByName,
@@ -240,7 +266,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     isFetching: quotasFetching,
   } = useChatGPTOAuthProviderQuotas(quotaProviderNames, isOAuth);
   const poolEntries = useMemo<CodexPoolEntry[]>(() => {
-    if (!isOAuth) return [];
+    if (!canEditPoolRouting) return [];
     return quotaProviderNames.map((providerName) => {
       const item = providerByName.get(providerName);
       return {
@@ -261,7 +287,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
         quota: quotaByName.get(providerName),
       };
     });
-  }, [isOAuth, provider.name, providerByName, quotaByName, quotaProviderNames, statusByName]);
+  }, [canEditPoolRouting, provider.name, providerByName, quotaByName, quotaProviderNames, statusByName]);
 
   const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
   useEffect(() => { resetEmb(); }, [embModel, embDimensions, resetEmb]);
@@ -389,9 +415,15 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
         </div>
       </section>
 
-      {isOAuth ? <ProviderOAuthAccountSection provider={provider} /> : null}
-
       {isOAuth ? (
+        <ProviderOAuthAccountSection
+          provider={provider}
+          managedByProvider={managedByProvider}
+          managedMemberCount={managedMemberCount}
+        />
+      ) : null}
+
+      {canEditPoolRouting ? (
         <ChatGPTOAuthRoutingSection
           title={t("detail.codexPoolDefaultsTitle")}
           description={t("detail.codexPoolDefaultsDescription")}

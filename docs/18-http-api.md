@@ -141,7 +141,7 @@ Response: `{content, run_id, usage?}`. Used by orchestrators (n8n, Paperclip) to
 ### Codex/OpenAI OAuth Routing in `other_config`
 
 For agents whose main `provider` is a `chatgpt_oauth` provider, `other_config.chatgpt_oauth_routing`
-can override or inherit multi-account routing while keeping the main `provider` field as the preferred/default account alias.
+can override or inherit routing behavior while keeping the main `provider` field as the preferred/default account alias.
 
 ```json
 {
@@ -150,8 +150,7 @@ can override or inherit multi-account routing while keeping the main `provider` 
   "other_config": {
     "chatgpt_oauth_routing": {
       "override_mode": "custom",
-      "strategy": "round_robin",
-      "extra_provider_names": ["codex-work", "codex-team"]
+      "strategy": "round_robin"
     }
   }
 }
@@ -159,12 +158,14 @@ can override or inherit multi-account routing while keeping the main `provider` 
 
 Rules:
 - Provider settings may define reusable `settings.codex_pool` defaults for a primary alias.
+- `settings.codex_pool.extra_provider_names` is the authoritative membership list for that pool owner.
+- A provider listed in another pool cannot also manage its own pool.
 - `override_mode: "inherit"` tells the agent to follow those provider defaults.
-- `override_mode: "custom"` stores an agent-local override.
-- `strategy: "primary_first"` keeps the main `provider` as the preferred account.
+- `override_mode: "custom"` stores an agent-local routing override for that provider-owned pool.
+- `strategy: "primary_first"` keeps the main `provider` as the preferred account. When saved as a custom override with no extra names, it disables pooling for that agent.
 - Provider aliases are arbitrary. `openai-codex`, `codex-work`, and `codex-team` are examples, not required prefixes.
-- `strategy: "round_robin"` rotates requests across the main provider plus the listed extra authenticated OpenAI Codex OAuth providers.
-- `strategy: "priority_order"` tries the main provider first, then drains the listed extra providers in order.
+- `strategy: "round_robin"` rotates requests across the main provider plus the provider-owned extra authenticated OpenAI Codex OAuth providers.
+- `strategy: "priority_order"` tries the main provider first, then drains the provider-owned extra providers in order.
 - Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth provider in the same request.
 - Only enabled and authenticated `chatgpt_oauth` providers participate.
 - Provider-scoped auth remains unchanged: `cmd/auth` and `/v1/auth/chatgpt/{provider}/*` still operate on explicit providers.

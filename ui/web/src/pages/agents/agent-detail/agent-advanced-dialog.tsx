@@ -149,6 +149,10 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
             value={chatgptRouting}
             onChange={setChatgptRouting}
             defaultRouting={providerDefaults}
+            membershipEditable={false}
+            membershipManagedByLabel={
+              currentProvider?.display_name || agent.provider
+            }
           />
 
           {/* Performance */}

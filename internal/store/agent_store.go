@@ -388,6 +388,14 @@ func ResolveEffectiveChatGPTOAuthRouting(defaults, agentRouting *ChatGPTOAuthRou
 		return nil
 	}
 	effective.OverrideMode = ""
+	if normalizedDefaults != nil && len(normalizedDefaults.ExtraProviderNames) > 0 {
+		if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
+			len(normalizedAgent.ExtraProviderNames) == 0 {
+			effective.ExtraProviderNames = nil
+		} else {
+			effective.ExtraProviderNames = append([]string(nil), normalizedDefaults.ExtraProviderNames...)
+		}
+	}
 	if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
 		len(effective.ExtraProviderNames) == 0 &&
 		normalizedAgent.OverrideMode != ChatGPTOAuthOverrideCustom {

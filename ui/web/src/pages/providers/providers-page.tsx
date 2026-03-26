@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Cpu, Info, Plus } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -11,8 +12,13 @@ import { Pagination } from "@/components/shared/pagination";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useProviders, type ProviderData } from "./hooks/use-providers";
+import { useChatGPTOAuthProviderStatuses } from "./hooks/use-chatgpt-oauth-provider-statuses";
 import { ProviderFormDialog } from "./provider-form-dialog";
 import { ProviderListRow } from "./provider-list-row";
+import {
+  getChatGPTOAuthPoolOwnership,
+  sortProvidersForPoolHierarchy,
+} from "./provider-utils";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
 import { ProviderDetailPage } from "./provider-detail/provider-detail-page";
@@ -42,20 +48,79 @@ function ProviderListView() {
     createProvider, deleteProvider,
   } = useProviders();
   const showSkeleton = useDeferredLoading(loading && providers.length === 0);
+  const { statuses } = useChatGPTOAuthProviderStatuses(providers);
 
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProviderData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const hasChatGPTOAuthProviders = providers.some((provider) => provider.provider_type === "chatgpt_oauth");
-
-  const filtered = providers.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.display_name || "").toLowerCase().includes(search.toLowerCase()),
+  const providerByName = useMemo(
+    () => new Map(providers.map((provider) => [provider.name, provider])),
+    [providers],
   );
+  const poolOwnership = useMemo(
+    () => getChatGPTOAuthPoolOwnership(providers),
+    [providers],
+  );
+  const oauthAvailabilityByName = useMemo(
+    () => new Map(statuses.map((status) => [status.provider.name, status.availability])),
+    [statuses],
+  );
+  const readyOAuthCount = statuses.filter((status) => status.authenticated).length;
+  const poolOwnerCount = poolOwnership.membersByOwner.size;
+  const poolMemberCount = poolOwnership.ownerByMember.size;
+  const hasConnectedChatGPTOAuthProvider = readyOAuthCount > 0;
 
-  const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(filtered);
+  const filtered = useMemo(() => providers.filter(
+    (provider) =>
+      provider.name.toLowerCase().includes(search.toLowerCase()) ||
+      (provider.display_name || "").toLowerCase().includes(search.toLowerCase()),
+  ), [providers, search]);
+  const orderedProviders = useMemo(
+    () => sortProvidersForPoolHierarchy(filtered, poolOwnership),
+    [filtered, poolOwnership],
+  );
+  const memberConnectorByName = useMemo(() => {
+    const visibleNames = new Set(orderedProviders.map((provider) => provider.name));
+    const map = new Map<string, "none" | "single" | "first" | "middle" | "last">();
+
+    for (const [ownerName] of poolOwnership.membersByOwner) {
+      if (!visibleNames.has(ownerName)) {
+        for (const provider of orderedProviders) {
+          if (poolOwnership.ownerByMember.get(provider.name) === ownerName) {
+            map.set(provider.name, "none");
+          }
+        }
+        continue;
+      }
+
+      const visibleMembers = orderedProviders
+        .filter((provider) => poolOwnership.ownerByMember.get(provider.name) === ownerName)
+        .map((provider) => provider.name);
+
+      if (visibleMembers.length === 1) {
+        const onlyMember = visibleMembers[0];
+        if (onlyMember) {
+          map.set(onlyMember, "single");
+        }
+        continue;
+      }
+
+      visibleMembers.forEach((name, index) => {
+        if (index === 0) {
+          map.set(name, "first");
+        } else if (index === visibleMembers.length - 1) {
+          map.set(name, "last");
+        } else {
+          map.set(name, "middle");
+        }
+      });
+    }
+
+    return map;
+  }, [orderedProviders, poolOwnership.membersByOwner, poolOwnership.ownerByMember]);
+
+  const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(orderedProviders);
 
   useEffect(() => { resetPage(); }, [search, resetPage]);
 
@@ -91,11 +156,26 @@ function ProviderListView() {
         />
       </div>
 
-      {hasChatGPTOAuthProviders && (
-        <Alert className="mt-4">
+      {hasConnectedChatGPTOAuthProvider && (
+        <Alert className="mt-4 border-primary/20 bg-primary/[0.04] px-3 py-2">
           <Info className="h-4 w-4" />
-          <AlertTitle>{t("pageHint.title")}</AlertTitle>
-          <AlertDescription>
+          <AlertTitle className="flex flex-wrap items-center gap-2">
+            <span>{t("pageHint.title")}</span>
+            <Badge variant="success" className="h-5 px-1.5 text-[10px]">
+              {t("pageHint.connected", { count: readyOAuthCount })}
+            </Badge>
+            {poolOwnerCount > 0 && (
+              <Badge variant="info" className="h-5 px-1.5 text-[10px]">
+                {t("pageHint.owners", { count: poolOwnerCount })}
+              </Badge>
+            )}
+            {poolMemberCount > 0 && (
+              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                {t("pageHint.members", { count: poolMemberCount })}
+              </Badge>
+            )}
+          </AlertTitle>
+          <AlertDescription className="gap-1 text-xs">
             <p>{t("pageHint.description")}</p>
           </AlertDescription>
         </Alert>
@@ -117,6 +197,23 @@ function ProviderListView() {
                 <ProviderListRow
                   key={p.id}
                   provider={p}
+                  oauthPool={p.provider_type === "chatgpt_oauth" ? {
+                    availability: oauthAvailabilityByName.get(p.name) ?? (p.enabled ? "needs_sign_in" : "disabled"),
+                    role: poolOwnership.ownerByMember.has(p.name)
+                      ? "member"
+                      : poolOwnership.membersByOwner.has(p.name)
+                        ? "owner"
+                        : "standalone",
+                    managedByLabel: (() => {
+                      const ownerName = poolOwnership.ownerByMember.get(p.name);
+                      if (!ownerName) return undefined;
+                      const owner = providerByName.get(ownerName);
+                      return owner?.display_name || owner?.name || ownerName;
+                    })(),
+                    memberCount: poolOwnership.membersByOwner.get(p.name)?.length ?? 0,
+                    strategy: poolOwnership.strategyByOwner.get(p.name) ?? "primary_first",
+                    connectorPosition: memberConnectorByName.get(p.name) ?? "none",
+                  } : undefined}
                   onClick={() => navigate(`/providers/${p.id}`)}
                   onDelete={() => setDeleteTarget(p)}
                 />

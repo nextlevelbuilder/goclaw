@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Copy, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/stores/use-toast-store";
@@ -8,11 +9,22 @@ import type { ProviderData } from "@/types/provider";
 
 interface ProviderOAuthAccountSectionProps {
   provider: ProviderData;
+  managedByProvider?: ProviderData;
+  managedMemberCount?: number;
 }
 
-export function ProviderOAuthAccountSection({ provider }: ProviderOAuthAccountSectionProps) {
+export function ProviderOAuthAccountSection({
+  provider,
+  managedByProvider,
+  managedMemberCount = 0,
+}: ProviderOAuthAccountSectionProps) {
   const { t } = useTranslation("providers");
   const modelPrefix = `${provider.name}/`;
+  const role: "member" | "owner" | "standalone" = managedByProvider
+    ? "member"
+    : managedMemberCount > 0
+      ? "owner"
+      : "standalone";
 
   const handleCopyPrefix = () => {
     navigator.clipboard.writeText(modelPrefix).catch(() => {});
@@ -22,8 +34,23 @@ export function ProviderOAuthAccountSection({ provider }: ProviderOAuthAccountSe
   return (
     <section className="space-y-3 rounded-lg border p-3 sm:p-4 overflow-hidden">
       <div className="space-y-0.5">
-        <h3 className="text-sm font-medium">{t("detail.oauthAccountUsage")}</h3>
-        <p className="text-xs text-muted-foreground">{t("detail.oauthAccountUsageDesc")}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-medium">{t("detail.oauthAccountUsage")}</h3>
+          <Badge variant="outline" className="h-6 px-2 text-[11px]">
+            {t(`detail.oauthPoolRole.${role}`)}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {managedByProvider
+            ? t("detail.oauthAccountUsageManagedDesc", {
+                provider: managedByProvider.display_name || managedByProvider.name,
+              })
+            : managedMemberCount > 0
+              ? t("detail.oauthAccountUsageOwnerDesc", {
+                  count: managedMemberCount,
+                })
+              : t("detail.oauthAccountUsageDesc")}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -51,11 +78,21 @@ export function ProviderOAuthAccountSection({ provider }: ProviderOAuthAccountSe
         <Info className="h-4 w-4" />
         <AlertTitle>{t("detail.oauthAccountBadge")}</AlertTitle>
         <AlertDescription>
-          <p>{t("detail.oauthPreferredHint")}</p>
-          <p>{t("detail.oauthProviderDefaultHint")}</p>
-          <p>{t("detail.oauthRoutingHint")}</p>
-          {!provider.display_name && (
-            <p>{t("detail.oauthDisplayNameRecommendation")}</p>
+          {managedByProvider ? (
+            <p>
+              {t("detail.oauthManagedByHint", {
+                provider: managedByProvider.display_name || managedByProvider.name,
+              })}
+            </p>
+          ) : (
+            <>
+              <p>{t("detail.oauthPreferredHint")}</p>
+              <p>{t("detail.oauthProviderDefaultHint")}</p>
+              <p>{t("detail.oauthRoutingHint")}</p>
+              {!provider.display_name && (
+                <p>{t("detail.oauthDisplayNameRecommendation")}</p>
+              )}
+            </>
           )}
         </AlertDescription>
       </Alert>
