@@ -1,0 +1,106 @@
+name: CI and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ============================================
+  # CI Jobs
+  # ============================================
+  go-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: go build ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+
+  web-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  # ============================================
+  # Deploy (запускается только после успешного CI)
+  # ============================================
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [go-ci, web-ci]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            # Load PATH через fnm или bashrc
+            if [ -f ~/.bashrc ]; then
+              source ~/.bashrc
+            fi
+            if command -v fnm >/dev/null 2>&1; then
+              eval "$(fnm env)"
+            fi
+            
+            cd ~/goclaw
+            
+            # Pull latest
+            git pull origin main
+            
+            # Build Go
+            go build -o goclaw .
+            
+            # Check if build succeeded
+            if [ $? -ne 0 ]; then
+              echo "Build failed, aborting deploy"
+              exit 1
+            fi
+            
+            # Build UI
+            cd ui/web
+            pnpm install --frozen-lockfile
+            pnpm build
+            
+            if [ $? -ne 0 ]; then
+              echo "UI build failed, aborting deploy"
+              exit 1
+            fi
+            
+            # Restart service
+            sudo systemctl restart goclaw
+            
+            # Wait for startup
+            sleep 5
+            
+            # Health check
+            if curl -sf http://localhost:18790/health > /dev/null 2>&1; then
+              echo "Deploy successful - service healthy"
+            else
+              echo "Deploy completed but health check failed - investigate manually"
+              exit 0
+            fi
