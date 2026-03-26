@@ -97,10 +97,10 @@ The derived role is then used by the `PolicyEngine.CanAccess()` method to gate R
 
 GoClaw tries authentication methods in this priority order:
 
-1. **Gateway token** (exact match via constant-time comparison) → `RoleAdmin`
+1. **Gateway token** (exact match via constant-time comparison) → `RoleAdmin` or `RoleOwner` for configured owner IDs
 2. **API key** (SHA-256 hash lookup in `api_keys` table) → role from scopes
 3. **Browser pairing** (sender ID must be paired with "browser" device type) → `RoleOperator` (HTTP only; requires `X-GoClaw-Sender-Id` header)
-4. **No auth configured** (backward compatibility: if no gateway token is set) → `RoleOperator`
+4. **No auth configured** (backward compatibility: if no gateway token is set) → full-access dev mode
 5. **No valid auth found** → `401 Unauthorized`
 
 ### HTTP Request Flow
@@ -116,7 +116,7 @@ flowchart TD
     G -->|Yes| H[Derive role from scopes]
     G -->|No| I{Gateway token configured?}
     I -->|Yes| J[401 Unauthorized]
-    I -->|No| K[RoleOperator - backward compat]
+    I -->|No| K[Full-access backward compat]
     C -->|Check paired device| L{Device paired?}
     L -->|Yes| M[RoleOperator]
     L -->|No| J
@@ -151,11 +151,20 @@ On successful API key authentication, `last_used_at` is updated asynchronously (
 - **Bearer token**: `Authorization: Bearer <token>` — checked first for gateway token or API key
 - **User ID**: `X-GoClaw-User-Id: <user-id>` — optional external user identifier (max 255 chars)
 - **Browser pairing**: `X-GoClaw-Sender-Id: <sender-id>` — identifies a previously-paired browser device
+- **Tenant scope**: `X-GoClaw-Tenant-Id: <tenant-uuid-or-slug>` — owner/system-key scope narrowing; non-owner gateway token and browser-pairing callers must already belong to the requested tenant
 - **Locale**: `Accept-Language` — user's preferred language (en, vi, zh; default: en)
+
+### Tenant Scope Rules
+
+- **Gateway token + owner user ID**: may narrow to any tenant via `X-GoClaw-Tenant-Id`
+- **Gateway token + non-owner user ID**: may only use `X-GoClaw-Tenant-Id` for a tenant where that user already has membership; otherwise auth fails
+- **Browser pairing**: same tenant-membership rule as non-owner gateway-token HTTP requests
+- **Tenant-bound API key**: always stays bound to its stored `tenant_id`; request headers cannot move it
+- **System-level API key** (`tenant_id = NULL`): keeps its scope-derived role (`admin`, `operator`, or `viewer`) and may narrow requests to a tenant via `X-GoClaw-Tenant-Id`, but it does **not** become `owner`
 
 ### Backward Compatibility
 
-If no gateway token is configured (`gateway.token` is empty in `config.json`), all unauthenticated requests are granted `RoleOperator` access. This enables self-hosted deployments without strict authentication. Once a gateway token is configured, all requests must authenticate or use browser pairing.
+If no gateway token is configured (`gateway.token` is empty in `config.json`), unauthenticated requests run in backward-compatibility full-access mode. This enables self-hosted deployments without strict authentication. Once a gateway token is configured, all requests must authenticate or use browser pairing.
 
 ---
 
@@ -205,7 +214,7 @@ The partial index on `key_hash` ensures only active (non-revoked) keys are searc
 | `api_keys.create` | Create key |
 | `api_keys.revoke` | Revoke key |
 
-All API key management operations require admin access (gateway token or API key with `operator.admin` scope).
+All API key management operations require admin access (gateway token or API key with `operator.admin` scope). Owner callers are accepted because owner is a superset of admin.
 
 ### Create Request
 
