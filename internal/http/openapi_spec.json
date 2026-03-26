@@ -371,26 +371,38 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["strategy", "pool_providers", "provider_counts", "recent_requests"],
+                  "required": ["strategy", "pool_providers", "stats_sample_size", "provider_counts", "recent_requests"],
                   "properties": {
                     "strategy": { "type": "string", "enum": ["manual", "round_robin"] },
                     "pool_providers": {
                       "type": "array",
                       "items": { "type": "string" }
                     },
+                    "stats_sample_size": {
+                      "type": "integer",
+                      "description": "Number of recent routed llm_call spans used to derive runtime health. The server samples max(limit, 120) spans even when recent_requests remains capped by limit."
+                    },
                     "provider_counts": {
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "required": ["provider_name", "request_count", "direct_selection_count", "failover_serve_count"],
+                        "required": ["provider_name", "request_count", "direct_selection_count", "failover_serve_count", "success_count", "failure_count", "consecutive_failures", "success_rate", "health_score", "health_state"],
                         "properties": {
                           "provider_name": { "type": "string", "description": "Provider alias in the configured pool." },
                           "request_count": { "type": "integer", "description": "Backward-compatible count of requests where this alias was directly selected by the router." },
                           "direct_selection_count": { "type": "integer", "description": "Number of recent requests where the router selected this alias first." },
                           "failover_serve_count": { "type": "integer", "description": "Number of recent requests this alias served after another alias was selected first." },
+                          "success_count": { "type": "integer", "description": "Trace-backed successes attributed to the alias that actually served the request." },
+                          "failure_count": { "type": "integer", "description": "Trace-backed failures attributed to earlier attempted aliases on successful failover, or to every attempted alias on terminal error." },
+                          "consecutive_failures": { "type": "integer", "description": "Newest-first failure streak for this alias." },
+                          "success_rate": { "type": "integer", "description": "Success rate percent derived from recent runtime outcomes." },
+                          "health_score": { "type": "integer", "description": "Heuristic runtime health score from 0 to 100." },
+                          "health_state": { "type": "string", "description": "Health band derived from recent runtime outcomes: idle when there are no outcomes, critical at 3+ consecutive failures or score < 40, degraded below 80, otherwise healthy.", "enum": ["idle", "healthy", "degraded", "critical"] },
                           "last_selected_at": { "type": "string", "format": "date-time", "nullable": true },
                           "last_failover_at": { "type": "string", "format": "date-time", "nullable": true },
-                          "last_used_at": { "type": "string", "format": "date-time", "nullable": true }
+                          "last_used_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "last_success_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "last_failure_at": { "type": "string", "format": "date-time", "nullable": true }
                         }
                       }
                     },
@@ -405,7 +417,7 @@
                           "started_at": { "type": "string", "format": "date-time" },
                           "status": { "type": "string" },
                           "duration_ms": { "type": "integer" },
-                          "provider_name": { "type": "string", "description": "Alias that actually served the request." },
+                          "provider_name": { "type": "string", "description": "Alias that actually served the request. Empty when a terminal failure completed without any alias serving successfully." },
                           "selected_provider": { "type": "string", "description": "Alias chosen first by the router before any failover." },
                           "model": { "type": "string" },
                           "attempt_count": { "type": "integer" },

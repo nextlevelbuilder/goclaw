@@ -65,6 +65,13 @@ function routeLabelKey(
   return "chatgptOAuthRouting.blockedNowTitle";
 }
 
+function roleBadgeClass(role: "preferred" | "extra"): string {
+  if (role === "preferred") {
+    return "border-primary/35 bg-primary/12 text-foreground shadow-sm dark:border-primary/40 dark:bg-primary/18";
+  }
+  return "border-border/70 bg-background/80 text-muted-foreground";
+}
+
 function StateGroup({
   title,
   count,
@@ -202,49 +209,38 @@ export function ChatGPTOAuthRoutingSection({
   };
 
   return (
-    <Card className={cn("flex h-full min-h-0 flex-col gap-0 overflow-hidden", className)}>
+    <Card className={cn("flex min-h-0 flex-col gap-0 overflow-hidden", className)}>
       <CardHeader className="border-b bg-muted/20 px-4 py-3">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="text-base">
-                {t("chatgptOAuthRouting.controlTitle")}
-              </CardTitle>
-              <CardDescription>
-                {t("chatgptOAuthRouting.controlDescription")}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {!canManageProviders && (
-                <Badge variant="outline">
-                  {t("chatgptOAuthRouting.viewerMode")}
-                </Badge>
-              )}
-              {isDirty && (
-                <Badge variant="warning">
-                  {t("chatgptOAuthRouting.draftBadge")}
-                </Badge>
-              )}
-              {(quotaLoading || isLoading) && (
-                <Badge variant="outline">
-                  {t("chatgptOAuthRouting.quota.checking")}
-                </Badge>
-              )}
-              <Button
-                type="button"
-                size="sm"
-                onClick={onSave}
-                disabled={!canManageProviders || !isDirty || saving}
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {saving ? tc("saving") : tc("save")}
-              </Button>
-            </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="text-base">
+              {t("chatgptOAuthRouting.controlTitle")}
+            </CardTitle>
+            <CardDescription>
+              {t("chatgptOAuthRouting.controlDescription")}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {!canManageProviders && (
+              <Badge variant="outline">
+                {t("chatgptOAuthRouting.viewerMode")}
+              </Badge>
+            )}
+            {isDirty && (
+              <Badge variant="warning">
+                {t("chatgptOAuthRouting.draftBadge")}
+              </Badge>
+            )}
+            {(quotaLoading || isLoading) && (
+              <Badge variant="outline">
+                {t("chatgptOAuthRouting.quota.checking")}
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-3">
+      <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3">
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -357,9 +353,8 @@ export function ChatGPTOAuthRoutingSection({
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium">{entry.label}</span>
                       <Badge
-                        variant={
-                          entry.role === "preferred" ? "secondary" : "outline"
-                        }
+                        variant="outline"
+                        className={roleBadgeClass(entry.role)}
                       >
                         {t(`chatgptOAuthRouting.role.${entry.role}`)}
                       </Badge>
@@ -423,6 +418,22 @@ export function ChatGPTOAuthRoutingSection({
           </div>
         </section>
       </CardContent>
+
+      {canManageProviders && onSave ? (
+        <div className="border-t bg-background/70 px-4 py-3">
+          <div className="flex items-center justify-end">
+            <Button
+              type="button"
+              size="sm"
+              onClick={onSave}
+              disabled={!isDirty || saving}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {saving ? tc("saving") : tc("save")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }

@@ -174,7 +174,7 @@
     "lastUsedAt": "Dùng gần nhất {{value}}",
     "openProvider": "Mở Provider",
     "activityTitle": "Định tuyến trực tiếp",
-    "activityDescription": "Lưu lượng gần đây và mức sẵn sàng của tài khoản.",
+    "activityDescription": "Sức khỏe runtime và bằng chứng route trực tiếp.",
     "refreshEvidence": "Làm mới trạng thái trực tiếp",
     "recentRequestsCount": "{{count}} request gần đây",
     "observedProviders": "{{observed}} / {{total}} tài khoản đã được dùng trực tiếp",
@@ -186,20 +186,28 @@
     "poolMembersTitle": "Tài khoản trong pool",
     "poolMembersDescription": "Vai trò, trạng thái route, bằng chứng gần đây và quota.",
     "sequenceTitle": "Request gần đây",
-    "sequenceDescription": "Các lần gọi Codex gần nhất.",
+    "sequenceColumns": {
+      "step": "#",
+      "account": "Tài khoản",
+      "route": "Luồng",
+      "when": "Lúc",
+      "duration": "Thời gian"
+    },
+    "sequenceDescription": "Bằng chứng gần đây từ các lượt gọi Codex đã route.",
     "sequenceEmptyTitle": "Chưa có bằng chứng gần đây",
     "loadingEvidence": "Đang tải bằng chứng định tuyến Codex gần đây...",
     "unknownModel": "Model không xác định",
-    "attemptCount": "{{count}} lượt thử định tuyến",
+    "attemptCount": "{{count}} lượt thử",
     "selectedProviderBadge": "Chọn {{provider}}",
     "servedProviderBadge": "Phục vụ {{provider}}",
     "failoverHint": "Lỗi có thể retry đã rơi sang: {{providers}}",
+    "traceAction": "Trace",
     "openTrace": "Mở Trace",
     "noEvidence": "Hãy gửi vài request Codex rồi làm mới trang.",
     "selectedCount": "{{count}} trong pool",
     "productLabel": "ChatGPT Subscription (OAuth)",
     "controlTitle": "Thiết lập Pool",
-    "controlDescription": "Chọn policy, chọn tài khoản rồi lưu.",
+    "controlDescription": "Policy, thành viên trong pool, rồi lưu.",
     "poolStateTitle": "Trạng thái Pool",
     "routerActiveTitle": "Đang route",
     "fallbackTitle": "Chỉ fallback",
@@ -208,10 +216,26 @@
     "emptyGroup": "Không có",
     "viewerMode": "Chỉ xem",
     "consoleSummary": "{{active}} đang route · {{observed}} đã dùng trực tiếp · {{blocked}} đang chặn",
-    "monitorDirectLabel": "Đã chọn",
-    "monitorDirectUseLabel": "Dùng trực tiếp",
+    "monitorDirectLabel": "Trực tiếp",
+    "monitorDirectUseLabel": "Lượt trực tiếp",
     "monitorFailoverLabel": "Failover",
     "lastSeenLabel": "Lần thấy cuối",
+    "sampleBadge": "{{count}} span đã ghi nhận",
+    "noSampleBadge": "Chưa có mẫu gần đây",
+    "runtimeHealthTitle": "Sức khỏe runtime",
+    "runtimeHealthSummary": "{{rate}}% thành công · điểm {{score}}",
+    "noRuntimeSample": "Chưa có mẫu runtime gần đây.",
+    "failureStreakBadge": "{{count}} lỗi liên tiếp",
+    "runtimeSuccessCompact": "Thành công {{count}}",
+    "runtimeFailureCompact": "Thất bại {{count}}",
+    "lastSuccessLabel": "Lần ok cuối {{value}}",
+    "lastFailureLabel": "Lần lỗi cuối {{value}}",
+    "healthState": {
+      "healthy": "Ổn định",
+      "degraded": "Suy giảm",
+      "critical": "Nguy cấp",
+      "idle": "Chưa có mẫu"
+    },
     "checkpoints": {
       "configured": "Đã cấu hình",
       "ready": "Sẵn sàng",
@@ -293,6 +317,7 @@
       "poolHealth": "Sức khỏe pool",
       "policy": "Chính sách lưu lượng",
       "poolSize": "Số tài khoản",
+      "observedSample": "Mẫu đã ghi nhận",
       "routerActiveAccounts": "Router Active",
       "blockedAccounts": "Đang chặn",
       "readyAccounts": "Tài khoản đã đăng nhập",
@@ -307,11 +332,11 @@
     "verdict": {
       "healthy": {
         "title": "Round robin có vẻ khỏe",
-      "description": "Đã thấy {{observed}} tài khoản sẵn sàng được dùng trực tiếp trong {{count}} lần gọi gần nhất."
+        "description": "Đã thấy {{observed}} tài khoản sẵn sàng luân phiên qua {{count}} span gần đây."
       },
       "warning": {
         "title": "Round robin đã cấu hình nhưng chưa xác minh đủ",
-      "description": "Mới chỉ có {{observed}} tài khoản sẵn sàng có bằng chứng dùng trực tiếp. Một phần lưu lượng có thể vẫn chỉ là failover hoặc chưa xuất hiện."
+        "description": "Mới chỉ có {{observed}} tài khoản sẵn sàng có bằng chứng dùng trực tiếp trong {{count}} span gần đây."
       },
       "manual": {
         "title": "Primary only đang hoạt động",

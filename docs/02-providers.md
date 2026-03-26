@@ -650,6 +650,7 @@ Routing behavior:
 - `round_robin` rotates requests across the preferred account plus the configured extra authenticated OpenAI Codex OAuth accounts.
 - Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth account in the same request.
 - Explicit provider names remain explicit. OAuth auth/logout is still provider-scoped.
+- Runtime observability for one agent is available at `GET /v1/agents/{id}/codex-pool-activity`, which exposes recent routed traces plus per-alias health derived from those traces.
 
 ---
 

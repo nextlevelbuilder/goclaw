@@ -60,7 +60,9 @@ export function OAuthSection({
       <p className="mt-2">{t("oauth.multiAccountHint")}</p>
       <p className="mt-1">
         {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{provider}/</code>{" "}
-        {t("oauth.modelPrefixExample")}
+        {t("oauth.modelPrefixExample", {
+          example: `${provider}/gpt-5.4`,
+        })}
       </p>
     </div>
   );
@@ -241,7 +243,9 @@ export function OAuthSection({
         <p className="mt-2">{t("oauth.multiAccountHint")}</p>
         <p className="mt-1">
           {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{resolvedProviderName}/</code>{" "}
-          {t("oauth.modelPrefixExample")}
+          {t("oauth.modelPrefixExample", {
+            example: `${resolvedProviderName}/gpt-5.4`,
+          })}
         </p>
       </div>
       {waitingCallback ? (

@@ -24,7 +24,7 @@ export class WsClient {
   private connectGeneration = 0;
 
   /** Server-assigned role from connect response. */
-  role: "admin" | "operator" | "viewer" | "" = "";
+  role: "owner" | "admin" | "operator" | "viewer" | "" = "";
 
   /** Tenant fields from connect response. */
   tenantId = "";
@@ -235,7 +235,7 @@ export class WsClient {
       }
 
       this.authenticated = true;
-      this.role = (res?.role as "admin" | "operator" | "viewer") ?? "";
+      this.role = (res?.role as "owner" | "admin" | "operator" | "viewer") ?? "";
       this.tenantId = res?.tenant_id ?? "";
       this.tenantName = res?.tenant_name ?? "";
       this.tenantSlug = res?.tenant_slug ?? "";

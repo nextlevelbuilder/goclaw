@@ -21,9 +21,17 @@ type codexPoolProviderCount struct {
 	RequestCount         int        `json:"request_count"`
 	DirectSelectionCount int        `json:"direct_selection_count"`
 	FailoverServeCount   int        `json:"failover_serve_count"`
+	SuccessCount         int        `json:"success_count"`
+	FailureCount         int        `json:"failure_count"`
+	ConsecutiveFailures  int        `json:"consecutive_failures"`
+	SuccessRate          int        `json:"success_rate"`
+	HealthScore          int        `json:"health_score"`
+	HealthState          string     `json:"health_state"`
 	LastSelectedAt       *time.Time `json:"last_selected_at,omitempty"`
 	LastFailoverAt       *time.Time `json:"last_failover_at,omitempty"`
 	LastUsedAt           *time.Time `json:"last_used_at,omitempty"`
+	LastSuccessAt        *time.Time `json:"last_success_at,omitempty"`
+	LastFailureAt        *time.Time `json:"last_failure_at,omitempty"`
 }
 
 type codexPoolRecentRequest struct {
@@ -59,6 +67,7 @@ func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.R
 			limit = parsed
 		}
 	}
+	statsLimit := maxInt(limit, codexPoolRuntimeHealthSampleSize)
 
 	routing := agent.ParseChatGPTOAuthRouting()
 	strategy := store.ChatGPTOAuthStrategyManual
@@ -76,10 +85,11 @@ func (h *AgentsHandler) handleCodexPoolActivity(w http.ResponseWriter, r *http.R
 
 	if len(poolProviders) == 0 || agent.Provider == "" {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"strategy":        strategy,
-			"pool_providers":  []string{},
-			"provider_counts": []codexPoolProviderCount{},
-			"recent_requests": []codexPoolRecentRequest{},
+			"strategy":          strategy,
+			"pool_providers":    []string{},
+			"stats_sample_size": 0,
+			"provider_counts":   []codexPoolProviderCount{},
+			"recent_requests":   []codexPoolRecentRequest{},
 		})
 		return
 	}
@@ -109,14 +119,14 @@ WHERE t.agent_id = $1
 ORDER BY sp.start_time DESC
 LIMIT $4`
 
-	rows, err := h.db.QueryContext(r.Context(), query, agent.ID, agent.TenantID, pq.Array(poolProviders), limit)
+	rows, err := h.db.QueryContext(r.Context(), query, agent.ID, agent.TenantID, pq.Array(poolProviders), statsLimit)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	spans := make([]codexPoolSpanActivity, 0, limit)
+	spans := make([]codexPoolSpanActivity, 0, statsLimit)
 	for rows.Next() {
 		var item codexPoolSpanActivity
 		var metadata json.RawMessage
@@ -149,12 +159,16 @@ LIMIT $4`
 	}
 
 	providerCounts, recent := buildCodexPoolActivity(poolProviders, spans)
+	if len(recent) > limit {
+		recent = recent[:limit]
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"strategy":        strategy,
-		"pool_providers":  poolProviders,
-		"provider_counts": providerCounts,
-		"recent_requests": recent,
+		"strategy":          strategy,
+		"pool_providers":    poolProviders,
+		"stats_sample_size": len(spans),
+		"provider_counts":   providerCounts,
+		"recent_requests":   recent,
 	})
 }
 

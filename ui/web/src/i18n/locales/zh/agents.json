@@ -174,7 +174,7 @@
     "lastUsedAt": "最近使用于 {{value}}",
     "openProvider": "打开 Provider",
     "activityTitle": "实时路由",
-    "activityDescription": "最近流量与账户就绪状态。",
+    "activityDescription": "运行健康与实时路由证据。",
     "refreshEvidence": "刷新实时状态",
     "recentRequestsCount": "{{count}} 次最近请求",
     "observedProviders": "{{observed}} / {{total}} 个账户已被直接使用",
@@ -186,20 +186,28 @@
     "poolMembersTitle": "池中账户",
     "poolMembersDescription": "角色、路由状态、最近证据与 quota。",
     "sequenceTitle": "最近请求",
-    "sequenceDescription": "最近的 Codex 调用。",
+    "sequenceColumns": {
+      "step": "#",
+      "account": "账号",
+      "route": "路由",
+      "when": "时间",
+      "duration": "耗时"
+    },
+    "sequenceDescription": "来自最近 Codex 路由调用的证据。",
     "sequenceEmptyTitle": "还没有最近证据",
     "loadingEvidence": "正在加载最近的 Codex 路由证据...",
     "unknownModel": "未知模型",
-    "attemptCount": "{{count}} 次路由尝试",
+    "attemptCount": "尝试 {{count}} 次",
     "selectedProviderBadge": "选中 {{provider}}",
     "servedProviderBadge": "承接 {{provider}}",
     "failoverHint": "可重试的错误已切换到：{{providers}}",
+    "traceAction": "Trace",
     "openTrace": "打开 Trace",
     "noEvidence": "请再发送几次 Codex 请求，然后刷新此页。",
     "selectedCount": "{{count}} 个在池中",
     "productLabel": "ChatGPT Subscription (OAuth)",
     "controlTitle": "池设置",
-    "controlDescription": "选择策略、账户，然后保存。",
+    "controlDescription": "策略、池成员，然后保存。",
     "poolStateTitle": "池状态",
     "routerActiveTitle": "路由中",
     "fallbackTitle": "仅备用",
@@ -208,10 +216,26 @@
     "emptyGroup": "无",
     "viewerMode": "仅查看",
     "consoleSummary": "{{active}} 个可路由 · {{observed}} 个已直接使用 · {{blocked}} 个被阻塞",
-    "monitorDirectLabel": "已选",
-    "monitorDirectUseLabel": "直接使用",
+    "monitorDirectLabel": "直连",
+    "monitorDirectUseLabel": "直连次数",
     "monitorFailoverLabel": "Failover",
     "lastSeenLabel": "最近出现",
+    "sampleBadge": "{{count}} 个追踪 span",
+    "noSampleBadge": "暂无最近样本",
+    "runtimeHealthTitle": "运行健康",
+    "runtimeHealthSummary": "{{rate}}% 成功 · 分数 {{score}}",
+    "noRuntimeSample": "还没有最近的运行样本。",
+    "failureStreakBadge": "连续 {{count}} 次失败",
+    "runtimeSuccessCompact": "成功 {{count}}",
+    "runtimeFailureCompact": "失败 {{count}}",
+    "lastSuccessLabel": "上次成功 {{value}}",
+    "lastFailureLabel": "上次失败 {{value}}",
+    "healthState": {
+      "healthy": "健康",
+      "degraded": "降级",
+      "critical": "严重",
+      "idle": "空闲"
+    },
     "checkpoints": {
       "configured": "已配置",
       "ready": "已就绪",
@@ -293,6 +317,7 @@
       "poolHealth": "池健康度",
       "policy": "流量策略",
       "poolSize": "池大小",
+      "observedSample": "已观测样本",
       "routerActiveAccounts": "Router Active",
       "blockedAccounts": "阻塞中",
       "readyAccounts": "已登录账户",
@@ -307,11 +332,11 @@
     "verdict": {
       "healthy": {
         "title": "Round robin 看起来健康",
-      "description": "最近 {{count}} 次调用里，已有 {{observed}} 个就绪账户被直接使用。"
+        "description": "最近 {{count}} 个追踪 span 中，已观察到 {{observed}} 个就绪账户参与轮换。"
       },
       "warning": {
         "title": "Round robin 已配置，但还未充分验证",
-      "description": "目前只有 {{observed}} 个就绪账户有直接路由证据。部分流量可能仍然只是 failover 或尚未出现。"
+        "description": "最近 {{count}} 个追踪 span 中，只有 {{observed}} 个就绪账户有直接路由证据。"
       },
       "manual": {
         "title": "当前是 Primary Only",

@@ -113,7 +113,7 @@
     "poolBadge": "Sẵn sàng cho pool",
     "roundRobinBadge": "Round robin",
     "modelPrefixHint": "Dùng tiền tố model",
-    "modelPrefixExample": "trong cấu hình agent (vd: primary/gpt-5.4).",
+    "modelPrefixExample": "trong cấu hình agent (vd: {{example}}).",
     "multiAccountHint": "Sau này bạn có thể thêm bí danh khác từ pool của agent để bật pooling hoặc round robin.",
     "aliasRequired": "Nhập một bí danh tài khoản hợp lệ dạng chữ thường trước khi bắt đầu OpenAI Codex OAuth.",
     "removeToken": "Ngắt kết nối tài khoản",

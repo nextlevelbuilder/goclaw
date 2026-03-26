@@ -108,7 +108,7 @@
     "poolBadge": "Pool ready",
     "roundRobinBadge": "Round robin",
     "modelPrefixHint": "Use model prefix",
-    "modelPrefixExample": "in agent config (for example primary/gpt-5.4).",
+    "modelPrefixExample": "in agent config (for example {{example}}).",
     "multiAccountHint": "Add more aliases later from an agent pool to enable pooling or round robin.",
     "aliasRequired": "Enter a valid lowercase account alias before starting OpenAI Codex OAuth.",
     "removeToken": "Disconnect Account",

@@ -7,9 +7,17 @@ export interface CodexPoolProviderCount {
   request_count: number;
   direct_selection_count: number;
   failover_serve_count: number;
+  success_count: number;
+  failure_count: number;
+  consecutive_failures: number;
+  success_rate: number;
+  health_score: number;
+  health_state: "healthy" | "degraded" | "critical" | "idle";
   last_selected_at?: string;
   last_failover_at?: string;
   last_used_at?: string;
+  last_success_at?: string;
+  last_failure_at?: string;
 }
 
 export interface CodexPoolRecentRequest {
@@ -29,6 +37,7 @@ export interface CodexPoolRecentRequest {
 interface CodexPoolActivityResponse {
   strategy: "manual" | "round_robin";
   pool_providers: string[];
+  stats_sample_size: number;
   provider_counts: CodexPoolProviderCount[];
   recent_requests: CodexPoolRecentRequest[];
 }
@@ -50,6 +59,7 @@ export function useCodexPoolActivity(agentId: string, limit = 18, enabled = true
     data: query.data ?? {
       strategy: "manual" as const,
       pool_providers: [],
+      stats_sample_size: 0,
       provider_counts: [],
       recent_requests: [],
     },

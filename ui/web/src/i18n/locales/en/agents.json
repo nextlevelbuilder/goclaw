@@ -174,7 +174,7 @@
     "lastUsedAt": "Last used {{value}}",
     "openProvider": "Open Provider",
     "activityTitle": "Live Routing",
-    "activityDescription": "Recent traffic and account readiness.",
+    "activityDescription": "Runtime health and live routing proof.",
     "refreshEvidence": "Refresh Live State",
     "recentRequestsCount": "{{count}} recent requests",
     "observedProviders": "{{observed}} of {{total}} accounts used directly",
@@ -186,20 +186,28 @@
     "poolMembersTitle": "Pool Accounts",
     "poolMembersDescription": "Role, route state, recent proof, and quota.",
     "sequenceTitle": "Recent Requests",
-    "sequenceDescription": "Latest routed Codex calls.",
+    "sequenceColumns": {
+      "step": "#",
+      "account": "Account",
+      "route": "Route",
+      "when": "When",
+      "duration": "Time"
+    },
+    "sequenceDescription": "Recent proof from routed Codex calls.",
     "sequenceEmptyTitle": "No recent proof yet",
     "loadingEvidence": "Loading recent Codex routing evidence...",
     "unknownModel": "Unknown model",
-    "attemptCount": "{{count}} routing attempts",
+    "attemptCount": "Attempts {{count}}",
     "selectedProviderBadge": "Selected {{provider}}",
     "servedProviderBadge": "Served {{provider}}",
     "failoverHint": "Retryable failure fell through to: {{providers}}",
+    "traceAction": "Trace",
     "openTrace": "Open Trace",
     "noEvidence": "Send a few Codex requests, then refresh.",
     "selectedCount": "{{count}} in pool",
     "productLabel": "ChatGPT Subscription (OAuth)",
     "controlTitle": "Pool Setup",
-    "controlDescription": "Choose policy, pick accounts, save.",
+    "controlDescription": "Policy, pool members, save.",
     "poolStateTitle": "Pool State",
     "routerActiveTitle": "Router Active",
     "fallbackTitle": "Fallback Only",
@@ -208,10 +216,26 @@
     "emptyGroup": "None",
     "viewerMode": "View only",
     "consoleSummary": "{{active}} active · {{observed}} used directly · {{blocked}} blocked",
-    "monitorDirectLabel": "Selected",
-    "monitorDirectUseLabel": "Direct Use",
+    "monitorDirectLabel": "Direct",
+    "monitorDirectUseLabel": "Direct Hits",
     "monitorFailoverLabel": "Failover",
     "lastSeenLabel": "Last Seen",
+    "sampleBadge": "{{count}} traced spans",
+    "noSampleBadge": "No recent sample",
+    "runtimeHealthTitle": "Runtime Health",
+    "runtimeHealthSummary": "{{rate}}% success · score {{score}}",
+    "noRuntimeSample": "No recent runtime sample yet.",
+    "failureStreakBadge": "{{count}} failing now",
+    "runtimeSuccessCompact": "Success {{count}}",
+    "runtimeFailureCompact": "Failed {{count}}",
+    "lastSuccessLabel": "Last ok {{value}}",
+    "lastFailureLabel": "Last fail {{value}}",
+    "healthState": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "critical": "Critical",
+      "idle": "Idle"
+    },
     "checkpoints": {
       "configured": "Configured",
       "ready": "Ready",
@@ -293,6 +317,7 @@
       "poolHealth": "Pool Health",
       "policy": "Traffic Policy",
       "poolSize": "Pool Size",
+      "observedSample": "Observed Sample",
       "routerActiveAccounts": "Router Active",
       "blockedAccounts": "Blocked",
       "readyAccounts": "Signed-In Accounts",
@@ -307,11 +332,11 @@
     "verdict": {
       "healthy": {
         "title": "Round robin looks healthy",
-      "description": "{{observed}} ready accounts were used directly in the last {{count}} routed calls."
+        "description": "{{observed}} ready accounts were observed rotating across {{count}} traced spans."
       },
       "warning": {
         "title": "Round robin is configured but not verified yet",
-      "description": "Only {{observed}} ready accounts have direct routing evidence. Some traffic may still be failover-only or missing."
+        "description": "Only {{observed}} ready accounts have direct routing evidence across {{count}} traced spans so far."
       },
       "manual": {
         "title": "Primary only is active",

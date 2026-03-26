@@ -176,15 +176,19 @@ Query parameters:
 Response fields:
 - `strategy`: effective routing strategy (`manual` or `round_robin`)
 - `pool_providers`: configured primary + extra provider aliases in pool order
+- `stats_sample_size`: number of recent routed `llm_call` spans used to derive runtime health. The server derives health from `max(limit, 120)` recent spans even when `recent_requests` is still capped by the requested `limit`.
 - `provider_counts`: per-alias routing evidence:
   - `request_count`: backward-compatible count of direct selections
   - `direct_selection_count`: times the router selected that alias first
   - `failover_serve_count`: times that alias only served as failover
-  - `last_selected_at`, `last_failover_at`, `last_used_at`: latest timestamps for each evidence type
+  - `success_count`, `failure_count`: trace-backed runtime outcomes attributed to that alias. Success is attributed to the alias that actually served the request. On successful failover, earlier attempted aliases receive failures. On terminal error, every attempted alias receives a failure.
+  - `consecutive_failures`: current newest-first failure streak from recent trace evidence
+  - `success_rate`, `health_score`, `health_state`: additive runtime health summary. `health_score` is heuristic, but the stable bands are `idle` when there are no recent outcomes, `critical` at 3+ consecutive failures or score `< 40`, `degraded` below `80`, otherwise `healthy`
+  - `last_selected_at`, `last_failover_at`, `last_used_at`, `last_success_at`, `last_failure_at`: latest timestamps for each evidence type
 - `recent_requests`: recent routed Codex calls:
   - `span_id`, `trace_id`, `started_at`, `status`, `duration_ms`, `model`
   - `selected_provider`: alias chosen first by the router
-  - `provider_name`: alias that actually served the request
+  - `provider_name`: alias that actually served the request. This can be empty on terminal failures where no alias completed the call.
   - `attempt_count`, `used_failover`, `failover_providers`
 
 Use `direct_selection_count` plus the `selected_provider` sequence to verify real round-robin behavior. A provider with `failover_serve_count > 0` and `direct_selection_count = 0` was only observed as a rescue target, not as a confirmed round-robin selection.

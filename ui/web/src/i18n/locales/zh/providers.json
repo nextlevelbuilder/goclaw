@@ -122,7 +122,7 @@
     "poolBadge": "可加入账户池",
     "roundRobinBadge": "Round robin",
     "modelPrefixHint": "在Agent配置中使用模型前缀",
-    "modelPrefixExample": "（例如 primary/gpt-5.4）。令牌会自动刷新。",
+    "modelPrefixExample": "（例如 {{example}}）。令牌会自动刷新。",
     "multiAccountHint": "之后可在 agent 账户池中继续添加别名，以启用 pooling 或 round robin。",
     "aliasRequired": "开始 OpenAI Codex OAuth 之前，请先输入有效的小写账户别名。",
     "removeToken": "断开账户",

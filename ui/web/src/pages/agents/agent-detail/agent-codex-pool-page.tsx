@@ -47,7 +47,7 @@ export function AgentCodexPoolPage() {
   const navigate = useNavigate();
   const { t } = useTranslation("agents");
   const role = useAuthStore((state) => state.role);
-  const canManageProviders = role === "admin";
+  const canManageProviders = role === "admin" || role === "owner";
   const { agent, loading, updateAgent } = useAgentDetail(id);
   const { providers, loading: providersLoading } = useProviders();
   const { statuses } = useChatGPTOAuthProviderStatuses(providers);
@@ -122,7 +122,6 @@ export function AgentCodexPoolPage() {
   );
   const {
     data: activity,
-    isLoading: activityLoading,
     isFetching: activityFetching,
     refetch: refreshActivity,
   } = useCodexPoolActivity(agent?.id ?? id, 8, Boolean(agent && isEligible));
@@ -153,9 +152,17 @@ export function AgentCodexPoolPage() {
         directSelectionCount:
           count?.direct_selection_count ?? count?.request_count ?? 0,
         failoverServeCount: count?.failover_serve_count ?? 0,
+        successCount: count?.success_count ?? 0,
+        failureCount: count?.failure_count ?? 0,
+        consecutiveFailures: count?.consecutive_failures ?? 0,
+        successRate: count?.success_rate ?? 0,
+        healthScore: count?.health_score ?? 0,
+        healthState: count?.health_state ?? "idle",
         lastSelectedAt: count?.last_selected_at,
         lastFailoverAt: count?.last_failover_at,
         lastUsedAt: count?.last_used_at,
+        lastSuccessAt: count?.last_success_at,
+        lastFailureAt: count?.last_failure_at,
         providerHref: provider?.id ? `/providers/${provider.id}` : undefined,
         quota: quotaByName.get(providerName),
       };
@@ -194,9 +201,17 @@ export function AgentCodexPoolPage() {
         directSelectionCount:
           count?.direct_selection_count ?? count?.request_count ?? 0,
         failoverServeCount: count?.failover_serve_count ?? 0,
+        successCount: count?.success_count ?? 0,
+        failureCount: count?.failure_count ?? 0,
+        consecutiveFailures: count?.consecutive_failures ?? 0,
+        successRate: count?.success_rate ?? 0,
+        healthScore: count?.health_score ?? 0,
+        healthState: count?.health_state ?? "idle",
         lastSelectedAt: count?.last_selected_at,
         lastFailoverAt: count?.last_failover_at,
         lastUsedAt: count?.last_used_at,
+        lastSuccessAt: count?.last_success_at,
+        lastFailureAt: count?.last_failure_at,
         providerHref: provider?.id ? `/providers/${provider.id}` : undefined,
         quota: quotaByName.get(providerName),
       };
@@ -218,12 +233,24 @@ export function AgentCodexPoolPage() {
       })),
     [liveEntries],
   );
-  const healthyEntries = routeEntries.filter(
-    (entry) => entry.routeReadiness === "healthy",
+  const blockedEntries = routeEntries.filter(
+    (entry) => entry.routeReadiness === "blocked",
   );
-  const routerActiveEntries = healthyEntries;
-  const observedRouterActiveCount = routerActiveEntries.filter(
-    (entry) => entry.directSelectionCount > 0,
+  const readyEntries = liveEntries.filter(
+    (entry) => entry.availability === "ready",
+  );
+  const runtimeHealthyEntries = liveEntries.filter(
+    (entry) => entry.healthState === "healthy",
+  );
+  const runtimeDegradedEntries = liveEntries.filter(
+    (entry) => entry.healthState === "degraded",
+  );
+  const runtimeCriticalEntries = liveEntries.filter(
+    (entry) => entry.healthState === "critical",
+  );
+  const observedRoutableCount = routeEntries.filter(
+    (entry) =>
+      entry.routeReadiness !== "blocked" && entry.directSelectionCount > 0,
   ).length;
   const switchCount = activity.recent_requests
     .slice(1)
@@ -246,10 +273,12 @@ export function AgentCodexPoolPage() {
       JSON.stringify(routing.extra_provider_names ?? []);
   const roundRobinVerified =
     savedStrategy === "round_robin" &&
-    routerActiveEntries.length > 1 &&
-    observedRouterActiveCount >= routerActiveEntries.length &&
-    switchCount >= Math.max(1, routerActiveEntries.length - 1);
-  const recentRequestCount = activity.recent_requests.length;
+    readyEntries.length > 1 &&
+    observedRoutableCount >= readyEntries.length &&
+    switchCount >= Math.max(1, readyEntries.length - 1) &&
+    blockedEntries.length === 0 &&
+    runtimeCriticalEntries.length === 0;
+  const recentRequestCount = activity.stats_sample_size ?? 0;
   const title = agent ? agentDisplayName(agent, t("card.unnamedAgent")) : "";
 
   if (loading || providersLoading || !agent) {
@@ -334,9 +363,32 @@ export function AgentCodexPoolPage() {
                   ? t("chatgptOAuthRouting.strategy.roundRobin")
                   : t("chatgptOAuthRouting.strategy.manual")}
               </Badge>
+              <Badge variant="outline">
+                {recentRequestCount > 0
+                  ? t("chatgptOAuthRouting.sampleBadge", {
+                      count: recentRequestCount,
+                    })
+                  : t("chatgptOAuthRouting.noSampleBadge")}
+              </Badge>
               {isDirty && (
                 <Badge variant="warning">
                   {t("chatgptOAuthRouting.draftBadge")}
+                </Badge>
+              )}
+              <Badge variant="success">
+                {t("chatgptOAuthRouting.healthState.healthy")}{" "}
+                {runtimeHealthyEntries.length}
+              </Badge>
+              {runtimeDegradedEntries.length > 0 && (
+                <Badge variant="warning">
+                  {t("chatgptOAuthRouting.healthState.degraded")}{" "}
+                  {runtimeDegradedEntries.length}
+                </Badge>
+              )}
+              {runtimeCriticalEntries.length > 0 && (
+                <Badge variant="destructive">
+                  {t("chatgptOAuthRouting.healthState.critical")}{" "}
+                  {runtimeCriticalEntries.length}
                 </Badge>
               )}
             </div>
@@ -345,19 +397,19 @@ export function AgentCodexPoolPage() {
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {t(`chatgptOAuthRouting.verdict.${summaryTone}.description`, {
-                observed: observedRouterActiveCount,
+                observed: observedRoutableCount,
                 count: recentRequestCount,
               })}
             </p>
           </section>
 
-          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain xl:grid-cols-[minmax(0,1.62fr)_minmax(320px,0.9fr)] xl:overflow-hidden">
+          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start xl:overflow-hidden">
             <CodexPoolActivityPanel
               entries={liveEntries}
               strategy={savedStrategy}
               recentRequests={activity.recent_requests}
-              loading={activityLoading}
-              fetching={activityFetching || quotasFetching}
+              statsSampleSize={activity.stats_sample_size ?? 0}
+              fetching={activityFetching}
               showProviderLinks={canManageProviders}
               onRefresh={() => {
                 void Promise.all([refreshActivity(), refreshQuotas()]);
@@ -365,20 +417,22 @@ export function AgentCodexPoolPage() {
               className="h-full min-h-0"
             />
 
-            <ChatGPTOAuthRoutingSection
-              currentProvider={agent.provider}
-              providers={providers}
-              value={routing}
-              onChange={setRouting}
-              canManageProviders={canManageProviders}
-              quotaByName={quotaByName}
-              quotaLoading={quotasLoading || quotasFetching}
-              entries={draftEntries}
-              isDirty={isDirty}
-              saving={saving}
-              onSave={handleSave}
-              className="h-full min-h-0"
-            />
+            <div className="flex min-h-0 flex-col gap-4 overflow-hidden xl:h-full xl:self-stretch">
+              <ChatGPTOAuthRoutingSection
+                currentProvider={agent.provider}
+                providers={providers}
+                value={routing}
+                onChange={setRouting}
+                canManageProviders={canManageProviders}
+                quotaByName={quotaByName}
+                quotaLoading={quotasLoading || quotasFetching}
+                entries={draftEntries}
+                isDirty={isDirty}
+                saving={saving}
+                onSave={handleSave}
+                className="h-full min-h-0"
+              />
+            </div>
           </div>
         </div>
       )}
