@@ -25,6 +25,7 @@ export function TelegramGroupFields({ config, onChange, idPrefix }: Props) {
       values={config as Record<string, unknown>}
       onChange={(key, value) => onChange({ ...config, [key]: value })}
       idPrefix={idPrefix}
+      contextValues={config as Record<string, unknown>}
     />
   );
 }

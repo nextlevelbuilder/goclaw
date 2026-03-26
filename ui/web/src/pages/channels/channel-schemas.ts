@@ -163,8 +163,8 @@ export const configSchema: Record<string, FieldDef[]> = {
 
 export const groupOverrideSchema: FieldDef[] = [
   { key: "group_policy", label: "Group Policy", type: "tristate", options: groupPolicyOptions },
-  { key: "require_mention", label: "Require @mention", type: "tristate" },
   { key: "mention_mode", label: "Mention Mode", type: "tristate", options: mentionModeOptions },
+  { key: "require_mention", label: "Require @mention", type: "tristate", disabledWhen: { key: "mention_mode", value: "yield", hint: "fieldConfig.require_mention.disabledHint" } },
   { key: "enabled", label: "Enabled", type: "tristate" },
   { key: "allow_from", label: "Allowed Users", type: "tags", placeholder: "User IDs, one per line", help: "Restrict which users can interact in this group" },
   { key: "skills", label: "Skills Filter", type: "skill-select", help: "Limit available skills for this group" },

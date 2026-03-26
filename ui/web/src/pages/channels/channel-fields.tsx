@@ -211,9 +211,9 @@ function FieldRenderer({
       };
 
       return (
-        <div className="grid gap-1.5">
+        <div className={`grid gap-1.5${disabled ? " opacity-50" : ""}`}>
           <Label>{label}</Label>
-          <Select value={boolToStr(value)} onValueChange={(v) => onChange(strToBool(v))}>
+          <Select value={boolToStr(value)} onValueChange={(v) => onChange(strToBool(v))} disabled={disabled}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -223,7 +223,8 @@ function FieldRenderer({
               ))}
             </SelectContent>
           </Select>
-          {help && <p className="text-xs text-muted-foreground">{help}</p>}
+          {resolvedHint && <p className="text-xs text-muted-foreground">{resolvedHint}</p>}
+          {!resolvedHint && help && <p className="text-xs text-muted-foreground">{help}</p>}
         </div>
       );
     }
