@@ -59,12 +59,10 @@ func (c *Channel) detectMention(msg *telego.Message, botUsername string) bool {
 	return false
 }
 
-// hasOtherBotMention checks if the message mentions any bot other than ours.
-// Used by "yield" mention mode: if another bot is explicitly mentioned, this bot yields.
-// Telegram marks bot mentions as entity type "mention" with text "@username";
-// we detect bots by checking if the mentioned user is a bot via the reply-to context,
-// or by checking for any @mention that is not our own username.
-func (c *Channel) hasOtherBotMention(msg *telego.Message, myUsername string) bool {
+// hasOtherMention checks if the message mentions any user/bot other than ours.
+// Used by "yield" mention mode: if another entity is explicitly @mentioned, this bot yields.
+// Checks both "mention" entities (@username) and "bot_command" entities (/cmd@bot).
+func (c *Channel) hasOtherMention(msg *telego.Message, myUsername string) bool {
 	lowerMy := strings.ToLower(myUsername)
 
 	for _, pair := range []struct {

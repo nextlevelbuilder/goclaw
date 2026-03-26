@@ -242,10 +242,27 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	if isGroup && (topicCfg.effectiveRequireMention(c.requireMention) || mentionMode == "yield") {
 		botUsername := c.bot.Username()
 
-		// In yield mode, skip messages from other bots entirely to prevent infinite loops.
+		// In yield mode, skip messages from other bots to prevent infinite loops.
 		// Bot A responds → Bot B sees it as "no specific mention" → responds → loop.
-		// Only skip when not explicitly mentioned (allow direct @bot commands to other bots' messages).
-		if mentionMode == "yield" && user.IsBot && user.Username != botUsername {
+		// Only skip when our bot is NOT explicitly mentioned — allow cross-bot @commands.
+		if mentionMode == "yield" && user.IsBot && user.Username != botUsername && !c.detectMention(message, botUsername) {
+			// Respect pairing guard — don't record history in unpaired groups.
+			if topicCfg.groupPolicy == "pairing" && c.pairingService != nil {
+				if _, cached := c.approvedGroups.Load(chatIDStr); !cached {
+					groupSenderID := fmt.Sprintf("group:%d", chatID)
+					paired, pairErr := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
+					if pairErr != nil {
+						slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+							"group_sender", groupSenderID, "channel", c.Name(), "error", pairErr)
+						paired = true
+					}
+					if paired {
+						c.approvedGroups.Store(chatIDStr, true)
+					} else {
+						return
+					}
+				}
+			}
 			c.groupHistory.Record(localKey, channels.HistoryEntry{
 				Sender:    senderLabel,
 				SenderID:  senderID,
@@ -267,7 +284,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		// If nobody is mentioned → respond. If we are mentioned → respond.
 		if mentionMode == "yield" && !wasMentioned {
 			// In yield mode, respond unless someone else was specifically called out
-			if !c.hasOtherBotMention(message, botUsername) {
+			if !c.hasOtherMention(message, botUsername) {
 				wasMentioned = true // treat as mentioned — no specific target, all bots respond
 			}
 		}

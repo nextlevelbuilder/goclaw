@@ -12,6 +12,8 @@ export interface FieldDef {
   help?: string;
   /** Only show this field when another field has a specific value */
   showWhen?: { key: string; value: string };
+  /** Disable this field when another field has a specific value */
+  disabledWhen?: { key: string; value: string; hint?: string };
 }
 
 // --- Shared option lists ---
@@ -79,7 +81,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "proxy", label: "HTTP Proxy", type: "text", placeholder: "http://proxy:8080", help: "Route bot traffic through an HTTP proxy" },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
-    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true, disabledWhen: { key: "mention_mode", value: "yield", hint: "Yield mode automatically listens to all messages" } },
     { key: "mention_mode", label: "Mention Mode", type: "select", options: mentionModeOptions, defaultValue: "strict", help: "Strict: only respond when @mentioned. Yield: respond to all messages unless another bot is explicitly mentioned." },
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
     { key: "dm_stream", label: "DM Streaming", type: "boolean", defaultValue: true, help: "Stream response progressively in DMs" },

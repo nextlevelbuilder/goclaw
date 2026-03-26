@@ -137,6 +137,7 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
             values={policyValues}
             onChange={handlePolicyChange}
             idPrefix="cd-pol"
+            contextValues={policyValues}
           />
         </section>
       )}

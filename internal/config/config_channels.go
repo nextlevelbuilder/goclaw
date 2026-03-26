@@ -120,7 +120,6 @@ type SlackConfig struct {
 	DMPolicy       string              `json:"dm_policy,omitempty"`       // "pairing" (default), "allowlist", "open", "disabled"
 	GroupPolicy    string              `json:"group_policy,omitempty"`    // "open" (default), "pairing", "allowlist", "disabled"
 	RequireMention *bool               `json:"require_mention,omitempty"` // require @bot mention in channels (default true)
-	MentionMode    string              `json:"mention_mode,omitempty"`    // "strict" (default) = only respond when mentioned; "yield" = respond unless another bot is mentioned
 	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
 	DMStream       *bool               `json:"dm_stream,omitempty"`       // enable streaming for DMs (default false)
 	GroupStream    *bool               `json:"group_stream,omitempty"`    // enable streaming for groups (default false)

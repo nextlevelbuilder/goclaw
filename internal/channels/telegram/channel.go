@@ -119,6 +119,10 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 	if mentionMode == "" {
 		mentionMode = "strict"
 	}
+	if mentionMode != "strict" && mentionMode != "yield" {
+		slog.Warn("telegram: unknown mention_mode, defaulting to strict", "value", mentionMode)
+		mentionMode = "strict"
+	}
 
 	return &Channel{
 		BaseChannel:     base,
