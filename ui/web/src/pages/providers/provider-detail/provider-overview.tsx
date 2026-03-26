@@ -156,6 +156,11 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     ? poolOwnership.membersByOwner.get(provider.name)?.length ?? 0
     : 0;
   const canEditPoolRouting = isOAuth && !managedByOwnerName;
+  const currentOAuthAvailability = providerStatus(
+    provider.name,
+    statusByName,
+    provider.enabled,
+  );
 
   const initialRouting = getChatGPTOAuthProviderRouting(provider.settings);
 
@@ -250,15 +255,32 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   }, [draftFormSignature, provider.api_key, provider.display_name, provider.enabled, provider.id, provider.settings, savedFormSignature]);
 
   const quotaProviderNames = useMemo(
-    () =>
-      canEditPoolRouting
-        ? Array.from(
-            new Set(
-              [provider.name, ...(poolRouting.extra_provider_names ?? [])].filter(Boolean),
-            ),
-          )
-        : [],
-    [canEditPoolRouting, poolRouting.extra_provider_names, provider.name],
+    () => {
+      if (!isOAuth) return [];
+      const candidateNames = [
+        provider.name,
+        ...(canEditPoolRouting ? poolRouting.extra_provider_names ?? [] : []),
+      ];
+      return Array.from(
+        new Set(
+          candidateNames.filter((providerName) => {
+            if (!providerName) return false;
+            const item = providerByName.get(providerName);
+            return (
+              providerStatus(providerName, statusByName, item?.enabled) === "ready"
+            );
+          }),
+        ),
+      );
+    },
+    [
+      canEditPoolRouting,
+      isOAuth,
+      poolRouting.extra_provider_names,
+      provider.name,
+      providerByName,
+      statusByName,
+    ],
   );
   const {
     quotaByName,
@@ -420,6 +442,9 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
           provider={provider}
           managedByProvider={managedByProvider}
           managedMemberCount={managedMemberCount}
+          availability={currentOAuthAvailability}
+          quota={quotaByName.get(provider.name)}
+          quotaLoading={quotasLoading || quotasFetching}
         />
       ) : null}
 

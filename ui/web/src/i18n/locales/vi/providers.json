@@ -29,6 +29,41 @@
     "signInNeeded": "Cần đăng nhập",
     "disabled": "Đã tắt"
   },
+  "quota": {
+    "checking": "Đang kiểm tra quota",
+    "plan": "Gói",
+    "lastChecked": "Kiểm tra {{value}}",
+    "failure": {
+      "billing": {
+        "label": "Thanh toán",
+        "description": "Gói thanh toán hoặc quyền truy cập hiện đang chặn tài khoản này."
+      },
+      "exhausted": {
+        "label": "Hết quota",
+        "description": "Tài khoản đã đăng nhập nhưng một trong các cửa sổ quota chính đã cạn."
+      },
+      "reauth": {
+        "label": "Đăng nhập lại",
+        "description": "Đăng nhập lại để làm mới quyền truy cập workspace."
+      },
+      "forbidden": {
+        "label": "Bị chặn",
+        "description": "Tài khoản này không thể đọc dữ liệu quota từ upstream."
+      },
+      "needs_setup": {
+        "label": "Cần thiết lập",
+        "description": "Đăng nhập lại để GoClaw khôi phục metadata workspace ChatGPT."
+      },
+      "retry_later": {
+        "label": "Thử lại sau",
+        "description": "Endpoint quota đang tạm thời không khả dụng hoặc bị giới hạn tốc độ."
+      },
+      "unavailable": {
+        "label": "Không khả dụng",
+        "description": "Hiện không lấy được dữ liệu quota cho tài khoản này."
+      }
+    }
+  },
   "detail": {
     "title": "Chi tiết Provider",
     "advanced": "Nâng cao"
@@ -173,36 +208,38 @@
     "oauthAccountUsage": "Cách dùng tài khoản",
     "oauthAccountUsageDesc": "Cách bí danh này hoạt động trong mô hình OpenAI Codex pool do provider sở hữu.",
     "oauthAccountUsageManagedDesc": "Bí danh này hiện là pool member được quản lý bởi {{provider}}.",
-    "oauthAccountUsageOwnerDesc": "Bí danh này hiện đang sở hữu một reusable pool với {{count}} tài khoản phụ.",
+    "oauthAccountUsageOwnerDesc": "Bí danh này hiện đang sở hữu một pool dùng lại với {{count}} tài khoản phụ.",
     "oauthPoolRole": {
-      "member": "Pool Member",
-      "owner": "Pool Owner",
+      "member": "Thành viên pool",
+      "owner": "Chủ pool",
       "standalone": "Độc lập"
     },
     "oauthAliasLabel": "Bí danh tài khoản",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "Tiền tố model",
+    "oauthQuotaTitle": "Trạng thái quota",
+    "oauthQuotaDescription": "Quota ChatGPT workspace mới nhất của tài khoản này.",
     "oauthModelPrefixCopied": "Đã sao chép tiền tố model",
     "oauthPreferredHint": "Đặt trường Provider của agent thành bí danh này để biến nó thành bí danh OpenAI chính.",
-    "oauthProviderDefaultHint": "Dùng phần Pool Defaults bên dưới để định nghĩa chính sách routing OpenAI Codex dùng lại cho mọi agent trỏ vào bí danh này.",
+    "oauthProviderDefaultHint": "Dùng phần thiết lập pool mặc định bên dưới để định nghĩa chính sách routing OpenAI Codex dùng lại cho mọi agent trỏ vào bí danh này.",
     "oauthRoutingHint": "Trang agent giờ sẽ hiển thị pool hiệu lực của agent đó, cùng việc nó đang kế thừa mặc định này hay đang dùng override riêng.",
     "oauthManagedByHint": "Bí danh này đang được quản lý bởi provider {{provider}}. Hãy chỉnh membership ở provider đó thay vì tại tài khoản này.",
-    "codexPoolDefaultsTitle": "Pool Defaults",
-    "codexPoolDefaultsDescription": "Định nghĩa reusable OpenAI Codex pool do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
-    "oauthDisplayNameRecommendation": "Thêm display name nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool."
+    "codexPoolDefaultsTitle": "Thiết lập pool mặc định",
+    "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
+    "oauthDisplayNameRecommendation": "Thêm tên hiển thị nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool."
   },
   "list": {
-    "poolOwner": "Pool Owner",
-    "poolMember": "Pool Member",
+    "poolOwner": "Chủ pool",
+    "poolMember": "Thành viên pool",
     "standalone": "Độc lập",
     "managedBy": "Được quản lý bởi {{provider}}",
     "memberCount_one": "{{count}} tài khoản",
     "memberCount_other": "{{count}} tài khoản",
     "memberOverflow": "+{{count}}",
     "strategy": {
-      "roundRobin": "Round robin",
-      "priorityOrder": "Priority order",
-      "primaryFirst": "Primary first"
+      "roundRobin": "Luân phiên",
+      "priorityOrder": "Theo thứ tự ưu tiên",
+      "primaryFirst": "Ưu tiên chính"
     },
     "status": {
       "needsSignIn": "Cần đăng nhập",

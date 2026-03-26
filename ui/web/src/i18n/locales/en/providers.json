@@ -28,6 +28,41 @@
     "signInNeeded": "Sign in needed",
     "disabled": "Disabled"
   },
+  "quota": {
+    "checking": "Checking quota",
+    "plan": "Plan",
+    "lastChecked": "Checked {{value}}",
+    "failure": {
+      "billing": {
+        "label": "Billing",
+        "description": "Workspace billing or entitlement is blocking this account right now."
+      },
+      "exhausted": {
+        "label": "Exhausted",
+        "description": "This account is signed in, but one of its core quota windows is exhausted."
+      },
+      "reauth": {
+        "label": "Reauth",
+        "description": "Sign in again to refresh workspace access."
+      },
+      "forbidden": {
+        "label": "Forbidden",
+        "description": "This account cannot read upstream quota data."
+      },
+      "needs_setup": {
+        "label": "Needs setup",
+        "description": "Sign in again so GoClaw can restore the ChatGPT account workspace metadata."
+      },
+      "retry_later": {
+        "label": "Retry later",
+        "description": "The quota endpoint is temporarily unavailable or rate limited."
+      },
+      "unavailable": {
+        "label": "Unavailable",
+        "description": "Quota data is unavailable for this account right now."
+      }
+    }
+  },
   "form": {
     "createTitle": "Add Provider",
     "editTitle": "Edit Provider",
@@ -178,6 +213,8 @@
     "oauthAliasLabel": "Account Alias",
     "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
     "oauthModelPrefix": "Model Prefix",
+    "oauthQuotaTitle": "Quota Status",
+    "oauthQuotaDescription": "Latest ChatGPT workspace quota for this account.",
     "oauthModelPrefixCopied": "Model prefix copied",
     "oauthPreferredHint": "Set an agent's Provider field to this alias to make it the primary OpenAI alias.",
     "oauthProviderDefaultHint": "Use the pool defaults below to define the reusable OpenAI Codex routing policy for every agent that points at this alias.",

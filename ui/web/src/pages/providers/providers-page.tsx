@@ -12,6 +12,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { useProviders, type ProviderData } from "./hooks/use-providers";
+import { useChatGPTOAuthProviderQuotas } from "./hooks/use-chatgpt-oauth-provider-quotas";
 import { useChatGPTOAuthProviderStatuses } from "./hooks/use-chatgpt-oauth-provider-statuses";
 import { ProviderFormDialog } from "./provider-form-dialog";
 import { ProviderListRow } from "./provider-list-row";
@@ -80,21 +81,15 @@ function ProviderListView() {
     () => sortProvidersForPoolHierarchy(filtered, poolOwnership),
     [filtered, poolOwnership],
   );
+  const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(orderedProviders);
   const memberConnectorByName = useMemo(() => {
-    const visibleNames = new Set(orderedProviders.map((provider) => provider.name));
+    const visibleNames = new Set(pageItems.map((provider) => provider.name));
     const map = new Map<string, "none" | "single" | "first" | "middle" | "last">();
 
     for (const [ownerName] of poolOwnership.membersByOwner) {
-      if (!visibleNames.has(ownerName)) {
-        for (const provider of orderedProviders) {
-          if (poolOwnership.ownerByMember.get(provider.name) === ownerName) {
-            map.set(provider.name, "none");
-          }
-        }
-        continue;
-      }
+      if (!visibleNames.has(ownerName)) continue;
 
-      const visibleMembers = orderedProviders
+      const visibleMembers = pageItems
         .filter((provider) => poolOwnership.ownerByMember.get(provider.name) === ownerName)
         .map((provider) => provider.name);
 
@@ -118,9 +113,23 @@ function ProviderListView() {
     }
 
     return map;
-  }, [orderedProviders, poolOwnership.membersByOwner, poolOwnership.ownerByMember]);
-
-  const { pageItems, pagination, setPage, setPageSize, resetPage } = usePagination(orderedProviders);
+  }, [pageItems, poolOwnership.membersByOwner, poolOwnership.ownerByMember]);
+  const visibleQuotaProviderNames = useMemo(
+    () =>
+      pageItems
+        .filter(
+          (provider) =>
+            provider.provider_type === "chatgpt_oauth" &&
+            oauthAvailabilityByName.get(provider.name) === "ready",
+        )
+        .map((provider) => provider.name),
+    [oauthAvailabilityByName, pageItems],
+  );
+  const {
+    quotaByName,
+    isLoading: quotasLoading,
+    isFetching: quotasFetching,
+  } = useChatGPTOAuthProviderQuotas(visibleQuotaProviderNames, visibleQuotaProviderNames.length > 0);
 
   useEffect(() => { resetPage(); }, [search, resetPage]);
 
@@ -213,6 +222,10 @@ function ProviderListView() {
                     memberCount: poolOwnership.membersByOwner.get(p.name)?.length ?? 0,
                     strategy: poolOwnership.strategyByOwner.get(p.name) ?? "primary_first",
                     connectorPosition: memberConnectorByName.get(p.name) ?? "none",
+                    quota: quotaByName.get(p.name),
+                    quotaLoading: oauthAvailabilityByName.get(p.name) === "ready"
+                      ? quotasLoading || quotasFetching
+                      : false,
                   } : undefined}
                   onClick={() => navigate(`/providers/${p.id}`)}
                   onDelete={() => setDeleteTarget(p)}

@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ChatGPTOAuthQuotaStrip } from "@/pages/agents/agent-detail/chatgpt-oauth-quota-strip";
 import type { EffectiveChatGPTOAuthRoutingStrategy } from "@/types/agent";
+import type { ChatGPTOAuthProviderQuota } from "./hooks/use-chatgpt-oauth-provider-quotas";
 import type { ChatGPTOAuthAvailability } from "./hooks/use-chatgpt-oauth-provider-statuses";
 import type { ProviderData } from "./hooks/use-providers";
 import { PROVIDER_TYPE_BADGE, ProviderApiKeyBadge } from "./provider-utils";
@@ -15,6 +17,8 @@ interface ProviderOAuthPoolSummary {
   memberCount: number;
   strategy: EffectiveChatGPTOAuthRoutingStrategy;
   connectorPosition?: "none" | "single" | "first" | "middle" | "last";
+  quota?: ChatGPTOAuthProviderQuota | null;
+  quotaLoading?: boolean;
 }
 
 interface ProviderListRowProps {
@@ -56,6 +60,16 @@ export function ProviderListRow({
     : oauthPool?.role === "member" && oauthPool.managedByLabel
       ? t("list.managedBy", { provider: oauthPool.managedByLabel })
       : null;
+  const secondaryText = [subtitle, poolMeta].filter(Boolean).join(" · ");
+  const availabilityWarningLabel = showAvailabilityWarning
+    ? t(
+        oauthPool?.availability === "disabled"
+          ? "list.status.disabled"
+          : "list.status.needsSignIn",
+      )
+    : null;
+  const showQuota = provider.provider_type === "chatgpt_oauth"
+    && (oauthPool?.quotaLoading || Boolean(oauthPool?.quota));
   const connectorLineClass = oauthPool?.connectorPosition === "first" || oauthPool?.connectorPosition === "middle"
     ? "top-[-0.75rem] h-[calc(100%+1.5rem)]"
     : "top-[-0.75rem] h-[calc(50%+0.75rem)]";
@@ -124,33 +138,38 @@ export function ProviderListRow({
             </Badge>
           )}
         </div>
-        {(subtitle || poolMeta || showAvailabilityWarning) && (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
-            {subtitle && <span className="truncate">{subtitle}</span>}
-            {poolMeta && (
-              <>
-                {subtitle && <span aria-hidden="true">·</span>}
-                <span className="truncate">{poolMeta}</span>
-              </>
+        {(secondaryText || availabilityWarningLabel || showQuota) && (
+          <div className="flex min-w-0 items-center gap-2 text-xs">
+            {secondaryText ? (
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {secondaryText}
+              </span>
+            ) : (
+              <span className="flex-1" />
             )}
-            {showAvailabilityWarning && (
-              <>
-                {(subtitle || poolMeta) && <span aria-hidden="true">·</span>}
-                <span
-                  className={cn(
-                    "font-medium",
-                    oauthPool?.availability === "disabled"
-                      ? "text-muted-foreground"
-                      : "text-amber-700 dark:text-amber-400",
-                  )}
-                >
-                  {t(
-                    oauthPool?.availability === "disabled"
-                      ? "list.status.disabled"
-                      : "list.status.needsSignIn",
-                  )}
-                </span>
-              </>
+            {availabilityWarningLabel && (
+              <span
+                className={cn(
+                  "shrink-0 font-medium",
+                  oauthPool?.availability === "disabled"
+                    ? "text-muted-foreground"
+                    : "text-amber-700 dark:text-amber-400",
+                )}
+              >
+                {availabilityWarningLabel}
+              </span>
+            )}
+            {showQuota && (
+              <ChatGPTOAuthQuotaStrip
+                quota={oauthPool?.quota}
+                loading={oauthPool?.quotaLoading}
+                compact
+                layout="inline"
+                embedded
+                translationNamespace="providers"
+                translationKeyPrefix="quota"
+                className="shrink-0"
+              />
             )}
           </div>
         )}

@@ -4,6 +4,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ChatGPTOAuthQuotaStrip } from "@/pages/agents/agent-detail/chatgpt-oauth-quota-strip";
+import type { ChatGPTOAuthProviderQuota } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
+import type { ChatGPTOAuthAvailability } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import { toast } from "@/stores/use-toast-store";
 import type { ProviderData } from "@/types/provider";
 
@@ -11,12 +14,18 @@ interface ProviderOAuthAccountSectionProps {
   provider: ProviderData;
   managedByProvider?: ProviderData;
   managedMemberCount?: number;
+  availability: ChatGPTOAuthAvailability;
+  quota?: ChatGPTOAuthProviderQuota | null;
+  quotaLoading?: boolean;
 }
 
 export function ProviderOAuthAccountSection({
   provider,
   managedByProvider,
   managedMemberCount = 0,
+  availability,
+  quota,
+  quotaLoading = false,
 }: ProviderOAuthAccountSectionProps) {
   const { t } = useTranslation("providers");
   const modelPrefix = `${provider.name}/`;
@@ -70,6 +79,41 @@ export function ProviderOAuthAccountSection({
             <Button type="button" variant="outline" size="icon" className="size-9 shrink-0" onClick={handleCopyPrefix}>
               <Copy className="h-4 w-4" />
             </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-muted/10 p-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1 lg:max-w-xs">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              {t("detail.oauthQuotaTitle")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("detail.oauthQuotaDescription")}
+            </p>
+          </div>
+
+          <div className="min-w-0 flex-1 rounded-md border bg-background/70 px-3 py-2">
+            {availability === "ready" || quotaLoading || quota ? (
+              <ChatGPTOAuthQuotaStrip
+                quota={quota}
+                loading={quotaLoading}
+                embedded
+                showSignalBadges={false}
+                translationNamespace="providers"
+                translationKeyPrefix="quota"
+                className="w-full"
+              />
+            ) : (
+              <Badge variant="outline" className="h-5 w-fit px-1.5 text-[10px]">
+                {t(
+                  availability === "disabled"
+                    ? "list.status.disabled"
+                    : "list.status.needsSignIn",
+                )}
+              </Badge>
+            )}
           </div>
         </div>
       </div>

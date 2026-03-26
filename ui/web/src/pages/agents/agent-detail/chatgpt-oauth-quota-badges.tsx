@@ -19,6 +19,8 @@ import {
 interface ChatGPTOAuthQuotaBadgesProps {
   quota?: ChatGPTOAuthProviderQuota | null;
   loading?: boolean;
+  translationNamespace?: "agents" | "providers";
+  translationKeyPrefix?: string;
   className?: string;
 }
 
@@ -35,13 +37,15 @@ const failureVariantByKind = {
 export function ChatGPTOAuthQuotaBadges({
   quota,
   loading = false,
+  translationNamespace = "agents",
+  translationKeyPrefix = "chatgptOAuthRouting.quota",
   className,
 }: ChatGPTOAuthQuotaBadgesProps) {
-  const { t } = useTranslation("agents");
+  const { t } = useTranslation(translationNamespace);
 
   if (loading && !quota) {
     return (
-      <Badge variant="outline">{t("chatgptOAuthRouting.quota.checking")}</Badge>
+      <Badge variant="outline">{t(`${translationKeyPrefix}.checking`)}</Badge>
     );
   }
   if (!quota) return null;
@@ -57,7 +61,7 @@ export function ChatGPTOAuthQuotaBadges({
           <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
             {failureKind ? (
               <Badge variant={failureVariantByKind[failureKind]}>
-                {t(`chatgptOAuthRouting.quota.failure.${failureKind}.label`)}
+                {t(`${translationKeyPrefix}.failure.${failureKind}.label`)}
               </Badge>
             ) : (
               <>
@@ -79,12 +83,10 @@ export function ChatGPTOAuthQuotaBadges({
           {failureKind ? (
             <div className="space-y-1.5">
               <p className="font-medium">
-                {t(`chatgptOAuthRouting.quota.failure.${failureKind}.label`)}
+                {t(`${translationKeyPrefix}.failure.${failureKind}.label`)}
               </p>
               <p className="text-muted-foreground">
-                {t(
-                  `chatgptOAuthRouting.quota.failure.${failureKind}.description`,
-                )}
+                {t(`${translationKeyPrefix}.failure.${failureKind}.description`)}
               </p>
             </div>
           ) : (
@@ -92,7 +94,7 @@ export function ChatGPTOAuthQuotaBadges({
               {planLabel && (
                 <div className="flex justify-between gap-3">
                   <span className="text-muted-foreground">
-                    {t("chatgptOAuthRouting.quota.plan")}
+                    {t(`${translationKeyPrefix}.plan`)}
                   </span>
                   <span>{planLabel}</span>
                 </div>
@@ -110,7 +112,7 @@ export function ChatGPTOAuthQuotaBadges({
                 </div>
               ))}
               <p className="text-muted-foreground">
-                {t("chatgptOAuthRouting.quota.lastChecked", {
+                {t(`${translationKeyPrefix}.lastChecked`, {
                   value: formatRelativeTime(quota.last_updated),
                 })}
               </p>
