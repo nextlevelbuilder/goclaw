@@ -55,7 +55,7 @@ RUN set -eux; \
         apk add --no-cache docker-cli; \
     fi; \
     if [ "$ENABLE_FULL_SKILLS" = "true" ]; then \
-        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli poppler-utils bash; \
+        apk add --no-cache python3 py3-pip nodejs npm pandoc github-cli poppler-utils bash curl; \
         pip3 install --no-cache-dir --break-system-packages \
             pypdf openpyxl pandas python-pptx markitdown defusedxml lxml \
             pdfplumber pdf2image anthropic; \
