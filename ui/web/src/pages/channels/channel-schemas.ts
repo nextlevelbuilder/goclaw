@@ -50,6 +50,10 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "app_token", label: "App-Level Token", type: "password", required: true, placeholder: "xapp-...", help: "App-Level Token with connections:write scope (required for Socket Mode)" },
     { key: "user_token", label: "User Token (Optional)", type: "password", required: false, placeholder: "xoxp-...", help: "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity." },
   ],
+  mattermost: [
+    { key: "server_url", label: "Server URL", type: "text", required: true, placeholder: "https://mattermost.example.com", help: "Your Mattermost server URL" },
+    { key: "bot_token", label: "Bot Token", type: "password", required: true, placeholder: "Bot personal access token", help: "Create from Mattermost → Integrations → Bot Accounts" },
+  ],
   feishu: [
     { key: "app_id", label: "App ID", type: "text", required: true, placeholder: "cli_xxxxx" },
     { key: "app_secret", label: "App Secret", type: "password", required: true },
@@ -106,6 +110,18 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "thread_ttl", label: "Thread Participation TTL (hours)", type: "number", defaultValue: 24, help: "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal (thinking + done)" }, { value: "full", label: "Full (all status emoji)" }], defaultValue: "off", help: "Show emoji reactions on user messages during agent processing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Slack user IDs (U...) allowed to interact; empty = no allowlist filter" },
+    { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
+  ],
+  mattermost: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing", help: "How to handle direct messages from unknown users" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing", help: "How to handle messages from channels/groups" },
+    { key: "require_mention", label: "Require @mention in channels", type: "boolean", defaultValue: true, help: "Bot only responds when explicitly @mentioned in channels (recommended)" },
+    { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 50, help: "Max pending group messages for context (0 = disabled)" },
+    { key: "debounce_delay", label: "Debounce Delay (ms)", type: "number", defaultValue: 300, help: "Milliseconds to wait before dispatching rapid messages. Set 0 to disable." },
+    { key: "thread_ttl", label: "Thread Participation TTL (hours)", type: "number", defaultValue: 24, help: "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
+    { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal (thinking + done)" }, { value: "full", label: "Full (all status emoji)" }], defaultValue: "off", help: "Show emoji reactions on user messages during agent processing" },
+    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 50, help: "Max inbound media download size" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Mattermost user IDs allowed to interact; empty = no allowlist filter" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
   feishu: [

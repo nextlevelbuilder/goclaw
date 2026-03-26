@@ -25,17 +25,26 @@ const ESSENTIAL_CONFIG_KEYS = new Set(["dm_policy", "group_policy", "require_men
 const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
 const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"]);
 const STREAMING_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_stream", "native_stream", "debounce_delay", "thread_ttl"]);
+const STREAM_TOGGLE_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_stream", "native_stream"]);
 const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "block_reply", "render_mode", "topic_session_mode"]);
 const ACCESS_KEYS = new Set(["allow_from", "group_allow_from"]);
 
 function getAdvancedFields(channelType: string) {
   const allFields = configSchema[channelType] ?? [];
   const advanced = allFields.filter((f) => !ESSENTIAL_CONFIG_KEYS.has(f.key));
+
+  const streamingFields = advanced.filter((f) => STREAMING_KEYS.has(f.key));
+  const hasStreamToggles = streamingFields.some((f) => STREAM_TOGGLE_KEYS.has(f.key));
+
   return {
     network: advanced.filter((f) => NETWORK_KEYS.has(f.key)),
     limits: advanced.filter((f) => LIMITS_KEYS.has(f.key)),
-    streaming: advanced.filter((f) => STREAMING_KEYS.has(f.key)),
-    behavior: advanced.filter((f) => BEHAVIOR_KEYS.has(f.key)),
+    // Show streaming section only if channel has actual stream toggle fields
+    streaming: hasStreamToggles ? streamingFields : [],
+    // When no stream toggles, merge orphaned streaming keys (debounce, ttl) into behavior
+    behavior: hasStreamToggles
+      ? advanced.filter((f) => BEHAVIOR_KEYS.has(f.key))
+      : advanced.filter((f) => BEHAVIOR_KEYS.has(f.key) || STREAMING_KEYS.has(f.key)),
     access: advanced.filter((f) => ACCESS_KEYS.has(f.key)),
   };
 }

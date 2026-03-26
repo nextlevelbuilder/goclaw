@@ -179,6 +179,7 @@
     "verification_token": { "label": "Verification Token", "help": "For webhook mode" },
     "webhook_secret": { "label": "Webhook Secret" },
     "bridge_url": { "label": "Bridge URL" },
+    "server_url": { "label": "Server URL", "help": "Your server URL" },
     "api_server": { "label": "API Server URL", "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
     "proxy": { "label": "HTTP Proxy", "help": "Route bot traffic through an HTTP proxy" },
     "dm_policy": { "label": "DM Policy" },

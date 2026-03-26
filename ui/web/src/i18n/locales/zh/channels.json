@@ -179,6 +179,7 @@
     "verification_token": { "label": "验证Token", "help": "用于Webhook模式" },
     "webhook_secret": { "label": "Webhook Secret" },
     "bridge_url": { "label": "Bridge URL" },
+    "server_url": { "label": "服务器URL", "help": "服务器地址" },
     "api_server": { "label": "API 服务器 URL", "help": "自定义 Telegram Bot API 服务器用于大文件上传（最大 2GB）。留空使用默认服务器。" },
     "proxy": { "label": "HTTP 代理", "help": "通过 HTTP 代理路由Bot流量" },
     "dm_policy": { "label": "私聊策略" },

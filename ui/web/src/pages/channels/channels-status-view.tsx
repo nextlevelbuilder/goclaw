@@ -12,6 +12,7 @@ const channelTypeLabels: Record<string, string> = {
   telegram: "Telegram",
   discord: "Discord",
   slack: "Slack",
+  mattermost: "Mattermost",
   feishu: "Feishu / Lark",
   zalo_oa: "Zalo OA",
   zalo_personal: "Zalo Personal",

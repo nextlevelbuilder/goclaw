@@ -23,8 +23,8 @@ import { useContacts } from "./hooks/use-contacts";
 import { useContactMerge } from "./hooks/use-contact-merge";
 import { MergeContactsDialog } from "./merge-contacts-dialog";
 
-const CHANNEL_TYPES = ["telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu"];
-const PERM_CHANNELS = ["telegram", "discord", "zalo", "slack", "feishu"] as const;
+const CHANNEL_TYPES = ["telegram", "discord", "slack", "mattermost", "whatsapp", "zalo_oa", "zalo_personal", "feishu"];
+const PERM_CHANNELS = ["telegram", "discord", "zalo", "slack", "mattermost", "feishu"] as const;
 
 export function ContactsPage() {
   const { t } = useTranslation("contacts");

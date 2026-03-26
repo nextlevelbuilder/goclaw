@@ -16,6 +16,7 @@ const CHANNEL_META: Record<string, { label: string; secretEnv: string; secretFie
   telegram: { label: "Telegram", secretEnv: "GOCLAW_TELEGRAM_TOKEN", secretField: "token" },
   discord: { label: "Discord", secretEnv: "GOCLAW_DISCORD_TOKEN", secretField: "token" },
   slack: { label: "Slack", secretEnv: "GOCLAW_SLACK_BOT_TOKEN", secretField: "bot_token" },
+  mattermost: { label: "Mattermost", secretEnv: "GOCLAW_MATTERMOST_TOKEN", secretField: "bot_token" },
   whatsapp: { label: "WhatsApp", secretEnv: "", secretField: "" },
   zalo: { label: "Zalo", secretEnv: "GOCLAW_ZALO_TOKEN", secretField: "token" },
   feishu: { label: "Feishu / Lark", secretEnv: "GOCLAW_FEISHU_APP_SECRET", secretField: "app_secret" },
