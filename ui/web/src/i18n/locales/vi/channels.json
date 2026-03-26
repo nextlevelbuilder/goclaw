@@ -183,8 +183,8 @@
     "proxy": { "label": "Proxy HTTP", "help": "Định tuyến lưu lượng bot qua proxy HTTP" },
     "dm_policy": { "label": "Chính sách DM" },
     "group_policy": { "label": "Chính sách nhóm" },
-    "require_mention": { "label": "Yêu cầu @đề cập trong nhóm", "disabledHint": "Chế độ nhường tự động lắng nghe tất cả tin nhắn" },
-    "mention_mode": { "label": "Chế độ đề cập", "help": "Nghiêm ngặt: chỉ phản hồi khi được @đề cập. Nhường: phản hồi tất cả tin nhắn trừ khi bot khác được đề cập." },
+    "require_mention": { "label": "Yêu cầu @đề cập trong nhóm", "disabledHint": "Chế độ đa bot luôn lắng nghe tất cả tin nhắn" },
+    "mention_mode": { "label": "Hành vi phản hồi nhóm", "help": "Cách bot quyết định khi nào phản hồi trong nhóm có nhiều bot." },
     "history_limit": { "label": "Giới hạn lịch sử nhóm", "help": "Số tin nhắn nhóm chờ tối đa cho ngữ cảnh (0 = tắt)" },
     "dm_stream": { "label": "Stream DM", "help": "Truyền phản hồi liên tục trong DM" },
     "group_stream": { "label": "Stream nhóm", "help": "Truyền phản hồi liên tục trong nhóm" },
@@ -230,8 +230,8 @@
       "disabled": "Tắt"
     },
     "mention_mode": {
-      "strict": "Nghiêm ngặt (chỉ khi được đề cập)",
-      "yield": "Nhường (phản hồi trừ khi bot khác được đề cập)"
+      "strict": "Mặc định (theo cài đặt @đề cập)",
+      "yield": "Đa bot (phản hồi trừ khi bot khác được @đề cập)"
     },
     "reaction_level": {
       "off": "Tắt",
