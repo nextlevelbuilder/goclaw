@@ -23,8 +23,8 @@ type MethodHandler func(ctx context.Context, client *Client, req *protocol.Reque
 type MethodRouter struct {
 	handlers    map[string]MethodHandler
 	server      *Server
-	tenantStore store.TenantStore       // optional, for enriching connect response
-	permCache   *cache.PermissionCache  // optional, for caching tenant membership checks
+	tenantStore store.TenantStore      // optional, for enriching connect response
+	permCache   *cache.PermissionCache // optional, for caching tenant membership checks
 }
 
 func NewMethodRouter(server *Server) *MethodRouter {
@@ -105,9 +105,9 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		UserID      string `json:"user_id"`
 		SenderID    string `json:"sender_id"`    // browser pairing: stored sender ID for reconnect
 		Locale      string `json:"locale"`       // user's preferred locale (en, vi, zh)
-		TenantHint string `json:"tenant_hint"`      // optional tenant slug for browser pairing multi-tenant
-		TenantID   string `json:"tenant_id"`        // cross-tenant admin: narrow scope to specific tenant (UUID or slug)
-		TenantScope string `json:"tenant_scope"`    // deprecated: alias for tenant_id (backward compat)
+		TenantHint  string `json:"tenant_hint"`  // optional tenant slug for browser pairing multi-tenant
+		TenantID    string `json:"tenant_id"`    // cross-tenant admin: narrow scope to specific tenant (UUID or slug)
+		TenantScope string `json:"tenant_scope"` // deprecated: alias for tenant_id (backward compat)
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -177,8 +177,8 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				client.userID = params.UserID
 			}
 			if keyData.TenantID == uuid.Nil {
-				// API key with no tenant → owner scope
-				client.role = permissions.RoleOwner
+				// System-level API keys keep their scope-derived role and may
+				// optionally narrow to a tenant without gaining owner privileges.
 				apiKeyScope := params.TenantID
 				if apiKeyScope == "" {
 					apiKeyScope = params.TenantScope // backward compat

@@ -11,6 +11,7 @@ import {
 } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import { useChatGPTOAuthProviderQuotas } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
 import type { AgentData } from "@/types/agent";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { ChatGPTOAuthQuotaBadges } from "../chatgpt-oauth-quota-badges";
 import { normalizeChatGPTOAuthRouting } from "../agent-display-utils";
 import { summarizeQuotaHealth } from "../chatgpt-oauth-quota-utils";
@@ -31,8 +32,10 @@ export function ChatGPTOAuthRoutingSummarySection({
   onManage,
 }: ChatGPTOAuthRoutingSummarySectionProps) {
   const { t } = useTranslation("agents");
-  const { providers } = useProviders();
-  const { statuses, isLoading } = useChatGPTOAuthProviderStatuses(providers);
+  const role = useAuthStore((state) => state.role);
+  const canManagePool = role === "admin" || role === "owner";
+  const { providers } = useProviders(canManagePool);
+  const { statuses, isLoading } = useChatGPTOAuthProviderStatuses(providers, canManagePool);
   const routing = normalizeChatGPTOAuthRouting(agent.other_config);
   const providerByName = useMemo(
     () => new Map(providers.map((provider) => [provider.name, provider])),
@@ -57,6 +60,7 @@ export function ChatGPTOAuthRoutingSummarySection({
   );
   const { quotaByName } = useChatGPTOAuthProviderQuotas(providerNames, shouldShow);
 
+  if (!canManagePool) return null;
   if (!shouldShow) return null;
 
   const preferredLabel = currentProvider?.display_name || agent.provider;
@@ -87,10 +91,12 @@ export function ChatGPTOAuthRoutingSummarySection({
           <h3 className="text-sm font-medium">{t("chatgptOAuthRouting.summaryTitle")}</h3>
           <p className="text-xs text-muted-foreground">{t("chatgptOAuthRouting.summaryDescription")}</p>
         </div>
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onManage}>
-          <Settings2 className="h-4 w-4" />
-          {t("chatgptOAuthRouting.manageAction")}
-        </Button>
+        {canManagePool ? (
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onManage}>
+            <Settings2 className="h-4 w-4" />
+            {t("chatgptOAuthRouting.manageAction")}
+          </Button>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

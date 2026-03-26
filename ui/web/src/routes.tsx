@@ -151,7 +151,7 @@ export function AppRoutes() {
           <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
           <Route path={ROUTES.CHAT_PATTERN} element={<ChatPage />} />
           <Route path={ROUTES.AGENTS} element={<AgentsPage key="list" />} />
-          <Route path={ROUTES.AGENT_CODEX_POOL} element={<AgentCodexPoolPage />} />
+          <Route path={ROUTES.AGENT_CODEX_POOL} element={<RequireAdmin><AgentCodexPoolPage /></RequireAdmin>} />
           <Route path={ROUTES.AGENT_DETAIL} element={<AgentsPage key="detail" />} />
           <Route path={ROUTES.TEAMS} element={<TeamsPage key="list" />} />
           <Route path={ROUTES.TEAM_DETAIL} element={<TeamsPage key="detail" />} />

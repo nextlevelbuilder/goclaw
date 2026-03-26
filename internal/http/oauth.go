@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -25,14 +26,17 @@ type OAuthHandler struct {
 	providerReg *providers.Registry
 	msgBus      *bus.MessageBus
 
-	mu      sync.Mutex
-	pending *pendingOAuthFlow // active OAuth flow (if any)
+	mu            sync.Mutex
+	pending       map[string]*pendingOAuthFlow
+	activeFlowKey string
 }
 
 type pendingOAuthFlow struct {
 	login        *oauth.PendingLogin
 	cancel       context.CancelFunc
+	flowKey      string
 	tenantID     uuid.UUID
+	userID       string
 	providerName string
 	displayName  string
 	apiBase      string
@@ -45,6 +49,7 @@ func NewOAuthHandler(provStore store.ProviderStore, secretStore store.ConfigSecr
 		secretStore: secretStore,
 		providerReg: providerReg,
 		msgBus:      msgBus,
+		pending:     make(map[string]*pendingOAuthFlow),
 	}
 }
 
@@ -64,7 +69,7 @@ func (h *OAuthHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *OAuthHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth("", next)
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 func oauthTenantID(ctx context.Context) uuid.UUID {
@@ -79,6 +84,10 @@ func oauthProviderName(r *http.Request) string {
 		return provider
 	}
 	return oauth.DefaultProviderName
+}
+
+func oauthFlowKey(ctx context.Context, providerName string) string {
+	return oauthTenantID(ctx).String() + ":" + store.UserIDFromContext(ctx) + ":" + providerName
 }
 
 func (h *OAuthHandler) newTokenSource(ctx context.Context, providerName, displayName, apiBase string) *oauth.DBTokenSource {
@@ -183,10 +192,19 @@ func (h *OAuthHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.pending != nil {
-		h.pending.cancel()
-		h.pending.login.Shutdown()
-		h.pending = nil
+	flowKey := oauthFlowKey(r.Context(), providerName)
+	if pending := h.pending[flowKey]; pending != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"auth_url":      pending.login.AuthURL,
+			"provider_name": providerName,
+		})
+		return
+	}
+	if h.activeFlowKey != "" && h.activeFlowKey != flowKey {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "another OAuth flow is already active on this server",
+		})
+		return
 	}
 
 	pending, err := oauth.StartLoginOpenAI()
@@ -199,17 +217,21 @@ func (h *OAuthHandler) handleStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	waitCtx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
-	h.pending = &pendingOAuthFlow{
+	flow := &pendingOAuthFlow{
 		login:        pending,
 		cancel:       cancel,
+		flowKey:      flowKey,
 		tenantID:     oauthTenantID(r.Context()),
+		userID:       store.UserIDFromContext(r.Context()),
 		providerName: providerName,
 		displayName:  body.DisplayName,
 		apiBase:      body.APIBase,
 	}
+	h.pending[flowKey] = flow
+	h.activeFlowKey = flowKey
 
 	// Wait for callback in background, save token when done
-	go h.waitForCallback(waitCtx, h.pending)
+	go h.waitForCallback(waitCtx, flow)
 
 	emitAudit(h.msgBus, r, "oauth.login_started", "oauth", "openai")
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -223,8 +245,11 @@ func (h *OAuthHandler) waitForCallback(ctx context.Context, flow *pendingOAuthFl
 	tokenResp, err := flow.login.Wait(ctx)
 
 	h.mu.Lock()
-	if h.pending == flow {
-		h.pending = nil
+	if h.pending[flow.flowKey] == flow {
+		delete(h.pending, flow.flowKey)
+	}
+	if h.activeFlowKey == flow.flowKey {
+		h.activeFlowKey = ""
 	}
 	h.mu.Unlock()
 
@@ -267,10 +292,10 @@ func (h *OAuthHandler) handleManualCallback(w http.ResponseWriter, r *http.Reque
 	}
 
 	h.mu.Lock()
-	pending := h.pending
+	pending := h.pending[oauthFlowKey(r.Context(), providerName)]
 	h.mu.Unlock()
 
-	if pending == nil || pending.providerName != providerName || pending.tenantID != oauthTenantID(r.Context()) {
+	if pending == nil || pending.providerName != providerName || pending.tenantID != oauthTenantID(r.Context()) || pending.userID != store.UserIDFromContext(r.Context()) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgNoPendingOAuth)})
 		return
 	}
@@ -286,8 +311,11 @@ func (h *OAuthHandler) handleManualCallback(w http.ResponseWriter, r *http.Reque
 	pending.cancel()
 	pending.login.Shutdown()
 	h.mu.Lock()
-	if h.pending == pending {
-		h.pending = nil
+	if h.pending[pending.flowKey] == pending {
+		delete(h.pending, pending.flowKey)
+	}
+	if h.activeFlowKey == pending.flowKey {
+		h.activeFlowKey = ""
 	}
 	h.mu.Unlock()
 

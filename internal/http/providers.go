@@ -11,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -21,10 +22,10 @@ type ProvidersHandler struct {
 	store           store.ProviderStore
 	secretStore     store.ConfigSecretsStore
 	providerReg     *providers.Registry
-	gatewayAddr     string                         // for injecting MCP bridge into Claude CLI providers
-	mcpLookup       providers.MCPServerLookup       // optional: resolves per-agent MCP servers
+	gatewayAddr     string                           // for injecting MCP bridge into Claude CLI providers
+	mcpLookup       providers.MCPServerLookup        // optional: resolves per-agent MCP servers
 	apiBaseFallback func(providerType string) string // optional: config/env fallback for api_base
-	cliMu           sync.Mutex                      // serializes Claude CLI provider create to prevent duplicates
+	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 	sysConfigStore  store.SystemConfigStore
 }
@@ -104,7 +105,7 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth("", next)
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 // maskAPIKey replaces non-empty API keys with "***".

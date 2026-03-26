@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -358,7 +360,54 @@ func TestOAuthHandlerProviderLogoutRoute(t *testing.T) {
 	}
 }
 
-func TestOAuthHandlerStartReplacesPendingFlow(t *testing.T) {
+func TestProvidersHandlerRequiresAdmin(t *testing.T) {
+	token := "operator-key"
+	setupTestCache(t, map[string]*store.APIKeyData{
+		crypto.HashAPIKey(token): {
+			ID:       uuid.New(),
+			Scopes:   []string{"operator.write"},
+			TenantID: store.MasterTenantID,
+		},
+	})
+
+	h := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/v1/providers", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status code = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestOAuthHandlerRequiresAdmin(t *testing.T) {
+	token := "operator-key"
+	setupTestCache(t, map[string]*store.APIKeyData{
+		crypto.HashAPIKey(token): {
+			ID:       uuid.New(),
+			Scopes:   []string{"operator.write"},
+			TenantID: store.MasterTenantID,
+		},
+	})
+	h := newTestOAuthHandler(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest("GET", "/v1/auth/openai/status", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status code = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestOAuthHandlerStartReusesPendingFlowForSameRequester(t *testing.T) {
 	h := newTestOAuthHandler(t, "")
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -373,25 +422,108 @@ func TestOAuthHandlerStartReplacesPendingFlow(t *testing.T) {
 	if w1.Code != http.StatusOK {
 		t.Fatalf("first start status = %d, want %d", w1.Code, http.StatusOK)
 	}
-	if h.pending != nil {
-		defer func() {
-			h.pending.cancel()
-			h.pending.login.Shutdown()
-		}()
+	key := oauthFlowKey(req1.Context(), "codex-work")
+	firstPending := h.pending[key]
+	if firstPending == nil {
+		t.Fatal("pending flow = nil after first start")
 	}
-	firstPending := h.pending
+	defer func() {
+		firstPending.cancel()
+		firstPending.login.Shutdown()
+	}()
 
-	req2 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-personal/start", nil)
+	req2 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-work/start", nil)
 	w2 := httptest.NewRecorder()
 	mux.ServeHTTP(w2, req2)
 
 	if w2.Code != http.StatusOK {
 		t.Fatalf("second start status = %d, want %d", w2.Code, http.StatusOK)
 	}
-	if h.pending == nil {
-		t.Fatal("pending flow = nil after replacement")
+	if h.pending[key] == nil {
+		t.Fatal("pending flow = nil after second start")
 	}
-	if h.pending == firstPending {
-		t.Fatal("pending flow was not replaced")
+	if h.pending[key] != firstPending {
+		t.Fatal("pending flow should be reused for the same requester")
+	}
+}
+
+func TestOAuthHandlerStartRejectsConcurrentFlowForDifferentRequester(t *testing.T) {
+	h := newTestOAuthHandler(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req1 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-work/start", nil)
+	req1.Header.Set("X-GoClaw-User-Id", "alice")
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
+
+	if w1.Code == http.StatusInternalServerError {
+		t.Skip("port 1455 unavailable, skipping")
+	}
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first start status = %d, want %d", w1.Code, http.StatusOK)
+	}
+	key := oauthFlowKey(req1.Context(), "codex-work")
+	firstPending := h.pending[key]
+	if firstPending == nil {
+		t.Fatal("pending flow = nil after first start")
+	}
+	defer func() {
+		firstPending.cancel()
+		firstPending.login.Shutdown()
+	}()
+
+	req2 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-personal/start", nil)
+	req2.Header.Set("X-GoClaw-User-Id", "bob")
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusConflict {
+		t.Fatalf("second start status = %d, want %d", w2.Code, http.StatusConflict)
+	}
+	if h.pending[key] != firstPending {
+		t.Fatal("first pending flow should remain active")
+	}
+}
+
+func TestOAuthHandlerManualCallbackRequiresSameRequester(t *testing.T) {
+	h := newTestOAuthHandler(t, "")
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req1 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-work/start", nil)
+	req1.Header.Set("X-GoClaw-User-Id", "alice")
+	w1 := httptest.NewRecorder()
+	mux.ServeHTTP(w1, req1)
+
+	if w1.Code == http.StatusInternalServerError {
+		t.Skip("port 1455 unavailable, skipping")
+	}
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first start status = %d, want %d", w1.Code, http.StatusOK)
+	}
+	key := oauthFlowKey(req1.Context(), "codex-work")
+	firstPending := h.pending[key]
+	if firstPending == nil {
+		t.Fatal("pending flow = nil after first start")
+	}
+	defer func() {
+		firstPending.cancel()
+		firstPending.login.Shutdown()
+	}()
+
+	req2 := httptest.NewRequest("POST", "/v1/auth/chatgpt/codex-work/callback", nil)
+	req2.Header.Set("X-GoClaw-User-Id", "bob")
+	req2 = httptest.NewRequest(
+		"POST",
+		"/v1/auth/chatgpt/codex-work/callback",
+		strings.NewReader(`{"redirect_url":"http://localhost:1455/auth/callback?code=test&state=wrong"}`),
+	)
+	req2.Header.Set("X-GoClaw-User-Id", "bob")
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want %d", w2.Code, http.StatusBadRequest)
 	}
 }

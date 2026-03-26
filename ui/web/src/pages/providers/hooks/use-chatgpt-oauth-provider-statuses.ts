@@ -16,7 +16,7 @@ export interface ChatGPTOAuthProviderStatus {
   availability: ChatGPTOAuthAvailability;
 }
 
-export function useChatGPTOAuthProviderStatuses(providers: ProviderData[]) {
+export function useChatGPTOAuthProviderStatuses(providers: ProviderData[], enabled = true) {
   const http = useHttp();
   const oauthProviders = useMemo(
     () => providers.filter((provider) => provider.provider_type === "chatgpt_oauth"),
@@ -26,7 +26,7 @@ export function useChatGPTOAuthProviderStatuses(providers: ProviderData[]) {
 
   const query = useQuery({
     queryKey: queryKeys.providers.chatgptOAuthStatuses(providerKeys),
-    enabled: oauthProviders.length > 0,
+    enabled: enabled && oauthProviders.length > 0,
     staleTime: 10_000,
     queryFn: async () => Promise.all(
       oauthProviders.map(async (provider) => {
