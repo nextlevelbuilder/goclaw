@@ -6,7 +6,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
-import { PageHeader } from "@/components/shared/page-header";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -355,53 +354,43 @@ export function AgentCodexPoolPage() {
         : "warning";
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden p-4 sm:p-6">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="mb-3 shrink-0 self-start gap-1.5 px-0"
-        onClick={() => navigate(`/agents/${agent.id}`)}
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {t("chatgptOAuthRouting.backToAgent")}
-      </Button>
-
-      <div className="shrink-0">
-        <PageHeader
-          title={t("chatgptOAuthRouting.pageTitle")}
-          description={t("chatgptOAuthRouting.pageDescription", { name: title })}
-          actions={
-            canManageProviders ? (
-              <Button asChild variant="outline" size="sm">
-                <Link to={ROUTES.PROVIDERS}>
-                  {t("chatgptOAuthRouting.openProviders")}
-                </Link>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden p-3 sm:p-4 xl:p-5 [@media(max-height:760px)]:p-2.5">
+      <section className="shrink-0 rounded-xl border bg-card/70 px-3 py-2.5 shadow-sm sm:px-4 sm:py-3 [@media(max-height:760px)]:py-2">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between [@media(max-height:760px)]:gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col items-start gap-1.5 [@media(max-height:760px)]:flex-row [@media(max-height:760px)]:items-center [@media(max-height:760px)]:gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mb-1.5 h-7 gap-1.5 px-2 text-xs sm:h-8 sm:px-2.5 sm:text-sm [@media(max-height:760px)]:mb-0 [@media(max-height:760px)]:h-7 [@media(max-height:760px)]:px-1.5"
+                onClick={() => navigate(`/agents/${agent.id}`)}
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {t("chatgptOAuthRouting.backToAgent")}
               </Button>
-            ) : undefined
-          }
-        />
-      </div>
 
-      {!isEligible ? (
-        <Alert className="mt-4 shrink-0">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>
-            {t("chatgptOAuthRouting.pageUnsupportedTitle")}
-          </AlertTitle>
-          <AlertDescription>
-            {t("chatgptOAuthRouting.pageUnsupportedDescription")}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-          <section
-            className={cn(
-              "shrink-0 rounded-xl border bg-card p-3",
-              summaryTone === "healthy" && "border-emerald-500/30",
-              summaryTone === "warning" && "border-amber-500/30",
-            )}
-          >
-            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl [@media(max-height:760px)]:text-lg">
+                {t("chatgptOAuthRouting.pageTitle")}
+              </h1>
+            </div>
+            <p className="mt-1 max-w-3xl text-xs text-muted-foreground sm:text-sm [@media(max-height:760px)]:hidden">
+              {t("chatgptOAuthRouting.pageDescription", { name: title })}
+            </p>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 [@media(max-height:760px)]:mt-1.5">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "px-2.5 py-1 font-semibold",
+                  summaryTone === "healthy" &&
+                    "border-emerald-500/30 bg-emerald-500/[0.07] text-emerald-700 dark:text-emerald-200",
+                  summaryTone === "warning" &&
+                    "border-amber-500/30 bg-amber-500/[0.08] text-amber-800 dark:text-amber-200",
+                  summaryTone === "manual" && "border-border/70 bg-muted/20",
+                )}
+              >
+                {t(`chatgptOAuthRouting.verdict.${summaryTone}.title`)}
+              </Badge>
               <Badge variant="outline">
                 {t(strategyLabelKey(savedStrategy))}
               </Badge>
@@ -410,18 +399,13 @@ export function AgentCodexPoolPage() {
                   ? t("chatgptOAuthRouting.mode.inherit")
                   : t("chatgptOAuthRouting.mode.custom")}
               </Badge>
-              <Badge variant="outline">
+              <Badge variant="outline" className="[@media(max-height:760px)]:hidden">
                 {recentRequestCount > 0
                   ? t("chatgptOAuthRouting.sampleBadge", {
                       count: recentRequestCount,
                     })
                   : t("chatgptOAuthRouting.noSampleBadge")}
               </Badge>
-              {isDirty ? (
-                <Badge variant="warning">
-                  {t("chatgptOAuthRouting.draftBadge")}
-                </Badge>
-              ) : null}
               <Badge variant="success">
                 {t("chatgptOAuthRouting.healthState.healthy")}{" "}
                 {runtimeHealthyEntries.length}
@@ -438,19 +422,42 @@ export function AgentCodexPoolPage() {
                   {runtimeCriticalEntries.length}
                 </Badge>
               ) : null}
+              {isDirty ? (
+                <Badge variant="warning">
+                  {t("chatgptOAuthRouting.draftBadge")}
+                </Badge>
+              ) : null}
             </div>
-            <p className="mt-2 text-base font-semibold leading-snug">
-              {t(`chatgptOAuthRouting.verdict.${summaryTone}.title`)}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t(`chatgptOAuthRouting.verdict.${summaryTone}.description`, {
-                observed: observedRoutableCount,
-                count: recentRequestCount,
-              })}
-            </p>
-          </section>
+          </div>
 
-          <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)] xl:items-start xl:overflow-hidden">
+          {canManageProviders ? (
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 self-start px-3 [@media(max-height:760px)]:h-7"
+            >
+              <Link to={ROUTES.PROVIDERS}>
+                {t("chatgptOAuthRouting.openProviders")}
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      </section>
+
+      {!isEligible ? (
+        <Alert className="mt-3 shrink-0">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>
+            {t("chatgptOAuthRouting.pageUnsupportedTitle")}
+          </AlertTitle>
+          <AlertDescription>
+            {t("chatgptOAuthRouting.pageUnsupportedDescription")}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div className="mt-2 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden [@media(max-height:760px)]:gap-2">
+          <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto overscroll-contain lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.95fr)] lg:items-start lg:overflow-hidden [@media(max-height:760px)]:gap-2">
             <CodexPoolActivityPanel
               entries={liveEntries}
               strategy={savedStrategy}
@@ -464,7 +471,7 @@ export function AgentCodexPoolPage() {
               className="h-full min-h-0"
             />
 
-            <div className="flex min-h-0 flex-col gap-4 overflow-hidden xl:h-full xl:self-stretch">
+            <div className="flex min-h-0 flex-col gap-4 overflow-hidden lg:h-full lg:self-stretch">
               <ChatGPTOAuthRoutingSection
                 currentProvider={agent.provider}
                 providers={providers}

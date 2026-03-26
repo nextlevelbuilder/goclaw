@@ -75,14 +75,6 @@ function routeLabelKey(
   return "chatgptOAuthRouting.blockedNowTitle";
 }
 
-function strategyLabelKey(
-  strategy: EffectiveChatGPTOAuthRoutingStrategy,
-): string {
-  if (strategy === "round_robin") return "chatgptOAuthRouting.strategy.roundRobin";
-  if (strategy === "priority_order") return "chatgptOAuthRouting.strategy.priorityOrder";
-  return "chatgptOAuthRouting.strategy.primaryFirst";
-}
-
 function roleBadgeClass(role: "preferred" | "extra"): string {
   if (role === "preferred") {
     return "border-primary/35 bg-primary/12 text-foreground shadow-sm dark:border-primary/40 dark:bg-primary/18";
@@ -104,7 +96,7 @@ function StateGroup({
   emptyLabel: string;
 }) {
   return (
-    <div className="self-start rounded-lg border bg-muted/10 px-3 py-2.5">
+    <div className="self-start rounded-lg border bg-muted/10 px-2.5 py-2 [@media(max-height:760px)]:px-2 [@media(max-height:760px)]:py-1.5">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {title}
@@ -248,36 +240,39 @@ export function ChatGPTOAuthRoutingSection({
 
   return (
     <Card className={cn("flex min-h-0 flex-col gap-0 overflow-hidden", className)}>
-      <CardHeader className="border-b bg-muted/20 px-4 py-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <CardTitle className="text-base">
+      <CardHeader className="border-b bg-muted/20 px-3 py-2 lg:px-4 lg:py-2.5 [@media(max-height:860px)]:py-1.5">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="min-w-0">
+            <CardTitle className="text-sm sm:text-[15px] lg:text-base [@media(max-height:860px)]:text-[14px]">
               {title ?? t("chatgptOAuthRouting.controlTitle")}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="mt-0.5 hidden text-xs text-muted-foreground 2xl:block 2xl:line-clamp-2 [@media(min-width:1800px)]:line-clamp-none [@media(max-height:860px)]:hidden">
               {description ?? t("chatgptOAuthRouting.controlDescription")}
             </CardDescription>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {showOverrideMode ? (
-              <Badge variant={mode === "inherit" ? "secondary" : "outline"}>
+              <Badge
+                variant={mode === "inherit" ? "secondary" : "outline"}
+                className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5"
+              >
                 {mode === "inherit"
                   ? t("chatgptOAuthRouting.mode.inherit")
                   : t("chatgptOAuthRouting.mode.custom")}
               </Badge>
             ) : null}
             {!canManageProviders ? (
-              <Badge variant="outline">
+              <Badge variant="outline" className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5">
                 {t("chatgptOAuthRouting.viewerMode")}
               </Badge>
             ) : null}
             {isDirty ? (
-              <Badge variant="warning">
+              <Badge variant="warning" className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5">
                 {t("chatgptOAuthRouting.draftBadge")}
               </Badge>
             ) : null}
             {(quotaLoading || isLoading) ? (
-              <Badge variant="outline">
+              <Badge variant="outline" className="h-6 px-2 text-[11px] [@media(max-height:860px)]:h-5">
                 {t("chatgptOAuthRouting.quota.checking")}
               </Badge>
             ) : null}
@@ -285,28 +280,22 @@ export function ChatGPTOAuthRoutingSection({
         </div>
       </CardHeader>
 
-      <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-3">
+      <CardContent className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-2.5 lg:px-4 lg:py-3 [@media(max-height:760px)]:space-y-2 [@media(max-height:760px)]:py-2">
         {showOverrideMode ? (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
+          <section className="space-y-2.5 [@media(max-height:760px)]:space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {t("chatgptOAuthRouting.mode.label")}
               </p>
-              {providerDefaultsAvailable ? (
-                <Badge variant="outline">
-                  {t("chatgptOAuthRouting.mode.providerDefaultSummary", {
-                    count: 1 + defaultRouting.extraProviderNames.length,
-                  })}
-                </Badge>
-              ) : null}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-1.5 xl:grid-cols-2">
               <Button
                 type="button"
                 variant={mode === "inherit" ? "default" : "outline"}
                 onClick={() => setMode("inherit")}
                 disabled={!canManageProviders || !providerDefaultsAvailable}
+                className="h-9 [@media(max-height:760px)]:h-8"
               >
                 {t("chatgptOAuthRouting.mode.inherit")}
               </Button>
@@ -315,41 +304,25 @@ export function ChatGPTOAuthRoutingSection({
                 variant={mode === "custom" ? "default" : "outline"}
                 onClick={() => setMode("custom")}
                 disabled={!canManageProviders}
+                className="h-9 [@media(max-height:760px)]:h-8"
               >
                 {t("chatgptOAuthRouting.mode.custom")}
               </Button>
             </div>
 
-            {providerDefaultsAvailable ? (
-              <div className="rounded-lg border bg-muted/10 px-3 py-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">
-                    {t(strategyLabelKey(defaultRouting.strategy))}
-                  </Badge>
-                  <Badge variant="outline">
-                    {t("chatgptOAuthRouting.readySummary", {
-                      ready: defaultRouting.extraProviderNames.length,
-                      total: defaultRouting.extraProviderNames.length,
-                    })}
-                  </Badge>
-                </div>
-              </div>
-            ) : (
+            {!providerDefaultsAvailable ? (
               <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
                 {t("chatgptOAuthRouting.mode.noProviderDefault")}
               </div>
-            )}
+            ) : null}
           </section>
         ) : null}
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
+        <section className="space-y-2.5 [@media(max-height:760px)]:space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("chatgptOAuthRouting.strategyLabel")}
             </p>
-            <Badge variant="outline">
-              {t(strategyLabelKey(selectedStrategy))}
-            </Badge>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-3">
@@ -358,6 +331,7 @@ export function ChatGPTOAuthRoutingSection({
               variant={selectedStrategy === "primary_first" ? "default" : "outline"}
               onClick={() => setStrategy("primary_first")}
               disabled={!canManageProviders || mode === "inherit"}
+              className="h-9 text-xs sm:text-sm [@media(max-height:760px)]:h-8"
             >
               {t("chatgptOAuthRouting.strategy.primaryFirst")}
             </Button>
@@ -366,6 +340,7 @@ export function ChatGPTOAuthRoutingSection({
               variant={selectedStrategy === "round_robin" ? "default" : "outline"}
               onClick={() => setStrategy("round_robin")}
               disabled={!canManageProviders || mode === "inherit"}
+              className="h-9 text-xs sm:text-sm [@media(max-height:760px)]:h-8"
             >
               {t("chatgptOAuthRouting.strategy.roundRobin")}
             </Button>
@@ -374,23 +349,18 @@ export function ChatGPTOAuthRoutingSection({
               variant={selectedStrategy === "priority_order" ? "default" : "outline"}
               onClick={() => setStrategy("priority_order")}
               disabled={!canManageProviders || mode === "inherit"}
+              className="h-9 text-xs sm:text-sm [@media(max-height:760px)]:h-8"
             >
               {t("chatgptOAuthRouting.strategy.priorityOrder")}
             </Button>
           </div>
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
+        <section className="space-y-2.5 [@media(max-height:760px)]:space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("chatgptOAuthRouting.availableExtraAccountsLabel")}
             </p>
-            <Badge variant="outline">
-              {t("chatgptOAuthRouting.readySummary", {
-                ready: readyExtraProviders.length,
-                total: allExtraProviders.length,
-              })}
-            </Badge>
           </div>
 
           {isLoading ? (
@@ -398,7 +368,7 @@ export function ChatGPTOAuthRoutingSection({
               {t("chatgptOAuthRouting.loadingAccounts")}
             </div>
           ) : readyExtraProviders.length > 0 ? (
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 xl:grid-cols-2">
               {readyExtraProviders.map((provider) => {
                 const selected = selectedExtras.has(provider.name);
                 const failureKind = getQuotaFailureKind(
@@ -411,7 +381,7 @@ export function ChatGPTOAuthRoutingSection({
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "h-10 justify-start gap-1.5 rounded-lg px-3 text-left",
+                      "h-8 justify-start gap-1.5 rounded-lg px-3 text-left text-[13px] xl:h-9 xl:text-sm [@media(max-height:760px)]:h-8",
                       selected &&
                         "border-primary/40 bg-primary/10 text-foreground hover:bg-primary/15 dark:border-primary/30 dark:bg-primary/10",
                       !selected &&
@@ -437,12 +407,12 @@ export function ChatGPTOAuthRoutingSection({
           )}
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
+        <section className="space-y-3 [@media(max-height:760px)]:space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("chatgptOAuthRouting.selectedAccountsLabel")}
             </p>
-            <Badge variant="outline">
+            <Badge variant="outline" className="h-6 px-2 text-[11px]">
               {t("chatgptOAuthRouting.selectedCount", {
                 count: selectedEntries.length,
               })}
@@ -450,27 +420,42 @@ export function ChatGPTOAuthRoutingSection({
           </div>
 
           {selectedEntries.length > 0 ? (
-            <div className="rounded-lg border bg-muted/10 p-3">
-              <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border bg-muted/10 p-3 [@media(max-height:760px)]:p-2.5">
+              <div className="grid gap-1.5 xl:grid-cols-2 [@media(max-height:760px)]:gap-1">
                 {selectedEntries.map((entry) => (
                   <div
                     key={entry.name}
-                    className="rounded-lg border bg-background/80 px-3 py-2"
+                    className="rounded-lg border bg-background/80 px-2.5 py-2 [@media(max-height:760px)]:px-2 [@media(max-height:760px)]:py-1.5"
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{entry.label}</span>
+                      <span className="min-w-0 truncate text-sm font-medium">
+                        {entry.label}
+                      </span>
                       <Badge
                         variant="outline"
-                        className={roleBadgeClass(entry.role)}
+                        className={cn(
+                          "h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs",
+                          roleBadgeClass(entry.role),
+                        )}
                       >
                         {t(`chatgptOAuthRouting.role.${entry.role}`)}
                       </Badge>
-                      <Badge variant={statusBadgeVariant(entry.availability)}>
-                        {t(`chatgptOAuthRouting.status.${entry.availability}`)}
-                      </Badge>
-                      <Badge variant={routeBadgeVariant(entry.routeReadiness)}>
-                        {t(routeLabelKey(entry.routeReadiness))}
-                      </Badge>
+                      {entry.availability !== "ready" && (
+                        <Badge
+                          variant={statusBadgeVariant(entry.availability)}
+                          className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                        >
+                          {t(`chatgptOAuthRouting.status.${entry.availability}`)}
+                        </Badge>
+                      )}
+                      {entry.routeReadiness !== "healthy" && (
+                        <Badge
+                          variant={routeBadgeVariant(entry.routeReadiness)}
+                          className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                        >
+                          {t(routeLabelKey(entry.routeReadiness))}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -483,12 +468,12 @@ export function ChatGPTOAuthRoutingSection({
           )}
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-2.5 [@media(max-height:760px)]:space-y-2">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("chatgptOAuthRouting.poolStateTitle")}
           </p>
 
-          <div className="grid items-start gap-2 xl:grid-cols-3">
+          <div className="grid items-start gap-1.5 xl:grid-cols-3 [@media(max-height:760px)]:gap-1">
             <StateGroup
               title={t("chatgptOAuthRouting.routerActiveTitle")}
               count={routerActiveEntries.length}
@@ -526,8 +511,8 @@ export function ChatGPTOAuthRoutingSection({
         </section>
       </CardContent>
 
-      {canManageProviders && onSave ? (
-        <div className="border-t bg-background/70 px-4 py-3">
+      {canManageProviders && onSave && (isDirty || saving) ? (
+        <div className="border-t bg-background/70 px-3 py-2 lg:px-4 [@media(max-height:760px)]:py-1.5">
           <div className="flex items-center justify-end">
             <Button
               type="button"

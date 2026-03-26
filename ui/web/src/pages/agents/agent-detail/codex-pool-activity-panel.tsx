@@ -131,11 +131,11 @@ function poolRoleBadgeClass(role: CodexPoolEntry["role"]): string {
 
 function MonitorStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="h-full rounded-lg border bg-background/70 px-2.5 py-2">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="h-full rounded-md border bg-background/70 px-2 py-1 xl:px-2.5 xl:py-1.5">
+      <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground xl:text-[10px]">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold leading-tight tabular-nums">
+      <p className="mt-0.5 text-[13px] font-semibold leading-tight tabular-nums xl:mt-1 xl:text-sm">
         {value}
       </p>
     </div>
@@ -144,11 +144,11 @@ function MonitorStat({ label, value }: { label: string; value: string }) {
 
 function MemberMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="h-full rounded-md border bg-background/70 px-2.5 py-1.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="flex h-full items-center justify-between gap-1 rounded-md border bg-background/70 px-2 py-1 xl:px-2.5">
+      <p className="truncate text-[9px] font-medium text-muted-foreground xl:text-[10px]">
         {label}
       </p>
-      <p className="mt-1 text-sm font-semibold leading-tight tabular-nums">
+      <p className="shrink-0 text-[12px] font-semibold leading-tight tabular-nums xl:text-[13px]">
         {value}
       </p>
     </div>
@@ -320,7 +320,9 @@ function CodexPoolRecentRequestsList({
               <div
                 key={request.span_id}
                 className={cn(
-                  "relative isolate flex min-h-[6.5rem] w-[15.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-lg border bg-background/80 p-2.5",
+                  "relative isolate flex min-h-[4.85rem] w-[12.75rem] shrink-0 snap-start flex-col overflow-hidden rounded-lg border bg-background/80 p-2.5",
+                  "lg:min-h-[5.35rem] lg:w-[13.75rem] xl:min-h-[5.85rem] xl:w-[14.75rem] sm:xl:w-[15rem]",
+                  "[@media(max-height:760px)]:min-h-[4.35rem] [@media(max-height:760px)]:w-[11.75rem] [@media(max-height:760px)]:p-1.5",
                   "transition-colors hover:bg-background",
                   accent.card,
                 )}
@@ -340,11 +342,30 @@ function CodexPoolRecentRequestsList({
                   )}
                 />
 
-                <div className="relative z-10 flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-start gap-2">
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "absolute right-1.5 top-1.5 z-10 h-5 w-5 shrink-0 rounded-full border border-transparent xl:right-2 xl:top-2 xl:h-6 xl:w-6",
+                    accent.trace,
+                  )}
+                >
+                  <Link
+                    to={`/traces/${request.trace_id}`}
+                    aria-label={t("chatgptOAuthRouting.openTrace")}
+                    title={t("chatgptOAuthRouting.openTrace")}
+                  >
+                    <ArrowUpRight className="h-2.5 w-2.5 xl:h-3 xl:w-3" />
+                  </Link>
+                </Button>
+
+                <div className="relative z-10 flex min-w-0 items-start gap-2 pr-6 xl:pr-7">
+                  <div className="flex min-w-0 flex-1 items-start gap-2">
                     <div
                       className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums",
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] font-semibold tabular-nums",
+                        "xl:h-6 xl:w-6 xl:text-[10px]",
                         accent.index,
                       )}
                     >
@@ -360,86 +381,70 @@ function CodexPoolRecentRequestsList({
                             accent.marker,
                           )}
                         />
-                        <p className="truncate text-sm font-semibold leading-tight">
+                        <p className="truncate text-[13px] font-semibold leading-tight xl:text-sm">
                           {providerSummary}
                         </p>
                       </div>
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <p className="truncate text-[10px] text-muted-foreground xl:text-[11px]">
                         {request.model || t("chatgptOAuthRouting.unknownModel")}
                       </p>
                     </div>
                   </div>
-
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="icon"
-                    className={cn(
-                      "h-7 w-7 shrink-0 rounded-full border border-transparent",
-                      accent.trace,
-                    )}
-                  >
-                    <Link
-                      to={`/traces/${request.trace_id}`}
-                      aria-label={t("chatgptOAuthRouting.openTrace")}
-                      title={t("chatgptOAuthRouting.openTrace")}
-                    >
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                    </Link>
-                  </Button>
                 </div>
 
-                <div className="relative z-10 mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <div className="relative z-10 mt-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10px] text-muted-foreground xl:mt-2 xl:gap-2 xl:text-[11px]">
                   <Badge
                     variant={request.used_failover ? "warning" : "outline"}
-                    className={request.used_failover ? undefined : accent.directBadge}
+                    className={cn(
+                      "h-5 shrink-0 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs",
+                      request.used_failover ? undefined : accent.directBadge,
+                    )}
                   >
                     {request.used_failover
                       ? t("chatgptOAuthRouting.monitorFailoverLabel")
                       : t("chatgptOAuthRouting.monitorDirectLabel")}
                   </Badge>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 whitespace-nowrap font-medium tabular-nums",
-                      accent.pill,
-                    )}
-                  >
+                  <span className="shrink-0 font-medium tabular-nums">
                     {formatRelativeTime(request.started_at)}
                   </span>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 whitespace-nowrap font-medium tabular-nums",
-                      accent.pill,
-                    )}
-                  >
+                  <span aria-hidden className="shrink-0 text-muted-foreground/70">
+                    ·
+                  </span>
+                  <span className="shrink-0 font-medium tabular-nums">
                     {formatDuration(request.duration_ms)}
                   </span>
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-2 py-0.5 whitespace-nowrap",
-                      accent.pill,
-                    )}
-                  >
-                    {t("chatgptOAuthRouting.attemptCount", {
-                      count: request.attempt_count,
-                    })}
-                  </span>
+                  {request.attempt_count > 1 && (
+                    <>
+                      <span
+                        aria-hidden
+                        className="shrink-0 text-muted-foreground/70"
+                      >
+                        ·
+                      </span>
+                      <span className="shrink-0 font-medium tabular-nums">
+                        {request.attempt_count}x
+                      </span>
+                    </>
+                  )}
                   {request.status !== "completed" && (
-                    <Badge variant={requestStatusVariant(request.status)}>
+                    <Badge
+                      variant={requestStatusVariant(request.status)}
+                      className="h-5 shrink-0 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                    >
                       {request.status}
                     </Badge>
                   )}
                 </div>
 
                 {request.used_failover &&
-                  request.failover_providers &&
-                  request.failover_providers.length > 0 && (
-                    <p className="relative z-10 mt-1 truncate text-[11px] text-muted-foreground">
-                      {t("chatgptOAuthRouting.failoverHint", {
-                        providers: request.failover_providers.join(", "),
-                      })}
-                    </p>
-                  )}
+                request.failover_providers &&
+                request.failover_providers.length > 0 && (
+                  <p className="relative z-10 mt-0.5 truncate text-[10px] text-muted-foreground xl:text-[11px]">
+                    {t("chatgptOAuthRouting.failoverHint", {
+                      providers: request.failover_providers.join(", "),
+                    })}
+                  </p>
+                )}
               </div>
             );
           })}
@@ -572,28 +577,28 @@ export function CodexPoolActivityPanel({
 
   return (
     <Card className={cn("flex h-full min-h-0 flex-col gap-0 overflow-hidden", className)}>
-      <CardHeader className="border-b bg-muted/20 px-4 py-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <CardHeader className="border-b bg-muted/20 px-3 py-2.5 lg:px-4 lg:py-3 [@media(max-height:760px)]:py-1.5">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between [@media(max-height:760px)]:gap-1">
           <div>
-            <CardTitle className="text-base">
+            <CardTitle className="text-sm sm:text-base [@media(max-height:760px)]:text-[15px]">
               {t("chatgptOAuthRouting.activityTitle")}
             </CardTitle>
-            <p className="text-sm text-muted-foreground">
+            <p className="hidden text-xs text-muted-foreground xl:block [@media(max-height:760px)]:hidden">
               {t("chatgptOAuthRouting.activityDescription")}
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">
+          <div className="flex flex-wrap items-center gap-2 [@media(max-height:760px)]:gap-1.5">
+            <Badge variant="outline" className="h-6 px-2 text-[11px] [@media(max-height:760px)]:h-5">
               {t(strategyLabelKey(strategy))}
             </Badge>
             {blockedEntries.length > 0 && (
-              <Badge variant="warning">
+              <Badge variant="warning" className="h-6 px-2 text-[11px] [@media(max-height:760px)]:h-5">
                 {t("chatgptOAuthRouting.blockedNowTitle")} {blockedEntries.length}
               </Badge>
             )}
             {failoverOnlyProviders > 0 && (
-              <Badge variant="warning">
+              <Badge variant="warning" className="h-6 px-2 text-[11px] [@media(max-height:760px)]:h-5">
                 {t("chatgptOAuthRouting.failoverOnlyProviders", {
                   count: failoverOnlyProviders,
                 })}
@@ -603,7 +608,7 @@ export function CodexPoolActivityPanel({
               type="button"
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="h-8 gap-1.5 px-2.5 [@media(max-height:760px)]:h-7 [@media(max-height:760px)]:px-2"
               onClick={onRefresh}
               disabled={fetching}
             >
@@ -616,8 +621,8 @@ export function CodexPoolActivityPanel({
         </div>
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-4 py-3">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-3 py-2.5 lg:px-4 lg:py-3 [@media(max-height:760px)]:gap-2 [@media(max-height:760px)]:py-2">
+        <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4 [@media(max-height:760px)]:gap-1">
           <MonitorStat
             label={t("chatgptOAuthRouting.metrics.poolSize")}
             value={String(entries.length)}
@@ -639,9 +644,9 @@ export function CodexPoolActivityPanel({
           />
         </div>
 
-        <section className="shrink-0 rounded-lg border bg-muted/5 p-2.5">
+        <section className="shrink-0 rounded-lg border bg-muted/5 p-2 [@media(max-height:760px)]:p-1.5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">
+            <h3 className="text-sm font-medium [@media(max-height:760px)]:text-[13px]">
               {t("chatgptOAuthRouting.sequenceTitle")}
             </h3>
             <Badge variant="outline">
@@ -655,13 +660,13 @@ export function CodexPoolActivityPanel({
             recentRequests={recentRequests}
             loading={fetching && recentRequests.length === 0}
             compact
-            className="mt-2"
+            className="mt-1.5 [@media(max-height:760px)]:mt-1"
           />
         </section>
 
-        <section className="flex min-h-0 flex-1 flex-col gap-3">
+        <section className="flex min-h-0 flex-1 flex-col gap-2.5 [@media(max-height:760px)]:gap-2">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">
+            <h3 className="text-sm font-medium [@media(max-height:760px)]:text-[13px]">
               {t("chatgptOAuthRouting.poolMembersTitle")}
             </h3>
             <Badge variant="outline">
@@ -682,14 +687,15 @@ export function CodexPoolActivityPanel({
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
-              <div className="grid auto-rows-min content-start gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))]">
+              <div className="grid auto-rows-min content-start gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,12.25rem),1fr))] lg:[grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr))] xl:[grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr))] [@media(max-height:760px)]:gap-2 [@media(max-height:760px)]:[grid-template-columns:repeat(auto-fit,minmax(min(100%,12.25rem),1fr))]">
                 {routeEntries.map((entry) => {
                   const accent = requestAccentClasses(entry.name);
                   return (
                     <div
                       key={entry.name}
                       className={cn(
-                        "relative isolate overflow-hidden rounded-lg border bg-background/80 p-2.5",
+                        "relative isolate overflow-hidden rounded-lg border bg-background/80 p-2 lg:min-h-[10.5rem] lg:p-2.5 xl:min-h-[11rem]",
+                        "[@media(max-height:760px)]:min-h-0 [@media(max-height:760px)]:p-1.5",
                         accent.card,
                       )}
                     >
@@ -713,12 +719,19 @@ export function CodexPoolActivityPanel({
                           const totalOutcomes =
                             entry.successCount + entry.failureCount;
                           const barWidths = runtimeHealthBarWidths(entry);
+                          const showAvailabilityBadge =
+                            entry.availability !== "ready";
+                          const showHealthBadge =
+                            entry.healthState !== "healthy" &&
+                            entry.healthState !== "idle";
+                          const showRouteBadge =
+                            entry.routeReadiness !== "healthy";
                           return (
                             <>
-                              <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start justify-between gap-2">
                                 <div className="min-w-0 space-y-1">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span className="inline-flex min-w-0 items-center gap-1.5 truncate text-sm font-medium">
+                                  <div className="flex flex-wrap items-center gap-1.5 xl:gap-2">
+                                    <span className="inline-flex min-w-0 items-center gap-1 truncate text-[13px] font-medium xl:gap-1.5 xl:text-sm">
                                       <span
                                         aria-hidden
                                         className={cn(
@@ -730,34 +743,44 @@ export function CodexPoolActivityPanel({
                                     </span>
                                     <Badge
                                       variant="outline"
-                                      className={poolRoleBadgeClass(entry.role)}
-                                    >
-                                      {t(`chatgptOAuthRouting.role.${entry.role}`)}
-                                    </Badge>
-                                    <Badge
-                                      variant={availabilityVariant(entry.availability)}
-                                    >
-                                      {t(
-                                        `chatgptOAuthRouting.status.${entry.availability}`,
+                                      className={cn(
+                                        "h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs",
+                                        poolRoleBadgeClass(entry.role),
                                       )}
-                                    </Badge>
-                                    <Badge
-                                      variant={runtimeHealthVariant(entry.healthState)}
-                                    >
-                                      {t(
-                                        `chatgptOAuthRouting.healthState.${entry.healthState}`,
-                                      )}
-                                    </Badge>
-                                    {entry.routeReadiness !== "healthy" && (
+                                      >
+                                        {t(`chatgptOAuthRouting.role.${entry.role}`)}
+                                      </Badge>
+                                    {showAvailabilityBadge && (
+                                      <Badge
+                                        variant={availabilityVariant(entry.availability)}
+                                        className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                                      >
+                                        {t(
+                                          `chatgptOAuthRouting.status.${entry.availability}`,
+                                        )}
+                                      </Badge>
+                                    )}
+                                    {showHealthBadge && (
+                                      <Badge
+                                        variant={runtimeHealthVariant(entry.healthState)}
+                                        className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                                      >
+                                        {t(
+                                          `chatgptOAuthRouting.healthState.${entry.healthState}`,
+                                        )}
+                                      </Badge>
+                                    )}
+                                    {showRouteBadge && (
                                       <Badge
                                         variant={routeBadgeVariant(entry.routeReadiness)}
+                                        className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
                                       >
                                         {t(routeLabelKey(entry.routeReadiness))}
                                       </Badge>
                                     )}
                                   </div>
                                   {entry.label !== entry.name && (
-                                    <p className="truncate font-mono text-xs text-muted-foreground">
+                                    <p className="truncate font-mono text-[10px] text-muted-foreground xl:text-xs">
                                       {entry.name}
                                     </p>
                                   )}
@@ -768,41 +791,45 @@ export function CodexPoolActivityPanel({
                                     asChild
                                     variant="ghost"
                                     size="icon"
-                                    className={cn("h-8 w-8 shrink-0 rounded-full", accent.trace)}
+                                    className={cn(
+                                      "h-7 w-7 shrink-0 rounded-full xl:h-8 xl:w-8",
+                                      accent.trace,
+                                    )}
                                   >
                                     <Link
                                       to={entry.providerHref}
                                       aria-label={t("chatgptOAuthRouting.openProvider")}
                                       title={t("chatgptOAuthRouting.openProvider")}
                                     >
-                                      <ArrowUpRight className="h-4 w-4" />
+                                      <ArrowUpRight className="h-3.5 w-3.5 xl:h-4 xl:w-4" />
                                     </Link>
                                   </Button>
                                 )}
                               </div>
 
-                              <div className="mt-2 rounded-md border bg-background/75 px-2.5 py-1.5">
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                      {t("chatgptOAuthRouting.runtimeHealthTitle")}
+                              <ChatGPTOAuthQuotaStrip
+                                quota={entry.quota}
+                                className="mt-1 xl:mt-1.5"
+                                compact
+                              />
+
+                              <div className="mt-1 rounded-md border bg-background/75 px-2 py-1.5 xl:mt-1.5 xl:px-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  {totalOutcomes > 0 ? (
+                                    <p className="truncate text-[11px] font-medium text-foreground xl:text-xs">
+                                      {t(
+                                        "chatgptOAuthRouting.runtimeHealthSummary",
+                                        {
+                                          rate: entry.successRate,
+                                          score: entry.healthScore,
+                                        },
+                                      )}
                                     </p>
-                                    {totalOutcomes > 0 ? (
-                                      <p className="mt-1 text-xs text-muted-foreground">
-                                        {t(
-                                          "chatgptOAuthRouting.runtimeHealthSummary",
-                                          {
-                                            rate: entry.successRate,
-                                            score: entry.healthScore,
-                                          },
-                                        )}
-                                      </p>
-                                    ) : (
-                                      <p className="mt-1 text-xs text-muted-foreground">
-                                        {t("chatgptOAuthRouting.noRuntimeSample")}
-                                      </p>
-                                    )}
-                                  </div>
+                                  ) : (
+                                    <p className="truncate text-[11px] text-muted-foreground xl:text-xs">
+                                      {t("chatgptOAuthRouting.noRuntimeSample")}
+                                    </p>
+                                  )}
                                   {entry.consecutiveFailures > 0 && (
                                     <Badge
                                       variant={
@@ -810,6 +837,7 @@ export function CodexPoolActivityPanel({
                                           ? "destructive"
                                           : "warning"
                                       }
+                                      className="h-5 shrink-0 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
                                     >
                                       {t("chatgptOAuthRouting.failureStreakBadge", {
                                         count: entry.consecutiveFailures,
@@ -818,7 +846,7 @@ export function CodexPoolActivityPanel({
                                   )}
                                 </div>
 
-                                <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-muted">
+                                <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-muted xl:mt-1.5">
                                   {totalOutcomes > 0 ? (
                                     <>
                                       <div
@@ -837,7 +865,7 @@ export function CodexPoolActivityPanel({
                                   )}
                                 </div>
 
-                                <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                                <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground xl:mt-1.5 xl:gap-3 xl:text-[11px]">
                                   <span>
                                     {t("chatgptOAuthRouting.runtimeSuccessCompact", {
                                       count: entry.successCount,
@@ -848,37 +876,19 @@ export function CodexPoolActivityPanel({
                                       count: entry.failureCount,
                                     })}
                                   </span>
+                                  {entry.lastFailureAt && (
+                                    <span className="truncate">
+                                      {t("chatgptOAuthRouting.lastFailureLabel", {
+                                        value: formatRelativeTime(entry.lastFailureAt),
+                                      })}
+                                    </span>
+                                  )}
                                 </div>
-
-                                {(entry.lastSuccessAt || entry.lastFailureAt) && (
-                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                                    {entry.lastSuccessAt && (
-                                      <span>
-                                        {t("chatgptOAuthRouting.lastSuccessLabel", {
-                                          value: formatRelativeTime(entry.lastSuccessAt),
-                                        })}
-                                      </span>
-                                    )}
-                                    {entry.lastFailureAt && (
-                                      <span>
-                                        {t("chatgptOAuthRouting.lastFailureLabel", {
-                                          value: formatRelativeTime(entry.lastFailureAt),
-                                        })}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
                               </div>
 
-                              <ChatGPTOAuthQuotaStrip
-                                quota={entry.quota}
-                                className="mt-2"
-                                compact
-                              />
-
-                              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                              <div className="mt-1 grid gap-1 sm:grid-cols-3 xl:mt-1.5 xl:gap-1.5">
                                 <MemberMetric
-                                  label={t("chatgptOAuthRouting.monitorDirectUseLabel")}
+                                  label={t("chatgptOAuthRouting.monitorDirectLabel")}
                                   value={String(entry.directSelectionCount)}
                                 />
                                 <MemberMetric
