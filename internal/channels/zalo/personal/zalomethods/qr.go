@@ -18,11 +18,17 @@ import (
 	goclawprotocol "github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
+// cancelEntry wraps a CancelFunc so it can be stored and compared by pointer
+// in sync.Map.CompareAndDelete (function types are not comparable).
+type cancelEntry struct {
+	cancel context.CancelFunc
+}
+
 // QRMethods handles QR login for zalo_personal channel instances.
 type QRMethods struct {
 	instanceStore  store.ChannelInstanceStore
 	msgBus         *bus.MessageBus
-	activeSessions sync.Map // instanceID (string) -> context.CancelFunc
+	activeSessions sync.Map // instanceID (string) -> *cancelEntry
 }
 
 func NewQRMethods(s store.ChannelInstanceStore, msgBus *bus.MessageBus) *QRMethods {
@@ -54,23 +60,24 @@ func (m *QRMethods) handleQRStart(ctx context.Context, client *gateway.Client, r
 	}
 
 	qrCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	entry := &cancelEntry{cancel: cancel}
 
-	// Atomically swap cancel func; cancel any previous QR session so the user can retry.
-	if prev, loaded := m.activeSessions.Swap(params.InstanceID, cancel); loaded {
-		if cancelFn, ok := prev.(context.CancelFunc); ok {
-			cancelFn()
+	// Atomically swap cancel entry; cancel any previous QR session so the user can retry.
+	if prev, loaded := m.activeSessions.Swap(params.InstanceID, entry); loaded {
+		if prevEntry, ok := prev.(*cancelEntry); ok {
+			prevEntry.cancel()
 		}
 	}
 
 	// ACK immediately — QR arrives via event.
 	client.SendResponse(goclawprotocol.NewOKResponse(req.ID, map[string]any{"status": "started"}))
 
-	go m.runQRFlow(qrCtx, cancel, client, params.InstanceID, instID)
+	go m.runQRFlow(qrCtx, entry, client, params.InstanceID, instID)
 }
 
-func (m *QRMethods) runQRFlow(ctx context.Context, cancel context.CancelFunc, client *gateway.Client, instanceIDStr string, instanceID uuid.UUID) {
-	defer cancel()
-	defer m.activeSessions.CompareAndDelete(instanceIDStr, cancel)
+func (m *QRMethods) runQRFlow(ctx context.Context, entry *cancelEntry, client *gateway.Client, instanceIDStr string, instanceID uuid.UUID) {
+	defer entry.cancel()
+	defer m.activeSessions.CompareAndDelete(instanceIDStr, entry)
 
 	sess := protocol.NewSession()
 

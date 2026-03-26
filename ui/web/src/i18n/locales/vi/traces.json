@@ -16,6 +16,7 @@
     "time": "Thời gian"
   },
   "unnamed": "Không tên",
+  "stopRun": "Dừng chạy",
   "cached": "đã cache",
   "detail": {
     "title": "Chi tiết theo dõi",
@@ -36,7 +37,8 @@
     "spansCount": "Khoảng ({{count}})",
     "llmCalls": "LLM",
     "toolCalls": "công cụ",
-    "export": "Xuất trace"
+    "export": "Xuất trace",
+    "stopRun": "Dừng chạy"
   },
   "span": {
     "model": "Model:",
@@ -53,6 +55,9 @@
     "cached": "đã cache"
   },
   "toast": {
-    "failedLoad": "Không thể tải dữ liệu theo dõi"
+    "failedLoad": "Không thể tải dữ liệu theo dõi",
+    "abortSent": "Đã dừng chạy",
+    "abortFailed": "Không thể dừng chạy",
+    "abortNotFound": "Lệnh đã hoàn tất hoặc không tìm thấy"
   }
 }

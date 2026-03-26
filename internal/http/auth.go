@@ -156,6 +156,7 @@ type authResult struct {
 	Authenticated bool
 	KeyData       *store.APIKeyData // non-nil when authenticated via API key
 	TenantID      uuid.UUID         // resolved tenant; always concrete after resolution
+	TenantSlug    string            // resolved tenant slug for filesystem paths
 }
 
 // resolveAuth determines the caller's role from the request.
@@ -191,6 +192,7 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 		if res.TenantID == uuid.Nil {
 			res.TenantID = store.MasterTenantID
 		}
+		res.TenantSlug = resolveTenantSlug(r.Context(), res.TenantID)
 		return res
 	}
 	// API key → role from scopes
@@ -203,8 +205,10 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 			if res.TenantID == uuid.Nil {
 				res.TenantID = store.MasterTenantID
 			}
+			res.TenantSlug = resolveTenantSlug(r.Context(), res.TenantID)
 		} else {
 			res.TenantID = keyData.TenantID
+			res.TenantSlug = resolveTenantSlug(r.Context(), keyData.TenantID)
 		}
 		return res
 	}
@@ -216,7 +220,12 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 			if !allowed {
 				return authResult{}
 			}
-			return authResult{Role: permissions.RoleOperator, Authenticated: true, TenantID: tenantID}
+			return authResult{
+				Role:          permissions.RoleOperator,
+				Authenticated: true,
+				TenantID:      tenantID,
+				TenantSlug:    resolveTenantSlug(r.Context(), tenantID),
+			}
 		}
 		if err != nil {
 			slog.Warn("security.http_pairing_check_failed", "sender_id", senderID, "error", err)
@@ -244,6 +253,16 @@ func resolveScopedTenant(ctx context.Context, tenantVal string) uuid.UUID {
 	}
 	slog.Debug("security.http_tenant_scope_unresolved", "tenant", tenantVal)
 	return uuid.Nil
+}
+
+func resolveTenantSlug(ctx context.Context, tenantID uuid.UUID) string {
+	if tenantID == uuid.Nil || pkgTenantCache == nil {
+		return ""
+	}
+	if tenant, err := pkgTenantCache.GetTenant(ctx, tenantID); err == nil && tenant != nil {
+		return tenant.Slug
+	}
+	return ""
 }
 
 func resolveTenantHint(ctx context.Context, hint, userID string) (uuid.UUID, bool) {
@@ -306,6 +325,9 @@ func enrichContext(ctx context.Context, r *http.Request, auth authResult) contex
 		tenantID = store.MasterTenantID
 	}
 	ctx = store.WithTenantID(ctx, tenantID)
+	if auth.TenantSlug != "" {
+		ctx = store.WithTenantSlug(ctx, auth.TenantSlug)
+	}
 	slog.Debug("security.http_auth_resolved",
 		"path", r.URL.Path,
 		"role", string(auth.Role),

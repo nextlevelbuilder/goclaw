@@ -118,14 +118,17 @@ func (s *toolLoopState) detect(toolName string, argsHash string) (level, message
 }
 
 // recordMutation updates the read-only streak based on tool type.
-// Mutating tools reset the streak; exec is neutral (ambiguous); all others increment.
+// Mutating tools reset the streak; exec/bash/mcp are neutral (ambiguous); all others increment.
 func (s *toolLoopState) recordMutation(toolName string) {
 	if mutatingTools[toolName] {
 		s.readOnlyStreak = 0
 		return
 	}
-	if toolName == "exec" || toolName == "bash" {
-		return // ambiguous — neither reset nor increment
+	// exec/bash: ambiguous (could be ls or rm).
+	// mcp_*: user-defined external tools — GoClaw cannot determine read vs write.
+	// Neither reset nor increment the read-only streak.
+	if toolName == "exec" || toolName == "bash" || strings.HasPrefix(toolName, "mcp_") {
+		return
 	}
 	s.readOnlyStreak++
 }

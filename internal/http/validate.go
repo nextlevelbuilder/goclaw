@@ -58,7 +58,7 @@ var customToolAllowedFields = map[string]bool{
 var mcpServerAllowedFields = map[string]bool{
 	"name": true, "transport": true, "command": true, "args": true,
 	"url": true, "api_key": true, "env": true, "headers": true,
-	"enabled": true, "tool_prefix": true, "timeout_seconds": true,
+	"enabled": true, "tool_prefix": true, "timeout_sec": true,
 	"agent_id": true, "config": true, "settings": true,
 }
 
@@ -66,4 +66,5 @@ var channelInstanceAllowedFields = map[string]bool{
 	"channel_type": true, "credentials": true, "agent_id": true,
 	"enabled": true, "group_policy": true, "allow_from": true,
 	"metadata": true, "webhook_secret": true, "config": true,
+	"display_name": true,
 }

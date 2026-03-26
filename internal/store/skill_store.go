@@ -61,3 +61,64 @@ type EmbeddingSkillSearcher interface {
 	SetEmbeddingProvider(provider EmbeddingProvider)
 	BackfillSkillEmbeddings(ctx context.Context) (int, error)
 }
+
+// SkillCreateParams holds parameters for creating a managed skill.
+// Shared by PGSkillStore and SQLiteSkillStore.
+type SkillCreateParams struct {
+	Name        string
+	Slug        string
+	Description *string
+	OwnerID     string
+	Visibility  string
+	Status      string // "active", "archived" (missing deps), or "deleted" (user-deleted)
+	Version     int
+	FilePath    string
+	FileSize    int64
+	FileHash    *string
+	Frontmatter map[string]string
+}
+
+// SkillWithGrantStatus is a skill with its grant status for a specific agent.
+type SkillWithGrantStatus struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description string    `json:"description"`
+	Visibility  string    `json:"visibility"`
+	Version     int       `json:"version"`
+	Granted     bool      `json:"granted"`
+	PinnedVer   *int      `json:"pinned_version,omitempty"`
+	IsSystem    bool      `json:"is_system"`
+}
+
+// SkillManageStore extends SkillStore with CRUD, ownership, and grant operations
+// needed by HTTP upload handlers and agent tools (skill_manage, publish_skill).
+// Implemented by both PGSkillStore and SQLiteSkillStore.
+type SkillManageStore interface {
+	SkillStore
+	// CRUD
+	CreateSkillManaged(ctx context.Context, p SkillCreateParams) (uuid.UUID, error)
+	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error
+	DeleteSkill(ctx context.Context, id uuid.UUID) error
+	ToggleSkill(ctx context.Context, id uuid.UUID, enabled bool) error
+	// Queries
+	GetSkillByID(ctx context.Context, id uuid.UUID) (SkillInfo, bool)
+	GetSkillOwnerID(ctx context.Context, id uuid.UUID) (string, bool)
+	GetSkillOwnerIDBySlug(ctx context.Context, slug string) (string, bool)
+	GetNextVersion(ctx context.Context, slug string) int
+	GetNextVersionLocked(ctx context.Context, slug string) (int, func() error, error)
+	IsSystemSkill(slug string) bool
+	// System skill management
+	ListAllSkills(ctx context.Context) []SkillInfo
+	ListAllSystemSkills(ctx context.Context) []SkillInfo
+	ListSystemSkillDirs(ctx context.Context) map[string]string
+	StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error
+	// Grants
+	GrantToAgent(ctx context.Context, skillID, agentID uuid.UUID, version int, grantedBy string) error
+	RevokeFromAgent(ctx context.Context, skillID, agentID uuid.UUID) error
+	GrantToUser(ctx context.Context, skillID uuid.UUID, userID, grantedBy string) error
+	RevokeFromUser(ctx context.Context, skillID uuid.UUID, userID string) error
+	ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]SkillWithGrantStatus, error)
+	// Files
+	GetSkillFilePath(ctx context.Context, id uuid.UUID) (filePath string, slug string, version int, isSystem bool, ok bool)
+}

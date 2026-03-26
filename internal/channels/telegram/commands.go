@@ -11,6 +11,7 @@ import (
 	tu "github.com/mymmrac/telego/telegoutil"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // resolveAgentUUID looks up the agent UUID from the channel's agent key.
@@ -26,7 +27,8 @@ func (c *Channel) resolveAgentUUID(ctx context.Context) (uuid.UUID, error) {
 		return id, nil
 	}
 
-	// Look up by agent key.
+	// Inject tenant scope so the store can filter by tenant_id.
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	agent, err := c.agentStore.GetByKey(ctx, key)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("agent %q not found: %w", key, err)

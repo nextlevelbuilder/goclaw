@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight, ChevronDown, Copy, Check, Download, CircleCheck, CircleX, Loader, CircleMinus } from "lucide-react";
+import { ChevronRight, ChevronDown, Copy, Check, Download, CircleCheck, CircleX, Loader, CircleMinus, Square } from "lucide-react";
 import { useClipboard } from "@/hooks/use-clipboard";
 import { useHttp } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
@@ -53,9 +53,10 @@ interface TraceDetailDialogProps {
   onClose: () => void;
   getTrace: (id: string) => Promise<{ trace: TraceData; spans: SpanData[] } | null>;
   onNavigateTrace?: (traceId: string) => void;
+  onAbortRun?: (trace: TraceData, e: React.MouseEvent) => void;
 }
 
-export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace }: TraceDetailDialogProps) {
+export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace, onAbortRun }: TraceDetailDialogProps) {
   const { t } = useTranslation("traces");
   const tz = useUiStore((s) => s.timezone);
   const http = useHttp();
@@ -160,6 +161,16 @@ export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace 
               )}
               {t("detail.export")}
             </button>
+            {trace && (trace.status === "running") && onAbortRun && (
+              <button
+                type="button"
+                onClick={(e) => onAbortRun(trace, e)}
+                className="flex cursor-pointer items-center gap-1 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground transition-colors hover:bg-destructive/90"
+              >
+                <Square className="h-3.5 w-3.5" />
+                {t("detail.stopRun")}
+              </button>
+            )}
           </DialogTitle>
         </DialogHeader>
 

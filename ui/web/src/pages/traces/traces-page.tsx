@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, GitFork, RefreshCw } from "lucide-react";
+import { Activity, GitFork, RefreshCw, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,6 +22,9 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useChannelInstances } from "@/pages/channels/hooks/use-channel-instances";
+import { useWs } from "@/hooks/use-ws";
+import { Methods } from "@/api/protocol";
+import { toast } from "@/stores/use-toast-store";
 
 export function TracesPage() {
   const { t } = useTranslation("traces");
@@ -33,8 +36,11 @@ export function TracesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  const ws = useWs();
   const { agents } = useAgents();
   const { instances: channels } = useChannelInstances();
+
+  const [abortingRunId, setAbortingRunId] = useState<string | null>(null);
 
   const { traces, total, loading, fetching, refresh, getTrace } = useTraces({
     agentId: agentFilter,
@@ -42,10 +48,36 @@ export function TracesPage() {
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
+
   const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && traces.length === 0);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const handleAbortRun = useCallback(
+    async (trace: TraceData, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!ws.isConnected || abortingRunId) return;
+      setAbortingRunId(trace.run_id);
+      try {
+        const res = await ws.call(Methods.CHAT_ABORT, {
+          sessionKey: trace.session_key,
+          runId: trace.run_id,
+        }) as { aborted?: boolean };
+        if (res?.aborted) {
+          toast.success(t("toast.abortSent"));
+          refresh();
+        } else {
+          toast.info(t("toast.abortNotFound"));
+        }
+      } catch {
+        toast.error(t("toast.abortFailed"));
+      } finally {
+        setAbortingRunId(null);
+      }
+    },
+    [ws, t, refresh, abortingRunId],
+  );
 
   return (
     <div className="p-4 sm:p-6 pb-10">
@@ -134,7 +166,20 @@ export function TracesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={trace.status} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={trace.status} />
+                        {(trace.status === "running") && (
+                          <Button
+                            variant="destructive"
+                            size="icon-xs"
+                            onClick={(e) => handleAbortRun(trace, e)}
+                            disabled={abortingRunId === trace.run_id}
+                            title={t("stopRun")}
+                          >
+                            <Square className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {formatDuration(trace.duration_ms || computeDurationMs(trace.start_time, trace.end_time))}
@@ -175,6 +220,7 @@ export function TracesPage() {
           onClose={() => setSelectedTraceId(null)}
           getTrace={getTrace}
           onNavigateTrace={setSelectedTraceId}
+          onAbortRun={handleAbortRun}
         />
       )}
     </div>

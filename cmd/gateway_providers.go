@@ -279,7 +279,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			if host == "" {
 				host = "http://localhost:11434"
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", host+"/v1", "llama3.3"))
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host+"/v1"), "llama3.3"))
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}

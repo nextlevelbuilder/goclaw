@@ -16,6 +16,7 @@
     "time": "Time"
   },
   "unnamed": "Unnamed",
+  "stopRun": "Stop run",
   "cached": "cached",
   "detail": {
     "title": "Trace Detail",
@@ -36,7 +37,8 @@
     "spansCount": "Spans ({{count}})",
     "llmCalls": "LLM",
     "toolCalls": "tool",
-    "export": "Export trace"
+    "export": "Export trace",
+    "stopRun": "Stop run"
   },
   "span": {
     "model": "Model:",
@@ -53,6 +55,9 @@
     "cached": "cached"
   },
   "toast": {
-    "failedLoad": "Failed to load traces"
+    "failedLoad": "Failed to load traces",
+    "abortSent": "Run stopped",
+    "abortFailed": "Failed to stop run",
+    "abortNotFound": "Run already finished or not found"
   }
 }

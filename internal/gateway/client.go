@@ -213,6 +213,9 @@ func (c *Client) RemoteAddr() string { return c.remoteAddr }
 // TenantID returns the resolved tenant UUID (uuid.Nil means cross-tenant).
 func (c *Client) TenantID() uuid.UUID { return c.tenantID }
 
+// TenantSlug returns the resolved tenant URL slug (set during connect).
+func (c *Client) TenantSlug() string { return c.tenantSlug }
+
 // IsOwner returns true if the client has the owner role (tenant management + full access).
 func (c *Client) IsOwner() bool { return c.role == permissions.RoleOwner }
 

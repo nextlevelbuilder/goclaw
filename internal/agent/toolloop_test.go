@@ -171,6 +171,45 @@ func TestReadOnlyStreak_ExecNeutral(t *testing.T) {
 	}
 }
 
+func TestReadOnlyStreak_MCPNeutral(t *testing.T) {
+	var s toolLoopState
+	// 5 reads → streak = 5
+	for range 5 {
+		s.recordMutation("read_file")
+	}
+	// MCP tools should not reset or increment (same as exec)
+	s.recordMutation("mcp_gmail__query_gmail_emails")
+	if s.readOnlyStreak != 5 {
+		t.Fatalf("expected streak 5 after mcp tool, got %d", s.readOnlyStreak)
+	}
+	s.recordMutation("mcp_gmail__get_gmail_email")
+	if s.readOnlyStreak != 5 {
+		t.Fatalf("expected streak 5 after second mcp tool, got %d", s.readOnlyStreak)
+	}
+	// 7 more reads → streak = 12, should hit critical
+	for range 7 {
+		s.recordMutation("list_files")
+	}
+	if s.readOnlyStreak != 12 {
+		t.Fatalf("expected streak 12, got %d", s.readOnlyStreak)
+	}
+}
+
+func TestReadOnlyStreak_MCPOnlyNeverTriggers(t *testing.T) {
+	var s toolLoopState
+	// 20 consecutive MCP tool calls → streak should stay 0
+	for range 20 {
+		s.recordMutation("mcp_gmail__query_gmail_emails")
+	}
+	if s.readOnlyStreak != 0 {
+		t.Fatalf("expected streak 0 after 20 mcp-only calls, got %d", s.readOnlyStreak)
+	}
+	level, _ := s.detectReadOnlyStreak()
+	if level != "" {
+		t.Fatalf("expected no detection for mcp-only calls, got %q", level)
+	}
+}
+
 // --- Same-result cross-args detection ---
 
 func TestSameResult_Warning(t *testing.T) {

@@ -527,8 +527,8 @@ func setupSkillsSystem(
 				}
 			}
 			if bundledSkillsDir != "" {
-				if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
-					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], pgSkills)
+				if seederStore, ok := pgStores.Skills.(skills.SystemSkillStore); ok {
+					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], seederStore)
 					seeded, skipped, seededSkills, err := seeder.Seed(context.Background())
 					if err != nil {
 						slog.Warn("system skills seed failed", "error", err)
@@ -549,12 +549,12 @@ func setupSkillsSystem(
 
 	// Publish skill tool — lets agents register created skills in the database
 	if pgStores.Skills != nil {
-		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
+		if manageStore, ok := pgStores.Skills.(store.SkillManageStore); ok {
 			storeDirs := pgStores.Skills.Dirs()
 			if len(storeDirs) > 0 {
-				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
+				toolsReg.Register(tools.NewPublishSkillTool(manageStore, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("publish_skill tool registered")
-				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
+				toolsReg.Register(tools.NewSkillManageTool(manageStore, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("skill_manage tool registered")
 			}
 		}

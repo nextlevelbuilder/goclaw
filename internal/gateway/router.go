@@ -84,6 +84,9 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 	if client.TenantID() != uuid.Nil {
 		ctx = store.WithTenantID(ctx, client.TenantID())
 	}
+	if slug := client.TenantSlug(); slug != "" {
+		ctx = store.WithTenantSlug(ctx, slug)
+	}
 
 	slog.Debug("handling method", "method", req.Method, "client", client.id, "req_id", req.ID)
 	handler(ctx, client, req)

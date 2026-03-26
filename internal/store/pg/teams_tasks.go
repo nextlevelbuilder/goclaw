@@ -17,7 +17,9 @@ import (
 )
 
 // taskLockDuration is how long a claimed task stays locked before stale recovery resets it.
-const taskLockDuration = 30 * time.Minute
+// Must be significantly larger than the consumer heartbeat interval (5min) to avoid
+// race conditions where a delayed heartbeat causes premature stale recovery.
+const taskLockDuration = 60 * time.Minute
 
 // taskSelectCols is the shared SELECT column list for task queries (must match scanTaskRowsJoined).
 const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,

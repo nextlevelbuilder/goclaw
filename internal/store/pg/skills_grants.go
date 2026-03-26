@@ -14,15 +14,29 @@ import (
 // GrantToAgent grants a skill to an agent with version pinning.
 // Auto-promotes visibility from 'private' to 'internal' so the skill
 // becomes accessible via ListAccessible for granted agents.
+// Validates the agent belongs to the requesting tenant (prevents cross-tenant grant injection).
 func (s *PGSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uuid.UUID, version int, grantedBy string) error {
 	if err := store.ValidateUserID(grantedBy); err != nil {
 		return err
 	}
+	tid := tenantIDForInsert(ctx)
+
+	// Verify agent belongs to the requesting tenant.
+	var agentTenantID uuid.UUID
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT tenant_id FROM agents WHERE id = $1", agentID,
+	).Scan(&agentTenantID); err != nil {
+		return fmt.Errorf("agent not found")
+	}
+	if agentTenantID != tid {
+		return fmt.Errorf("agent not found")
+	}
+
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO skill_agent_grants (id, skill_id, agent_id, pinned_version, granted_by, created_at, tenant_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (skill_id, agent_id) DO UPDATE SET pinned_version = EXCLUDED.pinned_version`,
-		store.GenNewID(), skillID, agentID, version, grantedBy, time.Now(), tenantIDForInsert(ctx),
+		store.GenNewID(), skillID, agentID, version, grantedBy, time.Now(), tid,
 	)
 	if err != nil {
 		return err
@@ -187,21 +201,8 @@ type SkillGrantInfo struct {
 	GrantedBy     string    `json:"granted_by"`
 }
 
-// SkillWithGrantStatus represents a skill with its grant status for a specific agent.
-type SkillWithGrantStatus struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
-	Visibility  string    `json:"visibility"`
-	Version     int       `json:"version"`
-	Granted     bool      `json:"granted"`
-	PinnedVer   *int      `json:"pinned_version,omitempty"`
-	IsSystem    bool      `json:"is_system"`
-}
-
 // ListWithGrantStatus returns all active skills with grant status for a specific agent.
-func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]SkillWithGrantStatus, error) {
+func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]store.SkillWithGrantStatus, error) {
 	tc, tcArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
@@ -224,9 +225,9 @@ func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUI
 	}
 	defer rows.Close()
 
-	var result []SkillWithGrantStatus
+	var result []store.SkillWithGrantStatus
 	for rows.Next() {
-		var r SkillWithGrantStatus
+		var r store.SkillWithGrantStatus
 		if err := rows.Scan(&r.ID, &r.Name, &r.Slug, &r.Description, &r.Visibility, &r.Version, &r.Granted, &r.PinnedVer, &r.IsSystem); err != nil {
 			slog.Warn("skill_grants: scan error in ListWithGrantStatus", "error", err)
 			continue

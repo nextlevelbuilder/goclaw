@@ -15,7 +15,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 const maxSkillDirSize = 20 << 20 // 20 MB
@@ -23,13 +22,13 @@ const maxSkillDirSize = 20 << 20 // 20 MB
 // PublishSkillTool registers a skill directory in the database,
 // making it discoverable and grantable to agents.
 type PublishSkillTool struct {
-	skills  *pg.PGSkillStore
+	skills  store.SkillManageStore
 	base    string         // skills-store/ directory (master tenant)
 	dataDir string         // parent data dir for tenant-scoped skill paths
 	loader  *skills.Loader // cache invalidation
 }
 
-func NewPublishSkillTool(skills *pg.PGSkillStore, baseDir, dataDir string, loader *skills.Loader) *PublishSkillTool {
+func NewPublishSkillTool(skills store.SkillManageStore, baseDir, dataDir string, loader *skills.Loader) *PublishSkillTool {
 	return &PublishSkillTool{skills: skills, base: baseDir, dataDir: dataDir, loader: loader}
 }
 
@@ -119,7 +118,7 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 
 	// Version + destination (tenant-scoped)
-	version := t.skills.GetNextVersion(slug)
+	version := t.skills.GetNextVersion(ctx, slug)
 	destDir := filepath.Join(t.tenantSkillsDir(ctx), slug, fmt.Sprintf("%d", version))
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create destination: %v", err))
@@ -136,7 +135,7 @@ func (t *PublishSkillTool) Execute(ctx context.Context, args map[string]any) *Re
 		userID = "system" // fallback for agent-only contexts
 	}
 	desc := description
-	params := pg.SkillCreateParams{
+	params := store.SkillCreateParams{
 		Name:        name,
 		Slug:        slug,
 		Description: &desc,

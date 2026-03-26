@@ -16,7 +16,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -24,7 +23,7 @@ const maxSkillUploadSize = 20 << 20 // 20 MB
 
 // SkillsHandler handles skill management HTTP endpoints.
 type SkillsHandler struct {
-	skills         *pg.PGSkillStore
+	skills         store.SkillManageStore
 	baseDir        string // filesystem base for skill content (skills-store/) — master tenant
 	dataDir        string // parent data dir for tenant-scoped skill paths
 	bundledDir     string // original bundled skills dir (fallback for broken managed copies)
@@ -34,7 +33,7 @@ type SkillsHandler struct {
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.
-func NewSkillsHandler(skills *pg.PGSkillStore, baseDir, dataDir, bundledDir string, msgBus *bus.MessageBus, tenantCfgStore store.SkillTenantConfigStore, tenantStore store.TenantStore) *SkillsHandler {
+func NewSkillsHandler(skills store.SkillManageStore, baseDir, dataDir, bundledDir string, msgBus *bus.MessageBus, tenantCfgStore store.SkillTenantConfigStore, tenantStore store.TenantStore) *SkillsHandler {
 	return &SkillsHandler{skills: skills, baseDir: baseDir, dataDir: dataDir, bundledDir: bundledDir, msgBus: msgBus, tenantCfgStore: tenantCfgStore, tenantStore: tenantStore}
 }
 

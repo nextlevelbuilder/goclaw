@@ -296,7 +296,7 @@ func handleTeammateMessage(
 	go func(origCh, origChatID, senderID, taskID string, meta, inMeta map[string]string) {
 		defer bgWg.Done()
 		defer safego.Recover(nil, "component", "teammate_message", "task_id", taskID)
-		// Lock renewal heartbeat: extend task lock every 10 min to prevent
+		// Lock renewal heartbeat: extend task lock every 5 min to prevent
 		// the ticker from recovering long-running tasks as stale.
 		var lockStop chan struct{}
 		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
@@ -305,7 +305,7 @@ func handleTeammateMessage(
 			if teamTaskID != uuid.Nil {
 				lockStop = make(chan struct{})
 				go func() {
-					ticker := time.NewTicker(10 * time.Minute)
+					ticker := time.NewTicker(5 * time.Minute)
 					defer ticker.Stop()
 					for {
 						select {

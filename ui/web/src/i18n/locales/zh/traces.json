@@ -28,7 +28,8 @@
     "title": "追踪详情",
     "tokens": "令牌：",
     "toolCalls": "工具",
-    "export": "导出追踪"
+    "export": "导出追踪",
+    "stopRun": "停止运行"
   },
   "emptyDescription": "暂无追踪记录。当Agent处理请求时将自动记录追踪。",
   "emptyTitle": "暂无追踪",
@@ -51,7 +52,11 @@
   },
   "title": "追踪",
   "toast": {
-    "failedLoad": "加载追踪失败"
+    "failedLoad": "加载追踪失败",
+    "abortSent": "已停止运行",
+    "abortFailed": "停止运行失败",
+    "abortNotFound": "运行已完成或未找到"
   },
-  "unnamed": "未命名"
+  "unnamed": "未命名",
+  "stopRun": "停止运行"
 }

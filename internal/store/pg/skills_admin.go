@@ -13,7 +13,7 @@ import (
 // Returns (id, changed, actualFilePath, error).
 // When hash is unchanged, returns the existing file_path from DB so the caller
 // uses the correct directory for dep scanning (not a non-existent next-version dir).
-func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParams) (uuid.UUID, bool, string, error) {
+func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error) {
 	// Check if skill already exists
 	var existingID uuid.UUID
 	var existingHash *string
@@ -95,9 +95,12 @@ func (s *PGSkillStore) ListSystemSkillDirs(ctx context.Context) map[string]strin
 	return dirs
 }
 
-// IsSystemSkill checks if a skill slug belongs to a system skill.
+// IsSystemSkill checks if a skill slug belongs to a system skill (master tenant only).
 func (s *PGSkillStore) IsSystemSkill(slug string) bool {
 	var isSystem bool
-	err := s.db.QueryRow("SELECT is_system FROM skills WHERE slug = $1", slug).Scan(&isSystem)
+	err := s.db.QueryRow(
+		"SELECT is_system FROM skills WHERE slug = $1 AND tenant_id = $2 AND is_system = true",
+		slug, store.MasterTenantID,
+	).Scan(&isSystem)
 	return err == nil && isSystem
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 // handleUpload processes a ZIP file upload containing a skill (must have SKILL.md at root).
@@ -115,7 +114,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine version (always increment — includes archived skills so re-upload gets v2+)
-	version := h.skills.GetNextVersion(slug)
+	version := h.skills.GetNextVersion(r.Context(), slug)
 
 	// Extract to filesystem: tenant-scoped skills-store/slug/version/
 	tenantSkillsBase := h.tenantSkillsDir(r)
@@ -166,7 +165,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	// Save metadata to DB
 	desc := description
-	skill := pg.SkillCreateParams{
+	skill := store.SkillCreateParams{
 		Name:        name,
 		Slug:        slug,
 		Description: &desc,

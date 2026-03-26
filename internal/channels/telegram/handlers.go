@@ -233,8 +233,46 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 	// --- Group mention gating (matching TS mentionGate logic) ---
 	// Also check implicit mention via reply-to-bot
-	if isGroup && topicCfg.effectiveRequireMention(c.requireMention) {
+	//
+	// mention_mode controls multi-bot behavior in groups:
+	//   "strict" (default): only respond when explicitly @mentioned (require_mention=true)
+	//   "yield": respond to all messages UNLESS another bot/user is @mentioned (and not us)
+	//            — enables "shared group" where all bots listen, but yield when someone is called by name
+	mentionMode := topicCfg.effectiveMentionMode(c.mentionMode)
+	if isGroup && (topicCfg.effectiveRequireMention(c.requireMention) || mentionMode == "yield") {
 		botUsername := c.bot.Username()
+
+		// In yield mode, skip messages from other bots to prevent infinite loops.
+		// Bot A responds → Bot B sees it as "no specific mention" → responds → loop.
+		// Only skip when our bot is NOT explicitly mentioned — allow cross-bot @commands.
+		if mentionMode == "yield" && user.IsBot && user.Username != botUsername && !c.detectMention(message, botUsername) {
+			// Respect pairing guard — don't record history in unpaired groups.
+			if topicCfg.groupPolicy == "pairing" && c.pairingService != nil {
+				if _, cached := c.approvedGroups.Load(chatIDStr); !cached {
+					groupSenderID := fmt.Sprintf("group:%d", chatID)
+					paired, pairErr := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
+					if pairErr != nil {
+						slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+							"group_sender", groupSenderID, "channel", c.Name(), "error", pairErr)
+						paired = true
+					}
+					if paired {
+						c.approvedGroups.Store(chatIDStr, true)
+					} else {
+						return
+					}
+				}
+			}
+			c.groupHistory.Record(localKey, channels.HistoryEntry{
+				Sender:    senderLabel,
+				SenderID:  senderID,
+				Body:      content,
+				Timestamp: time.Unix(int64(message.Date), 0),
+				MessageID: fmt.Sprintf("%d", message.MessageID),
+			}, c.historyLimit)
+			return
+		}
+
 		wasMentioned := c.detectMention(message, botUsername)
 
 		// Reply to bot's message counts as implicit mention
@@ -242,10 +280,20 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			wasMentioned = true
 		}
 
+		// Yield mode: skip only if another bot/user is explicitly mentioned (not us).
+		// If nobody is mentioned → respond. If we are mentioned → respond.
+		if mentionMode == "yield" && !wasMentioned {
+			// In yield mode, respond unless someone else was specifically called out
+			if !c.hasOtherMention(message, botUsername) {
+				wasMentioned = true // treat as mentioned — no specific target, all bots respond
+			}
+		}
+
 		slog.Debug("telegram group mention gate",
 			"chat_id", chatID,
 			"bot_username", botUsername,
 			"require_mention", c.requireMention,
+			"mention_mode", mentionMode,
 			"was_mentioned", wasMentioned,
 			"text_preview", channels.Truncate(content, 60),
 		)

@@ -71,7 +71,31 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	_ = t.manager.teamStore.ClaimTask(ctx, taskID, agentID, team.ID)
 
 	if err := t.manager.teamStore.CompleteTask(ctx, taskID, team.ID, result); err != nil {
-		return ErrorResult("failed to complete task: " + err.Error())
+		// Fast path: check in-memory turn flags before hitting DB again.
+		if flags := TaskActionFlagsFromCtx(ctx); flags != nil && flags.Completed {
+			return NewResult(fmt.Sprintf("Task %s already completed.", taskID))
+		}
+		// Slow path: re-query to determine actual status.
+		if current, getErr := t.manager.teamStore.GetTask(ctx, taskID); getErr == nil && current != nil {
+			switch current.Status {
+			case store.TeamTaskStatusCompleted:
+				recordTaskAction(ctx, func(f *TaskActionFlags) { f.Completed = true })
+				return NewResult(fmt.Sprintf("Task %s already completed.", taskID))
+			case store.TeamTaskStatusFailed, store.TeamTaskStatusCancelled:
+				return NewResult(fmt.Sprintf("Task %s is %s — cannot complete.", taskID, current.Status))
+			case store.TeamTaskStatusPending:
+				// Task was reset by stale recovery — re-assign and retry once.
+				if t.manager.teamStore.AssignTask(ctx, taskID, agentID, team.ID) == nil {
+					if t.manager.teamStore.CompleteTask(ctx, taskID, team.ID, result) == nil {
+						slog.Info("executeComplete: re-assigned stale-recovered task", "task_id", taskID)
+						err = nil
+					}
+				}
+			}
+		}
+		if err != nil {
+			return ErrorResult("failed to complete task: " + err.Error())
+		}
 	}
 	// Record action flag after successful store operation.
 	recordTaskAction(ctx, func(f *TaskActionFlags) { f.Completed = true })

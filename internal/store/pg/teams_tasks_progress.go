@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,11 @@ func (s *PGTeamStore) UpdateTaskProgress(ctx context.Context, taskID, teamID uui
 		return err
 	}
 	if n == 0 {
+		// Diagnostic: log actual status to help trace why the task is not in_progress.
+		if diag, _ := s.GetTask(ctx, taskID); diag != nil {
+			slog.Warn("UpdateTaskProgress: status mismatch", "task_id", taskID,
+				"expected", "in_progress", "actual", diag.Status, "lock_expires", diag.LockExpiresAt)
+		}
 		return fmt.Errorf("task not in progress or not found")
 	}
 	return nil

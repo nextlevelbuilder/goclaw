@@ -183,7 +183,8 @@
     "proxy": { "label": "HTTP Proxy", "help": "Route bot traffic through an HTTP proxy" },
     "dm_policy": { "label": "DM Policy" },
     "group_policy": { "label": "Group Policy" },
-    "require_mention": { "label": "Require @mention in groups" },
+    "require_mention": { "label": "Require @mention in groups", "disabledHint": "Multi-bot mode always listens to all messages" },
+    "mention_mode": { "label": "Group Response Behavior", "help": "How the bot decides when to respond in groups with multiple bots." },
     "history_limit": { "label": "Group History Limit", "help": "Max pending group messages for context (0 = disabled)" },
     "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },
     "group_stream": { "label": "Group Streaming", "help": "Stream response progressively in groups" },
@@ -227,6 +228,10 @@
       "pairing": "Pairing (require approval)",
       "allowlist": "Allowlist only",
       "disabled": "Disabled"
+    },
+    "mention_mode": {
+      "strict": "Default (follow @mention setting)",
+      "yield": "Multi-bot (respond unless another bot is @mentioned)"
     },
     "reaction_level": {
       "off": "Off",

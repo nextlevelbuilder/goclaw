@@ -183,7 +183,8 @@
     "proxy": { "label": "HTTP 代理", "help": "通过 HTTP 代理路由Bot流量" },
     "dm_policy": { "label": "私聊策略" },
     "group_policy": { "label": "群组策略" },
-    "require_mention": { "label": "群组中需要 @提及" },
+    "require_mention": { "label": "群组中需要 @提及", "disabledHint": "多机器人模式始终监听所有消息" },
+    "mention_mode": { "label": "群组响应行为", "help": "机器人在多机器人群组中如何决定何时响应。" },
     "history_limit": { "label": "群组历史限制", "help": "上下文中最大待处理群组消息数（0 = 禁用）" },
     "dm_stream": { "label": "私聊流式传输", "help": "在私聊中逐步传输回复" },
     "group_stream": { "label": "群聊流式传输", "help": "在群聊中逐步传输回复" },
@@ -227,6 +228,10 @@
       "pairing": "配对（需要审批）",
       "allowlist": "仅白名单",
       "disabled": "禁用"
+    },
+    "mention_mode": {
+      "strict": "默认（遵循 @提及设置）",
+      "yield": "多机器人（除非其他机器人被 @提及否则响应）"
     },
     "reaction_level": {
       "off": "关闭",
