@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
-.PHONY: build run clean version net up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
+.PHONY: build run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
 
 build:
 	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o $(BINARY) .
@@ -36,13 +36,10 @@ endif
 COMPOSE = $(COMPOSE_BASE) $(COMPOSE_EXTRA)
 UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml
 
-net:
-	docker network inspect goclaw-net >/dev/null 2>&1 || docker network create goclaw-net
-
 version-file:
 	@echo $(VERSION) > VERSION
 
-up: net version-file
+up: version-file
 	$(COMPOSE) up -d --build
 	$(UPGRADE) run --rm upgrade
 
@@ -52,7 +49,7 @@ down:
 logs:
 	$(COMPOSE) logs -f goclaw
 
-reset: net version-file
+reset: version-file
 	$(COMPOSE) down -v
 	$(COMPOSE) up -d --build
 
