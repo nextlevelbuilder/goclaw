@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWsCall } from "@/hooks/use-ws-call";
 
 interface Friend {
@@ -134,37 +135,46 @@ export function ZaloContactsPicker({ instanceId, hasCredentials, value, onChange
             onChange={(e) => setSearch(e.target.value)}
             className="h-8"
           />
-          <div className="max-h-48 overflow-y-auto rounded border p-2 space-y-1">
-            {filteredFriends.length > 0 && (
-              <>
-                <p className="text-xs font-medium text-muted-foreground">{t("zalo.friends")}</p>
-                {filteredFriends.map((f) => (
+          <Tabs defaultValue="friends">
+            <TabsList className="w-full">
+              <TabsTrigger value="friends" className="flex-1 text-xs">
+                {t("zalo.friends")} ({filteredFriends.length})
+              </TabsTrigger>
+              <TabsTrigger value="groups" className="flex-1 text-xs">
+                {t("zalo.groups")} ({filteredGroups.length})
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="friends" className="mt-2">
+              <div className="max-h-56 overflow-y-auto rounded border p-2 space-y-1">
+                {filteredFriends.length > 0 ? filteredFriends.map((f) => (
                   <label key={f.userId} className="flex items-center gap-2 py-0.5 text-sm cursor-pointer hover:bg-muted/50 rounded px-1">
                     <input type="checkbox" checked={value.includes(f.userId)} onChange={() => toggle(f.userId)} />
-                    <span>{f.displayName}</span>
-                    <span className="text-xs text-muted-foreground ml-auto">{f.userId}</span>
+                    <span className="truncate">{f.displayName}</span>
+                    <span className="text-xs text-muted-foreground ml-auto shrink-0">{f.userId}</span>
                   </label>
-                ))}
-              </>
-            )}
-            {filteredGroups.length > 0 && (
-              <>
-                <p className="text-xs font-medium text-muted-foreground mt-2">{t("zalo.groups")}</p>
-                {filteredGroups.map((g) => (
+                )) : (
+                  <p className="text-sm text-muted-foreground py-2 text-center">
+                    {search ? t("zalo.noContactsMatch", { search }) : t("zalo.noContacts")}
+                  </p>
+                )}
+              </div>
+            </TabsContent>
+            <TabsContent value="groups" className="mt-2">
+              <div className="max-h-56 overflow-y-auto rounded border p-2 space-y-1">
+                {filteredGroups.length > 0 ? filteredGroups.map((g) => (
                   <label key={g.groupId} className="flex items-center gap-2 py-0.5 text-sm cursor-pointer hover:bg-muted/50 rounded px-1">
                     <input type="checkbox" checked={value.includes(g.groupId)} onChange={() => toggle(g.groupId)} />
-                    <span>{g.name}</span>
-                    <span className="text-xs text-muted-foreground ml-auto">{t("zalo.membersCount", { count: g.totalMember })}</span>
+                    <span className="truncate">{g.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto shrink-0">{t("zalo.membersCount", { count: g.totalMember })}</span>
                   </label>
-                ))}
-              </>
-            )}
-            {filteredFriends.length === 0 && filteredGroups.length === 0 && (
-              <p className="text-sm text-muted-foreground py-2 text-center">
-                {search ? t("zalo.noContactsMatch", { search }) : t("zalo.noContacts")}
-              </p>
-            )}
-          </div>
+                )) : (
+                  <p className="text-sm text-muted-foreground py-2 text-center">
+                    {search ? t("zalo.noContactsMatch", { search }) : t("zalo.noContacts")}
+                  </p>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         </>
       )}
 

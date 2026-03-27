@@ -163,8 +163,12 @@ func (ln *Listener) decryptEventData(data string, encType uint, cipherKey string
 	switch encType {
 	case 0: // plaintext
 		result = []byte(data)
-	case 1: // base64 only
-		result, err = base64.StdEncoding.DecodeString(data)
+	case 1: // base64 + gzip
+		raw, e := base64.StdEncoding.DecodeString(data)
+		if e != nil {
+			return nil, e
+		}
+		result, err = decompressGzip(raw)
 	case 2: // AES-GCM + gzip
 		raw, e := ln.decryptAESGCMPayload(data, cipherKey)
 		if e != nil {

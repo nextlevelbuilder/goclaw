@@ -96,8 +96,32 @@ func FetchGroups(ctx context.Context, sess *Session) ([]GroupListInfo, error) {
 		return nil, nil
 	}
 
-	// Step 2: Get group details from group service
-	return fetchGroupDetails(ctx, sess, gridVerMap)
+	// Step 2: Get group details in batches (Zalo rejects large payloads)
+	const batchSize = 50
+	ids := make([]string, 0, len(gridVerMap))
+	for id := range gridVerMap {
+		ids = append(ids, id)
+	}
+
+	var allGroups []GroupListInfo
+	for i := 0; i < len(ids); i += batchSize {
+		end := i + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batch := make(map[string]string, end-i)
+		for _, id := range ids[i:end] {
+			batch[id] = gridVerMap[id]
+		}
+		groups, err := fetchGroupDetails(ctx, sess, batch)
+		if err != nil {
+			return nil, err
+		}
+		allGroups = append(allGroups, groups...)
+	}
+
+	sort.Slice(allGroups, func(i, j int) bool { return allGroups[i].Name < allGroups[j].Name })
+	return allGroups, nil
 }
 
 // fetchGroupIDs gets group ID -> version map from group_poll service.
@@ -222,7 +246,6 @@ func fetchGroupDetails(ctx context.Context, sess *Session, gridVerMap map[string
 			TotalMember: info.TotalMember,
 		})
 	}
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Name < groups[j].Name })
 	return groups, nil
 }
 

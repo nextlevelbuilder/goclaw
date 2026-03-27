@@ -14,7 +14,7 @@ const (
 	DefaultUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0"
 	DefaultLanguage     = "vi"
 	DefaultAPIType      = 30
-	DefaultAPIVersion   = 665
+	DefaultAPIVersion   = 671
 	DefaultComputerName = "Web"
 	DefaultUIDSelf      = "0"
 	DefaultEncryptVer   = "v2"
