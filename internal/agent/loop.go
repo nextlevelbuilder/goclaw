@@ -501,6 +501,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (*RunResult, error) 
 				providers.OptChatID:      req.ChatID,
 				providers.OptPeerKind:    req.PeerKind,
 				providers.OptWorkspace:   tools.ToolWorkspaceFromCtx(ctx),
+				providers.OptTenantID:    store.TenantIDFromContext(ctx).String(),
 			},
 		}
 		if l.thinkingLevel != "" && l.thinkingLevel != "off" {
