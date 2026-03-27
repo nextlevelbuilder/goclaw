@@ -277,7 +277,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	}
 }
 
-const replyContextMaxLen = 500
+const replyContextMaxLen = 2000
 
 // fetchReplyContext fetches the parent message content and returns a formatted
 // reply context string + any downloaded media from the parent message.
