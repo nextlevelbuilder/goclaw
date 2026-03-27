@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
-import { Plus, Bot, LayoutGrid, List } from "lucide-react";
+import { Plus, Bot, LayoutGrid, List, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -24,6 +24,8 @@ import { AgentCard } from "./agent-card";
 import { AgentListRow } from "./agent-list-row";
 import { AgentCreateDialog } from "./agent-create-dialog";
 import { AgentDetailPage } from "./agent-detail/agent-detail-page";
+import { AgentImportDialog } from "./agent-import-dialog";
+import { AgentExportDialog } from "./agent-export-dialog";
 import { SummoningModal } from "./summoning-modal";
 import { usePagination } from "@/hooks/use-pagination";
 
@@ -31,7 +33,7 @@ export function AgentsPage() {
   const { t } = useTranslation("agents");
   const { id: detailId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { agents, loading, createAgent, deleteAgent, refresh, resummonAgent } = useAgents();
+  const { agents, loading, createAgent, deleteAgent, refresh, resummonAgent, exportAgent, importAgent, mergeImport } = useAgents();
   const showSkeleton = useDeferredLoading(loading && agents.length === 0);
 
   const [search, setSearch] = useState("");
@@ -40,6 +42,8 @@ export function AgentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [summoningAgent, setSummoningAgent] = useState<{ id: string; name: string } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [exportTarget, setExportTarget] = useState<{ id: string; key: string; name?: string } | null>(null);
 
   // Collect unique owner IDs for filter + contact resolution
   const ownerIDs = useMemo(() => [...new Set(agents.map((a) => a.owner_id).filter(Boolean))], [agents]);
@@ -96,9 +100,14 @@ export function AgentsPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setCreateOpen(true)} className="gap-1">
-            <Plus className="h-4 w-4" /> {t("createAgent")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-1">
+              <Upload className="h-4 w-4" /> {t("importAgent")}
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} className="gap-1">
+              <Plus className="h-4 w-4" /> {t("createAgent")}
+            </Button>
+          </div>
         }
       />
 
@@ -193,6 +202,7 @@ export function AgentsPage() {
                       onClick={() => handleClick(agent)}
                       onResummon={() => handleResummon(agent)}
                       onDelete={() => setDeleteTarget({ id: agent.id, name: agent.display_name || agent.agent_key })}
+                      onExport={() => setExportTarget({ id: agent.id, key: agent.agent_key, name: agent.display_name })}
                     />
                   ))}
                 </div>
@@ -206,6 +216,7 @@ export function AgentsPage() {
                       onClick={() => handleClick(agent)}
                       onResummon={() => handleResummon(agent)}
                       onDelete={() => setDeleteTarget({ id: agent.id, name: agent.display_name || agent.agent_key })}
+                      onExport={() => setExportTarget({ id: agent.id, key: agent.agent_key, name: agent.display_name })}
                     />
                   ))}
                 </div>
@@ -260,6 +271,25 @@ export function AgentsPage() {
           agentName={summoningAgent.name}
           onCompleted={refresh}
           onResummon={resummonAgent}
+        />
+      )}
+
+      <AgentImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImport={importAgent}
+        onMergeImport={mergeImport}
+        agents={agents}
+      />
+
+      {exportTarget && (
+        <AgentExportDialog
+          open={!!exportTarget}
+          onOpenChange={(open) => { if (!open) setExportTarget(null); }}
+          agentId={exportTarget.id}
+          agentKey={exportTarget.key}
+          agentName={exportTarget.name}
+          onExport={exportAgent}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Bot, Star, Trash2, RotateCcw, Sparkles } from "lucide-react";
+import { Bot, Star, Trash2, RotateCcw, Sparkles, Download } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,10 @@ interface AgentListRowProps {
   onClick: () => void;
   onResummon?: () => void;
   onDelete?: () => void;
+  onExport?: () => void;
 }
 
-export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }: AgentListRowProps) {
+export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete, onExport }: AgentListRowProps) {
   const { t } = useTranslation("agents");
   const displayName = agentDisplayName(agent, t("card.unnamedAgent"));
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
@@ -108,6 +109,16 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
             onClick={(e) => { e.stopPropagation(); onResummon(); }}
           >
             <RotateCcw className="h-3 w-3" />
+          </Button>
+        )}
+        {onExport && (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="text-muted-foreground"
+            onClick={(e) => { e.stopPropagation(); onExport(); }}
+          >
+            <Download className="h-3.5 w-3.5" />
           </Button>
         )}
         {onDelete && (

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, Bot, Heart, Settings, Sparkles, Star, Trash2 } from "lucide-react";
+import { ArrowLeft, Bot, Download, Heart, Settings, Sparkles, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AgentData } from "@/types/agent";
 import type { HeartbeatConfig } from "@/pages/agents/hooks/use-agent-heartbeat";
@@ -16,9 +16,10 @@ interface AgentHeaderProps {
   onDelete: () => void;
   onAdvanced: () => void;
   onHeartbeat: () => void;
+  onExport?: () => void;
 }
 
-export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, onHeartbeat }: AgentHeaderProps) {
+export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, onHeartbeat, onExport }: AgentHeaderProps) {
   const { t } = useTranslation("agents");
 
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
@@ -138,6 +139,12 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
           <Settings className="h-4 w-4" />
           <span className="hidden sm:inline">{t("detail.advanced")}</span>
         </Button>
+        {onExport && (
+          <Button variant="ghost" size="sm" onClick={onExport} className="shrink-0 gap-1.5 size-9 sm:w-auto sm:px-3">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("export.title")}</span>
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"

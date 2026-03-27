@@ -112,5 +112,66 @@ export function useAgents() {
     [http],
   );
 
-  return { agents, loading, error, refresh: invalidate, createAgent, updateAgent, deleteAgent, resummonAgent };
+  const exportAgent = useCallback(
+    async (id: string, agentKey: string, include?: string[]) => {
+      try {
+        const params: Record<string, string> = {};
+        if (include && include.length > 0) params.include = include.join(",");
+        const data = await http.get<Record<string, unknown>>(`/v1/agents/${id}/export`, params);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${agentKey}.agent.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success(i18n.t("agents:toast.exported"));
+      } catch (err) {
+        toast.error(i18n.t("agents:toast.exportFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http],
+  );
+
+  const importAgent = useCallback(
+    async (data: Record<string, unknown>, overrides?: { agent_key?: string; display_name?: string }) => {
+      try {
+        const params: Record<string, string> = {};
+        if (overrides?.agent_key) params.agent_key = overrides.agent_key;
+        if (overrides?.display_name) params.display_name = overrides.display_name;
+        const qs = new URLSearchParams(params).toString();
+        const url = `/v1/agents/import${qs ? `?${qs}` : ""}`;
+        const res = await http.post<AgentData>(url, data);
+        await invalidate();
+        toast.success(i18n.t("agents:toast.imported"), `${res.display_name || res.agent_key || "Agent"}`);
+        return res;
+      } catch (err) {
+        toast.error(i18n.t("agents:toast.importFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
+  const mergeImport = useCallback(
+    async (agentId: string, data: Record<string, unknown>, include?: string[]) => {
+      try {
+        const params: Record<string, string> = {};
+        if (include && include.length > 0) params.include = include.join(",");
+        const qs = new URLSearchParams(params).toString();
+        const url = `/v1/agents/${agentId}/import${qs ? `?${qs}` : ""}`;
+        const res = await http.post<{ ok: boolean; imported: string[] }>(url, data);
+        await invalidate();
+        toast.success(i18n.t("agents:toast.mergeImported"), res.imported?.join(", ") || "");
+        return res;
+      } catch (err) {
+        toast.error(i18n.t("agents:toast.mergeImportFailed"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [http, invalidate],
+  );
+
+  return { agents, loading, error, refresh: invalidate, createAgent, updateAgent, deleteAgent, resummonAgent, exportAgent, importAgent, mergeImport };
 }

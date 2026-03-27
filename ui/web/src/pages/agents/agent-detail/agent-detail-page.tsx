@@ -15,6 +15,7 @@ import { HeartbeatConfigDialog } from "./heartbeat-config-dialog";
 import { SummoningModal } from "../summoning-modal";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
+import { AgentExportDialog } from "../agent-export-dialog";
 import { agentDisplayName } from "./agent-display-utils";
 
 interface AgentDetailPageProps {
@@ -27,13 +28,14 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const navigate = useNavigate();
   const { agent, files, loading, updateAgent, getFile, setFile, regenerateAgent, resummonAgent, refresh } =
     useAgentDetail(agentId);
-  const { deleteAgent: deleteAgentById } = useAgents();
+  const { deleteAgent: deleteAgentById, exportAgent } = useAgents();
   const hb = useAgentHeartbeat(agentId);
   const [summoningOpen, setSummoningOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("agent");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [heartbeatOpen, setHeartbeatOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const handleRegenerate = async (prompt: string) => {
     await regenerateAgent(prompt);
@@ -65,6 +67,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
         onDelete={() => setDeleteOpen(true)}
         onAdvanced={() => setAdvancedOpen(true)}
         onHeartbeat={() => setHeartbeatOpen(true)}
+        onExport={() => setExportOpen(true)}
       />
 
       <div className="p-3 sm:p-4">
@@ -161,6 +164,15 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
           setDeleteOpen(false);
           onBack();
         }}
+      />
+
+      <AgentExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        agentId={agent.id}
+        agentKey={agent.agent_key}
+        agentName={agent.display_name}
+        onExport={exportAgent}
       />
     </div>
   );

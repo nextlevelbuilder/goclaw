@@ -26,10 +26,12 @@ type AgentsHandler struct {
 	providerReg      *providers.Registry
 	db               *sql.DB
 	tracingStore     store.TracingStore
-	defaultWorkspace string            // default workspace path template (e.g. "~/.goclaw/workspace")
-	msgBus           *bus.MessageBus   // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner    // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool // checks if user ID is a system owner (nil = no owners configured)
+	memoryStore      store.MemoryStore           // for export/import (optional, set via SetMemoryStore)
+	kgStore          store.KnowledgeGraphStore   // for export/import (optional, set via SetKGStore)
+	defaultWorkspace string                      // default workspace path template (e.g. "~/.goclaw/workspace")
+	msgBus           *bus.MessageBus             // for cache invalidation events (nil = no events)
+	summoner         *AgentSummoner              // LLM-based agent setup (nil = disabled)
+	isOwner          func(string) bool           // checks if user ID is a system owner (nil = no owners configured)
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -47,6 +49,12 @@ func NewAgentsHandler(agents store.AgentStore, providers store.ProviderStore, pr
 		isOwner:          isOwner,
 	}
 }
+
+// SetMemoryStore configures the memory store for agent export/import.
+func (h *AgentsHandler) SetMemoryStore(s store.MemoryStore) { h.memoryStore = s }
+
+// SetKGStore configures the knowledge graph store for agent export/import.
+func (h *AgentsHandler) SetKGStore(s store.KnowledgeGraphStore) { h.kgStore = s }
 
 // isOwnerUser checks if the given user ID is a system owner.
 func (h *AgentsHandler) isOwnerUser(userID string) bool {
@@ -81,6 +89,11 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{id}/instances/{userID}/files", h.authMiddleware(h.handleGetInstanceFiles))
 	mux.HandleFunc("PUT /v1/agents/{id}/instances/{userID}/files/{fileName}", h.authMiddleware(h.handleSetInstanceFile))
 	mux.HandleFunc("PATCH /v1/agents/{id}/instances/{userID}/metadata", h.authMiddleware(h.handleUpdateInstanceMetadata))
+
+	// Export / Import
+	mux.HandleFunc("GET /v1/agents/{id}/export", h.authMiddleware(h.handleExport))
+	mux.HandleFunc("POST /v1/agents/import", h.authMiddleware(h.handleImport))
+	mux.HandleFunc("POST /v1/agents/{id}/import", h.authMiddleware(h.handleMergeImport))
 }
 
 func (h *AgentsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
