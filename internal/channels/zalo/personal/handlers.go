@@ -68,8 +68,9 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	}
 
 	metadata := map[string]string{
-		"message_id": msg.Data.MsgID,
-		"platform":   channels.TypeZaloPersonal,
+		"message_id":   msg.Data.MsgID,
+		"platform":     channels.TypeZaloPersonal,
+		"display_name": senderName,
 	}
 	c.HandleMessage(senderID, threadID, content, media, metadata, "direct")
 }
@@ -147,9 +148,10 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	}
 
 	metadata := map[string]string{
-		"message_id": msg.Data.MsgID,
-		"platform":   channels.TypeZaloPersonal,
-		"group_id":   threadID,
+		"message_id":   msg.Data.MsgID,
+		"platform":     channels.TypeZaloPersonal,
+		"group_id":     threadID,
+		"display_name": senderName,
 	}
 	c.HandleMessage(senderID, threadID, finalContent, allMedia, metadata, "group")
 
