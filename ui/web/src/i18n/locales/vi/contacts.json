@@ -50,5 +50,17 @@
     "allTypes": "Tất cả loại",
     "direct": "Trực tiếp",
     "group": "Nhóm"
+  },
+  "tabs": {
+    "users": "Người dùng",
+    "groups": "Nhóm"
+  },
+  "groups": {
+    "name": "Tên nhóm",
+    "groupId": "ID nhóm",
+    "channel": "Channel",
+    "members": "Thành viên",
+    "emptyTitle": "Chưa có nhóm",
+    "emptyDescription": "Nhóm sẽ xuất hiện khi có tin nhắn từ group chat."
   }
 }

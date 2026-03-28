@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2, Loader2, RefreshCw, Users, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useContactPicker } from "@/hooks/use-contact-picker";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { useGroups } from "@/pages/contacts/hooks/use-groups";
 import type { GroupManagerGroupInfo, GroupManagerData } from "../hooks/use-channel-detail";
 import type { ChannelContact } from "@/types/contact";
 
@@ -149,9 +151,23 @@ export function ChannelManagersTab({
   const [groups, setGroups] = useState<GroupManagerGroupInfo[]>([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
 
+  // Fetch known groups to resolve group_id → group_name
+  const { groups: knownGroups } = useGroups();
+  const groupNameMap = useMemo(
+    () => new Map(knownGroups.map((g) => [g.group_id, g.group_name])),
+    [knownGroups],
+  );
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [managersMap, setManagersMap] = useState<Record<string, GroupManagerData[]>>({});
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
+
+  // Resolve manager user IDs to contact names
+  const allManagerIDs = useMemo(
+    () => Object.values(managersMap).flat().map((w) => w.user_id),
+    [managersMap],
+  );
+  const { resolve: resolveContact } = useContactResolver(allManagerIDs);
 
   const refreshGroups = useCallback(async () => {
     setLoadingGroups(true);
@@ -266,8 +282,17 @@ export function ChannelManagersTab({
                       : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     }
                     <div className="min-w-0 flex-1">
-                      <span className="font-mono text-sm">{shortGroupId(g.group_id)}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">{g.group_id}</span>
+                      {groupNameMap.get(shortGroupId(g.group_id)) ? (
+                        <>
+                          <span className="text-sm font-medium">{groupNameMap.get(shortGroupId(g.group_id))}</span>
+                          <span className="ml-2 font-mono text-xs text-muted-foreground">{shortGroupId(g.group_id)}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-mono text-sm">{shortGroupId(g.group_id)}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{g.group_id}</span>
+                        </>
+                      )}
                     </div>
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium tabular-nums">
                       {g.writer_count === 1
@@ -297,8 +322,8 @@ export function ChannelManagersTab({
                               {groupManagers.map((w) => (
                                 <tr key={w.user_id} className="border-b last:border-0 hover:bg-muted/20">
                                   <td className="px-3 py-2 font-mono text-xs">{w.user_id}</td>
-                                  <td className="px-3 py-2">{w.display_name || <span className="text-muted-foreground">-</span>}</td>
-                                  <td className="px-3 py-2">{w.username ? <span className="text-muted-foreground">@{w.username}</span> : <span className="text-muted-foreground">-</span>}</td>
+                                  <td className="px-3 py-2">{w.display_name || resolveContact(w.user_id)?.display_name || <span className="text-muted-foreground">-</span>}</td>
+                                  <td className="px-3 py-2">{(w.username || resolveContact(w.user_id)?.username) ? <span className="text-muted-foreground">@{w.username || resolveContact(w.user_id)?.username}</span> : <span className="text-muted-foreground">-</span>}</td>
                                   <td className="px-3 py-2 text-right">
                                     <Button
                                       variant="ghost"
