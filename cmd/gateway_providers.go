@@ -71,8 +71,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 	}
 
 	if cfg.Providers.MiniMax.APIKey != "" {
-		registry.Register(providers.NewOpenAIProvider("minimax", cfg.Providers.MiniMax.APIKey, "https://api.minimax.io/v1", "MiniMax-M2.5").
-			WithChatPath("/text/chatcompletion_v2"))
+		registry.Register(providers.NewMiniMaxProvider("minimax", cfg.Providers.MiniMax.APIKey, cfg.Providers.MiniMax.APIBase, "MiniMax-M2.7"))
 		slog.Info("registered provider", "name", "minimax")
 	}
 
@@ -341,12 +340,11 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, "")
 			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderMiniMax:
+			registry.RegisterForTenant(p.TenantID, providers.NewMiniMaxProvider(p.Name, p.APIKey, p.APIBase, ""))
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
 			prov.WithProviderType(p.ProviderType)
-			if p.ProviderType == store.ProviderMiniMax {
-				prov.WithChatPath("/text/chatcompletion_v2")
-			}
 			registry.RegisterForTenant(p.TenantID, prov)
 		}
 		slog.Info("registered provider from DB", "name", p.Name)

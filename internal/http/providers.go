@@ -176,11 +176,10 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			base = "https://coding-intl.dashscope.aliyuncs.com/v1"
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, "qwen3.5-plus"))
+	case store.ProviderMiniMax:
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewMiniMaxProvider(p.Name, p.APIKey, apiBase, ""))
 	default:
 		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, "")
-		if p.ProviderType == store.ProviderMiniMax {
-			prov.WithChatPath("/text/chatcompletion_v2")
-		}
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	}
 }
