@@ -14,7 +14,7 @@ import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { cn } from "@/lib/utils";
 import { useSkills, type SkillInfo } from "./hooks/use-skills";
 import { SkillDetailDialog } from "./skill-detail-dialog";
-import { SkillUploadDialog } from "./skill-upload-dialog";
+import { SkillInstallDialog } from "./skill-install-dialog";
 import { SkillEditDialog } from "./skill-edit-dialog";
 import { MissingDepsPanel } from "./missing-deps-panel";
 import { useRuntimes } from "./hooks/use-runtimes";
@@ -36,7 +36,7 @@ type Tab = "core" | "custom";
 export function SkillsPage() {
   const { t } = useTranslation("skills");
   const {
-    skills, loading, refresh, getSkill, uploadSkill, updateSkill, deleteSkill,
+    skills, loading, refresh, getSkill, uploadSkill, previewURL, installFromURL, updateSkill, deleteSkill,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   } = useSkills();
@@ -48,7 +48,7 @@ export function SkillsPage() {
   const [tab, setTab] = useState<Tab>("core");
   const [search, setSearch] = useState("");
   const [selectedSkill, setSelectedSkill] = useState<(SkillInfo & { content: string }) | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SkillInfo | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillInfo | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -128,8 +128,8 @@ export function SkillsPage() {
         actions={
           <div className="flex gap-2">
             {tab === "custom" && (
-              <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} className="gap-1">
-                <Upload className="h-3.5 w-3.5" /> {t("upload.button")}
+              <Button variant="outline" size="sm" onClick={() => setInstallOpen(true)} className="gap-1">
+                <Upload className="h-3.5 w-3.5" /> {t("install.button")}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={handleRescanDeps} disabled={rescanning} className="gap-1">
@@ -375,10 +375,12 @@ export function SkillsPage() {
         />
       )}
 
-      <SkillUploadDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
+      <SkillInstallDialog
+        open={installOpen}
+        onOpenChange={setInstallOpen}
         onUpload={handleUpload}
+        onPreviewURL={previewURL}
+        onInstallURL={installFromURL}
       />
 
       <ConfirmDeleteDialog

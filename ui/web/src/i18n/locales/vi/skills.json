@@ -48,6 +48,30 @@
     "successCount": "{{success}} / {{total}} đã tải lên thành công",
     "remove": "Xóa tệp"
   },
+  "install": {
+    "title": "Cài Skill",
+    "description": "Cài skill từ file ZIP hoặc GitHub repo.",
+    "button": "Cài Skill",
+    "tabFile": "File Upload",
+    "tabUrl": "Từ GitHub"
+  },
+  "installUrl": {
+    "title": "Cài từ URL",
+    "description": "Cài skill từ GitHub repo hoặc URL ZIP.",
+    "button": "Từ URL",
+    "urlLabel": "URL Repository",
+    "branchLabel": "Branch (tùy chọn)",
+    "branchHint": "Để trống sẽ dùng branch mặc định (main)",
+    "scan": "Quét",
+    "scanning": "Đang quét...",
+    "foundSkills": "Tìm thấy {{count}} skill",
+    "selectAll": "Chọn tất cả",
+    "deselectAll": "Bỏ chọn tất cả",
+    "back": "Quay lại",
+    "installCount": "Cài đặt ({{count}})",
+    "installingCount": "Đang cài {{count}} skill...",
+    "close": "Đóng"
+  },
   "edit": {
     "title": "Chỉnh sửa skill",
     "name": "Tên",

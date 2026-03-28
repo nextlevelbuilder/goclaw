@@ -60,6 +60,8 @@ func (h *SkillsHandler) emitCacheInvalidate(kind, key string) {
 func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/skills", h.authMiddleware(h.handleList))
 	mux.HandleFunc("POST /v1/skills/upload", h.authMiddleware(h.handleUpload))
+	mux.HandleFunc("POST /v1/skills/preview-url", h.authMiddleware(h.handlePreviewURL))
+	mux.HandleFunc("POST /v1/skills/install-url", h.authMiddleware(h.handleInstallURL))
 	mux.HandleFunc("GET /v1/skills/{id}", h.authMiddleware(h.handleGet))
 	mux.HandleFunc("PUT /v1/skills/{id}", h.authMiddleware(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/skills/{id}", h.authMiddleware(h.handleDelete))
