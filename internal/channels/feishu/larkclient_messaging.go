@@ -304,6 +304,100 @@ func (c *LarkClient) ListChatMembers(ctx context.Context, chatID string) ([]Chat
 	return all, nil
 }
 
+// --- IM API: Chat Info ---
+
+// ChatInfo holds basic group/chat information from Feishu API.
+type ChatInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Avatar      string `json:"avatar"`
+	UserCount   string `json:"user_count"`
+}
+
+// GetChatInfo retrieves chat/group info by chat ID.
+// Feishu API: GET /open-apis/im/v1/chats/{chat_id}
+func (c *LarkClient) GetChatInfo(ctx context.Context, chatID string) (*ChatInfo, error) {
+	path := fmt.Sprintf("/open-apis/im/v1/chats/%s", chatID)
+	resp, err := c.doJSON(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("get chat info: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	var data ChatInfo
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal chat info: %w", err)
+	}
+	return &data, nil
+}
+
+// --- IM API: List Chats (groups the bot is in) ---
+
+// ChatListItem represents a single chat/group from the list chats API.
+type ChatListItem struct {
+	ChatID    string `json:"chat_id"`
+	Name      string `json:"name"`
+	Avatar    string `json:"avatar"`
+	OwnerID   string `json:"owner_id"`
+	ChatMode  string `json:"chat_mode"` // "group" or "p2p"
+	ChatType  string `json:"chat_type"` // "private" or "public"
+	UserCount string `json:"user_count"`
+}
+
+// UserCountInt returns UserCount as an integer (0 if parse fails).
+func (c ChatListItem) UserCountInt() int {
+	n, _ := strconv.Atoi(c.UserCount)
+	return n
+}
+
+// ListChats returns all chats the bot is a member of, handling pagination automatically.
+// Only group chats are returned (chat_mode == "group").
+// Lark API: GET /open-apis/im/v1/chats
+// Requires scope: im:chat:readonly
+func (c *LarkClient) ListChats(ctx context.Context) ([]ChatListItem, error) {
+	var all []ChatListItem
+	pageToken := ""
+
+	for {
+		path := "/open-apis/im/v1/chats?page_size=100"
+		if pageToken != "" {
+			path += "&page_token=" + url.QueryEscape(pageToken)
+		}
+
+		resp, err := c.doJSON(ctx, "GET", path, nil)
+		if err != nil {
+			return nil, err
+		}
+		if resp.Code != 0 {
+			return nil, fmt.Errorf("list chats: code=%d msg=%s", resp.Code, resp.Msg)
+		}
+
+		var result struct {
+			Items     []ChatListItem `json:"items"`
+			PageToken string         `json:"page_token"`
+			HasMore   bool           `json:"has_more"`
+		}
+		if err := json.Unmarshal(resp.Data, &result); err != nil {
+			return nil, fmt.Errorf("unmarshal list chats: %w", err)
+		}
+
+		// Include all chats except p2p (DMs)
+		for _, item := range result.Items {
+			if item.ChatMode != "p2p" {
+				all = append(all, item)
+			}
+		}
+
+		if !result.HasMore || result.PageToken == "" {
+			break
+		}
+		pageToken = result.PageToken
+	}
+
+	return all, nil
+}
+
 // --- Contact API ---
 
 func (c *LarkClient) GetUser(ctx context.Context, userID, userIDType string) (string, error) {

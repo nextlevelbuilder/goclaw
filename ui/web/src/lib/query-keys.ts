@@ -41,6 +41,10 @@ export const queryKeys = {
     search: (params: Record<string, unknown>) => ["contacts", "search", params] as const,
     resolve: (ids: string) => ["contacts", "resolve", ids] as const,
   },
+  groups: {
+    all: ["groups"] as const,
+    list: (channelType?: string) => ["groups", channelType ?? "all"] as const,
+  },
   skills: {
     all: ["skills"] as const,
     agentGrants: (agentId: string) => ["skills", "agent", agentId] as const,

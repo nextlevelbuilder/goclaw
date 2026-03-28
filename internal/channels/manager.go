@@ -54,6 +54,7 @@ type Manager struct {
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector
+	groupCollector   *store.GroupCollector
 }
 
 type asyncTask struct {
@@ -161,10 +162,15 @@ func (m *Manager) GetEnabledChannels() []string {
 func (m *Manager) RegisterChannel(name string, channel Channel) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Propagate contact collector to channels that embed BaseChannel.
+	// Propagate collectors to channels that embed BaseChannel.
 	if m.contactCollector != nil {
 		if bc, ok := channel.(interface{ SetContactCollector(*store.ContactCollector) }); ok {
 			bc.SetContactCollector(m.contactCollector)
+		}
+	}
+	if m.groupCollector != nil {
+		if bc, ok := channel.(interface{ SetGroupCollector(*store.GroupCollector) }); ok {
+			bc.SetGroupCollector(m.groupCollector)
 		}
 	}
 	m.channels[name] = channel
@@ -178,6 +184,18 @@ func (m *Manager) SetContactCollector(cc *store.ContactCollector) {
 	for _, ch := range m.channels {
 		if bc, ok := ch.(interface{ SetContactCollector(*store.ContactCollector) }); ok {
 			bc.SetContactCollector(cc)
+		}
+	}
+}
+
+// SetGroupCollector sets the group collector for all current and future channels.
+func (m *Manager) SetGroupCollector(gc *store.GroupCollector) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.groupCollector = gc
+	for _, ch := range m.channels {
+		if bc, ok := ch.(interface{ SetGroupCollector(*store.GroupCollector) }); ok {
+			bc.SetGroupCollector(gc)
 		}
 	}
 }

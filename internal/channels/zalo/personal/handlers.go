@@ -112,6 +112,12 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 			if cc := c.ContactCollector(); cc != nil {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
 			}
+			// Collect group directory entry.
+			if gc := c.GroupCollector(); gc != nil {
+				if groupName := c.resolveGroupName(threadID); groupName != "" {
+					gc.EnsureGroup(ctx, c.Type(), c.Name(), threadID, groupName, 0)
+				}
+			}
 
 			slog.Debug("zalo_personal group message recorded (no mention)",
 				"group_id", threadID,
@@ -144,6 +150,12 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	// Collect contact for group-mentioned messages.
 	if cc := c.ContactCollector(); cc != nil {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
+	}
+	// Collect group directory entry.
+	if gc := c.GroupCollector(); gc != nil {
+		if groupName := c.resolveGroupName(threadID); groupName != "" {
+			gc.EnsureGroup(ctx, c.Type(), c.Name(), threadID, groupName, 0)
+		}
 	}
 
 	metadata := map[string]string{

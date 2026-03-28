@@ -26,6 +26,12 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 			summoner = httpapi.NewAgentSummoner(stores.Agents, providerReg, msgBus)
 		}
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
+		if stores.Memory != nil {
+			agentsH.SetMemoryStore(stores.Memory)
+		}
+		if stores.KnowledgeGraph != nil {
+			agentsH.SetKGStore(stores.KnowledgeGraph)
+		}
 	}
 
 	if stores != nil && stores.Skills != nil {
@@ -50,7 +56,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.ChannelInstances != nil {
-		channelInstancesH = httpapi.NewChannelInstancesHandler(stores.ChannelInstances, stores.Agents, stores.ConfigPermissions, stores.Contacts, stores.Tenants, msgBus)
+		channelInstancesH = httpapi.NewChannelInstancesHandler(stores.ChannelInstances, stores.Agents, stores.ConfigPermissions, stores.Contacts, stores.Groups, stores.Tenants, msgBus)
 	}
 
 	if stores != nil && stores.Providers != nil {
@@ -75,7 +81,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.PendingMessages != nil {
-		pendingMessagesH = httpapi.NewPendingMessagesHandler(stores.PendingMessages, stores.Agents, providerReg)
+		pendingMessagesH = httpapi.NewPendingMessagesHandler(stores.PendingMessages, stores.Agents, stores.Groups, providerReg)
 	}
 
 	if stores != nil && stores.SecureCLI != nil {

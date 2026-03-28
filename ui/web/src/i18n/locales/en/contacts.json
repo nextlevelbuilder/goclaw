@@ -50,5 +50,17 @@
     "allTypes": "All Types",
     "direct": "Direct",
     "group": "Group"
+  },
+  "tabs": {
+    "users": "Users",
+    "groups": "Groups"
+  },
+  "groups": {
+    "name": "Group Name",
+    "groupId": "Group ID",
+    "channel": "Channel",
+    "members": "Members",
+    "emptyTitle": "No groups",
+    "emptyDescription": "Groups will appear here as messages arrive from group chats."
   }
 }

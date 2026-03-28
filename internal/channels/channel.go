@@ -149,6 +149,13 @@ type ReactionChannel interface {
 	ClearReaction(ctx context.Context, chatID string, messageID string) error
 }
 
+// GroupRefresher is optionally implemented by channels that can fetch their
+// full group/conversation list on demand and populate channel_groups.
+// Used by the HTTP API to trigger on-demand refresh from the UI.
+type GroupRefresher interface {
+	RefreshGroups(ctx context.Context) error
+}
+
 // BaseChannel provides shared functionality for all channel implementations.
 // Channel implementations should embed this struct.
 type BaseChannel struct {
@@ -160,6 +167,7 @@ type BaseChannel struct {
 	agentID          string                 // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
 	tenantID         uuid.UUID              // for DB instances: tenant scope (zero = master tenant fallback)
 	contactCollector *store.ContactCollector // optional: auto-collect contacts from channel messages
+	groupCollector   *store.GroupCollector   // optional: auto-collect group directory from channel messages
 }
 
 // NewBaseChannel creates a new BaseChannel with the given parameters.
@@ -205,6 +213,12 @@ func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contac
 
 // ContactCollector returns the contact collector (may be nil).
 func (c *BaseChannel) ContactCollector() *store.ContactCollector { return c.contactCollector }
+
+// SetGroupCollector sets the group collector for auto-collecting group directory from messages.
+func (c *BaseChannel) SetGroupCollector(gc *store.GroupCollector) { c.groupCollector = gc }
+
+// GroupCollector returns the group collector (may be nil).
+func (c *BaseChannel) GroupCollector() *store.GroupCollector { return c.groupCollector }
 
 // IsRunning returns whether the channel is running.
 func (c *BaseChannel) IsRunning() bool { return c.running }

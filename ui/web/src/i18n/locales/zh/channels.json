@@ -312,6 +312,16 @@
     "failedUpdate": "更新Channel失败",
     "failedDelete": "删除Channel失败"
   },
+  "allowFromPicker": {
+    "users": "用户",
+    "groups": "群组",
+    "search": "搜索...",
+    "noMatch": "无匹配结果",
+    "manualPlaceholder": "手动输入 ID",
+    "add": "添加",
+    "fetchGroups": "获取群组列表",
+    "fetching": "正在获取频道..."
+  },
   "zalo": {
     "allowedUsers": "允许的用户",
     "loadContacts": "加载联系人",

@@ -50,5 +50,17 @@
     "allTypes": "所有类型",
     "direct": "私聊",
     "group": "群组"
+  },
+  "tabs": {
+    "users": "用户",
+    "groups": "群组"
+  },
+  "groups": {
+    "name": "群名",
+    "groupId": "群ID",
+    "channel": "Channel",
+    "members": "成员",
+    "emptyTitle": "暂无群组",
+    "emptyDescription": "当收到群聊消息时，群组将显示在此处。"
   }
 }

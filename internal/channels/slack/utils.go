@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	slackapi "github.com/slack-go/slack"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -35,6 +37,15 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 	if cc := c.ContactCollector(); cc != nil {
 		ctx := store.WithTenantID(context.Background(), c.TenantID())
 		cc.EnsureContact(ctx, c.Type(), c.Name(), userID, userID, metadata["username"], "", peerKind)
+	}
+	// Collect group directory entry.
+	if peerKind == "group" {
+		if gc := c.GroupCollector(); gc != nil {
+			ctx := store.WithTenantID(context.Background(), c.TenantID())
+			if chanName := c.resolveChannelName(ctx, chatID); chanName != "" {
+				gc.EnsureGroup(ctx, c.Type(), c.Name(), chatID, chanName, 0)
+			}
+		}
 	}
 
 	c.Bus().PublishInbound(bus.InboundMessage{
@@ -82,6 +93,70 @@ func (c *Channel) resolveDisplayName(userID string) string {
 	c.userCacheMu.Unlock()
 
 	return name
+}
+
+// resolveChannelName returns the cached channel name, fetching from Slack API on first call.
+func (c *Channel) resolveChannelName(ctx context.Context, channelID string) string {
+	if name, ok := c.channelNames.Load(channelID); ok {
+		return name.(string)
+	}
+	info, err := c.api.GetConversationInfoContext(ctx, &slackapi.GetConversationInfoInput{
+		ChannelID: channelID,
+	})
+	if err != nil {
+		slog.Debug("slack: failed to resolve channel name", "channel_id", channelID, "error", err)
+		return ""
+	}
+	if info.Name != "" {
+		c.channelNames.Store(channelID, info.Name)
+	}
+	return info.Name
+}
+
+// RefreshGroups fetches all Slack conversations the bot is a member of and
+// upserts them into the channel_groups directory via the GroupCollector.
+// Pagination is handled via cursor. Only channels with a non-empty name are recorded.
+func (c *Channel) RefreshGroups(ctx context.Context) error {
+	gc := c.GroupCollector()
+	if gc == nil {
+		return fmt.Errorf("slack: group collector not configured")
+	}
+
+	gctx := store.WithTenantID(ctx, c.TenantID())
+	var cursor string
+	var total int
+
+	for {
+		params := &slackapi.GetConversationsParameters{
+			Types:           []string{"public_channel", "private_channel"},
+			Limit:           200,
+			Cursor:          cursor,
+			ExcludeArchived: true,
+		}
+		convos, nextCursor, err := c.api.GetConversationsContext(gctx, params)
+		if err != nil {
+			return fmt.Errorf("slack: conversations.list failed: %w", err)
+		}
+		for _, ch := range convos {
+			name := ch.Name
+			if name == "" {
+				name = ch.NameNormalized
+			}
+			if name == "" {
+				continue
+			}
+			gc.EnsureGroup(gctx, c.Type(), c.Name(), ch.ID, name, ch.NumMembers)
+			c.channelNames.Store(ch.ID, name)
+			total++
+		}
+		if nextCursor == "" {
+			break
+		}
+		cursor = nextCursor
+	}
+
+	slog.Info("slack: refreshed groups", "count", total, "channel", c.Name())
+	return nil
 }
 
 // nonRetryableAuthErrors matches Slack errors that indicate permanent auth failure.

@@ -43,6 +43,7 @@ type Channel struct {
 	reactions       sync.Map // chatID:messageID -> *reactionState
 	pairingDebounce sync.Map // senderID -> time.Time
 	approvedGroups  sync.Map // channelID -> true
+	channelNames    sync.Map // channelID → name string
 
 	// High-churn map: sync.Mutex + regular map for debounce timers
 	debounceMu     sync.Mutex
@@ -210,6 +211,19 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	c.SetRunning(true)
 	slog.Info("slack bot connected", "user_id", c.botUserID, "team", authResp.Team)
+
+	// Populate channel_groups directory in background (non-blocking).
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_refresh_groups")
+		refreshCtx, refreshCancel := context.WithTimeout(smCtx, 30*time.Second)
+		defer refreshCancel()
+		if err := c.RefreshGroups(refreshCtx); err != nil {
+			slog.Warn("slack: initial group refresh failed", "error", err)
+		}
+	}()
+
 	return nil
 }
 

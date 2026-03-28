@@ -44,6 +44,7 @@ type Channel struct {
 	pairingDebounce sync.Map // senderID → time.Time
 	reactions       sync.Map // chatID → *reactionState
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
+	groupNames      sync.Map // chatID → name string
 	groupAllowList  []string
 	groupHistory    *channels.PendingHistory
 	historyLimit    int
@@ -113,12 +114,38 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	c.SetRunning(true)
 
+	// Pre-populate channel_groups with all group chats (best-effort, non-blocking).
+	go c.refreshGroupsOnStartup()
+
 	switch mode {
 	case "webhook":
 		return c.startWebhook(ctx)
 	default: // "websocket"
 		return c.startWebSocket(ctx)
 	}
+}
+
+// refreshGroupsOnStartup fetches all group chats via ListChats and populates channel_groups.
+func (c *Channel) refreshGroupsOnStartup() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	chats, err := c.client.ListChats(ctx)
+	if err != nil {
+		slog.Warn("feishu: list chats on startup failed", "error", err)
+		return
+	}
+	gc := c.GroupCollector()
+	if gc == nil {
+		return
+	}
+	ctx = store.WithTenantID(ctx, c.TenantID())
+	for _, chat := range chats {
+		gc.EnsureGroup(ctx, c.Type(), c.Name(), chat.ChatID, chat.Name, chat.UserCountInt())
+		if chat.Name != "" {
+			c.groupNames.Store(chat.ChatID, chat.Name)
+		}
+	}
+	slog.Info("feishu: cached group names", "count", len(chats))
 }
 
 // BlockReplyEnabled returns the per-channel block_reply override (nil = inherit gateway default).
@@ -497,6 +524,29 @@ func (c *Channel) isDuplicate(messageID string) bool {
 		})
 	}
 	return loaded
+}
+
+// resolveGroupName returns the group name for a chat ID, using a local cache.
+func (c *Channel) resolveGroupName(ctx context.Context, chatID string) string {
+	if chatID == "" {
+		return ""
+	}
+
+	// Check cache
+	if name, ok := c.groupNames.Load(chatID); ok {
+		return name.(string)
+	}
+
+	// Fetch from API
+	info, err := c.client.GetChatInfo(ctx, chatID)
+	if err != nil {
+		slog.Warn("feishu: fetch group name failed", "chat_id", chatID, "error", err)
+		return ""
+	}
+	if info.Name != "" {
+		c.groupNames.Store(chatID, info.Name)
+	}
+	return info.Name
 }
 
 // --- ReactionChannel implementation ---

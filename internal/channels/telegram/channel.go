@@ -228,6 +228,18 @@ func (c *Channel) Start(ctx context.Context) error {
 					case <-pollCtx.Done():
 						return
 					}
+				} else if update.MyChatMember != nil {
+					select {
+					case c.handlerSem <- struct{}{}:
+						c.handlerWg.Add(1)
+						go func(m *telego.ChatMemberUpdated) {
+							defer c.handlerWg.Done()
+							defer func() { <-c.handlerSem }()
+							c.handleMyChatMember(pollCtx, m)
+						}(update.MyChatMember)
+					case <-pollCtx.Done():
+						return
+					}
 				} else {
 					// Log non-message updates for delivery diagnostics
 					updateType := "unknown"
@@ -236,8 +248,6 @@ func (c *Channel) Start(ctx context.Context) error {
 						updateType = "edited_message"
 					case update.ChannelPost != nil:
 						updateType = "channel_post"
-					case update.MyChatMember != nil:
-						updateType = "my_chat_member"
 					case update.ChatMember != nil:
 						updateType = "chat_member"
 					}

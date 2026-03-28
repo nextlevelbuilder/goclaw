@@ -197,6 +197,12 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			if cc := c.ContactCollector(); cc != nil {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, "group")
 			}
+			// Collect group directory entry.
+			if gc := c.GroupCollector(); gc != nil && m.GuildID != "" {
+				if guildName := c.resolveGuildName(m.GuildID); guildName != "" {
+					gc.EnsureGroup(ctx, c.Type(), c.Name(), m.GuildID, guildName, 0)
+				}
+			}
 
 			slog.Debug("discord group message recorded (no mention)",
 				"channel_id", channelID,
@@ -289,6 +295,14 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if cc := c.ContactCollector(); cc != nil {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, m.Author.Username, peerKind)
 	}
+	// Collect group directory entry.
+	if !isDM && m.GuildID != "" {
+		if gc := c.GroupCollector(); gc != nil {
+			if guildName := c.resolveGuildName(m.GuildID); guildName != "" {
+				gc.EnsureGroup(ctx, c.Type(), c.Name(), m.GuildID, guildName, 0)
+			}
+		}
+	}
 
 	// Publish directly to bus (to preserve MediaFile MIME types)
 	c.Bus().PublishInbound(bus.InboundMessage{
@@ -307,6 +321,22 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if peerKind == "group" {
 		c.groupHistory.Clear(channelID)
 	}
+}
+
+// resolveGuildName returns the cached guild name, fetching from Discord API on first call.
+func (c *Channel) resolveGuildName(guildID string) string {
+	if guildID == "" {
+		return ""
+	}
+	if name, ok := c.guildNames.Load(guildID); ok {
+		return name.(string)
+	}
+	guild, err := c.session.Guild(guildID)
+	if err != nil {
+		return ""
+	}
+	c.guildNames.Store(guildID, guild.Name)
+	return guild.Name
 }
 
 // checkGroupPolicy evaluates the group policy for a sender, with pairing support.
@@ -432,4 +462,62 @@ func resolveDisplayName(m *discordgo.MessageCreate) string {
 		return m.Author.GlobalName
 	}
 	return m.Author.Username
+}
+
+// handleGuildCreate fires when the bot joins a new guild (or on initial connect for each guild).
+// It upserts the guild into channel_groups so the UI can display it immediately.
+func (c *Channel) handleGuildCreate(_ *discordgo.Session, g *discordgo.GuildCreate) {
+	if g.Guild == nil {
+		return
+	}
+	gc := c.GroupCollector()
+	if gc == nil {
+		return
+	}
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
+
+	memberCount := g.MemberCount
+	gc.EnsureGroup(ctx, c.Type(), c.Name(), g.ID, g.Name, memberCount)
+	c.guildNames.Store(g.ID, g.Name)
+
+	slog.Debug("discord guild collected", "guild_id", g.ID, "name", g.Name, "members", memberCount)
+}
+
+// RefreshGroups fetches all guilds the bot is in and upserts them into channel_groups.
+// Called during Start() and can be invoked on demand.
+func (c *Channel) RefreshGroups() error {
+	gc := c.GroupCollector()
+	if gc == nil {
+		return nil
+	}
+
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
+
+	// Paginate through all guilds (API returns max 200 per call).
+	var afterID string
+	total := 0
+	for {
+		guilds, err := c.session.UserGuilds(200, "", afterID, false)
+		if err != nil {
+			slog.Warn("discord: failed to fetch guilds", "error", err, "after_id", afterID)
+			return fmt.Errorf("fetch discord guilds: %w", err)
+		}
+		if len(guilds) == 0 {
+			break
+		}
+		for _, g := range guilds {
+			gc.EnsureGroup(ctx, c.Type(), c.Name(), g.ID, g.Name, 0)
+			c.guildNames.Store(g.ID, g.Name)
+		}
+		total += len(guilds)
+		if len(guilds) < 200 {
+			break
+		}
+		afterID = guilds[len(guilds)-1].ID
+	}
+
+	slog.Info("discord: refreshed guilds", "count", total)
+	return nil
 }

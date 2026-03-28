@@ -22,6 +22,7 @@ type Stores struct {
 	PendingMessages  PendingMessageStore
 	KnowledgeGraph   KnowledgeGraphStore
 	Contacts         ContactStore
+	Groups           GroupStore
 	Activity         ActivityStore
 	Snapshots        SnapshotStore
 	SecureCLI        SecureCLIStore
