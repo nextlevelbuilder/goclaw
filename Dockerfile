@@ -59,7 +59,7 @@ RUN set -eux; \
         pip3 install --no-cache-dir --break-system-packages \
             pypdf openpyxl pandas python-pptx markitdown defusedxml lxml \
             pdfplumber pdf2image anthropic; \
-        npm install -g --cache /tmp/npm-cache docx pptxgenjs; \
+        npm install -g --cache /tmp/npm-cache docx pptxgenjs @anthropic-ai/claude-code; \
         rm -rf /tmp/npm-cache /root/.cache /var/cache/apk/*; \
     else \
         if [ "$ENABLE_PYTHON" = "true" ]; then \
@@ -69,6 +69,11 @@ RUN set -eux; \
         if [ "$ENABLE_NODE" = "true" ]; then \
             apk add --no-cache nodejs npm; \
         fi; \
+    fi; \
+    # Install Claude CLI if Node.js is available
+    if command -v npm >/dev/null 2>&1; then \
+        npm install -g --cache /tmp/npm-cache @anthropic-ai/claude-code; \
+        rm -rf /tmp/npm-cache; \
     fi
 
 # Non-root user
@@ -116,7 +121,8 @@ RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global
     && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.claude
 
 # Default environment
-ENV GOCLAW_CONFIG=/app/config.json \
+ENV HOME=/app \
+    GOCLAW_CONFIG=/app/config.json \
     GOCLAW_WORKSPACE=/app/workspace \
     GOCLAW_DATA_DIR=/app/data \
     GOCLAW_SKILLS_DIR=/app/skills \

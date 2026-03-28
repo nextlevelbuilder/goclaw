@@ -8,3 +8,4 @@ services:
   goclaw:
     volumes:
       - ${HOME}/.claude:/app/.claude-host:ro
+      - ${HOME}/.claude.json:/app/.claude-host.json:ro
