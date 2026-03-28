@@ -209,6 +209,7 @@ type ProvidersConfig struct {
 	Ollama      OllamaConfig    `json:"ollama"`       // local Ollama instance (no API key needed)
 	OllamaCloud ProviderConfig  `json:"ollama_cloud"` // Ollama Cloud (API key required)
 	ClaudeCLI   ClaudeCLIConfig `json:"claude_cli"`
+	CursorCLI   CursorCLIConfig `json:"cursor_cli"`
 	ACP         ACPConfig       `json:"acp"`
 }
 
@@ -224,6 +225,15 @@ type ClaudeCLIConfig struct {
 	Model       string `json:"model" yaml:"model"`                 // default model alias (default: "sonnet")
 	BaseWorkDir string `json:"base_work_dir" yaml:"base_work_dir"` // base dir for agent workspaces
 	PermMode    string `json:"perm_mode" yaml:"perm_mode"`         // permission mode (default: "bypassPermissions")
+}
+
+// CursorCLIConfig configures the Cursor CLI provider.
+// Uses CURSOR_API_KEY for headless authentication via the `agent` binary.
+type CursorCLIConfig struct {
+	APIKey      string `json:"api_key,omitempty"`       // Cursor User API Key (prefer CURSOR_API_KEY env)
+	CLIPath     string `json:"cli_path,omitempty"`      // path to agent binary (default: "agent")
+	Model       string `json:"model,omitempty"`         // default model (default: "cursor-fast")
+	BaseWorkDir string `json:"base_work_dir,omitempty"` // base dir for agent workspaces
 }
 
 // ACPConfig configures the ACP (Agent Client Protocol) provider.
@@ -304,6 +314,7 @@ func (c *Config) HasAnyProvider() bool {
 		p.Ollama.Host != "" ||
 		p.OllamaCloud.APIKey != "" ||
 		p.ClaudeCLI.CLIPath != "" ||
+		p.CursorCLI.APIKey != "" ||
 		p.ACP.Binary != ""
 }
 

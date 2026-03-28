@@ -160,6 +160,27 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 		slog.Info("registered provider", "name", "claude-cli")
 	}
 
+	// Cursor CLI provider — API key auth, configurable agent binary path
+	if cfg.Providers.CursorCLI.APIKey != "" {
+		cliPath := cfg.Providers.CursorCLI.CLIPath
+		if cliPath == "" {
+			cliPath = "agent"
+		}
+		var opts []providers.CursorCLIOption
+		opts = append(opts, providers.WithCursorCLIAPIKey(cfg.Providers.CursorCLI.APIKey))
+		if cfg.Providers.CursorCLI.Model != "" {
+			opts = append(opts, providers.WithCursorCLIModel(cfg.Providers.CursorCLI.Model))
+		}
+		if cfg.Providers.CursorCLI.BaseWorkDir != "" {
+			opts = append(opts, providers.WithCursorCLIWorkDir(cfg.Providers.CursorCLI.BaseWorkDir))
+		}
+		gatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
+		mcpData := providers.BuildCLIMCPConfigData(cfg.Tools.McpServers, gatewayAddr, cfg.Gateway.Token)
+		opts = append(opts, providers.WithCursorCLIMCPConfigData(mcpData))
+		registry.Register(providers.NewCursorCLIProvider(cliPath, opts...))
+		slog.Info("registered provider", "name", "cursor-cli")
+	}
+
 	// ACP provider (config-based) — orchestrates any ACP-compatible agent binary
 	if cfg.Providers.ACP.Binary != "" {
 		registerACPFromConfig(registry, cfg.Providers.ACP)
@@ -266,6 +287,34 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 			}
 			registry.Register(providers.NewClaudeCLIProvider(cliPath, cliOpts...))
+			slog.Info("registered provider from DB", "name", p.Name)
+			continue
+		}
+		if p.ProviderType == store.ProviderCursorCLI {
+			cliPath := p.APIBase //reuse APIBase field for CLI path
+			if cliPath == "" {
+				cliPath = "agent"
+			}
+			if cliPath != "agent" && !filepath.IsAbs(cliPath) {
+				slog.Warn("security.cursor_cli: invalid path from DB, using default", "path", cliPath)
+				cliPath = "agent"
+			}
+			if p.APIKey == "" {
+				slog.Warn("cursor-cli: no API key in DB provider, skipping", "name", p.Name)
+				continue
+			}
+			if _, err := exec.LookPath(cliPath); err != nil {
+				slog.Warn("cursor-cli: binary not found, skipping", "path", cliPath, "error", err)
+				continue
+			}
+			var cursorOpts []providers.CursorCLIOption
+			cursorOpts = append(cursorOpts, providers.WithCursorCLIAPIKey(p.APIKey))
+			if gatewayAddr != "" {
+				mcpData := providers.BuildCLIMCPConfigData(nil, gatewayAddr, gatewayToken)
+				mcpData.AgentMCPLookup = buildMCPServerLookup(mcpStore)
+				cursorOpts = append(cursorOpts, providers.WithCursorCLIMCPConfigData(mcpData))
+			}
+			registry.Register(providers.NewCursorCLIProvider(cliPath, cursorOpts...))
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}

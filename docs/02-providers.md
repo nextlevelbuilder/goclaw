@@ -1,6 +1,6 @@
 # 02 - LLM Providers
 
-GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Six concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), Claude CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking).
+GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Seven concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), Claude CLI (local binary), Cursor CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking).
 
 ---
 
@@ -15,6 +15,7 @@ flowchart TD
     PI --> ANTH["Anthropic Provider<br/>native net/http + SSE"]
     PI --> OAI["OpenAI-Compatible Provider<br/>generic HTTP client"]
     PI --> CLAUDE["Claude CLI Provider<br/>stdio subprocess"]
+    PI --> CURSOR["Cursor CLI Provider<br/>stdio subprocess"]
     PI --> CODEX["Codex Provider<br/>OAuth-based Responses API"]
     PI --> ACP["ACP Provider<br/>JSON-RPC 2.0 subagents"]
     PI --> DASH["DashScope Provider<br/>OpenAI-compat wrapper"]
@@ -27,6 +28,7 @@ flowchart TD
     OAI --> GEM["Gemini API"]
     OAI --> OTHER["Mistral / xAI / MiniMax<br/>Cohere / Perplexity / Ollama"]
     CLAUDE --> CLI["claude CLI binary<br/>stdio + MCP bridge"]
+    CURSOR --> CURSOR_CLI["agent (Cursor) binary<br/>stdio + MCP bridge"]
     CODEX --> CODEX_API["ChatGPT Responses API<br/>chatgpt.com/backend-api"]
     ACP --> AGENTS["Claude Code / Codex<br/>Gemini CLI agents"]
     DASH --> QWEN["Alibaba DashScope<br/>Qwen3 models"]
@@ -36,6 +38,7 @@ Authentication and timeouts vary by provider type:
 - **Anthropic**: `x-api-key` header + `anthropic-version: 2023-06-01`
 - **OpenAI-compatible**: `Authorization: Bearer` token
 - **Claude CLI**: stdio subprocess (no auth; uses local CLI session)
+- **Cursor CLI**: `CURSOR_API_KEY` env var injection per-call
 - **Codex**: OAuth access token (auto-refreshed via TokenSource)
 - **ACP**: JSON-RPC 2.0 over subprocess stdio
 - **DashScope**: `Authorization: Bearer` token (inherits from OpenAI-compatible)
@@ -46,12 +49,13 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 
 ## 2. Supported Providers
 
-### Six Core Provider Types
+### Seven Core Provider Types
 
 | Provider | Type | Configuration | Default Model |
 |----------|------|----------|---------------|
 | **anthropic** | Native HTTP + SSE | API key required | `claude-sonnet-4-5-20250929` |
 | **claude_cli** | stdio subprocess + MCP | Binary path (default: `claude`) | `sonnet` |
+| **cursor_cli** | stdio subprocess + MCP | API key env var (default binary: `agent`) | `cursor-fast` |
 | **codex** | OAuth Responses API | OAuth token source | `gpt-5.3-codex` |
 | **acp** | JSON-RPC 2.0 subagents | Binary + workspace dir | `claude` |
 | **dashscope** | OpenAI-compat wrapper | API key + custom models | `qwen3-max` |
@@ -557,7 +561,80 @@ Claude CLI inherits thinking support from the underlying Claude model. Thinking 
 
 ---
 
-## 12. Codex Provider
+## 12. Cursor CLI Provider
+
+The Cursor CLI provider enables GoClaw to delegate requests to a local `agent` (Cursor) CLI binary. Like Claude CLI, it manages session history, context files, and tool execution independently. Cursor provides fast inference with multimodal support and extended context.
+
+### Architecture Overview
+
+```mermaid
+flowchart TD
+    AL["Agent Loop"] -->|Chat / ChatStream| CLI["CursorCLIProvider"]
+    CLI --> POOL["SessionPool"]
+    POOL -->|spawn/reuse| PROC["Subprocess<br/>agent --print --output-format stream-json"]
+    PROC -->|manages| SESS["Session<br/>(chat ID, history)"]
+
+    SESS -->|AGENTS.md system prompt| TOOLS["CLI Tool Execution"]
+    SESS -->|.cursor/mcp.json MCP config| TOOLS
+    SESS -->|--resume chatId| TOOLS
+
+    TOOLS -->|via MCP| MCP["MCP Servers<br/>(if configured)"]
+```
+
+### Configuration
+
+CursorCLIProvider can be configured in `config.json`:
+
+```json5
+{
+  "providers": {
+    "cursor_cli": {
+      "api_key": "your-cursor-api-key",         // optional; prefer CURSOR_API_KEY env
+      "model": "cursor-fast",                    // default model (cursor-fast, cursor-standard, etc.)
+      "base_work_dir": "/tmp/cursor-workspaces" // workspace directory base
+    }
+  }
+}
+```
+
+Or via database `llm_providers` table with `provider_type = "cursor_cli"`.
+
+Environment variables:
+- `CURSOR_API_KEY` — Cursor User API Key (injected per-call; overrides config)
+- `GOCLAW_CURSOR_CLI_MODEL` — Default model override
+- `GOCLAW_CURSOR_CLI_WORK_DIR` — Base workspace directory override
+
+### Session Management
+
+Each conversation gets a persistent session tied to `session_key` option. Sessions survive across multiple requests and maintain:
+- Chat ID (server-assigned; persisted to `.cursor_session_id`)
+- Workspace directory (for file operations)
+- MCP server connections
+- System prompt file (`AGENTS.md`)
+
+### Tool Execution
+
+Cursor CLI executes tools natively (filesystem, web, terminal). GoClaw forwards tool results back and lets the CLI loop continue. This mirrors Claude CLI's execution model.
+
+### Headless Flags
+
+The provider invokes `agent` with these critical flags:
+- `--print` — stream output to stdout
+- `--output-format stream-json` — use structured event format
+- `--force` — bypass confirmation prompts
+- `--trust` — skip workspace security dialogs
+- `--workspace <workdir>` — set working directory
+- `--approve-mcps` — auto-approve MCP server connections (if configured)
+- `--resume <chatId>` — resume existing conversation (if session ID found)
+
+### Streaming
+
+- **Chat**: Returns complete response after CLI execution
+- **ChatStream**: Streams text chunks as they are produced by the CLI
+
+---
+
+## 14. Codex Provider
 
 The Codex provider integrates with OpenAI's ChatGPT Responses API (OAuth-based), enabling access to gpt-5.3-codex model through the chatgpt.com backend. Unlike standard OpenAI endpoints, Codex uses OAuth token refresh and a custom response format with "phase" markers.
 
@@ -629,7 +706,7 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 
 ---
 
-## 14. File Reference
+## 15. File Reference
 
 | File | Purpose |
 |------|---------|
@@ -649,6 +726,12 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 | `internal/providers/claude_cli_deny_patterns.go` | Path validation and deny pattern enforcement |
 | `internal/providers/claude_cli_hooks.go` | Security hooks configuration for CLI tool execution |
 | `internal/providers/claude_cli_types.go` | Internal types for CLI provider (session, config, options) |
+| `internal/providers/cursor_cli.go` | CursorCLIProvider: orchestrates local cursor agent binary via stdio |
+| `internal/providers/cursor_cli_chat.go` | Chat/ChatStream implementation for Cursor CLI provider |
+| `internal/providers/cursor_cli_session.go` | Session management: workspace, system prompt, session ID persistence |
+| `internal/providers/cursor_cli_mcp.go` | MCP configuration for Cursor CLI provider |
+| `internal/providers/cursor_cli_auth.go` | API key validation for Cursor CLI |
+| `internal/providers/cursor_cli_parse.go` | Response parsing and chat ID extraction from stream-json |
 | `internal/providers/codex.go` | CodexProvider: OAuth-based ChatGPT Responses API |
 | `internal/providers/codex_build.go` | Codex request builder: message formatting, phase handling |
 | `internal/providers/codex_types.go` | Codex request/response types and OAuth token management |
