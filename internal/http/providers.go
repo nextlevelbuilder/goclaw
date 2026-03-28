@@ -2,8 +2,12 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -185,6 +189,38 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	}
 }
 
+// validateProviderURL rejects provider base URLs pointing to internal/private networks.
+// Defense-in-depth: prevents SSRF when providers are later used for API calls.
+func validateProviderURL(rawURL string) error {
+	if rawURL == "" {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	host := u.Hostname()
+	// Block obvious internal targets
+	blocked := []string{"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254", "metadata.google.internal"}
+	for _, b := range blocked {
+		if strings.EqualFold(host, b) {
+			return fmt.Errorf("provider URL cannot point to %s", b)
+		}
+	}
+	// Block private IP ranges
+	ip := net.ParseIP(host)
+	if ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("provider URL cannot point to private network: %s", host)
+		}
+	}
+	// Block common internal hostnames
+	if strings.HasSuffix(host, ".internal") || strings.HasSuffix(host, ".local") {
+		return fmt.Errorf("provider URL cannot point to internal hostname: %s", host)
+	}
+	return nil
+}
+
 // --- Provider CRUD ---
 
 func (h *ProvidersHandler) handleListProviders(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +278,11 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 	}
 
 	if err := validateChatGPTOAuthProviderCandidate(r.Context(), h.store, uuid.Nil, &p); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := validateProviderURL(p.APIBase); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -354,6 +395,23 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 			return
 		}
 		candidate.Settings = rawSettings
+	}
+
+	if apiBase, ok := updates["api_base"]; ok {
+		if s, _ := apiBase.(string); s != "" {
+			if err := validateProviderURL(s); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+	}
+	if baseURL, ok := updates["base_url"]; ok {
+		if s, _ := baseURL.(string); s != "" {
+			if err := validateProviderURL(s); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+		}
 	}
 
 	if err := validateChatGPTOAuthProviderCandidate(r.Context(), h.store, id, &candidate); err != nil {

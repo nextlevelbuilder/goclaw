@@ -53,6 +53,24 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 	}
 
 	targetDir := filepath.Clean(localPath)
+
+	// Resolve symlinks to prevent workspace escape via symlinked paths.
+	// EvalSymlinks returns the canonical path, which we then re-validate
+	// against the original cleaned path to detect traversal attempts.
+	if resolved, err := filepath.EvalSymlinks(localPath); err == nil {
+		resolvedClean := filepath.Clean(resolved)
+		// If symlink resolves outside the original directory tree, reject it.
+		if resolvedClean != targetDir && !strings.HasPrefix(resolvedClean, targetDir+string(filepath.Separator)) {
+			slog.Warn("sandbox.resolve: symlink escape detected",
+				"path", localPath,
+				"resolved", resolvedClean,
+				"expected_prefix", targetDir,
+			)
+			return localPath // Fall back to unresolved path (safe: won't mount outside container)
+		}
+		targetDir = resolvedClean
+	}
+
 	var bestDest string
 	var bestSource string
 	var bestRel string
