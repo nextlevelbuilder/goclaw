@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"regexp"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -11,6 +12,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+var validSenderIDRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:@-]*$`)
+
+// isValidSenderID checks that a sender ID contains only safe characters.
+// Prevents log injection and bus event poisoning.
+func isValidSenderID(id string) bool {
+	return validSenderIDRe.MatchString(id)
+}
 
 // PairingApproveCallback is called after a pairing is approved.
 // channel is the channel name (e.g., "telegram"), chatID is the chat to notify,
@@ -63,6 +72,13 @@ func (m *PairingMethods) handleRequest(ctx context.Context, client *gateway.Clie
 
 	if params.SenderID == "" || params.Channel == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgSenderChannelRequired)))
+		return
+	}
+
+	// Validate sender ID format: alphanumeric, hyphens, underscores, colons, dots.
+	// Max 128 chars. Prevents log injection and bus event poisoning.
+	if len(params.SenderID) > 128 || !isValidSenderID(params.SenderID) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid sender_id format"))
 		return
 	}
 
@@ -219,6 +235,13 @@ func (m *PairingMethods) handleBrowserPairingStatus(ctx context.Context, client 
 
 	if params.SenderID == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgSenderIDRequired)))
+		return
+	}
+
+	// Validate sender ID format: alphanumeric, hyphens, underscores, colons, dots.
+	// Max 128 chars. Prevents log injection and bus event poisoning.
+	if len(params.SenderID) > 128 || !isValidSenderID(params.SenderID) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid sender_id format"))
 		return
 	}
 
