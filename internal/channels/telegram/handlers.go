@@ -331,7 +331,11 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
 				contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-				cc.EnsureContact(ctx, c.Type(), c.Name(), userID, userID, contactName, user.Username, "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, "group")
+			}
+			// Collect group directory entry.
+			if gc := c.GroupCollector(); gc != nil && message.Chat.Title != "" {
+				gc.EnsureGroup(ctx, c.Type(), c.Name(), chatIDStr, message.Chat.Title, 0)
 			}
 
 			slog.Debug("telegram group message recorded (no mention)",
@@ -584,6 +588,12 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, user.FirstName, user.Username, peerKind)
+	}
+	// Collect group directory entry.
+	if isGroup && message.Chat.Title != "" {
+		if gc := c.GroupCollector(); gc != nil {
+			gc.EnsureGroup(ctx, c.Type(), c.Name(), chatIDStr, message.Chat.Title, 0)
+		}
 	}
 
 	c.Bus().PublishInbound(bus.InboundMessage{

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -23,8 +24,10 @@ type Channel struct {
 	config          config.ZaloPersonalConfig
 	pairingService  store.PairingStore
 	pairingDebounce sync.Map // senderID -> time.Time
-	approvedGroups  sync.Map // groupID → true (in-memory cache for paired groups)
-	typingCtrls     sync.Map // threadID → *typing.Controller
+	approvedGroups         sync.Map  // groupID → true (in-memory cache for paired groups)
+	groupNames             sync.Map  // groupID → name string (cached for contact collection)
+	groupNamesRefreshedAt  time.Time // last refresh time (throttle, protected by mu)
+	typingCtrls            sync.Map  // threadID → *typing.Controller
 
 	mu       sync.RWMutex // protects sess and listener
 	sess     *protocol.Session
@@ -118,6 +121,9 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	slog.Info("zalo_personal connected", "uid", sess.UID)
 
+	// Pre-cache group names for contact collection (best-effort).
+	go c.cacheGroupNames(sess)
+
 	c.SetRunning(true)
 	go c.listenLoop(ctx)
 
@@ -132,6 +138,60 @@ func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
 
 // SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
 func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
+
+// cacheGroupNames fetches group list and caches names for contact collection.
+func (c *Channel) cacheGroupNames(sess *protocol.Session) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	groups, err := protocol.FetchGroups(ctx, sess)
+	if err != nil {
+		slog.Debug("zalo_personal: cache group names failed", "error", err)
+		return
+	}
+	for _, g := range groups {
+		if g.Name != "" {
+			c.groupNames.Store(g.GroupID, g.Name)
+		}
+	}
+	slog.Info("zalo_personal: cached group names", "count", len(groups))
+}
+
+// resolveGroupName returns cached group name. If unknown, triggers async refresh
+// and returns empty (name will be available on next message).
+func (c *Channel) resolveGroupName(groupID string) string {
+	if name, ok := c.groupNames.Load(groupID); ok {
+		return name.(string)
+	}
+	// Unknown group — trigger async refresh (non-blocking, throttled).
+	c.refreshGroupNamesOnce()
+	return ""
+}
+
+// refreshGroupNamesOnce triggers a background group name refresh, throttled to
+// at most once per 5 minutes to avoid API spam.
+func (c *Channel) refreshGroupNamesOnce() {
+	now := time.Now()
+	c.mu.RLock()
+	last := c.groupNamesRefreshedAt
+	c.mu.RUnlock()
+	if now.Sub(last) < 5*time.Minute {
+		return
+	}
+	c.mu.Lock()
+	// Double-check after acquiring write lock.
+	if now.Sub(c.groupNamesRefreshedAt) < 5*time.Minute {
+		c.mu.Unlock()
+		return
+	}
+	c.groupNamesRefreshedAt = now
+	c.mu.Unlock()
+
+	sess := c.session()
+	if sess == nil {
+		return
+	}
+	go c.cacheGroupNames(sess)
+}
 
 // Stop gracefully shuts down the Zalo Personal channel.
 func (c *Channel) Stop(_ context.Context) error {

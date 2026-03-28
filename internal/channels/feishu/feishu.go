@@ -44,6 +44,7 @@ type Channel struct {
 	pairingDebounce sync.Map // senderID → time.Time
 	reactions       sync.Map // chatID → *reactionState
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
+	groupNames      sync.Map // chatID → name string
 	groupAllowList  []string
 	groupHistory    *channels.PendingHistory
 	historyLimit    int
@@ -497,6 +498,29 @@ func (c *Channel) isDuplicate(messageID string) bool {
 		})
 	}
 	return loaded
+}
+
+// resolveGroupName returns the group name for a chat ID, using a local cache.
+func (c *Channel) resolveGroupName(ctx context.Context, chatID string) string {
+	if chatID == "" {
+		return ""
+	}
+
+	// Check cache
+	if name, ok := c.groupNames.Load(chatID); ok {
+		return name.(string)
+	}
+
+	// Fetch from API
+	info, err := c.client.GetChatInfo(ctx, chatID)
+	if err != nil {
+		slog.Warn("feishu: fetch group name failed", "chat_id", chatID, "error", err)
+		return ""
+	}
+	if info.Name != "" {
+		c.groupNames.Store(chatID, info.Name)
+	}
+	return info.Name
 }
 
 // --- ReactionChannel implementation ---

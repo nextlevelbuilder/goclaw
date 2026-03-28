@@ -202,6 +202,12 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 			if cc := c.ContactCollector(); cc != nil {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group")
 			}
+			// Collect group directory entry.
+			if gc := c.GroupCollector(); gc != nil {
+				if chanName := c.resolveChannelName(ctx, channelID); chanName != "" {
+					gc.EnsureGroup(ctx, c.Type(), c.Name(), channelID, chanName, 0)
+				}
+			}
 
 			slog.Debug("slack group message recorded (no mention)",
 				"channel_id", channelID, "user", displayName)

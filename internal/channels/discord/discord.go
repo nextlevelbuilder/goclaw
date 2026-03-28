@@ -31,6 +31,7 @@ type Channel struct {
 	pairingService  store.PairingStore
 	pairingDebounce sync.Map // senderID → time.Time
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
+	guildNames      sync.Map // guildID → name string (cached for contact collection)
 	groupHistory    *channels.PendingHistory
 	historyLimit    int
 	agentStore      store.AgentStore             // for agent key lookup (nil = writer commands disabled)

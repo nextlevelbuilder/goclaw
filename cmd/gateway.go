@@ -1061,6 +1061,12 @@ func runGateway() {
 		channelMgr.SetContactCollector(contactCollector) // propagate to all channel handlers
 	}
 
+	// Group collector: auto-collect group directory from channels with in-memory dedup cache.
+	if pgStores.Groups != nil {
+		groupCollector := store.NewGroupCollector(pgStores.Groups, cache.NewInMemoryCache[string]())
+		channelMgr.SetGroupCollector(groupCollector)
+	}
+
 	go consumeInboundMessages(ctx, msgBus, agentRouter, cfg, sched, channelMgr, consumerTeamStore, quotaChecker, pgStores.Sessions, pgStores.Agents, contactCollector, postTurn)
 
 	// Task recovery ticker: re-dispatches stale/pending team tasks on startup and periodically.

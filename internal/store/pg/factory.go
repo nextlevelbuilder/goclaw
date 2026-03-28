@@ -40,6 +40,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		PendingMessages:  NewPGPendingMessageStore(db),
 		KnowledgeGraph:   NewPGKnowledgeGraphStore(db),
 		Contacts:         NewPGContactStore(db),
+		Groups:           NewPGGroupStore(db),
 		Activity:         NewPGActivityStore(db),
 		Snapshots:        NewPGSnapshotStore(db),
 		SecureCLI:        NewPGSecureCLIStore(db, cfg.EncryptionKey),

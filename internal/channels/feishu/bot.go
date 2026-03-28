@@ -109,6 +109,13 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", "group")
 			}
 
+			// Collect group directory entry.
+			if gc := c.GroupCollector(); gc != nil {
+				if groupName := c.resolveGroupName(ctx, mc.ChatID); groupName != "" {
+					gc.EnsureGroup(ctx, c.Type(), c.Name(), mc.ChatID, groupName, 0)
+				}
+			}
+
 			slog.Debug("feishu group message recorded (no mention)",
 				"chat_id", mc.ChatID, "sender", senderName,
 			)
@@ -163,6 +170,13 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", peerKind)
+	}
+
+	// Collect group directory entry.
+	if gc := c.GroupCollector(); gc != nil && mc.ChatType == "group" {
+		if groupName := c.resolveGroupName(ctx, mc.ChatID); groupName != "" {
+			gc.EnsureGroup(ctx, c.Type(), c.Name(), mc.ChatID, groupName, 0)
+		}
 	}
 
 	metadata := map[string]string{

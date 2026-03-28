@@ -304,6 +304,34 @@ func (c *LarkClient) ListChatMembers(ctx context.Context, chatID string) ([]Chat
 	return all, nil
 }
 
+// --- IM API: Chat Info ---
+
+// ChatInfo holds basic group/chat information from Feishu API.
+type ChatInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Avatar      string `json:"avatar"`
+	UserCount   string `json:"user_count"`
+}
+
+// GetChatInfo retrieves chat/group info by chat ID.
+// Feishu API: GET /open-apis/im/v1/chats/{chat_id}
+func (c *LarkClient) GetChatInfo(ctx context.Context, chatID string) (*ChatInfo, error) {
+	path := fmt.Sprintf("/open-apis/im/v1/chats/%s", chatID)
+	resp, err := c.doJSON(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Code != 0 {
+		return nil, fmt.Errorf("get chat info: code=%d msg=%s", resp.Code, resp.Msg)
+	}
+	var data ChatInfo
+	if err := json.Unmarshal(resp.Data, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal chat info: %w", err)
+	}
+	return &data, nil
+}
+
 // --- Contact API ---
 
 func (c *LarkClient) GetUser(ctx context.Context, userID, userIDType string) (string, error) {

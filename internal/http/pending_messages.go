@@ -18,6 +18,7 @@ import (
 type PendingMessagesHandler struct {
 	store       store.PendingMessageStore
 	agentStore  store.AgentStore
+	groupStore  store.GroupStore
 	providerReg *providers.Registry
 	keepRecent  int    // global keepRecent from config (0 = use default 15)
 	maxTokens   int    // max output tokens for LLM summarization (0 = use default)
@@ -25,8 +26,8 @@ type PendingMessagesHandler struct {
 	cfgModel    string // config-level model override (empty = resolve from agent)
 }
 
-func NewPendingMessagesHandler(s store.PendingMessageStore, agentStore store.AgentStore, providerReg *providers.Registry) *PendingMessagesHandler {
-	return &PendingMessagesHandler{store: s, agentStore: agentStore, providerReg: providerReg}
+func NewPendingMessagesHandler(s store.PendingMessageStore, agentStore store.AgentStore, groupStore store.GroupStore, providerReg *providers.Registry) *PendingMessagesHandler {
+	return &PendingMessagesHandler{store: s, agentStore: agentStore, groupStore: groupStore, providerReg: providerReg}
 }
 
 // SetKeepRecent sets the global keepRecent value from config.
@@ -65,6 +66,22 @@ func (h *PendingMessagesHandler) handleListGroups(w http.ResponseWriter, r *http
 		for i := range groups {
 			if t, ok := titles[groups[i].ChannelName+":"+groups[i].HistoryKey]; ok {
 				groups[i].GroupTitle = t
+			}
+		}
+	}
+
+	// Fallback: resolve remaining titles from channel_groups table
+	if h.groupStore != nil {
+		for i := range groups {
+			if groups[i].GroupTitle != "" {
+				continue
+			}
+			// history_key is the group ID for group chats
+			channelGroups, err := h.groupStore.GetGroupsByIDs(r.Context(), "", []string{groups[i].HistoryKey})
+			if err == nil {
+				if g, ok := channelGroups[groups[i].HistoryKey]; ok && g.GroupName != nil {
+					groups[i].GroupTitle = *g.GroupName
+				}
 			}
 		}
 	}

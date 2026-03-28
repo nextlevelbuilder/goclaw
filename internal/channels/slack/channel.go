@@ -43,6 +43,7 @@ type Channel struct {
 	reactions       sync.Map // chatID:messageID -> *reactionState
 	pairingDebounce sync.Map // senderID -> time.Time
 	approvedGroups  sync.Map // channelID -> true
+	channelNames    sync.Map // channelID → name string
 
 	// High-churn map: sync.Mutex + regular map for debounce timers
 	debounceMu     sync.Mutex
