@@ -1,6 +1,6 @@
 # 02 - LLM Providers
 
-GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Six concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), Claude CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking).
+GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Seven concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), MiniMax (OpenAI-compatible with temperature clamping), Claude CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking).
 
 ---
 
@@ -25,7 +25,9 @@ flowchart TD
     OAI --> GROQ["Groq API"]
     OAI --> DS["DeepSeek API"]
     OAI --> GEM["Gemini API"]
-    OAI --> OTHER["Mistral / xAI / MiniMax<br/>Cohere / Perplexity / Ollama"]
+    OAI --> OTHER["Mistral / xAI<br/>Cohere / Perplexity / Ollama"]
+    PI --> MINIMAX["MiniMax Provider<br/>OpenAI-compat + temp clamp"]
+    MINIMAX --> MMAX["MiniMax API<br/>api.minimax.io/v1"]
     CLAUDE --> CLI["claude CLI binary<br/>stdio + MCP bridge"]
     CODEX --> CODEX_API["ChatGPT Responses API<br/>chatgpt.com/backend-api"]
     ACP --> AGENTS["Claude Code / Codex<br/>Gemini CLI agents"]
@@ -55,6 +57,7 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 | **codex** | OAuth Responses API | OAuth token source | `gpt-5.3-codex` |
 | **acp** | JSON-RPC 2.0 subagents | Binary + workspace dir | `claude` |
 | **dashscope** | OpenAI-compat wrapper | API key + custom models | `qwen3-max` |
+| **minimax** | OpenAI-compat wrapper | API key + temp clamp | `MiniMax-M2.7` |
 | **openai** (+ 10+ variants) | OpenAI-compatible | API key + endpoint URL | Model-specific |
 
 ### OpenAI-Compatible Providers
@@ -68,7 +71,7 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 | gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
 | mistral | `https://api.mistral.ai/v1` | `mistral-large-latest` | |
 | xai | `https://api.x.ai/v1` | `grok-3-mini` | |
-| minimax | `https://api.minimax.io/v1` | `MiniMax-M2.5` | Uses custom chat path |
+| minimax | `https://api.minimax.io/v1` | `MiniMax-M2.7` | Dedicated provider with temperature clamping |
 | cohere | `https://api.cohere.ai/compatibility/v1` | `command-a` | |
 | perplexity | `https://api.perplexity.ai` | `sonar-pro` | |
 | ollama | `http://localhost:11434/v1` | `llama3.3` | Local/configurable |
@@ -298,9 +301,9 @@ Anthropic requires thinking blocks (including cryptographic signatures) to be ec
 
 ---
 
-## 9. DashScope and Bailian Providers
+## 9. DashScope, MiniMax, and Bailian Providers
 
-Two providers for the Alibaba Cloud AI ecosystem.
+Three providers with OpenAI-compatible wrappers for specific API constraints.
 
 ### DashScope (Alibaba Qwen)
 
@@ -309,6 +312,15 @@ Wraps the OpenAI-compatible provider with a critical override: when tools are pr
 - **Default model**: `qwen3-max`
 - **Thinking support**: Custom budget mapping (low=4,096, medium=16,384, high=32,768)
 - **Known limitation**: No simultaneous streaming + tools
+
+### MiniMax
+
+Wraps the OpenAI-compatible provider with temperature clamping. MiniMax requires temperature in (0.0, 1.0] — values ≤ 0 are removed (server uses its default), values > 1 are clamped to 1.0.
+
+- **Default model**: `MiniMax-M2.7`
+- **Models**: M2.7, M2.7-highspeed, M2.5, M2.5-highspeed (all 204K context)
+- **Thinking support**: Supports `reasoning_effort` via the standard OpenAI-compatible parameter
+- **Provider type**: `minimax_native` (used for media tool routing)
 
 ### Bailian Coding
 
@@ -701,6 +713,7 @@ Routing behavior:
 | `internal/providers/codex_types.go` | Codex request/response types and OAuth token management |
 | `internal/providers/chatgpt_oauth_router.go` | Agent-side routing across multiple authenticated OpenAI Codex OAuth providers |
 | `internal/providers/dashscope.go` | DashScope provider: OpenAI-compat wrapper with thinking budget, tools+streaming fallback |
+| `internal/providers/minimax.go` | MiniMax provider: OpenAI-compat wrapper with temperature clamping |
 | `internal/providers/acp_provider.go` | ACPProvider: orchestrates ACP-compatible agent subprocesses |
 | `internal/providers/acp/types.go` | ACP protocol types: InitializeRequest, SessionUpdate, ContentBlock, etc. |
 | `internal/providers/acp/process.go` | ProcessPool: subprocess lifecycle, idle TTL reaping, crash recovery |
