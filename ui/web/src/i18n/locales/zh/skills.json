@@ -48,6 +48,30 @@
     "successCount": "{{success}} / {{total}} 上传成功",
     "remove": "移除文件"
   },
+  "install": {
+    "title": "安装Skill",
+    "description": "从本地ZIP文件或GitHub仓库安装Skill。",
+    "button": "安装Skill",
+    "tabFile": "本地文件",
+    "tabUrl": "从GitHub"
+  },
+  "installUrl": {
+    "title": "从URL安装",
+    "description": "从GitHub仓库或ZIP URL安装Skill。",
+    "button": "从URL",
+    "urlLabel": "仓库URL",
+    "branchLabel": "分支（可选）",
+    "branchHint": "留空则使用默认分支（main）",
+    "scan": "扫描",
+    "scanning": "扫描中...",
+    "foundSkills": "发现 {{count}} 个Skill",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "back": "返回",
+    "installCount": "安装 ({{count}})",
+    "installingCount": "正在安装 {{count}} 个Skill...",
+    "close": "关闭"
+  },
   "edit": {
     "title": "编辑Skill",
     "name": "名称",

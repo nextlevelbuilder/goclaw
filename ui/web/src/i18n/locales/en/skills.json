@@ -48,6 +48,30 @@
     "successCount": "{{success}} of {{total}} uploaded successfully",
     "remove": "Remove file"
   },
+  "install": {
+    "title": "Install Skill",
+    "description": "Add skills from a local ZIP file or a GitHub repository.",
+    "button": "Install Skill",
+    "tabFile": "Local File",
+    "tabUrl": "From GitHub"
+  },
+  "installUrl": {
+    "title": "Install from URL",
+    "description": "Install skills from a GitHub repository or ZIP URL.",
+    "button": "From URL",
+    "urlLabel": "Repository URL",
+    "branchLabel": "Branch (optional)",
+    "branchHint": "Leave empty to use the default branch (main)",
+    "scan": "Scan",
+    "scanning": "Scanning...",
+    "foundSkills": "Found {{count}} skill(s)",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "back": "Back",
+    "installCount": "Install ({{count}})",
+    "installingCount": "Installing {{count}} skill(s)...",
+    "close": "Close"
+  },
   "edit": {
     "title": "Edit Skill",
     "name": "Name",

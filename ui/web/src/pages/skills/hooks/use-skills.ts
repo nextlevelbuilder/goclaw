@@ -162,6 +162,29 @@ export function useSkills() {
     [http, invalidate],
   );
 
+  const previewURL = useCallback(
+    async (url: string, branch?: string) => {
+      return http.post<{
+        skills: Array<{ name: string; slug: string; description: string; dir: string; has_scripts: boolean }>;
+        total: number;
+      }>("/v1/skills/preview-url", { url, branch });
+    },
+    [http],
+  );
+
+  const installFromURL = useCallback(
+    async (url: string, slugs: string[], branch?: string) => {
+      const res = await http.post<{
+        installed: Array<{ id: string; slug: string; version: number; name: string; deps_warning?: string }>;
+        total: number;
+        errors?: string[];
+      }>("/v1/skills/install-url", { url, branch, slugs });
+      await invalidate();
+      return res;
+    },
+    [http, invalidate],
+  );
+
   const toggleSkill = useCallback(
     async (id: string, enabled: boolean) => {
       const res = await http.post<{ ok: boolean; enabled: boolean; status: string }>(
@@ -204,7 +227,7 @@ export function useSkills() {
 
   return {
     skills, loading, refresh: invalidate, getSkill,
-    uploadSkill, updateSkill, deleteSkill,
+    uploadSkill, previewURL, installFromURL, updateSkill, deleteSkill,
     getSkillVersions, getSkillFiles, getSkillFileContent, rescanDeps, installDeps, installSingleDep, toggleSkill,
     setTenantConfig, deleteTenantConfig,
   };
