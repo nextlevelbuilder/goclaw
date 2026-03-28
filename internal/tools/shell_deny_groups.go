@@ -118,6 +118,12 @@ var DenyGroupRegistry = map[string]*DenyGroup{
 			regexp.MustCompile(`\bGIT_DIFF_OPTS\s*=`),
 			regexp.MustCompile(`\bBASH_ENV\s*=`),
 			regexp.MustCompile(`\bENV\s*=.*\bsh\b`),
+			// export-prefixed variants: prevent setting dangerous env vars via export
+			regexp.MustCompile(`\bexport\s+LD_`),
+			regexp.MustCompile(`\bexport\s+DYLD_`),
+			regexp.MustCompile(`\bexport\s+BASH_ENV\b`),
+			regexp.MustCompile(`\bexport\s+ENV\s*=`),
+			regexp.MustCompile(`\bexport\s+PROMPT_COMMAND\b`),
 		},
 	},
 	"container_escape": {

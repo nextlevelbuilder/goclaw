@@ -49,9 +49,16 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		args = append(args, "--read-only")
 	}
 	for _, t := range cfg.Tmpfs {
-		// Append default size if not already specified and TmpfsSizeMB > 0
-		if cfg.TmpfsSizeMB > 0 && !strings.Contains(t, ":") {
-			t = fmt.Sprintf("%s:size=%dm", t, cfg.TmpfsSizeMB)
+		if !strings.Contains(t, ":") {
+			// Always add security flags; optionally add size limit
+			opts := "noexec,nosuid,nodev"
+			if cfg.TmpfsSizeMB > 0 {
+				opts = fmt.Sprintf("size=%dm,%s", cfg.TmpfsSizeMB, opts)
+			}
+			t = fmt.Sprintf("%s:%s", t, opts)
+		} else if !strings.Contains(t, "noexec") {
+			// User-specified options but missing noexec — append security flags
+			t += ",noexec,nosuid,nodev"
 		}
 		args = append(args, "--tmpfs", t)
 	}

@@ -96,6 +96,7 @@ func DefaultConfig() Config {
 		ReadOnlyRoot:     true,
 		CapDrop:          []string{"ALL"},
 		Tmpfs:            []string{"/tmp", "/var/tmp", "/run"},
+		PidsLimit:        256,
 		MaxOutputBytes:   1 << 20, // 1MB
 		ContainerPrefix:  "goclaw-sbx-",
 		Workdir:          "/workspace",

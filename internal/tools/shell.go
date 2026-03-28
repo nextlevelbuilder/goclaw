@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Dangerous command patterns organized into configurable deny groups.
@@ -88,6 +89,22 @@ func (t *ExecTool) SetSecureCLIStore(s store.SecureCLIStore) {
 	t.secureCLIStore = s
 }
 
+// normalizeCommand applies NFKC Unicode normalization and strips zero-width
+// characters before deny pattern matching, preventing Unicode-based bypasses.
+func normalizeCommand(s string) string {
+	// NFKC normalization: folds compatibility characters (e.g. fullwidth letters)
+	s = norm.NFKC.String(s)
+	// Strip zero-width characters that are invisible but can fragment tokens
+	s = strings.NewReplacer(
+		"\u200b", "", // zero-width space
+		"\u200c", "", // zero-width non-joiner
+		"\u200d", "", // zero-width joiner
+		"\u2060", "", // word joiner
+		"\ufeff", "", // BOM / zero-width no-break space
+	).Replace(s)
+	return s
+}
+
 func (t *ExecTool) Name() string        { return "exec" }
 func (t *ExecTool) Description() string { return "Execute a shell command and return its output" }
 func (t *ExecTool) Parameters() map[string]any {
@@ -113,6 +130,10 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return ErrorResult("command is required")
 	}
 
+	// Normalize command before all deny checks: NFKC + zero-width strip prevents
+	// Unicode-based pattern bypass while preserving functional command content.
+	normalizedCommand := normalizeCommand(command)
+
 	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
 	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
 	groupPatterns := ResolveDenyPatterns(denyOverrides)
@@ -130,11 +151,14 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 	// Check for dangerous commands (applies to both host and sandbox).
 	for _, pattern := range allPatterns {
-		if pattern.MatchString(command) {
-			// Check if any exemption applies (e.g. skills-store within .goclaw)
+		if pattern.MatchString(normalizedCommand) {
+			// Check if any exemption applies (e.g. skills-store within .goclaw).
+			// Use prefix match to prevent bypass via comments or arguments
+			// that merely contain the exemption string elsewhere.
 			exempt := false
+			trimmed := strings.TrimSpace(normalizedCommand)
 			for _, ex := range t.denyExemptions {
-				if strings.Contains(command, ex) {
+				if strings.HasPrefix(trimmed, ex) {
 					exempt = true
 					break
 				}
@@ -145,7 +169,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 
 			// Package install commands: route through approval flow instead of hard deny.
 			// This lets agents "request permission" from admin to install packages.
-			if t.approvalMgr != nil && matchesAny(command, pkgInstallPatterns) {
+			if t.approvalMgr != nil && matchesAny(normalizedCommand, pkgInstallPatterns) {
 				slog.Info("exec: package install requires approval", "command", truncateCmd(command, 100), "agent", t.agentID)
 				decision, err := t.approvalMgr.RequestApproval(command, t.agentID, 2*time.Minute)
 				if err != nil {
