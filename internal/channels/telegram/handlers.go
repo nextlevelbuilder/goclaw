@@ -331,7 +331,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
 				contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-				cc.EnsureContact(ctx, c.Type(), c.Name(), userID, userID, contactName, user.Username, "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, "group")
 			}
 
 			slog.Debug("telegram group message recorded (no mention)",
