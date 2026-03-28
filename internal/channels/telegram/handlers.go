@@ -616,3 +616,54 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	}
 }
 
+// handleMyChatMember processes my_chat_member updates (bot added/removed from groups).
+// When the bot is added to a group (status transitions to "member" or "administrator"),
+// the group is immediately registered in the group directory so it appears in the
+// contacts picker without waiting for the first message.
+func (c *Channel) handleMyChatMember(ctx context.Context, update *telego.ChatMemberUpdated) {
+	if update == nil {
+		return
+	}
+
+	chat := update.Chat
+	newStatus := update.NewChatMember.MemberStatus()
+	oldStatus := update.OldChatMember.MemberStatus()
+
+	slog.Debug("telegram my_chat_member update",
+		"chat_id", chat.ID,
+		"chat_type", chat.Type,
+		"chat_title", chat.Title,
+		"old_status", oldStatus,
+		"new_status", newStatus,
+	)
+
+	isGroup := chat.Type == "group" || chat.Type == "supergroup"
+	if !isGroup {
+		return
+	}
+
+	// Bot was added or promoted in a group — register the group immediately.
+	switch newStatus {
+	case "member", "administrator", "creator":
+		// Only act on transitions from non-member states to avoid duplicate work
+		// on status changes between member↔administrator.
+		if oldStatus == "left" || oldStatus == "kicked" || oldStatus == "" {
+			chatIDStr := fmt.Sprintf("%d", chat.ID)
+			if gc := c.GroupCollector(); gc != nil && chat.Title != "" {
+				gc.EnsureGroup(ctx, c.Type(), c.Name(), chatIDStr, chat.Title, 0)
+				slog.Info("telegram group registered via my_chat_member",
+					"chat_id", chat.ID,
+					"title", chat.Title,
+					"new_status", newStatus,
+				)
+			}
+		}
+	case "left", "kicked":
+		slog.Info("telegram bot removed from group",
+			"chat_id", chat.ID,
+			"title", chat.Title,
+			"new_status", newStatus,
+		)
+	}
+}
+

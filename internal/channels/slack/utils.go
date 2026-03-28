@@ -113,6 +113,52 @@ func (c *Channel) resolveChannelName(ctx context.Context, channelID string) stri
 	return info.Name
 }
 
+// RefreshGroups fetches all Slack conversations the bot is a member of and
+// upserts them into the channel_groups directory via the GroupCollector.
+// Pagination is handled via cursor. Only channels with a non-empty name are recorded.
+func (c *Channel) RefreshGroups(ctx context.Context) error {
+	gc := c.GroupCollector()
+	if gc == nil {
+		return fmt.Errorf("slack: group collector not configured")
+	}
+
+	gctx := store.WithTenantID(ctx, c.TenantID())
+	var cursor string
+	var total int
+
+	for {
+		params := &slackapi.GetConversationsParameters{
+			Types:           []string{"public_channel", "private_channel"},
+			Limit:           200,
+			Cursor:          cursor,
+			ExcludeArchived: true,
+		}
+		convos, nextCursor, err := c.api.GetConversationsContext(gctx, params)
+		if err != nil {
+			return fmt.Errorf("slack: conversations.list failed: %w", err)
+		}
+		for _, ch := range convos {
+			name := ch.Name
+			if name == "" {
+				name = ch.NameNormalized
+			}
+			if name == "" {
+				continue
+			}
+			gc.EnsureGroup(gctx, c.Type(), c.Name(), ch.ID, name, ch.NumMembers)
+			c.channelNames.Store(ch.ID, name)
+			total++
+		}
+		if nextCursor == "" {
+			break
+		}
+		cursor = nextCursor
+	}
+
+	slog.Info("slack: refreshed groups", "count", total, "channel", c.Name())
+	return nil
+}
+
 // nonRetryableAuthErrors matches Slack errors that indicate permanent auth failure.
 var nonRetryableAuthErrors = regexp.MustCompile(
 	`(?i)(invalid_auth|token_revoked|account_inactive|not_authed|team_not_found|missing_scope)`,

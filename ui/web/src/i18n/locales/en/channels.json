@@ -312,6 +312,16 @@
     "failedUpdate": "Failed to update channel",
     "failedDelete": "Failed to delete channel"
   },
+  "allowFromPicker": {
+    "users": "Users",
+    "groups": "Groups",
+    "search": "Search...",
+    "noMatch": "No matches",
+    "manualPlaceholder": "Enter ID manually",
+    "add": "Add",
+    "fetchGroups": "Fetch groups",
+    "fetching": "Fetching channels..."
+  },
   "zalo": {
     "allowedUsers": "Allowed Users",
     "loadContacts": "Load Contacts",

@@ -320,6 +320,7 @@ func runGateway() {
 	// Create gateway server and wire enforcement
 	server := gateway.NewServer(cfg, msgBus, agentRouter, pgStores.Sessions, toolsReg)
 	server.SetVersion(Version)
+	server.StartUpdateChecker(context.Background())
 	server.SetDB(pgStores.DB)
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pgStores.Pairing)
@@ -525,6 +526,11 @@ func runGateway() {
 
 	// Channel manager
 	channelMgr := channels.NewManager(msgBus)
+
+	// Wire channel manager into HTTP handler for on-demand group refresh
+	if channelInstancesH != nil {
+		channelInstancesH.SetChannelManager(channelMgr)
+	}
 
 	// Wire channel sender + tenant checker on message tool (now that channelMgr exists)
 	if t, ok := toolsReg.Get("message"); ok {
@@ -891,6 +897,7 @@ func runGateway() {
 	heartbeatMethods.SetWakeFn(heartbeatTicker.Wake)
 	heartbeatMethods.SetAgentStore(pgStores.Agents)
 	heartbeatMethods.SetProviderStore(pgStores.Providers)
+	heartbeatMethods.SetPermissionStore(pgStores.ConfigPermissions)
 	cronHeartbeatWakeFn = func(agentID string) {
 		if id, err := uuid.Parse(agentID); err == nil {
 			heartbeatTicker.Wake(id)

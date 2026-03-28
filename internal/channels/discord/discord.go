@@ -49,7 +49,8 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 	}
 
 	// Request necessary intents
-	session.Identify.Intents = discordgo.IntentsGuildMessages |
+	session.Identify.Intents = discordgo.IntentsGuilds |
+		discordgo.IntentsGuildMessages |
 		discordgo.IntentsDirectMessages |
 		discordgo.IntentsMessageContent
 
@@ -85,6 +86,7 @@ func (c *Channel) Start(_ context.Context) error {
 	slog.Info("starting discord bot")
 
 	c.session.AddHandler(c.handleMessage)
+	c.session.AddHandler(c.handleGuildCreate)
 
 	if err := c.session.Open(); err != nil {
 		return fmt.Errorf("open discord session: %w", err)
@@ -100,6 +102,9 @@ func (c *Channel) Start(_ context.Context) error {
 
 	c.SetRunning(true)
 	slog.Info("discord bot connected", "username", user.Username, "id", user.ID)
+
+	// Pre-populate channel_groups with all guilds the bot is in (best-effort).
+	go c.RefreshGroups()
 
 	return nil
 }

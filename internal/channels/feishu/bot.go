@@ -183,6 +183,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		"message_id":    messageID,
 		"chat_type":     mc.ChatType,
 		"sender_name":   senderName,
+		"display_name":  senderName,
 		"mentioned_bot": fmt.Sprintf("%t", mc.MentionedBot),
 		"platform":      channels.TypeFeishu,
 	}

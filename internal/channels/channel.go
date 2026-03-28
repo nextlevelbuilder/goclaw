@@ -149,6 +149,13 @@ type ReactionChannel interface {
 	ClearReaction(ctx context.Context, chatID string, messageID string) error
 }
 
+// GroupRefresher is optionally implemented by channels that can fetch their
+// full group/conversation list on demand and populate channel_groups.
+// Used by the HTTP API to trigger on-demand refresh from the UI.
+type GroupRefresher interface {
+	RefreshGroups(ctx context.Context) error
+}
+
 // BaseChannel provides shared functionality for all channel implementations.
 // Channel implementations should embed this struct.
 type BaseChannel struct {

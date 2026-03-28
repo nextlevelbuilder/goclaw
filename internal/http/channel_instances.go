@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -24,6 +26,12 @@ type ChannelInstancesHandler struct {
 	groupStore      store.GroupStore
 	tenantStore     store.TenantStore
 	msgBus          *bus.MessageBus
+	channelMgr      *channels.Manager // optional: for on-demand group refresh
+}
+
+// SetChannelManager sets the channel manager for on-demand operations like group refresh.
+func (h *ChannelInstancesHandler) SetChannelManager(mgr *channels.Manager) {
+	h.channelMgr = mgr
 }
 
 // NewChannelInstancesHandler creates a handler for channel instance management endpoints.
@@ -38,6 +46,7 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/channels/instances/{id}", h.auth(h.handleGet))
 	mux.HandleFunc("PUT /v1/channels/instances/{id}", h.auth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/channels/instances/{id}", h.auth(h.handleDelete))
+	mux.HandleFunc("POST /v1/channels/instances/{id}/fetch-groups", h.auth(h.handleFetchGroups))
 
 	// Channel contacts (global, not per-agent)
 	if h.contactStore != nil {
@@ -519,6 +528,48 @@ func (h *ChannelInstancesHandler) handleListGroups(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }
 
+// POST /v1/channels/instances/{id}/fetch-groups
+// Triggers an on-demand refresh of the channel's group/conversation list.
+// The channel must implement channels.GroupRefresher (currently: Slack).
+func (h *ChannelInstancesHandler) handleFetchGroups(w http.ResponseWriter, r *http.Request) {
+	instID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "invalid instance id")
+		return
+	}
+
+	inst, err := h.store.Get(r.Context(), instID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, "instance not found")
+		return
+	}
+
+	// Try running channel first (supports live refresh)
+	if h.channelMgr != nil {
+		if ch, ok := h.channelMgr.GetChannel(inst.Name); ok && ch.IsRunning() {
+			if refresher, ok := ch.(channels.GroupRefresher); ok {
+				if err := refresher.RefreshGroups(r.Context()); err != nil {
+					slog.Error("fetch-groups failed", "instance", inst.Name, "error", err)
+					writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "failed to fetch groups: "+err.Error())
+					return
+				}
+				if h.groupStore != nil {
+					if groups, err := h.groupStore.ListGroups(r.Context(), inst.ChannelType); err == nil {
+						writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+						return
+					}
+				}
+				writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+				return
+			}
+		}
+	}
+
+	// Fallback: temporary API client from credentials
+	h.fetchGroupsFallback(w, r, inst)
+
+}
+
 func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r *http.Request) {
 	idsParam := r.URL.Query().Get("ids")
 	if idsParam == "" {
@@ -540,6 +591,98 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"contacts": result})
+}
+
+// fetchGroupsFallback handles channels that don't implement GroupRefresher
+// by creating a temporary API client from instance credentials.
+func (h *ChannelInstancesHandler) fetchGroupsFallback(w http.ResponseWriter, r *http.Request, inst *store.ChannelInstanceData) {
+	if len(inst.Credentials) == 0 {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "instance has no credentials")
+		return
+	}
+
+	switch inst.ChannelType {
+	case "feishu":
+		h.fetchFeishuGroups(w, r, inst)
+	default:
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "fetch-groups not supported for channel type: "+inst.ChannelType)
+	}
+}
+
+// fetchFeishuGroups fetches group chats from the Feishu/Lark API and upserts them.
+func (h *ChannelInstancesHandler) fetchFeishuGroups(w http.ResponseWriter, r *http.Request, inst *store.ChannelInstanceData) {
+	locale := store.LocaleFromContext(r.Context())
+
+	var creds struct {
+		AppID     string `json:"app_id"`
+		AppSecret string `json:"app_secret"`
+	}
+	if err := json.Unmarshal(inst.Credentials, &creds); err != nil || creds.AppID == "" || creds.AppSecret == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "invalid feishu credentials")
+		return
+	}
+
+	// Resolve domain from instance config
+	domain := "https://open.larksuite.com"
+	if len(inst.Config) > 0 {
+		var cfg struct {
+			Domain string `json:"domain,omitempty"`
+		}
+		if json.Unmarshal(inst.Config, &cfg) == nil && cfg.Domain != "" {
+			switch cfg.Domain {
+			case "feishu":
+				domain = "https://open.feishu.cn"
+			case "lark":
+				// default
+			default:
+				if strings.HasPrefix(cfg.Domain, "http") {
+					domain = cfg.Domain
+				} else {
+					domain = "https://" + cfg.Domain
+				}
+			}
+		}
+	}
+
+	client := feishu.NewLarkClient(creds.AppID, creds.AppSecret, domain)
+
+	chats, err := client.ListChats(r.Context())
+	if err != nil {
+		slog.Error("fetch_groups.feishu", "instance", inst.ID, "error", err)
+		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "groups"))
+		return
+	}
+
+	// Upsert into channel_groups
+	if h.groupStore != nil {
+		for _, chat := range chats {
+			if err := h.groupStore.UpsertGroup(r.Context(), "feishu", inst.Name, chat.ChatID, chat.Name, chat.UserCountInt()); err != nil {
+				slog.Warn("fetch_groups.feishu upsert", "chat_id", chat.ChatID, "error", err)
+			}
+		}
+	}
+
+	// Build response
+	type groupResult struct {
+		GroupID     string `json:"group_id"`
+		GroupName   string `json:"group_name"`
+		MemberCount int    `json:"member_count"`
+		Avatar      string `json:"avatar,omitempty"`
+	}
+	groups := make([]groupResult, 0, len(chats))
+	for _, chat := range chats {
+		groups = append(groups, groupResult{
+			GroupID:     chat.ChatID,
+			GroupName:   chat.Name,
+			MemberCount: chat.UserCountInt(),
+			Avatar:      chat.Avatar,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"groups": groups,
+		"total":  len(groups),
+	})
 }
 
 // isValidChannelType checks if the channel type is supported.
