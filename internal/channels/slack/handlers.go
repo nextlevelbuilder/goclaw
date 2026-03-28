@@ -222,6 +222,16 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		replyThreadTS = ev.TimeStamp // start thread from the triggering message
 	}
 
+	// For top-level group mentions, encode the reply thread TS into localKey so
+	// subagent/team announce flows (which reconstruct routing from origin_local_key)
+	// can route replies back to the correct thread via buildAnnounceOutMeta.
+	// History operations above already used the channel-scoped localKey; from here
+	// on the thread-qualified key is needed for placeholder storage and routing.
+	historyKey := localKey
+	if !isDM && threadTS == "" && replyThreadTS != "" {
+		localKey = fmt.Sprintf("%s:thread:%s", channelID, replyThreadTS)
+	}
+
 	placeholderOpts := []slackapi.MsgOption{
 		slackapi.MsgOptionText("Thinking...", false),
 	}
@@ -234,7 +244,9 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		c.placeholders.Store(localKey, placeholderTS)
 	}
 
-	// Build final content with group history context
+	// Build final content with group history context.
+	// Use historyKey (channel-scoped for top-level) so accumulated pending messages
+	// from before the mention are included correctly.
 	finalContent := content
 	if peerKind == "group" {
 		annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
@@ -282,7 +294,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 			participKey := channelID + ":particip:" + replyThreadTS
 			c.threadParticip.Store(participKey, time.Now())
 		}
-		c.groupHistory.Clear(localKey)
+		c.groupHistory.Clear(historyKey)
 	}
 }
 
@@ -293,7 +305,7 @@ func (c *Channel) fetchThreadParentContext(ctx context.Context, channelID, threa
 		ChannelID: channelID,
 		Latest:    threadTS,
 		Limit:     1,
-		Inclusive:  true,
+		Inclusive: true,
 	}
 	history, err := c.api.GetConversationHistoryContext(ctx, params)
 	if err != nil || len(history.Messages) == 0 {
