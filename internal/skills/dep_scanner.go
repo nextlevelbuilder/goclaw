@@ -120,6 +120,9 @@ var (
 	nodeRequireRe  = regexp.MustCompile(`require\(['"]([\w@][^'"]*)['"]\)`)
 	nodeESImportRe = regexp.MustCompile(`from\s+['"]([^'"./][^'"]*?)['"]`)
 	shebangRe      = regexp.MustCompile(`^#!\s*/usr/bin/env\s+(\S+)`)
+	// Detects JS ES module pattern: `import X from '...'` or `from '...'`.
+	// Used to skip false positives when JS imports appear inside Python string literals.
+	jsFromStringRe = regexp.MustCompile(`from\s+['"]`)
 )
 
 func scanFile(path string, pyImports, nodeImports map[string]bool, binaries map[string]bool) {
@@ -143,7 +146,10 @@ func scanFile(path string, pyImports, nodeImports map[string]bool, binaries map[
 		for _, line := range strings.Split(content, "\n") {
 			line = strings.TrimSpace(line)
 			if m := pyImportRe.FindStringSubmatch(line); len(m) > 1 {
-				pyImports[m[1]] = true
+				// Skip JS ES module imports inside string literals (e.g. `import mermaid from '...'`)
+				if !jsFromStringRe.MatchString(line) {
+					pyImports[m[1]] = true
+				}
 			}
 			if m := pyFromRe.FindStringSubmatch(line); len(m) > 1 {
 				pyImports[m[1]] = true
