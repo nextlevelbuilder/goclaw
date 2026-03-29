@@ -29,6 +29,8 @@ type ProvidersHandler struct {
 	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 	sysConfigStore  store.SystemConfigStore
+	tracingStore    store.TracingStore // optional: for provider-scoped pool activity
+	agents          store.AgentCRUDStore // optional: for provider pool activity agent lookup
 }
 
 // NewProvidersHandler creates a handler for provider management endpoints.
@@ -57,6 +59,16 @@ func (h *ProvidersHandler) SetMCPServerLookup(lookup providers.MCPServerLookup) 
 // Used as fallback when DB providers have no api_base set.
 func (h *ProvidersHandler) SetAPIBaseFallback(fn func(providerType string) string) {
 	h.apiBaseFallback = fn
+}
+
+// SetTracingStore sets the tracing store for provider-scoped pool activity.
+func (h *ProvidersHandler) SetTracingStore(ts store.TracingStore) {
+	h.tracingStore = ts
+}
+
+// SetAgentStore sets the agent store for provider pool activity agent lookup.
+func (h *ProvidersHandler) SetAgentStore(as store.AgentCRUDStore) {
+	h.agents = as
 }
 
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
@@ -97,6 +109,9 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Provider + model verification (pre-flight check)
 	mux.HandleFunc("POST /v1/providers/{id}/verify", h.auth(h.handleVerifyProvider))
 	mux.HandleFunc("POST /v1/providers/{id}/verify-embedding", h.auth(h.handleVerifyEmbedding))
+
+	// Provider-scoped Codex pool activity monitor
+	mux.HandleFunc("GET /v1/providers/{id}/codex-pool-activity", h.auth(h.handleProviderCodexPoolActivity))
 
 	// Embedding system status
 	mux.HandleFunc("GET /v1/embedding/status", h.auth(h.handleEmbeddingStatus))

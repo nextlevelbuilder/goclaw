@@ -62,6 +62,12 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		if stores.MCP != nil {
 			providersH.SetMCPServerLookup(buildMCPServerLookup(stores.MCP))
 		}
+		if stores.Tracing != nil {
+			providersH.SetTracingStore(stores.Tracing)
+		}
+		if stores.Agents != nil {
+			providersH.SetAgentStore(stores.Agents)
+		}
 	}
 
 	var teamEventsH *httpapi.TeamEventsHandler
