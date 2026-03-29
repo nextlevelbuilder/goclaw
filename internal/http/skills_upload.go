@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // handleUpload processes a ZIP file upload containing a skill (must have SKILL.md at root).
@@ -199,9 +201,25 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if manifest != nil && !manifest.IsEmpty() {
 		ok, missing := skills.CheckSkillDeps(manifest)
 		if !ok {
-			// Set skill to archived due to missing deps
-			_ = h.skills.UpdateSkill(r.Context(), id, map[string]any{"status": "archived"})
-			response["deps_warning"] = "missing dependencies: " + skills.FormatMissing(missing)
+			// Attempt auto-install before archiving (same as seeder flow for system skills)
+			if h.msgBus != nil {
+				h.msgBus.Broadcast(bus.Event{
+					Name:    protocol.EventSkillDepsInstalling,
+					Payload: map[string]any{"skill": slug, "count": len(missing)},
+				})
+			}
+			result, installErr := skills.InstallDeps(r.Context(), manifest, missing)
+			if installErr != nil || (result != nil && len(result.Errors) > 0) {
+				_ = h.skills.UpdateSkill(r.Context(), id, map[string]any{"status": "archived"})
+				response["deps_warning"] = "auto-install failed for: " + skills.FormatMissing(missing)
+				if result != nil && len(result.Errors) > 0 {
+					response["deps_errors"] = result.Errors
+				}
+				slog.Warn("skill deps auto-install failed", "skill", slug, "missing", missing, "errors", result.Errors)
+			} else {
+				response["deps_installed"] = true
+				slog.Info("skill deps auto-installed", "skill", slug, "installed", missing)
+			}
 		}
 	}
 
