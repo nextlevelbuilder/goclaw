@@ -281,22 +281,45 @@ func (s *PGSessionStore) Save(ctx context.Context, key string) error {
 		metaJSON, _ = json.Marshal(snapshot.Metadata)
 	}
 
+	// UPSERT: INSERT the session if it doesn't exist yet (first-run cron jobs),
+	// or UPDATE if it does. Fixes silent 0-row UPDATE for new cron sessions.
+	tid := tenantIDForInsert(ctx)
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE sessions SET
-			messages = $1, summary = $2, model = $3, provider = $4, channel = $5,
-			input_tokens = $6, output_tokens = $7, compaction_count = $8,
-			memory_flush_compaction_count = $9, memory_flush_at = $10,
-			label = $11, spawned_by = $12, spawn_depth = $13,
-			agent_id = $14, user_id = $15, metadata = $16, updated_at = $17,
-			team_id = $18
-		 WHERE session_key = $19 AND tenant_id = $20`,
+		`INSERT INTO sessions (id, session_key, tenant_id,
+			messages, summary, model, provider, channel,
+			input_tokens, output_tokens, compaction_count,
+			memory_flush_compaction_count, memory_flush_at,
+			label, spawned_by, spawn_depth,
+			agent_id, user_id, metadata, created_at, updated_at,
+			team_id)
+		 VALUES ($1, $2, $3,
+			$4, $5, $6, $7, $8,
+			$9, $10, $11,
+			$12, $13,
+			$14, $15, $16,
+			$17, $18, $19, $20, $20,
+			$21)
+		 ON CONFLICT (tenant_id, session_key) DO UPDATE SET
+			messages = EXCLUDED.messages, summary = EXCLUDED.summary,
+			model = EXCLUDED.model, provider = EXCLUDED.provider,
+			channel = EXCLUDED.channel,
+			input_tokens = EXCLUDED.input_tokens,
+			output_tokens = EXCLUDED.output_tokens,
+			compaction_count = EXCLUDED.compaction_count,
+			memory_flush_compaction_count = EXCLUDED.memory_flush_compaction_count,
+			memory_flush_at = EXCLUDED.memory_flush_at,
+			label = EXCLUDED.label, spawned_by = EXCLUDED.spawned_by,
+			spawn_depth = EXCLUDED.spawn_depth,
+			agent_id = EXCLUDED.agent_id, user_id = EXCLUDED.user_id,
+			metadata = EXCLUDED.metadata, updated_at = EXCLUDED.updated_at,
+			team_id = EXCLUDED.team_id`,
+		uuid.Must(uuid.NewV7()), key, tid,
 		msgsJSON, nilStr(snapshot.Summary), nilStr(snapshot.Model), nilStr(snapshot.Provider), nilStr(snapshot.Channel),
 		snapshot.InputTokens, snapshot.OutputTokens, snapshot.CompactionCount,
 		snapshot.MemoryFlushCompactionCount, snapshot.MemoryFlushAt,
 		nilStr(snapshot.Label), nilStr(snapshot.SpawnedBy), snapshot.SpawnDepth,
 		nilSessionUUID(snapshot.AgentUUID), nilStr(snapshot.UserID), metaJSON, snapshot.Updated,
 		snapshot.TeamID,
-		key, tenantIDForInsert(ctx),
 	)
 	return err
 }
