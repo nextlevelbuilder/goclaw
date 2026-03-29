@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/cron"
@@ -189,44 +188,7 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 
 // computeNextRun calculates the next run time for a schedule.
 func computeNextRun(schedule *store.CronSchedule, now time.Time, defaultTZ string) *time.Time {
-	switch schedule.Kind {
-	case "at":
-		if schedule.AtMS != nil {
-			t := time.UnixMilli(*schedule.AtMS)
-			if t.After(now) {
-				return &t
-			}
-		}
-		return nil
-	case "every":
-		if schedule.EveryMS != nil && *schedule.EveryMS > 0 {
-			t := now.Add(time.Duration(*schedule.EveryMS) * time.Millisecond)
-			return &t
-		}
-		return nil
-	case "cron":
-		if schedule.Expr == "" {
-			return nil
-		}
-		tz := schedule.TZ
-		if tz == "" {
-			tz = defaultTZ
-		}
-		evalTime := now
-		if tz != "" {
-			if loc, err := time.LoadLocation(tz); err == nil {
-				evalTime = now.In(loc)
-			}
-		}
-		nextTime, err := gronx.NextTickAfter(schedule.Expr, evalTime, false)
-		if err != nil {
-			return nil
-		}
-		utcNext := nextTime.UTC()
-		return &utcNext
-	default:
-		return nil
-	}
+	return store.ComputeNextRun(schedule, now, defaultTZ)
 }
 
 func (s *SQLiteCronStore) scanJob(ctx context.Context, id uuid.UUID) (*store.CronJob, error) {

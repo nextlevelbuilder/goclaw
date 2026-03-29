@@ -2,7 +2,9 @@ package pg
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -185,14 +187,53 @@ func (s *PGCronStore) EnableJob(ctx context.Context, jobID string, enabled bool)
 		return fmt.Errorf("invalid job ID: %s", jobID)
 	}
 
-	q := "UPDATE cron_jobs SET enabled = $1, updated_at = $2 WHERE id = $3"
-	args := []any{enabled, time.Now(), id}
+	q := `SELECT schedule_kind, cron_expression, run_at, timezone, interval_ms
+		FROM cron_jobs WHERE id = $1`
+	args := []any{id}
 
 	if !store.IsCrossTenant(ctx) {
 		tid := store.TenantIDFromContext(ctx)
 		if tid == uuid.Nil {
 			return fmt.Errorf("tenant_id required")
 		}
+		q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+
+	var scheduleKind string
+	var cronExpr, tz *string
+	var runAt *time.Time
+	var intervalMS *int64
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&scheduleKind, &cronExpr, &runAt, &tz, &intervalMS); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("job not found")
+		}
+		return err
+	}
+
+	schedule := store.CronSchedule{Kind: scheduleKind}
+	if cronExpr != nil {
+		schedule.Expr = *cronExpr
+	}
+	if runAt != nil {
+		ms := runAt.UnixMilli()
+		schedule.AtMS = &ms
+	}
+	if tz != nil {
+		schedule.TZ = *tz
+	}
+	if intervalMS != nil {
+		schedule.EveryMS = intervalMS
+	}
+
+	now := time.Now()
+	nextRun := store.NextRunForToggle(&schedule, enabled, now, s.defaultTZ)
+
+	q = "UPDATE cron_jobs SET enabled = $1, next_run_at = $2, updated_at = $3 WHERE id = $4"
+	args = []any{enabled, nextRun, now, id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
 		q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
 		args = append(args, tid)
 	}

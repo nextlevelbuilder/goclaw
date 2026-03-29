@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
 )
 
@@ -123,4 +124,57 @@ type CronStore interface {
 // CacheInvalidatable is an optional interface for stores that support cache invalidation.
 type CacheInvalidatable interface {
 	InvalidateCache()
+}
+
+// ComputeNextRun calculates the next run time for a cron schedule.
+// defaultTZ is used for cron expressions that do not specify a per-job timezone.
+func ComputeNextRun(schedule *CronSchedule, now time.Time, defaultTZ string) *time.Time {
+	switch schedule.Kind {
+	case "at":
+		if schedule.AtMS != nil {
+			t := time.UnixMilli(*schedule.AtMS)
+			if t.After(now) {
+				return &t
+			}
+		}
+		return nil
+	case "every":
+		if schedule.EveryMS != nil && *schedule.EveryMS > 0 {
+			t := now.Add(time.Duration(*schedule.EveryMS) * time.Millisecond)
+			return &t
+		}
+		return nil
+	case "cron":
+		if schedule.Expr == "" {
+			return nil
+		}
+		tz := schedule.TZ
+		if tz == "" {
+			tz = defaultTZ
+		}
+		evalTime := now
+		if tz != "" {
+			if loc, err := time.LoadLocation(tz); err == nil {
+				evalTime = now.In(loc)
+			}
+		}
+		nextTime, err := gronx.NextTickAfter(schedule.Expr, evalTime, false)
+		if err != nil {
+			return nil
+		}
+		utcNext := nextTime.UTC()
+		return &utcNext
+	default:
+		return nil
+	}
+}
+
+// NextRunForToggle returns the next run state after explicitly enabling or
+// disabling a cron job. Disabling clears next_run_at immediately so the
+// scheduler stops seeing the job as runnable.
+func NextRunForToggle(schedule *CronSchedule, enabled bool, now time.Time, defaultTZ string) *time.Time {
+	if !enabled {
+		return nil
+	}
+	return ComputeNextRun(schedule, now, defaultTZ)
 }

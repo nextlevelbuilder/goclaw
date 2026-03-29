@@ -4,7 +4,9 @@ package sqlitestore
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -184,14 +186,53 @@ func (s *SQLiteCronStore) EnableJob(ctx context.Context, jobID string, enabled b
 		return fmt.Errorf("invalid job ID: %s", jobID)
 	}
 
-	q := "UPDATE cron_jobs SET enabled = ?, updated_at = ? WHERE id = ?"
-	args := []any{enabled, time.Now(), id}
+	q := `SELECT schedule_kind, cron_expression, run_at, timezone, interval_ms
+		FROM cron_jobs WHERE id = ?`
+	args := []any{id}
 
 	if !store.IsCrossTenant(ctx) {
 		tid := store.TenantIDFromContext(ctx)
 		if tid == uuid.Nil {
 			return fmt.Errorf("tenant_id required")
 		}
+		q += " AND tenant_id = ?"
+		args = append(args, tid)
+	}
+
+	var scheduleKind string
+	var cronExpr, tz *string
+	var runAt *time.Time
+	var intervalMS *int64
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&scheduleKind, &cronExpr, &runAt, &tz, &intervalMS); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("job not found")
+		}
+		return err
+	}
+
+	schedule := store.CronSchedule{Kind: scheduleKind}
+	if cronExpr != nil {
+		schedule.Expr = *cronExpr
+	}
+	if runAt != nil {
+		ms := runAt.UnixMilli()
+		schedule.AtMS = &ms
+	}
+	if tz != nil {
+		schedule.TZ = *tz
+	}
+	if intervalMS != nil {
+		schedule.EveryMS = intervalMS
+	}
+
+	now := time.Now()
+	nextRun := store.NextRunForToggle(&schedule, enabled, now, s.defaultTZ)
+
+	q = "UPDATE cron_jobs SET enabled = ?, next_run_at = ?, updated_at = ? WHERE id = ?"
+	args = []any{enabled, nextRun, now, id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
 		q += " AND tenant_id = ?"
 		args = append(args, tid)
 	}

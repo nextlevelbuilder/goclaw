@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -127,42 +126,5 @@ func scanCronSingleRow(row *sql.Row) (*store.CronJob, error) {
 // defaultTZ is the gateway-level fallback IANA timezone used when the
 // schedule itself does not specify a timezone (existing jobs with TZ = NULL).
 func computeNextRun(schedule *store.CronSchedule, now time.Time, defaultTZ string) *time.Time {
-	switch schedule.Kind {
-	case "at":
-		if schedule.AtMS != nil {
-			t := time.UnixMilli(*schedule.AtMS)
-			if t.After(now) {
-				return &t
-			}
-		}
-		return nil
-	case "every":
-		if schedule.EveryMS != nil && *schedule.EveryMS > 0 {
-			t := now.Add(time.Duration(*schedule.EveryMS) * time.Millisecond)
-			return &t
-		}
-		return nil
-	case "cron":
-		if schedule.Expr == "" {
-			return nil
-		}
-		tz := schedule.TZ
-		if tz == "" {
-			tz = defaultTZ
-		}
-		evalTime := now
-		if tz != "" {
-			if loc, err := time.LoadLocation(tz); err == nil {
-				evalTime = now.In(loc)
-			}
-		}
-		nextTime, err := gronx.NextTickAfter(schedule.Expr, evalTime, false)
-		if err != nil {
-			return nil
-		}
-		utcNext := nextTime.UTC()
-		return &utcNext
-	default:
-		return nil
-	}
+	return store.ComputeNextRun(schedule, now, defaultTZ)
 }
