@@ -1,6 +1,8 @@
 package pg
 
 import (
+	"database/sql"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -146,16 +148,20 @@ func (s *PGCronStore) checkAndRunDueJobs() {
 		return
 	}
 
-	// Clear next_run for all due jobs first to prevent duplicate fires
+	now := time.Now()
+	var claimedJobs []store.CronJob
 	for _, job := range dueJobs {
-		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
-			s.db.ExecContext(s.baseCtx, "UPDATE cron_jobs SET next_run_at = NULL WHERE id = $1", id)
+		if id, parseErr := uuid.Parse(job.ID); parseErr == nil && s.claimDueJob(id, now) {
+			claimedJobs = append(claimedJobs, job)
 		}
+	}
+	if len(claimedJobs) == 0 {
+		return
 	}
 
 	// Execute jobs in parallel — scheduler enforces per-session serialization
 	var wg sync.WaitGroup
-	for _, job := range dueJobs {
+	for _, job := range claimedJobs {
 		wg.Add(1)
 		go func(job store.CronJob) {
 			defer wg.Done()
@@ -172,6 +178,15 @@ func (s *PGCronStore) checkAndRunDueJobs() {
 
 // executeOneJob runs a single cron job with retry, logs the result, and updates next_run_at.
 func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.CronJob) (*store.CronJobResult, error)) {
+	if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
+		freshJob, ok := s.loadClaimedJob(id)
+		if !ok {
+			slog.Info("cron job skipped after claim state changed", "id", job.ID)
+			return
+		}
+		job = *freshJob
+	}
+
 	startTime := time.Now()
 
 	// Wrap handler to fit ExecuteWithRetry's (string, error) signature
@@ -237,9 +252,17 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 	} else if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 		schedule := job.Schedule
 		next := computeNextRun(&schedule, now, s.defaultTZ)
+		var nextRunValue any
+		if next != nil {
+			nextRunValue = *next
+		}
 		s.db.ExecContext(s.baseCtx,
-			"UPDATE cron_jobs SET last_run_at = $1, last_status = $2, last_error = $3, next_run_at = $4, updated_at = $5 WHERE id = $6",
-			now, status, lastError, next, now, id,
+			"UPDATE cron_jobs SET last_run_at = $1, last_status = $2, last_error = $3, updated_at = $4 WHERE id = $5",
+			now, status, lastError, now, id,
+		)
+		s.db.ExecContext(s.baseCtx,
+			"UPDATE cron_jobs SET next_run_at = $1, updated_at = $2 WHERE id = $3 AND enabled = true AND next_run_at IS NULL",
+			nextRunValue, now, id,
 		)
 	}
 
@@ -250,4 +273,43 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 		evt.Error = err.Error()
 	}
 	s.emitEvent(evt)
+}
+
+func (s *PGCronStore) claimDueJob(id uuid.UUID, now time.Time) bool {
+	res, err := s.db.ExecContext(
+		s.baseCtx,
+		`UPDATE cron_jobs
+		 SET next_run_at = NULL
+		 WHERE id = $1 AND enabled = true AND next_run_at IS NOT NULL AND next_run_at <= $2`,
+		id,
+		now,
+	)
+	if err != nil {
+		slog.Warn("cron: failed to claim due job", "id", id, "error", err)
+		return false
+	}
+
+	n, _ := res.RowsAffected()
+	return n == 1
+}
+
+func (s *PGCronStore) loadClaimedJob(id uuid.UUID) (*store.CronJob, bool) {
+	row := s.db.QueryRowContext(
+		s.baseCtx,
+		`SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
+		 created_at, updated_at
+		 FROM cron_jobs
+		 WHERE id = $1 AND enabled = true AND next_run_at IS NULL`,
+		id,
+	)
+	job, err := scanCronSingleRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false
+	}
+	if err != nil {
+		slog.Warn("cron: failed to reload claimed job", "id", id, "error", err)
+		return nil, false
+	}
+	return job, true
 }

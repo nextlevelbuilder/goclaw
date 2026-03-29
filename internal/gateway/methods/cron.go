@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"regexp"
 
@@ -155,7 +156,11 @@ func (m *CronMethods) handleToggle(ctx context.Context, client *gateway.Client, 
 	}
 
 	if err := m.service.EnableJob(ctx, params.JobID, params.Enabled); err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
+		code := protocol.ErrInvalidRequest
+		if errors.Is(err, store.ErrCronJobNotFound) {
+			code = protocol.ErrNotFound
+		}
+		client.SendResponse(protocol.NewErrorResponse(req.ID, code, err.Error()))
 		return
 	}
 
@@ -200,7 +205,11 @@ func (m *CronMethods) handleUpdate(ctx context.Context, client *gateway.Client, 
 
 	job, err := m.service.UpdateJob(ctx, jobID, params.Patch)
 	if err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
+		code := protocol.ErrInvalidRequest
+		if errors.Is(err, store.ErrCronJobNotFound) {
+			code = protocol.ErrNotFound
+		}
+		client.SendResponse(protocol.NewErrorResponse(req.ID, code, err.Error()))
 		return
 	}
 

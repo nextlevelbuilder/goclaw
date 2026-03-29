@@ -119,9 +119,14 @@ func sqliteVal(v any) any {
 	if v == nil {
 		return nil
 	}
-	switch v.(type) {
+	switch typed := v.(type) {
 	case string, int, int64, float64, bool, time.Time, []byte, json.RawMessage:
 		return v
+	case *time.Time:
+		if typed == nil {
+			return nil
+		}
+		return *typed
 	}
 	// For maps, slices, etc. — marshal to JSON string.
 	b, err := json.Marshal(v)

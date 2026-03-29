@@ -2,10 +2,17 @@ package store
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
+)
+
+var (
+	ErrCronJobNotFound    = errors.New("cron job not found")
+	ErrCronJobNoFutureRun = errors.New("cron job has no future run")
 )
 
 // CronJob represents a scheduled job.
@@ -169,12 +176,109 @@ func ComputeNextRun(schedule *CronSchedule, now time.Time, defaultTZ string) *ti
 	}
 }
 
+// NextRunForSchedule resolves the persisted next_run_at for a given schedule state.
+func NextRunForSchedule(schedule *CronSchedule, enabled bool, now time.Time, defaultTZ string) (*time.Time, error) {
+	if !enabled {
+		return nil, nil
+	}
+
+	next := ComputeNextRun(schedule, now, defaultTZ)
+	if next != nil {
+		return next, nil
+	}
+
+	switch schedule.Kind {
+	case "at":
+		return nil, fmt.Errorf("%w: at schedule is already in the past", ErrCronJobNoFutureRun)
+	case "cron":
+		return nil, fmt.Errorf("%w: cron schedule has no valid next execution", ErrCronJobNoFutureRun)
+	case "every":
+		return nil, fmt.Errorf("%w: every schedule has no valid interval", ErrCronJobNoFutureRun)
+	default:
+		return nil, fmt.Errorf("%w: unsupported schedule kind %q", ErrCronJobNoFutureRun, schedule.Kind)
+	}
+}
+
 // NextRunForToggle returns the next run state after explicitly enabling or
 // disabling a cron job. Disabling clears next_run_at immediately so the
 // scheduler stops seeing the job as runnable.
-func NextRunForToggle(schedule *CronSchedule, enabled bool, now time.Time, defaultTZ string) *time.Time {
+func NextRunForToggle(schedule *CronSchedule, enabled, currentlyEnabled bool, currentNextRunAt *time.Time, now time.Time, defaultTZ string) (*time.Time, error) {
 	if !enabled {
-		return nil
+		return nil, nil
 	}
-	return ComputeNextRun(schedule, now, defaultTZ)
+	if currentlyEnabled && currentNextRunAt != nil {
+		next := *currentNextRunAt
+		return &next, nil
+	}
+	return NextRunForSchedule(schedule, true, now, defaultTZ)
+}
+
+// MergeCronSchedule applies a partial schedule patch on top of the current schedule.
+func MergeCronSchedule(current CronSchedule, patch *CronSchedule) CronSchedule {
+	if patch == nil {
+		return current
+	}
+
+	newKind := patch.Kind
+	if newKind == "" {
+		newKind = current.Kind
+	}
+
+	merged := CronSchedule{Kind: newKind}
+	switch newKind {
+	case "cron":
+		if patch.Expr != "" {
+			merged.Expr = patch.Expr
+		} else if current.Kind == newKind {
+			merged.Expr = current.Expr
+		}
+		if patch.TZ != "" {
+			merged.TZ = patch.TZ
+		} else if current.Kind == newKind {
+			merged.TZ = current.TZ
+		}
+	case "every":
+		if patch.EveryMS != nil {
+			merged.EveryMS = patch.EveryMS
+		} else if current.Kind == newKind {
+			merged.EveryMS = current.EveryMS
+		}
+	case "at":
+		if patch.AtMS != nil {
+			merged.AtMS = patch.AtMS
+		} else if current.Kind == newKind {
+			merged.AtMS = current.AtMS
+		}
+	}
+
+	return merged
+}
+
+// ValidateCronSchedule checks structural schedule validity without evaluating future run existence.
+func ValidateCronSchedule(schedule *CronSchedule) error {
+	switch schedule.Kind {
+	case "cron":
+		if schedule.Expr == "" {
+			return fmt.Errorf("cron schedule requires expr")
+		}
+		if !gronx.New().IsValid(schedule.Expr) {
+			return fmt.Errorf("invalid cron expression: %s", schedule.Expr)
+		}
+		if schedule.TZ != "" {
+			if _, err := time.LoadLocation(schedule.TZ); err != nil {
+				return fmt.Errorf("invalid timezone: %s", schedule.TZ)
+			}
+		}
+	case "every":
+		if schedule.EveryMS == nil || *schedule.EveryMS <= 0 {
+			return fmt.Errorf("every schedule requires positive everyMs")
+		}
+	case "at":
+		if schedule.AtMS == nil {
+			return fmt.Errorf("at schedule requires atMs")
+		}
+	default:
+		return fmt.Errorf("invalid schedule kind: %s", schedule.Kind)
+	}
+	return nil
 }
