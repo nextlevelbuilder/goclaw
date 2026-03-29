@@ -84,7 +84,7 @@ func (a *App) startup(ctx context.Context) {
 
 // waitForGateway polls the health endpoint until the gateway is ready or times out.
 func (a *App) waitForGateway() {
-	url := fmt.Sprintf("http://localhost:%d/health", a.gatewayPort)
+	url := fmt.Sprintf("http://127.0.0.1:%d/health", a.gatewayPort)
 	for i := 0; i < 30; i++ {
 		resp, err := http.Get(url)
 		if err == nil && resp.StatusCode == 200 {
@@ -109,7 +109,7 @@ func (a *App) shutdown(ctx context.Context) {
 
 // GetGatewayURL returns the base URL of the embedded gateway.
 func (a *App) GetGatewayURL() string {
-	return fmt.Sprintf("http://localhost:%d", a.gatewayPort)
+	return fmt.Sprintf("http://127.0.0.1:%d", a.gatewayPort)
 }
 
 // GetGatewayToken returns the token for WebSocket authentication.
@@ -124,7 +124,7 @@ func (a *App) GetGatewayPort() int {
 
 // IsGatewayReady checks if the gateway health endpoint is responding.
 func (a *App) IsGatewayReady() bool {
-	url := fmt.Sprintf("http://localhost:%d/health", a.gatewayPort)
+	url := fmt.Sprintf("http://127.0.0.1:%d/health", a.gatewayPort)
 	resp, err := http.Get(url)
 	if err != nil {
 		return false

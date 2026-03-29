@@ -110,7 +110,10 @@ func runGateway() {
 	// Bootstrap files live in Postgres.
 
 	// Detect server IPs for output scrubbing (prevents IP leaks via web_fetch, exec, etc.)
-	tools.DetectServerIPs(context.Background())
+	// Skip for desktop/lite — localhost-only, no multi-tenant exposure risk
+	if !edition.Current().IsLimited() {
+		tools.DetectServerIPs(context.Background())
+	}
 
 	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
 	if browserMgr != nil {
@@ -1137,7 +1140,7 @@ func runGateway() {
 	if strings.Contains(cfg.Database.PostgresDSN, ":goclaw@") {
 		slog.Warn("security.default_db_password: using default Postgres password — run ./prepare-env.sh to generate a strong one")
 	}
-	if len(cfg.Gateway.AllowedOrigins) == 0 {
+	if len(cfg.Gateway.AllowedOrigins) == 0 && !edition.Current().IsLimited() {
 		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins for production")
 	}
 
