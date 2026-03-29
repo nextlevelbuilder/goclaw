@@ -124,11 +124,15 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantSkillsBase := h.tenantSkillsDir(r)
+	uploadLock := h.skillUploadLock(filepath.Join(tenantSkillsBase, slug))
+	uploadLock.Lock()
+	defer uploadLock.Unlock()
+
 	// Determine version (always increment — includes archived skills so re-upload gets v2+)
 	version := h.skills.GetNextVersion(r.Context(), slug)
 
 	// Extract to filesystem: tenant-scoped skills-store/slug/version/
-	tenantSkillsBase := h.tenantSkillsDir(r)
 	destDir := filepath.Join(tenantSkillsBase, slug, fmt.Sprintf("%d", version))
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to create skill directory")})
@@ -191,13 +195,14 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	// Scan and check dependencies
 	response := map[string]any{"slug": slug, "version": version, "name": name, "status": "active"}
+	depState := uploadSkillDepState{}
 	depsCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), uploadDepsInstallTimeout)
 	defer cancel()
 
 	manifest := skills.ScanSkillDeps(destDir)
 	if manifest != nil && !manifest.IsEmpty() {
 		if ok, missing := skills.CheckSkillDeps(manifest); !ok {
-			depState := h.reconcileUploadedSkillDeps(
+			depState = h.reconcileUploadedSkillDeps(
 				depsCtx,
 				slug,
 				manifest,
@@ -222,6 +227,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 	h.skills.BumpVersion()
 	emitAudit(h.msgBus, r, "skill.uploaded", "skill", slug)
 	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size, "status", skill.Status)
+	depState.emit(h, slug)
 
 	writeJSON(w, http.StatusCreated, response)
 }
@@ -239,6 +245,16 @@ func uploadDepErrors(result *skills.InstallResult, installErr error) []string {
 		errors = append(errors, result.Errors...)
 	}
 	return errors
+}
+
+func (h *SkillsHandler) emitUploadDepInstalling(slug string, count int) {
+	if h.msgBus == nil {
+		return
+	}
+	h.msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventSkillDepsInstalling,
+		Payload: map[string]any{"skill": slug, "count": count},
+	})
 }
 
 func (h *SkillsHandler) emitUploadDepChecked(slug, status string, missing []string) {
@@ -282,16 +298,11 @@ func (h *SkillsHandler) reconcileUploadedSkillDeps(
 	response := map[string]any{}
 	finalStatus := "archived"
 	finalMissing := append([]string(nil), missing...)
+	state := uploadSkillDepState{installCount: len(missing), checked: true}
 	var installResult *skills.InstallResult
 	var installErr error
 
 	if allowAutoInstall {
-		if h.msgBus != nil {
-			h.msgBus.Broadcast(bus.Event{
-				Name:    protocol.EventSkillDepsInstalling,
-				Payload: map[string]any{"skill": slug, "count": len(missing)},
-			})
-		}
 		installResult, installErr = installUploadedSkillDeps(ctx, manifest, missing)
 		if ok, checkedMissing := checkUploadedSkillDeps(manifest); ok {
 			finalStatus = "active"
@@ -302,9 +313,10 @@ func (h *SkillsHandler) reconcileUploadedSkillDeps(
 			finalMissing = checkedMissing
 			slog.Warn("skill deps auto-install failed", "skill", slug, "missing", finalMissing, "errors", uploadDepErrors(installResult, installErr))
 		}
-		h.emitUploadDepInstalled(slug, installResult)
+		state.installResult = installResult
 	} else {
 		response["deps_warning"] = "missing dependencies: " + skills.FormatMissing(finalMissing)
+		state.installCount = 0
 	}
 
 	if finalStatus == "archived" {
@@ -317,12 +329,28 @@ func (h *SkillsHandler) reconcileUploadedSkillDeps(
 		}
 	}
 	response["status"] = finalStatus
-	h.emitUploadDepChecked(slug, finalStatus, finalMissing)
-	return uploadSkillDepState{status: finalStatus, missing: finalMissing, response: response}
+	state.status = finalStatus
+	state.missing = finalMissing
+	state.response = response
+	return state
 }
 
 type uploadSkillDepState struct {
-	status   string
-	missing  []string
-	response map[string]any
+	status        string
+	missing       []string
+	response      map[string]any
+	installCount  int
+	installResult *skills.InstallResult
+	checked       bool
+}
+
+func (s uploadSkillDepState) emit(h *SkillsHandler, slug string) {
+	if !s.checked {
+		return
+	}
+	if s.installCount > 0 {
+		h.emitUploadDepInstalling(slug, s.installCount)
+		h.emitUploadDepInstalled(slug, s.installResult)
+	}
+	h.emitUploadDepChecked(slug, s.status, s.missing)
 }

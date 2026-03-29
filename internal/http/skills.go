@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -32,6 +33,7 @@ type SkillsHandler struct {
 	tenantCfgStore store.SkillTenantConfigStore
 	tenantStore    store.TenantStore
 	db             *sql.DB // for export/import direct queries
+	uploadLocks    sync.Map
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.
@@ -45,6 +47,11 @@ func (h *SkillsHandler) tenantSkillsDir(r *http.Request) string {
 	tid := store.TenantIDFromContext(r.Context())
 	slug := store.TenantSlugFromContext(r.Context())
 	return config.TenantSkillsStoreDir(h.dataDir, tid, slug)
+}
+
+func (h *SkillsHandler) skillUploadLock(scopeKey string) *sync.Mutex {
+	actual, _ := h.uploadLocks.LoadOrStore(scopeKey, &sync.Mutex{})
+	return actual.(*sync.Mutex)
 }
 
 // emitCacheInvalidate broadcasts a cache invalidation event if msgBus is set.

@@ -53,6 +53,7 @@ func TestReconcileUploadedSkillDeps_SkipsAutoInstallOutsideMasterTenant(t *testi
 		t.Fatalf("missing = %#v", state.missing)
 	}
 	response := state.response
+	state.emit(handler, "demo")
 	if got := response["deps_warning"]; got != "missing dependencies: pip:requests" {
 		t.Fatalf("deps_warning = %v", got)
 	}
@@ -83,6 +84,7 @@ func TestReconcileUploadedSkillDeps_AutoInstallSuccessClearsMissingDeps(t *testi
 		t.Fatalf("missing = %v, want none", state.missing)
 	}
 	response := state.response
+	state.emit(handler, "demo")
 	if got := response["deps_installed"]; got != true {
 		t.Fatalf("deps_installed = %v, want true", got)
 	}
@@ -115,6 +117,7 @@ func TestReconcileUploadedSkillDeps_AutoInstallFailureArchivesSkill(t *testing.T
 		t.Fatalf("missing = %#v", state.missing)
 	}
 	response := state.response
+	state.emit(handler, "demo")
 	if got := response["deps_warning"]; got != "auto-install failed for: pip:requests" {
 		t.Fatalf("deps_warning = %v", got)
 	}
