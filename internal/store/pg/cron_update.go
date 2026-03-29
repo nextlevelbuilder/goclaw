@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -14,13 +13,6 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
-
-type cronJobMutableState struct {
-	enabled   bool
-	schedule  store.CronSchedule
-	nextRunAt *time.Time
-	payload   store.CronPayload
-}
 
 func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.CronJobPatch) (*store.CronJob, error) {
 	id, err := uuid.Parse(jobID)
@@ -41,7 +33,7 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 
 	now := time.Now()
 	updates := make(map[string]any)
-	effectiveEnabled := current.enabled
+	effectiveEnabled := current.Enabled
 	if patch.Enabled != nil {
 		effectiveEnabled = *patch.Enabled
 		updates["enabled"] = effectiveEnabled
@@ -62,12 +54,12 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 	}
 
 	if patch.Schedule != nil {
-		merged := store.MergeCronSchedule(current.schedule, patch.Schedule)
+		merged := store.MergeCronSchedule(current.Schedule, patch.Schedule)
 		if err := store.ValidateCronSchedule(&merged); err != nil {
 			return nil, err
 		}
 
-		applyCronScheduleUpdates(updates, merged)
+		store.ApplyCronScheduleUpdates(updates, merged)
 
 		nextRun, err := store.NextRunForSchedule(&merged, effectiveEnabled, now, s.defaultTZ)
 		if err != nil {
@@ -75,7 +67,7 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 		}
 		updates["next_run_at"] = nextRun
 	} else if patch.Enabled != nil {
-		nextRun, err := store.NextRunForToggle(&current.schedule, effectiveEnabled, current.enabled, current.nextRunAt, now, s.defaultTZ)
+		nextRun, err := store.NextRunForToggle(&current.Schedule, effectiveEnabled, current.Enabled, current.NextRunAt, now, s.defaultTZ)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +76,7 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 
 	needsPayloadUpdate := patch.Message != "" || patch.Deliver != nil || patch.Channel != nil || patch.To != nil || patch.WakeHeartbeat != nil
 	if needsPayloadUpdate {
-		payload := current.payload
+		payload := current.Payload
 		if patch.Message != "" {
 			payload.Message = patch.Message
 		}
@@ -122,7 +114,7 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 	return job, nil
 }
 
-func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id uuid.UUID, loadPayload bool) (*cronJobMutableState, error) {
+func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id uuid.UUID, loadPayload bool) (*store.CronJobMutableState, error) {
 	q := `SELECT enabled, schedule_kind, cron_expression, run_at, timezone, interval_ms, next_run_at, payload
 		FROM cron_jobs WHERE id = $1`
 	args := []any{id}
@@ -138,7 +130,7 @@ func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id
 	q += " FOR UPDATE"
 
 	var (
-		state        cronJobMutableState
+		state        store.CronJobMutableState
 		scheduleKind string
 		cronExpr     *string
 		runAt        *time.Time
@@ -149,7 +141,7 @@ func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id
 	)
 
 	if err := tx.QueryRowContext(ctx, q, args...).Scan(
-		&state.enabled,
+		&state.Enabled,
 		&scheduleKind,
 		&cronExpr,
 		&runAt,
@@ -164,24 +156,24 @@ func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id
 		return nil, err
 	}
 
-	state.schedule = store.CronSchedule{Kind: scheduleKind}
+	state.Schedule = store.CronSchedule{Kind: scheduleKind}
 	if cronExpr != nil {
-		state.schedule.Expr = *cronExpr
+		state.Schedule.Expr = *cronExpr
 	}
 	if runAt != nil {
 		ms := runAt.UnixMilli()
-		state.schedule.AtMS = &ms
+		state.Schedule.AtMS = &ms
 	}
 	if tz != nil {
-		state.schedule.TZ = *tz
+		state.Schedule.TZ = *tz
 	}
 	if intervalMS != nil {
-		state.schedule.EveryMS = intervalMS
+		state.Schedule.EveryMS = intervalMS
 	}
-	state.nextRunAt = nextRunAt
+	state.NextRunAt = nextRunAt
 
 	if loadPayload && len(payloadJSON) > 0 {
-		if err := json.Unmarshal(payloadJSON, &state.payload); err != nil {
+		if err := json.Unmarshal(payloadJSON, &state.Payload); err != nil {
 			return nil, fmt.Errorf("failed to parse existing payload for job %s: %w", id, err)
 		}
 	}
@@ -189,32 +181,6 @@ func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id
 	return &state, nil
 }
 
-func applyCronScheduleUpdates(updates map[string]any, schedule store.CronSchedule) {
-	updates["schedule_kind"] = schedule.Kind
-
-	switch schedule.Kind {
-	case "cron":
-		updates["cron_expression"] = schedule.Expr
-		if schedule.TZ != "" {
-			updates["timezone"] = schedule.TZ
-		} else {
-			updates["timezone"] = nil
-		}
-		updates["interval_ms"] = nil
-		updates["run_at"] = nil
-	case "every":
-		updates["cron_expression"] = nil
-		updates["timezone"] = nil
-		updates["interval_ms"] = *schedule.EveryMS
-		updates["run_at"] = nil
-	case "at":
-		runAt := time.UnixMilli(*schedule.AtMS)
-		updates["cron_expression"] = nil
-		updates["timezone"] = nil
-		updates["interval_ms"] = nil
-		updates["run_at"] = runAt
-	}
-}
 
 func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
@@ -225,7 +191,7 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 		setClauses []string
 		args       []any
 	)
-	for idx, col := range sortedUpdateColumns(updates) {
+	for idx, col := range store.SortedUpdateColumns(updates) {
 		if !validColumnName.MatchString(col) {
 			return fmt.Errorf("invalid column name: %q", col)
 		}
@@ -254,13 +220,3 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 	return nil
 }
 
-func sortedUpdateColumns(updates map[string]any) []string {
-	cols := make([]string, 0, len(updates))
-	for col := range updates {
-		cols = append(cols, col)
-	}
-	// The exact order is not important functionally, but keeping it stable
-	// simplifies tests and makes SQL generation deterministic.
-	sort.Strings(cols)
-	return cols
-}

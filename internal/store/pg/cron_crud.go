@@ -197,7 +197,7 @@ func (s *PGCronStore) EnableJob(ctx context.Context, jobID string, enabled bool)
 	}
 
 	now := time.Now()
-	nextRun, err := store.NextRunForToggle(&current.schedule, enabled, current.enabled, current.nextRunAt, now, s.defaultTZ)
+	nextRun, err := store.NextRunForToggle(&current.Schedule, enabled, current.Enabled, current.NextRunAt, now, s.defaultTZ)
 	if err != nil {
 		return err
 	}

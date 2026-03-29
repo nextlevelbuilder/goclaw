@@ -257,12 +257,11 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 			nextRunValue = *next
 		}
 		s.db.ExecContext(s.baseCtx,
-			"UPDATE cron_jobs SET last_run_at = $1, last_status = $2, last_error = $3, updated_at = $4 WHERE id = $5",
-			now, status, lastError, now, id,
-		)
-		s.db.ExecContext(s.baseCtx,
-			"UPDATE cron_jobs SET next_run_at = $1, updated_at = $2 WHERE id = $3 AND enabled = true AND next_run_at IS NULL",
-			nextRunValue, now, id,
+			`UPDATE cron_jobs SET
+			 last_run_at = $1, last_status = $2, last_error = $3, updated_at = $4,
+			 next_run_at = CASE WHEN enabled = true AND next_run_at IS NULL THEN $5 ELSE next_run_at END
+			 WHERE id = $6`,
+			now, status, lastError, now, nextRunValue, id,
 		)
 	}
 

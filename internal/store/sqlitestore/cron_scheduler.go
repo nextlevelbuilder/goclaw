@@ -258,12 +258,11 @@ func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *sto
 			nextRunValue = *next
 		}
 		s.db.ExecContext(s.baseCtx,
-			"UPDATE cron_jobs SET last_run_at = ?, last_status = ?, last_error = ?, updated_at = ? WHERE id = ?",
-			now, status, lastError, now, id,
-		)
-		s.db.ExecContext(s.baseCtx,
-			"UPDATE cron_jobs SET next_run_at = ?, updated_at = ? WHERE id = ? AND enabled = 1 AND next_run_at IS NULL",
-			nextRunValue, now, id,
+			`UPDATE cron_jobs SET
+			 last_run_at = ?, last_status = ?, last_error = ?, updated_at = ?,
+			 next_run_at = CASE WHEN enabled = 1 AND next_run_at IS NULL THEN ? ELSE next_run_at END
+			 WHERE id = ?`,
+			now, status, lastError, now, nextRunValue, id,
 		)
 	}
 

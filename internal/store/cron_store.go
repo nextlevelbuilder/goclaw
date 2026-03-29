@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/adhocore/gronx"
@@ -131,6 +132,15 @@ type CronStore interface {
 // CacheInvalidatable is an optional interface for stores that support cache invalidation.
 type CacheInvalidatable interface {
 	InvalidateCache()
+}
+
+// CronJobMutableState holds the mutable fields of a cron job loaded within a
+// transaction for read-compute-write operations (EnableJob, UpdateJob).
+type CronJobMutableState struct {
+	Enabled   bool
+	Schedule  CronSchedule
+	NextRunAt *time.Time
+	Payload   CronPayload
 }
 
 // ComputeNextRun calculates the next run time for a cron schedule.
@@ -281,4 +291,44 @@ func ValidateCronSchedule(schedule *CronSchedule) error {
 		return fmt.Errorf("invalid schedule kind: %s", schedule.Kind)
 	}
 	return nil
+}
+
+// ApplyCronScheduleUpdates populates the update map with the column values
+// for a fully-resolved cron schedule (after merge + validation).
+func ApplyCronScheduleUpdates(updates map[string]any, schedule CronSchedule) {
+	updates["schedule_kind"] = schedule.Kind
+
+	switch schedule.Kind {
+	case "cron":
+		updates["cron_expression"] = schedule.Expr
+		if schedule.TZ != "" {
+			updates["timezone"] = schedule.TZ
+		} else {
+			updates["timezone"] = nil
+		}
+		updates["interval_ms"] = nil
+		updates["run_at"] = nil
+	case "every":
+		updates["cron_expression"] = nil
+		updates["timezone"] = nil
+		updates["interval_ms"] = *schedule.EveryMS
+		updates["run_at"] = nil
+	case "at":
+		runAt := time.UnixMilli(*schedule.AtMS)
+		updates["cron_expression"] = nil
+		updates["timezone"] = nil
+		updates["interval_ms"] = nil
+		updates["run_at"] = runAt
+	}
+}
+
+// SortedUpdateColumns returns the map keys in sorted order for deterministic
+// SQL generation.
+func SortedUpdateColumns(updates map[string]any) []string {
+	cols := make([]string, 0, len(updates))
+	for col := range updates {
+		cols = append(cols, col)
+	}
+	sort.Strings(cols)
+	return cols
 }
