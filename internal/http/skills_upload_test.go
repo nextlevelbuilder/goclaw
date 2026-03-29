@@ -147,12 +147,19 @@ func TestReconcileUploadedSkillDeps_AutoInstallFailureArchivesSkill(t *testing.T
 func TestHandleUpload_AutoInstallsMissingDepsAndKeepsSkillActive(t *testing.T) {
 	handler, skillStore, ctx, _ := newTestUploadHandler(t)
 	installCalls := 0
+	checkCalls := 0
 	stubUploadDepFns(t,
 		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
 			installCalls++
 			return &skills.InstallResult{Pip: []string{"requests"}}, nil
 		},
-		func(*skills.SkillManifest) (bool, []string) { return true, nil },
+		func(*skills.SkillManifest) (bool, []string) {
+			checkCalls++
+			if checkCalls == 1 {
+				return false, []string{"pip:requests"}
+			}
+			return true, nil
+		},
 	)
 
 	req := newZipUploadRequest(t, ctx, map[string]string{

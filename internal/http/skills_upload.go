@@ -201,7 +201,7 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	manifest := skills.ScanSkillDeps(destDir)
 	if manifest != nil && !manifest.IsEmpty() {
-		if ok, missing := skills.CheckSkillDeps(manifest); !ok {
+		if ok, missing := checkUploadedSkillDeps(manifest); !ok {
 			depState = h.reconcileUploadedSkillDeps(
 				depsCtx,
 				slug,
