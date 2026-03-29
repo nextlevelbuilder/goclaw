@@ -23,6 +23,11 @@ import (
 
 const maxSkillUploadSize = 20 << 20 // 20 MB
 
+var (
+	aggregateInstallDeps = skills.AggregateMissingDeps
+	installManagedDeps   = skills.InstallDeps
+)
+
 // SkillsHandler handles skill management HTTP endpoints.
 type SkillsHandler struct {
 	skills         store.SkillManageStore
@@ -256,7 +261,7 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	manifest, missing := skills.AggregateMissingDeps(dirs)
+	manifest, missing := aggregateInstallDeps(dirs)
 	if len(missing) == 0 {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "all deps satisfied"})
 		return
@@ -269,7 +274,7 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 		})
 	}
 
-	result, err := skills.InstallDeps(r.Context(), manifest, missing)
+	result, err := installManagedDeps(r.Context(), manifest, missing)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
