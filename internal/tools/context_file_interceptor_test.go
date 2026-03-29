@@ -40,11 +40,18 @@ func (s *stubAgentStore) SetUserContextFile(_ context.Context, _ uuid.UUID, _, _
 func (s *stubAgentStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _, _ string) error {
 	return nil
 }
+func (s *stubAgentStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _ string) error {
+	return nil
+}
 
 // Remaining interface methods — not exercised in these tests.
-func (s *stubAgentStore) Create(_ context.Context, _ *store.AgentData) error              { return nil }
-func (s *stubAgentStore) GetByKey(_ context.Context, _ string) (*store.AgentData, error)  { return nil, nil }
-func (s *stubAgentStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) { return nil, nil }
+func (s *stubAgentStore) Create(_ context.Context, _ *store.AgentData) error { return nil }
+func (s *stubAgentStore) GetByKey(_ context.Context, _ string) (*store.AgentData, error) {
+	return nil, nil
+}
+func (s *stubAgentStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
+	return nil, nil
+}
 func (s *stubAgentStore) GetByIDUnscoped(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
 	return nil, nil
 }
@@ -54,10 +61,12 @@ func (s *stubAgentStore) GetByKeys(_ context.Context, _ []string) ([]store.Agent
 func (s *stubAgentStore) GetByIDs(_ context.Context, _ []uuid.UUID) ([]store.AgentData, error) {
 	return nil, nil
 }
-func (s *stubAgentStore) GetDefault(_ context.Context) (*store.AgentData, error)            { return nil, nil }
-func (s *stubAgentStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error   { return nil }
-func (s *stubAgentStore) Delete(_ context.Context, _ uuid.UUID) error                     { return nil }
-func (s *stubAgentStore) List(_ context.Context, _ string) ([]store.AgentData, error)     { return nil, nil }
+func (s *stubAgentStore) GetDefault(_ context.Context) (*store.AgentData, error)        { return nil, nil }
+func (s *stubAgentStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error { return nil }
+func (s *stubAgentStore) Delete(_ context.Context, _ uuid.UUID) error                   { return nil }
+func (s *stubAgentStore) List(_ context.Context, _ string) ([]store.AgentData, error) {
+	return nil, nil
+}
 func (s *stubAgentStore) ShareAgent(_ context.Context, _ uuid.UUID, _, _, _ string) error { return nil }
 func (s *stubAgentStore) RevokeShare(_ context.Context, _ uuid.UUID, _ string) error      { return nil }
 func (s *stubAgentStore) ListShares(_ context.Context, _ uuid.UUID) ([]store.AgentShareData, error) {

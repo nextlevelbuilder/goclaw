@@ -54,6 +54,9 @@ func (s *seedStubStore) SetUserContextFile(_ context.Context, _ uuid.UUID, _, na
 func (s *seedStubStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _, _ string) error {
 	return nil
 }
+func (s *seedStubStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _ string) error {
+	return nil
+}
 
 // Remaining interface methods — not exercised.
 func (s *seedStubStore) Create(_ context.Context, _ *store.AgentData) error { return nil }

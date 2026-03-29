@@ -80,6 +80,9 @@ func (s *createCaptureStore) SetUserContextFile(_ context.Context, _ uuid.UUID, 
 func (s *createCaptureStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _, _ string) error {
 	return nil
 }
+func (s *createCaptureStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _ string) error {
+	return nil
+}
 func (s *createCaptureStore) GetUserOverride(_ context.Context, _ uuid.UUID, _ string) (*store.UserAgentOverrideData, error) {
 	return nil, nil
 }

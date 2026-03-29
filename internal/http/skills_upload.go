@@ -2,6 +2,7 @@ package http
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -10,6 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -17,6 +21,18 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+const uploadDepsInstallTimeout = 5 * time.Minute
+
+var (
+	installUploadedSkillDeps = skills.InstallDeps
+	checkUploadedSkillDeps   = skills.CheckSkillDeps
+)
+
+type skillDepStateWriter interface {
+	StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error
+	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error
+}
 
 // handleUpload processes a ZIP file upload containing a skill (must have SKILL.md at root).
 func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
@@ -196,32 +212,156 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		"slug":    slug,
 		"version": version,
 		"name":    name,
+		"status":  "active",
 	}
+	depsCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), uploadDepsInstallTimeout)
+	defer cancel()
+
 	manifest := skills.ScanSkillDeps(destDir)
-	if manifest != nil && !manifest.IsEmpty() {
-		ok, missing := skills.CheckSkillDeps(manifest)
-		if !ok {
-			// Attempt auto-install before archiving (same as seeder flow for system skills)
-			if h.msgBus != nil {
-				h.msgBus.Broadcast(bus.Event{
-					Name:    protocol.EventSkillDepsInstalling,
-					Payload: map[string]any{"skill": slug, "count": len(missing)},
-				})
-			}
-			result, installErr := skills.InstallDeps(r.Context(), manifest, missing)
-			if installErr != nil || (result != nil && len(result.Errors) > 0) {
-				_ = h.skills.UpdateSkill(r.Context(), id, map[string]any{"status": "archived"})
-				response["deps_warning"] = "auto-install failed for: " + skills.FormatMissing(missing)
-				if result != nil && len(result.Errors) > 0 {
-					response["deps_errors"] = result.Errors
-				}
-				slog.Warn("skill deps auto-install failed", "skill", slug, "missing", missing, "errors", result.Errors)
-			} else {
-				response["deps_installed"] = true
-				slog.Info("skill deps auto-installed", "skill", slug, "installed", missing)
-			}
+	if manifest == nil || manifest.IsEmpty() {
+		if err := h.skills.StoreMissingDeps(depsCtx, id, nil); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to persist skill dependency state")})
+			return
 		}
+		writeJSON(w, http.StatusCreated, response)
+		return
+	}
+
+	ok, missing := skills.CheckSkillDeps(manifest)
+	if ok {
+		if err := h.skills.StoreMissingDeps(depsCtx, id, nil); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to persist skill dependency state")})
+			return
+		}
+		writeJSON(w, http.StatusCreated, response)
+		return
+	}
+
+	depsResponse, err := h.reconcileUploadedSkillDeps(
+		depsCtx,
+		h.skills,
+		id,
+		slug,
+		manifest,
+		missing,
+		canAutoInstallUploadedSkillDeps(r.Context()),
+	)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to persist skill dependency state")})
+		return
+	}
+	for key, value := range depsResponse {
+		response[key] = value
 	}
 
 	writeJSON(w, http.StatusCreated, response)
+}
+
+func canAutoInstallUploadedSkillDeps(ctx context.Context) bool {
+	return store.IsOwnerRole(ctx) || store.TenantIDFromContext(ctx) == store.MasterTenantID
+}
+
+func uploadDepErrors(result *skills.InstallResult, installErr error) []string {
+	var errors []string
+	if installErr != nil {
+		errors = append(errors, installErr.Error())
+	}
+	if result != nil && len(result.Errors) > 0 {
+		errors = append(errors, result.Errors...)
+	}
+	return errors
+}
+
+func (h *SkillsHandler) emitUploadDepChecked(slug, status string, missing []string) {
+	if h.msgBus == nil {
+		return
+	}
+	payload := map[string]any{
+		"slug":   slug,
+		"status": status,
+	}
+	if len(missing) > 0 {
+		payload["missing"] = missing
+	}
+	h.msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventSkillDepsChecked,
+		Payload: payload,
+	})
+}
+
+func (h *SkillsHandler) emitUploadDepInstalled(slug string, result *skills.InstallResult) {
+	if h.msgBus == nil {
+		return
+	}
+	payload := map[string]any{"skill": slug}
+	if result != nil {
+		payload["result"] = result
+	}
+	h.msgBus.Broadcast(bus.Event{
+		Name:    protocol.EventSkillDepsInstalled,
+		Payload: payload,
+	})
+}
+
+func (h *SkillsHandler) reconcileUploadedSkillDeps(
+	ctx context.Context,
+	writer skillDepStateWriter,
+	id uuid.UUID,
+	slug string,
+	manifest *skills.SkillManifest,
+	missing []string,
+	allowAutoInstall bool,
+) (map[string]any, error) {
+	response := map[string]any{}
+	finalStatus := "archived"
+	finalMissing := append([]string(nil), missing...)
+	var installResult *skills.InstallResult
+	var installErr error
+
+	if allowAutoInstall {
+		if h.msgBus != nil {
+			h.msgBus.Broadcast(bus.Event{
+				Name:    protocol.EventSkillDepsInstalling,
+				Payload: map[string]any{"skill": slug, "count": len(missing)},
+			})
+		}
+		installResult, installErr = installUploadedSkillDeps(ctx, manifest, missing)
+		if ok, checkedMissing := checkUploadedSkillDeps(manifest); ok {
+			finalStatus = "active"
+			finalMissing = nil
+			response["deps_installed"] = true
+			slog.Info("skill deps auto-installed", "skill", slug, "installed", missing)
+		} else {
+			finalMissing = checkedMissing
+			slog.Warn("skill deps auto-install failed", "skill", slug, "missing", finalMissing, "errors", uploadDepErrors(installResult, installErr))
+		}
+		h.emitUploadDepInstalled(slug, installResult)
+	} else {
+		response["deps_warning"] = "missing dependencies: " + skills.FormatMissing(finalMissing)
+	}
+
+	if finalStatus == "archived" {
+		if _, exists := response["deps_warning"]; !exists {
+			response["deps_warning"] = "auto-install failed for: " + skills.FormatMissing(finalMissing)
+		}
+		response["missing_deps"] = finalMissing
+		if errors := uploadDepErrors(installResult, installErr); len(errors) > 0 {
+			response["deps_errors"] = errors
+		}
+	}
+
+	storeMissing := finalMissing
+	if finalStatus == "active" {
+		storeMissing = nil
+	}
+	if err := writer.StoreMissingDeps(ctx, id, storeMissing); err != nil {
+		return nil, err
+	}
+	if err := writer.UpdateSkill(ctx, id, map[string]any{"status": finalStatus}); err != nil {
+		return nil, err
+	}
+
+	response["status"] = finalStatus
+	h.emitUploadDepChecked(slug, finalStatus, finalMissing)
+	return response, nil
 }
