@@ -38,7 +38,13 @@ func (p *ClaudeCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 	disableTools := extractBoolOpt(req.Options, OptDisableTools)
 	bc := bridgeContextFromOpts(req.Options)
 	mcpPath := p.resolveMCPConfigPath(ctx, sessionKey, bc)
-	args := p.buildArgs(model, workDir, mcpPath, cliSessionID, "json", len(images) > 0, disableTools)
+	// When images are present, claude CLI requires matching input/output formats.
+	// --input-format=stream-json requires --output-format=stream-json.
+	outputFormat := "json"
+	if len(images) > 0 {
+		outputFormat = "stream-json"
+	}
+	args := p.buildArgs(model, workDir, mcpPath, cliSessionID, outputFormat, len(images) > 0, disableTools)
 
 	var stdin *bytes.Reader
 	if len(images) > 0 {
