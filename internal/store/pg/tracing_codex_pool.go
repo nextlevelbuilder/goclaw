@@ -85,6 +85,7 @@ WHERE t.tenant_id = $1
   AND t.parent_trace_id IS NULL
   AND sp.tenant_id = $1
   AND sp.span_type = 'llm_call'
+  AND sp.start_time > NOW() - INTERVAL '7 days'
   AND (
 	sp.provider = ANY($2)
 	OR COALESCE(sp.metadata->'chatgpt_oauth_routing'->>'selected_provider', '') = ANY($2)
