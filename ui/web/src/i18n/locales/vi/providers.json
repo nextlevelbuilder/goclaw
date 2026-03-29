@@ -226,7 +226,15 @@
     "oauthManagedByHint": "Bí danh này đang được quản lý bởi provider {{provider}}. Hãy chỉnh membership ở provider đó thay vì tại tài khoản này.",
     "codexPoolDefaultsTitle": "Thiết lập pool mặc định",
     "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
-    "oauthDisplayNameRecommendation": "Thêm tên hiển thị nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool."
+    "oauthDisplayNameRecommendation": "Thêm tên hiển thị nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool.",
+    "poolActivityTitle": "Hoạt động pool",
+    "poolActivityDescription": "Hoạt động runtime tổng hợp trên tất cả agent sử dụng pool Codex của provider này.",
+    "poolActivityRefresh": "Làm mới",
+    "poolActivityTopAgents": "Agent",
+    "poolActivityTopAgentsTitle": "Agent sử dụng pool nhiều nhất",
+    "poolActivityRequests": "req",
+    "poolActivityEmpty": "Chưa có hoạt động",
+    "poolActivityEmptyDesc": "Hoạt động pool sẽ xuất hiện ở đây khi agent bắt đầu gửi request qua pool này."
   },
   "list": {
     "poolOwner": "Chủ pool",

@@ -7,6 +7,7 @@ export const queryKeys = {
     models: (providerId: string) => ["providers", providerId, "models"] as const,
     chatgptOAuthStatuses: (providerKeys: string[]) => ["providers", "chatgpt-oauth-statuses", ...providerKeys] as const,
     chatgptOAuthQuotas: (providerNames: string[]) => ["providers", "chatgpt-oauth-quotas", ...providerNames] as const,
+    codexPoolActivity: (providerId: string, limit: number) => ["providers", providerId, "codex-pool-activity", limit] as const,
   },
   agents: {
     all: ["agents"] as const,

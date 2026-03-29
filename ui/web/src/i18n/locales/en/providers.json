@@ -222,7 +222,15 @@
     "oauthManagedByHint": "This alias is managed by provider {{provider}}. Edit pool membership there instead of on this account.",
     "codexPoolDefaultsTitle": "Pool Defaults",
     "codexPoolDefaultsDescription": "Define the reusable OpenAI Codex pool owned by this alias for agents that use it as their primary provider.",
-    "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple OpenAI Codex OAuth accounts appear in the pool."
+    "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple OpenAI Codex OAuth accounts appear in the pool.",
+    "poolActivityTitle": "Pool Activity",
+    "poolActivityDescription": "Aggregate runtime activity across all agents using this provider's Codex pool.",
+    "poolActivityRefresh": "Refresh",
+    "poolActivityTopAgents": "Agents",
+    "poolActivityTopAgentsTitle": "Top agents using this pool",
+    "poolActivityRequests": "req",
+    "poolActivityEmpty": "No activity yet",
+    "poolActivityEmptyDesc": "Pool activity will appear here once agents start routing requests through this pool."
   },
   "embedding": {
     "enable": "Enable Embedding",

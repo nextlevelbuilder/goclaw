@@ -244,7 +244,15 @@
     "oauthManagedByHint": "这个别名由 provider {{provider}} 管理。请到那个 provider 上编辑池成员，而不是在这个账户上修改。",
     "codexPoolDefaultsTitle": "默认账户池",
     "codexPoolDefaultsDescription": "为把这个别名作为主 provider 的 agent 定义由该别名拥有的可复用 OpenAI Codex 账户池。",
-    "oauthDisplayNameRecommendation": "如果您希望多个 OpenAI Codex OAuth 账户在池里显示得更清楚，可以补充显示名称。"
+    "oauthDisplayNameRecommendation": "如果您希望多个 OpenAI Codex OAuth 账户在池里显示得更清楚，可以补充显示名称。",
+    "poolActivityTitle": "池活动",
+    "poolActivityDescription": "汇总所有使用该 provider Codex 池的 agent 的运行时活动。",
+    "poolActivityRefresh": "刷新",
+    "poolActivityTopAgents": "Agent",
+    "poolActivityTopAgentsTitle": "使用该池最多的 agent",
+    "poolActivityRequests": "请求",
+    "poolActivityEmpty": "暂无活动",
+    "poolActivityEmptyDesc": "当 agent 开始通过此池路由请求时，池活动将在此显示。"
   },
   "list": {
     "poolOwner": "池拥有者",

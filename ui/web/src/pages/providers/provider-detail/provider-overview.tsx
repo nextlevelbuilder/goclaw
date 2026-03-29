@@ -34,6 +34,8 @@ import {
   ChatGPTOAuthRoutingSection,
 } from "@/pages/agents/agent-detail/config-sections";
 import type { CodexPoolEntry } from "@/pages/agents/agent-detail/codex-pool-activity-panel";
+import { useProviderCodexPoolActivity } from "../hooks/use-provider-codex-pool-activity";
+import { ProviderPoolActivitySection } from "./provider-pool-activity-section";
 
 interface ProviderOverviewProps {
   provider: ProviderData;
@@ -311,6 +313,14 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
     });
   }, [canEditPoolRouting, provider.name, providerByName, quotaByName, quotaProviderNames, statusByName]);
 
+  // Provider-scoped pool activity (only for pool owners)
+  const isPoolOwner = canEditPoolRouting && poolEntries.length > 0;
+  const {
+    data: poolActivity,
+    isFetching: poolActivityFetching,
+    refetch: refreshPoolActivity,
+  } = useProviderCodexPoolActivity(provider.id, 8, isPoolOwner);
+
   const { verifyEmbedding, embVerifying, embResult, resetEmb } = useProviderVerify();
   useEffect(() => { resetEmb(); }, [embModel, embDimensions, resetEmb]);
 
@@ -461,6 +471,21 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
           quotaByName={quotaByName}
           quotaLoading={quotasLoading || quotasFetching}
           entries={poolEntries}
+        />
+      ) : null}
+
+      {isPoolOwner ? (
+        <ProviderPoolActivitySection
+          provider={provider}
+          providerCounts={poolActivity.provider_counts}
+          recentRequests={poolActivity.recent_requests}
+          topAgents={poolActivity.top_agents}
+          statsSampleSize={poolActivity.stats_sample_size}
+          fetching={poolActivityFetching}
+          onRefresh={() => void refreshPoolActivity()}
+          providerByName={providerByName}
+          statusByName={statusByName}
+          quotaByName={quotaByName}
         />
       ) : null}
 
