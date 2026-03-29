@@ -112,6 +112,12 @@ function providerFormSignature(input: {
   });
 }
 
+function parseEmbeddingDimensions(value: string): number {
+  if (value.trim() === "") return 0;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : NaN;
+}
+
 export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) {
   const { t } = useTranslation("providers");
   const { t: tc } = useTranslation("common");
@@ -325,14 +331,20 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   useEffect(() => { resetEmb(); }, [embModel, embDimensions, resetEmb]);
 
   const [saving, setSaving] = useState(false);
+  const parsedEmbDimensions = parseEmbeddingDimensions(embDimensions);
+  const embDimensionsInvalid = embDimensions.trim() !== "" && parsedEmbDimensions !== 1536;
 
   const handleSave = async () => {
+    if (embDimensionsInvalid) {
+      toast.error(t("embedding.dimensionsInvalid"));
+      return;
+    }
     setSaving(true);
     try {
       const nextDisplayName = displayName.trim();
       const nextEmbModel = embModel.trim();
       const nextEmbAPIBase = embApiBase.trim();
-      const parsedDims = embDimensions ? parseInt(embDimensions, 10) : 0;
+      const parsedDims = parsedEmbDimensions > 0 ? parsedEmbDimensions : 0;
       const nextEmbDimensions = parsedDims > 0 ? String(parsedDims) : "";
       const submittedAPIKey = showApiKey && apiKey && apiKey !== "***" ? apiKey : "";
       const data: ProviderInput = {
@@ -388,7 +400,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   };
 
   const handleVerifyEmbedding = () => {
-    const parsedDims = embDimensions ? parseInt(embDimensions, 10) : 0;
+    const parsedDims = parsedEmbDimensions > 0 ? parsedEmbDimensions : 0;
     verifyEmbedding(provider.id, embModel.trim() || undefined, parsedDims > 0 ? parsedDims : undefined);
   };
 
@@ -541,10 +553,14 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
                   value={embDimensions}
                   onChange={(e) => setEmbDimensions(e.target.value)}
                   placeholder="1536"
-                  min={1}
+                  min={1536}
+                  max={1536}
                   className="text-base md:text-sm"
                 />
                 <p className="text-xs text-muted-foreground">{t("embedding.dimensionsHint")}</p>
+                {embDimensionsInvalid ? (
+                  <p className="text-xs text-destructive">{t("embedding.dimensionsInvalid")}</p>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -621,7 +637,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       <StickySaveBar
         onSave={handleSave}
         saving={saving}
-        disabled={!isDirty}
+        disabled={!isDirty || embDimensionsInvalid}
       />
     </div>
   );

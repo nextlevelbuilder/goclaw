@@ -127,7 +127,12 @@ func buildEmbeddingProvider(
 	// Models that natively output 1536 ignore the parameter; models with larger native dims get truncated.
 	dims := 1536
 	if es != nil && es.Dimensions > 0 {
-		dims = es.Dimensions
+		if es.Dimensions == 1536 {
+			dims = es.Dimensions
+		} else {
+			slog.Warn("ignoring incompatible provider embedding dimensions for memory schema",
+				"provider", dbp.Name, "requested", es.Dimensions, "required", 1536)
+		}
 	}
 
 	// Try registry first for the actual API key / base (handles runtime-registered providers)
