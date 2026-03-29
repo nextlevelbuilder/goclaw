@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -28,11 +26,6 @@ var (
 	installUploadedSkillDeps = skills.InstallDeps
 	checkUploadedSkillDeps   = skills.CheckSkillDeps
 )
-
-type skillDepStateWriter interface {
-	StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error
-	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error
-}
 
 // handleUpload processes a ZIP file upload containing a skill (must have SKILL.md at root).
 func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
@@ -196,63 +189,39 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		Frontmatter: frontmatter,
 	}
 
+	// Scan and check dependencies
+	response := map[string]any{"slug": slug, "version": version, "name": name, "status": "active"}
+	depsCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), uploadDepsInstallTimeout)
+	defer cancel()
+
+	manifest := skills.ScanSkillDeps(destDir)
+	if manifest != nil && !manifest.IsEmpty() {
+		if ok, missing := skills.CheckSkillDeps(manifest); !ok {
+			depState := h.reconcileUploadedSkillDeps(
+				depsCtx,
+				slug,
+				manifest,
+				missing,
+				canAutoInstallUploadedSkillDeps(r.Context()),
+			)
+			skill.Status = depState.status
+			skill.MissingDeps = depState.missing
+			for key, value := range depState.response {
+				response[key] = value
+			}
+		}
+	}
+
 	id, err := h.skills.CreateSkillManaged(r.Context(), skill)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToCreate, "skill", err.Error())})
 		return
 	}
+	response["id"] = id
 
 	h.skills.BumpVersion()
 	emitAudit(h.msgBus, r, "skill.uploaded", "skill", slug)
-	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size)
-
-	// Scan and check dependencies
-	response := map[string]any{
-		"id":      id,
-		"slug":    slug,
-		"version": version,
-		"name":    name,
-		"status":  "active",
-	}
-	depsCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), uploadDepsInstallTimeout)
-	defer cancel()
-
-	manifest := skills.ScanSkillDeps(destDir)
-	if manifest == nil || manifest.IsEmpty() {
-		if err := h.skills.StoreMissingDeps(depsCtx, id, nil); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to persist skill dependency state")})
-			return
-		}
-		writeJSON(w, http.StatusCreated, response)
-		return
-	}
-
-	ok, missing := skills.CheckSkillDeps(manifest)
-	if ok {
-		if err := h.skills.StoreMissingDeps(depsCtx, id, nil); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to persist skill dependency state")})
-			return
-		}
-		writeJSON(w, http.StatusCreated, response)
-		return
-	}
-
-	depsResponse, err := h.reconcileUploadedSkillDeps(
-		depsCtx,
-		h.skills,
-		id,
-		slug,
-		manifest,
-		missing,
-		canAutoInstallUploadedSkillDeps(r.Context()),
-	)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to persist skill dependency state")})
-		return
-	}
-	for key, value := range depsResponse {
-		response[key] = value
-	}
+	slog.Info("skill uploaded", "id", id, "slug", slug, "version", version, "size", header.Size, "status", skill.Status)
 
 	writeJSON(w, http.StatusCreated, response)
 }
@@ -305,13 +274,11 @@ func (h *SkillsHandler) emitUploadDepInstalled(slug string, result *skills.Insta
 
 func (h *SkillsHandler) reconcileUploadedSkillDeps(
 	ctx context.Context,
-	writer skillDepStateWriter,
-	id uuid.UUID,
 	slug string,
 	manifest *skills.SkillManifest,
 	missing []string,
 	allowAutoInstall bool,
-) (map[string]any, error) {
+) uploadSkillDepState {
 	response := map[string]any{}
 	finalStatus := "archived"
 	finalMissing := append([]string(nil), missing...)
@@ -349,19 +316,13 @@ func (h *SkillsHandler) reconcileUploadedSkillDeps(
 			response["deps_errors"] = errors
 		}
 	}
-
-	storeMissing := finalMissing
-	if finalStatus == "active" {
-		storeMissing = nil
-	}
-	if err := writer.StoreMissingDeps(ctx, id, storeMissing); err != nil {
-		return nil, err
-	}
-	if err := writer.UpdateSkill(ctx, id, map[string]any{"status": finalStatus}); err != nil {
-		return nil, err
-	}
-
 	response["status"] = finalStatus
 	h.emitUploadDepChecked(slug, finalStatus, finalMissing)
-	return response, nil
+	return uploadSkillDepState{status: finalStatus, missing: finalMissing, response: response}
+}
+
+type uploadSkillDepState struct {
+	status   string
+	missing  []string
+	response map[string]any
 }

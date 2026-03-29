@@ -190,10 +190,7 @@ func (s *PGSkillStore) scanSkillInfoList(rows *sql.Rows) []store.SkillInfo {
 // Works for both system and custom skills. System skills bypass tenant filter;
 // custom skills require tenant_id match for cross-tenant safety.
 func (s *PGSkillStore) StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error {
-	if missing == nil {
-		missing = []string{}
-	}
-	encoded, err := json.Marshal(map[string]any{"missing": missing})
+	encoded, err := marshalMissingDeps(missing)
 	if err != nil {
 		return err
 	}
@@ -206,4 +203,11 @@ func (s *PGSkillStore) StoreMissingDeps(ctx context.Context, id uuid.UUID, missi
 		s.BumpVersion()
 	}
 	return err
+}
+
+func marshalMissingDeps(missing []string) ([]byte, error) {
+	if missing == nil {
+		missing = []string{}
+	}
+	return json.Marshal(map[string]any{"missing": missing})
 }

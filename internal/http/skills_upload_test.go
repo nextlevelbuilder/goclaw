@@ -5,29 +5,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
-
-type depStateWriterStub struct {
-	status        string
-	storedMissing []string
-}
-
-func (s *depStateWriterStub) StoreMissingDeps(_ context.Context, _ uuid.UUID, missing []string) error {
-	s.storedMissing = append([]string(nil), missing...)
-	return nil
-}
-
-func (s *depStateWriterStub) UpdateSkill(_ context.Context, _ uuid.UUID, updates map[string]any) error {
-	if status, _ := updates["status"].(string); status != "" {
-		s.status = status
-	}
-	return nil
-}
 
 func captureEventNames(msgBus *bus.MessageBus) *[]string {
 	names := []string{}
@@ -54,7 +35,6 @@ func stubUploadDepFns(
 func TestReconcileUploadedSkillDeps_SkipsAutoInstallOutsideMasterTenant(t *testing.T) {
 	msgBus := bus.New()
 	handler := &SkillsHandler{msgBus: msgBus}
-	writer := &depStateWriterStub{}
 	events := captureEventNames(msgBus)
 	called := false
 	stubUploadDepFns(t, func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
@@ -62,24 +42,22 @@ func TestReconcileUploadedSkillDeps_SkipsAutoInstallOutsideMasterTenant(t *testi
 		return nil, nil
 	}, func(*skills.SkillManifest) (bool, []string) { return false, nil })
 
-	response, err := handler.reconcileUploadedSkillDeps(context.Background(), writer, uuid.New(), "demo", &skills.SkillManifest{}, []string{"pip:requests"}, false)
-	if err != nil {
-		t.Fatalf("reconcileUploadedSkillDeps returned error: %v", err)
-	}
+	state := handler.reconcileUploadedSkillDeps(context.Background(), "demo", &skills.SkillManifest{}, []string{"pip:requests"}, false)
 	if called {
 		t.Fatal("expected auto-install to be skipped")
 	}
-	if got := response["status"]; got != "archived" {
+	if got := state.status; got != "archived" {
 		t.Fatalf("status = %v, want archived", got)
 	}
+	if !reflect.DeepEqual(state.missing, []string{"pip:requests"}) {
+		t.Fatalf("missing = %#v", state.missing)
+	}
+	response := state.response
 	if got := response["deps_warning"]; got != "missing dependencies: pip:requests" {
 		t.Fatalf("deps_warning = %v", got)
 	}
 	if !reflect.DeepEqual(response["missing_deps"], []string{"pip:requests"}) {
 		t.Fatalf("missing_deps = %#v", response["missing_deps"])
-	}
-	if writer.status != "archived" || !reflect.DeepEqual(writer.storedMissing, []string{"pip:requests"}) {
-		t.Fatalf("writer state = status:%q missing:%v", writer.status, writer.storedMissing)
 	}
 	if !reflect.DeepEqual(*events, []string{protocol.EventSkillDepsChecked}) {
 		t.Fatalf("events = %v", *events)
@@ -89,7 +67,6 @@ func TestReconcileUploadedSkillDeps_SkipsAutoInstallOutsideMasterTenant(t *testi
 func TestReconcileUploadedSkillDeps_AutoInstallSuccessClearsMissingDeps(t *testing.T) {
 	msgBus := bus.New()
 	handler := &SkillsHandler{msgBus: msgBus}
-	writer := &depStateWriterStub{}
 	events := captureEventNames(msgBus)
 	stubUploadDepFns(t,
 		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
@@ -98,18 +75,16 @@ func TestReconcileUploadedSkillDeps_AutoInstallSuccessClearsMissingDeps(t *testi
 		func(*skills.SkillManifest) (bool, []string) { return true, nil },
 	)
 
-	response, err := handler.reconcileUploadedSkillDeps(context.Background(), writer, uuid.New(), "demo", &skills.SkillManifest{}, []string{"pip:requests"}, true)
-	if err != nil {
-		t.Fatalf("reconcileUploadedSkillDeps returned error: %v", err)
-	}
-	if got := response["status"]; got != "active" {
+	state := handler.reconcileUploadedSkillDeps(context.Background(), "demo", &skills.SkillManifest{}, []string{"pip:requests"}, true)
+	if got := state.status; got != "active" {
 		t.Fatalf("status = %v, want active", got)
 	}
+	if len(state.missing) != 0 {
+		t.Fatalf("missing = %v, want none", state.missing)
+	}
+	response := state.response
 	if got := response["deps_installed"]; got != true {
 		t.Fatalf("deps_installed = %v, want true", got)
-	}
-	if writer.status != "active" || len(writer.storedMissing) != 0 {
-		t.Fatalf("writer state = status:%q missing:%v", writer.status, writer.storedMissing)
 	}
 	wantEvents := []string{
 		protocol.EventSkillDepsInstalling,
@@ -124,7 +99,6 @@ func TestReconcileUploadedSkillDeps_AutoInstallSuccessClearsMissingDeps(t *testi
 func TestReconcileUploadedSkillDeps_AutoInstallFailureArchivesSkill(t *testing.T) {
 	msgBus := bus.New()
 	handler := &SkillsHandler{msgBus: msgBus}
-	writer := &depStateWriterStub{}
 	events := captureEventNames(msgBus)
 	stubUploadDepFns(t,
 		func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
@@ -133,18 +107,19 @@ func TestReconcileUploadedSkillDeps_AutoInstallFailureArchivesSkill(t *testing.T
 		func(*skills.SkillManifest) (bool, []string) { return false, []string{"pip:requests"} },
 	)
 
-	response, err := handler.reconcileUploadedSkillDeps(context.Background(), writer, uuid.New(), "demo", &skills.SkillManifest{}, []string{"pip:requests"}, true)
-	if err != nil {
-		t.Fatalf("reconcileUploadedSkillDeps returned error: %v", err)
+	state := handler.reconcileUploadedSkillDeps(context.Background(), "demo", &skills.SkillManifest{}, []string{"pip:requests"}, true)
+	if got := state.status; got != "archived" {
+		t.Fatalf("status = %v, want archived", got)
 	}
+	if !reflect.DeepEqual(state.missing, []string{"pip:requests"}) {
+		t.Fatalf("missing = %#v", state.missing)
+	}
+	response := state.response
 	if got := response["deps_warning"]; got != "auto-install failed for: pip:requests" {
 		t.Fatalf("deps_warning = %v", got)
 	}
 	if !reflect.DeepEqual(response["deps_errors"], []string{"pip failed"}) {
 		t.Fatalf("deps_errors = %#v", response["deps_errors"])
-	}
-	if writer.status != "archived" || !reflect.DeepEqual(writer.storedMissing, []string{"pip:requests"}) {
-		t.Fatalf("writer state = status:%q missing:%v", writer.status, writer.storedMissing)
 	}
 	wantEvents := []string{
 		protocol.EventSkillDepsInstalling,

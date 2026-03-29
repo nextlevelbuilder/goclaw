@@ -11,7 +11,7 @@ import type { SkillInfo, SkillFile, SkillVersions } from "@/types/skill";
 
 export type { SkillInfo, SkillFile, SkillVersions };
 
-type SkillUploadResponse = {
+export type SkillUploadResponse = {
   id: string;
   slug: string;
   version: number;
@@ -67,12 +67,6 @@ export function useSkills() {
         formData,
       );
       await invalidate();
-      if (res.deps_warning) {
-        const detail = res.deps_errors?.length
-          ? `${res.deps_warning}: ${res.deps_errors.join("; ")}`
-          : res.deps_warning;
-        throw new Error(detail);
-      }
       return res;
     },
     [http, invalidate],

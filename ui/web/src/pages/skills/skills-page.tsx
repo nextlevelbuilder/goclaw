@@ -77,8 +77,7 @@ export function SkillsPage() {
   };
 
   const handleUpload = async (file: File) => {
-    await uploadSkill(file);
-    refresh();
+    return uploadSkill(file);
   };
 
   const handleCycleVisibility = async (skill: SkillInfo) => {

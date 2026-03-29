@@ -71,6 +71,7 @@ type SkillCreateParams struct {
 	OwnerID     string
 	Visibility  string
 	Status      string // "active", "archived" (missing deps), or "deleted" (user-deleted)
+	MissingDeps []string
 	Version     int
 	FilePath    string
 	FileSize    int64

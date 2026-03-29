@@ -174,21 +174,25 @@ func (s *SQLiteSkillStore) scanSkillInfoList(rows *sql.Rows) []store.SkillInfo {
 }
 
 func (s *SQLiteSkillStore) StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error {
-	if missing == nil {
-		missing = []string{}
-	}
-	encoded, err := json.Marshal(map[string]any{"missing": missing})
+	encoded, err := marshalMissingDeps(missing)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE skills SET deps = ?, updated_at = ? WHERE id = ? AND is_system = 1`,
+		`UPDATE skills SET deps = ?, updated_at = ? WHERE id = ?`,
 		encoded, time.Now().UTC(), id,
 	)
 	if err == nil {
 		s.BumpVersion()
 	}
 	return err
+}
+
+func marshalMissingDeps(missing []string) ([]byte, error) {
+	if missing == nil {
+		missing = []string{}
+	}
+	return json.Marshal(map[string]any{"missing": missing})
 }
 
 // --- helpers shared with other skill files ---

@@ -123,6 +123,14 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p store.SkillCrea
 			fmJSON = b
 		}
 	}
+	depsJSON, err := marshalMissingDeps(p.MissingDeps)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("marshal deps: %w", err)
+	}
+	status := p.Status
+	if status == "" {
+		status = "active"
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -154,18 +162,18 @@ func (s *PGSkillStore) CreateSkillManaged(ctx context.Context, p store.SkillCrea
 	id := store.GenNewID()
 	var returnedID uuid.UUID
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO skills (id, name, slug, description, owner_id, tenant_id, visibility, version, status, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10, $11, $12, NOW(), NOW())
+		`INSERT INTO skills (id, name, slug, description, owner_id, tenant_id, visibility, version, status, deps, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
 		 ON CONFLICT (tenant_id, slug) DO UPDATE SET
 		   name = EXCLUDED.name, description = EXCLUDED.description,
 		   version = EXCLUDED.version, frontmatter = EXCLUDED.frontmatter,
-		   file_path = EXCLUDED.file_path,
+		   file_path = EXCLUDED.file_path, deps = EXCLUDED.deps,
 		   file_size = EXCLUDED.file_size, file_hash = EXCLUDED.file_hash,
 		   visibility = CASE WHEN skills.status IN ('archived', 'deleted') THEN 'private' ELSE skills.visibility END,
-		   status = 'active', updated_at = NOW()
+		   status = EXCLUDED.status, updated_at = NOW()
 		 RETURNING id`,
 		id, p.Name, p.Slug, p.Description, p.OwnerID, tenantID, p.Visibility, version,
-		fmJSON, p.FilePath, p.FileSize, p.FileHash,
+		status, depsJSON, fmJSON, p.FilePath, p.FileSize, p.FileHash,
 	).Scan(&returnedID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("upsert skill: %w", err)

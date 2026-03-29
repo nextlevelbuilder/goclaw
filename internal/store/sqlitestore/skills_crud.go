@@ -98,6 +98,14 @@ func (s *SQLiteSkillStore) CreateSkillManaged(ctx context.Context, p store.Skill
 	}
 
 	fmJSON := marshalFrontmatter(p.Frontmatter)
+	depsJSON, err := marshalMissingDeps(p.MissingDeps)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("marshal deps: %w", err)
+	}
+	status := p.Status
+	if status == "" {
+		status = "active"
+	}
 
 	tenantID := store.TenantIDFromContext(ctx)
 	if tenantID == uuid.Nil {
@@ -131,11 +139,11 @@ func (s *SQLiteSkillStore) CreateSkillManaged(ctx context.Context, p store.Skill
 		// Update existing.
 		_, err = tx.ExecContext(ctx,
 			`UPDATE skills SET name = ?, description = ?, version = ?, frontmatter = ?,
-			 file_path = ?, file_size = ?, file_hash = ?,
+			 file_path = ?, file_size = ?, file_hash = ?, deps = ?,
 			 visibility = CASE WHEN status IN ('archived', 'deleted') THEN 'private' ELSE visibility END,
-			 status = 'active', updated_at = ? WHERE id = ?`,
+			 status = ?, updated_at = ? WHERE id = ?`,
 			p.Name, p.Description, version, fmJSON,
-			p.FilePath, p.FileSize, p.FileHash, now, existingID,
+			p.FilePath, p.FileSize, p.FileHash, depsJSON, status, now, existingID,
 		)
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("update skill: %w", err)
@@ -145,10 +153,10 @@ func (s *SQLiteSkillStore) CreateSkillManaged(ctx context.Context, p store.Skill
 		// Insert new.
 		newID := store.GenNewID()
 		_, err = tx.ExecContext(ctx,
-			`INSERT INTO skills (id, name, slug, description, owner_id, tenant_id, visibility, version, status, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO skills (id, name, slug, description, owner_id, tenant_id, visibility, version, status, deps, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			newID, p.Name, p.Slug, p.Description, p.OwnerID, tenantID, p.Visibility, version,
-			fmJSON, p.FilePath, p.FileSize, p.FileHash, now, now,
+			status, depsJSON, fmJSON, p.FilePath, p.FileSize, p.FileHash, now, now,
 		)
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("insert skill: %w", err)
