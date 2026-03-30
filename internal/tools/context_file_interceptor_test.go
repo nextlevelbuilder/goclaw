@@ -90,6 +90,9 @@ func (s *stubAgentStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ str
 func (s *stubAgentStore) PropagateContextFile(_ context.Context, _ uuid.UUID, _ string) (int, error) {
 	return 0, nil
 }
+func (s *stubAgentStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _ string) error {
+	return nil
+}
 
 // ---- Tests ----
 
