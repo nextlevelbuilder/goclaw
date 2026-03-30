@@ -58,13 +58,17 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult(fmt.Sprintf("Failed to get team details: %v", err))
 	}
 
-	// Download the team bundle
+	// Download the team bundle (read fully into memory to avoid stream EOF issues)
 	goclawVersion := "" // TODO: Could detect version from build info
 	reader, err := t.client.Download(ctx, slug, goclawVersion)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v", listing.Title, err))
 	}
-	defer reader.Close()
+	bundleData, err := io.ReadAll(reader)
+	reader.Close()
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to read team bundle: %v", err))
+	}
 
 	// Save to a temporary file for now
 	// TODO: In the future, this will call the team import function directly
@@ -72,16 +76,10 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
 	tempFile := filepath.Join(tempDir, filename)
 
-	outFile, err := os.Create(tempFile)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to create temp file: %v", err))
-	}
-	defer outFile.Close()
-
-	bytesWritten, err := io.Copy(outFile, reader)
-	if err != nil {
+	if err := os.WriteFile(tempFile, bundleData, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to save team bundle: %v", err))
 	}
+	bytesWritten := int64(len(bundleData))
 
 	// Build success message
 	var result strings.Builder
