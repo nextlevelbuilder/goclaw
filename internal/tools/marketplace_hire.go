@@ -65,8 +65,10 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	if _, err := os.Stat(tempDir); err != nil {
 		tempDir = os.TempDir()
 	}
-	os.MkdirAll(filepath.Join(tempDir, "marketplace"), 0755)
-	tempDir = filepath.Join(tempDir, "marketplace")
+	mktDir := filepath.Join(tempDir, "marketplace")
+	os.MkdirAll(mktDir, 0777)
+	os.Chmod(mktDir, 0777) // ensure writable even if dir existed
+	tempDir = mktDir
 	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
 	tempFile := filepath.Join(tempDir, filename)
 
