@@ -163,7 +163,16 @@ func uniquifyToolCallIDs(calls []providers.ToolCall, runID string, iteration int
 	if len(calls) == 0 {
 		return calls
 	}
-	short := runID
+	// Sanitize runID: Anthropic requires tool_use.id to match ^[a-zA-Z0-9_-]+$
+	// RunIDs like "cron:UUID" or "heartbeat:agentID" contain colons that cause HTTP 400.
+	var sb strings.Builder
+	for _, c := range runID {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-':
+			sb.WriteRune(c)
+		}
+	}
+	short := sb.String()
 	if len(short) > 8 {
 		short = short[:8]
 	}
