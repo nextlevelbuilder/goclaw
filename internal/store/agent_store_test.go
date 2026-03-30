@@ -6,6 +6,72 @@ import (
 	"testing"
 )
 
+func TestParseReasoningConfigDefaultsToOff(t *testing.T) {
+	agent := &AgentData{}
+
+	got := agent.ParseReasoningConfig()
+	if got.Effort != "off" {
+		t.Fatalf("Effort = %q, want off", got.Effort)
+	}
+	if got.Fallback != ReasoningFallbackDowngrade {
+		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackDowngrade)
+	}
+	if got.Source != ReasoningSourceUnset {
+		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceUnset)
+	}
+}
+
+func TestParseReasoningConfigUsesLegacyThinkingLevel(t *testing.T) {
+	agent := &AgentData{
+		OtherConfig: json.RawMessage(`{"thinking_level":"medium"}`),
+	}
+
+	got := agent.ParseReasoningConfig()
+	if got.Effort != "medium" {
+		t.Fatalf("Effort = %q, want medium", got.Effort)
+	}
+	if got.Source != ReasoningSourceLegacy {
+		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceLegacy)
+	}
+}
+
+func TestParseReasoningConfigPrefersAdvancedSettings(t *testing.T) {
+	agent := &AgentData{
+		OtherConfig: json.RawMessage(`{
+			"thinking_level": "high",
+			"reasoning": {"effort": "xhigh", "fallback": "provider_default"}
+		}`),
+	}
+
+	got := agent.ParseReasoningConfig()
+	if got.Effort != "xhigh" {
+		t.Fatalf("Effort = %q, want xhigh", got.Effort)
+	}
+	if got.Fallback != ReasoningFallbackProviderDefault {
+		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackProviderDefault)
+	}
+	if got.Source != ReasoningSourceAdvanced {
+		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceAdvanced)
+	}
+}
+
+func TestParseReasoningConfigKeepsLegacyEffortWhenAdvancedOnlySetsFallback(t *testing.T) {
+	agent := &AgentData{
+		OtherConfig: json.RawMessage(`{
+			"thinking_level": "medium",
+			"reasoning": {"fallback": "off"}
+		}`),
+	}
+
+	got := agent.ParseReasoningConfig()
+	if got.Effort != "medium" {
+		t.Fatalf("Effort = %q, want medium", got.Effort)
+	}
+	if got.Fallback != ReasoningFallbackDisable {
+		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackDisable)
+	}
+}
+
 func TestParseChatGPTOAuthRoutingNormalizesNames(t *testing.T) {
 	agent := &AgentData{
 		OtherConfig: json.RawMessage(`{

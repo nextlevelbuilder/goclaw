@@ -262,13 +262,23 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
 			chatReq.Options[providers.OptTenantID] = tid.String()
 		}
-		if l.thinkingLevel != "" && l.thinkingLevel != "off" {
-			if tc, ok := provider.(providers.ThinkingCapable); ok && tc.SupportsThinking() {
-				chatReq.Options[providers.OptThinkingLevel] = l.thinkingLevel
-			} else {
-				slog.Debug("thinking_level ignored: provider does not support thinking",
-					"provider", provider.Name(), "level", l.thinkingLevel)
-			}
+		reasoningDecision := providers.ResolveReasoningDecision(
+			provider,
+			model,
+			l.reasoningConfig.Effort,
+			l.reasoningConfig.Fallback,
+			l.reasoningConfig.Source,
+		)
+		if effort := reasoningDecision.RequestEffort(); effort != "" {
+			chatReq.Options[providers.OptThinkingLevel] = effort
+		}
+		if reasoningDecision.Reason != "" && reasoningDecision.RequestedEffort != "off" {
+			slog.Debug("reasoning normalized",
+				"provider", provider.Name(),
+				"model", model,
+				"requested", reasoningDecision.RequestedEffort,
+				"effective", reasoningDecision.EffectiveEffort,
+				"reason", reasoningDecision.Reason)
 		}
 
 		// Call LLM (streaming or non-streaming)
@@ -276,6 +286,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		var err error
 
 		callCtx := providers.WithChatGPTOAuthRoutingObservation(ctx, providers.NewChatGPTOAuthRoutingObservation())
+		if reasoningDecision.HasObservation() {
+			callCtx = providers.WithReasoningDecision(callCtx, reasoningDecision)
+		}
 		llmSpanStart := time.Now().UTC()
 		llmSpanID := l.emitLLMSpanStart(callCtx, llmSpanStart, rs.iteration, messages)
 

@@ -162,6 +162,9 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 			}
 		}
 	}
+	if decision := providers.ReasoningDecisionFromContext(ctx); decision != nil {
+		spanMetadata = providers.MergeReasoningMetadata(spanMetadata, *decision)
+	}
 	if len(spanMetadata) > 0 {
 		updates["metadata"] = spanMetadata
 	}

@@ -134,9 +134,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			provider, _ = deps.ProviderReg.GetForTenant(ag.TenantID, names[0])
 			slog.Warn("agent provider not found, using fallback",
 				"agent", agentKey, "wanted", ag.Provider, "using", names[0])
-			if tl := ag.ParseThinkingLevel(); tl != "" && tl != "off" {
+			if rc := ag.ParseReasoningConfig(); rc.Effort != "" && rc.Effort != "off" {
 				slog.Warn("agent thinking may not be supported by fallback provider",
-					"agent", agentKey, "thinking_level", tl,
+					"agent", agentKey, "thinking_level", rc.Effort,
 					"wanted_provider", ag.Provider, "fallback_provider", names[0])
 			}
 		}
@@ -392,7 +392,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 			BuiltinToolSettings:    builtinSettings,
 			DisabledTools:          disabledTools,
-			ThinkingLevel:          ag.ParseThinkingLevel(),
+			ReasoningConfig:        ag.ParseReasoningConfig(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),

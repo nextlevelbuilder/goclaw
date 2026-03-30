@@ -12,13 +12,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
+	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
 // handleListProviderModels proxies to the upstream provider API to list
@@ -42,6 +44,11 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	// Claude CLI doesn't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderClaudeCLI {
 		writeJSON(w, http.StatusOK, map[string]any{"models": claudeCLIModels()})
+		return
+	}
+
+	if p.ProviderType == store.ProviderChatGPTOAuth {
+		writeJSON(w, http.StatusOK, map[string]any{"models": chatGPTOAuthModels()})
 		return
 	}
 
@@ -90,7 +97,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+	writeJSON(w, http.StatusOK, map[string]any{"models": withReasoningCapabilities(models)})
 }
 
 // fetchAnthropicModels calls the Anthropic models API.
@@ -292,4 +299,29 @@ func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo
 		models = append(models, ModelInfo{ID: m.ID, Name: m.ID})
 	}
 	return models, nil
+}
+
+func chatGPTOAuthModels() []ModelInfo {
+	return withReasoningCapabilities([]ModelInfo{
+		{ID: "gpt-5.4", Name: "GPT-5.4"},
+		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
+		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
+		{ID: "gpt-5.3-codex-spark", Name: "GPT-5.3 Codex Spark"},
+		{ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex"},
+		{ID: "gpt-5.2", Name: "GPT-5.2"},
+		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex"},
+		{ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max"},
+		{ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini"},
+		{ID: "gpt-5.1", Name: "GPT-5.1"},
+	})
+}
+
+func withReasoningCapabilities(models []ModelInfo) []ModelInfo {
+	result := make([]ModelInfo, 0, len(models))
+	for _, model := range models {
+		next := model
+		next.Reasoning = providers.LookupReasoningCapability(model.ID)
+		result = append(result, next)
+	}
+	return result
 }

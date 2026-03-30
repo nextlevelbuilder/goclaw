@@ -155,22 +155,56 @@ func (a *AgentData) ParseMemoryConfig() *config.MemoryConfig {
 	return &c
 }
 
-// ParseThinkingLevel extracts thinking_level from other_config JSONB.
-// Returns "low" if not configured (default thinking mode).
+// ParseThinkingLevel extracts the normalized reasoning effort from other_config JSONB.
+// Missing config defaults to "off" to match the dashboard and docs.
 func (a *AgentData) ParseThinkingLevel() string {
+	return a.ParseReasoningConfig().Effort
+}
+
+// ParseReasoningConfig extracts additive advanced reasoning settings from other_config.
+// Legacy thinking_level remains a backward-compatible fallback source.
+func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
+	cfg := AgentReasoningConfig{
+		Effort:   "off",
+		Fallback: ReasoningFallbackDowngrade,
+		Source:   ReasoningSourceUnset,
+	}
 	if len(a.OtherConfig) == 0 {
-		return "low"
+		return cfg
 	}
-	var cfg struct {
-		ThinkingLevel string `json:"thinking_level"`
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &raw) != nil {
+		return cfg
 	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
-		return "low"
+
+	var reasoning struct {
+		Effort   string `json:"effort"`
+		Fallback string `json:"fallback"`
 	}
-	if cfg.ThinkingLevel == "" {
-		return "low"
+	if data, ok := raw["reasoning"]; ok && len(data) > 0 && json.Unmarshal(data, &reasoning) == nil {
+		cfg.Source = ReasoningSourceAdvanced
+		if effort := normalizeReasoningEffort(reasoning.Effort); effort != "" {
+			cfg.Effort = effort
+		}
+		cfg.Fallback = normalizeReasoningFallback(reasoning.Fallback)
 	}
-	return cfg.ThinkingLevel
+
+	if data, ok := raw["thinking_level"]; ok && len(data) > 0 {
+		var legacy string
+		if json.Unmarshal(data, &legacy) == nil {
+			if effort := normalizeReasoningEffort(legacy); effort != "" {
+				if cfg.Source == ReasoningSourceUnset {
+					cfg.Source = ReasoningSourceLegacy
+					cfg.Effort = effort
+				} else if cfg.Effort == "off" {
+					cfg.Effort = effort
+				}
+			}
+		}
+	}
+
+	return cfg
 }
 
 // ParseMaxTokens extracts max_tokens from other_config JSONB.
@@ -238,6 +272,24 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return *cfg.SkillNudgeInterval
 }
 
+func normalizeReasoningEffort(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ""
+	}
+}
+
+func normalizeReasoningFallback(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case ReasoningFallbackDisable, ReasoningFallbackProviderDefault:
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return ReasoningFallbackDowngrade
+	}
+}
+
 // WorkspaceSharingConfig controls per-user workspace isolation.
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.
@@ -247,6 +299,21 @@ type WorkspaceSharingConfig struct {
 	SharedUsers         []string `json:"shared_users,omitempty"`
 	ShareMemory         bool     `json:"share_memory"`
 	ShareKnowledgeGraph bool     `json:"share_knowledge_graph"`
+}
+
+const (
+	ReasoningSourceUnset             = "unset"
+	ReasoningSourceLegacy            = "thinking_level"
+	ReasoningSourceAdvanced          = "reasoning"
+	ReasoningFallbackDowngrade       = "downgrade"
+	ReasoningFallbackDisable         = "off"
+	ReasoningFallbackProviderDefault = "provider_default"
+)
+
+type AgentReasoningConfig struct {
+	Effort   string `json:"effort,omitempty"`
+	Fallback string `json:"fallback,omitempty"`
+	Source   string `json:"-"`
 }
 
 const (
