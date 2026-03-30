@@ -487,7 +487,42 @@
         "tags": ["Providers"],
         "summary": "List available models",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "responses": { "200": { "description": "Model list" } }
+        "responses": {
+          "200": {
+            "description": "Model list with optional reasoning capability metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "reasoning": {
+                            "type": "object",
+                            "properties": {
+                              "levels": {
+                                "type": "array",
+                                "items": { "type": "string" }
+                              },
+                              "default_effort": { "type": "string" }
+                            }
+                          }
+                        },
+                        "required": ["id"]
+                      }
+                    }
+                  },
+                  "required": ["models"]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/providers/{id}/verify": {
@@ -837,14 +872,33 @@
           "description": { "type": "string" },
           "provider": { "type": "string", "description": "LLM provider name" },
           "model": { "type": "string", "description": "Model ID" },
-          "system_prompt": { "type": "string" },
-          "other_config": {
-            "type": "object",
-            "description": "Optional per-agent JSON config.",
-            "properties": {
-              "chatgpt_oauth_routing": {
-                "type": "object",
-                "description": "Optional agent-side routing override for ChatGPT OAuth providers. The main provider field remains the preferred/default account, while provider settings may supply inherited defaults.",
+                  "system_prompt": { "type": "string" },
+                  "other_config": {
+                    "type": "object",
+                    "description": "Optional per-agent JSON config.",
+                    "properties": {
+                      "thinking_level": {
+                        "type": "string",
+                        "enum": ["off", "low", "medium", "high"],
+                        "description": "Legacy coarse reasoning shim. Unset means off."
+                      },
+                      "reasoning": {
+                        "type": "object",
+                        "description": "Capability-aware reasoning policy for GPT-5/Codex models.",
+                        "properties": {
+                          "effort": {
+                            "type": "string",
+                            "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+                          },
+                          "fallback": {
+                            "type": "string",
+                            "enum": ["downgrade", "off", "provider_default"]
+                          }
+                        }
+                      },
+                      "chatgpt_oauth_routing": {
+                        "type": "object",
+                        "description": "Optional agent-side routing override for ChatGPT OAuth providers. The main provider field remains the preferred/default account, while provider settings may supply inherited defaults.",
                 "properties": {
                   "override_mode": { "type": "string", "enum": ["inherit", "custom"] },
                   "strategy": { "type": "string", "enum": ["manual", "primary_first", "round_robin", "priority_order"] },

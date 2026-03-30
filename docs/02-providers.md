@@ -271,25 +271,25 @@ flowchart LR
 
 ## 8. Extended Thinking
 
-Extended thinking allows LLMs to generate internal reasoning tokens before producing a response, improving quality for complex tasks. GoClaw supports this across multiple providers with a unified `thinking_level` configuration. See [12-extended-thinking.md](./12-extended-thinking.md) for full details.
+Extended thinking allows LLMs to generate internal reasoning tokens before producing a response, improving quality for complex tasks. GoClaw supports this across multiple providers with a legacy `thinking_level` shim plus capability-aware GPT-5/Codex reasoning policies. See [12-extended-thinking.md](./12-extended-thinking.md) for full details.
 
 ### Provider Mapping
 
 ```mermaid
 flowchart TD
-    LEVEL["thinking_level"] --> CHECK{"Provider<br/>supports thinking?"}
+    LEVEL["thinking_level / reasoning"] --> CHECK{"Provider<br/>supports thinking?"}
     CHECK -->|No| SKIP["Skip — normal request"]
     CHECK -->|Yes| TYPE{"Provider type?"}
 
     TYPE -->|Anthropic| ANTH["Budget tokens:<br/>low=4K, medium=10K, high=32K<br/>+ anthropic-beta header<br/>+ strip temperature"]
-    TYPE -->|OpenAI-compat| OAI["reasoning_effort:<br/>low / medium / high"]
+    TYPE -->|OpenAI-compat| OAI["capability-aware<br/>reasoning_effort"]
     TYPE -->|DashScope| DASH["enable_thinking: true<br/>Budget: low=4K, medium=16K, high=32K<br/>⚠ No streaming with tools"]
 ```
 
 ### Streaming
 
 - **Anthropic**: `thinking_delta` events accumulate into `StreamChunk.Thinking`
-- **OpenAI-compat**: `reasoning_content` in response delta
+- **OpenAI-compat**: `reasoning_content` in response delta, with GPT-5/Codex effort normalization when the model is known
 - **DashScope**: Falls back to non-streaming when tools are present, synthesizes chunk callbacks
 
 ### Tool Loop Handling
@@ -621,7 +621,7 @@ Codex supports SSE streaming similar to Anthropic:
 
 ### Extended Thinking
 
-Codex provider reports `SupportsThinking() = true`, allowing thinking_level to be injected. The provider maps thinking levels to reasoning_effort parameters as needed.
+Codex provider reports `SupportsThinking() = true`, allowing capability-aware reasoning effort injection. For known GPT-5/Codex models, GoClaw resolves requested versus effective effort before the request and records the result in trace metadata.
 
 ### Token Usage
 

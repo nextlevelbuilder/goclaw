@@ -185,6 +185,31 @@ Provider-level defaults example:
 }
 ```
 
+### Agent reasoning policy in `other_config`
+
+Agents can now store capability-aware GPT-5/Codex reasoning intent under `other_config.reasoning`.
+
+```json
+{
+  "provider": "openai-codex",
+  "model": "gpt-5.4",
+  "other_config": {
+    "thinking_level": "high",
+    "reasoning": {
+      "effort": "xhigh",
+      "fallback": "downgrade"
+    }
+  }
+}
+```
+
+Rules:
+- `thinking_level` remains the coarse compatibility shim: `off|low|medium|high`
+- `reasoning.effort` supports `off|auto|none|minimal|low|medium|high|xhigh`
+- `reasoning.fallback` supports `downgrade|off|provider_default`
+- unset reasoning resolves to `off`
+- the runtime may normalize unsupported efforts, and the actual decision is surfaced in trace span metadata
+
 ### Codex Pool Activity
 
 | Method | Path | Description |
@@ -273,10 +298,37 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/providers/{id}/verify` | Test provider+model with minimal LLM call |
-| `GET` | `/v1/providers/{id}/models` | Proxy to upstream provider model list |
+| `GET` | `/v1/providers/{id}/models` | List models plus any known reasoning capability metadata |
 | `GET` | `/v1/providers/claude-cli/auth-status` | Check Claude CLI login status |
 
 **Supported types:** `anthropic_native`, `openai_compat`, `chatgpt_oauth`, `gemini_native`, `dashscope`, `bailian`, `minimax`, `claude_cli`, `acp`
+
+Example response:
+
+```json
+{
+  "models": [
+    {
+      "id": "gpt-5.4",
+      "name": "GPT-5.4",
+      "reasoning": {
+        "levels": ["none", "low", "medium", "high", "xhigh"],
+        "default_effort": "none"
+      }
+    },
+    {
+      "id": "custom-model",
+      "name": "custom-model"
+    }
+  ]
+}
+```
+
+Notes:
+- `chatgpt_oauth` providers return a backend-owned model list because OAuth tokens cannot rely on `/v1/models`
+- unknown models remain usable and simply omit the `reasoning` field
+- the web UI uses this endpoint as the source of truth for advanced reasoning controls
+- when upstream model discovery fails, the endpoint returns an empty `models` array instead of a hard error
 
 ---
 
