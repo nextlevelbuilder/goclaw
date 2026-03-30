@@ -309,11 +309,12 @@ func handleTeammateMessage(
 			teamID, _ := uuid.Parse(inMeta[tools.MetaTeamID])
 			if teamTaskID != uuid.Nil {
 				meta := teammateTaskMeta{
-					TaskID:  teamTaskID,
-					TeamID:  teamID,
-					ToAgent: inMeta[tools.MetaToAgent],
-					Channel: inMeta[tools.MetaOriginChannel],
-					ChatID:  inMeta[tools.MetaOriginChatID],
+					TaskID:   teamTaskID,
+					TeamID:   teamID,
+					ToAgent:  inMeta[tools.MetaToAgent],
+					Channel:  inMeta[tools.MetaOriginChannel],
+					ChatID:   inMeta[tools.MetaOriginChatID],
+					PeerKind: inMeta[tools.MetaOriginPeerKind],
 				}
 				cachedTeam = resolveTeamTaskOutcome(ctx, deps, outcome, taskActionFlags, meta)
 			}

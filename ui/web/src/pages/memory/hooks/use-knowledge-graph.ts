@@ -141,7 +141,7 @@ export function useKGGraph(agentId: string, userId?: string) {
     queryKey: queryKeys.kg.graph(agentId, userId),
     queryFn: async () => {
       if (!agentId) return { entities: [], relations: [] };
-      const params: Record<string, string> = { limit: "200" };
+      const params: Record<string, string> = { limit: "50" };
       if (userId) params.user_id = userId;
       return http.get<KGGraphData>(`/v1/agents/${agentId}/kg/graph`, params);
     },

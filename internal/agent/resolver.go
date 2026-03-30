@@ -240,6 +240,10 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 				workspace = config.TenantWorkspace(deps.Workspace, ag.TenantID, tenantSlug)
 			}
 		}
+		// Fallback to global workspace if per-agent workspace is empty
+		if workspace == "" && deps.Workspace != "" {
+			workspace = deps.Workspace
+		}
 		if workspace != "" {
 			if err := os.MkdirAll(workspace, 0755); err != nil {
 				slog.Warn("failed to create agent workspace directory", "workspace", workspace, "agent", agentKey, "error", err)

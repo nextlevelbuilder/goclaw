@@ -74,25 +74,25 @@ func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.C
 		updates["next_run_at"] = nextRun
 	}
 
-	needsPayloadUpdate := patch.Message != "" || patch.Deliver != nil || patch.Channel != nil || patch.To != nil || patch.WakeHeartbeat != nil
-	if needsPayloadUpdate {
-		payload := current.Payload
-		if patch.Message != "" {
-			payload.Message = patch.Message
-		}
-		if patch.Deliver != nil {
-			payload.Deliver = *patch.Deliver
-		}
-		if patch.Channel != nil {
-			payload.Channel = *patch.Channel
-		}
-		if patch.To != nil {
-			payload.To = *patch.To
-		}
-		if patch.WakeHeartbeat != nil {
-			payload.WakeHeartbeat = *patch.WakeHeartbeat
-		}
+	if patch.Stateless != nil {
+		updates["stateless"] = *patch.Stateless
+	}
+	if patch.Deliver != nil {
+		updates["deliver"] = *patch.Deliver
+	}
+	if patch.DeliverChannel != nil {
+		updates["deliver_channel"] = *patch.DeliverChannel
+	}
+	if patch.DeliverTo != nil {
+		updates["deliver_to"] = *patch.DeliverTo
+	}
+	if patch.WakeHeartbeat != nil {
+		updates["wake_heartbeat"] = *patch.WakeHeartbeat
+	}
 
+	if patch.Message != "" {
+		payload := current.Payload
+		payload.Message = patch.Message
 		mergedPayload, err := json.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal payload for job %s: %w", jobID, err)

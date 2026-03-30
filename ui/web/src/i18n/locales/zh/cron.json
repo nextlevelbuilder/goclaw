@@ -130,6 +130,8 @@
     "timezone": "时区",
     "timezoneDesc": "Cron表达式的时区"
   },
+  "stateless": "无状态",
+  "statelessHelp": "跳过会话持久化。每次运行从零开始。为不需要历史上下文的定时任务节省令牌。",
   "toast": {
     "created": "定时任务已创建",
     "createdDesc": "{{name}} 已添加",

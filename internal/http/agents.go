@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -354,6 +355,11 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Sync display_name change into IDENTITY.md so the agent self-reports the new name.
+	if newName, ok := allowed["display_name"].(string); ok && newName != "" {
+		h.syncIdentityName(r.Context(), ag, newName)
+	}
+
 	// Invalidate caches: agent Loop + bootstrap files
 	h.emitCacheInvalidate(bus.CacheKindAgent, ag.AgentKey)
 	h.emitCacheInvalidate(bus.CacheKindBootstrap, id.String())
@@ -373,6 +379,45 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 
 	emitAudit(h.msgBus, r, "agent.updated", "agent", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+// syncIdentityName updates the Name: field in the agent's IDENTITY.md (agent-level and
+// all per-user copies for open agents) so the agent self-reports the new display name.
+// Errors are logged but do not fail the rename request.
+func (h *AgentsHandler) syncIdentityName(ctx context.Context, ag *store.AgentData, newName string) {
+	// Read existing agent-level IDENTITY.md.
+	existingContent := ""
+	if dbFiles, err := h.agents.GetAgentContextFiles(ctx, ag.ID); err == nil {
+		for _, f := range dbFiles {
+			if f.FileName == bootstrap.IdentityFile {
+				existingContent = f.Content
+				break
+			}
+		}
+	}
+
+	newContent := bootstrap.UpdateIdentityField(existingContent, "Name", newName)
+	if newContent == "" {
+		newContent = "# Identity\nName: " + newName + "\n"
+	}
+	if err := h.agents.SetAgentContextFile(ctx, ag.ID, bootstrap.IdentityFile, newContent); err != nil {
+		slog.Warn("agents.update: failed to sync IDENTITY.md name", "agent", ag.AgentKey, "error", err)
+	}
+
+	// For open agents, also update per-user IDENTITY.md copies.
+	if ag.AgentType == store.AgentTypeOpen {
+		if userFiles, err := h.agents.ListUserContextFilesByName(ctx, ag.ID, bootstrap.IdentityFile); err == nil {
+			for _, uf := range userFiles {
+				updated := bootstrap.UpdateIdentityField(uf.Content, "Name", newName)
+				if updated == uf.Content {
+					continue
+				}
+				if err := h.agents.SetUserContextFile(ctx, ag.ID, uf.UserID, bootstrap.IdentityFile, updated); err != nil {
+					slog.Warn("agents.update: failed to sync user IDENTITY.md name", "agent", ag.AgentKey, "user", uf.UserID, "error", err)
+				}
+			}
+		}
+	}
 }
 
 func (h *AgentsHandler) handleDelete(w http.ResponseWriter, r *http.Request) {

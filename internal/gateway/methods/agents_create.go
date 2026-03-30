@@ -156,38 +156,6 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 
 		// Invalidate router cache so resolver re-loads from DB
 		m.agents.InvalidateAgent(agentID)
-	} else {
-		// --- Fallback: config.json + filesystem ---
-		if _, ok := m.cfg.Agents.List[agentID]; ok {
-			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgAlreadyExists, "agent", agentID)))
-			return
-		}
-
-		spec := config.AgentSpec{
-			DisplayName: params.Name,
-			Workspace:   ws,
-		}
-		if params.Emoji != "" || params.Avatar != "" {
-			spec.Identity = &config.IdentityConfig{
-				Emoji: params.Emoji,
-			}
-		}
-
-		if m.cfg.Agents.List == nil {
-			m.cfg.Agents.List = make(map[string]config.AgentSpec)
-		}
-		m.cfg.Agents.List[agentID] = spec
-
-		if err := config.Save(m.cfgPath, m.cfg); err != nil {
-			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
-			return
-		}
-
-		// Append identity metadata to IDENTITY.md
-		if params.Name != "" || params.Emoji != "" || params.Avatar != "" {
-			identityPath := filepath.Join(ws, "IDENTITY.md")
-			appendIdentityFields(identityPath, params.Name, params.Emoji, params.Avatar)
-		}
 	}
 
 	// Both modes: create workspace dir + seed filesystem backup

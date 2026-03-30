@@ -6,6 +6,11 @@ export interface CronJob {
   schedule: CronSchedule
   payload: CronPayload
   state: CronState
+  deliver?: boolean
+  deliverChannel?: string
+  deliverTo?: string
+  wakeHeartbeat?: boolean
+  stateless?: boolean
   deleteAfterRun: boolean
   createdAtMs: number
   updatedAtMs: number
@@ -22,6 +27,7 @@ export interface CronSchedule {
 export interface CronPayload {
   kind: string
   message: string
+  command?: string
 }
 
 export interface CronState {

@@ -300,6 +300,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		PeerKind: peerKind,
 		UserID:   senderID,
 		AgentID:  targetAgentID,
+		TenantID: c.TenantID(),
 		Metadata: metadata,
 	})
 

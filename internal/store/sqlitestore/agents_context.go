@@ -125,6 +125,30 @@ func (s *SQLiteAgentStore) SetUserContextFile(ctx context.Context, agentID uuid.
 	return err
 }
 
+func (s *SQLiteAgentStore) ListUserContextFilesByName(ctx context.Context, agentID uuid.UUID, fileName string) ([]store.UserContextFileData, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = ? AND file_name = ?"+tClause,
+		append([]any{agentID, fileName}, tArgs...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.UserContextFileData
+	for rows.Next() {
+		var d store.UserContextFileData
+		if err := rows.Scan(&d.AgentID, &d.UserID, &d.FileName, &d.Content); err != nil {
+			continue
+		}
+		result = append(result, d)
+	}
+	return result, rows.Err()
+}
+
 func (s *SQLiteAgentStore) DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error {
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {

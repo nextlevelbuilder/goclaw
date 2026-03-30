@@ -33,7 +33,7 @@ type ProvidersHandler struct {
 	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 	sysConfigStore  store.SystemConfigStore
-	tracingStore    store.TracingStore // optional: for provider-scoped pool activity
+	tracingStore    store.TracingStore   // optional: for provider-scoped pool activity
 	agents          store.AgentCRUDStore // optional: for provider pool activity agent lookup
 }
 
@@ -311,6 +311,10 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if err := validateProviderEmbeddingSettings(&p); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, err.Error())})
+		return
+	}
 
 	if err := validateProviderURL(p.APIBase); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -446,6 +450,10 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 
 	if err := validateChatGPTOAuthProviderCandidate(r.Context(), h.store, id, &candidate); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateProviderEmbeddingSettings(&candidate); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, err.Error())})
 		return
 	}
 

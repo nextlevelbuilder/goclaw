@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -111,34 +111,7 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
             ) : relations.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t("kg.entity.noRelations")}</p>
             ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[400px] text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.direction")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.relation")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.target")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.confidence")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {relations.map((rel) => (
-                      <tr key={rel.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="px-3 py-2">
-                          {rel.source_entity_id === entity?.id
-                            ? t("kg.entity.direction.outgoing")
-                            : t("kg.entity.direction.incoming")}
-                        </td>
-                        <td className="px-3 py-2 font-mono">{rel.relation_type}</td>
-                        <td className="px-3 py-2 font-mono text-muted-foreground">
-                          {rel.source_entity_id === entity?.id ? rel.target_entity_id.slice(0, 8) : rel.source_entity_id.slice(0, 8)}
-                        </td>
-                        <td className="px-3 py-2">{Math.round(rel.confidence * 100)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <RelationsTable relations={relations} entityId={entity?.id} t={t} />
             )}
           </div>
 
@@ -168,3 +141,58 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
     </Dialog>
   );
 }
+
+/** Memoized relations table — prevents re-render when dialog parent updates */
+const RelationsTable = React.memo(function RelationsTable({
+  relations,
+  entityId,
+  t,
+}: {
+  relations: KGRelation[];
+  entityId: string | undefined;
+  t: (key: string) => string;
+}) {
+  const INITIAL_LIMIT = 50;
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? relations : relations.slice(0, INITIAL_LIMIT);
+  const hasMore = relations.length > INITIAL_LIMIT;
+
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <table className="w-full min-w-[400px] text-xs">
+        <thead>
+          <tr className="border-b bg-muted/50">
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.direction")}</th>
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.relation")}</th>
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.target")}</th>
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.confidence")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((rel) => (
+            <tr key={rel.id} className="border-b last:border-0 hover:bg-muted/30">
+              <td className="px-3 py-2">
+                {rel.source_entity_id === entityId
+                  ? t("kg.entity.direction.outgoing")
+                  : t("kg.entity.direction.incoming")}
+              </td>
+              <td className="px-3 py-2 font-mono">{rel.relation_type}</td>
+              <td className="px-3 py-2 font-mono text-muted-foreground">
+                {rel.source_entity_id === entityId ? rel.target_entity_id.slice(0, 8) : rel.source_entity_id.slice(0, 8)}
+              </td>
+              <td className="px-3 py-2">{Math.round(rel.confidence * 100)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hasMore && !showAll && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full py-1.5 text-xs text-muted-foreground hover:text-foreground border-t"
+        >
+          {t("kg.entity.showAll")} ({relations.length})
+        </button>
+      )}
+    </div>
+  );
+});

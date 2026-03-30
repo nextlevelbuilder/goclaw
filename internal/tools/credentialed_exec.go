@@ -104,8 +104,13 @@ func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCLIBinary,
 	binary string, args []string, cwd string, sandboxKey string) *Result {
 
-	// Step 1: Check for shell operators (early detection for clear error)
+	// Step 0: Reject NUL bytes (defense-in-depth — also checked in Execute()).
 	rawCommand := binary + " " + strings.Join(args, " ")
+	if strings.ContainsRune(rawCommand, '\x00') {
+		return ErrorResult("command contains invalid NUL byte")
+	}
+
+	// Step 1: Check for shell operators (early detection for clear error)
 	if ops := detectShellOperators(rawCommand); len(ops) > 0 {
 		return credentialedShellOperatorError(rawCommand, ops)
 	}

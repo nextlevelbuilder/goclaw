@@ -226,9 +226,14 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	}
 
 	// Compute sender label for group context (used in history + current message annotation)
-	senderLabel := user.FirstName
+	displayName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	senderLabel := displayName
 	if user.Username != "" {
-		senderLabel = "@" + user.Username
+		if displayName != "" {
+			senderLabel = "@" + user.Username + " (" + displayName + ")"
+		} else {
+			senderLabel = "@" + user.Username
+		}
 	}
 
 	// --- Group mention gating (matching TS mentionGate logic) ---
@@ -482,7 +487,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 				}
 				if len(histMedia) > 0 {
 					histTags := buildMediaTags(histMedia)
-					annotated = histTags + "\n\n" + annotated
+					annotated = "[Media from recent group messages — only analyze if user asks about them]\n" + histTags + "\n[/Media]\n\n" + annotated
 				}
 				for _, e := range histErrors {
 					slog.Warn("telegram: history media download failed",
@@ -603,6 +608,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		AgentID:      targetAgentID,
 		HistoryLimit: c.historyLimit,
 		ToolAllow:    topicCfg.tools,
+		TenantID:     c.TenantID(),
 		Metadata:     metadata,
 	})
 
@@ -611,4 +617,3 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		c.groupHistory.Clear(localKey)
 	}
 }
-

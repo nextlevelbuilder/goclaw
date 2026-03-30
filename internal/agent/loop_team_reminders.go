@@ -64,14 +64,14 @@ func (l *Loop) injectTeamTaskReminders(ctx context.Context, req *RunRequest, mes
 				}
 				if len(parts) > 0 {
 					reminder := "[System] " + strings.Join(parts, "\n\n")
-					// Pop user message, inject reminder, push user message back
+					// Merge reminder into the user message as a prefix tag.
+					// Previous approach injected [user]+[assistant]+[user] which caused
+					// LLMs to treat the assistant ack as "turn complete" → NO_REPLY (#266).
 					userMsg := messages[len(messages)-1]
-					messages = messages[:len(messages)-1]
-					messages = append(messages,
-						providers.Message{Role: "user", Content: reminder},
-						providers.Message{Role: "assistant", Content: "I see the task status. Let me handle accordingly."},
-						userMsg,
-					)
+					messages[len(messages)-1] = providers.Message{
+						Role:    "user",
+						Content: "[Active team tasks]\n" + reminder + "\n[/Active team tasks]\n\n" + userMsg.Content,
+					}
 				}
 			}
 		}
@@ -90,14 +90,12 @@ func (l *Loop) injectTeamTaskReminders(ctx context.Context, req *RunRequest, mes
 						"Stay focused on this task. Your final response becomes the task result — make it clear and complete. "+
 						"For long tasks, report progress: team_tasks(action=\"progress\", percent=50, text=\"status\").",
 					task.TaskNumber, task.Subject)
-				// Pop user message, inject reminder, push user message back
+				// Merge reminder into user message as prefix tag (#266).
 				userMsg := messages[len(messages)-1]
-				messages = messages[:len(messages)-1]
-				messages = append(messages,
-					providers.Message{Role: "user", Content: reminder},
-					providers.Message{Role: "assistant", Content: "Understood. I'll focus on this task and report progress."},
-					userMsg,
-				)
+				messages[len(messages)-1] = providers.Message{
+					Role:    "user",
+					Content: "[Task context]\n" + reminder + "\n[/Task context]\n\n" + userMsg.Content,
+				}
 			}
 		}
 	}

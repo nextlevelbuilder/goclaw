@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -31,7 +32,7 @@ func (s *SQLiteSessionStore) Save(ctx context.Context, key string) error {
 		metaJSON, _ = json.Marshal(snapshot.Metadata)
 	}
 
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE sessions SET
 			messages = ?, summary = ?, model = ?, provider = ?, channel = ?,
 			input_tokens = ?, output_tokens = ?, compaction_count = ?,
@@ -48,7 +49,38 @@ func (s *SQLiteSessionStore) Save(ctx context.Context, key string) error {
 		snapshot.TeamID,
 		key, tenantIDForInsert(ctx),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Session not yet in DB (e.g. cron/heartbeat sessions) — insert it.
+		_, err = s.db.ExecContext(ctx,
+			`INSERT INTO sessions (id, session_key, messages, summary, model, provider, channel,
+				input_tokens, output_tokens, compaction_count,
+				memory_flush_compaction_count, memory_flush_at,
+				label, spawned_by, spawn_depth, agent_id, user_id, metadata, updated_at, team_id, tenant_id, created_at)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 ON CONFLICT(session_key, tenant_id) DO UPDATE SET
+				messages = excluded.messages, summary = excluded.summary, model = excluded.model,
+				provider = excluded.provider, channel = excluded.channel,
+				input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+				compaction_count = excluded.compaction_count,
+				memory_flush_compaction_count = excluded.memory_flush_compaction_count,
+				memory_flush_at = excluded.memory_flush_at,
+				label = excluded.label, spawned_by = excluded.spawned_by, spawn_depth = excluded.spawn_depth,
+				agent_id = excluded.agent_id, user_id = excluded.user_id, metadata = excluded.metadata,
+				updated_at = excluded.updated_at, team_id = excluded.team_id`,
+			uuid.Must(uuid.NewV7()), key, msgsJSON,
+			nilStr(snapshot.Summary), nilStr(snapshot.Model), nilStr(snapshot.Provider), nilStr(snapshot.Channel),
+			snapshot.InputTokens, snapshot.OutputTokens, snapshot.CompactionCount,
+			snapshot.MemoryFlushCompactionCount, snapshot.MemoryFlushAt,
+			nilStr(snapshot.Label), nilStr(snapshot.SpawnedBy), snapshot.SpawnDepth,
+			nilSessionUUID(snapshot.AgentUUID), nilStr(snapshot.UserID), metaJSON, snapshot.Updated,
+			snapshot.TeamID, tenantIDForInsert(ctx), snapshot.Updated,
+		)
+		return err
+	}
+	return nil
 }
 
 func (s *SQLiteSessionStore) TruncateHistory(ctx context.Context, key string, keepLast int) {

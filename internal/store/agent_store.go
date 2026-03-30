@@ -503,6 +503,9 @@ type AgentContextStore interface {
 	SetAgentContextFile(ctx context.Context, agentID uuid.UUID, fileName, content string) error
 	PropagateContextFile(ctx context.Context, agentID uuid.UUID, fileName string) (int, error)
 	GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]UserContextFileData, error)
+	// ListUserContextFilesByName returns all per-user copies of fileName across all users of agentID.
+	// Used for bulk targeted updates (e.g. updating Name: in IDENTITY.md on agent rename).
+	ListUserContextFilesByName(ctx context.Context, agentID uuid.UUID, fileName string) ([]UserContextFileData, error)
 	SetUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName, content string) error
 	DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error
 	// MigrateUserDataOnMerge moves per-user data from oldUserIDs to newUserID when contacts are merged.

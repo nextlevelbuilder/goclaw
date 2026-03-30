@@ -9,23 +9,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { IANA_TIMEZONES } from "@/lib/constants";
-import type { CronJob } from "../hooks/use-cron";
+import type { CronJob, CronJobPatch } from "../hooks/use-cron";
 
 interface CronAdvancedDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   job: CronJob;
-  onUpdate?: (id: string, params: Record<string, unknown>) => Promise<void>;
+  onUpdate?: (id: string, params: CronJobPatch) => Promise<void>;
 }
 
 function deriveState(job: CronJob) {
   return {
     timezone: job.schedule.tz ?? "UTC",
-    deliver: job.payload?.deliver ?? false,
-    channel: job.payload?.channel ?? "",
-    to: job.payload?.to ?? "",
-    wakeHeartbeat: Boolean((job as unknown as Record<string, unknown>).wakeHeartbeat),
+    deliver: job.deliver ?? false,
+    channel: job.deliverChannel ?? "",
+    to: job.deliverTo ?? "",
+    wakeHeartbeat: job.wakeHeartbeat ?? false,
     deleteAfterRun: job.deleteAfterRun ?? false,
+    stateless: job.stateless ?? false,
   };
 }
 
@@ -40,6 +41,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
   const [to, setTo] = useState(init.to);
   const [wakeHeartbeat, setWakeHeartbeat] = useState(init.wakeHeartbeat);
   const [deleteAfterRun, setDeleteAfterRun] = useState(init.deleteAfterRun);
+  const [stateless, setStateless] = useState(init.stateless);
   const [saving, setSaving] = useState(false);
 
   // Re-sync when dialog opens
@@ -52,6 +54,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
     setTo(s.to);
     setWakeHeartbeat(s.wakeHeartbeat);
     setDeleteAfterRun(s.deleteAfterRun);
+    setStateless(s.stateless);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -68,10 +71,11 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
           tz: timezone !== "UTC" ? timezone : undefined,
         },
         deliver,
-        channel: deliver ? channel.trim() || undefined : undefined,
-        to: deliver ? to.trim() || undefined : undefined,
+        deliverChannel: deliver ? channel.trim() || undefined : undefined,
+        deliverTo: deliver ? to.trim() || undefined : undefined,
         wakeHeartbeat,
         deleteAfterRun,
+        stateless,
       });
       onOpenChange(false);
     } catch { // toast shown by hook
@@ -171,6 +175,14 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
               <p className="text-xs text-muted-foreground">{t("detail.deleteAfterRunDesc")}</p>
             </div>
             <Switch checked={deleteAfterRun} onCheckedChange={setDeleteAfterRun} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium">{t("stateless")}</p>
+              <p className="text-xs text-muted-foreground">{t("statelessHelp")}</p>
+            </div>
+            <Switch checked={stateless} onCheckedChange={setStateless} />
           </div>
 
         </div>

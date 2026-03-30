@@ -52,9 +52,11 @@ if [ ! -f "$ENV_FILE" ]; then
   if [ -f ".env.example" ]; then
     # Strip 'export ' prefix for Docker Compose compatibility
     sed 's/^export //' .env.example > "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
     echo "  [created]   .env from .env.example"
   else
     touch "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
     echo "  [created]   .env (empty)"
   fi
 else

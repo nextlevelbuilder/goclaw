@@ -4,12 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"slices"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -80,36 +77,6 @@ func (m *AgentsMethods) handleFilesList(ctx context.Context, client *gateway.Cli
 		}))
 		return
 	}
-
-	// --- Fallback: filesystem ---
-	ws := m.resolveWorkspace(params.AgentID)
-	files := make([]map[string]any, 0, len(allowedAgentFiles))
-
-	for _, name := range allowedAgentFiles {
-		p := filepath.Join(ws, name)
-		info, err := os.Stat(p)
-		if err != nil {
-			files = append(files, map[string]any{
-				"name":    name,
-				"path":    p,
-				"missing": true,
-			})
-		} else {
-			files = append(files, map[string]any{
-				"name":        name,
-				"path":        p,
-				"missing":     false,
-				"size":        info.Size(),
-				"updatedAtMs": info.ModTime().UnixMilli(),
-			})
-		}
-	}
-
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"agentId":   params.AgentID,
-		"workspace": ws,
-		"files":     files,
-	}))
 }
 
 // --- agents.files.get ---
@@ -176,38 +143,6 @@ func (m *AgentsMethods) handleFilesGet(ctx context.Context, client *gateway.Clie
 		}))
 		return
 	}
-
-	// --- Fallback: filesystem ---
-	ws := m.resolveWorkspace(params.AgentID)
-	p := filepath.Join(ws, params.Name)
-
-	info, err := os.Stat(p)
-	if err != nil {
-		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-			"agentId":   params.AgentID,
-			"workspace": ws,
-			"file": map[string]any{
-				"name":    params.Name,
-				"path":    p,
-				"missing": true,
-			},
-		}))
-		return
-	}
-
-	content, _ := os.ReadFile(p)
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"agentId":   params.AgentID,
-		"workspace": ws,
-		"file": map[string]any{
-			"name":        params.Name,
-			"path":        p,
-			"missing":     false,
-			"size":        info.Size(),
-			"updatedAtMs": info.ModTime().UnixMilli(),
-			"content":     string(content),
-		},
-	}))
 }
 
 // --- agents.files.set ---
@@ -280,40 +215,9 @@ func (m *AgentsMethods) handleFilesSet(ctx context.Context, client *gateway.Clie
 		}))
 		return
 	}
-
-	// --- Fallback: filesystem ---
-	ws := m.resolveWorkspace(params.AgentID)
-	os.MkdirAll(ws, 0755)
-	p := filepath.Join(ws, params.Name)
-
-	if err := os.WriteFile(p, []byte(params.Content), 0644); err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "file", err.Error())))
-		return
-	}
-
-	info, _ := os.Stat(p)
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"agentId":   params.AgentID,
-		"workspace": ws,
-		"file": map[string]any{
-			"name":        params.Name,
-			"path":        p,
-			"missing":     false,
-			"size":        info.Size(),
-			"updatedAtMs": info.ModTime().UnixMilli(),
-			"content":     params.Content,
-		},
-	}))
 }
 
 // --- Helpers ---
-
-func (m *AgentsMethods) resolveWorkspace(agentID string) string {
-	if spec, ok := m.cfg.Agents.List[agentID]; ok && spec.Workspace != "" {
-		return config.ExpandHome(spec.Workspace)
-	}
-	return config.ExpandHome(m.cfg.Agents.Defaults.Workspace)
-}
 
 func isAllowedFile(name string) bool {
 	return slices.Contains(allowedAgentFiles, name)

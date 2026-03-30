@@ -15,7 +15,8 @@ import (
 // scanJob fetches a single cron job by ID with tenant filtering.
 func (s *PGCronStore) scanJob(ctx context.Context, id uuid.UUID) (*store.CronJob, error) {
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
+		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE id = $1`
 	args := []any{id}
 
@@ -45,6 +46,8 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var userID *string
 	var name, scheduleKind string
 	var enabled, deleteAfterRun bool
+	var stateless, deliver, wakeHeartbeat bool
+	var deliverChannel, deliverTo string
 	var cronExpr, tz, lastStatus, lastError *string
 	var runAt, nextRunAt, lastRunAt *time.Time
 	var intervalMS *int64
@@ -52,7 +55,8 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var createdAt, updatedAt time.Time
 
 	err := row.Scan(&id, &tenantID, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
-		&intervalMS, &payloadJSON, &deleteAfterRun, &nextRunAt, &lastRunAt, &lastStatus, &lastError,
+		&intervalMS, &payloadJSON, &deleteAfterRun, &stateless, &deliver, &deliverChannel, &deliverTo, &wakeHeartbeat,
+		&nextRunAt, &lastRunAt, &lastStatus, &lastError,
 		&createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
@@ -77,6 +81,11 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 		CreatedAtMS:    createdAt.UnixMilli(),
 		UpdatedAtMS:    updatedAt.UnixMilli(),
 		DeleteAfterRun: deleteAfterRun,
+		Stateless:      stateless,
+		Deliver:        deliver,
+		DeliverChannel: deliverChannel,
+		DeliverTo:      deliverTo,
+		WakeHeartbeat:  wakeHeartbeat,
 	}
 
 	if agentID != nil {

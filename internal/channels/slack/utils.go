@@ -45,6 +45,7 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 		Media:    mediaFiles,
 		PeerKind: peerKind,
 		UserID:   userID,
+		TenantID: c.TenantID(),
 		Metadata: metadata,
 		AgentID:  c.AgentID(),
 	})

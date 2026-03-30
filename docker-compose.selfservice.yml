@@ -9,7 +9,7 @@ services:
   goclaw-ui:
     image: ghcr.io/nextlevelbuilder/goclaw-web:latest
     build:
-      context: ./ui/web
+      context: ${GOCLAW_DIR:-.}/ui/web
       dockerfile: Dockerfile
     ports:
       - "${GOCLAW_UI_PORT:-3000}:80"

@@ -147,6 +147,7 @@
       "traversing": "遍历中...",
       "loading": "加载中...",
       "noRelations": "未找到关系。",
+      "showAll": "显示全部",
       "traversalResults": "遍历结果（{{count}}）",
       "direction": {
         "outgoing": "→ 出向",
@@ -175,7 +176,10 @@
       "loading": "正在加载图谱...",
       "empty": "没有可视化的实体",
       "nodes": "{{count}} 个节点",
-      "edges": "{{count}} 条边"
+      "edges": "{{count}} 条边",
+      "selected": "已选择: {{name}}",
+      "limitNote": "显示前 {{limit}}/{{total}} 个实体",
+      "limitHint": "为确保性能，图谱限制显示 {{limit}} 个实体。请使用表格视图浏览全部 {{total}} 个实体。"
     }
   },
   "toast": {

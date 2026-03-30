@@ -147,6 +147,7 @@
       "traversing": "Traversing...",
       "loading": "Loading...",
       "noRelations": "No relations found.",
+      "showAll": "Show all",
       "traversalResults": "Traversal Results ({{count}})",
       "direction": {
         "outgoing": "→ outgoing",
@@ -175,7 +176,10 @@
       "loading": "Loading graph...",
       "empty": "No entities to visualize",
       "nodes": "{{count}} nodes",
-      "edges": "{{count}} edges"
+      "edges": "{{count}} edges",
+      "selected": "Selected: {{name}}",
+      "limitNote": "Showing top {{limit}} of {{total}} entities",
+      "limitHint": "Graph is limited to {{limit}} entities for performance. Use the table view to browse all {{total}} entities."
     }
   },
   "toast": {

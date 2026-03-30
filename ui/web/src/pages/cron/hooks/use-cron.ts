@@ -18,9 +18,21 @@ export interface CronSchedule {
 export interface CronPayload {
   kind: string;
   message: string;
-  deliver: boolean;
-  channel: string;
-  to: string;
+  command?: string;
+}
+
+export interface CronJobPatch {
+  name?: string;
+  agentId?: string;
+  enabled?: boolean;
+  schedule?: CronSchedule;
+  message?: string;
+  deliver?: boolean;
+  deliverChannel?: string;
+  deliverTo?: string;
+  deleteAfterRun?: boolean;
+  wakeHeartbeat?: boolean;
+  stateless?: boolean;
 }
 
 export interface CronJob {
@@ -30,6 +42,11 @@ export interface CronJob {
   enabled: boolean;
   schedule: CronSchedule;
   payload: CronPayload;
+  deliver?: boolean;
+  deliverChannel?: string;
+  deliverTo?: string;
+  wakeHeartbeat?: boolean;
+  stateless?: boolean;
   createdAtMs: number;
   updatedAtMs: number;
   deleteAfterRun?: boolean;
@@ -150,9 +167,9 @@ export function useCron() {
   );
 
   const updateJob = useCallback(
-    async (jobId: string, params: Record<string, unknown>) => {
+    async (jobId: string, params: CronJobPatch) => {
       try {
-        await ws.call(Methods.CRON_UPDATE, { jobId, ...params });
+        await ws.call(Methods.CRON_UPDATE, { jobId, patch: params });
         await invalidate();
         toast.success(i18next.t("cron:toast.updated"));
       } catch (err) {

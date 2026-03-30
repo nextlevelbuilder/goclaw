@@ -69,15 +69,9 @@ export class HttpClient {
   }
 
   async upload<T>(path: string, formData: FormData): Promise<T> {
-    const headers: Record<string, string> = {};
-    const token = this.getToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const userId = this.getUserId();
-    if (userId) headers["X-GoClaw-User-Id"] = userId;
-
     const res = await fetch(this.buildUrl(path), {
       method: "POST",
-      headers,
+      headers: this.authHeaders(),
       body: formData,
     });
 

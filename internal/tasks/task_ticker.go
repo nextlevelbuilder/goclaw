@@ -235,12 +235,21 @@ func (t *TaskTicker) notifyLeaders(ctx context.Context, tasks []store.RecoveredT
 			chatID = scope.TeamID.String()
 		}
 
+		// Resolve PeerKind from first task's metadata for correct session routing (#266).
+		var peerKind string
+		if fullTask, err := t.teams.GetTask(ctx, scopeTasks[0].ID); err == nil && fullTask != nil && fullTask.Metadata != nil {
+			if pk, ok := fullTask.Metadata["peer_kind"].(string); ok {
+				peerKind = pk
+			}
+		}
+
 		if !t.msgBus.TryPublishInbound(bus.InboundMessage{
 			Channel:  channel,
 			SenderID: "ticker:system",
 			ChatID:   chatID,
 			AgentID:  lead.AgentKey,
 			UserID:   team.CreatedBy,
+			PeerKind: peerKind,
 			TenantID: scope.TenantID,
 			Content:  content,
 		}) {

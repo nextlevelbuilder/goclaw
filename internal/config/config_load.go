@@ -214,6 +214,17 @@ func (c *Config) applyEnvOverrides() {
 		c.Gateway.OwnerIDs = ids
 	}
 
+	// Allowed origins from env (comma-separated, whitespace-trimmed)
+	if v := os.Getenv("GOCLAW_ALLOWED_ORIGINS"); v != "" {
+		var origins []string
+		for origin := range strings.SplitSeq(v, ",") {
+			if trimmed := strings.TrimSpace(origin); trimmed != "" {
+				origins = append(origins, trimmed)
+			}
+		}
+		c.Gateway.AllowedOrigins = origins
+	}
+
 	// Tailscale (tsnet)
 	envStr("GOCLAW_TSNET_HOSTNAME", &c.Tailscale.Hostname)
 	envStr("GOCLAW_TSNET_AUTH_KEY", &c.Tailscale.AuthKey)

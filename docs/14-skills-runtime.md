@@ -1,6 +1,6 @@
 # 14 - Skills Runtime Environment
 
-How skills access Python, Node.js, and system tools inside the Docker container. Covers pre-installed packages, runtime installation, and security constraints.
+How skills access Python, Node.js, and system tools inside the Docker container. Covers image variants, pre-installed packages, runtime installation, and security constraints.
 
 ---
 
@@ -14,10 +14,10 @@ How skills access Python, Node.js, and system tools inside the Docker container.
 │  │  Pre-installed   │  │  Writable Runtime Dir        │  │
 │  │  (image layer)   │  │  /app/data/.runtime/         │  │
 │  │                  │  │                              │  │
-│  │  python3, node   │  │  pip/        ← PIP_TARGET   │  │
-│  │  gh, pandoc      │  │  pip-cache/  ← PIP_CACHE    │  │
-│  │  pypdf, openpyxl │  │  npm-global/ ← NPM_PREFIX   │  │
-│  │  pandas, etc.    │  │                              │  │
+│  │  latest/alpine   │  │  pip/        ← PIP_TARGET   │  │
+│  │  no py/node      │  │  pip-cache/  ← PIP_CACHE    │  │
+│  │  python/node/full│  │  npm-global/ ← NPM_PREFIX   │  │
+│  │  add runtimes    │  │                              │  │
 │  └─────────────────┘  └──────────────────────────────┘  │
 │                                                         │
 │  Volumes (read-write):                                  │
@@ -33,9 +33,20 @@ How skills access Python, Node.js, and system tools inside the Docker container.
 
 ## 2. Pre-installed Packages (Option A)
 
-Installed at build time in the Dockerfile when `ENABLE_PYTHON=true`.
+Pre-installed runtimes depend on the Docker image variant you deploy. The Packages page and `/v1/packages/runtimes` report what exists inside the active GoClaw container, not what exists on the host machine.
 
-### Python Packages
+### Runtime Variant Matrix
+
+| Variant | Published tag | Build args | Pre-installed runtimes |
+|---------|---------------|------------|------------------------|
+| Minimal | `latest` | `ENABLE_PYTHON=false`, `ENABLE_NODE=false`, `ENABLE_FULL_SKILLS=false` | No Python or Node.js runtimes |
+| Python | `python` | `ENABLE_PYTHON=true` | `python3`, `py3-pip`, `edge-tts` |
+| Node | `node` | `ENABLE_NODE=true` | `nodejs`, `npm` |
+| Full | `full` | `ENABLE_FULL_SKILLS=true` | `python3`, `py3-pip`, `nodejs`, `npm`, `pandoc`, `github-cli`, bundled skill deps |
+
+### Full Variant Extras
+
+#### Python Packages
 
 | Package | Version | Used By |
 |---------|---------|---------|
@@ -45,21 +56,12 @@ Installed at build time in the Dockerfile when `ENABLE_PYTHON=true`.
 | `python-pptx` | latest | pptx skill |
 | `markitdown` | latest | pptx skill (content extraction) |
 
-### Node.js Packages (global)
+#### Node.js Packages (global)
 
 | Package | Used By |
 |---------|---------|
 | `docx` | docx skill (document creation) |
 | `pptxgenjs` | pptx skill (presentation creation) |
-
-### System Tools
-
-| Tool | Purpose |
-|------|---------|
-| `python3` + `py3-pip` | Python runtime + package manager |
-| `nodejs` + `npm` | Node.js runtime + package manager |
-| `pandoc` | Document format conversion |
-| `github-cli` (`gh`) | GitHub API operations |
 
 ---
 
@@ -90,11 +92,11 @@ PATH=/app/data/.runtime/npm-global/bin:/app/data/.runtime/pip/bin:$PATH
 
 ### Agent Guidance
 
-The system prompt includes this section so agents know what's available:
+The system prompt and UI should treat runtime availability as variant-dependent:
 
 ```
-Pre-installed: python3, node, gh, pypdf, openpyxl, pandas, python-pptx,
-markitdown, docx (npm), pptxgenjs (npm), pandoc.
+Minimal `latest`: Python/Node may be missing in the container.
+`python`, `node`, and `full` variants pre-install different runtimes.
 To install additional packages: pip3 install <pkg> or npm install -g <pkg>
 ```
 
@@ -179,10 +181,10 @@ When a user uploads a skill with the same name via the UI, the managed version t
 
 To add a new package to the Docker image:
 
-1. **Python**: Add to the `pip3 install` line in `Dockerfile`
-2. **Node.js**: Add to the `npm install -g` line in `Dockerfile`
+1. **Python**: Add to the `pip3 install` line in `Dockerfile` (usually `full`, sometimes `python`)
+2. **Node.js**: Add to the `npm install -g` line in `Dockerfile` (usually `full`, sometimes `node`)
 3. **System tool**: Add to the `apk add` line in `Dockerfile`
-4. **System prompt**: Update the pre-installed list in `systemprompt.go` (`buildToolSection`)
+4. **Docs/UI guidance**: Update runtime variant docs and any UI copy that describes pre-installed tools
 5. **Rebuild**: `docker compose ... up -d --build`
 
 For packages only needed by specific skills, prefer runtime installation (Option B) to keep the image lean.

@@ -91,6 +91,11 @@ func validCronRow(payloadJSON []byte) []any {
 		(*int64)(nil),       // interval_ms
 		payloadJSON,         // payload
 		false,               // delete_after_run
+		false,               // stateless
+		false,               // deliver
+		"",                  // deliver_channel
+		"",                  // deliver_to
+		false,               // wake_heartbeat
 		(*time.Time)(nil),   // next_run_at
 		(*time.Time)(nil),   // last_run_at
 		(*string)(nil),      // last_status
@@ -120,12 +125,16 @@ func TestScanCronRow_ValidPayload(t *testing.T) {
 	payload := store.CronPayload{
 		Kind:    "message",
 		Message: "hello world",
-		Deliver: true,
-		Channel: "telegram",
-		To:      "user123",
 	}
 	payloadJSON, _ := json.Marshal(payload)
-	row := &mockRowScanner{values: validCronRow(payloadJSON)}
+
+	// Build row with deliver/deliver_channel/deliver_to set as dedicated columns.
+	rowVals := validCronRow(payloadJSON)
+	// Indices: stateless=13, deliver=14, deliver_channel=15, deliver_to=16, wake_heartbeat=17
+	rowVals[14] = true      // deliver
+	rowVals[15] = "telegram" // deliver_channel
+	rowVals[16] = "user123" // deliver_to
+	row := &mockRowScanner{values: rowVals}
 
 	job, err := scanCronRow(row)
 	if err != nil {
@@ -135,11 +144,14 @@ func TestScanCronRow_ValidPayload(t *testing.T) {
 	if job.Payload.Message != "hello world" {
 		t.Errorf("expected Message 'hello world', got %q", job.Payload.Message)
 	}
-	if job.Payload.Channel != "telegram" {
-		t.Errorf("expected Channel 'telegram', got %q", job.Payload.Channel)
+	if job.DeliverChannel != "telegram" {
+		t.Errorf("expected DeliverChannel 'telegram', got %q", job.DeliverChannel)
 	}
-	if job.Payload.To != "user123" {
-		t.Errorf("expected To 'user123', got %q", job.Payload.To)
+	if job.DeliverTo != "user123" {
+		t.Errorf("expected DeliverTo 'user123', got %q", job.DeliverTo)
+	}
+	if !job.Deliver {
+		t.Errorf("expected Deliver true")
 	}
 }
 

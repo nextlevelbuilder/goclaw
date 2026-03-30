@@ -83,7 +83,7 @@ func (t *WriteFileTool) Parameters() map[string]any {
 			},
 			"deliver": map[string]any{
 				"type":        "boolean",
-				"description": "Deliver this file to the user as an attachment. Defaults to true. Set to false for intermediate/temporary files (e.g. config, cache, temp scripts).",
+				"description": "Deliver this file to the user as an attachment. Defaults to true. Set to false ONLY for intermediate/temporary files the user will never see (e.g. config, cache, temp scripts). For any file the user requested or should receive, keep true (default).",
 			},
 		},
 		"required": []string{"path", "content"},
@@ -214,6 +214,10 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	result.Deliverable = content
 	if deliver {
 		result.Media = []bus.MediaFile{{Path: resolved}}
+		// Track delivered path so message tool's self-send guard can detect duplicates.
+		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+			dm.Mark(resolved)
+		}
 	}
 	return result
 }
@@ -248,6 +252,9 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 		}
 		hostPath := filepath.Join(workspace, path)
 		result.Media = []bus.MediaFile{{Path: hostPath}}
+		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+			dm.Mark(hostPath)
+		}
 	}
 	return result
 }

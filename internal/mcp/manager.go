@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -141,7 +143,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			continue
 		}
 
-		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, cfg.Headers, cfg.ToolPrefix, cfg.TimeoutSec); err != nil {
+		if err := m.connectServer(ctx, name, cfg.Transport, cfg.Command, cfg.Args, cfg.Env, cfg.URL, resolveEnvVars(cfg.Headers), cfg.ToolPrefix, cfg.TimeoutSec); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", name, "error", err)
 			errs = append(errs, fmt.Sprintf("%s: %v", name, err))
 		}
@@ -184,7 +186,7 @@ func (m *Manager) resolveServerCredentials(ctx context.Context, info store.MCPAc
 
 	args := jsonBytesToStringSlice(srv.Args)
 	env := jsonBytesToStringMap(srv.Env)
-	headers := jsonBytesToStringMap(srv.Headers)
+	headers := resolveEnvVars(jsonBytesToStringMap(srv.Headers))
 
 	// Inject APIKey into headers if present (bug fix: was never passed to connections)
 	if srv.APIKey != "" && headers["Authorization"] == "" {
@@ -506,6 +508,19 @@ func (m *Manager) ServerStatus() []ServerStatus {
 		})
 	}
 	return statuses
+}
+
+// resolveEnvVars returns a copy of m with "env:VARNAME" values resolved to os.Getenv("VARNAME").
+func resolveEnvVars(m map[string]string) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		if after, ok := strings.CutPrefix(v, "env:"); ok {
+			out[k] = os.Getenv(after)
+		} else {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // requireUserCreds checks if an MCP server's settings mandate per-user credentials.

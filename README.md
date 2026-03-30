@@ -222,7 +222,9 @@ make down WITH_BROWSER=1 WITH_OTEL=1
 
 When `GOCLAW_*_API_KEY` environment variables are set, the gateway auto-onboards without interactive prompts — detects provider, runs migrations, and seeds default data.
 
-> For detailed configuration and Docker image tags, see the [Deployment Guide](https://docs.goclaw.sh/#deploy-docker-compose).
+> `ghcr.io/nextlevelbuilder/goclaw:latest` is the minimal runtime image and does **not** include Python or Node.js by default. If you need those runtimes preinstalled, use the `python`, `node`, or `full` image variant, run `./scripts/setup-docker.sh --variant <python|node|full>`, or rebuild locally with `ENABLE_PYTHON=true`, `ENABLE_NODE=true`, or `ENABLE_FULL_SKILLS=true`.
+
+> For build variants (OTel, Tailscale, Redis), Docker image tags, and compose overlays, see the [Deployment Guide](https://docs.goclaw.sh/#deploy-docker-compose).
 
 ## Multi-Agent Orchestration
 

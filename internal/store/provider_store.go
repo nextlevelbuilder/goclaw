@@ -78,6 +78,10 @@ type LLMProviderData struct {
 	Settings     json.RawMessage `json:"settings,omitempty"`
 }
 
+// RequiredMemoryEmbeddingDimensions is the fixed vector size used by the pgvector memory schema.
+// All memory embeddings must match this dimensionality until the schema supports variable sizes.
+const RequiredMemoryEmbeddingDimensions = 1536
+
 // EmbeddingSettings holds embedding-specific configuration stored in provider settings JSONB.
 type EmbeddingSettings struct {
 	Enabled    bool   `json:"enabled"`

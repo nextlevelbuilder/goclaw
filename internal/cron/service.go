@@ -114,10 +114,10 @@ func (cs *Service) AddJob(name string, schedule Schedule, message string, delive
 		Payload: Payload{
 			Kind:    "agent_turn",
 			Message: message,
-			Deliver: deliver,
-			Channel: channel,
-			To:      to,
 		},
+		Deliver:        deliver,
+		DeliverChannel: channel,
+		DeliverTo:      to,
 		CreatedAtMS:    now,
 		UpdatedAtMS:    now,
 		DeleteAfterRun: schedule.Kind == "at",
@@ -236,13 +236,19 @@ func (cs *Service) UpdateJob(jobID string, patch JobPatch) (*Job, error) {
 			job.Payload.Message = patch.Message
 		}
 		if patch.Deliver != nil {
-			job.Payload.Deliver = *patch.Deliver
+			job.Deliver = *patch.Deliver
 		}
-		if patch.Channel != nil {
-			job.Payload.Channel = *patch.Channel
+		if patch.DeliverChannel != nil {
+			job.DeliverChannel = *patch.DeliverChannel
 		}
-		if patch.To != nil {
-			job.Payload.To = *patch.To
+		if patch.DeliverTo != nil {
+			job.DeliverTo = *patch.DeliverTo
+		}
+		if patch.WakeHeartbeat != nil {
+			job.WakeHeartbeat = *patch.WakeHeartbeat
+		}
+		if patch.Stateless != nil {
+			job.Stateless = *patch.Stateless
 		}
 		if patch.DeleteAfterRun != nil {
 			job.DeleteAfterRun = *patch.DeleteAfterRun

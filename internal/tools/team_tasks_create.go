@@ -290,6 +290,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 					WithOwnerAgentKey(t.manager.AgentKeyFromID(ctx, assigneeID)),
 					WithChannel(task.Channel),
 					WithChatID(task.ChatID),
+					WithPeerKind(ToolPeerKindFromCtx(ctx)),
 				))
 				t.manager.DispatchTaskToAgent(ctx, task, team, assigneeID)
 			}

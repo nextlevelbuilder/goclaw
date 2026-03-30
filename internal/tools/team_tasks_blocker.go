@@ -45,6 +45,10 @@ func (t *TeamTasksTool) handleBlockerComment(
 	// 2. Notify subscriber → "❌ Task failed" → chat channel (direct outbound)
 	// 3. WS broadcast → web UI dashboard real-time update
 	memberKey := t.manager.AgentKeyFromID(ctx, agentID)
+	blockerPeerKind := ""
+	if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
+		blockerPeerKind = pk
+	}
 	t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, BuildTaskEventPayload(
 		team.ID.String(), taskID.String(),
 		store.TeamTaskStatusFailed,
@@ -55,6 +59,7 @@ func (t *TeamTasksTool) handleBlockerComment(
 		WithUserID(store.UserIDFromContext(ctx)),
 		WithChannel(task.Channel),
 		WithChatID(task.ChatID),
+		WithPeerKind(blockerPeerKind),
 	))
 
 	// Escalate to leader if enabled in team settings.
@@ -74,6 +79,7 @@ func (t *TeamTasksTool) handleBlockerComment(
 				ChatID:   task.ChatID,
 				Content:  escalationMsg,
 				UserID:   store.UserIDFromContext(ctx),
+				PeerKind: blockerPeerKind,
 				TenantID: store.TenantIDFromContext(ctx),
 				AgentID:  leadAg.AgentKey,
 			}) {

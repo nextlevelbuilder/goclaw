@@ -10,13 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { formatDate } from "@/lib/format";
-import type { CronJob } from "../hooks/use-cron";
+import type { CronJob, CronJobPatch } from "../hooks/use-cron";
 import { CronStatusBadge } from "../cron-utils";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 
 interface CronOverviewTabProps {
   job: CronJob;
-  onUpdate?: (id: string, params: Record<string, unknown>) => Promise<void>;
+  onUpdate?: (id: string, params: CronJobPatch) => Promise<void>;
 }
 
 type ScheduleKind = "every" | "cron" | "at";
@@ -57,7 +57,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
       await onUpdate(job.id, {
         schedule,
         message: message.trim(),
-        agentId: agentId.trim() || undefined,
+        agentId: agentId.trim() || "",
         enabled,
       });
       setEditingMessage(false);
@@ -176,7 +176,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>{t("create.agentId")}</Label>
-            <Select value={agentId || "__default__"} onValueChange={(v) => setAgentId(v === "__default__" ? "" : v)} disabled={readonly}>
+            <Select name="agentId" value={agentId || "__default__"} onValueChange={(v) => setAgentId(v === "__default__" ? "" : v)} disabled={readonly}>
               <SelectTrigger className="text-base md:text-sm">
                 <SelectValue placeholder={t("create.agentIdPlaceholder")} />
               </SelectTrigger>
@@ -193,7 +193,7 @@ export function CronOverviewTab({ job, onUpdate }: CronOverviewTabProps) {
           <div className="space-y-2">
             <Label>{t("columns.enabled")}</Label>
             <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
-              <span className="text-sm">{job.enabled ? t("detail.enabled") : t("detail.disabled")}</span>
+              <span className="text-sm">{enabled ? t("detail.enabled") : t("detail.disabled")}</span>
               <Switch
                 checked={enabled}
                 onCheckedChange={setEnabled}

@@ -14,7 +14,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -30,6 +30,18 @@ const SchemaVersion = 2
 var migrations = map[int]string{
 	// Version 1 → 2: add contact_type column to channel_contacts.
 	1: `ALTER TABLE channel_contacts ADD COLUMN contact_type VARCHAR(20) NOT NULL DEFAULT 'user';`,
+	// Version 2 → 3: promote cron payload fields to dedicated columns + add stateless flag.
+	2: `ALTER TABLE cron_jobs ADD COLUMN stateless INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE cron_jobs ADD COLUMN deliver INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE cron_jobs ADD COLUMN deliver_channel TEXT NOT NULL DEFAULT '';
+ALTER TABLE cron_jobs ADD COLUMN deliver_to TEXT NOT NULL DEFAULT '';
+ALTER TABLE cron_jobs ADD COLUMN wake_heartbeat INTEGER NOT NULL DEFAULT 0;
+UPDATE cron_jobs SET
+  deliver = COALESCE(json_extract(payload, '$.deliver'), 0),
+  deliver_channel = COALESCE(json_extract(payload, '$.channel'), ''),
+  deliver_to = COALESCE(json_extract(payload, '$.to'), ''),
+  wake_heartbeat = COALESCE(json_extract(payload, '$.wake_heartbeat'), 0)
+WHERE payload IS NOT NULL;`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

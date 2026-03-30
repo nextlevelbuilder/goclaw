@@ -132,6 +132,72 @@ func TestLoad_EnvVarAPIKeys(t *testing.T) {
 	}
 }
 
+// --- Allowed origins from JSON5 ---
+
+func TestLoad_AllowedOrigins_JSON5(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+
+	content := `{
+		"gateway": {
+			"allowed_origins": [
+				"https://app.example.com",
+				"https://admin.example.com",
+				"http://localhost:3002",
+			],
+		},
+	}`
+	os.WriteFile(cfgPath, []byte(content), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if len(cfg.Gateway.AllowedOrigins) != 3 {
+		t.Fatalf("expected 3 origins, got %d: %v", len(cfg.Gateway.AllowedOrigins), cfg.Gateway.AllowedOrigins)
+	}
+	if cfg.Gateway.AllowedOrigins[0] != "https://app.example.com" {
+		t.Fatalf("first origin: got %q", cfg.Gateway.AllowedOrigins[0])
+	}
+	if cfg.Gateway.AllowedOrigins[2] != "http://localhost:3002" {
+		t.Fatalf("third origin: got %q", cfg.Gateway.AllowedOrigins[2])
+	}
+}
+
+// --- Allowed origins from env var ---
+
+func TestLoad_AllowedOrigins_EnvVar(t *testing.T) {
+	t.Setenv("GOCLAW_ALLOWED_ORIGINS", " https://a.com , https://b.com ")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if len(cfg.Gateway.AllowedOrigins) != 2 {
+		t.Fatalf("expected 2 origins, got %d: %v", len(cfg.Gateway.AllowedOrigins), cfg.Gateway.AllowedOrigins)
+	}
+	if cfg.Gateway.AllowedOrigins[0] != "https://a.com" || cfg.Gateway.AllowedOrigins[1] != "https://b.com" {
+		t.Fatalf("origins not parsed correctly: %v", cfg.Gateway.AllowedOrigins)
+	}
+}
+
+func TestLoad_AllowedOrigins_EnvVar_OverridesFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	os.WriteFile(cfgPath, []byte(`{"gateway":{"allowed_origins":["https://file.com"]}}`), 0644)
+
+	// Env var should override file value
+	t.Setenv("GOCLAW_ALLOWED_ORIGINS", "https://env.com")
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if len(cfg.Gateway.AllowedOrigins) != 1 || cfg.Gateway.AllowedOrigins[0] != "https://env.com" {
+		t.Fatalf("env should override file: got %v", cfg.Gateway.AllowedOrigins)
+	}
+}
+
 // --- FlexibleStringSlice ---
 
 func TestFlexibleStringSlice_StringArray(t *testing.T) {

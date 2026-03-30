@@ -506,7 +506,7 @@ CLI authentication credentials for secure command execution. Requires **admin ro
 
 ## 17. Runtime & Packages Management
 
-Manage system (apk), Python (pip), and Node (npm) package installation in the runtime container. Requires authentication. When `GOCLAW_GATEWAY_TOKEN` is empty (dev/single-user mode), all users get admin role and can manage packages.
+Manage system (apk), Python (pip), and Node (npm) package installation in the GoClaw runtime container. These endpoints do not inspect host-level runtimes. Requires authentication. When `GOCLAW_GATEWAY_TOKEN` is empty (dev/single-user mode), all users get admin role and can manage packages.
 
 ### List Installed Packages
 
@@ -591,16 +591,24 @@ Same format as install. System packages are removed from persist file and contai
 GET /v1/packages/runtimes
 ```
 
-Check if Python and Node runtimes are available in the container.
+Check which prerequisite runtimes are available inside the active GoClaw runtime container. Host-installed runtimes and shell-profile-managed binaries (for example `nvm`) are not included in this result.
 
 **Response:**
 
 ```json
 {
-  "python": true,
-  "node": true
+  "runtimes": [
+    {"name": "python3", "available": false},
+    {"name": "pip3", "available": false},
+    {"name": "node", "available": false},
+    {"name": "npm", "available": false},
+    {"name": "pkg-helper", "available": true, "version": "socket"}
+  ],
+  "ready": false
 }
 ```
+
+The published `ghcr.io/nextlevelbuilder/goclaw:latest` image is the minimal variant, so missing Python or Node runtimes can be expected there.
 
 ---
 

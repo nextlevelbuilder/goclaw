@@ -274,6 +274,11 @@ func (c *Channel) handleIncomingMessage(msg map[string]any) {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, metadata["user_name"], "", peerKind, "user")
 	}
 
+	// Annotate with sender identity so the agent knows who is messaging.
+	if senderName := metadata["user_name"]; senderName != "" {
+		content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
+	}
+
 	c.HandleMessage(senderID, chatID, content, media, metadata, peerKind)
 }
 

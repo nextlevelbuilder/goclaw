@@ -24,7 +24,7 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 	}
 
 	payload := store.CronPayload{
-		Kind: "agent_turn", Message: message, Deliver: deliver, Channel: channel, To: to,
+		Kind: "agent_turn", Message: message,
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
@@ -68,10 +68,10 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO cron_jobs (id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, next_run_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		 interval_ms, payload, delete_after_run, deliver, deliver_channel, deliver_to, wake_heartbeat, next_run_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
 		id, tenantIDForInsert(ctx), agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
-		intervalMS, payloadJSON, deleteAfterRun, nextRun, now, now,
+		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create cron job: %w", err)
@@ -97,7 +97,8 @@ func (s *PGCronStore) GetJob(ctx context.Context, jobID string) (*store.CronJob,
 
 func (s *PGCronStore) ListJobs(ctx context.Context, includeDisabled bool, agentID, userID string) []store.CronJob {
 	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
+		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE 1=1`
 
 	var args []any

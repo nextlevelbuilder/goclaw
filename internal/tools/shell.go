@@ -113,6 +113,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return ErrorResult("command is required")
 	}
 
+	// Reject NUL bytes — they cause silent shell truncation enabling injection.
+	if strings.ContainsRune(command, '\x00') {
+		return ErrorResult("command contains invalid NUL byte")
+	}
+
 	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
 	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
 	groupPatterns := ResolveDenyPatterns(denyOverrides)

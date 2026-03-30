@@ -147,6 +147,7 @@
       "traversing": "Đang duyệt...",
       "loading": "Đang tải...",
       "noRelations": "Không tìm thấy quan hệ.",
+      "showAll": "Hiện tất cả",
       "traversalResults": "Kết quả duyệt ({{count}})",
       "direction": {
         "outgoing": "→ đi ra",
@@ -175,7 +176,10 @@
       "loading": "Đang tải đồ thị...",
       "empty": "Không có thực thể nào để hiển thị",
       "nodes": "{{count}} nút",
-      "edges": "{{count}} cạnh"
+      "edges": "{{count}} cạnh",
+      "selected": "Đã chọn: {{name}}",
+      "limitNote": "Hiển thị {{limit}}/{{total}} thực thể",
+      "limitHint": "Đồ thị giới hạn {{limit}} thực thể để đảm bảo hiệu năng. Dùng chế độ bảng để xem tất cả {{total}} thực thể."
     }
   },
   "toast": {

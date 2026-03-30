@@ -51,6 +51,7 @@ type teammateTaskMeta struct {
 	ToAgent    string
 	Channel    string
 	ChatID     string
+	PeerKind   string // "group" or "direct" — for correct notification routing (#266)
 	Subject    string
 	TaskNumber int
 }
@@ -96,6 +97,7 @@ func resolveTeamTaskOutcome(
 	taskNumber := meta.TaskNumber
 	taskChannel := meta.Channel
 	taskChatID := meta.ChatID
+	taskPeerKind := meta.PeerKind
 
 	// Enrich with live task data if available.
 	if currentTask != nil {
@@ -110,6 +112,11 @@ func resolveTeamTaskOutcome(
 		}
 		if currentTask.ChatID != "" {
 			taskChatID = currentTask.ChatID
+		}
+		if taskPeerKind == "" && currentTask.Metadata != nil {
+			if pk, ok := currentTask.Metadata[tools.TaskMetaPeerKind].(string); ok && pk != "" {
+				taskPeerKind = pk
+			}
 		}
 	}
 
@@ -129,6 +136,7 @@ func resolveTeamTaskOutcome(
 				tools.WithReason(outcome.Err.Error()),
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
+				tools.WithPeerKind(taskPeerKind),
 				tools.WithTimestamp(now),
 			))
 		}
@@ -162,6 +170,7 @@ func resolveTeamTaskOutcome(
 				tools.WithReason("loop_detector_kill"),
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
+				tools.WithPeerKind(taskPeerKind),
 				tools.WithTimestamp(now),
 			))
 		}
@@ -171,28 +180,33 @@ func resolveTeamTaskOutcome(
 	default:
 		// Agent turn ended without terminal action — auto-complete.
 		// Covers: Progressed, Commented, Claimed, or no flags at all.
+		result := ""
 		if outcome.Result != nil {
-			result := outcome.Result.Content
+			result = outcome.Result.Content
 			if len(outcome.Result.Deliverables) > 0 {
 				result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
 			}
-			if len(result) > 100_000 {
-				result = result[:100_000] + "\n[truncated]"
-			}
-			if err := deps.TeamStore.CompleteTask(ctx, meta.TaskID, meta.TeamID, result); err != nil {
-				slog.Warn("auto-complete: CompleteTask error", "task_id", meta.TaskID, "error", err)
-			} else {
-				bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(
-					meta.TeamID.String(), meta.TaskID.String(),
-					store.TeamTaskStatusCompleted,
-					"agent", toAgent,
-					tools.WithTaskInfo(taskNumber, taskSubject),
-					tools.WithOwnerAgentKey(toAgent),
-					tools.WithChannel(taskChannel),
-					tools.WithChatID(taskChatID),
-					tools.WithTimestamp(now),
-				))
-			}
+		}
+		if result == "" {
+			result = "Agent run ended without explicit result"
+		}
+		if len(result) > 100_000 {
+			result = result[:100_000] + "\n[truncated]"
+		}
+		if err := deps.TeamStore.CompleteTask(ctx, meta.TaskID, meta.TeamID, result); err != nil {
+			slog.Warn("auto-complete: CompleteTask error", "task_id", meta.TaskID, "error", err)
+		} else {
+			bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(
+				meta.TeamID.String(), meta.TaskID.String(),
+				store.TeamTaskStatusCompleted,
+				"agent", toAgent,
+				tools.WithTaskInfo(taskNumber, taskSubject),
+				tools.WithOwnerAgentKey(toAgent),
+				tools.WithChannel(taskChannel),
+				tools.WithChatID(taskChatID),
+				tools.WithPeerKind(taskPeerKind),
+				tools.WithTimestamp(now),
+			))
 		}
 	}
 

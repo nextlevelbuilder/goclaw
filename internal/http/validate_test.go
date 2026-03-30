@@ -4,6 +4,20 @@ import (
 	"testing"
 )
 
+func TestFilterAllowedKeys_ChannelInstance_IncludesName(t *testing.T) {
+	input := map[string]any{"name": "my-bot", "channel_type": "telegram", "evil_field": "hack"}
+	result := filterAllowedKeys(input, channelInstanceAllowedFields)
+	if result["name"] != "my-bot" {
+		t.Error("expected 'name' to be retained")
+	}
+	if _, ok := result["evil_field"]; ok {
+		t.Error("expected 'evil_field' to be stripped")
+	}
+	if result["channel_type"] != "telegram" {
+		t.Error("expected 'channel_type' to be retained")
+	}
+}
+
 func TestFilterAllowedKeys(t *testing.T) {
 	allowed := map[string]bool{"name": true, "status": true}
 

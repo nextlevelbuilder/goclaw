@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -358,4 +359,131 @@ func TestValidateChannelTenant(t *testing.T) {
 			t.Errorf("expected nil for master context, got: %s", err.ForLLM)
 		}
 	})
+}
+
+func TestSelfSendGuard(t *testing.T) {
+	workspace := t.TempDir()
+	workspaceCanonical, _ := filepath.EvalSymlinks(workspace)
+
+	// Create a test file for MEDIA: resolution.
+	testFile := filepath.Join(workspaceCanonical, "report.csv")
+	os.WriteFile(testFile, []byte("data"), 0o644)
+
+	tool := NewMessageTool(workspaceCanonical, true)
+	// Wire message bus so MEDIA sends can proceed past self-send guard.
+	tool.SetMessageBus(bus.New())
+
+	// Build context with self-send channel/chatID.
+	mkCtx := func() context.Context {
+		ctx := context.Background()
+		ctx = WithToolChannel(ctx, "telegram")
+		ctx = WithToolChatID(ctx, "chat-42")
+		return ctx
+	}
+
+	t.Run("text self-send blocked", func(t *testing.T) {
+		result := tool.Execute(mkCtx(), map[string]any{
+			"action":  "send",
+			"channel": "telegram",
+			"target":  "chat-42",
+			"message": "Hello, this is a text message",
+		})
+		if !result.IsError {
+			t.Fatal("expected text self-send to be blocked")
+		}
+	})
+
+	t.Run("text to different chat allowed", func(t *testing.T) {
+		result := tool.Execute(mkCtx(), map[string]any{
+			"action":  "send",
+			"channel": "telegram",
+			"target":  "chat-99",
+			"message": "Hello, other chat",
+		})
+		if result.IsError {
+			t.Fatalf("expected cross-chat send to succeed, got: %s", result.ForLLM)
+		}
+	})
+
+	t.Run("MEDIA self-send allowed when not delivered", func(t *testing.T) {
+		// No delivered media tracker — MEDIA self-send should be allowed.
+		result := tool.Execute(mkCtx(), map[string]any{
+			"action":  "send",
+			"channel": "telegram",
+			"target":  "chat-42",
+			"message": "MEDIA:" + testFile,
+		})
+		if result.IsError {
+			t.Fatalf("expected MEDIA self-send to be allowed, got: %s", result.ForLLM)
+		}
+	})
+
+	t.Run("MEDIA self-send blocked when already delivered", func(t *testing.T) {
+		ctx := mkCtx()
+		dm := NewDeliveredMedia()
+		dm.Mark(testFile)
+		ctx = WithDeliveredMedia(ctx, dm)
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "send",
+			"channel": "telegram",
+			"target":  "chat-42",
+			"message": "MEDIA:" + testFile,
+		})
+		if !result.IsError {
+			t.Fatal("expected MEDIA self-send to be blocked when file already delivered")
+		}
+	})
+
+	t.Run("MEDIA self-send allowed for undelivered file with tracker", func(t *testing.T) {
+		ctx := mkCtx()
+		dm := NewDeliveredMedia()
+		dm.Mark("/some/other/file.pdf") // different file marked
+		ctx = WithDeliveredMedia(ctx, dm)
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "send",
+			"channel": "telegram",
+			"target":  "chat-42",
+			"message": "MEDIA:" + testFile,
+		})
+		if result.IsError {
+			t.Fatalf("expected MEDIA self-send for undelivered file to be allowed, got: %s", result.ForLLM)
+		}
+	})
+
+	t.Run("embedded MEDIA in text self-send blocked", func(t *testing.T) {
+		ctx := mkCtx()
+		dm := NewDeliveredMedia()
+		dm.Mark(testFile)
+		ctx = WithDeliveredMedia(ctx, dm)
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "send",
+			"channel": "telegram",
+			"target":  "chat-42",
+			"message": "Here is the file\nMEDIA:" + testFile,
+		})
+		// Contains MEDIA: pattern → passes text guard → but file is delivered → blocked
+		if !result.IsError {
+			t.Fatal("expected embedded MEDIA self-send to be blocked when file already delivered")
+		}
+	})
+}
+
+func TestDeliveredMedia(t *testing.T) {
+	dm := NewDeliveredMedia()
+
+	if dm.IsDelivered("/tmp/test.csv") {
+		t.Fatal("expected empty tracker to report false")
+	}
+
+	dm.Mark("/tmp/test.csv")
+	if !dm.IsDelivered("/tmp/test.csv") {
+		t.Fatal("expected marked path to be delivered")
+	}
+
+	if dm.IsDelivered("/tmp/other.csv") {
+		t.Fatal("expected unmarked path to report false")
+	}
 }

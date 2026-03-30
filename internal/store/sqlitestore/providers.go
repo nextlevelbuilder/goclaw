@@ -54,11 +54,24 @@ func (s *SQLiteProviderStore) CreateProvider(ctx context.Context, p *store.LLMPr
 	p.UpdatedAt = now
 	tid := tenantIDForInsert(ctx)
 	p.TenantID = tid
-	_, err := s.db.ExecContext(ctx,
+	// UPSERT: if provider with same (tenant_id, name) exists, update it and return its ID.
+	// This handles orphaned providers left after agent deletion (#295).
+	var actualID string
+	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO llm_providers (id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(tenant_id, name) DO UPDATE SET
+			display_name = excluded.display_name, provider_type = excluded.provider_type,
+			api_base = excluded.api_base, api_key = excluded.api_key,
+			enabled = excluded.enabled, settings = excluded.settings, updated_at = excluded.updated_at
+		 RETURNING id`,
 		p.ID, p.Name, p.DisplayName, p.ProviderType, p.APIBase, apiKey, p.Enabled, settings, now, now, tid,
-	)
+	).Scan(&actualID)
+	if err == nil {
+		if parsed, parseErr := uuid.Parse(actualID); parseErr == nil {
+			p.ID = parsed // sync in-memory ID with actual DB row
+		}
+	}
 	return err
 }
 

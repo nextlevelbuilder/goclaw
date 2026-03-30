@@ -207,7 +207,11 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		Payload: completedPayload,
 	})
 	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
-		l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
+		if result != nil {
+			l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
+		} else {
+			l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
+		}
 	}
 	return result, nil
 }

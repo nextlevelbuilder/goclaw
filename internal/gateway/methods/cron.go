@@ -62,13 +62,15 @@ func (m *CronMethods) handleList(ctx context.Context, client *gateway.Client, re
 func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
-		Name     string             `json:"name"`
-		Schedule store.CronSchedule `json:"schedule"`
-		Message  string             `json:"message"`
-		Deliver  bool               `json:"deliver"`
-		Channel  string             `json:"channel"`
-		To       string             `json:"to"`
-		AgentID  string             `json:"agentId"`
+		Name           string             `json:"name"`
+		Schedule       store.CronSchedule `json:"schedule"`
+		Message        string             `json:"message"`
+		Deliver        bool               `json:"deliver"`
+		DeliverChannel string             `json:"deliverChannel"`
+		DeliverTo      string             `json:"deliverTo"`
+		WakeHeartbeat  bool               `json:"wakeHeartbeat"`
+		Stateless      *bool              `json:"stateless"` // default true for new crons
+		AgentID        string             `json:"agentId"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -87,10 +89,26 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		return
 	}
 
-	job, err := m.service.AddJob(ctx, params.Name, params.Schedule, params.Message, params.Deliver, params.Channel, params.To, params.AgentID, client.UserID())
+	job, err := m.service.AddJob(ctx, params.Name, params.Schedule, params.Message, params.Deliver, params.DeliverChannel, params.DeliverTo, params.AgentID, client.UserID())
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
+	}
+
+	// Apply extra fields not in AddJob signature via an immediate patch.
+	// Default stateless=true for new crons (saves tokens); override with explicit false.
+	statelessVal := true
+	if params.Stateless != nil {
+		statelessVal = *params.Stateless
+	}
+	{
+		patch := store.CronJobPatch{Stateless: &statelessVal}
+		if params.WakeHeartbeat {
+			patch.WakeHeartbeat = &params.WakeHeartbeat
+		}
+		if updated, pErr := m.service.UpdateJob(ctx, job.ID, patch); pErr == nil {
+			job = updated
+		}
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

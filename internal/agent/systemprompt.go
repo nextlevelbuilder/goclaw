@@ -98,9 +98,9 @@ var coreToolSummaries = map[string]string{
 	"session_status":   "Show session status (model, tokens, compaction count)",
 	"sessions_history": "Fetch message history for a session",
 	"sessions_send":    "Send a message into another session",
-	"read_image":       "REQUIRED when you see <media:image> tags — call this tool with the path attribute to analyze the image. You CAN see images through this tool. Never say you cannot see images",
-	"read_audio":       "REQUIRED when you see <media:audio> tags — call this tool to transcribe or analyze audio content",
-	"read_video":       "REQUIRED when you see <media:video> tags — call this tool to analyze video content",
+	"read_image":       "Analyze images when the user asks about them or when understanding the image is needed to answer. Call with the path attribute from <media:image> tags. You CAN see images through this tool. Never say you cannot see images",
+	"read_audio":       "Analyze audio when the user asks about it or references audio content. Call with the media_id from <media:audio> tags. You CAN hear audio through this tool",
+	"read_video":       "Analyze video when the user asks about it or references video content. Call with the media_id from <media:video> tags. You CAN see video through this tool",
 	"create_video":     "Generate videos from text descriptions using AI",
 	"read_document":    "Analyze documents (PDF, DOCX, etc.) attached to the conversation. Call this when you see <media:document> tags. If this tool fails, use a relevant skill instead (e.g. pdf skill with exec tool). The path attribute in <media:document path=\"...\"> is a directly accessible file in your workspace — use it directly, no need to copy",
 	"create_image":            "Generate images from text descriptions using AI",
@@ -389,9 +389,9 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 			"When users send images, videos, audio, or documents, you see tags like:",
 			`  <media:image id="..." path="...">`,
 			`  <media:video id="...">, <media:audio id="...">, <media:document path="...">`,
-			"You MUST use the corresponding read_* tool (with the path or media_id) to analyze them.",
+			"Use the corresponding read_* tool (with the path or media_id) to analyze them when the user asks about them or when understanding the media is needed to answer.",
 			"You have full vision/audio/video capabilities through these tools.",
-			"NEVER say you cannot see images or files — always use the tools.",
+			"NEVER say you cannot see images or files — always use the tools when relevant.",
 		)
 	}
 

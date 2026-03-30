@@ -84,6 +84,10 @@ type ChatResponse struct {
 	// RawAssistantContent preserves the raw content blocks array from the provider response.
 	// Used by Anthropic to pass thinking blocks back in tool use loops (required by API).
 	RawAssistantContent json.RawMessage `json:"-"`
+
+	// ThinkingSignature is the accumulated signature from streaming thinking blocks.
+	// Required by Anthropic API for tool use passback when thinking is enabled.
+	ThinkingSignature string `json:"-"`
 }
 
 // StreamChunk is a piece of a streaming response.

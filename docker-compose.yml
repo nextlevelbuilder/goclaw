@@ -17,7 +17,7 @@ services:
   goclaw:
     image: ghcr.io/nextlevelbuilder/goclaw:latest
     build:
-      context: .
+      context: ${GOCLAW_DIR:-.}
       dockerfile: Dockerfile
       args:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"

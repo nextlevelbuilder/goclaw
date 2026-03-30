@@ -30,6 +30,11 @@ type CronJob struct {
 	CreatedAtMS    int64        `json:"createdAtMs"`
 	UpdatedAtMS    int64        `json:"updatedAtMs"`
 	DeleteAfterRun bool         `json:"deleteAfterRun,omitempty"`
+	Stateless      bool         `json:"stateless"`
+	Deliver        bool         `json:"deliver"`
+	DeliverChannel string       `json:"deliverChannel"`
+	DeliverTo      string       `json:"deliverTo"`
+	WakeHeartbeat  bool         `json:"wakeHeartbeat"`
 }
 
 // CronSchedule defines when a job should run.
@@ -43,13 +48,9 @@ type CronSchedule struct {
 
 // CronPayload describes what a job does when triggered.
 type CronPayload struct {
-	Kind          string `json:"kind"`
-	Message       string `json:"message"`
-	Command       string `json:"command,omitempty"`
-	Deliver       bool   `json:"deliver"`
-	Channel       string `json:"channel,omitempty"`
-	To            string `json:"to,omitempty"`
-	WakeHeartbeat bool   `json:"wake_heartbeat,omitempty"` // trigger heartbeat after job completes
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+	Command string `json:"command,omitempty"`
 }
 
 // CronJobState tracks runtime state for a job.
@@ -87,10 +88,11 @@ type CronJobPatch struct {
 	Enabled        *bool         `json:"enabled,omitempty"`
 	Schedule       *CronSchedule `json:"schedule,omitempty"`
 	Message        string        `json:"message,omitempty"`
-	Deliver        *bool         `json:"deliver,omitempty"`
-	Channel        *string       `json:"channel,omitempty"`
-	To             *string       `json:"to,omitempty"`
 	DeleteAfterRun *bool         `json:"deleteAfterRun,omitempty"`
+	Stateless      *bool         `json:"stateless,omitempty"`
+	Deliver        *bool         `json:"deliver,omitempty"`
+	DeliverChannel *string       `json:"deliverChannel,omitempty"`
+	DeliverTo      *string       `json:"deliverTo,omitempty"`
 	WakeHeartbeat  *bool         `json:"wakeHeartbeat,omitempty"`
 }
 

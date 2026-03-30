@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"context"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -136,6 +138,36 @@ func TestPrivilegeEscalationGaps(t *testing.T) {
 		"doaspkg",   // not "doas" (no word boundary)
 		"pkexecute", // not "pkexec" (no word boundary)
 	)
+}
+
+func TestExecute_RejectsNULByte(t *testing.T) {
+	tool := &ExecTool{} // minimal instance, no sandbox/workspace needed
+
+	cases := []struct {
+		name    string
+		command string
+		reject  bool
+	}{
+		{"nul_mid", "ls\x00/etc/passwd", true},
+		{"nul_mid_echo", "echo hello\x00world", true},
+		{"nul_prefix", "\x00rm -rf /", true},
+		{"nul_only", "\x00", true},
+		{"normal_cmd", "echo normal", false},
+		{"empty_cmd", "", false}, // handled by "command is required"
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := tool.Execute(context.Background(), map[string]any{"command": tc.command})
+			hasNULError := result != nil && strings.Contains(result.ForLLM, "NUL byte")
+			if tc.reject && !hasNULError {
+				t.Errorf("expected NUL rejection for %q, got: %v", tc.name, result.ForLLM)
+			}
+			if !tc.reject && hasNULError {
+				t.Errorf("unexpected NUL rejection for %q", tc.name)
+			}
+		})
+	}
 }
 
 func TestLimitedBuffer(t *testing.T) {

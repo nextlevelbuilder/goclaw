@@ -130,6 +130,8 @@
     "timezone": "Timezone",
     "timezoneDesc": "Timezone for cron expressions"
   },
+  "stateless": "Stateless",
+  "statelessHelp": "Skip session persistence. Each run starts fresh without loading previous messages. Saves tokens for crons that don't need past context.",
   "toast": {
     "created": "Cron job created",
     "createdDesc": "{{name}} has been added",

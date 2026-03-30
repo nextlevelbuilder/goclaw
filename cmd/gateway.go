@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -676,6 +677,7 @@ func runGateway() {
 					ChatID:   meta.ChatID,
 					AgentID:  meta.LeadAgent,
 					UserID:   meta.UserID,
+					PeerKind: meta.PeerKind,
 					Content:  leaderContent,
 					Metadata: map[string]string{"run_kind": tools.RunKindNotification},
 				})
@@ -824,6 +826,7 @@ func runGateway() {
 				ChatID:    payload.ChatID,
 				UserID:    payload.UserID,
 				LeadAgent: leadAgentKey,
+				PeerKind:  payload.PeerKind,
 			})
 		})
 		slog.Info("team progress notification subscriber registered")
@@ -1049,12 +1052,32 @@ func runGateway() {
 		if !ok {
 			return
 		}
+		if pgStores.ConfigSecrets != nil {
+			if secrets, err := pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+				updatedCfg.ApplyDBSecrets(secrets)
+			}
+		}
 		newMgr := setupTTS(updatedCfg)
 		if newMgr == nil {
 			return
 		}
 		ttsTool.UpdateManager(newMgr)
 		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
+	})
+
+	// Log orphaned providers on agent deletion. Auto-delete is unsafe because
+	// providers can be referenced by heartbeats (FK), OAuth tokens, media chains.
+	// Users should clean up orphaned providers manually via UI/API.
+	msgBus.Subscribe("agent-deleted-provider-log", func(evt bus.Event) {
+		if evt.Name != bus.TopicAgentDeleted {
+			return
+		}
+		payload, ok := evt.Payload.(bus.AgentDeletedPayload)
+		if !ok || payload.Provider == "" {
+			return
+		}
+		slog.Info("agent deleted, provider may be orphaned — verify via UI",
+			"agent", payload.AgentKey, "provider", payload.Provider)
 	})
 
 	// Contact collector: auto-collect user info from channels with in-memory dedup cache.
@@ -1103,6 +1126,12 @@ func runGateway() {
 			sandboxMgr.ReleaseAll(context.Background())
 		}
 
+		if sched != nil {
+			slog.Info("gateway: draining active runs", "timeout", "5s")
+			sched.Stop() // MarkDraining + StopAll
+			time.Sleep(5 * time.Second)
+		}
+
 		cancel()
 	}()
 
@@ -1140,8 +1169,10 @@ func runGateway() {
 	if strings.Contains(cfg.Database.PostgresDSN, ":goclaw@") {
 		slog.Warn("security.default_db_password: using default Postgres password — run ./prepare-env.sh to generate a strong one")
 	}
-	if len(cfg.Gateway.AllowedOrigins) == 0 && !edition.Current().IsLimited() {
-		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins for production")
+	if len(cfg.Gateway.AllowedOrigins) > 0 {
+		slog.Info("cors: allowed_origins configured", "origins", cfg.Gateway.AllowedOrigins)
+	} else if !edition.Current().IsLimited() {
+		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins or GOCLAW_ALLOWED_ORIGINS for production")
 	}
 
 	if err := server.Start(ctx); err != nil {

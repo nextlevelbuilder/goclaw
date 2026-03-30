@@ -130,6 +130,8 @@
     "timezone": "Múi giờ",
     "timezoneDesc": "Múi giờ cho biểu thức cron"
   },
+  "stateless": "Không trạng thái",
+  "statelessHelp": "Bỏ qua lưu session. Mỗi lần chạy bắt đầu mới. Tiết kiệm token cho các cron không cần context cũ.",
   "toast": {
     "created": "Đã tạo tác vụ định kỳ",
     "createdDesc": "{{name}} đã được thêm",

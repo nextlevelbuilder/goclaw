@@ -40,6 +40,9 @@ func (s *stubAgentStore) SetUserContextFile(_ context.Context, _ uuid.UUID, _, _
 func (s *stubAgentStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _, _ string) error {
 	return nil
 }
+func (s *stubAgentStore) ListUserContextFilesByName(_ context.Context, _ uuid.UUID, _ string) ([]store.UserContextFileData, error) {
+	return nil, nil
+}
 func (s *stubAgentStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _ string) error {
 	return nil
 }
@@ -99,7 +102,6 @@ func (s *stubAgentStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ str
 func (s *stubAgentStore) PropagateContextFile(_ context.Context, _ uuid.UUID, _ string) (int, error) {
 	return 0, nil
 }
-
 // ---- Tests ----
 
 // TestInterceptor_CacheHit verifies that a second read does NOT call GetAgentContextFiles again.
