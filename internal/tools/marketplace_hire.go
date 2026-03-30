@@ -3,8 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -14,8 +14,6 @@ import (
 // MarketplaceHireTool downloads and installs agent teams from the GoClaw Hub marketplace.
 type MarketplaceHireTool struct {
 	client *registry.Client
-	// TODO: importFn will be wired when we have access to the team store
-	// importFn func(ctx context.Context, reader io.Reader) error
 }
 
 // NewMarketplaceHireTool creates a new marketplace hire tool.
@@ -39,7 +37,7 @@ func (t *MarketplaceHireTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"slug": map[string]any{
 				"type":        "string",
-				"description": "The team slug from search results (e.g., 'web-dev-experts', 'data-scientists')",
+				"description": "The team slug from search results (e.g., 'content-squad')",
 			},
 		},
 		"required": []string{"slug"},
@@ -52,77 +50,61 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult("slug is required")
 	}
 
-	// First, get the listing details to show what we're downloading
+	// Get listing details first
 	listing, err := t.client.GetListing(ctx, slug)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to get team details: %v", err))
 	}
 
-	// Download the team bundle (read fully into memory to avoid stream EOF issues)
-	goclawVersion := "" // TODO: Could detect version from build info
-	reader, err := t.client.Download(ctx, slug, goclawVersion)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v", listing.Title, err))
-	}
-	bundleData, err := io.ReadAll(reader)
-	reader.Close()
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to read team bundle: %v", err))
-	}
-
-	// Save to a temporary file for now
-	// TODO: In the future, this will call the team import function directly
+	// Download using wget — Go's HTTP client has TLS stream issues in some environments
 	tempDir := os.TempDir()
 	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
 	tempFile := filepath.Join(tempDir, filename)
 
-	if err := os.WriteFile(tempFile, bundleData, 0644); err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to save team bundle: %v", err))
+	dlURL := t.client.BaseURL + "/registry/download/" + slug
+	cmd := exec.CommandContext(ctx, "wget", "-q", "-O", tempFile, dlURL,
+		"--header=X-Registry-Key: "+t.client.APIKey,
+		"--timeout=30")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v (%s)", listing.Title, err, string(output)))
 	}
-	bytesWritten := int64(len(bundleData))
+
+	// Verify the file
+	info, err := os.Stat(tempFile)
+	if err != nil || info.Size() == 0 {
+		return ErrorResult(fmt.Sprintf("Download produced empty file for '%s'", listing.Title))
+	}
 
 	// Build success message
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("✅ Successfully hired team: **%s**\n\n", listing.Title))
+	result.WriteString(fmt.Sprintf("Successfully hired team: **%s**\n\n", listing.Title))
 
 	if listing.Tagline != "" {
 		result.WriteString(fmt.Sprintf("%s\n\n", listing.Tagline))
 	}
 
-	// Show team composition
 	if len(listing.Agents) > 0 {
-		result.WriteString("👥 **Your new team members:**\n")
+		result.WriteString("**Your new team members:**\n")
 		for _, agent := range listing.Agents {
-			result.WriteString(fmt.Sprintf("• %s", agent.DisplayName))
+			name := agent.DisplayName
 			if agent.Emoji != "" {
-				result.WriteString(fmt.Sprintf(" %s", agent.Emoji))
+				name = agent.Emoji + " " + name
 			}
 			if agent.Role != "" {
-				result.WriteString(fmt.Sprintf(" (%s)", agent.Role))
+				name += " (" + agent.Role + ")"
 			}
-			result.WriteString("\n")
+			result.WriteString(fmt.Sprintf("- %s\n", name))
 		}
 		result.WriteString("\n")
 	}
 
-	// Show download info
-	result.WriteString(fmt.Sprintf("📦 Bundle downloaded: %s (%.1f KB)\n", tempFile, float64(bytesWritten)/1024.0))
+	result.WriteString(fmt.Sprintf("Bundle: %s (%.1f KB)\n", tempFile, float64(info.Size())/1024.0))
 
-	// Creator acknowledgment
 	if listing.CreatorName != "" {
-		result.WriteString(fmt.Sprintf("👤 Created by %s\n", listing.CreatorName))
+		result.WriteString(fmt.Sprintf("By: %s\n", listing.CreatorName))
 	}
 
-	result.WriteString("\n🚀 **Next steps:**\n")
-	result.WriteString("• The team bundle has been downloaded and is ready for installation\n")
-	result.WriteString("• Team members will be available in your agent list once imported\n")
-	result.WriteString("• Each agent comes with their specialized skills and knowledge\n")
-
-	// TODO: When team import is wired, replace the above with:
-	// if err := t.importFn(ctx, reader); err != nil {
-	//     return ErrorResult(fmt.Sprintf("Failed to import team: %v", err))
-	// }
-	// result.WriteString("• Team members are now active and ready to work!\n")
+	result.WriteString("\nThe team bundle has been downloaded and is ready for import.\n")
 
 	return NewResult(result.String())
 }
