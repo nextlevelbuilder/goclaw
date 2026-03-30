@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -335,17 +336,24 @@ func TestUniquifyToolCallIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("appends run prefix", func(t *testing.T) {
+	t.Run("produces fixed-length hashed IDs", func(t *testing.T) {
 		calls := []providers.ToolCall{
 			{ID: "call_123", Name: "read_file"},
 			{ID: "call_456", Name: "write_file"},
 		}
 		got := uniquifyToolCallIDs(calls, runID, 2)
-		if got[0].ID != "call_123_abcdef12_2_0" {
-			t.Errorf("unexpected ID: %s", got[0].ID)
+		// IDs must be exactly 40 chars: "call_" (5) + 35 hex chars
+		for i, tc := range got {
+			if len(tc.ID) != 40 {
+				t.Errorf("call %d: ID length = %d, want 40: %s", i, len(tc.ID), tc.ID)
+			}
+			if !strings.HasPrefix(tc.ID, "call_") {
+				t.Errorf("call %d: ID should start with call_, got: %s", i, tc.ID)
+			}
 		}
-		if got[1].ID != "call_456_abcdef12_2_1" {
-			t.Errorf("unexpected ID: %s", got[1].ID)
+		// Different original IDs must produce different hashed IDs
+		if got[0].ID == got[1].ID {
+			t.Errorf("different inputs should produce different IDs: %s", got[0].ID)
 		}
 	})
 
@@ -354,8 +362,11 @@ func TestUniquifyToolCallIDs(t *testing.T) {
 			{ID: "", Name: "read_file"},
 		}
 		got := uniquifyToolCallIDs(calls, runID, 0)
-		if got[0].ID != "call_abcdef12_0_0" {
-			t.Errorf("unexpected ID for empty: %s", got[0].ID)
+		if len(got[0].ID) != 40 {
+			t.Errorf("empty input: ID length = %d, want 40: %s", len(got[0].ID), got[0].ID)
+		}
+		if !strings.HasPrefix(got[0].ID, "call_") {
+			t.Errorf("empty input: ID should start with call_, got: %s", got[0].ID)
 		}
 	})
 
@@ -382,11 +393,27 @@ func TestUniquifyToolCallIDs(t *testing.T) {
 			t.Errorf("IDs should be unique, both are: %s", got[0].ID)
 		}
 	})
+
+	t.Run("includes runID and iteration in hash", func(t *testing.T) {
+		calls := []providers.ToolCall{
+			{ID: "same_id", Name: "read_file"},
+		}
+		iter0 := uniquifyToolCallIDs(calls, runID, 0)[0].ID
+		iter1 := uniquifyToolCallIDs(calls, runID, 1)[0].ID
+		otherRun := uniquifyToolCallIDs(calls, "12345678-1234-5678-1234-567812345678", 0)[0].ID
+
+		if iter0 == iter1 {
+			t.Errorf("iteration should affect hashed ID: %s", iter0)
+		}
+		if iter0 == otherRun {
+			t.Errorf("runID should affect hashed ID: %s", iter0)
+		}
+	})
 }
 
 func TestEstimateTokens(t *testing.T) {
 	msgs := []providers.Message{
-		{Role: "user", Content: "Hello world!"},             // 12 chars → ~4 tokens
+		{Role: "user", Content: "Hello world!"},                // 12 chars → ~4 tokens
 		{Role: "assistant", Content: "Hi there, how are you?"}, // 22 chars → ~7 tokens
 	}
 	got := EstimateTokens(msgs)

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -325,7 +327,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 					}
 				}
 				toolCalls[i] = map[string]any{
-					"id":       tc.ID,
+					"id":       truncateToolCallID(tc.ID),
 					"type":     "function",
 					"function": fn,
 				}
@@ -334,7 +336,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 
 		if m.ToolCallID != "" {
-			msg["tool_call_id"] = m.ToolCallID
+			msg["tool_call_id"] = truncateToolCallID(m.ToolCallID)
 		}
 
 		msgs = append(msgs, msg)
@@ -369,16 +371,20 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	}
 
 	// Merge options
+	capabilityModel := modelFamily(model)
 	if v, ok := req.Options[OptMaxTokens]; ok {
-		if strings.HasPrefix(model, "gpt-5") || strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") || strings.HasPrefix(model, "o4") {
+		if strings.HasPrefix(capabilityModel, "gpt-5") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4") {
 			body["max_completion_tokens"] = v
 		} else {
 			body["max_tokens"] = v
 		}
 	}
 	if v, ok := req.Options[OptTemperature]; ok {
-		// GPT-5 mini/nano and o-series models only support default temperature
-		skipTemp := strings.HasPrefix(model, "gpt-5-mini") || strings.HasPrefix(model, "gpt-5-nano") || strings.HasPrefix(model, "o1") || strings.HasPrefix(model, "o3") || strings.HasPrefix(model, "o4")
+		// Certain model families don't support custom temperature (locked to default).
+		// This is a model-level constraint, not provider-specific — applies to both OpenAI and Azure.
+		// Note: gpt-5.X flagship models (gpt-5.1, gpt-5.4) DO support temperature;
+		// only the mini/nano reasoning variants reject it.
+		skipTemp := strings.HasPrefix(capabilityModel, "gpt-5-mini") || strings.HasPrefix(capabilityModel, "gpt-5-nano") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4")
 		if !skipTemp {
 			body["temperature"] = v
 		}
@@ -398,6 +404,15 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	}
 
 	return body
+}
+
+// modelFamily strips provider prefixes (for example "openai/o3-mini") so capability
+// gates apply to the actual model family rather than the transport-specific wrapper.
+func modelFamily(model string) string {
+	if idx := strings.LastIndex(model, "/"); idx >= 0 && idx < len(model)-1 {
+		return model[idx+1:]
+	}
+	return model
 }
 
 func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser, error) {
@@ -525,4 +540,17 @@ func clampedLimit(body map[string]any) any {
 		return v
 	}
 	return body["max_tokens"]
+}
+
+const maxToolCallIDLen = 40
+
+// truncateToolCallID deterministically fits tool call IDs into OpenAI's 40-char
+// limit. Prefix truncation can alias distinct legacy IDs that only diverge after
+// byte 40, so we hash the full original ID when shortening is needed.
+func truncateToolCallID(id string) string {
+	if len(id) <= maxToolCallIDLen {
+		return id
+	}
+	hash := sha256.Sum256([]byte(id))
+	return "call_" + hex.EncodeToString(hash[:])[:maxToolCallIDLen-len("call_")]
 }

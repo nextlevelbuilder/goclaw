@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -153,8 +155,11 @@ func (l *Loop) ProviderName() string {
 }
 
 // uniquifyToolCallIDs ensures all tool call IDs are globally unique across the
-// transcript by appending a short run-ID prefix and iteration index.
+// transcript by hashing the original ID with run-ID, iteration, and index.
 // Returns a new slice (does not mutate the input).
+//
+// IDs are capped at 40 characters to comply with the OpenAI/Azure API limit
+// on tool_calls[].id and tool_call_id fields (undocumented, returns HTTP 400).
 //
 // Some OpenAI-compatible APIs (OpenRouter, vLLM, DeepSeek) return duplicate IDs
 // within a single response or reuse IDs from earlier turns, causing HTTP 400.
@@ -163,18 +168,14 @@ func uniquifyToolCallIDs(calls []providers.ToolCall, runID string, iteration int
 	if len(calls) == 0 {
 		return calls
 	}
-	short := runID
-	if len(short) > 8 {
-		short = short[:8]
-	}
 	out := make([]providers.ToolCall, len(calls))
 	copy(out, calls)
 	for i := range out {
-		if out[i].ID == "" {
-			out[i].ID = fmt.Sprintf("call_%s_%d_%d", short, iteration, i)
-		} else {
-			out[i].ID = fmt.Sprintf("%s_%s_%d_%d", out[i].ID, short, iteration, i)
-		}
+		// Hash all discriminating components into a fixed-length ID:
+		// "call_" (5 chars) + hex(sha256(id:runID:iter:idx))[:35] = 40 chars exactly.
+		raw := fmt.Sprintf("%s:%s:%d:%d", out[i].ID, runID, iteration, i)
+		h := sha256.Sum256([]byte(raw))
+		out[i].ID = "call_" + hex.EncodeToString(h[:])[:35]
 	}
 	return out
 }
