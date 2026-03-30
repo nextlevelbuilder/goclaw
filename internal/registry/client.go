@@ -2,9 +2,11 @@ package registry
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -18,11 +20,17 @@ type Client struct {
 }
 
 // NewClient creates a new registry client with the given base URL and API key.
+// Forces HTTP/1.1 to avoid HTTP/2 stream errors with reverse proxies.
 func NewClient(baseURL, apiKey string) *Client {
+	transport := &http.Transport{
+		TLSNextProto:    make(map[string]func(string, *tls.Conn) http.RoundTripper), // disable HTTP/2
+		DialContext:     (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+	}
 	return &Client{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		HTTP:    &http.Client{Timeout: 60 * time.Second, Transport: transport},
 	}
 }
 
