@@ -38,7 +38,7 @@ type SkillsHandler struct {
 	tenantCfgStore store.SkillTenantConfigStore
 	tenantStore    store.TenantStore
 	db             *sql.DB // for export/import direct queries
-	uploadLocks    sync.Map
+	uploadLocks    sync.Map // per-slug mutex; bounded by validated slug set, entries are tiny (*sync.Mutex)
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.

@@ -217,7 +217,9 @@ func (h *SkillsHandler) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	id, err := h.skills.CreateSkillManaged(r.Context(), skill)
+	// Use depsCtx (non-cancellable) so the DB write completes even if the
+	// client disconnects during the dep-install window.
+	id, err := h.skills.CreateSkillManaged(depsCtx, skill)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToCreate, "skill", err.Error())})
 		return
