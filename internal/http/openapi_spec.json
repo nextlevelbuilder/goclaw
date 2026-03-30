@@ -515,6 +515,20 @@
                         },
                         "required": ["id"]
                       }
+                    },
+                    "reasoning_defaults": {
+                      "type": "object",
+                      "description": "Provider-owned default reasoning policy returned when the provider has saved defaults and at least one discovered model exposes reasoning capability metadata.",
+                      "properties": {
+                        "effort": {
+                          "type": "string",
+                          "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+                        },
+                        "fallback": {
+                          "type": "string",
+                          "enum": ["downgrade", "off", "provider_default"]
+                        }
+                      }
                     }
                   },
                   "required": ["models"]
@@ -886,6 +900,10 @@
                         "type": "object",
                         "description": "Capability-aware reasoning policy for GPT-5/Codex models.",
                         "properties": {
+                          "override_mode": {
+                            "type": "string",
+                            "enum": ["inherit", "custom"]
+                          },
                           "effort": {
                             "type": "string",
                             "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
@@ -918,7 +936,39 @@
           "provider_type": { "type": "string", "enum": ["anthropic_native", "openai_compat", "gemini_native", "openrouter", "groq", "deepseek", "mistral", "xai", "minimax_native", "cohere", "perplexity", "dashscope", "bailian", "chatgpt_oauth", "claude_cli", "suno", "yescale", "zai", "zai_coding", "ollama", "ollama_cloud", "acp"] },
           "api_base": { "type": "string" },
           "api_key": { "type": "string" },
-          "enabled": { "type": "boolean", "default": true }
+          "enabled": { "type": "boolean", "default": true },
+          "settings": {
+            "type": "object",
+            "description": "Provider-specific settings such as provider-owned Codex pool defaults and reasoning defaults.",
+            "properties": {
+              "reasoning_defaults": {
+                "type": "object",
+                "properties": {
+                  "effort": {
+                    "type": "string",
+                    "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+                  },
+                  "fallback": {
+                    "type": "string",
+                    "enum": ["downgrade", "off", "provider_default"]
+                  }
+                }
+              },
+              "codex_pool": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": ["manual", "primary_first", "round_robin", "priority_order"]
+                  },
+                  "extra_provider_names": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "Error": {

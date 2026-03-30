@@ -1,23 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
-import type { ModelInfo } from "@/types/provider";
+import type { ModelInfo, ProviderModelsResponse } from "@/types/provider";
 
 export type { ModelInfo };
 
 export function useProviderModels(providerId: string | undefined, _providerType?: string) {
   const http = useHttp();
 
-  const { data: models = [], isLoading: loading } = useQuery({
+  const {
+    data,
+    isLoading: loading,
+  } = useQuery({
     queryKey: queryKeys.providers.models(providerId ?? ""),
     queryFn: async () => {
-      const res = await http.get<{ models: ModelInfo[] }>(
+      const res = await http.get<ProviderModelsResponse>(
         `/v1/providers/${providerId}/models`,
       );
-      return res.models ?? [];
+      return res;
     },
     enabled: !!providerId,
   });
 
-  return { models, loading };
+  return {
+    models: data?.models ?? [],
+    reasoningDefaults: data?.reasoning_defaults ?? null,
+    loading,
+  };
 }

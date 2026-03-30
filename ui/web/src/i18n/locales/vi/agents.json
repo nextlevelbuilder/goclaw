@@ -647,6 +647,13 @@
     "thinking": {
       "title": "Suy nghĩ mở rộng",
       "description": "Cho phép model suy luận trước khi phản hồi. Cấp độ cao hơn dùng nhiều token hơn nhưng cho kết quả tốt hơn với tác vụ phức tạp.",
+      "modeLabel": "Reasoning Mode",
+      "inherit": "Use Provider Defaults",
+      "custom": "Custom For This Agent",
+      "customDesc": "Override the provider-owned default reasoning policy for this agent only.",
+      "providerDefaultSummary": "Inherited from {{provider}}",
+      "providerLabelFallback": "provider defaults",
+      "noProviderDefault": "No provider-owned reasoning default is saved yet. Inherit mode will keep this agent on reasoning off until the provider saves one.",
       "thinkingLevel": "Cấp độ suy nghĩ",
       "thinkingLevelTip": "Preset đơn giản cho phần lớn trường hợp. Bật Chế độ chuyên gia khi bạn cần mức reasoning theo model hoặc hành vi fallback rõ ràng.",
       "expertMode": "Chế độ chuyên gia",

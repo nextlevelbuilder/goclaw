@@ -647,6 +647,13 @@
     "thinking": {
       "title": "扩展思考",
       "description": "允许模型在响应前进行推理。更高级别使用更多令牌，但在复杂任务上产生更好的结果。",
+      "modeLabel": "Reasoning Mode",
+      "inherit": "Use Provider Defaults",
+      "custom": "Custom For This Agent",
+      "customDesc": "Override the provider-owned default reasoning policy for this agent only.",
+      "providerDefaultSummary": "Inherited from {{provider}}",
+      "providerLabelFallback": "provider defaults",
+      "noProviderDefault": "No provider-owned reasoning default is saved yet. Inherit mode will keep this agent on reasoning off until the provider saves one.",
       "thinkingLevel": "思考级别",
       "thinkingLevelTip": "面向常见场景的简单预设。需要模型级 effort 控制或明确 fallback 行为时，请开启专家模式。",
       "expertMode": "专家模式",

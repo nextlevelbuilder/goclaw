@@ -393,6 +393,11 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
                     {t("span.requested")} {span.metadata.reasoning.requested_effort}
                   </span>
                 ) : null}
+                {span.metadata.reasoning.source ? (
+                  <span className="ml-2">
+                    {t("span.source")} {t(`span.sourceValue.${span.metadata.reasoning.source}`)}
+                  </span>
+                ) : null}
                 {span.metadata.reasoning.effective_effort ? (
                   <span className="ml-2">
                     {t("span.effective")} {span.metadata.reasoning.effective_effort}

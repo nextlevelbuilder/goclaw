@@ -23,6 +23,11 @@ type ModelInfo struct {
 	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
+type ProviderModelsResponse struct {
+	Models            []ModelInfo                    `json:"models"`
+	ReasoningDefaults *store.ProviderReasoningConfig `json:"reasoning_defaults,omitempty"`
+}
+
 // handleListProviderModels proxies to the upstream provider API to list
 // available models for the given provider.
 //
@@ -41,20 +46,27 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	respond := func(models []ModelInfo) {
+		writeJSON(w, http.StatusOK, ProviderModelsResponse{
+			Models:            models,
+			ReasoningDefaults: reasoningDefaultsForModels(p.Settings, models),
+		})
+	}
+
 	// Claude CLI doesn't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderClaudeCLI {
-		writeJSON(w, http.StatusOK, map[string]any{"models": claudeCLIModels()})
+		respond(claudeCLIModels())
 		return
 	}
 
 	if p.ProviderType == store.ProviderChatGPTOAuth {
-		writeJSON(w, http.StatusOK, map[string]any{"models": chatGPTOAuthModels()})
+		respond(chatGPTOAuthModels())
 		return
 	}
 
 	// ACP agents don't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderACP {
-		writeJSON(w, http.StatusOK, map[string]any{"models": acpModels()})
+		respond(acpModels())
 		return
 	}
 
@@ -93,11 +105,26 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	if err != nil {
 		slog.Warn("providers.models", "provider", p.Name, "error", err)
 		// Return empty list instead of error — provider may not support /models
-		writeJSON(w, http.StatusOK, map[string]any{"models": []ModelInfo{}})
+		respond([]ModelInfo{})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"models": withReasoningCapabilities(models)})
+	respond(withReasoningCapabilities(models))
+}
+
+func reasoningDefaultsForModels(
+	settings []byte,
+	models []ModelInfo,
+) *store.ProviderReasoningConfig {
+	if len(models) == 0 {
+		return nil
+	}
+	for _, model := range models {
+		if model.Reasoning != nil {
+			return store.ParseProviderReasoningConfig(settings)
+		}
+	}
+	return nil
 }
 
 // fetchAnthropicModels calls the Anthropic models API.

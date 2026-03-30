@@ -26,6 +26,7 @@ import (
 // ResolverDeps holds shared dependencies for the agent resolver.
 type ResolverDeps struct {
 	AgentStore     store.AgentStore
+	ProviderStore  store.ProviderStore
 	ProviderReg    *providers.Registry
 	Bus            bus.EventPublisher
 	Sessions       store.SessionStore
@@ -143,6 +144,12 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 
 		if provider == nil {
 			return nil, fmt.Errorf("no provider available for agent %s", agentKey)
+		}
+		providerReasoningDefaults := (*store.ProviderReasoningConfig)(nil)
+		if deps.ProviderStore != nil {
+			if providerData, err := deps.ProviderStore.GetProviderByName(ctx, provider.Name()); err == nil && providerData != nil {
+				providerReasoningDefaults = store.ParseProviderReasoningConfig(providerData.Settings)
+			}
 		}
 
 		// Load bootstrap files from DB
@@ -392,7 +399,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SandboxWorkspaceAccess: sandboxWorkspaceAccess,
 			BuiltinToolSettings:    builtinSettings,
 			DisabledTools:          disabledTools,
-			ReasoningConfig:        ag.ParseReasoningConfig(),
+			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),

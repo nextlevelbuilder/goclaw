@@ -2,13 +2,13 @@
 
 ## Overview
 
-Extended thinking allows LLM providers to "think out loud" before producing a final response. When enabled, the model generates internal reasoning tokens that improve response quality for complex tasks at the cost of additional token usage and latency. GoClaw now supports both the legacy coarse `thinking_level` setting and an additive `other_config.reasoning` policy for capability-aware GPT-5/Codex control.
+Extended thinking allows LLM providers to "think out loud" before producing a final response. When enabled, the model generates internal reasoning tokens that improve response quality for complex tasks at the cost of additional token usage and latency. GoClaw now supports both the legacy coarse `thinking_level` setting and a provider-first reasoning policy for capability-aware GPT-5/Codex control.
 
 ---
 
 ## 1. Configuration
 
-The canonical agent setting now lives in `other_config.reasoning`, with `thinking_level` kept as a backward-compatible coarse shim.
+The reusable default now lives on the provider in `settings.reasoning_defaults`. Agents consume that default by inheriting it, or store a custom override in `other_config.reasoning`. `thinking_level` remains the backward-compatible coarse shim for older builds.
 
 | Level | Behavior |
 |-------|----------|
@@ -17,23 +17,40 @@ The canonical agent setting now lives in `other_config.reasoning`, with `thinkin
 | `medium` | Moderate thinking — balanced reasoning |
 | `high` | Maximum thinking — deep reasoning for complex tasks |
 
-### Legacy-only config
+### Provider default
 
 ```json
 {
-  "other_config": {
-    "thinking_level": "medium"
+  "provider_type": "chatgpt_oauth",
+  "settings": {
+    "reasoning_defaults": {
+      "effort": "high",
+      "fallback": "provider_default"
+    }
   }
 }
 ```
 
-### Capability-aware config
+### Agent inherits provider default
+
+```json
+{
+  "other_config": {
+    "reasoning": {
+      "override_mode": "inherit"
+    }
+  }
+}
+```
+
+### Agent custom override
 
 ```json
 {
   "other_config": {
     "thinking_level": "high",
     "reasoning": {
+      "override_mode": "custom",
       "effort": "xhigh",
       "fallback": "downgrade"
     }
@@ -42,12 +59,15 @@ The canonical agent setting now lives in `other_config.reasoning`, with `thinkin
 ```
 
 Rules:
-- Unset `thinking_level` and unset `reasoning` both resolve to `off`.
+- Unset provider defaults and unset agent reasoning both resolve to `off`.
+- `settings.reasoning_defaults` is provider-owned and reusable across agents.
+- `reasoning.override_mode` accepts `inherit|custom`.
 - `thinking_level` still accepts `off|low|medium|high`.
 - `reasoning.effort` accepts `off|auto|none|minimal|low|medium|high|xhigh`.
 - `reasoning.fallback` accepts `downgrade|off|provider_default`.
-- Read path prefers `reasoning`, then falls back to legacy `thinking_level`.
-- Write path keeps a derived coarse `thinking_level` so rollback to older GoClaw builds stays safe.
+- Existing `reasoning` payloads without `override_mode` are treated as custom overrides for backward compatibility.
+- Read path resolves provider defaults first, then applies agent inherit/custom semantics, then falls back to legacy `thinking_level`.
+- Write path keeps a derived coarse `thinking_level` only for custom agent overrides so rollback to older GoClaw builds stays safe.
 
 ---
 
@@ -57,7 +77,7 @@ Each provider maps the normalized reasoning policy to its own implementation par
 
 ```mermaid
 flowchart TD
-    CONFIG["Agent config:<br/>thinking_level / reasoning"] --> CHECK{"Provider supports<br/>thinking?"}
+    CONFIG["Provider defaults +<br/>agent inherit/custom"] --> CHECK{"Provider supports<br/>thinking?"}
     CHECK -->|No| SKIP["Send request<br/>without thinking"]
     CHECK -->|Yes| MAP{"Provider type?"}
 
@@ -93,6 +113,7 @@ Known GPT-5/Codex models use a static capability registry. The runtime resolves:
 - actual effective effort
 - fallback policy used
 - whether the model default was used
+- whether the source was the provider default or an agent override
 
 If the model is known:
 - supported efforts pass through unchanged
@@ -103,7 +124,7 @@ If the model is unknown:
 - explicit non-`auto` effort is passed through as requested
 - `auto` leaves provider-default reasoning untouched
 
-Reasoning content still streams in the provider-native format, and span metadata now records the requested versus effective effort.
+Reasoning content still streams in the provider-native format, and span metadata now records the source plus requested versus effective effort.
 
 ### DashScope (Alibaba Qwen)
 

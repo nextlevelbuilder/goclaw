@@ -10,6 +10,9 @@ func TestParseReasoningConfigDefaultsToOff(t *testing.T) {
 	agent := &AgentData{}
 
 	got := agent.ParseReasoningConfig()
+	if got.OverrideMode != ReasoningOverrideInherit {
+		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ReasoningOverrideInherit)
+	}
 	if got.Effort != "off" {
 		t.Fatalf("Effort = %q, want off", got.Effort)
 	}
@@ -30,6 +33,9 @@ func TestParseReasoningConfigUsesLegacyThinkingLevel(t *testing.T) {
 	if got.Effort != "medium" {
 		t.Fatalf("Effort = %q, want medium", got.Effort)
 	}
+	if got.OverrideMode != ReasoningOverrideCustom {
+		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ReasoningOverrideCustom)
+	}
 	if got.Source != ReasoningSourceLegacy {
 		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceLegacy)
 	}
@@ -46,6 +52,9 @@ func TestParseReasoningConfigPrefersAdvancedSettings(t *testing.T) {
 	got := agent.ParseReasoningConfig()
 	if got.Effort != "xhigh" {
 		t.Fatalf("Effort = %q, want xhigh", got.Effort)
+	}
+	if got.OverrideMode != ReasoningOverrideCustom {
+		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ReasoningOverrideCustom)
 	}
 	if got.Fallback != ReasoningFallbackProviderDefault {
 		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackProviderDefault)
@@ -69,6 +78,85 @@ func TestParseReasoningConfigKeepsLegacyEffortWhenAdvancedOnlySetsFallback(t *te
 	}
 	if got.Fallback != ReasoningFallbackDisable {
 		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackDisable)
+	}
+}
+
+func TestParseReasoningConfigPreservesExplicitInherit(t *testing.T) {
+	agent := &AgentData{
+		OtherConfig: json.RawMessage(`{
+			"thinking_level": "high",
+			"reasoning": {"override_mode": "inherit"}
+		}`),
+	}
+
+	got := agent.ParseReasoningConfig()
+	if got.OverrideMode != ReasoningOverrideInherit {
+		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ReasoningOverrideInherit)
+	}
+	if got.Effort != "off" {
+		t.Fatalf("Effort = %q, want off", got.Effort)
+	}
+	if got.Source != ReasoningSourceUnset {
+		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceUnset)
+	}
+}
+
+func TestParseProviderReasoningConfigNormalizesDefaults(t *testing.T) {
+	settings := json.RawMessage(`{
+		"reasoning_defaults": {"effort": " xhigh ", "fallback": "provider_default"}
+	}`)
+
+	got := ParseProviderReasoningConfig(settings)
+	if got == nil {
+		t.Fatal("ParseProviderReasoningConfig() = nil, want config")
+	}
+	if got.Effort != "xhigh" {
+		t.Fatalf("Effort = %q, want xhigh", got.Effort)
+	}
+	if got.Fallback != ReasoningFallbackProviderDefault {
+		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackProviderDefault)
+	}
+}
+
+func TestResolveEffectiveReasoningConfigUsesProviderDefaults(t *testing.T) {
+	got := ResolveEffectiveReasoningConfig(
+		&ProviderReasoningConfig{Effort: "medium", Fallback: ReasoningFallbackDisable},
+		AgentReasoningConfig{OverrideMode: ReasoningOverrideInherit},
+	)
+
+	if got.OverrideMode != ReasoningOverrideInherit {
+		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ReasoningOverrideInherit)
+	}
+	if got.Effort != "medium" {
+		t.Fatalf("Effort = %q, want medium", got.Effort)
+	}
+	if got.Fallback != ReasoningFallbackDisable {
+		t.Fatalf("Fallback = %q, want %q", got.Fallback, ReasoningFallbackDisable)
+	}
+	if got.Source != ReasoningSourceProviderDefault {
+		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceProviderDefault)
+	}
+}
+
+func TestResolveEffectiveReasoningConfigPreservesCustomAgentReasoning(t *testing.T) {
+	got := ResolveEffectiveReasoningConfig(
+		&ProviderReasoningConfig{Effort: "medium", Fallback: ReasoningFallbackDisable},
+		AgentReasoningConfig{
+			OverrideMode: ReasoningOverrideCustom,
+			Effort:       "xhigh",
+			Fallback:     ReasoningFallbackProviderDefault,
+			Source:       ReasoningSourceAdvanced,
+		},
+	)
+
+	if got.OverrideMode != ReasoningOverrideCustom {
+		t.Fatalf("OverrideMode = %q, want %q", got.OverrideMode, ReasoningOverrideCustom)
+	}
+	if got.Effort != "xhigh" {
+		t.Fatalf("Effort = %q, want xhigh", got.Effort)
+	}
+	if got.Source != ReasoningSourceAdvanced {
+		t.Fatalf("Source = %q, want %q", got.Source, ReasoningSourceAdvanced)
 	}
 }
 

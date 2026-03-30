@@ -647,6 +647,13 @@
     "thinking": {
       "title": "Extended Thinking",
       "description": "Allow the model to reason before responding. Higher levels use more tokens but produce better results on complex tasks.",
+      "modeLabel": "Reasoning Mode",
+      "inherit": "Use Provider Defaults",
+      "custom": "Custom For This Agent",
+      "customDesc": "Override the provider-owned default reasoning policy for this agent only.",
+      "providerDefaultSummary": "Inherited from {{provider}}",
+      "providerLabelFallback": "provider defaults",
+      "noProviderDefault": "No provider-owned reasoning default is saved yet. Inherit mode will keep this agent on reasoning off until the provider saves one.",
       "thinkingLevel": "Thinking Level",
       "thinkingLevelTip": "Simple preset for the common case. Use Expert Mode when you need model-specific effort controls or explicit fallback behavior.",
       "expertMode": "Expert Mode",

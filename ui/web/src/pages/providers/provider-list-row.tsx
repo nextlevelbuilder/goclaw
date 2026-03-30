@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChatGPTOAuthQuotaStrip } from "@/pages/agents/agent-detail/chatgpt-oauth-quota-strip";
 import type { EffectiveChatGPTOAuthRoutingStrategy } from "@/types/agent";
+import { getProviderReasoningDefaults } from "@/types/provider";
 import type { ChatGPTOAuthProviderQuota } from "./hooks/use-chatgpt-oauth-provider-quotas";
 import type { ChatGPTOAuthAvailability } from "./hooks/use-chatgpt-oauth-provider-statuses";
 import type { ProviderData } from "./hooks/use-providers";
@@ -70,6 +71,7 @@ export function ProviderListRow({
     : null;
   const showQuota = provider.provider_type === "chatgpt_oauth"
     && (oauthPool?.quotaLoading || Boolean(oauthPool?.quota));
+  const reasoningDefaults = getProviderReasoningDefaults(provider.settings);
   const connectorLineClass = oauthPool?.connectorPosition === "first" || oauthPool?.connectorPosition === "middle"
     ? "top-[-0.75rem] h-[calc(100%+1.5rem)]"
     : "top-[-0.75rem] h-[calc(50%+0.75rem)]";
@@ -137,6 +139,13 @@ export function ProviderListRow({
               {t(oauthPool.role === "owner" ? "list.poolOwner" : "list.poolMember")}
             </Badge>
           )}
+          {reasoningDefaults ? (
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+              {t("list.reasoningDefault", {
+                level: t(`reasoning.${reasoningDefaults.effort ?? "off"}`),
+              })}
+            </Badge>
+          ) : null}
         </div>
         {(secondaryText || availabilityWarningLabel || showQuota) && (
           <div className="flex min-w-0 items-center gap-2 text-xs">

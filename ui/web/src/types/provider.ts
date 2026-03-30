@@ -32,6 +32,16 @@ export interface ModelInfo {
   reasoning?: ReasoningCapability;
 }
 
+export interface ProviderReasoningDefaults {
+  effort?: string;
+  fallback?: "downgrade" | "provider_default" | "off";
+}
+
+export interface ProviderModelsResponse {
+  models: ModelInfo[];
+  reasoning_defaults?: ProviderReasoningDefaults;
+}
+
 export interface ReasoningCapability {
   levels?: string[];
   default_effort?: string;
@@ -75,6 +85,37 @@ export function normalizeChatGPTOAuthStrategy(
   return "primary_first";
 }
 
+export function normalizeReasoningEffort(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  return [
+    "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh",
+  ].includes(normalized) ? normalized : "";
+}
+
+export function normalizeReasoningFallback(
+  value: unknown,
+): "downgrade" | "provider_default" | "off" {
+  if (value === "provider_default" || value === "off") {
+    return value;
+  }
+  return "downgrade";
+}
+
+export function getProviderReasoningDefaults(
+  settings?: Record<string, unknown>,
+): ProviderReasoningDefaults | null {
+  const raw = settings?.reasoning_defaults;
+  if (!raw || typeof raw !== "object") return null;
+  const reasoning = raw as Record<string, unknown>;
+  const effort = normalizeReasoningEffort(reasoning.effort) || "off";
+  const fallback = normalizeReasoningFallback(reasoning.fallback);
+  if (effort === "off" && fallback === "downgrade") {
+    return null;
+  }
+  return { effort, fallback };
+}
+
 export function getChatGPTOAuthProviderRouting(
   settings?: Record<string, unknown>,
 ): NormalizedChatGPTOAuthProviderRouting | null {
@@ -105,6 +146,25 @@ export function buildProviderSettingsWithChatGPTOAuthRouting(
     next.codex_pool = {
       strategy,
       extra_provider_names: extraProviderNames,
+    };
+  }
+
+  return next;
+}
+
+export function buildProviderSettingsWithReasoningDefaults(
+  settings: Record<string, unknown> | undefined,
+  reasoning: ProviderReasoningDefaults | null,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(settings ?? {}) };
+  const effort = normalizeReasoningEffort(reasoning?.effort) || "off";
+  const fallback = normalizeReasoningFallback(reasoning?.fallback);
+
+  delete next.reasoning_defaults;
+  if (effort !== "off" || fallback !== "downgrade") {
+    next.reasoning_defaults = {
+      effort,
+      fallback,
     };
   }
 

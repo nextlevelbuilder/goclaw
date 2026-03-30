@@ -165,9 +165,10 @@ func (a *AgentData) ParseThinkingLevel() string {
 // Legacy thinking_level remains a backward-compatible fallback source.
 func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
 	cfg := AgentReasoningConfig{
-		Effort:   "off",
-		Fallback: ReasoningFallbackDowngrade,
-		Source:   ReasoningSourceUnset,
+		OverrideMode: ReasoningOverrideInherit,
+		Effort:       "off",
+		Fallback:     ReasoningFallbackDowngrade,
+		Source:       ReasoningSourceUnset,
 	}
 	if len(a.OtherConfig) == 0 {
 		return cfg
@@ -179,26 +180,40 @@ func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
 	}
 
 	var reasoning struct {
-		Effort   string `json:"effort"`
-		Fallback string `json:"fallback"`
+		OverrideMode string `json:"override_mode"`
+		Effort       string `json:"effort"`
+		Fallback     string `json:"fallback"`
 	}
+	explicitInherit := false
 	if data, ok := raw["reasoning"]; ok && len(data) > 0 && json.Unmarshal(data, &reasoning) == nil {
-		cfg.Source = ReasoningSourceAdvanced
-		if effort := normalizeReasoningEffort(reasoning.Effort); effort != "" {
-			cfg.Effort = effort
+		if reasoning.OverrideMode == ReasoningOverrideInherit {
+			explicitInherit = true
+			cfg.OverrideMode = ReasoningOverrideInherit
+			cfg.Source = ReasoningSourceUnset
+			cfg.Effort = "off"
+			cfg.Fallback = ReasoningFallbackDowngrade
+		} else {
+			cfg.OverrideMode = ReasoningOverrideCustom
+			cfg.Source = ReasoningSourceAdvanced
+			if effort := normalizeReasoningEffort(reasoning.Effort); effort != "" {
+				cfg.Effort = effort
+			}
+			cfg.Fallback = normalizeReasoningFallback(reasoning.Fallback)
 		}
-		cfg.Fallback = normalizeReasoningFallback(reasoning.Fallback)
 	}
 
-	if data, ok := raw["thinking_level"]; ok && len(data) > 0 {
-		var legacy string
-		if json.Unmarshal(data, &legacy) == nil {
-			if effort := normalizeReasoningEffort(legacy); effort != "" {
-				if cfg.Source == ReasoningSourceUnset {
-					cfg.Source = ReasoningSourceLegacy
-					cfg.Effort = effort
-				} else if cfg.Effort == "off" {
-					cfg.Effort = effort
+	if !explicitInherit {
+		if data, ok := raw["thinking_level"]; ok && len(data) > 0 {
+			var legacy string
+			if json.Unmarshal(data, &legacy) == nil {
+				if effort := normalizeReasoningEffort(legacy); effort != "" {
+					if cfg.Source == ReasoningSourceUnset {
+						cfg.OverrideMode = ReasoningOverrideCustom
+						cfg.Source = ReasoningSourceLegacy
+						cfg.Effort = effort
+					} else if cfg.Effort == "off" {
+						cfg.Effort = effort
+					}
 				}
 			}
 		}
@@ -305,15 +320,56 @@ const (
 	ReasoningSourceUnset             = "unset"
 	ReasoningSourceLegacy            = "thinking_level"
 	ReasoningSourceAdvanced          = "reasoning"
+	ReasoningSourceProviderDefault   = "provider_default"
 	ReasoningFallbackDowngrade       = "downgrade"
 	ReasoningFallbackDisable         = "off"
 	ReasoningFallbackProviderDefault = "provider_default"
+	ReasoningOverrideInherit         = "inherit"
+	ReasoningOverrideCustom          = "custom"
 )
 
 type AgentReasoningConfig struct {
-	Effort   string `json:"effort,omitempty"`
-	Fallback string `json:"fallback,omitempty"`
-	Source   string `json:"-"`
+	OverrideMode string `json:"override_mode,omitempty"`
+	Effort       string `json:"effort,omitempty"`
+	Fallback     string `json:"fallback,omitempty"`
+	Source       string `json:"-"`
+}
+
+// ResolveEffectiveReasoningConfig applies provider-owned defaults unless the agent
+// has an explicit custom reasoning override.
+func ResolveEffectiveReasoningConfig(
+	providerDefaults *ProviderReasoningConfig,
+	agentConfig AgentReasoningConfig,
+) AgentReasoningConfig {
+	if agentConfig.OverrideMode == "" {
+		agentConfig.OverrideMode = ReasoningOverrideInherit
+	}
+	if agentConfig.Fallback == "" {
+		agentConfig.Fallback = ReasoningFallbackDowngrade
+	}
+	if agentConfig.Effort == "" {
+		agentConfig.Effort = "off"
+	}
+
+	if agentConfig.OverrideMode == ReasoningOverrideCustom {
+		return agentConfig
+	}
+
+	if providerDefaults == nil {
+		return AgentReasoningConfig{
+			OverrideMode: ReasoningOverrideInherit,
+			Effort:       "off",
+			Fallback:     ReasoningFallbackDowngrade,
+			Source:       ReasoningSourceUnset,
+		}
+	}
+
+	return AgentReasoningConfig{
+		OverrideMode: ReasoningOverrideInherit,
+		Effort:       providerDefaults.Effort,
+		Fallback:     providerDefaults.Fallback,
+		Source:       ReasoningSourceProviderDefault,
+	}
 }
 
 const (

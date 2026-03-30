@@ -114,7 +114,7 @@ func normalizeReasoningFallback(value string) string {
 
 func normalizeReasoningSource(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "reasoning", "thinking_level":
+	case "reasoning", "thinking_level", "provider_default":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "unset"

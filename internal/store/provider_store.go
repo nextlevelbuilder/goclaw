@@ -86,8 +86,15 @@ const RequiredMemoryEmbeddingDimensions = 1536
 type EmbeddingSettings struct {
 	Enabled    bool   `json:"enabled"`
 	Model      string `json:"model,omitempty"`      // e.g. "text-embedding-3-small"
-	APIBase    string `json:"api_base,omitempty"`    // override if embedding endpoint differs from chat
+	APIBase    string `json:"api_base,omitempty"`   // override if embedding endpoint differs from chat
 	Dimensions int    `json:"dimensions,omitempty"` // truncate output to N dims (e.g. 1536); 0 = model default
+}
+
+// ProviderReasoningConfig holds provider-owned default reasoning settings.
+// These defaults are inherited by agents unless they save a custom override.
+type ProviderReasoningConfig struct {
+	Effort   string `json:"effort,omitempty"`
+	Fallback string `json:"fallback,omitempty"`
 }
 
 // ChatGPTOAuthProviderSettings holds provider-level defaults for Codex account pooling.
@@ -125,6 +132,38 @@ func ParseChatGPTOAuthProviderSettings(settings json.RawMessage) *ChatGPTOAuthPr
 	}
 	s.CodexPool.OverrideMode = ""
 	return &s
+}
+
+// ParseProviderReasoningConfig extracts provider-owned reasoning defaults from settings JSONB.
+// Returns nil when no non-default provider reasoning is configured.
+func ParseProviderReasoningConfig(settings json.RawMessage) *ProviderReasoningConfig {
+	if len(settings) == 0 {
+		return nil
+	}
+	var raw struct {
+		ReasoningDefaults *ProviderReasoningConfig `json:"reasoning_defaults"`
+	}
+	if json.Unmarshal(settings, &raw) != nil {
+		return nil
+	}
+	return normalizeProviderReasoningConfig(raw.ReasoningDefaults)
+}
+
+func normalizeProviderReasoningConfig(raw *ProviderReasoningConfig) *ProviderReasoningConfig {
+	if raw == nil {
+		return nil
+	}
+	cfg := &ProviderReasoningConfig{
+		Effort:   normalizeReasoningEffort(raw.Effort),
+		Fallback: normalizeReasoningFallback(raw.Fallback),
+	}
+	if cfg.Effort == "" {
+		cfg.Effort = "off"
+	}
+	if cfg.Effort == "off" && cfg.Fallback == ReasoningFallbackDowngrade {
+		return nil
+	}
+	return cfg
 }
 
 // NoEmbeddingTypes lists provider types that cannot serve embeddings.

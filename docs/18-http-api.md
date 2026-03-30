@@ -185,6 +185,28 @@ Provider-level defaults example:
 }
 ```
 
+### Provider reasoning defaults in `settings`
+
+Providers can store the reusable default reasoning policy in `settings.reasoning_defaults`.
+
+```json
+{
+  "name": "openai-codex",
+  "provider_type": "chatgpt_oauth",
+  "settings": {
+    "reasoning_defaults": {
+      "effort": "high",
+      "fallback": "provider_default"
+    }
+  }
+}
+```
+
+Rules:
+- these defaults are provider-owned and apply to any agent that inherits reasoning from this provider
+- the final runtime effort is still normalized against the agent's selected model capabilities
+- if no provider default is saved, inherit mode resolves to reasoning `off`
+
 ### Agent reasoning policy in `other_config`
 
 Agents can now store capability-aware GPT-5/Codex reasoning intent under `other_config.reasoning`.
@@ -194,19 +216,21 @@ Agents can now store capability-aware GPT-5/Codex reasoning intent under `other_
   "provider": "openai-codex",
   "model": "gpt-5.4",
   "other_config": {
-    "thinking_level": "high",
     "reasoning": {
-      "effort": "xhigh",
-      "fallback": "downgrade"
+      "override_mode": "inherit"
     }
   }
 }
 ```
 
 Rules:
+- `reasoning.override_mode` supports `inherit|custom`
+- `override_mode: "inherit"` tells the agent to follow `settings.reasoning_defaults`
+- `override_mode: "custom"` stores an agent-local override; the dashboard also writes a derived `thinking_level` shim for rollback safety
 - `thinking_level` remains the coarse compatibility shim: `off|low|medium|high`
 - `reasoning.effort` supports `off|auto|none|minimal|low|medium|high|xhigh`
 - `reasoning.fallback` supports `downgrade|off|provider_default`
+- existing `reasoning` payloads without `override_mode` continue to behave as custom overrides
 - unset reasoning resolves to `off`
 - the runtime may normalize unsupported efforts, and the actual decision is surfaced in trace span metadata
 
@@ -320,14 +344,19 @@ Example response:
       "id": "custom-model",
       "name": "custom-model"
     }
-  ]
+  ],
+  "reasoning_defaults": {
+    "effort": "high",
+    "fallback": "provider_default"
+  }
 }
 ```
 
 Notes:
 - `chatgpt_oauth` providers return a backend-owned model list because OAuth tokens cannot rely on `/v1/models`
+- `reasoning_defaults` is returned only when the provider has saved defaults and at least one returned model exposes reasoning capability metadata
 - unknown models remain usable and simply omit the `reasoning` field
-- the web UI uses this endpoint as the source of truth for advanced reasoning controls
+- the web UI uses this endpoint as the source of truth for provider-first reasoning controls
 - when upstream model discovery fails, the endpoint returns an empty `models` array instead of a hard error
 
 ---

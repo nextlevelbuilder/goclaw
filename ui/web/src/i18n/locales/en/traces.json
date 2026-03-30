@@ -44,11 +44,18 @@
     "model": "Model:",
     "tokens": "Tokens:",
     "reasoning": "Reasoning:",
+    "source": "source",
     "requested": "requested",
     "effective": "effective",
     "fallback": "fallback",
     "modelDefault": "model default",
     "supportedLevels": "supported:",
+    "sourceValue": {
+      "provider_default": "provider default",
+      "reasoning": "agent advanced",
+      "thinking_level": "legacy thinking level",
+      "unset": "unset"
+    },
     "createdAt": "Created:",
     "input": "Input:",
     "output": "Output:",

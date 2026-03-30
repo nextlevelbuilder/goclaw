@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -8,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import type { ReasoningOverrideMode } from "@/types/agent";
 import type { ReasoningCapability } from "@/types/provider";
 import { InfoLabel } from "./config-section";
 
@@ -15,13 +17,20 @@ const SIMPLE_LEVELS = ["off", "low", "medium", "high"] as const;
 const FALLBACKS = ["downgrade", "provider_default", "off"] as const;
 
 interface ThinkingSectionProps {
+  reasoningMode: ReasoningOverrideMode;
   thinkingLevel: string;
   reasoningEffort: string;
   reasoningFallback: string;
   expertMode: boolean;
   model: string;
   capability?: ReasoningCapability | null;
+  providerDefault?: {
+    effort?: string;
+    fallback?: "downgrade" | "provider_default" | "off";
+  } | null;
+  providerLabel?: string;
   capabilityLoading?: boolean;
+  onReasoningModeChange: (v: ReasoningOverrideMode) => void;
   onThinkingLevelChange: (v: string) => void;
   onReasoningEffortChange: (v: string) => void;
   onReasoningFallbackChange: (v: string) => void;
@@ -29,13 +38,17 @@ interface ThinkingSectionProps {
 }
 
 export function ThinkingSection({
+  reasoningMode,
   thinkingLevel,
   reasoningEffort,
   reasoningFallback,
   expertMode,
   model,
   capability,
+  providerDefault,
+  providerLabel,
   capabilityLoading = false,
+  onReasoningModeChange,
   onThinkingLevelChange,
   onReasoningEffortChange,
   onReasoningFallbackChange,
@@ -51,6 +64,9 @@ export function ThinkingSection({
     : advancedEfforts.includes(thinkingLevel)
       ? thinkingLevel
       : capability?.default_effort ?? "off";
+  const inheritedEffort = normalizeInheritedEffort(providerDefault?.effort);
+  const inheritedFallback = providerDefault?.fallback ?? "downgrade";
+  const showCustomControls = reasoningMode === "custom";
 
   return (
     <section className="space-y-3">
@@ -61,35 +77,84 @@ export function ThinkingSection({
         </p>
       </div>
 
-      <div className="space-y-2">
-        <InfoLabel tip={t(`${s}.thinkingLevelTip`)}>
-          {t(`${s}.thinkingLevel`)}
-        </InfoLabel>
-        <Select
-          value={thinkingLevel || "off"}
-          onValueChange={(value) => {
-            onThinkingLevelChange(value);
-            onReasoningEffortChange(value);
-          }}
-        >
-          <SelectTrigger className="w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SIMPLE_LEVELS.map((level) => (
-              <SelectItem key={level} value={level}>
-                <span>{t(`${s}.${level}`)}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {t(`${s}.${level}Desc`)}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <section className="space-y-2.5">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {t(`${s}.modeLabel`)}
+        </p>
+        <div className="grid gap-1.5 xl:grid-cols-2">
+          <Button
+            type="button"
+            variant={reasoningMode === "inherit" ? "default" : "outline"}
+            onClick={() => onReasoningModeChange("inherit")}
+            className="h-9"
+          >
+            {t(`${s}.inherit`)}
+          </Button>
+          <Button
+            type="button"
+            variant={reasoningMode === "custom" ? "default" : "outline"}
+            onClick={() => onReasoningModeChange("custom")}
+            className="h-9"
+          >
+            {t(`${s}.custom`)}
+          </Button>
+        </div>
+        {reasoningMode === "inherit" ? (
+          providerDefault ? (
+            <div className="rounded-lg border px-3 py-3 text-sm">
+              <p className="font-medium">
+                {t(`${s}.providerDefaultSummary`, {
+                  provider: providerLabel || t(`${s}.providerLabelFallback`),
+                })}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <Badge variant="secondary">{t(`${s}.${inheritedEffort}`)}</Badge>
+                <Badge variant="outline">{t(`${s}.${inheritedFallback}`)}</Badge>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
+              {t(`${s}.noProviderDefault`)}
+            </div>
+          )
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {t(`${s}.customDesc`)}
+          </p>
+        )}
+      </section>
+
+      {showCustomControls ? (
+        <div className="space-y-2">
+          <InfoLabel tip={t(`${s}.thinkingLevelTip`)}>
+            {t(`${s}.thinkingLevel`)}
+          </InfoLabel>
+          <Select
+            value={thinkingLevel || "off"}
+            onValueChange={(value) => {
+              onThinkingLevelChange(value);
+              onReasoningEffortChange(value);
+            }}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SIMPLE_LEVELS.map((level) => (
+                <SelectItem key={level} value={level}>
+                  <span>{t(`${s}.${level}`)}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {t(`${s}.${level}Desc`)}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
       <div className="rounded-md border p-3">
-        {expertAvailable ? (
+        {expertAvailable && showCustomControls ? (
           <div className="flex items-center justify-between gap-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">{t(`${s}.expertMode`)}</p>
@@ -130,7 +195,7 @@ export function ThinkingSection({
           ) : null}
         </div>
 
-        {expertAvailable && expertMode ? (
+        {expertAvailable && expertMode && showCustomControls ? (
           <div className="mt-4 space-y-3 border-t pt-3">
             <div className="space-y-2">
               <InfoLabel tip={t(`${s}.requestedEffortTip`)}>
@@ -190,4 +255,11 @@ export function ThinkingSection({
       </div>
     </section>
   );
+}
+
+function normalizeInheritedEffort(value: string | undefined): string {
+  if (!value) return "off";
+  return [
+    "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh",
+  ].includes(value) ? value : "off";
 }

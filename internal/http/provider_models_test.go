@@ -18,6 +18,9 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 		Name:         "openai-codex",
 		ProviderType: store.ProviderChatGPTOAuth,
 		Enabled:      true,
+		Settings: json.RawMessage(`{
+			"reasoning_defaults": {"effort": "high"}
+		}`),
 	}
 	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
 		t.Fatalf("CreateProvider() error = %v", err)
@@ -36,14 +39,18 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var result struct {
-		Models []ModelInfo `json:"models"`
-	}
+	var result ProviderModelsResponse
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
 	if len(result.Models) == 0 {
 		t.Fatal("models = empty, want hardcoded ChatGPT OAuth list")
+	}
+	if result.ReasoningDefaults == nil {
+		t.Fatal("reasoning_defaults = nil, want provider defaults")
+	}
+	if result.ReasoningDefaults.Effort != "high" {
+		t.Fatalf("reasoning_defaults.effort = %q, want high", result.ReasoningDefaults.Effort)
 	}
 
 	var found bool
@@ -109,9 +116,7 @@ func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *t
 		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var result struct {
-		Models []ModelInfo `json:"models"`
-	}
+	var result ProviderModelsResponse
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
@@ -126,5 +131,8 @@ func TestProvidersHandlerListProviderModelsOpenAICompatAnnotatesKnownModels(t *t
 	}
 	if result.Models[1].Reasoning != nil {
 		t.Fatalf("unknown GPT-5 variant reasoning = %#v, want nil", result.Models[1].Reasoning)
+	}
+	if result.ReasoningDefaults != nil {
+		t.Fatalf("reasoning_defaults = %#v, want nil when provider has no saved defaults", result.ReasoningDefaults)
 	}
 }
