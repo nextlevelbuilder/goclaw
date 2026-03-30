@@ -182,8 +182,14 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 		reqURL += "?" + params.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	// Use background context for downloads — the agent's request context
+	// may be cancelled before the download completes, causing "unexpected EOF".
+	dlCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	_ = cancel // caller closes the body, which cancels implicitly
+
+	req, err := http.NewRequestWithContext(dlCtx, "GET", reqURL, nil)
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
