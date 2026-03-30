@@ -362,6 +362,7 @@ type ToolsConfig struct {
 	WebFetch         WebFetchPolicyConfig        `json:"web_fetch"`            // domain policy for URL fetching
 	Web              WebToolsConfig              `json:"web"`
 	Browser          BrowserToolConfig           `json:"browser"`
+	Marketplace      MarketplaceConfig           `json:"marketplace"`                   // GoClaw Hub marketplace integration
 	RateLimitPerHour int                         `json:"rate_limit_per_hour,omitempty"` // max tool executions per hour per session (0 = disabled)
 	ScrubCredentials *bool                       `json:"scrub_credentials,omitempty"`   // auto-redact API keys/tokens in tool output (default true)
 	McpServers       map[string]*MCPServerConfig `json:"mcp_servers,omitempty"`         // external MCP server connections
@@ -433,6 +434,13 @@ type BraveConfig struct {
 type DuckDuckGoConfig struct {
 	Enabled    bool `json:"enabled"`
 	MaxResults int  `json:"max_results"`
+}
+
+// MarketplaceConfig configures the GoClaw Hub marketplace integration.
+type MarketplaceConfig struct {
+	Enabled bool   `json:"enabled,omitempty"`   // enable marketplace tools
+	APIBase string `json:"api_base,omitempty"`  // Hub API base URL (default: https://hub-api.vibery.app/v1)
+	APIKey  string `json:"api_key,omitempty"`   // Hub API key (from env: GOCLAW_MARKETPLACE_API_KEY)
 }
 
 // SessionsConfig controls session behavior.
