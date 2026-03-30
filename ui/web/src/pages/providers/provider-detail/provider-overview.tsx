@@ -178,13 +178,13 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       canEditPoolRouting
         ? Array.from(
             new Set(
-              [provider.name, ...(poolRouting.extra_provider_names ?? [])].filter(
-                Boolean,
-              ),
+              [provider.name, ...(poolRouting.extra_provider_names ?? [])]
+                .filter(Boolean)
+                .filter((name) => name === provider.name || providerByName.has(name)),
             ),
           )
         : [provider.name],
-    [canEditPoolRouting, poolRouting.extra_provider_names, provider.name],
+    [canEditPoolRouting, poolRouting.extra_provider_names, provider.name, providerByName],
   );
 
   const initEmb = getEmbeddingSettings(provider.settings);

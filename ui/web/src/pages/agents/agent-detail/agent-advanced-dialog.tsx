@@ -40,7 +40,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const deriveState = (a: AgentData) => {
     const otherObj = (a.other_config ?? {}) as Record<string, unknown>;
     const routing = normalizeChatGPTOAuthRouting(a.other_config);
-    const draftRouting = buildDraftRouting(routing, Boolean(providerDefaults));
+    const draftRouting = buildDraftRouting(routing);
     return {
       thinkingLevel: typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off",
       chatgptRouting: draftRouting,

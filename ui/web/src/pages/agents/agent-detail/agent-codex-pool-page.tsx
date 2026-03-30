@@ -87,12 +87,12 @@ export function AgentCodexPoolPage() {
     [agent?.provider, currentProvider?.settings, savedRouting],
   );
   const savedDraftRouting = useMemo(
-    () => buildDraftRouting(savedRouting, Boolean(providerDefaults)),
-    [providerDefaults, savedRouting],
+    () => buildDraftRouting(savedRouting),
+    [savedRouting],
   );
   const savedDraftSignature = useMemo(
-    () => routingDraftSignature(savedDraftRouting, Boolean(providerDefaults)),
-    [providerDefaults, savedDraftRouting],
+    () => routingDraftSignature(savedDraftRouting),
+    [savedDraftRouting],
   );
 
   const [routing, setRouting] = useState<ChatGPTOAuthRoutingConfig>(savedDraftRouting);
@@ -101,8 +101,8 @@ export function AgentCodexPoolPage() {
   const savedDraftSignatureRef = useRef(savedDraftSignature);
 
   const draftSignature = useMemo(
-    () => routingDraftSignature(routing, Boolean(providerDefaults)),
-    [providerDefaults, routing],
+    () => routingDraftSignature(routing),
+    [routing],
   );
 
   useEffect(() => {

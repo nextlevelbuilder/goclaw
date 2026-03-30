@@ -6,7 +6,6 @@ import {
 
 export function buildDraftRouting(
   savedRouting: NormalizedChatGPTOAuthRouting,
-  _hasProviderDefaults: boolean,
 ): ChatGPTOAuthRoutingConfig {
   if (savedRouting.isExplicit) {
     return {
@@ -25,7 +24,6 @@ export function buildDraftRouting(
 
 export function routingDraftSignature(
   routing: ChatGPTOAuthRoutingConfig,
-  _hasProviderDefaults: boolean,
 ): string {
   const normalized = normalizeChatGPTOAuthRoutingInput(routing);
   if (normalized.overrideMode === "inherit") {
