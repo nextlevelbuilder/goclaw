@@ -385,6 +385,37 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
                 )}
               </div>
             )}
+            {span.metadata?.reasoning && (
+              <div className="text-xs text-muted-foreground">
+                <span>{t("span.reasoning")}</span>{" "}
+                {span.metadata.reasoning.requested_effort ? (
+                  <span>
+                    {t("span.requested")} {span.metadata.reasoning.requested_effort}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.effective_effort ? (
+                  <span className="ml-2">
+                    {t("span.effective")} {span.metadata.reasoning.effective_effort}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.fallback ? (
+                  <span className="ml-2">
+                    {t("span.fallback")} {span.metadata.reasoning.fallback}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.used_provider_default ? (
+                  <span className="ml-2">{t("span.modelDefault")}</span>
+                ) : null}
+                {span.metadata.reasoning.reason ? (
+                  <div className="mt-1">{span.metadata.reasoning.reason}</div>
+                ) : null}
+                {span.metadata.reasoning.supported_levels?.length ? (
+                  <div className="mt-1">
+                    {t("span.supportedLevels")} {span.metadata.reasoning.supported_levels.join(", ")}
+                  </div>
+                ) : null}
+              </div>
+            )}
             {span.input_preview && (
               <PreviewBlock label={t("span.input")} content={span.input_preview} />
             )}

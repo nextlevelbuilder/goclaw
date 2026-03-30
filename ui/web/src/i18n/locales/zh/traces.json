@@ -46,6 +46,12 @@
     "endTime": "结束：",
     "input": "输入：",
     "model": "模型：",
+    "reasoning": "Reasoning：",
+    "requested": "请求",
+    "effective": "实际",
+    "fallback": "fallback",
+    "modelDefault": "模型默认",
+    "supportedLevels": "支持：",
     "output": "输出：",
     "thinking": "思考",
     "tokens": "令牌："

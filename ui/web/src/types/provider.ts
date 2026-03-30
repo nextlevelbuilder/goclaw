@@ -29,6 +29,12 @@ export interface ProviderInput {
 export interface ModelInfo {
   id: string;
   name?: string;
+  reasoning?: ReasoningCapability;
+}
+
+export interface ReasoningCapability {
+  levels?: string[];
+  default_effort?: string;
 }
 
 export interface EmbeddingSettings {

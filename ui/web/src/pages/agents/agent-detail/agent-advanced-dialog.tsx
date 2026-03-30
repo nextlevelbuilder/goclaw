@@ -16,12 +16,46 @@ import {
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
+import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { getChatGPTOAuthProviderRouting } from "@/types/provider";
 import {
   buildAgentOtherConfigWithChatGPTOAuthRouting,
   normalizeChatGPTOAuthRouting,
 } from "./agent-display-utils";
 import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
+
+const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
+
+function normalizeReasoningEffort(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim().toLowerCase();
+  return [
+    "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh",
+  ].includes(normalized) ? normalized : "";
+}
+
+function normalizeReasoningFallback(value: unknown): string {
+  if (typeof value !== "string") return "downgrade";
+  const normalized = value.trim().toLowerCase();
+  return ["downgrade", "provider_default", "off"].includes(normalized)
+    ? normalized
+    : "downgrade";
+}
+
+function deriveLegacyThinkingLevel(effort: string): string {
+  switch (effort) {
+    case "low":
+    case "medium":
+    case "high":
+      return effort;
+    case "minimal":
+      return "low";
+    case "xhigh":
+      return "high";
+    default:
+      return "off";
+  }
+}
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -32,17 +66,37 @@ interface AgentAdvancedDialogProps {
 
 export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: AgentAdvancedDialogProps) {
   const { t } = useTranslation("agents");
-  const { providers } = useProviders();
+  const { providers, loading: providersLoading } = useProviders();
   const providerByName = new Map(providers.map((provider) => [provider.name, provider]));
   const currentProvider = providerByName.get(agent.provider);
+  const { models: providerModels, loading: providerModelsLoading } = useProviderModels(
+    currentProvider?.id,
+    currentProvider?.provider_type,
+  );
   const providerDefaults = getChatGPTOAuthProviderRouting(currentProvider?.settings);
+  const currentModelCapability = providerModels.find(
+    (entry) => entry.id === agent.model || agent.model.endsWith(`/${entry.id}`),
+  )?.reasoning ?? null;
+  const expertReasoningAvailable = Boolean(currentModelCapability?.levels?.length);
 
   const deriveState = (a: AgentData) => {
     const otherObj = (a.other_config ?? {}) as Record<string, unknown>;
+    const rawReasoning = (otherObj.reasoning ?? {}) as Record<string, unknown>;
+    const reasoningEffort = normalizeReasoningEffort(rawReasoning.effort)
+      || normalizeReasoningEffort(otherObj.thinking_level)
+      || "off";
+    const reasoningFallback = normalizeReasoningFallback(rawReasoning.fallback);
     const routing = normalizeChatGPTOAuthRouting(a.other_config);
     const draftRouting = buildDraftRouting(routing);
     return {
-      thinkingLevel: typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off",
+      thinkingLevel: SIMPLE_REASONING_LEVELS.has(reasoningEffort)
+        ? reasoningEffort
+        : deriveLegacyThinkingLevel(reasoningEffort),
+      reasoningEffort,
+      reasoningFallback,
+      reasoningExpert: Boolean(otherObj.reasoning)
+        || !SIMPLE_REASONING_LEVELS.has(reasoningEffort)
+        || reasoningFallback !== "downgrade",
       chatgptRouting: draftRouting,
       wsSharing: (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig,
       comp: a.compaction_config ?? {},
@@ -56,6 +110,9 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const init = deriveState(agent);
   const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(init.wsSharing);
   const [thinkingLevel, setThinkingLevel] = useState(init.thinkingLevel);
+  const [reasoningEffort, setReasoningEffort] = useState(init.reasoningEffort);
+  const [reasoningFallback, setReasoningFallback] = useState(init.reasoningFallback);
+  const [reasoningExpert, setReasoningExpert] = useState(init.reasoningExpert);
   const [chatgptRouting, setChatgptRouting] = useState<ChatGPTOAuthRoutingConfig>(init.chatgptRouting);
   const [comp, setComp] = useState<CompactionConfig>(init.comp);
   const [pruneEnabled, setPruneEnabled] = useState(init.pruneEnabled);
@@ -68,6 +125,9 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     if (!open) return;
     const s = deriveState(agent);
     setThinkingLevel(s.thinkingLevel);
+    setReasoningEffort(s.reasoningEffort);
+    setReasoningFallback(s.reasoningFallback);
+    setReasoningExpert(s.reasoningExpert);
     setChatgptRouting(s.chatgptRouting);
     setWsSharing(s.wsSharing);
     setComp(s.comp);
@@ -75,8 +135,34 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     setPrune(s.prune);
     setSbEnabled(s.sbEnabled);
     setSb(s.sb);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !currentProvider || providerModelsLoading) return;
+    if (!expertReasoningAvailable) {
+      if (reasoningExpert) setReasoningExpert(false);
+      if (reasoningFallback !== "downgrade") setReasoningFallback("downgrade");
+      return;
+    }
+    const allowedEfforts = new Set(["off", "auto", ...(currentModelCapability?.levels ?? [])]);
+    if (!allowedEfforts.has(reasoningEffort)) {
+      const fallbackEffort = allowedEfforts.has(thinkingLevel)
+        ? thinkingLevel
+        : currentModelCapability?.default_effort ?? "off";
+      setReasoningEffort(fallbackEffort);
+    }
+  }, [
+    currentModelCapability,
+    currentProvider,
+    expertReasoningAvailable,
+    open,
+    providerModelsLoading,
+    reasoningEffort,
+    reasoningExpert,
+    reasoningFallback,
+    thinkingLevel,
+  ]);
 
   const [saving, setSaving] = useState(false);
 
@@ -92,9 +178,21 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         currentProvider?.settings,
       );
       delete otherBase.thinking_level;
+      delete otherBase.reasoning;
       delete otherBase.workspace_sharing;
-      if (thinkingLevel && thinkingLevel !== "off") {
-        otherBase.thinking_level = thinkingLevel;
+      const capabilityResolutionPending = !currentProvider || providersLoading || providerModelsLoading;
+      const shouldPersistExpertReasoning = reasoningExpert
+        && (expertReasoningAvailable || capabilityResolutionPending);
+      const requestedEffort = shouldPersistExpertReasoning ? reasoningEffort : thinkingLevel;
+      const legacyThinkingLevel = deriveLegacyThinkingLevel(requestedEffort);
+      if (legacyThinkingLevel !== "off") {
+        otherBase.thinking_level = legacyThinkingLevel;
+      }
+      if (shouldPersistExpertReasoning) {
+        const reasoningConfig: Record<string, unknown> = {};
+        if (requestedEffort !== "off") reasoningConfig.effort = requestedEffort;
+        if (reasoningFallback !== "downgrade") reasoningConfig.fallback = reasoningFallback;
+        if (Object.keys(reasoningConfig).length > 0) otherBase.reasoning = reasoningConfig;
       }
       if (
         wsSharing.shared_dm || wsSharing.shared_group ||
@@ -135,7 +233,31 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
           <WorkspaceSharingSection value={wsSharing} onChange={setWsSharing} />
 
           {/* Thinking */}
-          <ThinkingSection value={thinkingLevel} onChange={setThinkingLevel} />
+          <ThinkingSection
+            thinkingLevel={thinkingLevel}
+            reasoningEffort={reasoningEffort}
+            reasoningFallback={reasoningFallback}
+            expertMode={reasoningExpert}
+            model={agent.model}
+            capability={currentModelCapability}
+            capabilityLoading={providersLoading || providerModelsLoading}
+            onThinkingLevelChange={(value) => {
+              setThinkingLevel(value);
+              setReasoningEffort(value);
+            }}
+            onReasoningEffortChange={setReasoningEffort}
+            onReasoningFallbackChange={setReasoningFallback}
+            onExpertModeChange={(enabled) => {
+              setReasoningExpert(enabled);
+              if (!enabled) {
+                const legacy = deriveLegacyThinkingLevel(reasoningEffort);
+                setThinkingLevel(legacy);
+                setReasoningFallback("downgrade");
+              } else if (reasoningEffort === "off" && thinkingLevel !== "off") {
+                setReasoningEffort(thinkingLevel);
+              }
+            }}
+          />
 
           <ChatGPTOAuthRoutingSection
             currentProvider={agent.provider}

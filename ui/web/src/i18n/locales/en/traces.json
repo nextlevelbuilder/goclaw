@@ -43,6 +43,12 @@
   "span": {
     "model": "Model:",
     "tokens": "Tokens:",
+    "reasoning": "Reasoning:",
+    "requested": "requested",
+    "effective": "effective",
+    "fallback": "fallback",
+    "modelDefault": "model default",
+    "supportedLevels": "supported:",
     "createdAt": "Created:",
     "input": "Input:",
     "output": "Output:",

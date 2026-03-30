@@ -43,6 +43,12 @@
   "span": {
     "model": "Model:",
     "tokens": "Token:",
+    "reasoning": "Reasoning:",
+    "requested": "yêu cầu",
+    "effective": "thực tế",
+    "fallback": "fallback",
+    "modelDefault": "mặc định model",
+    "supportedLevels": "hỗ trợ:",
     "createdAt": "Tạo lúc:",
     "input": "Đầu vào:",
     "output": "Đầu ra:",
