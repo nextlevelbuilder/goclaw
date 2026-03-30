@@ -6,7 +6,7 @@ import {
 
 export function buildDraftRouting(
   savedRouting: NormalizedChatGPTOAuthRouting,
-  hasProviderDefaults: boolean,
+  _hasProviderDefaults: boolean,
 ): ChatGPTOAuthRoutingConfig {
   if (savedRouting.isExplicit) {
     return {
@@ -16,16 +16,8 @@ export function buildDraftRouting(
     };
   }
 
-  if (hasProviderDefaults) {
-    return {
-      override_mode: "inherit",
-      strategy: "primary_first",
-      extra_provider_names: [],
-    };
-  }
-
   return {
-    override_mode: "custom",
+    override_mode: "inherit",
     strategy: "primary_first",
     extra_provider_names: [],
   };
@@ -33,10 +25,10 @@ export function buildDraftRouting(
 
 export function routingDraftSignature(
   routing: ChatGPTOAuthRoutingConfig,
-  hasProviderDefaults: boolean,
+  _hasProviderDefaults: boolean,
 ): string {
   const normalized = normalizeChatGPTOAuthRoutingInput(routing);
-  if (normalized.overrideMode === "inherit" && hasProviderDefaults) {
+  if (normalized.overrideMode === "inherit") {
     return JSON.stringify({ override_mode: "inherit" });
   }
   return JSON.stringify({

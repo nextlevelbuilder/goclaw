@@ -147,7 +147,7 @@
     "manageAction": "打开池管理",
     "singleAccountHint": "请在 Providers 页面配置另一个具名 OpenAI Codex OAuth provider，以创建由 provider 管理的账户池。",
     "membershipManagedAtProvider": "池成员由 provider {{provider}} 管理。请先在那里修改成员关系，再回到这里调整路由行为。",
-    "membershipConfigureProviderFirst": "provider {{provider}} 还没有保存 provider-owned pool。请先在那里配置池成员，再为这个 agent 启用池化路由。",
+    "membershipConfigureProviderFirst": "provider {{provider}} 还没有保存 provider-owned pool。在那里添加池成员之前，这个 agent 会先只使用主账户。",
     "readySummary": "{{ready}} / {{total}} 个额外账户已就绪。",
     "preferredNeedsAttention": "主账户需要先处理，agent 才能稳定使用它。",
     "loadingAccounts": "正在检查 OpenAI Codex OAuth 账户状态...",
@@ -215,7 +215,7 @@
       "label": "Agent 路由模式",
       "inherit": "使用 Provider 默认值",
       "custom": "仅此 Agent 自定义",
-      "noProviderDefault": "还没有保存 provider-owned pool。请先去 Providers 页面配置可复用的池成员，或者继续让这个 agent 只使用主账户。",
+      "noProviderDefault": "还没有保存 provider-owned pool。跟随 provider 默认状态时，这个 agent 现在会先停留在主账户，并在以后自动接收新增的池成员。",
       "providerDefaultSummary": "Provider 默认池包含 {{count}} 个账户",
       "summaryInherited": "这个 agent 当前正在使用 provider 默认账户池。",
       "summaryCustom": "这个 agent 当前保存了针对 provider-owned pool 的路由覆盖配置。"

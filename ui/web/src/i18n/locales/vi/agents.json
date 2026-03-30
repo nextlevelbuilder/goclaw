@@ -147,7 +147,7 @@
     "manageAction": "Mở Pool",
     "singleAccountHint": "Hãy cấu hình thêm một provider OpenAI Codex OAuth khác trên trang Providers để tạo pool do provider quản lý.",
     "membershipManagedAtProvider": "Thành viên pool được quản lý tại provider {{provider}}. Hãy đổi membership ở đó rồi quay lại đây để chỉnh hành vi routing.",
-    "membershipConfigureProviderFirst": "Provider {{provider}} chưa có provider-owned pool. Hãy cấu hình pool members ở đó trước khi bật pooled routing cho agent này.",
+    "membershipConfigureProviderFirst": "Provider {{provider}} chưa có provider-owned pool. Agent này sẽ chỉ dùng tài khoản chính cho tới khi pool members được thêm ở đó.",
     "readySummary": "{{ready}} / {{total}} tài khoản phụ đã sẵn sàng.",
     "preferredNeedsAttention": "Tài khoản chính cần được xử lý trước khi agent dùng ổn định.",
     "loadingAccounts": "Đang kiểm tra trạng thái tài khoản OpenAI Codex OAuth...",
@@ -215,7 +215,7 @@
       "label": "Chế độ routing của agent",
       "inherit": "Dùng mặc định từ provider",
       "custom": "Tùy chỉnh riêng cho agent",
-      "noProviderDefault": "Chưa có provider-owned pool nào được lưu. Hãy cấu hình reusable pool members ở trang Providers trước, hoặc giữ agent này chỉ dùng tài khoản chính.",
+      "noProviderDefault": "Chưa có provider-owned pool nào được lưu. Chế độ dùng mặc định của provider sẽ giữ agent này ở tài khoản chính lúc này và tự nhận pool members khi provider thêm sau.",
       "providerDefaultSummary": "Mặc định từ provider có {{count}} tài khoản",
       "summaryInherited": "Agent này hiện đang dùng pool mặc định của provider.",
       "summaryCustom": "Agent này hiện đang lưu routing override riêng cho provider-owned pool."

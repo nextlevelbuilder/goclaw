@@ -21,6 +21,7 @@ import {
   buildAgentOtherConfigWithChatGPTOAuthRouting,
   normalizeChatGPTOAuthRouting,
 } from "./agent-display-utils";
+import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -39,17 +40,10 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const deriveState = (a: AgentData) => {
     const otherObj = (a.other_config ?? {}) as Record<string, unknown>;
     const routing = normalizeChatGPTOAuthRouting(a.other_config);
+    const draftRouting = buildDraftRouting(routing, Boolean(providerDefaults));
     return {
       thinkingLevel: typeof otherObj.thinking_level === "string" ? otherObj.thinking_level : "off",
-      chatgptRouting: {
-        override_mode: routing.isExplicit
-          ? routing.overrideMode
-          : providerDefaults
-            ? "inherit"
-            : "custom",
-        strategy: routing.strategy,
-        extra_provider_names: routing.extraProviderNames,
-      } as ChatGPTOAuthRoutingConfig,
+      chatgptRouting: draftRouting,
       wsSharing: (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig,
       comp: a.compaction_config ?? {},
       pruneEnabled: a.context_pruning?.mode !== "off",

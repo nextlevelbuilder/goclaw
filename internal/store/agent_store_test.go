@@ -113,6 +113,17 @@ func TestResolveEffectiveChatGPTOAuthRoutingUsesProviderDefaultsWhenAgentUnset(t
 	}
 }
 
+func TestResolveEffectiveChatGPTOAuthRoutingAllowsInheritWithoutSavedProviderPool(t *testing.T) {
+	override := &ChatGPTOAuthRoutingConfig{
+		OverrideMode: ChatGPTOAuthOverrideInherit,
+	}
+
+	got := ResolveEffectiveChatGPTOAuthRouting(nil, override)
+	if got != nil {
+		t.Fatalf("ResolveEffectiveChatGPTOAuthRouting() = %#v, want nil", got)
+	}
+}
+
 func TestResolveEffectiveChatGPTOAuthRoutingAllowsCustomSingleAccountToDisableDefaults(t *testing.T) {
 	defaults := &ChatGPTOAuthRoutingConfig{
 		Strategy:           ChatGPTOAuthStrategyRoundRobin,

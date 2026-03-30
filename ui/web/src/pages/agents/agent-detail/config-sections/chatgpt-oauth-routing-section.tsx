@@ -103,13 +103,15 @@ export function ChatGPTOAuthRoutingSection({
   if (!currentOAuthProvider) return null;
 
   const allExtraProviders = oauthProviders.filter((p) => p.name !== currentProvider);
-  const readyExtraProviders = allExtraProviders.filter(
-    (p) => getAvailabilityFromMap(p, statusByName) === "ready",
+  const selectedExtras = new Set(value.extra_provider_names ?? []);
+  const selectableExtraProviders = allExtraProviders.filter(
+    (p) =>
+      selectedExtras.has(p.name) ||
+      getAvailabilityFromMap(p, statusByName) === "ready",
   );
   const mode = value.override_mode === "inherit" ? "inherit" : "custom";
   const providerDefaultsAvailable =
     defaultRouting != null && defaultRouting.extraProviderNames.length > 0;
-  const selectedExtras = new Set(value.extra_provider_names ?? []);
 
   const selectedEntries = entries.map((entry) => ({
     ...entry,
@@ -214,7 +216,7 @@ export function ChatGPTOAuthRoutingSection({
                 type="button"
                 variant={mode === "inherit" ? "default" : "outline"}
                 onClick={() => setMode("inherit")}
-                disabled={!canManageProviders || !providerDefaultsAvailable}
+                disabled={!canManageProviders}
                 className="h-9 [@media(max-height:760px)]:h-8"
               >
                 {t("chatgptOAuthRouting.mode.inherit")}
@@ -277,7 +279,7 @@ export function ChatGPTOAuthRoutingSection({
           membershipManagedByLabel={membershipManagedByLabel}
           currentProvider={currentProvider}
           selectedEntries={selectedEntries}
-          readyExtraProviders={readyExtraProviders}
+          selectableExtraProviders={selectableExtraProviders}
           selectedExtras={selectedExtras}
           quotaByName={quotaByName}
           canEditMembership={canEditMembership}

@@ -147,7 +147,7 @@
     "manageAction": "Open Pool",
     "singleAccountHint": "Configure another named OpenAI Codex OAuth provider on the Providers page to create a provider-owned pool.",
     "membershipManagedAtProvider": "Pool members are managed on provider {{provider}}. Change membership there, then come back here to tune routing behavior.",
-    "membershipConfigureProviderFirst": "No provider-owned pool is saved on {{provider}} yet. Configure pool members there before enabling pooled routing for this agent.",
+    "membershipConfigureProviderFirst": "No provider-owned pool is saved on {{provider}} yet. This agent will stay on the primary account until pool members are added there.",
     "readySummary": "{{ready}} of {{total}} extra accounts are ready.",
     "preferredNeedsAttention": "The primary account needs attention before this agent can use it reliably.",
     "loadingAccounts": "Checking OpenAI Codex OAuth account status...",
@@ -215,7 +215,7 @@
       "label": "Agent Routing Mode",
       "inherit": "Use Provider Defaults",
       "custom": "Custom For This Agent",
-      "noProviderDefault": "No provider-owned pool is saved yet. Configure reusable pool members on the Providers page first, or keep this agent on its primary account.",
+      "noProviderDefault": "No provider-owned pool is saved yet. Following provider defaults will keep this agent on its primary account for now and automatically pick up pool members added later.",
       "providerDefaultSummary": "{{count}} accounts in provider default",
       "summaryInherited": "This agent currently follows the provider default pool.",
       "summaryCustom": "This agent currently saves its own routing override for the provider-owned pool."

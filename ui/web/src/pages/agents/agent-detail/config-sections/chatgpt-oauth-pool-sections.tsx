@@ -43,7 +43,7 @@ interface MembershipSectionProps {
   membershipManagedByLabel?: string;
   currentProvider: string;
   selectedEntries: SelectedEntry[];
-  readyExtraProviders: ProviderData[];
+  selectableExtraProviders: ProviderData[];
   selectedExtras: Set<string>;
   quotaByName?: Map<string, ChatGPTOAuthProviderQuota>;
   canEditMembership: boolean;
@@ -57,7 +57,7 @@ export function MembershipSection({
   membershipManagedByLabel,
   currentProvider,
   selectedEntries,
-  readyExtraProviders,
+  selectableExtraProviders,
   selectedExtras,
   quotaByName,
   canEditMembership,
@@ -91,9 +91,9 @@ export function MembershipSection({
         <div className="rounded-lg border border-dashed px-3 py-3 text-sm text-muted-foreground">
           {t("chatgptOAuthRouting.loadingAccounts")}
         </div>
-      ) : readyExtraProviders.length > 0 ? (
+      ) : selectableExtraProviders.length > 0 ? (
         <div className="grid gap-2 xl:grid-cols-2">
-          {readyExtraProviders.map((provider) => {
+          {selectableExtraProviders.map((provider) => {
             const selected = selectedExtras.has(provider.name);
             const failureKind = getQuotaFailureKind(quotaByName?.get(provider.name));
             return (
