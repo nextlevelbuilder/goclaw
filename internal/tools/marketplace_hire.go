@@ -1,8 +1,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,13 +17,17 @@ import (
 
 // MarketplaceHireTool downloads and installs agent teams from the GoClaw Hub marketplace.
 type MarketplaceHireTool struct {
-	client *registry.Client
+	client       *registry.Client
+	gatewayURL   string // e.g. http://localhost:18790
+	gatewayToken string
 }
 
 // NewMarketplaceHireTool creates a new marketplace hire tool.
-func NewMarketplaceHireTool(client *registry.Client) *MarketplaceHireTool {
+func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken string) *MarketplaceHireTool {
 	return &MarketplaceHireTool{
-		client: client,
+		client:       client,
+		gatewayURL:   gatewayURL,
+		gatewayToken: gatewayToken,
 	}
 }
 
@@ -28,7 +36,7 @@ func (t *MarketplaceHireTool) Name() string {
 }
 
 func (t *MarketplaceHireTool) Description() string {
-	return "Hire (download and install) an agent team from GoClaw Hub marketplace. Use this when the user wants to hire, install, or get a specific team."
+	return "Hire (download and install) an agent team from GoClaw Hub marketplace. This will download the team and import it into your GoClaw instance. Use this when the user wants to hire, install, or get a specific team."
 }
 
 func (t *MarketplaceHireTool) Parameters() map[string]any {
@@ -50,52 +58,61 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult("slug is required")
 	}
 
-	// Get listing details first
+	// Get listing details
 	listing, err := t.client.GetListing(ctx, slug)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to get team details: %v", err))
 	}
 
-	// Download using wget — Go's HTTP client has TLS stream issues in some environments
-	// Use /app/workspace instead of /tmp (which may be noexec in containers)
-	tempDir := "/app/workspace"
+	// Download bundle using wget (Go's HTTP client has TLS stream issues in some envs)
+	dlDir := "/app/workspace/marketplace"
 	if d := os.Getenv("GOCLAW_WORKSPACE_DIR"); d != "" {
-		tempDir = d
+		dlDir = filepath.Join(d, "marketplace")
 	}
-	if _, err := os.Stat(tempDir); err != nil {
-		tempDir = os.TempDir()
+	if _, err := os.Stat(dlDir); err != nil {
+		dlDir = filepath.Join(os.TempDir(), "marketplace")
 	}
-	mktDir := filepath.Join(tempDir, "marketplace")
-	os.MkdirAll(mktDir, 0777)
-	os.Chmod(mktDir, 0777) // ensure writable even if dir existed
-	tempDir = mktDir
+	os.MkdirAll(dlDir, 0777)
+	os.Chmod(dlDir, 0777)
+
 	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
-	tempFile := filepath.Join(tempDir, filename)
+	bundlePath := filepath.Join(dlDir, filename)
+	os.Remove(bundlePath) // clean any stale file
 
 	dlURL := t.client.BaseURL + "/registry/download/" + slug
-	cmd := exec.CommandContext(ctx, "wget", "-q", "-O", tempFile, dlURL,
+	cmd := exec.CommandContext(ctx, "wget", "-q", "-O", bundlePath, dlURL,
 		"--header=X-Registry-Key: "+t.client.APIKey,
 		"--timeout=30")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v (%s)", listing.Title, err, string(output)))
+		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v (%s)", listing.Title, err, strings.TrimSpace(string(output))))
 	}
 
-	// Verify the file
-	info, err := os.Stat(tempFile)
+	info, err := os.Stat(bundlePath)
 	if err != nil || info.Size() == 0 {
 		return ErrorResult(fmt.Sprintf("Download produced empty file for '%s'", listing.Title))
 	}
 
+	// Import into GoClaw by POSTing to the local team import endpoint
+	importResult, err := t.importBundle(bundlePath)
+	if err != nil {
+		// Download worked but import failed — still tell user about the download
+		var result strings.Builder
+		result.WriteString(fmt.Sprintf("Downloaded **%s** but import failed: %v\n\n", listing.Title, err))
+		result.WriteString(fmt.Sprintf("Bundle saved at: %s (%.1f KB)\n", bundlePath, float64(info.Size())/1024.0))
+		result.WriteString("You can import manually via the Teams page.\n")
+		return NewResult(result.String())
+	}
+
 	// Build success message
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("Successfully hired team: **%s**\n\n", listing.Title))
+	result.WriteString(fmt.Sprintf("Successfully hired and imported: **%s**\n\n", listing.Title))
 
 	if listing.Tagline != "" {
 		result.WriteString(fmt.Sprintf("%s\n\n", listing.Tagline))
 	}
 
 	if len(listing.Agents) > 0 {
-		result.WriteString("**Your new team members:**\n")
+		result.WriteString("**Team members now active:**\n")
 		for _, agent := range listing.Agents {
 			name := agent.DisplayName
 			if agent.Emoji != "" {
@@ -109,13 +126,64 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		result.WriteString("\n")
 	}
 
-	result.WriteString(fmt.Sprintf("Bundle: %s (%.1f KB)\n", tempFile, float64(info.Size())/1024.0))
-
 	if listing.CreatorName != "" {
 		result.WriteString(fmt.Sprintf("By: %s\n", listing.CreatorName))
 	}
 
-	result.WriteString("\nThe team bundle has been downloaded and is ready for import.\n")
+	if importResult != "" {
+		result.WriteString(fmt.Sprintf("\n%s\n", importResult))
+	}
+
+	result.WriteString("\nThe team is now available in your Teams page!\n")
+
+	// Clean up bundle file after successful import
+	os.Remove(bundlePath)
 
 	return NewResult(result.String())
+}
+
+// importBundle POSTs the tar.gz to GoClaw's own /v1/teams/import endpoint.
+func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
+	if t.gatewayURL == "" || t.gatewayToken == "" {
+		return "", fmt.Errorf("gateway URL or token not configured for auto-import")
+	}
+
+	// Read the bundle file
+	bundleData, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return "", fmt.Errorf("read bundle: %w", err)
+	}
+
+	// Build multipart form
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", filepath.Base(bundlePath))
+	if err != nil {
+		return "", fmt.Errorf("create form: %w", err)
+	}
+	if _, err := io.Copy(part, bytes.NewReader(bundleData)); err != nil {
+		return "", fmt.Errorf("write form: %w", err)
+	}
+	writer.Close()
+
+	// POST to local GoClaw import endpoint
+	req, err := http.NewRequest("POST", t.gatewayURL+"/v1/teams/import", &buf)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+t.gatewayToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("import request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("import failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	return string(body), nil
 }

@@ -154,8 +154,17 @@ func setupToolRegistry(
 		if apiKey != "" {
 			mktClient := registry.NewClient(apiBase, apiKey)
 			toolsReg.Register(tools.NewMarketplaceSearchTool(mktClient))
-			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient))
-			slog.Info("marketplace tools enabled", "api_base", apiBase)
+
+			// Gateway URL for self-import (local loopback)
+			gwPort := cfg.Gateway.Port
+			if gwPort == 0 {
+				gwPort = 18790
+			}
+			gwURL := fmt.Sprintf("http://localhost:%d", gwPort)
+			gwToken := cfg.Gateway.Token
+
+			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, gwToken))
+			slog.Info("marketplace tools enabled", "api_base", apiBase, "auto_import", gwToken != "")
 		}
 	}
 
