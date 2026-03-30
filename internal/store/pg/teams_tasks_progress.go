@@ -241,10 +241,10 @@ func (s *PGTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uuid.U
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, locked_at = NULL, lock_expires_at = NULL, result = NULL,
 		 progress_percent = NULL, progress_step = NULL, updated_at = $2
-		 WHERE id = $3 AND team_id = $4 AND status IN ($5, $6, $7, $8) AND tenant_id = $9`,
+		 WHERE id = $3 AND team_id = $4 AND status IN ($5, $6, $7, $8, $9) AND tenant_id = $10`,
 		store.TeamTaskStatusPending, now,
 		taskID, teamID, store.TeamTaskStatusStale, store.TeamTaskStatusFailed,
-		store.TeamTaskStatusCancelled, store.TeamTaskStatusInReview, tid,
+		store.TeamTaskStatusCancelled, store.TeamTaskStatusInReview, store.TeamTaskStatusInProgress, tid,
 	)
 	if err != nil {
 		return err
@@ -254,7 +254,7 @@ func (s *PGTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uuid.U
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("task not available for reset (not stale/failed/cancelled/in_review or wrong team)")
+		return fmt.Errorf("task not available for reset (not stale/failed/cancelled/in_review/in_progress or wrong team)")
 	}
 	return nil
 }

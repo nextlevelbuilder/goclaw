@@ -18,6 +18,7 @@ var fullActions = []string{
 	"list", "get", "create", "claim", "complete", "cancel",
 	"approve", "reject", "search", "review", "comment",
 	"progress", "attach", "update", "ask_user", "clear_ask_user", "retry",
+	"release_to_worker",
 }
 
 func (FullTeamPolicy) IsAllowed(string) bool       { return true }
@@ -25,6 +26,7 @@ func (FullTeamPolicy) AllowedActions() []string     { return fullActions }
 func (FullTeamPolicy) MemberGuidance() string {
 	return "Use comment(type='blocker') to escalate blockers to the leader. " +
 		"Use review to submit work for approval. " +
+		"Use release_to_worker to hand off coding tasks to external worker. " +
 		"Use progress to report incremental status updates."
 }
 

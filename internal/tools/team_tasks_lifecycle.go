@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -324,4 +325,57 @@ func (t *TeamTasksTool) executeReject(ctx context.Context, args map[string]any) 
 		WithContextInfo(ctx),
 	))
 	return NewResult(fmt.Sprintf("Task %s rejected.", taskID))
+}
+
+func (t *TeamTasksTool) executeReleaseToWorker(ctx context.Context, args map[string]any) *Result {
+	team, agentID, taskID, err := t.resolveTeamAndTask(ctx, args)
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+
+	task, err := t.manager.Store().GetTask(ctx, taskID)
+	if err != nil {
+		return ErrorResult("task not found: " + err.Error())
+	}
+	if task.TeamID != team.ID {
+		return ErrorResult("task does not belong to your team")
+	}
+	if task.Status != store.TeamTaskStatusInProgress {
+		return ErrorResult("task must be in_progress to release to worker (current: " + task.Status + ")")
+	}
+	if task.OwnerAgentID == nil || *task.OwnerAgentID != agentID {
+		return ErrorResult("only the task owner can release to worker")
+	}
+
+	brief, _ := args["text"].(string)
+
+	meta := task.Metadata
+	if meta == nil {
+		meta = make(map[string]any)
+	}
+	meta["execution_target"] = "windows-local"
+	meta["pre_audited"] = true
+	meta["pre_audit_agent"] = t.manager.AgentKeyFromID(ctx, agentID)
+	meta["pre_audit_at"] = time.Now().UTC().Format(time.RFC3339)
+	if brief != "" {
+		meta["brief_markdown"] = brief
+	}
+
+	if err := t.manager.Store().UpdateTask(ctx, taskID, map[string]any{"metadata": meta}); err != nil {
+		return ErrorResult("failed to update task metadata: " + err.Error())
+	}
+	if err := t.manager.Store().ResetTaskStatus(ctx, taskID, team.ID); err != nil {
+		return ErrorResult("failed to reset task status: " + err.Error())
+	}
+	recordTaskAction(ctx, func(f *TaskActionFlags) { f.ReleasedToWorker = true })
+
+	ownerKey := t.manager.AgentKeyFromID(ctx, agentID)
+	t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskUpdated, BuildTaskEventPayload(
+		team.ID.String(), taskID.String(),
+		store.TeamTaskStatusPending,
+		"agent", ownerKey,
+		WithContextInfo(ctx),
+	))
+
+	return NewResult(fmt.Sprintf("Task %s released to external worker. execution_target=windows-local, pre_audited=true.", taskID))
 }

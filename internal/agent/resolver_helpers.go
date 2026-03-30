@@ -144,6 +144,17 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		sb.WriteString("If blocked (missing info, unclear requirements, need credentials):\n")
 		sb.WriteString("```\nteam_tasks(action=\"comment\", type=\"blocker\", text=\"what you need\")\n```\n")
 		sb.WriteString("This auto-fails the task and notifies the leader, who can retry with updated instructions.\n")
+
+		sb.WriteString("\n## External Worker Tasks\n\n")
+		sb.WriteString("For coding tasks that require a local Windows worker:\n")
+		sb.WriteString("1. Review the task brief and enrich with specific instructions\n")
+		sb.WriteString("2. Release to worker: `team_tasks(action=\"release_to_worker\", text=\"enriched brief\")`\n")
+		sb.WriteString("3. Task resets to pending — worker auto-polls and claims\n")
+		sb.WriteString("4. When worker submits, you receive a notification to review\n")
+		sb.WriteString("5. Review result: `team_tasks(action=\"get\", task_id=\"...\")`\n")
+		sb.WriteString("6. Approve: `team_tasks(action=\"approve\")` or Reject: `team_tasks(action=\"reject\", text=\"feedback\")`\n\n")
+		sb.WriteString("IMPORTANT: Only use release_to_worker for tasks that need local code execution.\n")
+		sb.WriteString("For research, specs, or VPS-only work, complete the task directly.\n")
 	}
 
 	return sb.String()

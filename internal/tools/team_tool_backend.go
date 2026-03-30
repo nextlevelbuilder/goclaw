@@ -33,6 +33,7 @@ type TeamToolBackend interface {
 	BroadcastTeamEvent(ctx context.Context, name string, payload any)
 	DispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, team *store.TeamData, agentID uuid.UUID)
 	TryPublishInbound(msg bus.InboundMessage) bool
+	NotifyOwnerAgentInReview(ctx context.Context, task *store.TeamTaskData, team *store.TeamData)
 
 	// Dispatch helpers
 	BuildBlockerResultsSummary(ctx context.Context, task *store.TeamTaskData) string

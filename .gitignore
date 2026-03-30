@@ -54,10 +54,13 @@ tmp
 deploy-*.sh
 
 docs/technical-diaries
-docs/zuey
+history/
 plans
 release-manifest.json
 k8s-*/*
+.github/
+!.github/workflows/
+!.github/workflows/deploy.yaml
 
 # Test credentials (never commit)
 tests/**/creds.json

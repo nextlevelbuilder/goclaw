@@ -151,6 +151,11 @@ func resolveTeamTaskOutcome(
 		_ = deps.TeamStore.RenewTaskLock(ctx, meta.TaskID, meta.TeamID)
 		slog.Info("post-turn: task submitted for review", "task_id", meta.TaskID)
 
+	case flags.ReleasedToWorker:
+		// Task released to external worker — skip auto-complete.
+		// Task is already reset to pending with execution_target set.
+		slog.Info("post-turn: task released to external worker", "task_id", meta.TaskID)
+
 	case outcome.Result != nil && outcome.Result.LoopKilled:
 		// Loop detector killed the run → auto-fail instead of auto-complete.
 		// The agent was terminated (not stuck in_progress) — mark as failed

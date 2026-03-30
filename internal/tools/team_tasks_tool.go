@@ -107,6 +107,9 @@ func (t *TeamTasksTool) buildActionDescription() string {
 	if t.policy.IsAllowed("retry") {
 		base += " retry: re-dispatch a stale or failed task."
 	}
+	if t.policy.IsAllowed("release_to_worker") {
+		base += " release_to_worker: release pre-audited task to external worker with enriched brief."
+	}
 	return base
 }
 
@@ -163,7 +166,9 @@ func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return t.executeClearAskUser(ctx, args)
 	case "retry":
 		return t.executeRetry(ctx, args)
+	case "release_to_worker":
+		return t.executeReleaseToWorker(ctx, args)
 	default:
-		return ErrorResult(fmt.Sprintf("unknown action: %s (use list, get, create, claim, complete, cancel, search, review, comment, progress, attach, update, ask_user, clear_ask_user, or retry)", action))
+		return ErrorResult(fmt.Sprintf("unknown action: %s (use list, get, create, claim, complete, cancel, search, review, comment, progress, attach, update, ask_user, clear_ask_user, retry, or release_to_worker)", action))
 	}
 }

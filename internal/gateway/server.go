@@ -394,6 +394,11 @@ func (s *Server) SetProvidersHandler(h *httpapi.ProvidersHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetTeamWorkerHandler sets the worker REST API handler for external coding workers.
+func (s *Server) SetTeamWorkerHandler(h *httpapi.TeamWorkerHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetTeamEventsHandler sets the team event history handler.
 func (s *Server) SetTeamEventsHandler(h *httpapi.TeamEventsHandler) {
 	s.handlers = append(s.handlers, h)

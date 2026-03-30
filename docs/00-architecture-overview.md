@@ -72,6 +72,8 @@ flowchart TD
         MCP_S[MCPServerStore]
         CT_S[CustomToolStore]
         TM_S[TeamStore]
+        TN_S[TenantStore]
+        SC_S[SystemConfigStore]
     end
 
     WS --> WSS
@@ -99,16 +101,23 @@ flowchart TD
 |--------|-------------|
 | `internal/gateway/` | WebSocket + HTTP server, client handling, method router |
 | `internal/gateway/methods/` | RPC method handlers: chat, agents, teams, delegations, sessions, config, skills, cron, pairing, exec approval, usage, send |
-| `internal/agent/` | Agent loop (think, act, observe), router, resolver, system prompt builder, sanitization, pruning, tracing, memory flush, DELEGATION.md + TEAM.md injection |
+| `internal/agent/` | Agent loop (think, act, observe), router, resolver, system prompt builder, sanitization, pruning, tracing, memory flush, extractive memory fallback, title generation, loop split (loop_context, loop_tools, loop_finalize) |
 | `internal/providers/` | LLM providers: Anthropic (native HTTP + SSE), OpenAI-compatible (HTTP + SSE, 12+ providers), DashScope (Qwen), ACP (JSON-RPC 2.0 subprocess), Claude CLI, Codex, extended thinking support, retry logic |
 | `internal/providers/acp/` | ACP protocol implementation: ProcessPool (subprocess lifecycle), ToolBridge (fs/terminal), session management |
 | `internal/tools/` | Tool registry, filesystem ops, exec/shell, policy engine, subagent, delegation manager, team tools, context file + memory interceptors, credential scrubbing, rate limiting, PathDenyable |
 | `internal/tools/dynamic_loader.go` | Custom tool loader: LoadGlobal (startup), LoadForAgent (per-agent clone), ReloadGlobal (cache invalidation) |
 | `internal/tools/dynamic_tool.go` | Custom tool executor: command template rendering, shell escaping, encrypted env vars |
-| `internal/store/` | Store interfaces: SessionStore, AgentStore, ProviderStore, SkillStore, MemoryStore, CronStore, PairingStore, TracingStore, MCPServerStore, TeamStore, ChannelInstanceStore, ConfigSecretsStore |
+| `internal/tools/web_fetch_extractor.go` | Defuddle extractor chain for cleaner web content extraction |
+| `internal/tools/workspace_resolver.go` | Layered resolver pipeline for workspace path computation |
+| `internal/tools/sandbox_hints.go` | LLM hints when tool/binary missing in sandbox container |
+| `internal/safego/` | Panic recovery for goroutines (tool execution, cron, summarization) |
+| `internal/store/` | Store interfaces: SessionStore, AgentStore, ProviderStore, SkillStore, MemoryStore, CronStore, PairingStore, TracingStore, MCPServerStore, TeamStore, TenantStore, SystemConfigStore, ChannelInstanceStore, ConfigSecretsStore |
+| `internal/store/run_context.go` | Typed RunContext for consolidated context injection (tenant, agent, user, locale) |
+| `internal/store/scope.go` | QueryScope abstraction for composable multi-level tenant/agent isolation |
 | `internal/store/pg/` | PostgreSQL implementations (`database/sql` + `pgx/v5`) |
 | `internal/bootstrap/` | System prompt files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, BOOTSTRAP.md) + seeding + truncation |
-| `internal/config/` | Config loading (JSON5) + env var overlay |
+| `internal/config/` | Config loading (JSON5) + env var overlay + tenant paths + runtime config |
+| `internal/config/config_system.go` | Per-tenant system config resolution |
 | `internal/skills/` | SKILL.md loader (5-tier hierarchy) + BM25 search + hot-reload via fsnotify |
 | `internal/channels/` | Channel manager + adapters: Telegram (forum topics, STT, bot commands), Feishu/Lark (streaming cards, media), Zalo OA, Zalo Personal, Discord, WhatsApp, Slack |
 | `internal/mcp/` | MCP server bridge (stdio, SSE, streamable-HTTP transports) |
@@ -118,7 +127,7 @@ flowchart TD
 | `internal/store/pg/pairing.go` | DM/device pairing service (8-character codes, database-backed) |
 | `internal/sandbox/` | Docker-based code execution sandbox |
 | `internal/tts/` | Text-to-Speech providers: OpenAI, ElevenLabs, Edge, MiniMax |
-| `internal/http/` | HTTP API handlers: /v1/chat/completions, /v1/agents, /v1/skills, /v1/traces, /v1/mcp, /v1/delegations, summoner |
+| `internal/http/` | HTTP API handlers: /v1/chat/completions, /v1/agents, /v1/skills, /v1/traces, /v1/mcp, /v1/delegations, /v1/teams/*/worker, summoner |
 | `internal/crypto/` | AES-256-GCM encryption for API keys |
 | `internal/tracing/` | LLM call tracing (traces + spans), in-memory buffer with periodic store flush |
 | `internal/tracing/otelexport/` | Optional OpenTelemetry OTLP exporter (opt-in via build tags; adds gRPC + protobuf) |
@@ -401,6 +410,8 @@ flowchart TD
 | `internal/gateway/server.go` | WS + HTTP server, CORS, rate limiter setup |
 | `internal/gateway/client.go` | WebSocket client handling, read limit (512KB) |
 | `internal/gateway/router.go` | RPC method routing |
+| `internal/gateway/event_filter.go` | WS event filtering by channel/session key for tenant isolation |
+| `internal/gateway/update_check.go` | Version update checker for new releases |
 | `internal/scheduler/lanes.go` | Lane definitions, semaphore-based concurrency |
 | `internal/scheduler/queue.go` | Per-session queue, queue modes, debounce |
 | `internal/store/stores.go` | `Stores` container struct (all 22+ store interfaces) |
@@ -422,5 +433,8 @@ flowchart TD
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | Scheduler lanes, cron lifecycle |
 | [09-security.md](./09-security.md) | Defense layers, encryption, rate limiting, RBAC, sandbox |
 | [10-tracing-observability.md](./10-tracing-observability.md) | Tracing collector, span hierarchy, OTel export, trace API |
-| [11-agent-teams.md](./11-agent-teams.md) | Agent teams, task board, mailbox, delegation integration |
+| [11-agent-teams.md](./11-agent-teams.md) | Agent teams, task board, mailbox, delegation integration, external worker bridge |
 | [12-extended-thinking.md](./12-extended-thinking.md) | Extended thinking, per-provider support, streaming |
+| [23-multi-tenant-architecture.md](./23-multi-tenant-architecture.md) | Multi-tenant isolation, QueryScope, tenant foundation, membership checks |
+| [24-agent-team-setup.md](./24-agent-team-setup.md) | Straw Hat team setup guide, Windows worker bridge, operational runbook |
+| [model-steering-system.md](./model-steering-system.md) | Model steering system design and implementation |

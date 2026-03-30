@@ -521,11 +521,11 @@ func (s *SQLiteTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uu
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = ?, locked_at = NULL, lock_expires_at = NULL, result = NULL,
 		 progress_percent = NULL, progress_step = NULL, updated_at = ?
-		 WHERE id = ? AND team_id = ? AND status IN (?, ?, ?, ?) AND tenant_id = ?`,
+		 WHERE id = ? AND team_id = ? AND status IN (?, ?, ?, ?, ?) AND tenant_id = ?`,
 		store.TeamTaskStatusPending, now,
 		taskID, teamID,
 		store.TeamTaskStatusStale, store.TeamTaskStatusFailed,
-		store.TeamTaskStatusCancelled, store.TeamTaskStatusInReview, tid,
+		store.TeamTaskStatusCancelled, store.TeamTaskStatusInReview, store.TeamTaskStatusInProgress, tid,
 	)
 	if err != nil {
 		return err
@@ -535,7 +535,7 @@ func (s *SQLiteTeamStore) ResetTaskStatus(ctx context.Context, taskID, teamID uu
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("task not available for reset (not stale/failed/cancelled/in_review or wrong team)")
+		return fmt.Errorf("task not available for reset (not stale/failed/cancelled/in_review/in_progress or wrong team)")
 	}
 	return nil
 }

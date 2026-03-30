@@ -845,6 +845,83 @@ Exposes GoClaw tools to Claude CLI via streamable HTTP at `/mcp/bridge`. Only li
 
 ---
 
+## 28. Team Worker
+
+HTTP REST endpoints for external coding workers to interact with team tasks. Bypasses admin-only RPC permissions — requires operator role.
+
+Implementation: `internal/http/team_worker.go`
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/v1/teams/{teamId}/worker/tasks?status=pending` | List claimable tasks | Operator |
+| `GET` | `/v1/teams/{teamId}/worker/tasks/{taskId}` | Get single task detail | Operator |
+| `POST` | `/v1/teams/{teamId}/worker/tasks/{taskId}/claim` | Claim task for agent | Operator |
+| `POST` | `/v1/teams/{teamId}/worker/tasks/{taskId}/progress` | Report progress | Operator |
+| `POST` | `/v1/teams/{teamId}/worker/tasks/{taskId}/comment` | Add comment | Operator |
+| `POST` | `/v1/teams/{teamId}/worker/tasks/{taskId}/complete` | Mark done | Operator |
+| `POST` | `/v1/teams/{teamId}/worker/tasks/{taskId}/fail` | Mark failed | Operator |
+| `POST` | `/v1/teams/{teamId}/worker/heartbeat` | Worker liveness | Operator |
+
+### Claim
+
+```json
+POST /v1/teams/{teamId}/worker/tasks/{taskId}/claim
+{
+  "agent_id": "uuid-of-assigned-agent",
+  "worker_id": "windows-pc-01"
+}
+```
+
+Response: `200 {"task": {...}}` or `409` if already claimed.
+
+### Progress
+
+```json
+POST /v1/teams/{teamId}/worker/tasks/{taskId}/progress
+{
+  "percent": 50,
+  "step": "running tests"
+}
+```
+
+Also renews the task lock (heartbeat).
+
+### Complete
+
+```json
+POST /v1/teams/{teamId}/worker/tasks/{taskId}/complete
+{
+  "result": "{\"status\":\"pass\",\"summary\":\"...\"}",
+  "agent_id": "uuid"
+}
+```
+
+Response: `200 {"task": {...}}` or `409` if task not in progress.
+
+### Fail
+
+```json
+POST /v1/teams/{teamId}/worker/tasks/{taskId}/fail
+{
+  "reason": "timeout after 900s",
+  "agent_id": "uuid"
+}
+```
+
+### Heartbeat
+
+```json
+POST /v1/teams/{teamId}/worker/heartbeat
+{
+  "worker_id": "windows-pc-01",
+  "current_task_id": "uuid-or-empty"
+}
+```
+
+If `current_task_id` is set, renews the task lock. Response: `200 {"ok": true, "server_time": "RFC3339"}`.
+
+---
+
 ## Error Responses
 
 All endpoints return errors in a consistent JSON format:
@@ -877,6 +954,7 @@ The following operations are **only available via WebSocket RPC**, not HTTP:
 - **Cron jobs:** List, create, update, delete, logs (use WebSocket method `cron.*`)
 - **Send messages:** Send to channels (use WebSocket method `send.*`)
 - **Config management:** Get, apply, patch (use WebSocket method `config.*`)
+- **Team tasks:** Most team/task operations use WebSocket RPC (`teams.*`), but external coding workers can use the HTTP Team Worker endpoints (section 28) as an alternative with operator-level auth.
 
 These endpoints require an active WebSocket connection to the `/ws` endpoint with proper authentication and agent context.
 
@@ -917,4 +995,5 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 | `internal/gateway/server.go` | HTTP mux and route wiring |
 | `cmd/gateway.go` | Handler instantiation and wiring |
 | `cmd/pkg-helper/main.go` | Root-privileged system package helper (apk add/del) |
+| `internal/http/team_worker.go` | Team worker REST endpoints for external coding bridge |
 | `internal/skills/package_lister.go` | Query installed packages from apk/pip3/npm |

@@ -825,6 +825,9 @@ func (mb *mockBackend) TryPublishInbound(msg bus.InboundMessage) bool {
 	return true
 }
 
+func (mb *mockBackend) NotifyOwnerAgentInReview(_ context.Context, _ *store.TeamTaskData, _ *store.TeamData) {
+}
+
 func (mb *mockBackend) BuildBlockerResultsSummary(_ context.Context, _ *store.TeamTaskData) string { return "" }
 func (mb *mockBackend) BuildRecentCommentsSummary(_ context.Context, _ uuid.UUID) string           { return "" }
 func (mb *mockBackend) RestoreTraceContext(ctx context.Context, _ *store.TeamTaskData) context.Context {

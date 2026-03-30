@@ -353,7 +353,7 @@ func runGateway() {
 		mcpToolLister = mcpMgr
 	}
 	httpapi.InitGatewayToken(cfg.Gateway.Token)
-	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
+	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, teamWorkerH, secureCLIH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, toolsReg, providerRegistry, permPE.IsOwner, gatewayAddr, mcpToolLister)
 	if providersH != nil {
 		providersH.SetAPIBaseFallback(cfg.Providers.APIBaseForType)
 	}
@@ -389,6 +389,9 @@ func runGateway() {
 	}
 	if teamEventsH != nil {
 		server.SetTeamEventsHandler(teamEventsH)
+	}
+	if teamWorkerH != nil {
+		server.SetTeamWorkerHandler(teamWorkerH)
 	}
 	if pgStores != nil && pgStores.Teams != nil {
 		server.SetTeamAttachmentsHandler(httpapi.NewTeamAttachmentsHandler(pgStores.Teams, workspace))

@@ -31,6 +31,18 @@ func (m *TeamToolManager) BuildRecentCommentsSummary(ctx context.Context, taskID
 func (m *TeamToolManager) RestoreTraceContext(ctx context.Context, task *store.TeamTaskData) context.Context {
 	return m.restoreTraceContext(ctx, task)
 }
+func (m *TeamToolManager) NotifyOwnerAgentInReview(ctx context.Context, task *store.TeamTaskData, team *store.TeamData) {
+	m.notifyOwnerAgentInReview(ctx, task, team)
+}
+
+// isExternalTask checks if a task is targeted at an external worker (not the agent loop).
+func isExternalTask(task *store.TeamTaskData) bool {
+	if task.Metadata == nil {
+		return false
+	}
+	et, _ := task.Metadata["execution_target"].(string)
+	return et != "" && et != "agent"
+}
 
 // maxTaskDispatches is the max number of times a single task can be dispatched
 // before it auto-fails. Prevents infinite loops when agents can't complete a task.
@@ -48,6 +60,14 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	if m.msgBus == nil {
 		return
 	}
+
+	// Skip external tasks — they're handled by external workers, not the agent loop.
+	if isExternalTask(task) {
+		slog.Warn("team_tasks.dispatch: blocked dispatch of external task",
+			"task_id", task.ID, "execution_target", task.Metadata["execution_target"])
+		return
+	}
+
 	teamID := team.ID
 
 	// Safety net: never dispatch to the lead agent — causes dual-session loop.
@@ -350,6 +370,10 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 			})
 			continue
 		}
+		// Skip external tasks — handled by external workers, not agent dispatch.
+		if isExternalTask(task) {
+			continue
+		}
 		if dispatched[ownerID] {
 			continue // skip — this owner already has a higher-priority task dispatched
 		}
@@ -390,4 +414,49 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 		dispatchCtx := m.restoreTraceContext(ctx, task)
 		m.dispatchTaskToAgent(dispatchCtx, task, team, ownerID)
 	}
+}
+
+// notifyOwnerAgentInReview wakes the owner agent when an external task enters in_review.
+// Publishes an InboundMessage so the agent starts a fresh session to review the worker output.
+func (m *TeamToolManager) notifyOwnerAgentInReview(ctx context.Context, task *store.TeamTaskData, team *store.TeamData) {
+	if m.msgBus == nil || task.OwnerAgentID == nil {
+		return
+	}
+	if !isExternalTask(task) {
+		return
+	}
+
+	ag, err := m.cachedGetAgentByID(ctx, *task.OwnerAgentID)
+	if err != nil {
+		slog.Warn("team_tasks.review_notify: cannot resolve owner agent", "task_id", task.ID, "error", err)
+		return
+	}
+
+	content := fmt.Sprintf("[Task #%d submitted by worker — review needed]\nTask: %s\nAction: Review the result and changed files, then approve or reject.\nUse team_tasks(action=\"get\", task_id=\"%s\") to see details.",
+		task.TaskNumber, task.Subject, task.ID)
+
+	channel := task.Channel
+	chatID := task.ChatID
+	if channel == "" || channel == ChannelSystem || channel == ChannelTeammate {
+		channel = "dashboard"
+		chatID = team.ID.String()
+	}
+
+	userID := store.UserIDFromContext(ctx)
+	if userID == "" {
+		userID = chatID
+	}
+
+	m.msgBus.TryPublishInbound(bus.InboundMessage{
+		Channel:  channel,
+		SenderID: "notification:worker-submit",
+		ChatID:   chatID,
+		AgentID:  ag.AgentKey,
+		UserID:   userID,
+		TenantID: store.TenantIDFromContext(ctx),
+		Content:  content,
+	})
+
+	slog.Info("team_tasks.review_notify: notified owner agent",
+		"task_id", task.ID, "agent_key", ag.AgentKey)
 }

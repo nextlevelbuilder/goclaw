@@ -1,0 +1,41 @@
+# DigitalOcean VPS overlay — managed mode with external PostgreSQL + npm-network.
+#
+# Usage (without docker-compose.managed.yml — this overlay handles managed mode):
+#   docker compose -f docker-compose.yml -f docker-compose.selfservice.yml -f docker-compose.do.yml up -d --build
+
+services:
+  goclaw:
+    environment:
+      - GOCLAW_MODE=managed
+      - GOCLAW_POSTGRES_DSN=postgres://${POSTGRES_USER:-goclaw}:${POSTGRES_PASSWORD}@postgres-postgres-1:5432/${POSTGRES_DB:-goclaw}?sslmode=disable
+      - GOCLAW_ZALO_TOKEN=${GOCLAW_ZALO_TOKEN:-}
+      - GOCLAW_ALLOWED_ORIGINS=${GOCLAW_ALLOWED_ORIGINS:-}
+    volumes: !override
+      - ./data:/app/data
+      - ./workspace:/app/workspace
+      - ./skills:/app/skills
+      - ./.goclaw:/app/.goclaw
+    networks:
+      - npm-network
+    ports: !reset []
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: '1.5'
+          pids: 200
+
+  goclaw-ui:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:80/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    networks:
+      - npm-network
+    ports: !reset []
+
+networks:
+  npm-network:
+    external: true

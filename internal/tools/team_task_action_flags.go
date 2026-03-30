@@ -9,17 +9,18 @@ import "context"
 // No mutex needed: a single goroutine writes (agent loop), and the consumer
 // reads only after the turn ends (sequential).
 type TaskActionFlags struct {
-	Completed  bool // team_tasks(action="complete")
-	Reviewed   bool // team_tasks(action="review")
-	Escalated  bool // team_tasks(action="comment", type="blocker")
-	Progressed bool // team_tasks(action="progress")
-	Commented  bool // team_tasks(action="comment")
-	Claimed    bool // team_tasks(action="claim")
+	Completed        bool // team_tasks(action="complete")
+	Reviewed         bool // team_tasks(action="review")
+	Escalated        bool // team_tasks(action="comment", type="blocker")
+	Progressed       bool // team_tasks(action="progress")
+	Commented        bool // team_tasks(action="comment")
+	Claimed          bool // team_tasks(action="claim")
+	ReleasedToWorker bool // team_tasks(action="release_to_worker")
 }
 
 // HasAny returns true if the member interacted with the task system at all.
 func (f *TaskActionFlags) HasAny() bool {
-	return f.Completed || f.Reviewed || f.Escalated || f.Progressed || f.Commented || f.Claimed
+	return f.Completed || f.Reviewed || f.Escalated || f.Progressed || f.Commented || f.Claimed || f.ReleasedToWorker
 }
 
 const ctxTaskActionFlags toolContextKey = "tool_task_action_flags"

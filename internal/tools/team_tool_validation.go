@@ -94,6 +94,10 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		if *task.OwnerAgentID == team.LeadAgentID {
 			continue
 		}
+		// Skip tasks meant for external workers (e.g. windows-local).
+		if isExternalTask(task) {
+			continue
+		}
 		if err := m.teamStore.AssignTask(ctx, task.ID, *task.OwnerAgentID, teamID); err != nil {
 			slog.Warn("post_turn: assign failed", "task_id", task.ID, "error", err)
 			continue

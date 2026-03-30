@@ -665,6 +665,94 @@ Teams emit events for real-time UI updates and observability.
 
 ---
 
+## 13. External Worker Bridge
+
+Teams support external coding workers that connect via HTTP REST (not WebSocket). This enables a **VPS control plane + local execution plane** architecture where VPS agents orchestrate tasks and external workers execute code locally.
+
+### Architecture
+
+```mermaid
+flowchart LR
+    subgraph VPS["VPS — Control Plane"]
+        AGENTS["Team Agents<br/>(orchestration only)"]
+        WORKER_API["team_worker.go<br/>8 HTTP REST endpoints"]
+        STORE["TeamStore"]
+    end
+
+    subgraph PC["Windows PC — Execution Plane"]
+        WORKER["PowerShell Worker<br/>local-coding-worker.ps1"]
+        CLAUDE["Claude Code CLI"]
+        WORKTREE["Git Worktrees"]
+    end
+
+    WORKER -->|"HTTP poll + claim + complete"| WORKER_API
+    WORKER_API --> STORE
+    AGENTS --> STORE
+```
+
+### Worker HTTP Endpoints
+
+All under `/v1/teams/{teamId}/worker/` prefix. Auth: API key with operator role.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/tasks?status=pending` | List claimable tasks (default: pending only) |
+| `GET` | `/tasks/{taskId}` | Get single task detail |
+| `POST` | `/tasks/{taskId}/claim` | Atomically claim task on behalf of assigned agent |
+| `POST` | `/tasks/{taskId}/progress` | Report progress (percent, step) + renew lock |
+| `POST` | `/tasks/{taskId}/comment` | Add comment to task |
+| `POST` | `/tasks/{taskId}/complete` | Mark task done with result payload |
+| `POST` | `/tasks/{taskId}/fail` | Mark task failed with reason |
+| `POST` | `/heartbeat` | Worker liveness + task lock renewal |
+
+### Authentication
+
+Worker endpoints bypass the admin-only RPC permission policy (`permissions/policy.go:172-179` classifies `teams.tasks.*` as admin-only). Instead, `team_worker.go` uses `resolveAuth()` directly and requires at least **operator** role. This allows API keys with `operator.write` scope to access worker endpoints without full admin access.
+
+### Worker Identity
+
+Workers claim tasks **on behalf of the assigned VPS agent**. For example, a task assigned to agent "Zoro" is claimed with Zoro's `agent_id`. The worker is transparent to the task board — VPS agents see the task owned by Zoro naturally.
+
+### Task Metadata Contract
+
+Tasks routed to external workers carry structured metadata:
+
+```json
+{
+  "execution_target": "windows-local",
+  "repo_key": "goclaw",
+  "job_type": "implement|debug|test|review",
+  "brief_markdown": "execution instructions for Claude Code",
+  "files_of_interest": ["path/to/file.go"],
+  "commands_to_run": ["go build ./..."],
+  "max_runtime_seconds": 1800
+}
+```
+
+### Result Payload
+
+Workers return structured results via the `/complete` endpoint:
+
+```json
+{
+  "status": "pass|fail|blocker",
+  "summary": "what was done",
+  "changed_files": ["path/to/file.go"],
+  "commands_executed": ["go build ./..."],
+  "test_results": "stdout (truncated to 4000 chars)",
+  "branch": "task/42",
+  "duration_seconds": 120
+}
+```
+
+### Conflict Handling
+
+- **Duplicate claim**: Returns HTTP 409 (atomic CAS at DB level)
+- **Complete already-completed**: Returns HTTP 409 (idempotent — worker treats as success)
+- **Fail non-in-progress**: Returns HTTP 409
+
+---
+
 ## File Reference
 
 | File | Purpose |
@@ -688,6 +776,9 @@ Teams emit events for real-time UI updates and observability.
 | `internal/store/pg/teams.go` | PostgreSQL implementation: teams CRUD, members, tasks, messages, events, attachments |
 | `cmd/gateway_managed.go` | Team tool wiring, cache invalidation subscription |
 | `cmd/gateway_consumer.go` | Message routing for teammate/delegate (legacy) prefixes, task dispatch to agents |
+| `internal/http/team_worker.go` | Worker HTTP REST endpoints: list, claim, progress, comment, complete, fail, heartbeat |
+| `scripts/local-coding-worker.ps1` | PowerShell worker script for Windows local coding bridge |
+| `scripts/setup-strawhat-team.sh` | One-shot team + agent bootstrap script |
 
 ---
 
