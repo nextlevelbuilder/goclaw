@@ -57,7 +57,16 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	}
 
 	// Download using wget — Go's HTTP client has TLS stream issues in some environments
-	tempDir := os.TempDir()
+	// Use /app/workspace instead of /tmp (which may be noexec in containers)
+	tempDir := "/app/workspace"
+	if d := os.Getenv("GOCLAW_WORKSPACE_DIR"); d != "" {
+		tempDir = d
+	}
+	if _, err := os.Stat(tempDir); err != nil {
+		tempDir = os.TempDir()
+	}
+	os.MkdirAll(filepath.Join(tempDir, "marketplace"), 0755)
+	tempDir = filepath.Join(tempDir, "marketplace")
 	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
 	tempFile := filepath.Join(tempDir, filename)
 
