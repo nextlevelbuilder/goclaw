@@ -1,4 +1,21 @@
-import { Moon, Sun, PanelLeftClose, PanelLeftOpen, Menu, LogOut, Globe, Clock, Building2, ChevronDown, Check, User, KeyRound, Info, Settings2 } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  LogOut,
+  Globe,
+  Clock,
+  Building2,
+  ChevronDown,
+  Check,
+  User,
+  KeyRound,
+  Info,
+  Settings2,
+  Palette,
+} from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
@@ -7,7 +24,16 @@ import { useTenants } from "@/hooks/use-tenants";
 import { useIsMobile } from "@/hooks/use-media-query";
 import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
 
-import { ROUTES, SUPPORTED_LANGUAGES, LANGUAGE_LABELS, TIMEZONE_OPTIONS, LOCAL_STORAGE_KEYS, type Language } from "@/lib/constants";
+import {
+  ROUTES,
+  SUPPORTED_LANGUAGES,
+  LANGUAGE_LABELS,
+  TIMEZONE_OPTIONS,
+  COLOR_PRESETS,
+  LOCAL_STORAGE_KEYS,
+  type ColorPreset,
+  type Language,
+} from "@/lib/constants";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover } from "radix-ui";
 import { useState } from "react";
@@ -23,6 +49,8 @@ export function Topbar() {
   const setLanguage = useUiStore((s) => s.setLanguage);
   const timezone = useUiStore((s) => s.timezone);
   const setTimezone = useUiStore((s) => s.setTimezone);
+  const colorPreset = useUiStore((s) => s.colorPreset);
+  const setColorPreset = useUiStore((s) => s.setColorPreset);
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setMobileSidebarOpen = useUiStore((s) => s.setMobileSidebarOpen);
@@ -82,6 +110,26 @@ export function Topbar() {
           <SelectContent>
             {TIMEZONE_OPTIONS.map((tz) => (
               <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={colorPreset}
+          onValueChange={(v) => setColorPreset(v as ColorPreset)}
+        >
+          <SelectTrigger
+            title={t("colorPreset")}
+            className="h-auto w-auto gap-1 border-0 bg-transparent px-2 py-1.5 text-sm text-muted-foreground shadow-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-0 dark:bg-transparent dark:hover:bg-accent **:data-radix-select-icon:hidden"
+          >
+            <Palette className="h-4 w-4 shrink-0" />
+            <span className="hidden sm:inline"><SelectValue /></span>
+          </SelectTrigger>
+          <SelectContent>
+            {COLOR_PRESETS.map((preset) => (
+              <SelectItem key={preset} value={preset}>
+                {t(`colorPresets.${preset}`)}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>

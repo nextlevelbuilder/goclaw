@@ -3,6 +3,7 @@
   "expandSidebar": "Mở rộng thanh bên",
   "language": "Ngôn ngữ",
   "timezone": "Múi giờ",
+  "colorPreset": "Màu giao diện",
   "languages": {
     "en": "English",
     "vi": "Tiếng Việt",
@@ -29,5 +30,9 @@
     "viewRelease": "Xem chi tiết →"
   },
   "systemSettings": "Cài đặt hệ thống",
-  "toggleTheme": "Chuyển đổi giao diện"
+  "toggleTheme": "Chuyển đổi giao diện",
+  "colorPresets": {
+    "classic": "Mặc định",
+    "midnight": "Đêm sâu"
+  }
 }

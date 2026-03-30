@@ -85,6 +85,28 @@
   --chart-5: oklch(0.62 0.02 50);
 }
 
+[data-color-preset="midnight"].dark {
+  --background: oklch(0.08 0 0);
+  --foreground: oklch(0.94 0 0);
+  --card: oklch(0.14 0 0);
+  --card-foreground: oklch(0.94 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(0.94 0 0);
+  --secondary: oklch(0.20 0 0);
+  --secondary-foreground: oklch(0.94 0 0);
+  --muted: oklch(0.17 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.24 0 0);
+  --accent-foreground: oklch(0.94 0 0);
+  --border: oklch(0.26 0 0);
+  --input: oklch(0.24 0 0);
+  --sidebar: oklch(0.12 0 0);
+  --sidebar-foreground: oklch(0.94 0 0);
+  --sidebar-accent: oklch(0.24 0 0);
+  --sidebar-accent-foreground: oklch(0.94 0 0);
+  --sidebar-border: oklch(0.24 0 0);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

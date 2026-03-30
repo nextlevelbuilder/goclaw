@@ -12,6 +12,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useMemoryDocuments } from "./hooks/use-memory";
 import type { AgentData } from "@/types/agent";
@@ -25,6 +32,9 @@ interface MemoryCreateDialogProps {
   /** Known user/group IDs from existing docs */
   knownUserIds?: string[];
 }
+
+const AGENT_PLACEHOLDER_VALUE = "__select_agent__";
+const SCOPE_PLACEHOLDER_VALUE = "__select_scope__";
 
 export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId, knownUserIds = [] }: MemoryCreateDialogProps) {
   const { t } = useTranslation("memory");
@@ -105,19 +115,22 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
           {/* Agent selector */}
           <div className="grid gap-1.5">
             <Label htmlFor="mc-agent">{t("createDialog.agentId")}</Label>
-            <select
-              id="mc-agent"
-              value={selectedAgentId || parentAgentId || ""}
-              onChange={(e) => setSelectedAgentId(e.target.value)}
-              className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
+            <Select
+              value={selectedAgentId || parentAgentId || AGENT_PLACEHOLDER_VALUE}
+              onValueChange={(value) => setSelectedAgentId(value === AGENT_PLACEHOLDER_VALUE ? "" : value)}
             >
-              <option value="">{t("createDialog.agentIdPlaceholder")}</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.display_name || a.agent_key}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="mc-agent" className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start">
+                <SelectItem value={AGENT_PLACEHOLDER_VALUE}>{t("createDialog.agentIdPlaceholder")}</SelectItem>
+                {agents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.display_name || a.agent_key}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {selectedAgent?.workspace && (
               <p className="font-mono text-[10px] text-muted-foreground">{selectedAgent.workspace}</p>
             )}
@@ -155,18 +168,22 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
               </Button>
             </div>
             {scopeMode === "existing" && knownUserIds.length > 0 && (
-              <select
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
+              <Select
+                value={selectedUserId || SCOPE_PLACEHOLDER_VALUE}
+                onValueChange={(value) => setSelectedUserId(value === SCOPE_PLACEHOLDER_VALUE ? "" : value)}
               >
-                <option value="">{t("createDialog.selectGroupUser")}</option>
-                {knownUserIds.map((uid) => (
-                  <option key={uid} value={uid}>
-                    {formatScopeLabel(uid)}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectItem value={SCOPE_PLACEHOLDER_VALUE}>{t("createDialog.selectGroupUser")}</SelectItem>
+                  {knownUserIds.map((uid) => (
+                    <SelectItem key={uid} value={uid}>
+                      {formatScopeLabel(uid)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
             {scopeMode === "custom" && (
               <Input

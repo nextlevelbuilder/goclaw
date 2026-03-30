@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useUiStore, type Theme } from "@/stores/use-ui-store";
+import type { ColorPreset } from "@/lib/constants";
 
 function applyTheme(theme: Theme) {
   const root = document.documentElement;
@@ -13,12 +14,21 @@ function applyTheme(theme: Theme) {
   }
 }
 
+function applyColorPreset(preset: ColorPreset) {
+  document.documentElement.setAttribute("data-color-preset", preset);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useUiStore((s) => s.theme);
+  const colorPreset = useUiStore((s) => s.colorPreset);
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyColorPreset(colorPreset);
+  }, [colorPreset]);
 
   // Listen for system theme changes when in "system" mode
   useEffect(() => {

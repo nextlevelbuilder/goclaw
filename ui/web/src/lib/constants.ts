@@ -53,6 +53,7 @@ export const LOCAL_STORAGE_KEYS = {
   TENANT_HINT: "goclaw:tenant_hint",
   SETUP_SKIPPED: "goclaw:setup_skipped",
   THEME: "goclaw:theme",
+  COLOR_PRESET: "goclaw:color_preset",
   SIDEBAR_COLLAPSED: "goclaw:sidebarCollapsed",
   LANGUAGE: "goclaw:language",
   TIMEZONE: "goclaw:timezone",
@@ -66,6 +67,9 @@ export const LANGUAGE_LABELS: Record<Language, string> = {
   vi: "Tiếng Việt",
   zh: "中文",
 };
+
+export const COLOR_PRESETS = ["classic", "midnight"] as const;
+export type ColorPreset = (typeof COLOR_PRESETS)[number];
 
 /** "auto" = browser's local timezone. */
 export const TIMEZONE_OPTIONS = [
