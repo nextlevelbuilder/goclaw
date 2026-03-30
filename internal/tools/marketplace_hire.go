@@ -8,7 +8,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -64,7 +63,7 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult(fmt.Sprintf("Failed to get team details: %v", err))
 	}
 
-	// Download bundle using wget (Go's HTTP client has TLS stream issues in some envs)
+	// Download bundle via Go HTTP client
 	dlDir := "/app/workspace/marketplace"
 	if d := os.Getenv("GOCLAW_WORKSPACE_DIR"); d != "" {
 		dlDir = filepath.Join(d, "marketplace")
@@ -80,11 +79,34 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	os.Remove(bundlePath) // clean any stale file
 
 	dlURL := t.client.BaseURL + "/registry/download/" + slug
-	cmd := exec.CommandContext(ctx, "wget", "-q", "-O", bundlePath, dlURL,
-		"--header=X-Registry-Key: "+t.client.APIKey,
-		"--timeout=30")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v (%s)", listing.Title, err, strings.TrimSpace(string(output))))
+	dlReq, err := http.NewRequestWithContext(ctx, "GET", dlURL, nil)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create download request: %v", err))
+	}
+	dlReq.Header.Set("X-Registry-Key", t.client.APIKey)
+
+	dlResp, err := http.DefaultClient.Do(dlReq)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v", listing.Title, err))
+	}
+	defer dlResp.Body.Close()
+
+	if dlResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(dlResp.Body)
+		return ErrorResult(fmt.Sprintf("Download failed for '%s': HTTP %d: %s", listing.Title, dlResp.StatusCode, strings.TrimSpace(string(body))))
+	}
+
+	outFile, err := os.Create(bundlePath)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create file: %v", err))
+	}
+	written, err := io.Copy(outFile, dlResp.Body)
+	outFile.Close()
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to write bundle: %v", err))
+	}
+	if written == 0 {
+		return ErrorResult(fmt.Sprintf("Download produced empty file for '%s'", listing.Title))
 	}
 
 	info, err := os.Stat(bundlePath)
@@ -142,48 +164,47 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	return NewResult(result.String())
 }
 
-// importBundle POSTs the tar.gz to GoClaw's own /v1/teams/import endpoint.
+// importBundle POSTs the tar.gz to GoClaw's own /v1/teams/import endpoint as multipart form.
 func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
 	if t.gatewayURL == "" || t.gatewayToken == "" {
 		return "", fmt.Errorf("gateway URL or token not configured for auto-import")
 	}
 
-	// Read the bundle file
-	bundleData, err := os.ReadFile(bundlePath)
+	f, err := os.Open(bundlePath)
 	if err != nil {
-		return "", fmt.Errorf("read bundle: %w", err)
+		return "", fmt.Errorf("open bundle: %v", err)
 	}
+	defer f.Close()
 
-	// Build multipart form
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
 	part, err := writer.CreateFormFile("file", filepath.Base(bundlePath))
 	if err != nil {
-		return "", fmt.Errorf("create form: %w", err)
+		return "", fmt.Errorf("create form file: %v", err)
 	}
-	if _, err := io.Copy(part, bytes.NewReader(bundleData)); err != nil {
-		return "", fmt.Errorf("write form: %w", err)
+	if _, err := io.Copy(part, f); err != nil {
+		return "", fmt.Errorf("copy bundle to form: %v", err)
 	}
 	writer.Close()
 
-	// POST to local GoClaw import endpoint
-	req, err := http.NewRequest("POST", t.gatewayURL+"/v1/teams/import", &buf)
+	importURL := t.gatewayURL + "/v1/teams/import"
+	req, err := http.NewRequest("POST", importURL, &body)
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("create request: %v", err)
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+t.gatewayToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("import request: %w", err)
+		return "", fmt.Errorf("import request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("import failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("import returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 
-	return string(body), nil
+	return strings.TrimSpace(string(respBody)), nil
 }
