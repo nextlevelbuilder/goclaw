@@ -142,7 +142,7 @@ func setupToolRegistry(
 		cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL))
 
 	// Marketplace tools (GoClaw Hub integration)
-	if cfg.Tools.Marketplace.Enabled || cfg.Tools.Marketplace.APIKey != "" {
+	{
 		apiBase := cfg.Tools.Marketplace.APIBase
 		if apiBase == "" {
 			apiBase = "https://hub-api.vibery.app/v1"
