@@ -157,11 +157,13 @@ func (m *Manager) Start(ctx context.Context) error {
 
 // resolvedServer holds a server config with merged credentials ready for connection.
 type resolvedServer struct {
-	info         store.MCPAccessInfo
-	args         []string
-	env          map[string]string
-	headers      map[string]string
-	hasUserCreds bool
+	info             store.MCPAccessInfo
+	args             []string
+	env              map[string]string
+	headers          map[string]string
+	hasUserCreds     bool
+	projectID        string            // per-project MCP isolation
+	projectOverrides map[string]string // per-server env overrides from project
 }
 
 // resolveServerCredentials merges server defaults with per-user credentials.
@@ -246,10 +248,12 @@ func (m *Manager) connectAndFilter(ctx context.Context, rs *resolvedServer) erro
 	srv := rs.info.Server
 
 	if m.pool != nil && !rs.hasUserCreds {
-		// Pool mode: acquire shared connection, create per-agent BridgeTools
+		// Pool mode: acquire shared connection, create per-agent BridgeTools.
+		// Project env overrides are merged and create an isolated pool entry.
 		tid := store.TenantIDFromContext(ctx)
 		if err := m.connectViaPool(ctx, tid, srv.Name, srv.Transport, srv.Command,
-			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec); err != nil {
+			rs.args, rs.env, srv.URL, rs.headers, srv.ToolPrefix, srv.TimeoutSec,
+			rs.projectID, rs.projectOverrides); err != nil {
 			return err
 		}
 	} else {
@@ -271,6 +275,10 @@ func (m *Manager) connectAndFilter(ctx context.Context, rs *resolvedServer) erro
 
 // LoadForAgent connects MCP servers accessible by a specific agent+user.
 // Previously registered MCP tools for this manager are cleared and reloaded.
+//
+// Project context (store.ProjectIDFromContext / store.ProjectOverridesFromContext) is
+// automatically read from ctx. When present, per-server env overrides are injected
+// into each resolved server, and pool keys include the project ID for isolation.
 func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID string) error {
 	if m.store == nil {
 		return nil
@@ -280,6 +288,10 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 	if err != nil {
 		return fmt.Errorf("list accessible MCP servers: %w", err)
 	}
+
+	// Read project scope from context (set by consumer when chat is bound to a project).
+	projectID := store.ProjectIDFromContext(ctx)
+	projectOverrides := store.ProjectOverridesFromContext(ctx)
 
 	// Unregister all existing MCP tools first
 	m.unregisterAllTools()
@@ -297,6 +309,13 @@ func (m *Manager) LoadForAgent(ctx context.Context, agentID uuid.UUID, userID st
 		rs := m.resolveServerCredentials(ctx, info, userID)
 		if rs == nil {
 			continue
+		}
+		// Inject per-project env overrides so each project gets isolated MCP connections.
+		if projectID != "" {
+			rs.projectID = projectID
+			if projectOverrides != nil {
+				rs.projectOverrides = projectOverrides[info.Server.Name]
+			}
 		}
 		if err := m.connectAndFilter(ctx, rs); err != nil {
 			slog.Warn("mcp.server.connect_failed", "server", info.Server.Name, "error", err)

@@ -109,13 +109,18 @@ func (r *Router) Get(ctx context.Context, agentID string) (Agent, error) {
 	return nil, fmt.Errorf("agent not found: %s", agentID)
 }
 
-// agentCacheKey builds a tenant-scoped cache key for the agent router.
+// agentCacheKey builds a tenant-and-project-scoped cache key for the agent router.
+// Different projects get separate cached Loop instances (each with project-specific MCP env).
 func agentCacheKey(ctx context.Context, agentID string) string {
+	key := agentID
 	tid := store.TenantIDFromContext(ctx)
-	if tid == uuid.Nil {
-		return agentID
+	if tid != uuid.Nil {
+		key = tid.String() + ":" + key
 	}
-	return tid.String() + ":" + agentID
+	if pid := store.ProjectIDFromContext(ctx); pid != "" {
+		key += ":project:" + pid
+	}
+	return key
 }
 
 // Remove removes an agent from the router.

@@ -32,4 +32,5 @@ type Stores struct {
 	BuiltinToolTenantCfgs  BuiltinToolTenantConfigStore
 	SkillTenantCfgs        SkillTenantConfigStore
 	SystemConfigs          SystemConfigStore
+	Projects               ProjectStore
 }

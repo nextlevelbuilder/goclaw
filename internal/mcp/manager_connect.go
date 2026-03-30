@@ -122,10 +122,35 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 	return registeredNames
 }
 
+// mergeEnv merges base env vars with project-level overrides.
+// Project overrides take precedence but never remove base keys.
+func mergeEnv(base, overrides map[string]string) map[string]string {
+	if len(overrides) == 0 {
+		return base
+	}
+	merged := make(map[string]string, len(base)+len(overrides))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range overrides {
+		merged[k] = v
+	}
+	return merged
+}
+
 // connectViaPool acquires a shared connection from the pool and creates
 // per-agent BridgeTools pointing to the shared client/connected pointers.
-func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int) error {
-	entry, err := m.pool.Acquire(ctx, tenantID, name, transportType, command, args, env, url, headers, timeoutSec)
+// When projectID is non-empty, a separate pool entry is created with merged env
+// to prevent cross-project environment leakage.
+func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int, projectID string, projectEnvOverrides map[string]string) error {
+	// Merge project-level env overrides into base env for this pool connection.
+	mergedEnv := mergeEnv(env, projectEnvOverrides)
+	// Use project-scoped pool key to prevent cross-project env leakage.
+	poolName := name
+	if projectID != "" {
+		poolName = name + ":" + projectID
+	}
+	entry, err := m.pool.Acquire(ctx, tenantID, poolName, transportType, command, args, mergedEnv, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}

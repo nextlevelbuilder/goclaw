@@ -40,6 +40,17 @@ func processNormalMessage(
 		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 
+	// Resolve project binding for this chat (per-project MCP isolation).
+	// Injects project scope into context so the agent router creates separate
+	// cached Loop instances per project, each with project-specific MCP env vars.
+	channelType := resolveChannelType(deps.ChannelMgr, msg.Channel)
+	if projectID, projectOverrides := resolveProjectOverrides(ctx, deps.ProjectStore, channelType, msg.ChatID); projectID != "" {
+		ctx = store.WithProjectID(ctx, projectID)
+		if projectOverrides != nil {
+			ctx = store.WithProjectOverrides(ctx, projectOverrides)
+		}
+	}
+
 	agentLoop, err := deps.Agents.Get(ctx, agentID)
 	if err != nil {
 		slog.Warn("inbound: agent not found", "agent", agentID, "channel", msg.Channel)
@@ -350,7 +361,7 @@ func processNormalMessage(
 		Media:             reqMedia,
 		ForwardMedia:      fwdMedia,
 		Channel:           msg.Channel,
-		ChannelType:       resolveChannelType(deps.ChannelMgr, msg.Channel),
+		ChannelType:       channelType,
 		ChatTitle:         msg.Metadata["chat_title"],
 		ChatID:            msg.ChatID,
 		PeerKind:          peerKind,

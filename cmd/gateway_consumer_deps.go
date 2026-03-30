@@ -26,6 +26,7 @@ type ConsumerDeps struct {
 	PostTurn         tools.PostTurnProcessor
 	QuotaChecker     *channels.QuotaChecker
 	ContactCollector *store.ContactCollector
+	ProjectStore     store.ProjectStore
 	TaskRunSessions  sync.Map
 	BgWg             sync.WaitGroup
 	GetAnnounceMu    func(string) *sync.Mutex
