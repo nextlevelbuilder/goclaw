@@ -63,6 +63,26 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult(fmt.Sprintf("Failed to get team details: %v", err))
 	}
 
+	// Check if paid listing — can't download without purchase
+	if listing.PriceCents > 0 {
+		hubURL := strings.TrimSuffix(t.client.BaseURL, "/v1")
+		hubURL = strings.TrimSuffix(hubURL, "/")
+		// Try to derive the frontend URL from the API URL
+		buyURL := strings.Replace(hubURL, "hub-api.", "hub.", 1)
+		buyURL = strings.Replace(buyURL, ":9401", ":9402", 1)
+
+		price := fmt.Sprintf("$%.2f", float64(listing.PriceCents)/100)
+		if listing.PriceCents%100 == 0 {
+			price = fmt.Sprintf("$%d", listing.PriceCents/100)
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("**%s** costs %s (one-time purchase).\n\n", listing.Title, price))
+		sb.WriteString(fmt.Sprintf("Purchase it here: %s/listing/%s\n\n", buyURL, listing.Slug))
+		sb.WriteString("After purchasing, say \"hire " + listing.Slug + "\" again and I'll install it for you.")
+		return NewResult(sb.String())
+	}
+
 	// Download bundle via Go HTTP client
 	dlDir := "/app/workspace/marketplace"
 	if d := os.Getenv("GOCLAW_WORKSPACE_DIR"); d != "" {
