@@ -2,6 +2,8 @@
 
 How agents create, register, and manage skills programmatically through the `publish_skill` builtin tool, working in tandem with the `skill-creator` core skill.
 
+**Related:** See [22-skill-hub-installation.md](./22-skill-hub-installation.md) for user-driven skill discovery and CLI installation from public registry or GitHub.
+
 ---
 
 ## 1. Overview
