@@ -547,6 +547,10 @@ const maxToolCallIDLen = 40
 // truncateToolCallID deterministically fits tool call IDs into OpenAI's 40-char
 // limit. Prefix truncation can alias distinct legacy IDs that only diverge after
 // byte 40, so we hash the full original ID when shortening is needed.
+//
+// Fresh tool calls from the agent loop already go through uniquifyToolCallIDs
+// (which produces 40-char hashed IDs), so this is a no-op for those. This
+// function catches replayed/legacy history entries that bypassed uniquification.
 func truncateToolCallID(id string) string {
 	if len(id) <= maxToolCallIDLen {
 		return id
