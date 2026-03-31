@@ -410,6 +410,21 @@ func runGateway() {
 		server.SetSecureCLIHandler(secureCLIH)
 	}
 
+	// Marketplace install page (GoClaw Hub integration)
+	{
+		mktAPIKey := cfg.Tools.Marketplace.APIKey
+		if mktAPIKey == "" {
+			mktAPIKey = os.Getenv("GOCLAW_MARKETPLACE_API_KEY")
+		}
+		if mktAPIKey != "" {
+			gwPort := cfg.Gateway.Port
+			if gwPort == 0 {
+				gwPort = 18790
+			}
+			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort))
+		}
+	}
+
 	// Activity audit log API
 	if pgStores.Activity != nil {
 		server.SetActivityHandler(httpapi.NewActivityHandler(pgStores.Activity))

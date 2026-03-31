@@ -488,6 +488,11 @@ func (s *Server) SetDocsHandler(h *httpapi.DocsHandler) { s.handlers = append(s.
 // SetEditionHandler sets the edition info handler.
 func (s *Server) SetEditionHandler(h *httpapi.EditionHandler) { s.handlers = append(s.handlers, h) }
 
+// SetMarketplaceInstallHandler sets the marketplace install page handler.
+func (s *Server) SetMarketplaceInstallHandler(h *httpapi.MarketplaceInstallHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }
 
