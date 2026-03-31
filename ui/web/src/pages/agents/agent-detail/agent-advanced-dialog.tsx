@@ -18,7 +18,13 @@ import {
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
-import { getChatGPTOAuthProviderRouting, getProviderReasoningDefaults } from "@/types/provider";
+import {
+  getChatGPTOAuthProviderRouting,
+  getProviderReasoningDefaults,
+  normalizeReasoningEffort,
+  normalizeReasoningFallback,
+  deriveLegacyThinkingLevel,
+} from "@/types/provider";
 import {
   buildAgentOtherConfigWithChatGPTOAuthRouting,
   normalizeChatGPTOAuthRouting,
@@ -26,37 +32,6 @@ import {
 import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
 
 const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
-
-function normalizeReasoningEffort(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const normalized = value.trim().toLowerCase();
-  return [
-    "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh",
-  ].includes(normalized) ? normalized : "";
-}
-
-function normalizeReasoningFallback(value: unknown): string {
-  if (typeof value !== "string") return "downgrade";
-  const normalized = value.trim().toLowerCase();
-  return ["downgrade", "provider_default", "off"].includes(normalized)
-    ? normalized
-    : "downgrade";
-}
-
-function deriveLegacyThinkingLevel(effort: string): string {
-  switch (effort) {
-    case "low":
-    case "medium":
-    case "high":
-      return effort;
-    case "minimal":
-      return "low";
-    case "xhigh":
-      return "high";
-    default:
-      return "off";
-  }
-}
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -72,7 +47,6 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const currentProvider = providerByName.get(agent.provider);
   const { models: providerModels, loading: providerModelsLoading } = useProviderModels(
     currentProvider?.id,
-    currentProvider?.provider_type,
   );
   const providerRoutingDefaults = getChatGPTOAuthProviderRouting(currentProvider?.settings);
   const providerReasoningDefaults = getProviderReasoningDefaults(currentProvider?.settings);
@@ -127,7 +101,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const [reasoningMode, setReasoningMode] = useState<ReasoningOverrideMode>(init.reasoningMode);
   const [thinkingLevel, setThinkingLevel] = useState(init.thinkingLevel);
   const [reasoningEffort, setReasoningEffort] = useState(init.reasoningEffort);
-  const [reasoningFallback, setReasoningFallback] = useState(init.reasoningFallback);
+  const [reasoningFallback, setReasoningFallback] = useState<string>(init.reasoningFallback);
   const [reasoningExpert, setReasoningExpert] = useState(init.reasoningExpert);
   const [chatgptRouting, setChatgptRouting] = useState<ChatGPTOAuthRoutingConfig>(init.chatgptRouting);
   const [comp, setComp] = useState<CompactionConfig>(init.comp);

@@ -5,7 +5,7 @@ import type { ModelInfo, ProviderModelsResponse } from "@/types/provider";
 
 export type { ModelInfo };
 
-export function useProviderModels(providerId: string | undefined, _providerType?: string) {
+export function useProviderModels(providerId: string | undefined) {
   const http = useHttp();
 
   const {

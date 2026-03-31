@@ -102,6 +102,22 @@ export function normalizeReasoningFallback(
   return "downgrade";
 }
 
+/** Maps advanced reasoning effort levels to the legacy three-tier thinking_level. */
+export function deriveLegacyThinkingLevel(effort: string): string {
+  switch (effort) {
+    case "low":
+    case "medium":
+    case "high":
+      return effort;
+    case "minimal":
+      return "low";
+    case "xhigh":
+      return "high";
+    default:
+      return "off";
+  }
+}
+
 export function getProviderReasoningDefaults(
   settings?: Record<string, unknown>,
 ): ProviderReasoningDefaults | null {

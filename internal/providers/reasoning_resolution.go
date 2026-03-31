@@ -22,8 +22,8 @@ type ReasoningDecision struct {
 func ResolveReasoningDecision(provider Provider, model, requestedEffort, fallback, source string) ReasoningDecision {
 	decision := ReasoningDecision{
 		Source:          normalizeReasoningSource(source),
-		RequestedEffort: normalizeReasoningEffort(requestedEffort),
-		Fallback:        normalizeReasoningFallback(fallback),
+		RequestedEffort: NormalizeReasoningEffort(requestedEffort),
+		Fallback:        NormalizeReasoningFallback(fallback),
 	}
 	if decision.RequestedEffort == "" {
 		decision.RequestedEffort = "off"
@@ -94,7 +94,8 @@ func (d ReasoningDecision) HasObservation() bool {
 	return d.Source != "" && d.Source != "unset"
 }
 
-func normalizeReasoningEffort(value string) string {
+// NormalizeReasoningEffort returns the canonical lowercase effort level if valid, else "".
+func NormalizeReasoningEffort(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh":
 		return strings.ToLower(strings.TrimSpace(value))
@@ -103,7 +104,8 @@ func normalizeReasoningEffort(value string) string {
 	}
 }
 
-func normalizeReasoningFallback(value string) string {
+// NormalizeReasoningFallback returns the canonical fallback policy; defaults to "downgrade".
+func NormalizeReasoningFallback(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case ReasoningFallbackDisable, ReasoningFallbackProviderDefault:
 		return strings.ToLower(strings.TrimSpace(value))

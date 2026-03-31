@@ -154,7 +154,6 @@ function SortableProviderCard({ entry, index, toolName, enabledProviders, onUpda
   const selectedProvider = enabledProviders.find((p) => p.id === entry.provider_id);
   const { models, loading: modelsLoading } = useProviderModels(
     entry.provider_id || undefined,
-    selectedProvider?.provider_type,
   );
 
   const paramSchema: ParamField[] =

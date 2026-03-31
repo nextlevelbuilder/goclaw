@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // sanitizeToolCallPrefix strips characters not in [a-z0-9_{}] from the prefix.
@@ -287,22 +288,14 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return *cfg.SkillNudgeInterval
 }
 
+// normalizeReasoningEffort delegates to providers.NormalizeReasoningEffort (DRY).
 func normalizeReasoningEffort(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh":
-		return strings.ToLower(strings.TrimSpace(value))
-	default:
-		return ""
-	}
+	return providers.NormalizeReasoningEffort(value)
 }
 
+// normalizeReasoningFallback delegates to providers.NormalizeReasoningFallback (DRY).
 func normalizeReasoningFallback(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case ReasoningFallbackDisable, ReasoningFallbackProviderDefault:
-		return strings.ToLower(strings.TrimSpace(value))
-	default:
-		return ReasoningFallbackDowngrade
-	}
+	return providers.NormalizeReasoningFallback(value)
 }
 
 // WorkspaceSharingConfig controls per-user workspace isolation.
@@ -321,9 +314,10 @@ const (
 	ReasoningSourceLegacy            = "thinking_level"
 	ReasoningSourceAdvanced          = "reasoning"
 	ReasoningSourceProviderDefault   = "provider_default"
-	ReasoningFallbackDowngrade       = "downgrade"
-	ReasoningFallbackDisable         = "off"
-	ReasoningFallbackProviderDefault = "provider_default"
+	// Reasoning fallback constants — canonical definitions in providers package.
+	ReasoningFallbackDowngrade       = providers.ReasoningFallbackDowngrade
+	ReasoningFallbackDisable         = providers.ReasoningFallbackDisable
+	ReasoningFallbackProviderDefault = providers.ReasoningFallbackProviderDefault
 	ReasoningOverrideInherit         = "inherit"
 	ReasoningOverrideCustom          = "custom"
 )

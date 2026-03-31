@@ -272,7 +272,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		if effort := reasoningDecision.RequestEffort(); effort != "" {
 			chatReq.Options[providers.OptThinkingLevel] = effort
 		}
-		if reasoningDecision.Reason != "" && reasoningDecision.RequestedEffort != "off" {
+		if reasoningDecision.Reason != "" {
 			slog.Debug("reasoning normalized",
 				"provider", provider.Name(),
 				"model", model,

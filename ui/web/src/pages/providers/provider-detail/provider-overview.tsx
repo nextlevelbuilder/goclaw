@@ -34,6 +34,7 @@ import {
   getProviderReasoningDefaults,
   normalizeReasoningEffort,
   normalizeReasoningFallback,
+  deriveLegacyThinkingLevel,
 } from "@/types/provider";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 import type { ChatGPTOAuthRoutingConfig } from "@/types/agent";
@@ -128,20 +129,6 @@ function providerFormSignature(input: {
   });
 }
 
-function deriveLegacyThinkingLevel(effort: string): string {
-  switch (effort) {
-    case "low":
-    case "medium":
-    case "high":
-      return effort;
-    case "minimal":
-      return "low";
-    case "xhigh":
-      return "high";
-    default:
-      return "off";
-  }
-}
 
 function reasoningSignature(effort: string, fallback: string): string {
   return JSON.stringify({
@@ -157,7 +144,7 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
   const {
     models: providerModels,
     reasoningDefaults: providerReasoningDefaults,
-  } = useProviderModels(provider.id, provider.provider_type);
+  } = useProviderModels(provider.id);
   const { statuses } = useChatGPTOAuthProviderStatuses(providers);
 
   const typeInfo = PROVIDER_TYPES.find((pt) => pt.value === provider.provider_type);
