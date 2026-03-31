@@ -10,6 +10,7 @@ import { AgentOverviewTab } from "./agent-overview-tab";
 import { AgentFilesTab } from "./agent-files-tab";
 import { AgentInstancesTab } from "./agent-instances-tab";
 import { AgentPermissionsTab } from "./agent-permissions-tab";
+import { AgentSharesTab } from "./agent-shares-tab";
 import { AgentAdvancedDialog } from "./agent-advanced-dialog";
 import { HeartbeatConfigDialog } from "./heartbeat-config-dialog";
 import { SummoningModal } from "../summoning-modal";
@@ -74,6 +75,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
               <TabsTrigger value="agent">{t("detail.tabs.agent")}</TabsTrigger>
               <TabsTrigger value="files">{t("detail.tabs.files")}</TabsTrigger>
               <TabsTrigger value="permissions">{t("detail.tabs.permissions")}</TabsTrigger>
+              <TabsTrigger value="shares">{t("detail.tabs.shares")}</TabsTrigger>
               {agent.agent_type === "predefined" && (
                 <TabsTrigger value="instances">{t("detail.tabs.instances")}</TabsTrigger>
               )}
@@ -102,6 +104,10 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
 
             <TabsContent value="permissions" className="mt-4">
               <AgentPermissionsTab agentId={agentId} />
+            </TabsContent>
+
+            <TabsContent value="shares" className="mt-4">
+              <AgentSharesTab agentId={agentId} />
             </TabsContent>
 
             {agent.agent_type === "predefined" && (
