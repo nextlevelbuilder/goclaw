@@ -83,19 +83,21 @@ func (c *Channel) Start(_ context.Context) error {
 	c.groupHistory.StartFlusher()
 	slog.Info("starting discord bot")
 
-	c.session.AddHandler(c.handleMessage)
-
 	if err := c.session.Open(); err != nil {
 		return fmt.Errorf("open discord session: %w", err)
 	}
 
-	// Fetch bot identity
+	// Fetch bot identity before registering message handler so that
+	// botUserID is always set when handleMessage fires (avoids mention
+	// check failing on events replayed immediately after connect).
 	user, err := c.session.User("@me")
 	if err != nil {
 		c.session.Close()
 		return fmt.Errorf("fetch discord bot identity: %w", err)
 	}
 	c.botUserID = user.ID
+
+	c.session.AddHandler(c.handleMessage)
 
 	c.SetRunning(true)
 	slog.Info("discord bot connected", "username", user.Username, "id", user.ID)

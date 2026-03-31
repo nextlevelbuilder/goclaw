@@ -132,15 +132,26 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	}
 
 	// Team workspace: dispatched task overrides default workspace.
+	// Preserve the agent's own workspace so file tools can still allow access
+	// to project files (e.g. the code repo the agent normally works in).
 	if req.TeamWorkspace != "" {
 		if err := os.MkdirAll(req.TeamWorkspace, 0755); err != nil {
 			slog.Warn("failed to create team workspace directory", "workspace", req.TeamWorkspace, "error", err)
+		}
+		// Save the agent's BASE workspace (l.workspace), not the per-user
+		// derived workspace from context which may already have user-isolation
+		// layers applied (e.g. /workspaces/group_discord-pm_123...).
+		if l.workspace != "" {
+			ctx = tools.WithToolAgentWorkspace(ctx, l.workspace)
 		}
 		ctx = tools.WithToolTeamWorkspace(ctx, req.TeamWorkspace)
 		ctx = tools.WithToolWorkspace(ctx, req.TeamWorkspace)
 	}
 	if req.TeamID != "" {
 		ctx = tools.WithToolTeamID(ctx, req.TeamID)
+		if tid, err := uuid.Parse(req.TeamID); err == nil && tid != uuid.Nil {
+			ctx = store.WithMemoryTeamID(ctx, tid)
+		}
 	}
 	if req.LeaderAgentID != "" {
 		ctx = tools.WithLeaderAgentID(ctx, req.LeaderAgentID)
@@ -172,6 +183,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 			}
 			if req.TeamID == "" {
 				ctx = tools.WithToolTeamID(ctx, team.ID.String())
+				ctx = store.WithMemoryTeamID(ctx, team.ID)
 			}
 		}
 	}

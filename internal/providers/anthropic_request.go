@@ -184,6 +184,14 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 			tools[len(tools)-1]["cache_control"] = map[string]any{"type": "ephemeral"}
 		}
 		body["tools"] = tools
+		switch req.ToolChoice {
+		case "none":
+			body["tool_choice"] = map[string]any{"type": "none"}
+		case "required":
+			body["tool_choice"] = map[string]any{"type": "any"}
+		default:
+			body["tool_choice"] = map[string]any{"type": "auto"}
+		}
 	}
 
 	// Merge options

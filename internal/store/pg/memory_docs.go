@@ -18,7 +18,7 @@ import (
 type PGMemoryStore struct {
 	db       *sql.DB
 	provider store.EmbeddingProvider
-	mu       sync.RWMutex   // protects cfg from concurrent read/write
+	mu       sync.RWMutex // protects cfg from concurrent read/write
 	cfg      PGMemoryConfig
 }
 
@@ -86,12 +86,17 @@ func (s *PGMemoryStore) PutDocument(ctx context.Context, agentID, userID, path, 
 		uid = &userID
 	}
 
+	var teamID *uuid.UUID
+	if mtid := store.MemoryTeamID(ctx); mtid != uuid.Nil {
+		teamID = &mtid
+	}
+
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO memory_documents (id, agent_id, user_id, path, content, hash, tenant_id, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`INSERT INTO memory_documents (id, agent_id, user_id, path, content, hash, tenant_id, team_id, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (agent_id, COALESCE(user_id, ''), path)
-		 DO UPDATE SET content = EXCLUDED.content, hash = EXCLUDED.hash, tenant_id = EXCLUDED.tenant_id, updated_at = EXCLUDED.updated_at`,
-		id, aid, uid, path, content, hash, tid, now,
+		 DO UPDATE SET content = EXCLUDED.content, hash = EXCLUDED.hash, tenant_id = EXCLUDED.tenant_id, team_id = COALESCE(EXCLUDED.team_id, memory_documents.team_id), updated_at = EXCLUDED.updated_at`,
+		id, aid, uid, path, content, hash, tid, teamID, now,
 	)
 	return err
 }
@@ -319,6 +324,10 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 
 	// Insert chunks
 	tid := tenantIDForInsert(ctx)
+	var chunkTeamID *uuid.UUID
+	if mtid := store.MemoryTeamID(ctx); mtid != uuid.Nil {
+		chunkTeamID = &mtid
+	}
 	for i, tc := range chunks {
 		hash := memory.ContentHash(tc.Text)
 		chunkID := uuid.Must(uuid.NewV7())
@@ -330,19 +339,18 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 		}
 
 		if embeddings != nil && i < len(embeddings) && embeddings[i] != nil {
-			// Insert with embedding via raw SQL (pgvector)
 			s.db.ExecContext(ctx,
-				`INSERT INTO memory_chunks (id, agent_id, document_id, user_id, path, start_line, end_line, hash, text, embedding, tenant_id, updated_at)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12)`,
+				`INSERT INTO memory_chunks (id, agent_id, document_id, user_id, path, start_line, end_line, hash, text, embedding, tenant_id, team_id, updated_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11, $12, $13)`,
 				chunkID, aid, docID, uid, path, tc.StartLine, tc.EndLine, hash, tc.Text,
-				vectorToString(embeddings[i]), tid, now,
+				vectorToString(embeddings[i]), tid, chunkTeamID, now,
 			)
 		} else {
 			s.db.ExecContext(ctx,
-				`INSERT INTO memory_chunks (id, agent_id, document_id, user_id, path, start_line, end_line, hash, text, tenant_id, updated_at)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				`INSERT INTO memory_chunks (id, agent_id, document_id, user_id, path, start_line, end_line, hash, text, tenant_id, team_id, updated_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 				 ON CONFLICT DO NOTHING`,
-				chunkID, aid, docID, uid, path, tc.StartLine, tc.EndLine, hash, tc.Text, tid, now,
+				chunkID, aid, docID, uid, path, tc.StartLine, tc.EndLine, hash, tc.Text, tid, chunkTeamID, now,
 			)
 		}
 	}

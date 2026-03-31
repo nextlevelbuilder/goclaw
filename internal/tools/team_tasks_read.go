@@ -208,12 +208,10 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 		listChatID = ""
 	}
 
-	// Acquire team create lock to serialize list→create flows across concurrent goroutines.
-	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
+	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && ptd.TryMarkListed() {
 		lock := getTeamCreateLock(team.ID.String(), chatID)
 		lock.Lock()
 		ptd.SetTeamLock(lock)
-		ptd.MarkListed()
 	}
 
 	tasks, err := t.manager.Store().ListTasks(ctx, team.ID, "priority", statusFilter, filterUserID, "", listChatID, 0, offset)
@@ -382,11 +380,10 @@ func (t *TeamTasksTool) executeSearch(ctx context.Context, args map[string]any) 
 
 	// Acquire team create lock so search also satisfies the list-before-create gate.
 	chatID := ToolChatIDFromCtx(ctx)
-	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
+	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && ptd.TryMarkListed() {
 		lock := getTeamCreateLock(team.ID.String(), chatID)
 		lock.Lock()
 		ptd.SetTeamLock(lock)
-		ptd.MarkListed()
 	}
 
 	tasks, err := t.manager.Store().SearchTasks(ctx, team.ID, query, searchPageSize, filterUserID)

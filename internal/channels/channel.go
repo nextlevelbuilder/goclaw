@@ -40,9 +40,9 @@ type DMPolicy string
 
 const (
 	DMPolicyPairing   DMPolicy = "pairing"   // Require pairing code
-	DMPolicyAllowlist DMPolicy = "allowlist"  // Only whitelisted senders
-	DMPolicyOpen      DMPolicy = "open"       // Accept all
-	DMPolicyDisabled  DMPolicy = "disabled"   // Reject all DMs
+	DMPolicyAllowlist DMPolicy = "allowlist" // Only whitelisted senders
+	DMPolicyOpen      DMPolicy = "open"      // Accept all
+	DMPolicyDisabled  DMPolicy = "disabled"  // Reject all DMs
 )
 
 // GroupPolicy controls how group messages are handled.
@@ -50,8 +50,8 @@ type GroupPolicy string
 
 const (
 	GroupPolicyOpen      GroupPolicy = "open"      // Accept all groups
-	GroupPolicyAllowlist GroupPolicy = "allowlist"  // Only whitelisted groups
-	GroupPolicyDisabled  GroupPolicy = "disabled"   // No group messages
+	GroupPolicyAllowlist GroupPolicy = "allowlist" // Only whitelisted groups
+	GroupPolicyDisabled  GroupPolicy = "disabled"  // No group messages
 )
 
 // Channel type constants used across channel packages and gateway wiring.
@@ -149,6 +149,15 @@ type ReactionChannel interface {
 	ClearReaction(ctx context.Context, chatID string, messageID string) error
 }
 
+// TeamMappedChannel is optionally implemented by channels that map specific
+// chat IDs to Goclaw team IDs. Used to route inbound messages to the correct
+// team when an agent leads multiple teams.
+type TeamMappedChannel interface {
+	Channel
+	// ResolveChatTeam returns the team ID for the given chat ID, or "" if not mapped.
+	ResolveChatTeam(chatID string) string
+}
+
 // BaseChannel provides shared functionality for all channel implementations.
 // Channel implementations should embed this struct.
 type BaseChannel struct {
@@ -157,9 +166,10 @@ type BaseChannel struct {
 	bus              *bus.MessageBus
 	running          bool
 	allowList        []string
-	agentID          string                 // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
-	tenantID         uuid.UUID              // for DB instances: tenant scope (zero = master tenant fallback)
+	agentID          string                  // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
+	tenantID         uuid.UUID               // for DB instances: tenant scope (zero = master tenant fallback)
 	contactCollector *store.ContactCollector // optional: auto-collect contacts from channel messages
+	chatTeamMap      map[string]string
 }
 
 // NewBaseChannel creates a new BaseChannel with the given parameters.
@@ -202,6 +212,10 @@ func (c *BaseChannel) SetTenantID(id uuid.UUID) { c.tenantID = id }
 
 // SetContactCollector sets the contact collector for auto-collecting contacts from messages.
 func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contactCollector = cc }
+
+func (c *BaseChannel) SetChatTeamMap(m map[string]string) { c.chatTeamMap = m }
+
+func (c *BaseChannel) ResolveChatTeam(chatID string) string { return c.chatTeamMap[chatID] }
 
 // ContactCollector returns the contact collector (may be nil).
 func (c *BaseChannel) ContactCollector() *store.ContactCollector { return c.contactCollector }

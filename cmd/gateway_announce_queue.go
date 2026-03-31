@@ -19,10 +19,11 @@ import (
 
 // announceEntry holds one teammate completion result waiting to be announced.
 type announceEntry struct {
-	MemberAgent        string // agent key (e.g. "researcher")
-	MemberDisplayName  string // display name (e.g. "Nhà Nghiên Cứu"), empty if not set
-	Content            string
-	Media              []agent.MediaResult
+	MemberAgent       string // agent key (e.g. "researcher")
+	MemberDisplayName string // display name (e.g. "Nhà Nghiên Cứu"), empty if not set
+	Content           string
+	Media             []agent.MediaResult
+	DirectDelivered   bool // true when member already posted result to channel directly
 }
 
 // announceQueueState tracks the per-session announce queue.
@@ -123,7 +124,20 @@ func processAnnounceLoop(
 			}
 		}
 
+		allDirect := true
+		for _, e := range entries {
+			if !e.DirectDelivered {
+				allDirect = false
+				break
+			}
+		}
+
 		content := buildMergedAnnounceContent(entries, snapshot, r.TeamWorkspace)
+		if allDirect {
+			content += "\n\n[The member already posted the result directly to the chat. Do NOT repeat or rephrase their work. " +
+				"However, you SHOULD still create follow-up tasks if your workflow requires it (e.g. code review gate, deployment gate, QA). " +
+				"If you have no follow-up tasks and no new information, respond with NO_REPLY.]"
+		}
 
 		req := agent.RunRequest{
 			SessionKey:       r.LeadSessionKey,
@@ -193,7 +207,11 @@ func processAnnounceLoop(
 		}
 
 		slog.Info("teammate announce: batch processed",
-			"batch_size", len(entries), "session", r.LeadSessionKey)
+			"batch_size", len(entries),
+			"all_direct", allDirect,
+			"channel", r.OrigChannel,
+			"session", r.LeadSessionKey,
+		)
 
 		// Loop back — tryFinish at top will exit when queue is truly empty.
 	}

@@ -22,14 +22,14 @@ var virtualSystemFiles = map[string]string{
 
 // ReadFileTool reads file contents, optionally through a sandbox container.
 type ReadFileTool struct {
-	workspace        string
-	restrict         bool
-	allowedPrefixes  []string                // extra allowed path prefixes (e.g. skills dirs)
-	deniedPrefixes   []string                // path prefixes to deny access to (e.g. .goclaw)
-	sandboxMgr       sandbox.Manager         // nil = direct host access
-	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
-	memIntc          *MemoryInterceptor      // nil = no memory routing
-	permStore store.ConfigPermissionStore // nil = no group read restriction
+	workspace       string
+	restrict        bool
+	allowedPrefixes []string                    // extra allowed path prefixes (e.g. skills dirs)
+	deniedPrefixes  []string                    // path prefixes to deny access to (e.g. .goclaw)
+	sandboxMgr      sandbox.Manager             // nil = direct host access
+	contextFileIntc *ContextFileInterceptor     // nil = no virtual FS routing
+	memIntc         *MemoryInterceptor          // nil = no memory routing
+	permStore       store.ConfigPermissionStore // nil = no group read restriction
 }
 
 // SetContextFileInterceptor enables virtual FS routing for context files.
@@ -292,16 +292,22 @@ func (t *ReadFileTool) paginateOutput(content string, args map[string]any) *Resu
 	return SilentResult(output)
 }
 
-// allowedWithTeamWorkspace returns the allowed prefixes with team workspace appended
-// if present in context. Thread-safe: creates a new slice per request.
+// allowedWithTeamWorkspace returns the allowed prefixes with team workspace and
+// agent's own workspace appended if present in context.
 func allowedWithTeamWorkspace(ctx context.Context, base []string) []string {
 	teamWs := ToolTeamWorkspaceFromCtx(ctx)
-	if teamWs == "" {
+	agentWs := ToolAgentWorkspaceFromCtx(ctx)
+	if teamWs == "" && agentWs == "" {
 		return base
 	}
-	out := make([]string, len(base)+1)
+	out := make([]string, len(base), len(base)+2)
 	copy(out, base)
-	out[len(base)] = teamWs
+	if teamWs != "" {
+		out = append(out, teamWs)
+	}
+	if agentWs != "" {
+		out = append(out, agentWs)
+	}
 	return out
 }
 
@@ -517,4 +523,3 @@ func resolveThroughExistingAncestors(target string) (string, error) {
 	}
 	return filepath.Clean(target), nil
 }
-

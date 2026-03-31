@@ -377,6 +377,23 @@ func LeaderAgentIDFromCtx(ctx context.Context) string {
 	return ""
 }
 
+// --- Agent's own workspace (preserved when team workspace overrides) ---
+
+const ctxAgentWorkspace toolContextKey = "tool_agent_workspace"
+
+// WithToolAgentWorkspace stores the agent's own workspace path before a team
+// workspace override replaces it. This lets file tools allow read access to the
+// agent's project workspace even when the primary workspace is the team shared dir.
+func WithToolAgentWorkspace(ctx context.Context, ws string) context.Context {
+	return context.WithValue(ctx, ctxAgentWorkspace, ws)
+}
+
+// ToolAgentWorkspaceFromCtx returns the agent's own workspace path, or empty string.
+func ToolAgentWorkspaceFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxAgentWorkspace).(string)
+	return v
+}
+
 // --- Workspace scope propagation (delegation origin) ---
 
 const (
@@ -458,6 +475,19 @@ func (p *PendingTeamDispatch) HasListed() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.listed
+}
+
+// TryMarkListed atomically checks and sets the listed flag.
+// Returns true if this call was the first to mark it (caller should acquire the lock).
+// Returns false if already listed (caller should skip lock acquisition).
+func (p *PendingTeamDispatch) TryMarkListed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.listed {
+		return false
+	}
+	p.listed = true
+	return true
 }
 
 // SetTeamLock stores the acquired team create lock so it can be released post-turn.

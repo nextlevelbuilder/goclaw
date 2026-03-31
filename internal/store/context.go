@@ -39,6 +39,9 @@ const (
 	TenantSlugKey contextKey = "goclaw_tenant_slug"
 	// RoleKey is the context key for the caller's permission role (e.g. "admin", "operator", "viewer").
 	RoleKey contextKey = "goclaw_role"
+	// MemoryTeamIDKey scopes memory reads/writes to a specific team.
+	// When set, memory operations filter by team_id to prevent cross-project contamination.
+	MemoryTeamIDKey contextKey = "goclaw_memory_team_id"
 )
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
@@ -169,8 +172,17 @@ func IsSharedMemory(ctx context.Context) bool {
 	return false
 }
 
-// MemoryUserID returns the userID to use for memory operations.
-// Returns "" (shared/global) when shared memory is active, otherwise the per-user ID.
+func WithMemoryTeamID(ctx context.Context, teamID uuid.UUID) context.Context {
+	return context.WithValue(ctx, MemoryTeamIDKey, teamID)
+}
+
+func MemoryTeamID(ctx context.Context) uuid.UUID {
+	if v, ok := ctx.Value(MemoryTeamIDKey).(uuid.UUID); ok {
+		return v
+	}
+	return uuid.Nil
+}
+
 func MemoryUserID(ctx context.Context) string {
 	if IsSharedMemory(ctx) {
 		return ""

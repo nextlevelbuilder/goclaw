@@ -145,6 +145,23 @@ func (m *Manager) GetStatus() map[string]any {
 	return status
 }
 
+// ChannelForAgent returns the channel name bound to the given agent key.
+// Returns empty string if no channel is configured for the agent.
+func (m *Manager) ChannelForAgent(agentKey string) string {
+	if agentKey == "" {
+		return ""
+	}
+	type agentBound interface{ AgentID() string }
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for name, ch := range m.channels {
+		if ab, ok := ch.(agentBound); ok && ab.AgentID() == agentKey {
+			return name
+		}
+	}
+	return ""
+}
+
 // GetEnabledChannels returns the names of all enabled channels.
 func (m *Manager) GetEnabledChannels() []string {
 	m.mu.RLock()
@@ -222,6 +239,19 @@ func (m *Manager) ListGroupMembers(ctx context.Context, channelName, chatID stri
 		return nil, fmt.Errorf("channel %q does not support listing group members", channelName)
 	}
 	return gmp.ListGroupMembers(ctx, chatID)
+}
+
+func (m *Manager) ResolveChatTeam(channelName, chatID string) string {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return ""
+	}
+	if tmc, ok := ch.(TeamMappedChannel); ok {
+		return tmc.ResolveChatTeam(chatID)
+	}
+	return ""
 }
 
 // UnregisterChannel removes a channel from the manager.

@@ -81,14 +81,17 @@ func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Resul
 		prompt = "Describe this image in detail."
 	}
 
-	// If path is provided, load image from workspace file
+	// If path is provided, load image from workspace file.
+	// On failure, fall back to context images (already loaded by enrichInputMedia).
 	images := MediaImagesFromCtx(ctx)
 	if imgPath, _ := args["path"].(string); imgPath != "" {
 		fileImages, err := t.loadImageFromPath(ctx, imgPath)
 		if err != nil {
-			return ErrorResult(err.Error())
+			slog.Warn("read_image: path load failed, falling back to context images",
+				"path", imgPath, "error", err, "context_images", len(images))
+		} else {
+			images = fileImages
 		}
-		images = fileImages
 	}
 
 	if len(images) == 0 {

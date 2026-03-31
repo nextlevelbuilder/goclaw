@@ -344,6 +344,11 @@ func processNormalMessage(
 		schedCtx = tools.WithRunKind(schedCtx, rk)
 	}
 
+	chatTeamID := ""
+	if deps.ChannelMgr != nil {
+		chatTeamID = deps.ChannelMgr.ResolveChatTeam(msg.Channel, msg.ChatID)
+	}
+
 	// Schedule through main lane (per-session concurrency controlled by maxConcurrent)
 	outCh := deps.Sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
 		SessionKey:        sessionKey,
@@ -364,6 +369,7 @@ func processNormalMessage(
 		ToolAllow:         msg.ToolAllow,
 		ExtraSystemPrompt: extraPrompt,
 		SkillFilter:       skillFilter,
+		TeamID:            chatTeamID,
 	}, scheduler.ScheduleOpts{
 		MaxConcurrent: maxConcurrent,
 	})

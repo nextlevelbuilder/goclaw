@@ -383,7 +383,12 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	if len(req.Tools) > 0 {
 		body["tools"] = CleanToolSchemas(p.name, req.Tools)
-		body["tool_choice"] = "auto"
+		switch req.ToolChoice {
+		case "none", "required":
+			body["tool_choice"] = req.ToolChoice
+		default:
+			body["tool_choice"] = "auto"
+		}
 	}
 
 	if stream {
@@ -412,9 +417,13 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 	}
 
-	// Inject reasoning_effort for o-series models (ignored by models that don't support it)
+	// Inject reasoning_effort for o-series models (ignored by models that don't support it).
+	// When thinking/reasoning is enabled, remove temperature — Anthropic requires
+	// temperature=1 (default) when extended thinking is active, and proxies like
+	// LiteLLM forward it verbatim causing 400 errors.
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
 		body[OptReasoningEffort] = level
+		delete(body, "temperature")
 	}
 
 	// DashScope-specific passthrough keys

@@ -222,8 +222,6 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 			Payload: map[string]any{"phase": "thinking", "iteration": rs.iteration},
 		})
 
-		// Build per-iteration tool list: policy, tenant exclusions, bootstrap, skill visibility,
-		// channel type, and final-iteration stripping.
 		var toolDefs []providers.ToolDefinition
 		var allowedTools map[string]bool
 		// Resolve per-user MCP tools (servers requiring user credentials).
@@ -231,7 +229,8 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		if req.UserID != "" {
 			l.getUserMCPTools(iterCtx, req.UserID)
 		}
-		toolDefs, allowedTools, messages = l.buildFilteredTools(&req, hadBootstrap, rs.iteration, maxIter, messages)
+		var toolChoice string
+		toolDefs, allowedTools, messages, toolChoice = l.buildFilteredTools(&req, hadBootstrap, rs.iteration, maxIter, messages)
 
 		// Use per-request overrides if set (e.g. heartbeat uses cheaper provider/model).
 		model := l.model
@@ -244,9 +243,10 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		}
 
 		chatReq := providers.ChatRequest{
-			Messages: messages,
-			Tools:    toolDefs,
-			Model:    model,
+			Messages:   messages,
+			Tools:      toolDefs,
+			ToolChoice: toolChoice,
+			Model:      model,
 			Options: map[string]any{
 				providers.OptMaxTokens:   l.effectiveMaxTokens(),
 				providers.OptTemperature: config.DefaultTemperature,

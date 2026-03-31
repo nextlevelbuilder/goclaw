@@ -33,8 +33,8 @@ func NewMessageTool(workspace string, restrict bool) *MessageTool {
 	return &MessageTool{workspace: workspace, restrict: restrict}
 }
 
-func (t *MessageTool) SetChannelSender(s ChannelSender)              { t.sender = s }
-func (t *MessageTool) SetMessageBus(b *bus.MessageBus)               { t.msgBus = b }
+func (t *MessageTool) SetChannelSender(s ChannelSender)               { t.sender = s }
+func (t *MessageTool) SetMessageBus(b *bus.MessageBus)                { t.msgBus = b }
 func (t *MessageTool) SetChannelTenantChecker(c ChannelTenantChecker) { t.tenantChecker = c }
 
 func (t *MessageTool) Name() string { return "message" }
@@ -98,19 +98,19 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	// Self-send guard: prevent agent from sending to its own chat via message tool.
 	// Text self-sends are always blocked (response goes through normal outbound).
 	// MEDIA self-sends are allowed ONLY when the file was NOT already queued for
-	// delivery (i.e. write_file was called with deliver=false). This prevents both
-	// duplicate delivery (deliver=true then message MEDIA:) and runaway retry loops
-	// (deliver=false then message MEDIA: blocked unconditionally).
+	// delivery (i.e. write_file was called with deliver=false).
+	//
+	// Exception: team task runs (delegation) are allowed to self-send because the
+	// member agent's response is NOT auto-delivered to the origin channel — it goes
+	// through the leader announce queue instead.
 	ctxChannel := ToolChannelFromCtx(ctx)
 	ctxChatID := ToolChatIDFromCtx(ctx)
 	isSelfSend := ctxChannel != "" && ctxChatID != "" && channel == ctxChannel && target == ctxChatID
-	if isSelfSend {
+	if isSelfSend && TeamTaskIDFromCtx(ctx) == "" {
 		isMediaSend := embeddedMediaPattern.MatchString(message)
 		if !isMediaSend {
 			return ErrorResult("You are already responding to this chat. Your response text will be delivered automatically. Do not use the message tool to send text to your own chat — just include the content in your response text. To deliver files, use write_file with deliver=true instead.")
 		}
-		// MEDIA self-send: block if ALL referenced files are already queued for delivery.
-		// Extracts paths from both standalone "MEDIA:path" and embedded multi-line messages.
 		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
 			mediaRefs := embeddedMediaPattern.FindAllString(message, -1)
 			allDelivered := len(mediaRefs) > 0

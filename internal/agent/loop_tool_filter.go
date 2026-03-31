@@ -12,9 +12,9 @@ import (
 // disabled tools, bootstrap mode, skill visibility, channel type, and iteration budget.
 // Per-user MCP tools must be registered in the Registry before calling this function
 // (via getUserMCPTools) so they are included in policy filtering and execution.
-// Returns tool definitions for the provider, an allowed-tools map for execution validation,
-// and the (potentially modified) messages slice when final-iteration stripping appends a hint.
-func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration, maxIter int, messages []providers.Message) ([]providers.ToolDefinition, map[string]bool, []providers.Message) {
+// Returns tool definitions, an allowed-tools map, the (potentially modified) messages slice,
+// and a tool_choice override ("" = auto, "none" = no tool calls allowed).
+func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration, maxIter int, messages []providers.Message) ([]providers.ToolDefinition, map[string]bool, []providers.Message, string) {
 	// Build provider request with policy-filtered tools.
 	var toolDefs []providers.ToolDefinition
 	var allowedTools map[string]bool
@@ -81,15 +81,16 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		toolDefs = filtered
 	}
 
-	// Final iteration: strip all tools to force a text-only response.
-	// Without this the model may keep requesting tools and exit with "...".
+	// Final iteration: do NOT nil toolDefs — Anthropic rejects requests containing
+	// tool_use/tool_result history without a top-level "tools" parameter (HTTP 400).
+	// Use tool_choice="none" to enforce text-only response at the API level instead.
 	if iteration == maxIter {
-		toolDefs = nil
 		messages = append(messages, providers.Message{
 			Role:    "user",
 			Content: "[System] Final iteration reached. Summarize all findings and respond to the user now. No more tool calls allowed.",
 		})
+		return toolDefs, allowedTools, messages, "none"
 	}
 
-	return toolDefs, allowedTools, messages
+	return toolDefs, allowedTools, messages, ""
 }
