@@ -62,6 +62,7 @@ func resolveMedia(attachments []*discordgo.MessageAttachment, maxBytes int64) []
 		results = append(results, media.MediaInfo{
 			Type:        classifyMediaType(ct, att.Filename),
 			FilePath:    filePath,
+			SourceURL:   att.URL,
 			ContentType: ct,
 			FileName:    att.Filename,
 			FileSize:    int64(att.Size),

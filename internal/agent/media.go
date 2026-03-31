@@ -325,10 +325,17 @@ func (l *Loop) enrichImageIDs(messages []providers.Message, refs []providers.Med
 			pathAttr = fmt.Sprintf(" path=%q", ref.Path)
 		}
 
-		// Replace the LAST bare <media:image> with <media:image id="uuid" path="...">
-		bare := "<media:image>"
-		if idx := strings.LastIndex(content, bare); idx >= 0 {
-			content = content[:idx] + "<media:image" + idAttr + pathAttr + ">" + content[idx+len(bare):]
+		var replaced bool
+		content, replaced = replaceLastMediaTag(content, "<media:image", func(tag string) bool {
+			return !tagHasAttr(tag, "id")
+		}, func(tag string) string {
+			attrs := []string{idAttr}
+			if pathAttr != "" {
+				attrs = append(attrs, pathAttr)
+			}
+			return appendTagAttrs(tag, attrs...)
+		})
+		if replaced {
 			continue
 		}
 	}
@@ -367,27 +374,25 @@ func (l *Loop) enrichImagePaths(messages []providers.Message) {
 			}
 			pathAttr := fmt.Sprintf(" path=%q", p)
 
-			// Skip if path already present in this tag.
-			tagWithID := fmt.Sprintf(`<media:image id=%q`, ref.ID)
-			if idx := strings.Index(content, tagWithID); idx >= 0 {
-				closeIdx := strings.Index(content[idx:], ">")
-				if closeIdx >= 0 {
-					tag := content[idx : idx+closeIdx]
-					if strings.Contains(tag, "path=") {
-						continue // already has path
-					}
-					// Inject path before closing >
-					content = content[:idx+closeIdx] + pathAttr + content[idx+closeIdx:]
-					changed = true
-				}
+			// Prefer tags that already carry the matching media ID, regardless of attribute order.
+			var replaced bool
+			content, replaced = replaceLastMediaTag(content, "<media:image", func(tag string) bool {
+				return tagHasAttrValue(tag, "id", ref.ID) && !tagHasAttr(tag, "path")
+			}, func(tag string) string {
+				return appendTagAttrs(tag, pathAttr)
+			})
+			if replaced {
+				changed = true
 				continue
 			}
 
-			// Bare <media:image> without id — replace LAST occurrence.
-			bare := "<media:image>"
-			if idx := strings.LastIndex(content, bare); idx >= 0 {
-				replacement := fmt.Sprintf(`<media:image id=%q%s>`, ref.ID, pathAttr)
-				content = content[:idx] + replacement + content[idx+len(bare):]
+			// Fallback to the last image tag without an ID and attach both id and path.
+			content, replaced = replaceLastMediaTag(content, "<media:image", func(tag string) bool {
+				return !tagHasAttr(tag, "id")
+			}, func(tag string) string {
+				return appendTagAttrs(tag, fmt.Sprintf(` id=%q`, ref.ID), pathAttr)
+			})
+			if replaced {
 				changed = true
 			}
 		}
@@ -410,6 +415,42 @@ func mediaKindFromMime(mime string) string {
 	default:
 		return "document"
 	}
+}
+
+func replaceLastMediaTag(content, prefix string, match func(tag string) bool, replace func(tag string) string) (string, bool) {
+	searchFrom := len(content)
+	for searchFrom > 0 {
+		idx := strings.LastIndex(content[:searchFrom], prefix)
+		if idx < 0 {
+			return content, false
+		}
+		endRel := strings.IndexByte(content[idx:], '>')
+		if endRel < 0 {
+			return content, false
+		}
+		end := idx + endRel + 1
+		tag := content[idx:end]
+		if match(tag) {
+			return content[:idx] + replace(tag) + content[end:], true
+		}
+		searchFrom = idx
+	}
+	return content, false
+}
+
+func tagHasAttr(tag, attr string) bool {
+	return strings.Contains(tag, " "+attr+"=")
+}
+
+func tagHasAttrValue(tag, attr, value string) bool {
+	return strings.Contains(tag, fmt.Sprintf(` %s=%q`, attr, value))
+}
+
+func appendTagAttrs(tag string, attrs ...string) string {
+	if len(attrs) == 0 {
+		return tag
+	}
+	return strings.TrimSuffix(tag, ">") + strings.Join(attrs, "") + ">"
 }
 
 // maxMediaReloadMessages is the default number of recent messages with image MediaRefs
