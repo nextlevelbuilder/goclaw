@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/registry"
@@ -46,12 +47,13 @@ type hubSettings struct {
 
 func (t *MarketplaceCheckUpdatesTool) Execute(ctx context.Context, args map[string]any) *Result {
 	if t.db == nil {
+		slog.Warn("marketplace_check_updates: db is nil")
 		return ErrorResult("Database not available")
 	}
 
 	// Find all teams with hub_slug in settings
 	rows, err := t.db.QueryContext(ctx,
-		`SELECT id, name, settings FROM agent_teams WHERE settings->>'hub_slug' IS NOT NULL AND settings->>'hub_slug' != ''`)
+		`SELECT id, name, settings FROM agent_teams WHERE settings::text LIKE '%hub_slug%'`)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to query teams: %v", err))
 	}
@@ -77,6 +79,8 @@ func (t *MarketplaceCheckUpdatesTool) Execute(ctx context.Context, args map[stri
 		}
 		teams = append(teams, teamInfo{id: id, name: name, slug: hs.HubSlug, version: hs.HubVersion})
 	}
+
+	slog.Info("marketplace_check_updates", "teams_found", len(teams), "db_nil", t.db == nil)
 
 	if len(teams) == 0 {
 		return NewResult("No marketplace teams installed. Use marketplace_search to find teams.")
