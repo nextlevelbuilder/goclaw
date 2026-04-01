@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 )
 
 // MarketplaceInstallHandler serves the install confirmation page for Hub marketplace.
@@ -36,8 +35,8 @@ func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localA
 
 // RegisterRoutes registers marketplace install routes on the mux.
 func (h *MarketplaceInstallHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /marketplace/install", requireAuth(permissions.RoleViewer, h.handleConfirmPage))
-	mux.HandleFunc("POST /marketplace/install", requireAuth(permissions.RoleAdmin, h.handleDoInstall))
+	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)  // Public — just shows confirmation
+	mux.HandleFunc("POST /marketplace/install", h.handleDoInstall) // Auth checked via gateway token in form
 }
 
 // handleConfirmPage shows the install confirmation page.
