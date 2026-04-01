@@ -49,6 +49,12 @@ func (s *PGCronStore) SetRetryConfig(cfg cron.RetryConfig) {
 // SetDefaultTimezone sets the fallback IANA timezone for cron expressions
 // when a job does not specify its own timezone.
 func (s *PGCronStore) SetDefaultTimezone(tz string) {
+	if tz != "" {
+		if _, err := time.LoadLocation(tz); err != nil {
+			slog.Warn("security.invalid_default_timezone", "tz", tz, "err", err)
+			return
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.defaultTZ = tz

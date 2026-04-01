@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -196,6 +197,13 @@ func (m *HeartbeatMethods) handleSet(ctx context.Context, client *gateway.Client
 		hb.ActiveHoursEnd = params.ActiveHoursEnd
 	}
 	if params.Timezone != nil {
+		if *params.Timezone != "" {
+			if _, err := time.LoadLocation(*params.Timezone); err != nil {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+					fmt.Sprintf("invalid timezone: %s", *params.Timezone)))
+				return
+			}
+		}
 		hb.Timezone = params.Timezone
 	}
 	if params.Channel != nil {

@@ -19,7 +19,8 @@ import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useUiStore } from "@/stores/use-ui-store";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
 import { Combobox } from "@/components/ui/combobox";
-import { getAllIanaTimezones } from "@/lib/constants";
+import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { toast } from "@/stores/use-toast-store";
 import type { HeartbeatConfig, DeliveryTarget } from "@/pages/agents/hooks/use-agent-heartbeat";
 
 interface HeartbeatConfigDialogProps {
@@ -128,6 +129,10 @@ export function HeartbeatConfigDialog({
   };
 
   const handleSave = async () => {
+    if (timezone && !isValidIanaTimezone(timezone)) {
+      toast.error(t("heartbeat.invalidTimezone", "Invalid timezone"));
+      return;
+    }
     try {
       const clampedMin = Math.max(5, intervalMin);
       await update({

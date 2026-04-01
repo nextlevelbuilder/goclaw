@@ -8,7 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { Combobox } from "@/components/ui/combobox";
-import { getAllIanaTimezones } from "@/lib/constants";
+import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { toast } from "@/stores/use-toast-store";
 import type { CronJob, CronJobPatch } from "../hooks/use-cron";
 
 interface CronAdvancedDialogProps {
@@ -61,6 +62,10 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
   const handleSave = async () => {
     if (!onUpdate) {
       onOpenChange(false);
+      return;
+    }
+    if (timezone && timezone !== "UTC" && !isValidIanaTimezone(timezone)) {
+      toast.error(t("detail.invalidTimezone", "Invalid timezone"));
       return;
     }
     setSaving(true);

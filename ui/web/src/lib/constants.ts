@@ -131,3 +131,13 @@ export function getAllIanaTimezones(): TzOption[] {
   _cachedTimezones = entries.map(({ value, label }: { value: string; label: string }) => ({ value, label }));
   return _cachedTimezones;
 }
+
+let _cachedTzSet: Set<string> | undefined;
+
+/** Check if a value is a valid IANA timezone from the dynamic list. */
+export function isValidIanaTimezone(tz: string): boolean {
+  if (!_cachedTzSet) {
+    _cachedTzSet = new Set(getAllIanaTimezones().map((t) => t.value));
+  }
+  return _cachedTzSet.has(tz);
+}
