@@ -154,12 +154,10 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatResponse, toolCalls map[string]*codexToolCallAcc, onChunk func(StreamChunk)) {
 	switch event.Type {
 	case "response.output_text.delta":
-		if event.Delta != "" {
-			result.Content += event.Delta
-			if onChunk != nil {
-				onChunk(StreamChunk{Content: event.Delta})
-			}
-		}
+		appendCodexContent(result, event.Delta, onChunk)
+
+	case "response.output_text.done":
+		appendCodexFallbackContent(result, event.Text, onChunk)
 
 	case "response.function_call_arguments.delta":
 		if event.ItemID != "" {
@@ -175,6 +173,7 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 		if event.Item != nil {
 			switch event.Item.Type {
 			case "message":
+				appendCodexFallbackContent(result, codexMessageText(event.Item), onChunk)
 				if event.Item.Phase != "" {
 					result.Phase = event.Item.Phase
 				}
@@ -203,6 +202,21 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 
 	case "response.completed", "response.incomplete", "response.failed":
 		if event.Response != nil {
+			if result.Content == "" {
+				for i := range event.Response.Output {
+					item := &event.Response.Output[i]
+					if item.Type != "message" {
+						continue
+					}
+					appendCodexFallbackContent(result, codexMessageText(item), onChunk)
+					if result.Phase == "" && item.Phase != "" {
+						result.Phase = item.Phase
+					}
+					if result.Content != "" {
+						break
+					}
+				}
+			}
 			if event.Response.Usage != nil {
 				u := event.Response.Usage
 				result.Usage = &Usage{
@@ -219,4 +233,35 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 			}
 		}
 	}
+}
+
+func appendCodexContent(result *ChatResponse, text string, onChunk func(StreamChunk)) {
+	if text == "" {
+		return
+	}
+	result.Content += text
+	if onChunk != nil {
+		onChunk(StreamChunk{Content: text})
+	}
+}
+
+func appendCodexFallbackContent(result *ChatResponse, text string, onChunk func(StreamChunk)) {
+	if result.Content != "" {
+		return
+	}
+	appendCodexContent(result, text, onChunk)
+}
+
+func codexMessageText(item *codexItem) string {
+	if item == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	for _, part := range item.Content {
+		if part.Type == "output_text" && part.Text != "" {
+			b.WriteString(part.Text)
+		}
+	}
+	return b.String()
 }
