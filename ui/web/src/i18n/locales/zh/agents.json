@@ -462,7 +462,8 @@
     "role.user": "用户",
     "role.viewer": "查看者",
     "roleDesc.user": "可以使用代理和聊天",
-    "roleDesc.viewer": "只读访问"
+    "roleDesc.viewer": "只读访问",
+    "ownerOnly": "只有Agent所有者才能查看和管理共享。"
   },
   "links": {
     "teamsHint": "Agent Links 即将移除。请使用 Agent Teams 进行多代理协作——它提供任务跟踪、共享工作区和质量控制，且设置更简单。",

@@ -462,7 +462,8 @@
     "role.user": "User",
     "role.viewer": "Viewer",
     "roleDesc.user": "Can use the agent and chat",
-    "roleDesc.viewer": "Read-only access"
+    "roleDesc.viewer": "Read-only access",
+    "ownerOnly": "Only the agent owner can view and manage shares."
   },
   "links": {
     "teamsHint": "Agent Links will be removed soon. Please use Agent Teams for multi-agent collaboration — it provides task tracking, shared workspace, and quality control in a simpler setup.",

@@ -462,7 +462,8 @@
     "role.user": "Người dùng",
     "role.viewer": "Người xem",
     "roleDesc.user": "Có thể sử dụng agent và trò chuyện",
-    "roleDesc.viewer": "Chỉ đọc"
+    "roleDesc.viewer": "Chỉ đọc",
+    "ownerOnly": "Chỉ chủ sở hữu agent mới có thể xem và quản lý chia sẻ."
   },
   "links": {
     "teamsHint": "Agent Links sẽ sớm bị gỡ bỏ. Vui lòng sử dụng Agent Teams để cộng tác đa agent — hỗ trợ quản lý nhiệm vụ, workspace chung và kiểm soát chất lượng trong một hệ thống đơn giản hơn.",

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Share, Plus, Trash2, Loader2, RefreshCw } from "lucide-react";
+import { Share, Plus, Trash2, Loader2, RefreshCw, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,9 +11,10 @@ import { useAgentShares } from "../hooks/use-agent-shares";
 
 interface AgentSharesTabProps {
   agentId: string;
+  isOwner: boolean;
 }
 
-export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
+export function AgentSharesTab({ agentId, isOwner }: AgentSharesTabProps) {
   const { t } = useTranslation("agents");
   const { shares, loading, load, share, revoke } = useAgentShares(agentId);
   const [userId, setUserId] = useState("");
@@ -21,21 +22,32 @@ export function AgentSharesTab({ agentId }: AgentSharesTabProps) {
   const [adding, setAdding] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (isOwner) load(); }, [load, isOwner]);
 
   const handleRevoke = async (uid: string) => {
     setRevokingId(uid);
-    await revoke(uid);
-    setRevokingId(null);
+    try { await revoke(uid); } finally { setRevokingId(null); }
   };
 
   const handleAdd = async () => {
     if (!userId.trim()) return;
     setAdding(true);
-    await share(userId.trim(), role);
-    setUserId("");
-    setAdding(false);
+    try {
+      await share(userId.trim(), role);
+      setUserId("");
+    } finally { setAdding(false); }
   };
+
+  if (!isOwner) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-500/5 p-4 dark:border-sky-800">
+          <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" />
+          <p className="text-sm text-muted-foreground">{t("shares.ownerOnly")}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

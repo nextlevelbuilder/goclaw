@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuthStore } from "@/stores/use-auth-store";
 import { useAgentDetail } from "../hooks/use-agent-detail";
 import { useAgents } from "../hooks/use-agents";
 import { useAgentHeartbeat } from "../hooks/use-agent-heartbeat";
@@ -31,6 +32,8 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
   const { deleteAgent: deleteAgentById } = useAgents();
   const hb = useAgentHeartbeat(agentId);
   const [summoningOpen, setSummoningOpen] = useState(false);
+  const authUserId = useAuthStore((s) => s.userId);
+  const isTenantOwner = useAuthStore((s) => s.isOwner);
   const [activeTab, setActiveTab] = useState("agent");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -107,7 +110,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
             </TabsContent>
 
             <TabsContent value="shares" className="mt-4">
-              <AgentSharesTab agentId={agentId} />
+              <AgentSharesTab agentId={agentId} isOwner={(!!authUserId && authUserId === agent.owner_id) || isTenantOwner} />
             </TabsContent>
 
             {agent.agent_type === "predefined" && (
