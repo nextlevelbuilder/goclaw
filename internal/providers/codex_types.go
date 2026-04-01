@@ -47,16 +47,24 @@ type codexTokensDetails struct {
 // SSE streaming types
 
 type codexSSEEvent struct {
-	Type     string            `json:"type"`
-	Delta    string            `json:"delta,omitempty"`
-	Text     string            `json:"text,omitempty"`
-	ItemID   string            `json:"item_id,omitempty"`
-	Item     *codexItem        `json:"item,omitempty"`
-	Response *codexAPIResponse `json:"response,omitempty"`
+	Type         string            `json:"type"`
+	Delta        string            `json:"delta,omitempty"`
+	Text         string            `json:"text,omitempty"`
+	ItemID       string            `json:"item_id,omitempty"`
+	OutputIndex  int               `json:"output_index,omitempty"`
+	ContentIndex int               `json:"content_index,omitempty"`
+	Item         *codexItem        `json:"item,omitempty"`
+	Part         *codexContentPart `json:"part,omitempty"`
+	Response     *codexAPIResponse `json:"response,omitempty"`
 }
 
 type codexToolCallAcc struct {
 	callID  string
 	name    string
 	rawArgs string
+}
+
+type codexContentPart struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
 }
