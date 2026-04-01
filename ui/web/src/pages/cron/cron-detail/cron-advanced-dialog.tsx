@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
-import { IANA_TIMEZONES } from "@/lib/constants";
+import { Combobox } from "@/components/ui/combobox";
+import { getAllIanaTimezones } from "@/lib/constants";
 import type { CronJob, CronJobPatch } from "../hooks/use-cron";
 
 interface CronAdvancedDialogProps {
@@ -104,18 +104,13 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
           />
           <div className="space-y-2">
             <Label htmlFor="adv-timezone">{t("detail.timezone")}</Label>
-            <Select value={timezone} onValueChange={setTimezone}>
-              <SelectTrigger id="adv-timezone" className="text-base md:text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {IANA_TIMEZONES.map((tz) => (
-                  <SelectItem key={tz.value} value={tz.value}>
-                    {tz.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              value={timezone}
+              onChange={setTimezone}
+              options={getAllIanaTimezones()}
+              placeholder={t("detail.timezone")}
+              className="text-base md:text-sm"
+            />
             <p className="text-xs text-muted-foreground">{t("detail.timezoneDesc")}</p>
           </div>
 
