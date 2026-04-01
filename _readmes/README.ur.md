@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # .env میں کم از کم ایک GOCLAW_*_API_KEY شامل کریں، پھر:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# ویب ڈیش بورڈ http://localhost:3000 پر
+# ویب ڈیش بورڈ http://localhost:18790 پر
 # ہیلتھ چیک: curl http://localhost:18790/health
 ```
 

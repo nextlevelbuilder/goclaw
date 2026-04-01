@@ -21,6 +21,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/webui"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -194,6 +195,12 @@ func (s *Server) BuildMux() *http.ServeMux {
 				_, _ = w.Write([]byte(`{"error":"mcp bridge disabled: set GOCLAW_GATEWAY_TOKEN to enable"}`))
 			})
 		}
+	}
+
+	// Embedded web UI (built with -tags embedui). Catch-all after all API routes.
+	if h := webui.Handler(); h != nil {
+		mux.Handle("/", h)
+		slog.Info("serving embedded web UI")
 	}
 
 	s.mux = mux

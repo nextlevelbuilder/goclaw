@@ -2,21 +2,36 @@ VERSION ?= $(shell git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null 
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
-.PHONY: build run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
+.PHONY: build build-full run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
 
+# Build backend only (API-only, no embedded web UI)
 build:
 	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o $(BINARY) .
+
+# Build with embedded web UI (recommended for production)
+build-full: check-web
+	rm -rf internal/webui/dist && mkdir -p internal/webui/dist
+	cp -r ui/web/dist/* internal/webui/dist/
+	CGO_ENABLED=0 go build -tags embedui -ldflags="$(LDFLAGS)" -o $(BINARY) .
 
 run: build
 	./$(BINARY)
 
 clean:
 	rm -f $(BINARY)
+	rm -rf internal/webui/dist
 
 version:
 	@echo $(VERSION)
 
-COMPOSE_BASE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml
+# ── Docker Compose ──
+# Default: backend (with embedded web UI) + Postgres. No separate nginx needed.
+# Add WITH_WEB_NGINX=1 for separate nginx on :3000 (custom SSL, reverse proxy).
+COMPOSE_BASE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml
+ifdef WITH_WEB_NGINX
+COMPOSE_BASE += -f docker-compose.selfservice.yml
+export ENABLE_EMBEDUI=false
+endif
 COMPOSE_EXTRA =
 ifdef WITH_BROWSER
 COMPOSE_EXTRA += -f docker-compose.browser.yml
@@ -43,7 +58,7 @@ version-file:
 	@echo $(VERSION) > VERSION
 
 up: version-file
-	$(COMPOSE) up -d --build
+	GOCLAW_VERSION=$(VERSION) $(COMPOSE) up -d --build
 	$(UPGRADE) run --rm upgrade
 
 down:

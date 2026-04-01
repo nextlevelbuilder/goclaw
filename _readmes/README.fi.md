@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Lisää vähintään yksi GOCLAW_*_API_KEY tiedostoon .env, sitten:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Web-koontinäyttö osoitteessa http://localhost:3000
+# Web-koontinäyttö osoitteessa http://localhost:18790
 # Terveystarkistus: curl http://localhost:18790/health
 ```
 

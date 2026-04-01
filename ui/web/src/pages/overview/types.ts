@@ -18,6 +18,7 @@ export interface HealthPayload {
   latestVersion?: string;
   updateAvailable?: boolean;
   updateUrl?: string;
+  releaseNotes?: string;
 }
 
 export interface AgentInfo {

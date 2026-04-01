@@ -1,17 +1,26 @@
 # Base docker-compose — shared service definition.
 # Pre-built images: ghcr.io/nextlevelbuilder/goclaw (also on Docker Hub: digitop/goclaw)
 #
-# Combine with overlays for your deployment:
+# The default `latest` image includes an embedded web dashboard (no separate nginx needed).
+# Web UI is served at the same port as the API (default: 18790).
 #
-#   Recommended (+ Web Dashboard, pre-built images):
-#     docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d
+# Quick start:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+#   # Dashboard: http://localhost:18790
 #
-#   Build from source (add --build):
-#     docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
+# Optional nginx (for custom SSL, reverse proxy, caching):
+#   make up WITH_WEB_NGINX=1
+#   # or: docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d
+#   # Dashboard via nginx: http://localhost:3000
 #
-#   Without dashboard:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
-#   With OTel tracing:  docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.otel.yml up -d --build
-#   With Claude CLI:    add -f docker-compose.claude-cli.yml to auto-sync host ~/.claude credentials
+# Docker image variants:
+#   latest       — Backend + embedded web UI + Python (recommended)
+#   latest-base  — Backend API-only, no web UI, no runtimes
+#   latest-full  — All runtimes + skill dependencies pre-installed
+#   latest-otel  — Latest + OpenTelemetry tracing
+#
+# With OTel tracing:  add -f docker-compose.otel.yml
+# With Claude CLI:    add -f docker-compose.claude-cli.yml
 
 services:
   goclaw:
@@ -21,9 +30,11 @@ services:
       dockerfile: Dockerfile
       args:
         ENABLE_OTEL: "${ENABLE_OTEL:-false}"
+        ENABLE_EMBEDUI: "${ENABLE_EMBEDUI:-true}"  # set to false when using WITH_WEB_NGINX
         ENABLE_PYTHON: "${ENABLE_PYTHON:-true}"
         ENABLE_FULL_SKILLS: "${ENABLE_FULL_SKILLS:-false}"
         VERSION: "${GOCLAW_VERSION:-dev}"
+    # Uncomment to test update UI: GOCLAW_VERSION=v1.0.0
     ports:
       - "${GOCLAW_PORT:-18790}:18790"
     env_file:

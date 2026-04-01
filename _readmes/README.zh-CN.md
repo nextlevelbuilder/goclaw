@@ -111,10 +111,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # 在 .env 中至少添加一个 GOCLAW_*_API_KEY，然后：
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Web 控制台地址：http://localhost:3000
+# Web 控制台地址：http://localhost:18790
 # 健康检查：curl http://localhost:18790/health
 ```
 

@@ -185,8 +185,11 @@ chmod +x prepare-env.sh && ./prepare-env.sh
 # Add at least one GOCLAW_*_API_KEY to .env, then:
 make up
 
-# Web Dashboard at http://localhost:3000
+# Web Dashboard at http://localhost:18790 (built-in)
 # Health check: curl http://localhost:18790/health
+
+# Optional: separate nginx for custom SSL/reverse proxy
+# make up WITH_WEB_NGINX=1  → Dashboard at http://localhost:3000
 ```
 
 `make up` creates a Docker network, embeds the correct version from git tags, builds and starts all services, and runs database migrations automatically.
@@ -222,9 +225,32 @@ make down WITH_BROWSER=1 WITH_OTEL=1
 
 When `GOCLAW_*_API_KEY` environment variables are set, the gateway auto-onboards without interactive prompts — detects provider, runs migrations, and seeds default data.
 
-> `ghcr.io/nextlevelbuilder/goclaw:latest` is the minimal runtime image and does **not** include Python or Node.js by default. If you need those runtimes preinstalled, use the `python`, `node`, or `full` image variant, run `./scripts/setup-docker.sh --variant <python|node|full>`, or rebuild locally with `ENABLE_PYTHON=true`, `ENABLE_NODE=true`, or `ENABLE_FULL_SKILLS=true`.
+> **Docker image variants:**
+> | Image | Description |
+> |-------|-------------|
+> | `latest` | Backend + embedded web UI + Python (**recommended**) |
+> | `latest-base` | Backend API-only, no web UI, no runtimes |
+> | `latest-full` | All runtimes + skill dependencies pre-installed |
+> | `latest-otel` | Latest + OpenTelemetry tracing |
+> | `goclaw-web` | Standalone nginx + React SPA (for custom reverse proxy) |
+>
+> For custom builds (Tailscale, Redis): `docker build --build-arg ENABLE_TSNET=true ...`
+> See the [Deployment Guide](https://docs.goclaw.sh/#deploy-docker-compose) for details.
 
-> For build variants (OTel, Tailscale, Redis), Docker image tags, and compose overlays, see the [Deployment Guide](https://docs.goclaw.sh/#deploy-docker-compose).
+## Updating
+
+### Docker
+```bash
+docker compose pull && docker compose up -d
+```
+
+### Binary (with embedded web UI)
+```bash
+goclaw update --apply    # Downloads, verifies SHA256, swaps binary, restarts
+```
+
+### Web Dashboard
+Open **About** dialog → click **Update Now** (admin only). The update includes both backend and web dashboard when using the default `latest` image.
 
 ## Multi-Agent Orchestration
 

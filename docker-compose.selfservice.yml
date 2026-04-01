@@ -1,9 +1,14 @@
-# Self-service overlay — adds web dashboard UI (nginx + React SPA).
+# Self-service overlay — adds separate nginx web dashboard UI.
 #
-# Recommended usage:
-#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
+# OPTIONAL: The default `latest` image already includes an embedded web dashboard
+# served at port 18790. Use this overlay only if you need a dedicated nginx
+# reverse proxy for SSL termination, custom caching, or load balancing.
 #
-# Dashboard: http://localhost:3000
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d
+#   # or: make up WITH_WEB_NGINX=1
+#
+# Dashboard via nginx: http://localhost:3000
 
 services:
   goclaw-ui:

@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Přidat alespoň jeden GOCLAW_*_API_KEY do .env, poté:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Webový dashboard na http://localhost:3000
+# Webový dashboard na http://localhost:18790
 # Kontrola stavu: curl http://localhost:18790/health
 ```
 
