@@ -234,6 +234,26 @@ Rules:
 - unset reasoning resolves to `off`
 - the runtime may normalize unsupported efforts, and the actual decision is surfaced in trace span metadata
 
+### Export & Import
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/agents/{id}/export/preview` | Preview agent export |
+| `GET` | `/v1/agents/{id}/export` | Export agent config |
+| `GET` | `/v1/agents/{id}/export/download/{token}` | Download export file |
+| `GET` | `/v1/export/download/{token}` | Global export download |
+| `POST` | `/v1/agents/import/preview` | Preview agent import |
+| `POST` | `/v1/agents/import` | Import agent |
+| `POST` | `/v1/agents/{id}/import` | Merge import into existing agent |
+
+### Team Export & Import
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/teams/{id}/export/preview` | Preview team export |
+| `GET` | `/v1/teams/{id}/export` | Export team config |
+| `POST` | `/v1/teams/import` | Import team |
+
 ### Codex Pool Activity
 
 | Method | Path | Description |
@@ -275,6 +295,8 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `PUT` | `/v1/skills/{id}` | Update skill metadata |
 | `DELETE` | `/v1/skills/{id}` | Delete skill (not system skills) |
 | `POST` | `/v1/skills/{id}/toggle` | Toggle skill enabled/disabled state |
+| `PUT` | `/v1/skills/{id}/tenant-config` | Set tenant-level skill config |
+| `DELETE` | `/v1/skills/{id}/tenant-config` | Delete tenant-level skill config |
 
 ### Skill Grants
 
@@ -303,6 +325,14 @@ Use `direct_selection_count` plus the `selected_provider` sequence to verify rea
 | `POST` | `/v1/skills/install-dep` | Install single dependency |
 | `GET` | `/v1/skills/runtimes` | Check runtime availability |
 
+### Export & Import
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/skills/export/preview` | Preview skills export bundle |
+| `GET` | `/v1/skills/export` | Export skills bundle |
+| `POST` | `/v1/skills/import` | Import skills bundle |
+
 ---
 
 ## 6. Providers
@@ -323,6 +353,9 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 |--------|------|-------------|
 | `POST` | `/v1/providers/{id}/verify` | Test provider+model with minimal LLM call |
 | `GET` | `/v1/providers/{id}/models` | List models plus any known reasoning capability metadata |
+| `POST` | `/v1/providers/{id}/verify-embedding` | Verify embedding model configuration |
+| `GET` | `/v1/providers/{id}/codex-pool-activity` | Provider-level Codex pool activity |
+| `GET` | `/v1/embedding/status` | Check global embedding availability |
 | `GET` | `/v1/providers/claude-cli/auth-status` | Check Claude CLI login status |
 
 **Supported types:** `anthropic_native`, `openai_compat`, `chatgpt_oauth`, `gemini_native`, `dashscope`, `bailian`, `minimax`, `claude_cli`, `acp`
@@ -361,19 +394,7 @@ Notes:
 
 ---
 
-## 7. Sessions
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/v1/sessions` | List sessions (paginated) |
-| `GET` | `/v1/sessions/{key}` | Get session with messages |
-| `DELETE` | `/v1/sessions/{key}` | Delete session |
-| `POST` | `/v1/sessions/{key}/reset` | Clear session messages |
-| `PATCH` | `/v1/sessions/{key}` | Update label, model, metadata |
-
----
-
-## 8. MCP Servers
+## 7. MCP Servers
 
 Model Context Protocol server management.
 
@@ -387,6 +408,7 @@ Model Context Protocol server management.
 | `PUT` | `/v1/mcp/servers/{id}` | Update server |
 | `DELETE` | `/v1/mcp/servers/{id}` | Delete server |
 | `POST` | `/v1/mcp/servers/test` | Test connection (no save) |
+| `POST` | `/v1/mcp/servers/{id}/reconnect` | Reconnect MCP server |
 | `GET` | `/v1/mcp/servers/{id}/tools` | List runtime-discovered tools |
 
 ### Agent Grants
@@ -415,9 +437,27 @@ Model Context Protocol server management.
 
 Grants support `tool_allow` and `tool_deny` JSON arrays for fine-grained tool filtering.
 
+### User Credentials
+
+Per-user credential storage for MCP servers (e.g., API keys users provide for external services).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `PUT` | `/v1/mcp/servers/{id}/user-credentials` | Set user credentials |
+| `GET` | `/v1/mcp/servers/{id}/user-credentials` | Get user credentials |
+| `DELETE` | `/v1/mcp/servers/{id}/user-credentials` | Delete user credentials |
+
+### Export & Import
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/mcp/export/preview` | Preview MCP export bundle |
+| `GET` | `/v1/mcp/export` | Export MCP servers + grants |
+| `POST` | `/v1/mcp/import` | Import MCP config bundle |
+
 ---
 
-## 9. Tools
+## 8. Tools
 
 ### Built-in Tools
 
@@ -426,18 +466,8 @@ Grants support `tool_allow` and `tool_deny` JSON arrays for fine-grained tool fi
 | `GET` | `/v1/tools/builtin` | List all built-in tools |
 | `GET` | `/v1/tools/builtin/{name}` | Get tool definition |
 | `PUT` | `/v1/tools/builtin/{name}` | Update enabled/settings |
-
-### Custom Tools
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/v1/tools/custom` | List custom tools (paginated) |
-| `POST` | `/v1/tools/custom` | Create custom tool |
-| `GET` | `/v1/tools/custom/{id}` | Get tool details |
-| `PUT` | `/v1/tools/custom/{id}` | Update tool |
-| `DELETE` | `/v1/tools/custom/{id}` | Delete tool |
-
-Query parameters for list: `agent_id`, `search`, `limit`, `offset`
+| `PUT` | `/v1/tools/builtin/{name}/tenant-config` | Set tenant-level tool config |
+| `DELETE` | `/v1/tools/builtin/{name}/tenant-config` | Delete tenant-level tool config |
 
 ### Direct Invocation
 
@@ -496,6 +526,10 @@ Per-agent entity-relation graph.
 | `POST` | `/v1/agents/{agentID}/kg/extract` | LLM-powered entity extraction |
 | `GET` | `/v1/agents/{agentID}/kg/stats` | Knowledge graph statistics |
 | `GET` | `/v1/agents/{agentID}/kg/graph` | Full graph for visualization |
+| `POST` | `/v1/agents/{agentID}/kg/dedup/scan` | Scan for duplicate entities |
+| `GET` | `/v1/agents/{agentID}/kg/dedup` | List dedup candidates |
+| `POST` | `/v1/agents/{agentID}/kg/merge` | Merge duplicate entities |
+| `POST` | `/v1/agents/{agentID}/kg/dedup/dismiss` | Dismiss dedup candidate |
 
 ---
 
@@ -517,6 +551,16 @@ Per-agent entity-relation graph.
 |--------|------|-------------|
 | `GET` | `/v1/contacts` | List contacts (paginated) |
 | `GET` | `/v1/contacts/resolve?ids=...` | Resolve contacts by IDs (max 100) |
+| `POST` | `/v1/contacts/merge` | Merge contacts into unified identity |
+| `POST` | `/v1/contacts/unmerge` | Unmerge previously merged contacts |
+| `GET` | `/v1/contacts/merged/{tenantUserId}` | List merged contacts for tenant user |
+
+### Tenant Users
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/tenant-users` | List tenant users |
+| `GET` | `/v1/users/search` | Search users by query |
 
 ### Group Writers
 
@@ -546,20 +590,7 @@ Compaction runs in the background. Falls back to hard delete if no LLM provider 
 
 ---
 
-## 14. Delegations
-
-Agent task delegation and authorization history.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/v1/delegations` | List delegations (paginated, filterable) |
-| `GET` | `/v1/delegations/{id}` | Get delegation record |
-
-**Filters:** `source_agent_id`, `target_agent_id`, `team_id`, `user_id`, `status`, `limit`, `offset`
-
----
-
-## 15. Team Events
+## 14. Team Events
 
 Team activity and audit trail.
 
@@ -582,6 +613,15 @@ CLI authentication credentials for secure command execution. Requires **admin ro
 | `DELETE` | `/v1/cli-credentials/{id}` | Delete credential |
 | `GET` | `/v1/cli-credentials/presets` | Get preset credential templates |
 | `POST` | `/v1/cli-credentials/{id}/test` | Test credential connection (dry-run) |
+
+### Per-User Credentials
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/cli-credentials/{id}/user-credentials` | List user credentials for CLI cred |
+| `GET` | `/v1/cli-credentials/{id}/user-credentials/{userId}` | Get user credential |
+| `PUT` | `/v1/cli-credentials/{id}/user-credentials/{userId}` | Set user credential |
+| `DELETE` | `/v1/cli-credentials/{id}/user-credentials/{userId}` | Delete user credential |
 
 ---
 
@@ -745,7 +785,9 @@ Workspace file management.
 |--------|------|-------------|
 | `GET` | `/v1/storage/files` | List files with depth limiting |
 | `GET` | `/v1/storage/files/{path...}` | Read file (JSON or raw) |
+| `POST` | `/v1/storage/files` | Upload file (admin) |
 | `DELETE` | `/v1/storage/files/{path...}` | Delete file/directory |
+| `PUT` | `/v1/storage/move` | Move/rename file (admin) |
 | `GET` | `/v1/storage/size` | Stream storage size (Server-Sent Events, cached 60 min) |
 
 **Query parameters:**
@@ -770,6 +812,7 @@ Workspace file management.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/v1/files/{path...}` | Serve workspace file by path |
+| `POST` | `/v1/files/sign` | Generate signed URL for token-based file access |
 
 Auth via Bearer token or `?token=` query param (for `<img>` tags). MIME type auto-detected. Path traversal blocked.
 
@@ -900,7 +943,62 @@ Notes:
 
 ---
 
-## 26. System
+## 26. Edition
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/edition` | Get current edition info (lite vs standard) |
+
+---
+
+## 27. Tenants
+
+Multi-tenant management (admin only).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/tenants` | List tenants |
+| `POST` | `/v1/tenants` | Create tenant |
+| `GET` | `/v1/tenants/{id}` | Get tenant |
+| `PATCH` | `/v1/tenants/{id}` | Update tenant |
+| `GET` | `/v1/tenants/{id}/users` | List tenant users |
+| `POST` | `/v1/tenants/{id}/users` | Add user to tenant |
+| `DELETE` | `/v1/tenants/{id}/users/{userId}` | Remove user from tenant |
+
+---
+
+## 28. System Configs
+
+Key-value system configuration store.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/system-configs` | List all system configs |
+| `GET` | `/v1/system-configs/{key}` | Get config by key |
+| `PUT` | `/v1/system-configs/{key}` | Set config value (admin) |
+| `DELETE` | `/v1/system-configs/{key}` | Delete config (admin) |
+
+---
+
+## 29. Team Workspace & Attachments
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/teams/{teamId}/workspace/upload` | Upload file to team workspace |
+| `PUT` | `/v1/teams/{teamId}/workspace/move` | Move workspace item |
+| `GET` | `/v1/teams/{teamId}/attachments/{attachmentId}/download` | Download task attachment |
+
+---
+
+## 30. Shell Deny Groups
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/shell-deny-groups` | List shell command deny group patterns |
+
+---
+
+## 31. System
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -919,7 +1017,7 @@ Notes:
 
 ---
 
-## 27. MCP Bridge
+## 32. MCP Bridge
 
 Exposes GoClaw tools to Claude CLI via streamable HTTP at `/mcp/bridge`. Only listens on localhost. Protected by gateway token with HMAC-signed context headers.
 
@@ -966,6 +1064,7 @@ The following operations are **only available via WebSocket RPC**, not HTTP:
 - **Cron jobs:** List, create, update, delete, logs (use WebSocket method `cron.*`)
 - **Send messages:** Send to channels (use WebSocket method `send.*`)
 - **Config management:** Get, apply, patch (use WebSocket method `config.*`)
+- **Delegations:** List, get delegation history (use WebSocket method `delegations.*`) — _not currently registered as WS methods either; may be removed_
 
 These endpoints require an active WebSocket connection to the `/ws` endpoint with proper authentication and agent context.
 
@@ -981,7 +1080,6 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 | `internal/http/skills.go` | Skill management + grants + versions |
 | `internal/http/providers.go` | Provider CRUD + verification + models |
 | `internal/http/mcp.go` | MCP server management + grants + requests |
-| `internal/http/custom_tools.go` | Custom tool CRUD |
 | `internal/http/builtin_tools.go` | Built-in tool management |
 | `internal/http/tools_invoke.go` | Direct tool invocation |
 | `internal/http/channel_instances.go` | Channel instance management + contacts |
@@ -995,8 +1093,9 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 | `internal/http/media_serve.go` | Media file serving |
 | `internal/http/files.go` | Workspace file serving |
 | `internal/http/api_keys.go` | API key management + revoke |
-| `internal/http/delegations.go` | Delegation history API |
 | `internal/http/team_events.go` | Team event history API |
+| `internal/http/team_attachments.go` | Team attachment downloads |
+| `internal/http/workspace_upload.go` | Team workspace upload + move |
 | `internal/http/secure_cli.go` | CLI credential management |
 | `internal/http/packages.go` | Runtime package management (apk/pip/npm) |
 | `internal/http/pending_messages.go` | Pending message groups + compaction |
@@ -1007,3 +1106,16 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 | `cmd/gateway.go` | Handler instantiation and wiring |
 | `cmd/pkg-helper/main.go` | Root-privileged system package helper (apk add/del) |
 | `internal/skills/package_lister.go` | Query installed packages from apk/pip3/npm |
+| `internal/http/edition.go` | Edition info endpoint |
+| `internal/http/system_configs.go` | System config key-value store |
+| `internal/http/tenants.go` | Multi-tenant management |
+| `internal/http/mcp_user_credentials.go` | MCP per-user credentials |
+| `internal/http/mcp_export.go` | MCP export |
+| `internal/http/mcp_import.go` | MCP import |
+| `internal/http/skills_export.go` | Skills export |
+| `internal/http/skills_import.go` | Skills import |
+| `internal/http/agents_export.go` | Agent export |
+| `internal/http/agents_import.go` | Agent import |
+| `internal/http/contact_merge_handlers.go` | Contact merge/unmerge |
+| `internal/http/user_search.go` | User search |
+| `internal/http/secure_cli_user_credentials.go` | CLI per-user credentials |
