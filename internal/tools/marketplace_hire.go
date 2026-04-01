@@ -3,6 +3,8 @@ package tools
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -19,14 +21,16 @@ type MarketplaceHireTool struct {
 	client       *registry.Client
 	gatewayURL   string // e.g. http://localhost:18790
 	gatewayToken string
+	db           *sql.DB
 }
 
 // NewMarketplaceHireTool creates a new marketplace hire tool.
-func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken string) *MarketplaceHireTool {
+func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken string, db *sql.DB) *MarketplaceHireTool {
 	return &MarketplaceHireTool{
 		client:       client,
 		gatewayURL:   gatewayURL,
 		gatewayToken: gatewayToken,
+		db:           db,
 	}
 }
 
@@ -145,6 +149,11 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return NewResult(result.String())
 	}
 
+	// Save Hub metadata to the team's settings for update tracking
+	if t.db != nil {
+		go t.saveHubMetadata(listing.Title, slug)
+	}
+
 	// Build success message
 	var result strings.Builder
 	result.WriteString(fmt.Sprintf("Successfully hired and imported: **%s**\n\n", listing.Title))
@@ -227,4 +236,23 @@ func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(respBody)), nil
+}
+
+// saveHubMetadata updates the most recently imported team with Hub marketplace metadata.
+func (t *MarketplaceHireTool) saveHubMetadata(teamName, slug string) {
+	if t.db == nil {
+		return
+	}
+	// Find the team by name (just imported) and merge hub metadata into settings
+	metadata := map[string]any{
+		"hub_slug":    slug,
+		"hub_version": 1,
+	}
+	metaJSON, _ := json.Marshal(metadata)
+
+	// Merge into existing settings JSONB
+	t.db.Exec(
+		`UPDATE agent_teams SET settings = settings || $1::jsonb WHERE name = $2 AND (settings->>'hub_slug' IS NULL OR settings->>'hub_slug' = '')`,
+		string(metaJSON), teamName,
+	)
 }

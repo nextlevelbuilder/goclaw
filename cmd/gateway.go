@@ -34,6 +34,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/registry"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -410,18 +411,33 @@ func runGateway() {
 		server.SetSecureCLIHandler(secureCLIH)
 	}
 
-	// Marketplace install page (GoClaw Hub integration)
+	// Marketplace integration (GoClaw Hub)
 	{
+		apiBase := cfg.Tools.Marketplace.APIBase
+		if apiBase == "" {
+			apiBase = "https://hub-api.vibery.app/v1"
+		}
 		mktAPIKey := cfg.Tools.Marketplace.APIKey
 		if mktAPIKey == "" {
 			mktAPIKey = os.Getenv("GOCLAW_MARKETPLACE_API_KEY")
 		}
 		if mktAPIKey != "" {
+			mktClient := registry.NewClient(apiBase, mktAPIKey)
 			gwPort := cfg.Gateway.Port
 			if gwPort == 0 {
 				gwPort = 18790
 			}
+			gwURL := fmt.Sprintf("http://localhost:%d", gwPort)
+
+			// Agent tools
+			toolsReg.Register(tools.NewMarketplaceSearchTool(mktClient))
+			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, cfg.Gateway.Token, pgStores.DB))
+			toolsReg.Register(tools.NewMarketplaceCheckUpdatesTool(mktClient, pgStores.DB))
+
+			// Install page handler
 			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort))
+
+			slog.Info("marketplace tools enabled", "api_base", apiBase, "auto_import", cfg.Gateway.Token != "")
 		}
 	}
 

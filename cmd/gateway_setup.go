@@ -16,7 +16,6 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
-	"github.com/nextlevelbuilder/goclaw/internal/registry"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -141,32 +140,7 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewCreateAudioTool(providerRegistry,
 		cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL))
 
-	// Marketplace tools (GoClaw Hub integration)
-	{
-		apiBase := cfg.Tools.Marketplace.APIBase
-		if apiBase == "" {
-			apiBase = "https://hub-api.vibery.app/v1"
-		}
-		apiKey := cfg.Tools.Marketplace.APIKey
-		if apiKey == "" {
-			apiKey = os.Getenv("GOCLAW_MARKETPLACE_API_KEY")
-		}
-		if apiKey != "" {
-			mktClient := registry.NewClient(apiBase, apiKey)
-			toolsReg.Register(tools.NewMarketplaceSearchTool(mktClient))
-
-			// Gateway URL for self-import (local loopback)
-			gwPort := cfg.Gateway.Port
-			if gwPort == 0 {
-				gwPort = 18790
-			}
-			gwURL := fmt.Sprintf("http://localhost:%d", gwPort)
-			gwToken := cfg.Gateway.Token
-
-			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, gwToken))
-			slog.Info("marketplace tools enabled", "api_base", apiBase, "auto_import", gwToken != "")
-		}
-	}
+	// Marketplace tools registered in gateway.go where pgStores is available
 
 	// TTS (text-to-speech) system — always create TtsTool so config reload can populate it later
 	ttsMgr := setupTTS(cfg)
