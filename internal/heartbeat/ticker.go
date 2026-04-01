@@ -218,8 +218,11 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 			"- Your response will be delivered to the configured channel as-is.\n"+
 			"- HEARTBEAT_OK suppression: If your response contains the token HEARTBEAT_OK anywhere, "+
 			"the ENTIRE response is suppressed and NOT delivered to the channel.\n"+
-			"- Use HEARTBEAT_OK ONLY when there is nothing to deliver (e.g. monitoring checks all passed, no news).\n"+
-			"- Do NOT include HEARTBEAT_OK if the checklist asks you to send content (jokes, greetings, reports, etc.).",
+			"- Decision criteria for HEARTBEAT_OK:\n"+
+			"  - Respond with ONLY \"HEARTBEAT_OK\" (nothing else) when: all checks passed, nothing new or actionable was found, "+
+			"status is unchanged from last run. A \"no news\" summary is NOT worth delivering — use HEARTBEAT_OK instead.\n"+
+			"  - Do NOT use HEARTBEAT_OK when: you found new issues, status changes, alerts, errors, "+
+			"or the checklist explicitly asks you to send content every run (jokes, greetings, scheduled reports, etc.).",
 		agentKey, checklistContent,
 	)
 

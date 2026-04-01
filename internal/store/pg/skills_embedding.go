@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -22,16 +23,13 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 	}
 	vecStr := vectorToString(embedding)
 
-	// $1=vec, $2=vec → tenant at $3 (if needed), ORDER vec at $3+len(tcArgs), LIMIT after
-	tc, tcArgs, _, err := scopeClause(ctx, 3)
+	// $1=vec, scope starts at $2 (if present), ORDER vec uses next available param, LIMIT after.
+	tc, tcArgs, nextParam, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
-	tenantCond := ""
-	if tc != "" {
-		tenantCond = fmt.Sprintf(" AND (is_system = true OR tenant_id = $%d)", 3)
-	}
-	orderN := 3 + len(tcArgs)
+	tenantCond := buildSkillEmbeddingTenantCond(tc)
+	orderN := nextParam
 	limitN := orderN + 1
 	q := fmt.Sprintf(`SELECT name, slug, COALESCE(description, ''), version, file_path,
 			1 - (embedding <=> $1::vector) AS score
@@ -41,9 +39,9 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 		ORDER BY embedding <=> $%d::vector
 		LIMIT $%d`, tenantCond, orderN, limitN)
 
-	rows, err := s.db.QueryContext(ctx, q,
-		append(append([]any{vecStr}, tcArgs...), vecStr, limit)...,
-	)
+	args := append([]any{vecStr}, tcArgs...)
+	args = append(args, vecStr, limit)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("embedding skill search: %w", err)
 	}
@@ -66,6 +64,15 @@ func (s *PGSkillStore) SearchByEmbedding(ctx context.Context, embedding []float3
 		results = append(results, r)
 	}
 	return results, nil
+}
+
+
+func buildSkillEmbeddingTenantCond(scope string) string {
+	if scope == "" {
+		return ""
+	}
+	tenantExpr := strings.TrimPrefix(scope, " AND ")
+	return fmt.Sprintf(" AND (is_system = true OR (%s))", tenantExpr)
 }
 
 // BackfillSkillEmbeddings generates embeddings for all active skills that don't have one yet.

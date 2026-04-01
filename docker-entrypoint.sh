@@ -19,6 +19,15 @@ if [ "$(id -u)" = "0" ] && [ -d "$RUNTIME_DIR" ]; then
   chown -R goclaw:goclaw "$RUNTIME_DIR/pip" "$RUNTIME_DIR/npm-global" "$RUNTIME_DIR/pip-cache" 2>/dev/null || true
 fi
 
+# Fix workspace directory ownership: handle dirs created by root in previous
+# container lifecycle or via manual docker exec.
+# Security: -type d = real directories only (not symlinks).
+# find default -P mode = never follow symlinks. -maxdepth 5 limits traversal.
+if [ "$(id -u)" = "0" ] && [ -d /app/workspace ]; then
+  find /app/workspace -maxdepth 5 -type d -not -user goclaw \
+    -exec chown goclaw:goclaw {} + 2>/dev/null || true
+fi
+
 # Python: allow agent to pip install to writable target dir
 export PYTHONPATH="$RUNTIME_DIR/pip:${PYTHONPATH:-}"
 export PIP_TARGET="$RUNTIME_DIR/pip"

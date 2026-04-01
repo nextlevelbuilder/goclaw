@@ -104,7 +104,7 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, provi
 	if !isRetryableError(err) {
 		slog.Warn("summoning: single-call failed (non-retryable)", "agent", agentID, "error", err)
 		s.emitEvent(agentID, tenantID, SummonEventFailed, "", err.Error())
-		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+		s.setAgentStatus(context.Background(), tenantID, agentID, store.AgentStatusSummonFailed)
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, provi
 		if soulErr != nil {
 			slog.Warn("summoning: SOUL.md generation failed", "agent", agentID, "error", soulErr)
 			s.emitEvent(agentID, tenantID, SummonEventFailed, "", soulErr.Error())
-			s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+			s.setAgentStatus(context.Background(), tenantID, agentID, store.AgentStatusSummonFailed)
 			return
 		}
 		soulContent = soulFiles[bootstrap.SoulFile]
@@ -155,7 +155,7 @@ func (s *AgentSummoner) SummonAgent(agentID uuid.UUID, tenantID uuid.UUID, provi
 		if idErr != nil {
 			slog.Warn("summoning: IDENTITY.md generation failed", "agent", agentID, "error", idErr)
 			s.emitEvent(agentID, tenantID, SummonEventFailed, "", idErr.Error())
-			s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+			s.setAgentStatus(context.Background(), tenantID, agentID, store.AgentStatusSummonFailed)
 			return
 		}
 		identityContent = idFiles[bootstrap.IdentityFile]
@@ -198,7 +198,7 @@ func (s *AgentSummoner) finishSummon(ctx context.Context, agentID, tenantID uuid
 			slog.Warn("summoning: failed to save agent metadata", "agent", agentID, "error", err)
 		}
 	}
-	s.setAgentStatus(ctx, agentID, store.AgentStatusActive)
+	s.setAgentStatus(ctx, tenantID, agentID, store.AgentStatusActive)
 	s.emitEvent(agentID, tenantID, SummonEventCompleted, "", "")
 	slog.Info("summoning: completed", "agent", agentID)
 }

@@ -185,6 +185,7 @@
     "unsavedChangesTitle": "Draft changes are not live yet",
     "unsavedChangesDescription": "The verification cards below reflect the last saved pool. Save this draft before using the evidence to validate round robin.",
     "draftBadge": "Draft pending",
+    "providerChangedWarning": "Provider changed — pool routing will be reset on save.",
     "savedPoolOnlyHint": "Live evidence still reflects the last saved pool.",
     "verificationTitle": "How verification works",
     "verificationDescription": "Evidence comes from recent LLM spans for this agent. Refresh this page after a few requests to compare the configured pool with the aliases that were actually used.",

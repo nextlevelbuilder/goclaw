@@ -64,13 +64,18 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updatedOtherConfig = {
+      const updatedOtherConfig: Record<string, unknown> = {
         ...otherCfg,
         emoji: emoji.trim() || undefined,
         self_evolve: selfEvolve,
         skill_evolve: skillEvolve,
         skill_nudge_interval: skillEvolve ? skillNudgeInterval : undefined,
       };
+      // When the provider changes, clear stale pool routing config so it
+      // doesn't reference members from the previous provider's pool.
+      if (provider !== agent.provider) {
+        delete updatedOtherConfig.chatgpt_oauth_routing;
+      }
       const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
       await onUpdate({
         display_name: displayName,
@@ -129,6 +134,11 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
       />
 
       <ChatGPTOAuthRoutingSummarySection agent={agent} onManage={onManageCodexPool} />
+      {provider !== agent.provider && !!otherCfg.chatgpt_oauth_routing && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2 px-1">
+          {t("chatgptOAuthRouting.providerChangedWarning")}
+        </p>
+      )}
 
       {/* Memory — always visible, per-agent overrides */}
       <MemorySection

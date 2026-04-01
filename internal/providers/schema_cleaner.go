@@ -7,19 +7,28 @@ func CleanToolSchemas(providerName string, tools []ToolDefinition) []ToolDefinit
 		return tools
 	}
 	profile := profileForProvider(providerName)
-	var strictPtr *bool
-	if profile.StrictToolMode {
-		t := true
-		strictPtr = &t
-	}
 	cleaned := make([]ToolDefinition, len(tools))
 	for i, t := range tools {
+		// Exempt multi-action tools from strict mode — their many optional
+		// params become required under strict, forcing models to send empty values
+		// for every call (wasting ~200-300 output tokens per tool call).
+		useStrict := profile.StrictToolMode && !IsMultiActionSchema(t.Function.Parameters)
+
+		var strictPtr *bool
+		if useStrict {
+			tr := true
+			strictPtr = &tr
+		}
+
+		toolProfile := profile
+		toolProfile.StrictToolMode = useStrict
+
 		cleaned[i] = ToolDefinition{
 			Type: t.Type,
 			Function: ToolFunctionSchema{
 				Name:        t.Function.Name,
 				Description: t.Function.Description,
-				Parameters:  NormalizeSchema(providerName, t.Function.Parameters),
+				Parameters:  normalizeWithProfile(toolProfile, t.Function.Parameters),
 				Strict:      strictPtr,
 			},
 		}

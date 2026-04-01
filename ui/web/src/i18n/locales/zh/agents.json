@@ -185,6 +185,7 @@
     "unsavedChangesTitle": "草稿尚未生效",
     "unsavedChangesDescription": "下方验证卡片反映的是最近一次已保存的池配置。请先保存这个草稿，再使用证据验证 round robin。",
     "draftBadge": "草稿待保存",
+    "providerChangedWarning": "提供者已更改 — 池路由配置将在保存时重置。",
     "savedPoolOnlyHint": "实时证据仍然反映最近一次已保存的池配置。",
     "verificationTitle": "如何验证",
     "verificationDescription": "证据来自该 agent 最近的 LLM span。发送几次请求后刷新此页，即可对比配置好的池和实际使用的别名。",

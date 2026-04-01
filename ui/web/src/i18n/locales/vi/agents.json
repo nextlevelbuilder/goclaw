@@ -185,6 +185,7 @@
     "unsavedChangesTitle": "Bản nháp chưa được áp dụng",
     "unsavedChangesDescription": "Các thẻ xác minh bên dưới đang phản ánh pool đã lưu gần nhất. Hãy lưu bản nháp này trước khi dùng bằng chứng để xác nhận round robin.",
     "draftBadge": "Bản nháp chờ lưu",
+    "providerChangedWarning": "Provider đã thay đổi — cấu hình pool routing sẽ bị xóa khi lưu.",
     "savedPoolOnlyHint": "Bằng chứng trực tiếp vẫn đang phản ánh pool đã lưu gần nhất.",
     "verificationTitle": "Cách xác minh hoạt động",
     "verificationDescription": "Bằng chứng đến từ các LLM span gần đây của agent này. Làm mới trang sau vài request để so sánh pool đã cấu hình với các bí danh thực sự được dùng.",

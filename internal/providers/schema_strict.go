@@ -72,6 +72,33 @@ func applyStrictMode(schema map[string]any, depth int) map[string]any {
 	return schema
 }
 
+// IsMultiActionSchema detects tool schemas using the multi-action pattern:
+// a top-level "action" property with an "enum" list of 2+ values.
+// These tools have many optional params shared across actions;
+// strict mode forces models to send all params for every call.
+func IsMultiActionSchema(schema map[string]any) bool {
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return false
+	}
+	actionProp, ok := props["action"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enumVal, ok := actionProp["enum"]
+	if !ok {
+		return false
+	}
+	// Only exempt if 2+ actions — single-action tools benefit from strict.
+	switch e := enumVal.(type) {
+	case []string:
+		return len(e) >= 2
+	case []any:
+		return len(e) >= 2
+	}
+	return false
+}
+
 // makeNullable converts a property schema to accept null values.
 // - Simple type: "string" → ["string", "null"]
 // - Type array: ["string", "integer"] → ["string", "integer", "null"]

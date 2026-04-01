@@ -70,6 +70,12 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile, workspace 
 		slog.Warn("media: failed to create .uploads dir", "dir", uploadsDir, "error", err)
 		return nil
 	}
+	// Verify .uploads is a real directory (not symlink) to prevent symlink-based attacks.
+	// os.Lstat does NOT follow symlinks — rejects if attacker replaced .uploads with a symlink.
+	if fi, err := os.Lstat(uploadsDir); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		slog.Warn("media: .uploads is a symlink, refusing to use", "dir", uploadsDir)
+		return nil
+	}
 
 	var refs []providers.MediaRef
 	for _, f := range files {

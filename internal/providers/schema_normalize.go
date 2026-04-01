@@ -11,10 +11,15 @@ const maxSchemaDepth = 64
 // This is the single entry point — all providers should call this (directly or
 // via CleanToolSchemas / CleanSchemaForProvider wrappers).
 func NormalizeSchema(providerName string, schema map[string]any) map[string]any {
+	return normalizeWithProfile(profileForProvider(providerName), schema)
+}
+
+// normalizeWithProfile applies normalization using a pre-resolved profile.
+// Used by CleanToolSchemas to pass per-tool profile overrides.
+func normalizeWithProfile(profile SchemaProfile, schema map[string]any) map[string]any {
 	if schema == nil {
 		return nil
 	}
-	profile := profileForProvider(providerName)
 	result := copySchema(schema)
 
 	if profile.ResolveRefs {

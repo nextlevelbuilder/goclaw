@@ -110,6 +110,11 @@ func validateChatGPTOAuthProviderCandidate(
 		if provider.ProviderType != store.ProviderChatGPTOAuth {
 			continue
 		}
+		// Skip disabled providers — their stale pool configs should not
+		// block validation for active providers.
+		if !provider.Enabled {
+			continue
+		}
 		if currentID != uuid.Nil && provider.ID == currentID {
 			finalProviders = append(finalProviders, *candidate)
 			replaced = true

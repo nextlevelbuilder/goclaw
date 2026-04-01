@@ -81,9 +81,13 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 				"type":        "integer",
 				"description": "Progress percentage 0-100 (for progress action)",
 			},
-			"file_id": map[string]any{
+			"path": map[string]any{
 				"type":        "string",
-				"description": "Workspace file ID (for attach)",
+				"description": "Workspace file path (for attach)",
+			},
+			"task_type": map[string]any{
+				"type":        "string",
+				"description": "Task type for create: 'general' (default), 'request', or 'note'",
 			},
 			"assignee": map[string]any{
 				"type":        "string",
@@ -99,13 +103,40 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 }
 
 // buildActionDescription returns the action parameter description based on policy.
+// Includes per-action param guide so models know which params to send.
 func (t *TeamTasksTool) buildActionDescription() string {
 	base := "Available actions: " + strings.Join(t.policy.AllowedActions(), ", ") + "."
 	if t.policy.IsAllowed("ask_user") {
-		base += " ask_user: set a periodic reminder sent to the USER when you need input. clear_ask_user: cancel a previously set reminder."
+		base += " ask_user: set a periodic reminder. clear_ask_user: cancel reminder."
 	}
 	if t.policy.IsAllowed("retry") {
-		base += " retry: re-dispatch a stale or failed task."
+		base += " retry: re-dispatch a stale/failed task."
+	}
+	// Per-action param guide — only list actions allowed by policy.
+	base += "\n\nParams per action (only send listed params):\n"
+	guide := map[string]string{
+		"list":           "- list: status?, page?\n",
+		"get":            "- get: task_id\n",
+		"create":         "- create: subject, description, assignee, priority?, blocked_by?, require_approval?, task_type?\n",
+		"claim":          "- claim: task_id\n",
+		"complete":       "- complete: task_id?, result\n",
+		"cancel":         "- cancel: task_id, text\n",
+		"search":         "- search: query, page?\n",
+		"review":         "- review: task_id\n",
+		"comment":        "- comment: task_id?, text, type?\n",
+		"progress":       "- progress: task_id?, percent, text?\n",
+		"attach":         "- attach: task_id, path\n",
+		"update":         "- update: task_id, subject?, description?, priority?, blocked_by?\n",
+		"approve":        "- approve: task_id\n",
+		"reject":         "- reject: task_id, text\n",
+		"ask_user":       "- ask_user: task_id, text\n",
+		"clear_ask_user": "- clear_ask_user: task_id\n",
+		"retry":          "- retry: task_id\n",
+	}
+	for _, action := range t.policy.AllowedActions() {
+		if line, ok := guide[action]; ok {
+			base += line
+		}
 	}
 	return base
 }

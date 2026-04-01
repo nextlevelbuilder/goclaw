@@ -162,6 +162,196 @@ func TestCleanSchema_NestedArray(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Multi-action tool strict mode exemption
+// ---------------------------------------------------------------------------
+
+func TestIsMultiActionSchema(t *testing.T) {
+	tests := []struct {
+		name   string
+		schema map[string]any
+		want   bool
+	}{
+		{
+			name: "team_tasks-like with []string enum",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{
+						"type": "string",
+						"enum": []string{"list", "create", "search"},
+					},
+					"query": map[string]any{"type": "string"},
+				},
+				"required": []string{"action"},
+			},
+			want: true,
+		},
+		{
+			name: "cron-like with []any enum",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{
+						"type": "string",
+						"enum": []any{"status", "add", "remove"},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "single action — not exempt",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{
+						"type": "string",
+						"enum": []string{"send"},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no action property",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "action without enum",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{"type": "string"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "enum on non-action field",
+			schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"mode": map[string]any{
+						"type": "string",
+						"enum": []string{"markdown", "text"},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "nil schema",
+			schema: nil,
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsMultiActionSchema(tt.schema)
+			if got != tt.want {
+				t.Errorf("IsMultiActionSchema() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanToolSchemas_OpenAI_MultiActionExempt(t *testing.T) {
+	multiAction := ToolDefinition{
+		Type: "function",
+		Function: ToolFunctionSchema{
+			Name:        "team_tasks",
+			Description: "multi-action tool",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{
+						"type": "string",
+						"enum": []string{"list", "create", "search"},
+					},
+					"query": map[string]any{
+						"type":        "string",
+						"description": "search query",
+					},
+					"subject": map[string]any{
+						"type":        "string",
+						"description": "task subject",
+					},
+				},
+				"required": []string{"action"},
+			},
+		},
+	}
+	simple := ToolDefinition{
+		Type: "function",
+		Function: ToolFunctionSchema{
+			Name:        "read_file",
+			Description: "simple tool",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path": map[string]any{
+						"type":        "string",
+						"description": "file path",
+					},
+				},
+				"required": []string{"path"},
+			},
+		},
+	}
+
+	cleaned := CleanToolSchemas("openai", []ToolDefinition{multiAction, simple})
+
+	// Multi-action tool: strict should be nil (exempt).
+	if cleaned[0].Function.Strict != nil {
+		t.Errorf("multi-action tool: expected Strict=nil, got %v", *cleaned[0].Function.Strict)
+	}
+
+	// Multi-action tool: required should stay ["action"] only.
+	params0 := cleaned[0].Function.Parameters
+	reqArr, ok := params0["required"].([]string)
+	if !ok {
+		// May be []any from original schema copy.
+		if reqAny, ok2 := params0["required"].([]any); ok2 {
+			if len(reqAny) != 1 {
+				t.Errorf("multi-action: expected 1 required, got %d", len(reqAny))
+			}
+		}
+	} else if len(reqArr) != 1 {
+		t.Errorf("multi-action: expected 1 required, got %d: %v", len(reqArr), reqArr)
+	}
+
+	// Multi-action tool: should NOT have additionalProperties:false.
+	if _, hasAP := params0["additionalProperties"]; hasAP {
+		t.Error("multi-action: expected no additionalProperties")
+	}
+
+	// Simple tool: strict should be true.
+	if cleaned[1].Function.Strict == nil || !*cleaned[1].Function.Strict {
+		t.Error("simple tool: expected Strict=true")
+	}
+
+	// Simple tool: all props required (strict mode applied).
+	params1 := cleaned[1].Function.Parameters
+	if reqAny, ok := params1["required"].([]any); ok {
+		if len(reqAny) != 1 {
+			t.Errorf("simple tool: expected 1 required (path), got %d", len(reqAny))
+		}
+	}
+
+	// Simple tool: additionalProperties:false should be set.
+	if ap, ok := params1["additionalProperties"].(bool); !ok || ap {
+		t.Error("simple tool: expected additionalProperties=false")
+	}
+}
+
 func TestCleanSchema_DeepNesting(t *testing.T) {
 	params := map[string]any{
 		"type": "object",

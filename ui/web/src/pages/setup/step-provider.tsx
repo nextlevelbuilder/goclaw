@@ -72,22 +72,30 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
     setLoading(true);
     setError("");
     try {
-      const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
       const targetName = (resolvedProviderName?.trim() || name.trim()).toLowerCase();
       const targetDisplay = oauthDisplayName.trim().toLowerCase();
 
-      let provider = res.providers?.find((p) =>
-        p.provider_type === "chatgpt_oauth"
-        && p.name.toLowerCase() === targetName,
-      );
+      // Retry up to 3 times with 1 s delay — backend may not have committed
+      // the provider yet when the OAuth polling detects success.
+      let provider: ProviderData | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
 
-      if (!provider && targetDisplay) {
         provider = res.providers?.find((p) =>
           p.provider_type === "chatgpt_oauth"
-          && (p.display_name || "").trim().toLowerCase() === targetDisplay,
+          && p.name.toLowerCase() === targetName,
         );
-      }
 
+        if (!provider && targetDisplay) {
+          provider = res.providers?.find((p) =>
+            p.provider_type === "chatgpt_oauth"
+            && (p.display_name || "").trim().toLowerCase() === targetDisplay,
+          );
+        }
+
+        if (provider) break;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 1000));
+      }
       if (!provider) {
         setError(t("provider.errors.oauthProviderNotFound"));
         return;
