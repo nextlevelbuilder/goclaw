@@ -13,6 +13,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -40,9 +42,9 @@ type DMPolicy string
 
 const (
 	DMPolicyPairing   DMPolicy = "pairing"   // Require pairing code
-	DMPolicyAllowlist DMPolicy = "allowlist"  // Only whitelisted senders
-	DMPolicyOpen      DMPolicy = "open"       // Accept all
-	DMPolicyDisabled  DMPolicy = "disabled"   // Reject all DMs
+	DMPolicyAllowlist DMPolicy = "allowlist" // Only whitelisted senders
+	DMPolicyOpen      DMPolicy = "open"      // Accept all
+	DMPolicyDisabled  DMPolicy = "disabled"  // Reject all DMs
 )
 
 // GroupPolicy controls how group messages are handled.
@@ -50,8 +52,8 @@ type GroupPolicy string
 
 const (
 	GroupPolicyOpen      GroupPolicy = "open"      // Accept all groups
-	GroupPolicyAllowlist GroupPolicy = "allowlist"  // Only whitelisted groups
-	GroupPolicyDisabled  GroupPolicy = "disabled"   // No group messages
+	GroupPolicyAllowlist GroupPolicy = "allowlist" // Only whitelisted groups
+	GroupPolicyDisabled  GroupPolicy = "disabled"  // No group messages
 )
 
 // Channel type constants used across channel packages and gateway wiring.
@@ -64,6 +66,128 @@ const (
 	TypeZaloOA       = "zalo_oa"
 	TypeZaloPersonal = "zalo_personal"
 )
+
+// ChannelHealthState captures the current runtime state of a channel instance.
+type ChannelHealthState string
+
+const (
+	ChannelHealthStateRegistered ChannelHealthState = "registered"
+	ChannelHealthStateStarting   ChannelHealthState = "starting"
+	ChannelHealthStateHealthy    ChannelHealthState = "healthy"
+	ChannelHealthStateDegraded   ChannelHealthState = "degraded"
+	ChannelHealthStateFailed     ChannelHealthState = "failed"
+	ChannelHealthStateStopped    ChannelHealthState = "stopped"
+)
+
+// ChannelFailureKind classifies the dominant cause of the current failure state.
+type ChannelFailureKind string
+
+const (
+	ChannelFailureKindAuth    ChannelFailureKind = "auth"
+	ChannelFailureKindConfig  ChannelFailureKind = "config"
+	ChannelFailureKindNetwork ChannelFailureKind = "network"
+	ChannelFailureKindUnknown ChannelFailureKind = "unknown"
+)
+
+// ChannelHealth is the shared runtime health snapshot exposed via channels.status.
+type ChannelHealth struct {
+	Enabled      bool               `json:"enabled"`
+	Running      bool               `json:"running"`
+	State        ChannelHealthState `json:"state"`
+	Summary      string             `json:"summary,omitempty"`
+	Detail       string             `json:"detail,omitempty"`
+	FailureKind  ChannelFailureKind `json:"failure_kind,omitempty"`
+	Retryable    bool               `json:"retryable"`
+	CheckedAt    time.Time          `json:"checked_at,omitempty"`
+	FailureCount int                `json:"failure_count,omitempty"`
+}
+
+// ChannelErrorInfo contains shared error classification output for operators.
+type ChannelErrorInfo struct {
+	Summary   string
+	Detail    string
+	Kind      ChannelFailureKind
+	Retryable bool
+}
+
+// ClassifyChannelError maps common channel startup/runtime failures into operator-facing buckets.
+func ClassifyChannelError(err error) ChannelErrorInfo {
+	if err == nil {
+		return ChannelErrorInfo{
+			Summary:   "Channel failed",
+			Kind:      ChannelFailureKindUnknown,
+			Retryable: true,
+		}
+	}
+
+	detail := err.Error()
+	msg := strings.ToLower(detail)
+
+	switch {
+	case strings.Contains(msg, "401") || strings.Contains(msg, "unauthorized") || strings.Contains(msg, "forbidden"):
+		return ChannelErrorInfo{
+			Summary:   "Authentication failed",
+			Detail:    detail,
+			Kind:      ChannelFailureKindAuth,
+			Retryable: false,
+		}
+	case strings.Contains(msg, "token is required"),
+		strings.Contains(msg, "missing credentials"),
+		strings.Contains(msg, "invalid proxy"),
+		strings.Contains(msg, "decode "),
+		strings.Contains(msg, "not found for channel"),
+		strings.Contains(msg, "required"):
+		return ChannelErrorInfo{
+			Summary:   "Configuration is invalid",
+			Detail:    detail,
+			Kind:      ChannelFailureKindConfig,
+			Retryable: false,
+		}
+	case strings.Contains(msg, "timeout"),
+		strings.Contains(msg, "connection refused"),
+		strings.Contains(msg, "connection reset"),
+		strings.Contains(msg, "no such host"),
+		strings.Contains(msg, "dial tcp"),
+		strings.Contains(msg, "context deadline exceeded"),
+		strings.Contains(msg, "eof"):
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    detail,
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	default:
+		return ChannelErrorInfo{
+			Summary:   "Channel failed",
+			Detail:    detail,
+			Kind:      ChannelFailureKindUnknown,
+			Retryable: true,
+		}
+	}
+}
+
+// NewChannelHealth builds a shared runtime snapshot with a current timestamp.
+func NewChannelHealth(state ChannelHealthState, summary, detail string, kind ChannelFailureKind, retryable bool) ChannelHealth {
+	return ChannelHealth{
+		Enabled:     true,
+		Running:     state == ChannelHealthStateHealthy || state == ChannelHealthStateDegraded,
+		State:       state,
+		Summary:     summary,
+		Detail:      detail,
+		FailureKind: kind,
+		Retryable:   retryable,
+		CheckedAt:   time.Now().UTC(),
+	}
+}
+
+// NewFailedChannelHealth builds a failed snapshot from a classified error.
+func NewFailedChannelHealth(summary string, err error) ChannelHealth {
+	info := ClassifyChannelError(err)
+	if summary == "" {
+		summary = info.Summary
+	}
+	return NewChannelHealth(ChannelHealthStateFailed, summary, info.Detail, info.Kind, info.Retryable)
+}
 
 // Channel defines the interface that all channel implementations must satisfy.
 type Channel interface {
@@ -156,9 +280,11 @@ type BaseChannel struct {
 	channelType      string // platform type; defaults to name if unset
 	bus              *bus.MessageBus
 	running          bool
+	stateMu          sync.RWMutex
+	health           ChannelHealth
 	allowList        []string
-	agentID          string                 // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
-	tenantID         uuid.UUID              // for DB instances: tenant scope (zero = master tenant fallback)
+	agentID          string                  // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
+	tenantID         uuid.UUID               // for DB instances: tenant scope (zero = master tenant fallback)
 	contactCollector *store.ContactCollector // optional: auto-collect contacts from channel messages
 }
 
@@ -167,6 +293,7 @@ func NewBaseChannel(name string, msgBus *bus.MessageBus, allowList []string) *Ba
 	return &BaseChannel{
 		name:      name,
 		bus:       msgBus,
+		health:    NewChannelHealth(ChannelHealthStateRegistered, "Configured", "", ChannelFailureKindUnknown, false),
 		allowList: allowList,
 	}
 }
@@ -207,10 +334,116 @@ func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contac
 func (c *BaseChannel) ContactCollector() *store.ContactCollector { return c.contactCollector }
 
 // IsRunning returns whether the channel is running.
-func (c *BaseChannel) IsRunning() bool { return c.running }
+func (c *BaseChannel) IsRunning() bool {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	return c.running
+}
 
 // SetRunning updates the running state.
-func (c *BaseChannel) SetRunning(running bool) { c.running = running }
+func (c *BaseChannel) SetRunning(running bool) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	c.running = running
+	c.health.Running = running
+
+	switch {
+	case running && (c.health.State == "" ||
+		c.health.State == ChannelHealthStateRegistered ||
+		c.health.State == ChannelHealthStateStarting ||
+		c.health.State == ChannelHealthStateStopped):
+		c.health.State = ChannelHealthStateHealthy
+		if c.health.Summary == "" ||
+			c.health.Summary == "Configured" ||
+			c.health.Summary == "Starting" ||
+			c.health.Summary == "Stopped" {
+			c.health.Summary = "Connected"
+		}
+		c.health.CheckedAt = time.Now().UTC()
+	case !running && c.health.State == ChannelHealthStateHealthy:
+		c.health.State = ChannelHealthStateStopped
+		c.health.Summary = "Stopped"
+		c.health.CheckedAt = time.Now().UTC()
+	}
+}
+
+// HealthSnapshot returns the current runtime health snapshot for the channel.
+func (c *BaseChannel) HealthSnapshot() ChannelHealth {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+
+	snapshot := c.health
+	snapshot.Enabled = true
+	snapshot.Running = c.running
+	return snapshot
+}
+
+// MarkRegistered records that the channel was configured and registered successfully.
+func (c *BaseChannel) MarkRegistered(summary string) {
+	if summary == "" {
+		summary = "Configured"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateRegistered, summary, "", ChannelFailureKindUnknown, false), false)
+}
+
+// MarkStarting records that the channel is in startup validation / connection setup.
+func (c *BaseChannel) MarkStarting(summary string) {
+	if summary == "" {
+		summary = "Starting"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateStarting, summary, "", ChannelFailureKindUnknown, true), false)
+}
+
+// MarkHealthy records a healthy connected state.
+func (c *BaseChannel) MarkHealthy(summary string) {
+	if summary == "" {
+		summary = "Connected"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateHealthy, summary, "", ChannelFailureKindUnknown, false), false)
+}
+
+// MarkDegraded records a non-fatal warning state.
+func (c *BaseChannel) MarkDegraded(summary, detail string, kind ChannelFailureKind, retryable bool) {
+	if summary == "" {
+		summary = "Running with warnings"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable), true)
+}
+
+// MarkFailed records a startup or runtime failure.
+func (c *BaseChannel) MarkFailed(summary, detail string, kind ChannelFailureKind, retryable bool) {
+	if summary == "" {
+		summary = "Channel failed"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateFailed, summary, detail, kind, retryable), true)
+}
+
+// MarkStopped records a cleanly stopped state.
+func (c *BaseChannel) MarkStopped(summary string) {
+	if summary == "" {
+		summary = "Stopped"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateStopped, summary, "", ChannelFailureKindUnknown, false), false)
+}
+
+func (c *BaseChannel) setHealth(snapshot ChannelHealth, incrementFailure bool) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	if snapshot.CheckedAt.IsZero() {
+		snapshot.CheckedAt = time.Now().UTC()
+	}
+	if incrementFailure {
+		snapshot.FailureCount = c.health.FailureCount + 1
+	} else {
+		snapshot.FailureCount = c.health.FailureCount
+	}
+	snapshot.Enabled = true
+	snapshot.Running = snapshot.State == ChannelHealthStateHealthy || snapshot.State == ChannelHealthStateDegraded
+	c.running = snapshot.Running
+	c.health = snapshot
+}
 
 // Bus returns the message bus reference.
 func (c *BaseChannel) Bus() *bus.MessageBus { return c.bus }

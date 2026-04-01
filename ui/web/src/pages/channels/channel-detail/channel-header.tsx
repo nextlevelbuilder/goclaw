@@ -2,29 +2,76 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, Radio, Settings, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { channelTypeLabels } from "../channels-status-view";
-import type { ChannelInstanceData } from "@/types/channel";
+import type {
+  ChannelInstanceData,
+  ChannelRuntimeStatus,
+} from "@/types/channel";
 
 interface ChannelHeaderProps {
   instance: ChannelInstanceData;
-  status: { running: boolean } | null;
+  status: ChannelRuntimeStatus | null;
   agentName: string;
   onBack: () => void;
   onAdvanced: () => void;
   onDelete: () => void;
 }
 
-export function ChannelHeader({ instance, status, agentName, onBack, onAdvanced, onDelete }: ChannelHeaderProps) {
+export function ChannelHeader({
+  instance,
+  status,
+  agentName,
+  onBack,
+  onAdvanced,
+  onDelete,
+}: ChannelHeaderProps) {
   const { t } = useTranslation("channels");
   const displayTitle = instance.display_name || instance.name;
-  const typeLabel = channelTypeLabels[instance.channel_type] || instance.channel_type;
+  const typeLabel =
+    channelTypeLabels[instance.channel_type] || instance.channel_type;
+  const statusLabel = (() => {
+    switch (status?.state) {
+      case "healthy":
+        return t("status.running");
+      case "degraded":
+        return t("status.degraded", { defaultValue: "Degraded" });
+      case "starting":
+        return t("status.starting", { defaultValue: "Starting" });
+      case "registered":
+        return t("status.registered", { defaultValue: "Configured" });
+      case "failed":
+        return t("status.failed", { defaultValue: "Failed" });
+      default:
+        return status?.running ? t("status.running") : t("status.stopped");
+    }
+  })();
+  const statusVariant =
+    status?.state === "healthy"
+      ? "success"
+      : status?.state === "degraded"
+        ? "warning"
+        : status?.state === "starting"
+          ? "info"
+          : status?.state === "failed"
+            ? "destructive"
+            : "secondary";
 
   return (
     <TooltipProvider>
       <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-card px-3 py-2 landscape-compact sm:px-4 sm:gap-3">
-        <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 size-9">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="shrink-0 size-9"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
 
@@ -42,7 +89,9 @@ export function ChannelHeader({ instance, status, agentName, onBack, onAdvanced,
                 <span
                   className={cn(
                     "inline-block h-2.5 w-2.5 shrink-0 rounded-full",
-                    instance.enabled ? "bg-emerald-500" : "bg-muted-foreground/50",
+                    instance.enabled
+                      ? "bg-emerald-500"
+                      : "bg-muted-foreground/50",
                   )}
                 />
               </TooltipTrigger>
@@ -51,18 +100,30 @@ export function ChannelHeader({ instance, status, agentName, onBack, onAdvanced,
               </TooltipContent>
             </Tooltip>
             {status && (
-              <Badge variant={status.running ? "success" : "secondary"} className="text-[10px]">
-                {status.running ? t("status.running") : t("status.stopped")}
+              <Badge variant={statusVariant} className="text-[10px]">
+                {statusLabel}
               </Badge>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
             <span className="font-mono text-[11px]">{instance.name}</span>
             <span className="text-border">·</span>
-            <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
+            <Badge variant="outline" className="text-[10px]">
+              {typeLabel}
+            </Badge>
             <span className="text-border">·</span>
             <span>{t("detail.agent", { name: agentName })}</span>
           </div>
+          {status?.summary && (
+            <div className="mt-1 text-xs text-muted-foreground break-words">
+              {status.summary}
+            </div>
+          )}
+          {status?.detail && (
+            <div className="mt-1 text-xs text-muted-foreground break-words">
+              {status.detail}
+            </div>
+          )}
         </div>
 
         <Button

@@ -54,6 +54,25 @@ function HealthCell({
   );
 }
 
+function channelDotClass(status: ChannelStatusEntry) {
+  switch (status.state) {
+    case "healthy":
+      return "bg-emerald-500";
+    case "degraded":
+      return "bg-amber-500";
+    case "starting":
+      return "bg-sky-500";
+    case "failed":
+      return "bg-red-500";
+    case "registered":
+      return "bg-slate-400";
+    case "stopped":
+      return "bg-muted-foreground/50";
+    default:
+      return status.running ? "bg-emerald-500" : "bg-red-400";
+  }
+}
+
 export function SystemHealthCard({
   health,
   liveUptime,
@@ -72,6 +91,12 @@ export function SystemHealthCard({
   runtimeEntries?: RuntimeInfo[];
 }) {
   const { t } = useTranslation("overview");
+  const degradedCount = channelEntries.filter(
+    ([, ch]) => ch.state === "degraded",
+  ).length;
+  const failedCount = channelEntries.filter(
+    ([, ch]) => ch.state === "failed",
+  ).length;
   return (
     <Card className="gap-4">
       <CardHeader>
@@ -82,7 +107,9 @@ export function SystemHealthCard({
           {health?.version && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Tag className="h-3 w-3" />
-              <span className="font-medium">{cleanVersion(health.version)}</span>
+              <span className="font-medium">
+                {cleanVersion(health.version)}
+              </span>
               {health.updateAvailable === false && (
                 <CheckCircle2 className="h-3 w-3 text-emerald-500" />
               )}
@@ -167,9 +194,18 @@ export function SystemHealthCard({
 
         {channelEntries.length > 0 && (
           <div className="border-t pt-4">
-            <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {t("systemHealth.channels")}
-            </p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {t("systemHealth.channels")}
+              </p>
+              {(degradedCount > 0 || failedCount > 0) && (
+                <span className="text-xs text-muted-foreground">
+                  {failedCount > 0
+                    ? `${failedCount} failed`
+                    : `${degradedCount} warning${degradedCount === 1 ? "" : "s"}`}
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {channelEntries.map(([name, ch]) => (
                 <span
@@ -177,7 +213,7 @@ export function SystemHealthCard({
                   className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs"
                 >
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${ch.running ? "bg-emerald-500" : "bg-red-400"}`}
+                    className={`h-1.5 w-1.5 rounded-full ${channelDotClass(ch)}`}
                   />
                   {name}
                 </span>

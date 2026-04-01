@@ -8,7 +8,11 @@
   "status": {
     "running": "Running",
     "stopped": "Stopped",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "degraded": "Degraded",
+    "starting": "Starting",
+    "registered": "Configured",
+    "failed": "Failed"
   },
   "channelTypes": {
     "telegram": "Telegram",
@@ -38,6 +42,7 @@
   },
   "detail": {
     "back": "Back",
+    "lastChecked": "Last checked: {{value}}",
     "tabs": {
       "general": "General",
       "credentials": "Credentials",

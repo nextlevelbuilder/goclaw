@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -49,6 +50,7 @@ type RunContext struct {
 // and routing outbound messages to the correct channel.
 type Manager struct {
 	channels         map[string]Channel
+	health           map[string]ChannelHealth
 	bus              *bus.MessageBus
 	runs             sync.Map // runID string → *RunContext
 	dispatchTask     *asyncTask
@@ -65,6 +67,7 @@ type asyncTask struct {
 func NewManager(msgBus *bus.MessageBus) *Manager {
 	return &Manager{
 		channels: make(map[string]Channel),
+		health:   make(map[string]ChannelHealth),
 		bus:      msgBus,
 	}
 }
@@ -90,9 +93,22 @@ func (m *Manager) StartAll(ctx context.Context) error {
 
 	for name, channel := range m.channels {
 		slog.Info("starting channel", "channel", name)
-		if err := channel.Start(ctx); err != nil {
-			slog.Error("failed to start channel", "channel", name, "error", err)
+		if hc, ok := channel.(interface{ MarkStarting(string) }); ok {
+			hc.MarkStarting("Starting")
 		}
+		m.syncChannelHealthLocked(name, channel)
+		if err := channel.Start(ctx); err != nil {
+			info := ClassifyChannelError(err)
+			if hc, ok := channel.(interface {
+				MarkFailed(string, string, ChannelFailureKind, bool)
+			}); ok {
+				hc.MarkFailed(info.Summary, info.Detail, info.Kind, info.Retryable)
+			}
+			m.recordHealthLocked(name, NewFailedChannelHealth("", err))
+			slog.Error("failed to start channel", "channel", name, "error", err)
+			continue
+		}
+		m.syncChannelHealthLocked(name, channel)
 	}
 
 	slog.Info("all channels started")
@@ -114,8 +130,14 @@ func (m *Manager) StopAll(ctx context.Context) error {
 	for name, channel := range m.channels {
 		slog.Info("stopping channel", "channel", name)
 		if err := channel.Stop(ctx); err != nil {
+			m.recordHealthLocked(name, NewFailedChannelHealth("Failed to stop channel", err))
 			slog.Error("error stopping channel", "channel", name, "error", err)
+			continue
 		}
+		if hc, ok := channel.(interface{ MarkStopped(string) }); ok {
+			hc.MarkStopped("Stopped")
+		}
+		m.syncChannelHealthLocked(name, channel)
 	}
 
 	slog.Info("all channels stopped")
@@ -135,12 +157,12 @@ func (m *Manager) GetStatus() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	status := make(map[string]any)
+	status := make(map[string]any, len(m.health)+len(m.channels))
+	for name, snapshot := range m.health {
+		status[name] = snapshot
+	}
 	for name, channel := range m.channels {
-		status[name] = map[string]any{
-			"enabled": true,
-			"running": channel.IsRunning(),
-		}
+		status[name] = snapshotChannelHealth(channel)
 	}
 	return status
 }
@@ -168,6 +190,22 @@ func (m *Manager) RegisterChannel(name string, channel Channel) {
 		}
 	}
 	m.channels[name] = channel
+	if hc, ok := channel.(interface{ MarkRegistered(string) }); ok {
+		hc.MarkRegistered("Configured")
+	}
+	m.syncChannelHealthLocked(name, channel)
+}
+
+// RecordHealth stores runtime health for an instance, including failures before registration.
+func (m *Manager) RecordHealth(name string, snapshot ChannelHealth) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.recordHealthLocked(name, snapshot)
+}
+
+// RecordFailure stores a classified failure snapshot for an instance.
+func (m *Manager) RecordFailure(name, summary string, err error) {
+	m.RecordHealth(name, NewFailedChannelHealth(summary, err))
 }
 
 // SetContactCollector sets the contact collector for all current and future channels.
@@ -229,4 +267,49 @@ func (m *Manager) UnregisterChannel(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.channels, name)
+	delete(m.health, name)
+}
+
+func (m *Manager) recordHealthLocked(name string, snapshot ChannelHealth) {
+	prev := m.health[name]
+	if snapshot.CheckedAt.IsZero() {
+		snapshot.CheckedAt = time.Now().UTC()
+	}
+	if snapshot.Enabled == false {
+		snapshot.Enabled = true
+	}
+	if snapshot.State == ChannelHealthStateFailed || snapshot.State == ChannelHealthStateDegraded {
+		if snapshot.FailureCount == 0 {
+			snapshot.FailureCount = prev.FailureCount + 1
+		}
+	} else if snapshot.FailureCount == 0 {
+		snapshot.FailureCount = prev.FailureCount
+	}
+	m.health[name] = snapshot
+}
+
+func (m *Manager) syncChannelHealthLocked(name string, channel Channel) {
+	m.recordHealthLocked(name, snapshotChannelHealth(channel))
+}
+
+func snapshotChannelHealth(channel Channel) ChannelHealth {
+	if reporter, ok := channel.(interface{ HealthSnapshot() ChannelHealth }); ok {
+		snapshot := reporter.HealthSnapshot()
+		snapshot.Enabled = true
+		snapshot.Running = channel.IsRunning()
+		return snapshot
+	}
+
+	state := ChannelHealthStateStopped
+	summary := "Stopped"
+	if channel.IsRunning() {
+		state = ChannelHealthStateHealthy
+		summary = "Connected"
+	}
+	return ChannelHealth{
+		Enabled: true,
+		Running: channel.IsRunning(),
+		State:   state,
+		Summary: summary,
+	}
 }

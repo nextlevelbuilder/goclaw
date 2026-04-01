@@ -13,6 +13,24 @@ export interface ChannelInstanceData {
   updated_at: string;
 }
 
+export interface ChannelRuntimeStatus {
+  enabled: boolean;
+  running: boolean;
+  state?:
+    | "registered"
+    | "starting"
+    | "healthy"
+    | "degraded"
+    | "failed"
+    | "stopped";
+  summary?: string;
+  detail?: string;
+  failure_kind?: "auth" | "config" | "network" | "unknown";
+  retryable?: boolean;
+  checked_at?: string;
+  failure_count?: number;
+}
+
 export interface ChannelInstanceInput {
   name: string;
   display_name?: string;
