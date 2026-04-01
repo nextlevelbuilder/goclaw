@@ -68,16 +68,31 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
     [providerType],
   );
 
-  const handleOAuthSuccess = async () => {
+  const handleOAuthSuccess = async (resolvedProviderName?: string) => {
     setLoading(true);
     setError("");
     try {
       const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
-      const provider = res.providers?.find((p) => p.provider_type === "chatgpt_oauth" && p.name === name.trim());
+      const targetName = (resolvedProviderName?.trim() || name.trim()).toLowerCase();
+      const targetDisplay = oauthDisplayName.trim().toLowerCase();
+
+      let provider = res.providers?.find((p) =>
+        p.provider_type === "chatgpt_oauth"
+        && p.name.toLowerCase() === targetName,
+      );
+
+      if (!provider && targetDisplay) {
+        provider = res.providers?.find((p) =>
+          p.provider_type === "chatgpt_oauth"
+          && (p.display_name || "").trim().toLowerCase() === targetDisplay,
+        );
+      }
+
       if (!provider) {
         setError(t("provider.errors.oauthProviderNotFound"));
         return;
       }
+
       onComplete(provider);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("provider.errors.oauthProviderNotFound"));

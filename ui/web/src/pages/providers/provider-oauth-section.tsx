@@ -22,7 +22,7 @@ interface StartResponse {
 }
 
 interface OAuthSectionProps {
-  onSuccess: () => void;
+  onSuccess: (providerName?: string) => void;
   authenticatedActionLabel?: string;
   providerName?: string;
   displayName?: string;
@@ -191,7 +191,7 @@ export function OAuthSection({
         </div>
         {renderUsageHint(activeProvider)}
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={onSuccess}>
+          <Button size="sm" onClick={() => onSuccess(activeProvider)}>
             {actionLabel}
           </Button>
         </div>
@@ -212,7 +212,7 @@ export function OAuthSection({
         </div>
         {renderUsageHint(activeProvider)}
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={onSuccess}>
+          <Button size="sm" onClick={() => onSuccess(activeProvider)}>
             {actionLabel}
           </Button>
           <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1.5">
