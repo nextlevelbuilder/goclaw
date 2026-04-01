@@ -93,6 +93,8 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models = minimaxModels()
 	case "suno":
 		models = sunoModels()
+	case "xai":
+		models = xaiModels()
 	default:
 		// All other types use OpenAI-compatible /models endpoint
 		apiBase := strings.TrimRight(h.resolveAPIBase(p), "/")
@@ -271,6 +273,26 @@ func sunoModels() []ModelInfo {
 		{ID: "v4.5", Name: "Suno V4.5"},
 		{ID: "v4", Name: "Suno V4"},
 		{ID: "v3.5", Name: "Suno V3.5"},
+	}
+}
+
+// xaiModels returns a hardcoded list of xAI Grok models.
+func xaiModels() []ModelInfo {
+	return []ModelInfo{
+		// Grok 4.20 GA
+		{ID: "grok-4.20-reasoning", Name: "Grok 4.20 Reasoning"},
+		{ID: "grok-4.20-non-reasoning", Name: "Grok 4.20"},
+		{ID: "grok-4.20", Name: "Grok 4.20 (Auto)"},
+		// Grok 3
+		{ID: "grok-3-reasoning", Name: "Grok 3 Reasoning"},
+		{ID: "grok-3-non-reasoning", Name: "Grok 3"},
+		{ID: "grok-3", Name: "Grok 3 (Auto)"},
+		{ID: "grok-3-mini", Name: "Grok 3 Mini"},
+		// Grok 2
+		{ID: "grok-2-reasoning", Name: "Grok 2 Reasoning"},
+		{ID: "grok-2-non-reasoning", Name: "Grok 2"},
+		{ID: "grok-2", Name: "Grok 2 (Auto)"},
+		{ID: "grok-2-1212", Name: "Grok 2 (12-12)"},
 	}
 }
 

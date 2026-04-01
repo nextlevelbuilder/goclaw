@@ -28,6 +28,7 @@ func testPostgresConnection(dsn string) error {
 // UI discoverability. Users can later enable and configure them via the dashboard.
 var defaultPlaceholderProviders = []store.LLMProviderData{
 	{Name: "openrouter", DisplayName: "OpenRouter", ProviderType: store.ProviderOpenRouter, APIBase: "https://openrouter.ai/api/v1", Enabled: false},
+	{Name: "xai", DisplayName: "xAI (Grok)", ProviderType: store.ProviderXAI, APIBase: "https://api.x.ai/v1", Enabled: false},
 	{Name: "synthetic", DisplayName: "Synthetic", ProviderType: store.ProviderOpenAICompat, APIBase: "https://api.synthetic.new/openai/v1", Enabled: false},
 	{Name: "alicloud-api", DisplayName: "AliCloud API", ProviderType: store.ProviderDashScope, APIBase: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", Enabled: false},
 	{Name: "alicloud-sub", DisplayName: "AliCloud Sub", ProviderType: store.ProviderBailian, APIBase: "https://coding-intl.dashscope.aliyuncs.com/v1", Enabled: false},
