@@ -158,7 +158,12 @@ func (h *MarketplaceInstallHandler) importLocally(bundlePath string) (string, er
 func (h *MarketplaceInstallHandler) extractParams(r *http.Request) map[string]string {
 	params := make(map[string]string)
 	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig"} {
-		params[key] = r.URL.Query().Get(key)
+		v := r.URL.Query().Get(key)
+		// URL-decode in case of double encoding (browser preserves encoded chars)
+		if decoded, err := url.QueryUnescape(v); err == nil {
+			v = decoded
+		}
+		params[key] = v
 	}
 	return params
 }
@@ -191,6 +196,9 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 	mac := hmac.New(sha256.New, []byte(h.marketplaceAPIKey))
 	mac.Write([]byte(signingString))
 	expected := hex.EncodeToString(mac.Sum(nil))
+
+	fmt.Printf("[marketplace-install] key=%s..., signing=[%s], expected=%s, got=%s, match=%v\n",
+		h.marketplaceAPIKey[:8], signingString[:80], expected[:16], sig[:16], hmac.Equal([]byte(sig), []byte(expected)))
 
 	if !hmac.Equal([]byte(sig), []byte(expected)) {
 		return fmt.Errorf("invalid signature")
