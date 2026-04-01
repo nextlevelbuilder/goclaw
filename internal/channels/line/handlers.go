@@ -133,8 +133,12 @@ func (c *Channel) sendLoadingAnimation(chatID string) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		slog.Debug("LINE: loading animation failed", "err", err)
+		slog.Warn("LINE: loading animation request failed", "err", err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		slog.Warn("LINE: loading animation error", "status", resp.StatusCode, "body", string(respBody))
+	}
 }
