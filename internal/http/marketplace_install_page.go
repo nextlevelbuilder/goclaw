@@ -49,7 +49,7 @@ func (h *MarketplaceInstallHandler) handleConfirmPage(w http.ResponseWriter, r *
 	}
 
 	agents := strings.Split(params["agents"], ",")
-	h.renderConfirm(w, params["title"], params["slug"], agents, r.URL.RawQuery)
+	h.renderConfirm(w, params, agents)
 }
 
 // handleDoInstall downloads the bundle and imports it.
@@ -61,7 +61,11 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 
 	params := make(map[string]string)
 	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig"} {
-		params[key] = r.FormValue(key)
+		v := r.FormValue(key)
+		if decoded, err := url.QueryUnescape(v); err == nil {
+			v = decoded
+		}
+		params[key] = v
 	}
 
 	if err := h.verifySignature(params); err != nil {
@@ -207,7 +211,9 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 	return nil
 }
 
-func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, title, slug string, agents []string, rawQuery string) {
+func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params map[string]string, agents []string) {
+	title := params["title"]
+	slug := params["slug"]
 	var agentList strings.Builder
 	for _, a := range agents {
 		a = strings.TrimSpace(a)
@@ -263,9 +269,9 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, title, 
 </html>`,
 		title, title, len(agents), agentList.String(),
 		slug, title, strings.Join(agents, ","),
-		url.QueryEscape(h.extractParamFromQuery(rawQuery, "bundle_url")),
-		url.QueryEscape(h.extractParamFromQuery(rawQuery, "registry_key")),
-		h.extractParamFromQuery(rawQuery, "sig"))
+		params["bundle_url"],
+		params["registry_key"],
+		params["sig"])
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -334,7 +340,3 @@ func (h *MarketplaceInstallHandler) renderError(w http.ResponseWriter, title, me
 	w.Write([]byte(html))
 }
 
-func (h *MarketplaceInstallHandler) extractParamFromQuery(rawQuery, key string) string {
-	values, _ := url.ParseQuery(rawQuery)
-	return values.Get(key)
-}
