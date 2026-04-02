@@ -278,8 +278,7 @@ Agents communicate through explicit **permission links** with direction control 
 </p>
 
 - **Shared task board** — Create, claim, complete, search tasks with `blocked_by` dependencies
-- **Team mailbox** — Direct peer-to-peer messaging and broadcasts
-- **Tools**: `team_tasks` for task management, `team_message` for mailbox
+- **Tools**: `team_tasks` for task management, `spawn` for subagent orchestration
 
 > For delegation details, permission links, and concurrency control, see the [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams).
 
@@ -312,7 +311,6 @@ Agents communicate through explicit **permission links** with direction control 
 | `spawn`            | —             | Spawn a subagent                                             |
 | `subagents`        | sessions      | Control running subagents                                    |
 | `team_tasks`       | teams         | Shared task board (list, create, claim, complete, search)    |
-| `team_message`     | teams         | Team mailbox (send, broadcast, read)                         |
 | `sessions_list`    | sessions      | List active sessions                                         |
 | `sessions_history` | sessions      | View session history                                         |
 | `sessions_send`    | sessions      | Send message to a session                                    |
