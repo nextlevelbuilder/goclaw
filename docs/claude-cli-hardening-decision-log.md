@@ -48,6 +48,13 @@ This log is the maintainer record for the `#595` to `#599` series. Each entry sh
 - Evidence: Prior repo analysis showed Claude CLI does not currently have the Codex/OpenAI-style routing vocabulary needed for a safe pool.
 - Follow-up: Revisit in `#599` after the audit, isolation, and failover model are concrete.
 
+### 2026-04-02: Initial Phase 2 audit confirms the current baseline is shared-session collaboration, not account-aware isolation
+
+- Decision: Treat the present Claude CLI model as one-account-per-instance with shared collaborative sessions on most group channels.
+- Why: The backend blocks a second `claude_cli` provider, auth visibility is global, and non-Discord group chats intentionally collapse collaborators into one group-scoped user/workspace lineage.
+- Evidence: `internal/http/providers.go`, `internal/http/provider_verify.go`, `cmd/gateway_consumer_normal.go`, `internal/agent/loop_context.go`, `docs/claude-cli-collab-audit-matrix.md`.
+- Follow-up: `#598` must harden or document the shared-session boundary explicitly, and `#597` must introduce account-aware degraded/no-send behavior before any pooling discussion is credible.
+
 ## Open Questions
 
 - What exact filesystem and MCP-bridge boundaries are in effect for Claude CLI sessions today?
