@@ -82,6 +82,24 @@ func trimMarkdownWrapper(value string) string {
 	return value
 }
 
+// replaceIdentityName rewrites the Name field in IDENTITY.md content to newName.
+// Handles both "- **Name:** ..." and "Name: ..." formats.
+func replaceIdentityName(content, newName string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- **Name:**") {
+			lines[i] = strings.Replace(line, trimmed, "- **Name:** "+newName, 1)
+			return strings.Join(lines, "\n")
+		}
+		if strings.HasPrefix(trimmed, "Name:") {
+			lines[i] = strings.Replace(line, trimmed, "Name: "+newName, 1)
+			return strings.Join(lines, "\n")
+		}
+	}
+	return content
+}
+
 // suffixString returns the last n runes of s.
 func suffixString(s string, n int) string {
 	runes := []rune(s)

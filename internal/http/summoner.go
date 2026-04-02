@@ -190,8 +190,19 @@ func (s *AgentSummoner) finishSummon(ctx context.Context, agentID, tenantID uuid
 	if frontmatter != "" {
 		updates["frontmatter"] = frontmatter
 	}
+	// Only derive display_name from IDENTITY.md if the user did not already set one.
+	// If the user DID set a name, patch IDENTITY.md so the agent knows its real name.
 	if name := extractIdentityName(identityContent); name != "" {
-		updates["display_name"] = name
+		current, err := s.agents.GetByID(ctx, agentID)
+		if err != nil || current.DisplayName == "" {
+			updates["display_name"] = name
+		} else if current.DisplayName != name {
+			// User set a custom name — rewrite IDENTITY.md to use it.
+			patched := replaceIdentityName(identityContent, current.DisplayName)
+			if err := s.agents.SetAgentContextFile(ctx, agentID, bootstrap.IdentityFile, patched); err != nil {
+				slog.Warn("summoning: failed to patch IDENTITY.md name", "agent", agentID, "error", err)
+			}
+		}
 	}
 	if len(updates) > 0 {
 		if err := s.agents.Update(ctx, agentID, updates); err != nil {
