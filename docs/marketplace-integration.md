@@ -1,226 +1,88 @@
 # GoClaw Hub Marketplace Integration
 
-This document describes the GoClaw Hub marketplace integration that allows users to discover, search, and hire pre-built AI agent teams from the GoClaw Hub marketplace.
-
-## Overview
-
-The marketplace integration provides two new tools:
-
-1. **`marketplace_search`** - Search for agent teams in the marketplace
-2. **`marketplace_hire`** - Download and hire agent teams
+Discover, search, and install pre-built AI agent teams from GoClaw Hub.
 
 ## Configuration
-
-Add the marketplace configuration to your `config.json`:
 
 ```json
 {
   "tools": {
     "marketplace": {
-      "enabled": true,
-      "api_base": "https://hub-api.vibery.app/v1",
-      "api_key": "your-hub-api-key-here"
+      "api_base": "https://your-hub-api.example.com/v1",
+      "api_key": "your-hub-api-key",
+      "frontend_base": "https://your-hub.example.com"
     }
   }
 }
 ```
 
-### Configuration Options
-
-- **`enabled`** (boolean): Enable marketplace tools (default: false)
-- **`api_base`** (string): Hub API base URL (default: "https://hub-api.vibery.app/v1")
-- **`api_key`** (string): Hub API key for authentication
+Both `api_base` and `api_key` are required. Without them, marketplace tools are not registered.
 
 ### Environment Variable
 
-You can also set the API key via environment variable:
-
 ```bash
-export GOCLAW_MARKETPLACE_API_KEY=your-hub-api-key-here
+export GOCLAW_MARKETPLACE_API_KEY=your-hub-api-key
 ```
 
-The environment variable takes precedence over the config file setting.
+Config file `api_key` takes precedence over the environment variable.
 
 ## Tools
 
 ### marketplace_search
 
-Search the GoClaw Hub marketplace for pre-built AI agent teams.
-
-**Parameters:**
-- `query` (required): Search query to find relevant agent teams
-- `category` (optional): Filter by category slug
-- `type` (optional): Filter by listing type ("team", "agent", "skill")
-
-**Example usage:**
-```
-Use marketplace_search to find web development teams
-```
-
-**Example response:**
-```
-Found 2 agent teams for 'web development':
-
-1. **Full-Stack Web Team** (fullstack-web-team)
-   Complete web development solution with frontend and backend experts
-   👥 3 agents: 🎨 Frontend Dev, ⚙️ Backend Dev, 🗄️ Database Expert
-   💰 $20.00 (one-time)
-   📊 145 downloads • 4.7★ (23 reviews)
-   👤 By WebDevCorp (@webdevcorp)
-
-2. **React Specialists** (react-specialists)
-   Expert React developers for modern web applications
-   👥 2 agents: ⚛️ React Expert, 🎨 UI Designer
-   🆓 Free
-   📊 89 downloads • 4.9★ (15 reviews)
-   👤 By ReactTeam (@reactteam)
-
-💡 To hire a team, use the marketplace_hire tool with the team's slug.
-```
+Search for agent teams. Parameters: `query` (required), `category`, `type`.
 
 ### marketplace_hire
 
-Hire (download and install) an agent team from the GoClaw Hub marketplace.
+Download and install a team. Parameter: `slug` (required). For paid listings, returns a purchase link instead of downloading.
 
-**Parameters:**
-- `slug` (required): The team slug from search results
+### marketplace_check_updates
 
-**Example usage:**
+Check installed Hub teams for newer versions. No parameters.
+
+## Web Install (Hub-initiated)
+
+Hub generates a signed URL pointing to your GoClaw instance:
+
 ```
-Use marketplace_hire with slug "fullstack-web-team"
+GET /marketplace/install?slug=...&title=...&agents=...&bundle_url=...&sig=...&ts=...
 ```
 
-**Example response:**
-```
-✅ Successfully hired team: **Full-Stack Web Team**
+- HMAC-SHA256 signature prevents tampering
+- Links expire after 15 minutes (`ts` parameter)
+- Admin sees confirmation page before install
+- Already-installed teams show "Update" instead of "Install"
 
-Complete web development solution with frontend and backend experts
+## Security
 
-👥 **Your new team members:**
-• Frontend Developer 🎨 (UI/UX Specialist)
-• Backend Developer ⚙️ (API Architect)
-• Database Expert 🗄️ (Data Specialist)
+- No Hub credentials stored in GoClaw — only the shared registry key
+- Bundle downloads authenticated via `X-Registry-Key` header
+- SSRF protection: validates download URLs, resolves DNS, blocks private IPs
+- Bundle validation: checks gzip + tar structure, blocks path traversal and symlinks
+- Install links signed with HMAC-SHA256, expire after 15 minutes
+- Registry key never exposed in URLs or HTML
 
-📦 Bundle downloaded: /tmp/goclaw-team-fullstack-web-team.tar.gz (2.3 KB)
-👤 Created by WebDevCorp
+## Version Tracking
 
-🚀 **Next steps:**
-• The team bundle has been downloaded and is ready for installation
-• Team members will be available in your agent list once imported
-• Each agent comes with their specialized skills and knowledge
-```
+When a team is installed from Hub, `hub_slug` and `hub_version` are saved to the team's `settings` JSONB. The `marketplace_check_updates` tool queries these to detect available updates.
 
 ## Registry Client API
 
-The `internal/registry` package provides a Go client for the GoClaw Hub API:
-
-### Client Creation
-
 ```go
-import "github.com/nextlevelbuilder/goclaw/internal/registry"
+client := registry.NewClient("https://hub-api.example.com/v1", "api-key")
 
-client := registry.NewClient("https://hub-api.vibery.app/v1", "your-api-key")
+listings, _ := client.Search(ctx, "web development", "", "team")
+listing, _ := client.GetListing(ctx, "team-slug")
+reader, _ := client.Download(ctx, "team-slug", "1.0.0")
+info, _ := client.CheckUpdate(ctx, "team-slug", 1)
+categories, _ := client.Categories(ctx)
 ```
-
-### Available Methods
-
-```go
-// Search listings
-listings, err := client.Search(ctx, "web development", "development", "team")
-
-// Get listing details
-listing, err := client.GetListing(ctx, "team-slug")
-
-// Download team bundle
-reader, err := client.Download(ctx, "team-slug", "1.0.0")
-
-// Check for updates
-updateInfo, err := client.CheckUpdate(ctx, "team-slug", 1)
-
-// List categories
-categories, err := client.Categories(ctx)
-```
-
-### Data Structures
-
-```go
-type Listing struct {
-    Slug             string   `json:"slug"`
-    Title            string   `json:"title"`
-    Tagline          string   `json:"tagline"`
-    ListingType      string   `json:"listing_type"`
-    PriceCents       int      `json:"price_cents"`
-    PricingModel     string   `json:"pricing_model"`
-    DownloadCount    int      `json:"download_count"`
-    AvgRating        float64  `json:"avg_rating"`
-    ReviewCount      int      `json:"review_count"`
-    CreatorSlug      string   `json:"creator_slug"`
-    CreatorName      string   `json:"creator_display_name"`
-    Agents           []Agent  `json:"agents"`
-}
-
-type Agent struct {
-    AgentKey    string   `json:"agent_key"`
-    DisplayName string   `json:"display_name"`
-    Emoji       string   `json:"emoji"`
-    Role        string   `json:"role"`
-    Skills      []string `json:"skills"`
-    Model       string   `json:"model_default"`
-}
-```
-
-## Hub API Endpoints
-
-The integration uses the following GoClaw Hub API endpoints:
-
-- `GET /registry/search` - Search listings
-- `GET /registry/listings/{slug}` - Get listing details
-- `GET /registry/download/{slug}` - Download team bundle
-- `GET /registry/check-update` - Check for updates
-- `GET /registry/categories` - List categories
-
-All requests require the `X-Registry-Key` header for authentication.
-
-## Bundle Format
-
-Downloaded team bundles are in tar.gz format, compatible with GoClaw's team export format. The bundles contain:
-
-- Agent configurations
-- Skills and knowledge
-- Team structure and relationships
-- Metadata and documentation
-
-## Future Enhancements
-
-- **Automatic Team Import**: Currently bundles are downloaded to temp files. Future versions will integrate with GoClaw's team import functionality for seamless installation.
-- **Update Notifications**: Check for team updates and notify users
-- **Local Team Registry**: Track installed teams and their versions
-- **Payment Integration**: Support for paid team purchases through the Hub
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **API Key Not Found**
-   - Ensure `GOCLAW_MARKETPLACE_API_KEY` environment variable is set
-   - Or configure `tools.marketplace.api_key` in config.json
-
-2. **Network Errors**
-   - Check internet connection
-   - Verify `api_base` URL is correct
-   - Check firewall settings
-
-3. **Search Returns No Results**
-   - Try different search terms
-   - Check if the category filter is too restrictive
-   - Browse available categories first
-
-### Debug Logging
-
-Enable debug logging to see API requests:
-
-```bash
-export GOCLAW_LOG_LEVEL=debug
-```
-
-This will log all HTTP requests to the Hub API for troubleshooting.
+| Issue | Fix |
+|-------|-----|
+| "marketplace tools disabled" | Set both `api_base` and `api_key` in config |
+| "install link expired" | Generate a new link from Hub (links valid 15 min) |
+| "invalid signature" | Ensure GoClaw and Hub use the same registry key |
+| Search returns nothing | Try broader terms, check Hub has published listings |
