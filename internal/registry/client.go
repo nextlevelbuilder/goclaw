@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -318,12 +319,17 @@ func (c *Client) Categories(ctx context.Context) ([]Category, error) {
 
 func (c *Client) rateLimit() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	elapsed := time.Since(c.lastRequest)
+	var wait time.Duration
 	if elapsed < c.minInterval {
-		time.Sleep(c.minInterval - elapsed)
+		wait = c.minInterval - elapsed
 	}
 	c.lastRequest = time.Now()
+	c.mu.Unlock()
+	if wait > 0 {
+		slog.Debug("marketplace: rate limited", "wait_ms", wait.Milliseconds())
+		time.Sleep(wait)
+	}
 }
 
 func truncateBody(s string, max int) string {

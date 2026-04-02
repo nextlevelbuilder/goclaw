@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -303,7 +304,7 @@ func validateExternalURL(rawURL string) error {
 	return nil
 }
 
-// validateBundle validates that a file is a valid gzip archive.
+// validateBundle validates that a file is a valid gzip archive and tar structure.
 func validateBundle(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -314,7 +315,28 @@ func validateBundle(path string) error {
 	if err != nil {
 		return fmt.Errorf("not a valid gzip file: %w", err)
 	}
-	gz.Close()
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	count := 0
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("invalid tar entry: %w", err)
+		}
+		if strings.Contains(header.Name, "..") || filepath.IsAbs(header.Name) {
+			return fmt.Errorf("path traversal blocked: %s", header.Name)
+		}
+		if header.Typeflag == tar.TypeSymlink || header.Typeflag == tar.TypeLink {
+			return fmt.Errorf("symlinks not allowed: %s", header.Name)
+		}
+		count++
+		if count > 1000 {
+			return fmt.Errorf("too many files in bundle (max 1000)")
+		}
+	}
 	return nil
 }
 

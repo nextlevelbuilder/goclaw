@@ -414,14 +414,14 @@ func runGateway() {
 	// Marketplace integration (GoClaw Hub)
 	{
 		apiBase := cfg.Tools.Marketplace.APIBase
-		if apiBase == "" {
-			apiBase = "https://hub-api.vibery.app/v1"
-		}
 		mktAPIKey := cfg.Tools.Marketplace.APIKey
 		if mktAPIKey == "" {
 			mktAPIKey = os.Getenv("GOCLAW_MARKETPLACE_API_KEY")
 		}
-		if mktAPIKey != "" {
+		if mktAPIKey != "" && apiBase == "" {
+			slog.Warn("marketplace tools disabled: api_key set but api_base missing in config")
+		}
+		if mktAPIKey != "" && apiBase != "" {
 			mktClient := registry.NewClient(apiBase, mktAPIKey)
 			gwPort := cfg.Gateway.Port
 			if gwPort == 0 {

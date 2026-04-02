@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/registry"
 )
@@ -126,11 +128,21 @@ func TestMarketplaceHireTool(t *testing.T) {
 			}
 			json.NewEncoder(w).Encode(listing)
 		} else if strings.HasPrefix(r.URL.Path, "/registry/download/") {
-			// Return a valid gzip file
+			// Return a valid tar.gz file
 			w.Header().Set("Content-Type", "application/gzip")
 			var buf bytes.Buffer
 			gz := gzip.NewWriter(&buf)
-			gz.Write([]byte("mock bundle"))
+			tr := tar.NewWriter(gz)
+			// Add a sample file to the tar archive
+			header := &tar.Header{
+				Name:    "README.md",
+				Size:    11,
+				Mode:    0644,
+				ModTime: time.Now(),
+			}
+			tr.WriteHeader(header)
+			tr.Write([]byte("mock bundle"))
+			tr.Close()
 			gz.Close()
 			w.Write(buf.Bytes())
 		}

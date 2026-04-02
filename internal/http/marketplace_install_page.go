@@ -189,7 +189,9 @@ func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
 		return ""
 	}
 	var name string
-	h.db.QueryRow(`SELECT name FROM agent_teams WHERE settings->>'hub_slug' = $1 LIMIT 1`, slug).Scan(&name)
+	if err := h.db.QueryRow(`SELECT name FROM agent_teams WHERE settings->>'hub_slug' = $1 LIMIT 1`, slug).Scan(&name); err != nil && err != sql.ErrNoRows {
+		slog.Warn("marketplace: findInstalledTeam query failed", "slug", slug, "error", err)
+	}
 	return name
 }
 
