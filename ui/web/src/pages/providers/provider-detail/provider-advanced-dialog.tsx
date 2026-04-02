@@ -85,7 +85,6 @@ export function ProviderAdvancedDialog({
     try {
       const data: ProviderInput = {
         name: provider.name,
-        provider_type: provider.provider_type,
       };
 
       if (isACP) {

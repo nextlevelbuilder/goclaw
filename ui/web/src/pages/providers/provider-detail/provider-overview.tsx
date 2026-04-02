@@ -436,7 +436,6 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
       const data: ProviderInput = {
         name: provider.name,
         display_name: nextDisplayName || undefined,
-        provider_type: provider.provider_type,
         enabled,
       };
       if (submittedAPIKey) {

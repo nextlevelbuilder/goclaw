@@ -14,7 +14,7 @@ export interface ProviderData {
 export interface ProviderInput {
   name: string
   display_name?: string
-  provider_type: string
+  provider_type?: string
   api_base?: string
   api_key?: string
   enabled?: boolean
