@@ -79,6 +79,9 @@ func (t *MarketplaceCheckUpdatesTool) Execute(ctx context.Context, args map[stri
 		}
 		teams = append(teams, teamInfo{id: id, name: name, slug: hs.HubSlug, version: hs.HubVersion})
 	}
+	if err := rows.Err(); err != nil {
+		return ErrorResult(fmt.Sprintf("Error reading teams: %v", err))
+	}
 
 	slog.Info("marketplace_check_updates", "teams_found", len(teams), "db_nil", t.db == nil)
 

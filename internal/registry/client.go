@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -20,6 +21,7 @@ type Client struct {
 	HTTP        *http.Client
 	lastRequest time.Time
 	minInterval time.Duration
+	mu          sync.Mutex
 }
 
 // NewClient creates a new registry client with the given base URL and API key.
@@ -180,6 +182,7 @@ func (c *Client) GetListing(ctx context.Context, slug string) (*Listing, error) 
 
 // Download downloads a team bundle from the marketplace.
 // Returns an io.ReadCloser for the tar.gz stream that must be closed by the caller.
+// The caller is responsible for closing the returned body to cancel the underlying context.
 func (c *Client) Download(ctx context.Context, slug string, goclawVersion string) (io.ReadCloser, error) {
 	c.rateLimit()
 
@@ -195,12 +198,12 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 
 	// Use background context for downloads — the agent's request context
 	// may be cancelled before the download completes, causing "unexpected EOF".
-	// B2: defer cancel to avoid context leak.
+	// The caller must close the returned body to clean up resources.
 	dlCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(dlCtx, "GET", reqURL, nil)
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
@@ -208,6 +211,7 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
@@ -215,10 +219,27 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 		// B1: read body before closing, not after
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		cancel()
 		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, truncateBody(string(body), 200))
 	}
 
-	return resp.Body, nil
+	// Wrap body to cancel context when closed
+	return &contextCloser{rc: resp.Body, cancel: cancel}, nil
+}
+
+// contextCloser wraps an io.ReadCloser to cancel a context when closed.
+type contextCloser struct {
+	rc     io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (cc *contextCloser) Read(p []byte) (int, error) {
+	return cc.rc.Read(p)
+}
+
+func (cc *contextCloser) Close() error {
+	cc.cancel()
+	return cc.rc.Close()
 }
 
 // CheckUpdate checks if there's a newer version available for a listing.
@@ -296,6 +317,8 @@ func (c *Client) Categories(ctx context.Context) ([]Category, error) {
 }
 
 func (c *Client) rateLimit() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	elapsed := time.Since(c.lastRequest)
 	if elapsed < c.minInterval {
 		time.Sleep(c.minInterval - elapsed)

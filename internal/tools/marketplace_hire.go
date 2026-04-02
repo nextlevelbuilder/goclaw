@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/registry"
 )
@@ -253,7 +254,8 @@ func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+t.gatewayToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("import request failed: %v", err)
 	}
@@ -279,10 +281,22 @@ func validateExternalURL(rawURL string) error {
 	}
 	if !isLocal {
 		host := u.Hostname()
+		// Check literal IP
 		ip := net.ParseIP(host)
 		if ip != nil {
 			if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 				return fmt.Errorf("URL resolves to private/internal address")
+			}
+		} else {
+			// Resolve hostname and check all IPs
+			ips, err := net.LookupHost(host)
+			if err == nil {
+				for _, ipStr := range ips {
+					resolved := net.ParseIP(ipStr)
+					if resolved != nil && (resolved.IsPrivate() || resolved.IsLoopback() || resolved.IsLinkLocalUnicast()) {
+						return fmt.Errorf("URL hostname resolves to private/internal address")
+					}
+				}
 			}
 		}
 	}

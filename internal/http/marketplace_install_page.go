@@ -126,7 +126,7 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 	}
 	defer os.Remove(tmpFile.Name())
 
-	if _, err := io.Copy(tmpFile, dlResp.Body); err != nil {
+	if _, err := io.Copy(tmpFile, io.LimitReader(dlResp.Body, 100*1024*1024)); err != nil {
 		tmpFile.Close()
 		h.renderError(w, "Install Failed", "Could not save bundle.", http.StatusInternalServerError)
 		return
@@ -154,7 +154,9 @@ func (h *MarketplaceInstallHandler) importLocally(bundlePath string) (string, er
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	part, _ := writer.CreateFormFile("file", "team.tar.gz")
-	io.Copy(part, f)
+	if _, err := io.Copy(part, f); err != nil {
+		return "", fmt.Errorf("copy bundle to form: %v", err)
+	}
 	writer.Close()
 
 	importURL := fmt.Sprintf("http://localhost:%d/v1/teams/import", h.localAPIPort)
@@ -187,7 +189,7 @@ func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
 		return ""
 	}
 	var name string
-	h.db.QueryRow(`SELECT name FROM agent_teams WHERE settings::text LIKE '%' || $1 || '%' LIMIT 1`, slug).Scan(&name)
+	h.db.QueryRow(`SELECT name FROM agent_teams WHERE settings->>'hub_slug' = $1 LIMIT 1`, slug).Scan(&name)
 	return name
 }
 
@@ -266,15 +268,30 @@ func validateExternalURL(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
-	if u.Scheme != "https" && u.Host != "localhost" && !strings.HasPrefix(u.Host, "127.0.0.1") {
+	isLocal := u.Host == "localhost" || strings.HasPrefix(u.Host, "127.0.0.1")
+	if u.Scheme != "https" && !isLocal {
 		return fmt.Errorf("URL must use HTTPS")
 	}
 	// Check for private IPs
-	host := u.Hostname()
-	ip := net.ParseIP(host)
-	if ip != nil {
-		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-			return fmt.Errorf("URL resolves to private/internal address")
+	if !isLocal {
+		host := u.Hostname()
+		// Check literal IP
+		ip := net.ParseIP(host)
+		if ip != nil {
+			if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				return fmt.Errorf("URL resolves to private/internal address")
+			}
+		} else {
+			// Resolve hostname and check all IPs
+			ips, err := net.LookupHost(host)
+			if err == nil {
+				for _, ipStr := range ips {
+					resolved := net.ParseIP(ipStr)
+					if resolved != nil && (resolved.IsPrivate() || resolved.IsLoopback() || resolved.IsLinkLocalUnicast()) {
+						return fmt.Errorf("URL hostname resolves to private/internal address")
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -436,19 +453,37 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
 		ButtonLabel:   buttonLabel,
 	}
 
+	var buf bytes.Buffer
+	if err := confirmTmpl.Execute(&buf, data); err != nil {
+		slog.Error("template render failed", "error", err)
+		http.Error(w, "Internal error", 500)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	confirmTmpl.Execute(w, data)
+	w.Write(buf.Bytes())
 }
 
 func (h *MarketplaceInstallHandler) renderSuccess(w http.ResponseWriter, title, result string) {
+	var buf bytes.Buffer
+	if err := successTmpl.Execute(&buf, successData{Title: title, Result: result}); err != nil {
+		slog.Error("template render failed", "error", err)
+		http.Error(w, "Internal error", 500)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	successTmpl.Execute(w, successData{Title: title, Result: result})
+	w.Write(buf.Bytes())
 }
 
 func (h *MarketplaceInstallHandler) renderError(w http.ResponseWriter, title, message string, status int) {
+	var buf bytes.Buffer
+	if err := errorTmpl.Execute(&buf, errorData{Title: title, Message: message}); err != nil {
+		slog.Error("template render failed", "error", err)
+		http.Error(w, "Internal error", 500)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	errorTmpl.Execute(w, errorData{Title: title, Message: message})
+	w.Write(buf.Bytes())
 }
