@@ -77,10 +77,17 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Verify one-time install token (prevents unauthenticated POST)
+	// Verify one-time install token
 	installToken := r.FormValue("install_token")
 	if !h.consumeInstallToken(installToken) {
 		h.renderError(w, "Session Expired", "This install session has expired. Please start the install again from Hub.", http.StatusForbidden)
+		return
+	}
+
+	// Verify admin authorization via gateway token
+	adminToken := r.FormValue("admin_token")
+	if h.gatewayToken != "" && adminToken != h.gatewayToken {
+		h.renderError(w, "Unauthorized", "Invalid admin token. Enter your GoClaw gateway token to authorize the install.", http.StatusForbidden)
 		return
 	}
 
@@ -403,6 +410,10 @@ var confirmTmpl = template.Must(template.New("confirm").Parse(`<!DOCTYPE html>
         <input type="hidden" name="sig" value="{{.Sig}}">
         <input type="hidden" name="ts" value="{{.Ts}}">
         <input type="hidden" name="install_token" value="{{.InstallToken}}">
+        <div style="margin-bottom:12px">
+          <label style="display:block;color:#8b8c96;font-size:12px;margin-bottom:4px">Gateway Token (admin authorization)</label>
+          <input type="password" name="admin_token" required placeholder="Enter your GoClaw gateway token" style="width:100%;padding:8px 12px;background:#12131a;border:1px solid #2a2b35;border-radius:6px;color:#e1e1e6;font-size:13px;outline:none">
+        </div>
         <button type="submit" class="btn btn-primary" style="flex:1">{{.ButtonLabel}}</button>
       </form>
       <a href="javascript:window.close()" class="btn btn-secondary">Cancel</a>
