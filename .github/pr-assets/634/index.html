@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PR #634 — Channel Health Diagnostics UI Before / After</title>
+    <style>
+      :root {
+        --bg: #100705;
+        --panel: #1b110c;
+        --panel-2: #241610;
+        --text: #f7eee8;
+        --muted: #ceb6a8;
+        --line: rgba(255, 220, 196, 0.16);
+        --accent: #ff7a3d;
+        --accent-soft: rgba(255, 122, 61, 0.12);
+        --good: #4ad18c;
+        --warn: #ffd166;
+        --shadow: 0 26px 80px rgba(0, 0, 0, 0.34);
+      }
+
+      [data-theme="light"] {
+        --bg: #f7efe9;
+        --panel: #fffaf6;
+        --panel-2: #fff4ec;
+        --text: #23140d;
+        --muted: #71584b;
+        --line: rgba(122, 73, 44, 0.14);
+        --accent: #cf5c21;
+        --accent-soft: rgba(207, 92, 33, 0.1);
+        --good: #127a4b;
+        --warn: #9a6a07;
+        --shadow: 0 20px 60px rgba(72, 38, 14, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          "Inter",
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(255, 122, 61, 0.16), transparent 26%),
+          radial-gradient(circle at top right, rgba(255, 210, 186, 0.08), transparent 20%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+          var(--bg);
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .theme-toggle {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 30;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+      }
+
+      .wrap {
+        width: min(1480px, calc(100vw - 40px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .hero,
+      .section {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 30px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 122, 61, 0.25);
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 16px 0 12px;
+        font-size: clamp(34px, 5vw, 56px);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+      }
+
+      .hero p,
+      .section-intro,
+      .note,
+      .proof-list li,
+      .caption,
+      .bullets li {
+        color: var(--muted);
+      }
+
+      .hero p {
+        max-width: 980px;
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.7;
+      }
+
+      .meta-grid,
+      .proof-grid,
+      .comparison,
+      .code-grid,
+      .assert-grid {
+        display: grid;
+        gap: 16px;
+      }
+
+      .meta-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 22px;
+      }
+
+      .meta-card,
+      .proof,
+      .code-card,
+      .assert-card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel-2);
+      }
+
+      .meta-card {
+        padding: 15px 16px;
+      }
+
+      .meta-label {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .meta-value {
+        margin-top: 8px;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .section {
+        margin-top: 26px;
+        padding: 26px;
+      }
+
+      .section h2 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: -0.04em;
+      }
+
+      .section-intro {
+        margin: 10px 0 0;
+        font-size: 15px;
+        line-height: 1.65;
+      }
+
+      .proof-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 18px;
+      }
+
+      .proof {
+        padding: 16px;
+      }
+
+      .proof strong,
+      .code-card strong,
+      .assert-card strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .comparison {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 22px;
+      }
+
+      .shot {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel);
+      }
+
+      .shot-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 15px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .shot-title {
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .before {
+        color: #ffd5d5;
+        background: rgba(255, 93, 93, 0.14);
+        border: 1px solid rgba(255, 93, 93, 0.2);
+      }
+
+      .after {
+        color: #dcffec;
+        background: rgba(74, 209, 140, 0.14);
+        border: 1px solid rgba(74, 209, 140, 0.2);
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #0a0503;
+      }
+
+      .caption {
+        padding: 15px 16px 18px;
+        font-size: 14px;
+        line-height: 1.68;
+      }
+
+      .code-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 18px;
+      }
+
+      .code-card,
+      .assert-card {
+        padding: 18px;
+      }
+
+      .bullets,
+      .proof-list {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .bullets li + li,
+      .proof-list li + li {
+        margin-top: 8px;
+      }
+
+      .assert-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 18px;
+      }
+
+      pre {
+        margin: 10px 0 0;
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.55;
+        overflow: auto;
+      }
+
+      .note {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 14px;
+        line-height: 1.72;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        font-family: "SFMono-Regular", ui-monospace, monospace;
+        font-size: 0.94em;
+      }
+
+      @media (max-width: 1100px) {
+        .meta-grid,
+        .proof-grid,
+        .comparison,
+        .code-grid,
+        .assert-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <button class="theme-toggle" type="button" id="theme-toggle">Toggle theme</button>
+    <div class="wrap">
+      <section class="hero">
+        <div class="eyebrow">Draft PR #634 • Visual Review</div>
+        <h1>Channel Health Diagnostics UI Before / After</h1>
+        <p>
+          This evidence pack documents the user-facing impact of the channel-health diagnostics
+          work for issue <code>#628</code> and the follow-up UI hardening that landed during review.
+          The screenshots show the same seeded scenarios before the PR and after the current draft
+          head, so the deltas are attributable to this branch rather than a different test setup.
+        </p>
+        <div class="meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Issue Status</div>
+            <div class="meta-value">Partially solved. The product now explains the failure path, but bad credentials still need operator action.</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Screens Compared</div>
+            <div class="meta-value">4 paired captures: overview, channels list, auth detail, missing-credentials detail.</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Chosen Direction</div>
+            <div class="meta-value">Shared diagnostics + remediation, not a Telegram-only patch.</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Review Hardening</div>
+            <div class="meta-value">Added neutral checking state, safer tab fallback, and no partial-data overcounting.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>What This PR Proves</h2>
+        <p class="section-intro">
+          The screenshots validate the visible remediation experience. The code changes go a bit
+          further than the screenshots alone, so the report separates visual proof from the
+          additional hardening that prevents misleading UI states.
+        </p>
+        <div class="proof-grid">
+          <div class="proof">
+            <strong>Overview no longer hides the problem</strong>
+            <ul class="proof-list">
+              <li>Before: dashboard-level attention existed, but the missing-credentials path was easy to miss.</li>
+              <li>After: the overview clearly communicates that channel attention exists and aligns with the richer downstream diagnostics.</li>
+            </ul>
+          </div>
+          <div class="proof">
+            <strong>Channels list now points to action</strong>
+            <ul class="proof-list">
+              <li>Before: rows could degrade into vague summaries or omit the useful next step.</li>
+              <li>After: the row copy names the failure and exposes the remediation action more directly.</li>
+            </ul>
+          </div>
+          <div class="proof">
+            <strong>Auth failures are diagnosable</strong>
+            <ul class="proof-list">
+              <li>Before: the detail page lacked enough structure for a user to understand what failed.</li>
+              <li>After: the detail page shows what happened, recommended action, credentials entry point, and technical detail.</li>
+            </ul>
+          </div>
+          <div class="proof">
+            <strong>Config failures are diagnosable</strong>
+            <ul class="proof-list">
+              <li>Before: missing credentials did not surface a complete remediation path.</li>
+              <li>After: the detail page explains the config problem and exposes the credentials action clearly.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="overview">
+        <h2>Overview</h2>
+        <p class="section-intro">
+          The dashboard summary is the first place a user looks. It now leads toward the richer diagnostics
+          instead of leaving the channel state effectively opaque.
+        </p>
+        <div class="comparison">
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Overview — Before</div>
+              <div class="tag before">Before</div>
+            </div>
+            <img src="before-overview.png" alt="Overview before channel diagnostics improvements" />
+            <div class="caption">
+              Before: the overview conveyed that attention existed, but it did not make the missing-credentials
+              path nearly as actionable as the PR now does downstream.
+            </div>
+          </article>
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Overview — After</div>
+              <div class="tag after">After</div>
+            </div>
+            <img src="after-overview.png" alt="Overview after channel diagnostics improvements" />
+            <div class="caption">
+              After: the overview aligns with the richer diagnostics flow and no longer relies on the old opaque
+              failure presentation.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="channels-list">
+        <h2>Channels List</h2>
+        <p class="section-intro">
+          This is where the PR most clearly replaces vague channel status with named failures and next-step copy.
+        </p>
+        <div class="comparison">
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Channels List — Before</div>
+              <div class="tag before">Before</div>
+            </div>
+            <img src="before-channels-list.png" alt="Channels list before channel diagnostics improvements" />
+            <div class="caption">
+              Before: summaries and remediation copy were incomplete. The list did not consistently tell the user
+              what failed or which action to take next.
+            </div>
+          </article>
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Channels List — After</div>
+              <div class="tag after">After</div>
+            </div>
+            <img src="after-channels-list.png" alt="Channels list after channel diagnostics improvements" />
+            <div class="caption">
+              After: the row naming and next-step prompts are explicit. The UI now makes the channel-health state
+              actionable rather than just visible.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="auth-detail">
+        <h2>Auth Failure Detail</h2>
+        <p class="section-intro">
+          This captures the original class of incident from <code>#628</code>: a channel is enabled but blocked by
+          auth/runtime reality. The page now explains that state instead of flattening it.
+        </p>
+        <div class="comparison">
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Auth Detail — Before</div>
+              <div class="tag before">Before</div>
+            </div>
+            <img src="before-auth-detail.png" alt="Auth failure detail before channel diagnostics improvements" />
+            <div class="caption">
+              Before: the user could land on the channel detail view without enough structure to understand
+              what happened, what to try next, or where the credentials/debug entry point was.
+            </div>
+          </article>
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Auth Detail — After</div>
+              <div class="tag after">After</div>
+            </div>
+            <img src="after-auth-detail.png" alt="Auth failure detail after channel diagnostics improvements" />
+            <div class="caption">
+              After: the page names the auth failure, provides recommended action, exposes the credentials entry
+              point, and shows technical detail useful for debugging.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="missing-detail">
+        <h2>Missing Credentials Detail</h2>
+        <p class="section-intro">
+          Missing or incomplete channel configuration now gets the same structured treatment as auth failures.
+        </p>
+        <div class="comparison">
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Missing Credentials — Before</div>
+              <div class="tag before">Before</div>
+            </div>
+            <img src="before-missing-detail.png" alt="Missing credentials detail before channel diagnostics improvements" />
+            <div class="caption">
+              Before: the config failure path was visually thin and did not fully guide the user back to the
+              required credentials work.
+            </div>
+          </article>
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Missing Credentials — After</div>
+              <div class="tag after">After</div>
+            </div>
+            <img src="after-missing-detail.png" alt="Missing credentials detail after channel diagnostics improvements" />
+            <div class="caption">
+              After: the UI names the config problem, explains the credentials requirement, and surfaces the
+              action path directly on the page.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Additional Hardening Beyond The Screenshots</h2>
+        <p class="section-intro">
+          Review surfaced a few cases where the visible diagnostics could still be misleading. Those are fixed in
+          code even when they do not have a dedicated screenshot in this pack.
+        </p>
+        <div class="code-grid">
+          <div class="code-card">
+            <strong>No more false “Stopped” state for unknown-but-enabled channels</strong>
+            <ul class="bullets">
+              <li>Enabled channels without backend status now stay neutral as <code>Checking</code>.</li>
+              <li>This prevents the UI from manufacturing attention where the runtime has not yet reported anything.</li>
+            </ul>
+          </div>
+          <div class="code-card">
+            <strong>No more partial-data overcounting in overview</strong>
+            <ul class="bullets">
+              <li>Overview attention synthesis only runs when the loaded instance slice is complete.</li>
+              <li>This avoids claiming more failing channels than the current dataset can justify.</li>
+            </ul>
+          </div>
+          <div class="code-card">
+            <strong>Fallback remediation is channel-specific</strong>
+            <ul class="bullets">
+              <li><code>zalo_personal</code> now points to re-auth instead of generic credentials repair.</li>
+              <li>Generic missing-credentials fallback stays on the credentials path with localized copy.</li>
+            </ul>
+          </div>
+          <div class="code-card">
+            <strong>Invalid channel detail tabs fail safely</strong>
+            <ul class="bullets">
+              <li>Unsupported <code>?tab=</code> values now fall back to <code>general</code>.</li>
+              <li>Non-Telegram channels can no longer land on the Telegram-only <code>groups</code> tab.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Assertion Snapshot</h2>
+        <p class="section-intro">
+          These structured checks back up the screenshots by recording the UI markers that were present before and after.
+        </p>
+        <div class="assert-grid">
+          <div class="assert-card">
+            <strong>Before</strong>
+            <pre>{
+  "overview": {
+    "needsAttention": true,
+    "authChannelVisible": true,
+    "missingChannelVisible": false
+  },
+  "channelsList": {
+    "authSummary": false,
+    "missingSummary": true,
+    "nextStepVisible": true,
+    "credentialsActionVisible": false
+  },
+  "authDetail": {
+    "whatHappened": true,
+    "recommendedAction": true,
+    "reviewCredentials": false,
+    "technicalDetail": false
+  },
+  "missingCredentialsDetail": {
+    "missingCredentials": true,
+    "completeRequiredCredentials": false,
+    "openCredentials": false
+  }
+}</pre>
+          </div>
+          <div class="assert-card">
+            <strong>After</strong>
+            <pre>{
+  "overview": {
+    "needsAttention": true,
+    "authVisible": false,
+    "missingVisible": false
+  },
+  "channelsList": {
+    "authSummary": true,
+    "missingSummary": false,
+    "reviewCredentials": true,
+    "completeCredentials": true
+  },
+  "authDetail": {
+    "whatHappened": true,
+    "authFailed": true,
+    "recommendedAction": true,
+    "openCredentials": true,
+    "technicalDetail": true
+  },
+  "missingDetail": {
+    "whatHappened": true,
+    "configInvalid": true,
+    "completeCredentials": true,
+    "openCredentials": true,
+    "technicalDetail": true
+  }
+}</pre>
+          </div>
+        </div>
+        <div class="note">
+          Visual verdict: this PR fixes GoClaw’s product-side diagnosability gap for the seeded auth and config
+          channel failures. It does not auto-repair invalid credentials, so the incident class from <code>#628</code>
+          is better described as <strong>diagnosable and actionable</strong>, not automatically healed.
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const key = "pr-634-proof-theme";
+      const root = document.documentElement;
+      const button = document.getElementById("theme-toggle");
+      const preferred = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      const initial = localStorage.getItem(key) || preferred;
+
+      function applyTheme(theme) {
+        root.dataset.theme = theme;
+      }
+
+      applyTheme(initial);
+
+      button.addEventListener("click", () => {
+        const next = root.dataset.theme === "light" ? "dark" : "light";
+        localStorage.setItem(key, next);
+        applyTheme(next);
+      });
+    </script>
+  </body>
+</html>
