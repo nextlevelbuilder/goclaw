@@ -551,10 +551,15 @@ var confirmTmpl = template.Must(template.New("confirm").Parse(`<!DOCTYPE html>
           });
         };
       } else {
-        btn.disabled = true;
-        btn.textContent = 'Login Required';
-        status.innerHTML = 'Open <a href="/" target="_blank" style="color:#c98342">GoClaw admin panel</a> and log in first, then refresh this page.';
-        status.style.color = '#f87171';
+        btn.disabled = false;
+        btn.textContent = 'Log in to Install';
+        btn.onclick = function() {
+          // Save current URL so user can come back after login
+          sessionStorage.setItem('goclaw:install_return', window.location.href);
+          window.location.href = '/';
+        };
+        status.textContent = 'You need to log in to your GoClaw admin first.';
+        status.style.color = '#8b8c96';
       }
     })();
     </script>
