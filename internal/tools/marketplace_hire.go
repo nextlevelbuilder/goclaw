@@ -2,11 +2,13 @@ package tools
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -18,19 +20,21 @@ import (
 
 // MarketplaceHireTool downloads and installs agent teams from the GoClaw Hub marketplace.
 type MarketplaceHireTool struct {
-	client       *registry.Client
-	gatewayURL   string // e.g. http://localhost:18790
-	gatewayToken string
-	db           *sql.DB
+	client           *registry.Client
+	gatewayURL       string // e.g. http://localhost:18790
+	gatewayToken     string
+	hubFrontendURL   string // e.g. https://hub.vibery.app
+	db               *sql.DB
 }
 
 // NewMarketplaceHireTool creates a new marketplace hire tool.
-func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken string, db *sql.DB) *MarketplaceHireTool {
+func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken, hubFrontendURL string, db *sql.DB) *MarketplaceHireTool {
 	return &MarketplaceHireTool{
-		client:       client,
-		gatewayURL:   gatewayURL,
-		gatewayToken: gatewayToken,
-		db:           db,
+		client:         client,
+		gatewayURL:     gatewayURL,
+		gatewayToken:   gatewayToken,
+		hubFrontendURL: hubFrontendURL,
+		db:             db,
 	}
 }
 
@@ -69,11 +73,14 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 
 	// Check if paid listing — can't download without purchase
 	if listing.PriceCents > 0 {
-		hubURL := strings.TrimSuffix(t.client.BaseURL, "/v1")
-		hubURL = strings.TrimSuffix(hubURL, "/")
-		// Try to derive the frontend URL from the API URL
-		buyURL := strings.Replace(hubURL, "hub-api.", "hub.", 1)
-		buyURL = strings.Replace(buyURL, ":9401", ":9402", 1)
+		buyURL := t.hubFrontendURL
+		if buyURL == "" {
+			// Fallback: derive frontend URL from API URL
+			buyURL = strings.TrimSuffix(t.client.BaseURL, "/v1")
+			buyURL = strings.TrimSuffix(buyURL, "/")
+			buyURL = strings.Replace(buyURL, "hub-api.", "hub.", 1)
+			buyURL = strings.Replace(buyURL, ":9401", ":9402", 1)
+		}
 
 		price := fmt.Sprintf("$%.2f", float64(listing.PriceCents)/100)
 		if listing.PriceCents%100 == 0 {
@@ -138,6 +145,11 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 		return ErrorResult(fmt.Sprintf("Download produced empty file for '%s'", listing.Title))
 	}
 
+	// Validate bundle is a valid gzip file
+	if err := validateBundle(bundlePath); err != nil {
+		return ErrorResult(fmt.Sprintf("Bundle validation failed for '%s': %v", listing.Title, err))
+	}
+
 	// Import into GoClaw by POSTing to the local team import endpoint
 	importResult, err := t.importBundle(bundlePath)
 	if err != nil {
@@ -151,8 +163,10 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 
 	// Save Hub metadata to the team's settings for update tracking
 	if t.db != nil {
-		go t.saveHubMetadata(listing.Title, slug)
+		t.saveHubMetadata(ctx, listing.Title, slug)
 	}
+
+	slog.Info("marketplace: hired", "slug", slug, "title", listing.Title)
 
 	// Build success message
 	var result strings.Builder
@@ -238,8 +252,23 @@ func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
 	return strings.TrimSpace(string(respBody)), nil
 }
 
+// validateBundle validates that a file is a valid gzip archive.
+func validateBundle(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("not a valid gzip file: %w", err)
+	}
+	gz.Close()
+	return nil
+}
+
 // saveHubMetadata updates the most recently imported team with Hub marketplace metadata.
-func (t *MarketplaceHireTool) saveHubMetadata(teamName, slug string) {
+func (t *MarketplaceHireTool) saveHubMetadata(ctx context.Context, teamName, slug string) {
 	if t.db == nil {
 		return
 	}
@@ -251,8 +280,11 @@ func (t *MarketplaceHireTool) saveHubMetadata(teamName, slug string) {
 	metaJSON, _ := json.Marshal(metadata)
 
 	// Merge into existing settings JSONB
-	t.db.Exec(
+	_, err := t.db.ExecContext(ctx,
 		`UPDATE agent_teams SET settings = settings || $1::jsonb WHERE name = $2 AND (settings->>'hub_slug' IS NULL OR settings->>'hub_slug' = '')`,
 		string(metaJSON), teamName,
 	)
+	if err != nil {
+		slog.Error("failed to save hub metadata", "team", teamName, "slug", slug, "error", err)
+	}
 }

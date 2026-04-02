@@ -105,6 +105,8 @@ func (t *MarketplaceCheckUpdatesTool) Execute(ctx context.Context, args map[stri
 		}
 	}
 
+	slog.Info("marketplace: update check", "teams", len(teams), "updates", updatesAvailable)
+
 	if updatesAvailable > 0 {
 		sb.WriteString(fmt.Sprintf("\n%d update(s) available. To update a team, say \"hire {slug} from marketplace\" again.\n", updatesAvailable))
 	} else {

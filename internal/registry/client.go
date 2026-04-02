@@ -14,9 +14,12 @@ import (
 
 // Client provides access to the GoClaw Hub marketplace API.
 type Client struct {
-	BaseURL string
-	APIKey  string
-	HTTP    *http.Client
+	BaseURL     string
+	APIKey      string
+	FrontendURL string
+	HTTP        *http.Client
+	lastRequest time.Time
+	minInterval time.Duration
 }
 
 // NewClient creates a new registry client with the given base URL and API key.
@@ -28,9 +31,11 @@ func NewClient(baseURL, apiKey string) *Client {
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 	}
 	return &Client{
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-		HTTP:    &http.Client{Timeout: 60 * time.Second, Transport: transport},
+		BaseURL:     baseURL,
+		APIKey:      apiKey,
+		HTTP:        &http.Client{Timeout: 60 * time.Second, Transport: transport},
+		lastRequest: time.Now(),
+		minInterval: 200 * time.Millisecond,
 	}
 }
 
@@ -87,6 +92,8 @@ func (l *Listing) AgentCount() int {
 
 // Search searches marketplace listings with optional filters.
 func (c *Client) Search(ctx context.Context, query, category, listingType string) ([]Listing, error) {
+	c.rateLimit()
+
 	params := url.Values{}
 	if query != "" {
 		params.Set("q", query)
@@ -137,6 +144,8 @@ func (c *Client) Search(ctx context.Context, query, category, listingType string
 
 // GetListing retrieves detailed information about a specific listing.
 func (c *Client) GetListing(ctx context.Context, slug string) (*Listing, error) {
+	c.rateLimit()
+
 	reqURL := c.BaseURL + "/registry/listings/" + url.PathEscape(slug)
 	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
@@ -172,6 +181,8 @@ func (c *Client) GetListing(ctx context.Context, slug string) (*Listing, error) 
 // Download downloads a team bundle from the marketplace.
 // Returns an io.ReadCloser for the tar.gz stream that must be closed by the caller.
 func (c *Client) Download(ctx context.Context, slug string, goclawVersion string) (io.ReadCloser, error) {
+	c.rateLimit()
+
 	params := url.Values{}
 	if goclawVersion != "" {
 		params.Set("goclaw_version", goclawVersion)
@@ -211,6 +222,8 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 
 // CheckUpdate checks if there's a newer version available for a listing.
 func (c *Client) CheckUpdate(ctx context.Context, slug string, currentVersion int) (*UpdateInfo, error) {
+	c.rateLimit()
+
 	params := url.Values{}
 	params.Set("slug", slug)
 	params.Set("current_version", fmt.Sprintf("%d", currentVersion))
@@ -279,6 +292,14 @@ func (c *Client) Categories(ctx context.Context) ([]Category, error) {
 	}
 
 	return categories, nil
+}
+
+func (c *Client) rateLimit() {
+	elapsed := time.Since(c.lastRequest)
+	if elapsed < c.minInterval {
+		time.Sleep(c.minInterval - elapsed)
+	}
+	c.lastRequest = time.Now()
 }
 
 func truncateBody(s string, max int) string {

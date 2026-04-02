@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,7 +67,7 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 	}
 
 	params := make(map[string]string)
-	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig"} {
+	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig", "ts"} {
 		v := r.FormValue(key)
 		if decoded, err := url.QueryUnescape(v); err == nil {
 			v = decoded
@@ -177,7 +178,7 @@ func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
 
 func (h *MarketplaceInstallHandler) extractParams(r *http.Request) map[string]string {
 	params := make(map[string]string)
-	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig"} {
+	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig", "ts"} {
 		v := r.URL.Query().Get(key)
 		// URL-decode in case of double encoding (browser preserves encoded chars)
 		if decoded, err := url.QueryUnescape(v); err == nil {
@@ -196,6 +197,19 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 	sig := params["sig"]
 	if sig == "" {
 		return fmt.Errorf("missing signature")
+	}
+
+	// Check signature expiry
+	tsStr := params["ts"]
+	if tsStr == "" {
+		return fmt.Errorf("missing timestamp")
+	}
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp format")
+	}
+	if time.Since(time.Unix(ts, 0)) > 15*time.Minute {
+		return fmt.Errorf("install link expired")
 	}
 
 	// Build the signing string: sorted key=value pairs (excluding sig)
@@ -283,6 +297,7 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
         <input type="hidden" name="bundle_url" value="%s">
         <input type="hidden" name="registry_key" value="%s">
         <input type="hidden" name="sig" value="%s">
+        <input type="hidden" name="ts" value="%s">
         <button type="submit" class="btn btn-primary" style="flex:1">%s</button>
       </form>
       <a href="javascript:window.close()" class="btn btn-secondary">Cancel</a>
@@ -297,6 +312,7 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
 		params["bundle_url"],
 		params["registry_key"],
 		params["sig"],
+		params["ts"],
 		buttonLabel)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

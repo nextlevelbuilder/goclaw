@@ -429,9 +429,12 @@ func runGateway() {
 			}
 			gwURL := fmt.Sprintf("http://localhost:%d", gwPort)
 
+			// Use configured frontend base or empty string (tool will derive from API URL)
+			hubFrontendURL := cfg.Tools.Marketplace.FrontendBase
+
 			// Agent tools
 			toolsReg.Register(tools.NewMarketplaceSearchTool(mktClient))
-			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, cfg.Gateway.Token, pgStores.DB))
+			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, cfg.Gateway.Token, hubFrontendURL, pgStores.DB))
 			toolsReg.Register(tools.NewMarketplaceCheckUpdatesTool(mktClient, pgStores.DB))
 
 			// Install page handler

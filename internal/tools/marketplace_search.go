@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/registry"
@@ -66,6 +67,8 @@ func (t *MarketplaceSearchTool) Execute(ctx context.Context, args map[string]any
 	if len(listings) == 0 {
 		return NewResult(fmt.Sprintf("No teams found for query: %s", query))
 	}
+
+	slog.Info("marketplace: search", "query", query, "results", len(listings))
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Found %d agent team%s for '%s':\n\n", len(listings), plural(len(listings)), query))

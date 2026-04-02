@@ -438,9 +438,10 @@ type DuckDuckGoConfig struct {
 
 // MarketplaceConfig configures the GoClaw Hub marketplace integration.
 type MarketplaceConfig struct {
-	Enabled bool   `json:"enabled,omitempty"`   // enable marketplace tools
-	APIBase string `json:"api_base,omitempty"`  // Hub API base URL (default: https://hub-api.vibery.app/v1)
-	APIKey  string `json:"api_key,omitempty"`   // Hub API key (from env: GOCLAW_MARKETPLACE_API_KEY)
+	Enabled     bool   `json:"enabled,omitempty"`     // enable marketplace tools
+	APIBase     string `json:"api_base,omitempty"`    // Hub API base URL (default: https://hub-api.vibery.app/v1)
+	APIKey      string `json:"api_key,omitempty"`     // Hub API key (from env: GOCLAW_MARKETPLACE_API_KEY)
+	FrontendBase string `json:"frontend_base,omitempty"` // Hub frontend base URL (default: https://hub.vibery.app)
 }
 
 // SessionsConfig controls session behavior.

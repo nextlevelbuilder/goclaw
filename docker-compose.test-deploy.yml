@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: goclaw
+      POSTGRES_PASSWORD: goclaw_test
+      POSTGRES_DB: goclaw
+    volumes:
+      - goclaw-pg-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goclaw -d goclaw"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  goclaw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ENABLE_PYTHON: "true"
+    ports:
+      - "9410:18790"
+    environment:
+      - GOCLAW_HOST=0.0.0.0
+      - GOCLAW_PORT=18790
+      - GOCLAW_CONFIG=/app/data/config.json
+      - GOCLAW_POSTGRES_DSN=postgres://goclaw:goclaw_test@postgres:5432/goclaw?sslmode=disable
+      - GOCLAW_MARKETPLACE_API_KEY=7ed6cac1b885de0eace18ee4a150f91c32f06aa401829014
+      - GOCLAW_ALLOWED_ORIGINS=https://goclaw-test.vibery.app
+    volumes:
+      - goclaw-data:/app/data
+      - goclaw-workspace:/app/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - default
+      - goclaw-net
+
+  goclaw-ui:
+    image: ghcr.io/nextlevelbuilder/goclaw-web:latest
+    ports:
+      - "9411:80"
+    depends_on:
+      - goclaw
+    restart: unless-stopped
+    networks:
+      - default
+      - goclaw-net
+
+volumes:
+  goclaw-pg-data:
+  goclaw-data:
+  goclaw-workspace:
+
+networks:
+  goclaw-net:
+    name: goclaw-net
+    external: true
