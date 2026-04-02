@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -98,13 +97,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 		}
 		m.syncChannelHealthLocked(name, channel)
 		if err := channel.Start(ctx); err != nil {
-			info := ClassifyChannelError(err)
-			if hc, ok := channel.(interface {
-				MarkFailed(string, string, ChannelFailureKind, bool)
-			}); ok {
-				hc.MarkFailed(info.Summary, info.Detail, info.Kind, info.Retryable)
-			}
-			m.recordHealthLocked(name, NewFailedChannelHealth("", err))
+			m.recordChannelStartFailureLocked(name, channel, "", err)
 			slog.Error("failed to start channel", "channel", name, "error", err)
 			continue
 		}
@@ -208,6 +201,59 @@ func (m *Manager) RecordFailure(name, summary string, err error) {
 	m.RecordHealth(name, NewFailedChannelHealth(summary, err))
 }
 
+// RecordFailureForType stores a classified failure snapshot for an instance before registration exists.
+func (m *Manager) RecordFailureForType(name, channelType, summary string, err error) {
+	m.RecordHealth(name, NewFailedChannelHealthForType(channelType, summary, err))
+}
+
+func (m *Manager) recordChannelStartFailure(name string, channel Channel, summary string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.recordChannelStartFailureLocked(name, channel, summary, err)
+}
+
+func (m *Manager) recordChannelStartFailureLocked(name string, channel Channel, summary string, err error) {
+	info := ClassifyChannelError(err)
+	if summary == "" {
+		summary = info.Summary
+	}
+
+	current := snapshotChannelHealth(channel)
+	if isFailureState(current.State) {
+		if current.ChannelType == "" {
+			current.ChannelType = channel.Type()
+		}
+		if current.Summary == "" {
+			current.Summary = summary
+		}
+		if current.Detail == "" {
+			current.Detail = info.Detail
+		}
+		if current.FailureKind == "" {
+			current.FailureKind = info.Kind
+		}
+		m.recordHealthLocked(name, current)
+		return
+	}
+
+	if hc, ok := channel.(interface {
+		MarkFailed(string, string, ChannelFailureKind, bool)
+	}); ok {
+		hc.MarkFailed(summary, info.Detail, info.Kind, info.Retryable)
+		m.syncChannelHealthLocked(name, channel)
+		return
+	}
+
+	m.recordHealthLocked(name, NewChannelHealthForType(
+		channel.Type(),
+		ChannelHealthStateFailed,
+		summary,
+		info.Detail,
+		info.Kind,
+		info.Retryable,
+	))
+}
+
 // SetContactCollector sets the contact collector for all current and future channels.
 func (m *Manager) SetContactCollector(cc *store.ContactCollector) {
 	m.mu.Lock()
@@ -272,20 +318,17 @@ func (m *Manager) UnregisterChannel(name string) {
 
 func (m *Manager) recordHealthLocked(name string, snapshot ChannelHealth) {
 	prev := m.health[name]
-	if snapshot.CheckedAt.IsZero() {
-		snapshot.CheckedAt = time.Now().UTC()
-	}
-	if snapshot.Enabled == false {
-		snapshot.Enabled = true
-	}
-	if snapshot.State == ChannelHealthStateFailed || snapshot.State == ChannelHealthStateDegraded {
-		if snapshot.FailureCount == 0 {
-			snapshot.FailureCount = prev.FailureCount + 1
+	if snapshot.ChannelType == "" {
+		switch {
+		case prev.ChannelType != "":
+			snapshot.ChannelType = prev.ChannelType
+		case m.channels[name] != nil:
+			snapshot.ChannelType = m.channels[name].Type()
+		default:
+			snapshot.ChannelType = name
 		}
-	} else if snapshot.FailureCount == 0 {
-		snapshot.FailureCount = prev.FailureCount
 	}
-	m.health[name] = snapshot
+	m.health[name] = mergeChannelHealth(prev, snapshot)
 }
 
 func (m *Manager) syncChannelHealthLocked(name string, channel Channel) {
@@ -295,6 +338,7 @@ func (m *Manager) syncChannelHealthLocked(name string, channel Channel) {
 func snapshotChannelHealth(channel Channel) ChannelHealth {
 	if reporter, ok := channel.(interface{ HealthSnapshot() ChannelHealth }); ok {
 		snapshot := reporter.HealthSnapshot()
+		snapshot.ChannelType = channel.Type()
 		snapshot.Enabled = true
 		snapshot.Running = channel.IsRunning()
 		return snapshot
@@ -307,9 +351,10 @@ func snapshotChannelHealth(channel Channel) ChannelHealth {
 		summary = "Connected"
 	}
 	return ChannelHealth{
-		Enabled: true,
-		Running: channel.IsRunning(),
-		State:   state,
-		Summary: summary,
+		ChannelType: channel.Type(),
+		Enabled:     true,
+		Running:     channel.IsRunning(),
+		State:       state,
+		Summary:     summary,
 	}
 }

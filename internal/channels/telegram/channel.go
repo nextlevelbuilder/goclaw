@@ -176,8 +176,6 @@ func (c *Channel) Start(ctx context.Context) error {
 	me, err := c.bot.GetMe(probeCtx)
 	probeCancel()
 	if err != nil {
-		info := channels.ClassifyChannelError(err)
-		c.MarkFailed(info.Summary, info.Detail, info.Kind, info.Retryable)
 		return fmt.Errorf("validate telegram bot: %w", err)
 	}
 	username := ""
@@ -202,8 +200,6 @@ func (c *Channel) Start(ctx context.Context) error {
 	})
 	if err != nil {
 		cancel()
-		info := channels.ClassifyChannelError(err)
-		c.MarkFailed(info.Summary, info.Detail, info.Kind, info.Retryable)
 		return fmt.Errorf("start long polling: %w", err)
 	}
 
@@ -237,8 +233,7 @@ func (c *Channel) Start(ctx context.Context) error {
 			}
 		}
 		if lastErr != nil {
-			info := channels.ClassifyChannelError(lastErr)
-			c.MarkDegraded("Connected with command sync warnings", info.Detail, info.Kind, info.Retryable)
+			slog.Warn("telegram menu commands remain unsynced", "error", lastErr)
 		}
 	}()
 
@@ -251,7 +246,7 @@ func (c *Channel) Start(ctx context.Context) error {
 			case update, ok := <-updates:
 				if !ok {
 					if pollCtx.Err() == nil {
-						c.MarkDegraded("Polling stopped unexpectedly", "Telegram updates channel closed unexpectedly.", channels.ChannelFailureKindNetwork, true)
+						c.MarkFailed("Polling stopped unexpectedly", "Telegram updates channel closed unexpectedly.", channels.ChannelFailureKindNetwork, true)
 					}
 					slog.Info("telegram updates channel closed")
 					return

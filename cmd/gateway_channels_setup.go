@@ -33,7 +33,8 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 	}
 
 	recordMissingConfig := func(name, detail string) {
-		channelMgr.RecordHealth(name, channels.NewChannelHealth(
+		channelMgr.RecordHealth(name, channels.NewChannelHealthForType(
+			name,
 			channels.ChannelHealthStateFailed,
 			"Missing credentials",
 			detail,

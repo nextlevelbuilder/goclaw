@@ -89,17 +89,51 @@ const (
 	ChannelFailureKindUnknown ChannelFailureKind = "unknown"
 )
 
+// ChannelRemediationCode identifies the next operator step suggested for a channel incident.
+type ChannelRemediationCode string
+
+const (
+	ChannelRemediationCodeReauth          ChannelRemediationCode = "reauth"
+	ChannelRemediationCodeOpenCredentials ChannelRemediationCode = "open_credentials"
+	ChannelRemediationCodeOpenAdvanced    ChannelRemediationCode = "open_advanced"
+	ChannelRemediationCodeCheckNetwork    ChannelRemediationCode = "check_network"
+)
+
+// ChannelRemediationTarget tells the UI which existing surface can help resolve the issue.
+type ChannelRemediationTarget string
+
+const (
+	ChannelRemediationTargetCredentials ChannelRemediationTarget = "credentials"
+	ChannelRemediationTargetAdvanced    ChannelRemediationTarget = "advanced"
+	ChannelRemediationTargetReauth      ChannelRemediationTarget = "reauth"
+	ChannelRemediationTargetDetails     ChannelRemediationTarget = "details"
+)
+
+// ChannelRemediation contains a coarse, additive operator hint for the current incident.
+type ChannelRemediation struct {
+	Code     ChannelRemediationCode   `json:"code"`
+	Headline string                   `json:"headline"`
+	Hint     string                   `json:"hint,omitempty"`
+	Target   ChannelRemediationTarget `json:"target,omitempty"`
+}
+
 // ChannelHealth is the shared runtime health snapshot exposed via channels.status.
 type ChannelHealth struct {
-	Enabled      bool               `json:"enabled"`
-	Running      bool               `json:"running"`
-	State        ChannelHealthState `json:"state"`
-	Summary      string             `json:"summary,omitempty"`
-	Detail       string             `json:"detail,omitempty"`
-	FailureKind  ChannelFailureKind `json:"failure_kind,omitempty"`
-	Retryable    bool               `json:"retryable"`
-	CheckedAt    time.Time          `json:"checked_at,omitempty"`
-	FailureCount int                `json:"failure_count,omitempty"`
+	ChannelType         string              `json:"-"`
+	Enabled             bool                `json:"enabled"`
+	Running             bool                `json:"running"`
+	State               ChannelHealthState  `json:"state"`
+	Summary             string              `json:"summary,omitempty"`
+	Detail              string              `json:"detail,omitempty"`
+	FailureKind         ChannelFailureKind  `json:"failure_kind,omitempty"`
+	Retryable           bool                `json:"retryable"`
+	CheckedAt           time.Time           `json:"checked_at,omitempty"`
+	FailureCount        int                 `json:"failure_count,omitempty"`
+	ConsecutiveFailures int                 `json:"consecutive_failures,omitempty"`
+	FirstFailedAt       time.Time           `json:"first_failed_at,omitempty"`
+	LastFailedAt        time.Time           `json:"last_failed_at,omitempty"`
+	LastHealthyAt       time.Time           `json:"last_healthy_at,omitempty"`
+	Remediation         *ChannelRemediation `json:"remediation,omitempty"`
 }
 
 // ChannelErrorInfo contains shared error classification output for operators.
@@ -115,6 +149,7 @@ func ClassifyChannelError(err error) ChannelErrorInfo {
 	if err == nil {
 		return ChannelErrorInfo{
 			Summary:   "Channel failed",
+			Detail:    "GoClaw could not determine the latest channel error.",
 			Kind:      ChannelFailureKindUnknown,
 			Retryable: true,
 		}
@@ -127,39 +162,87 @@ func ClassifyChannelError(err error) ChannelErrorInfo {
 	case strings.Contains(msg, "401") || strings.Contains(msg, "unauthorized") || strings.Contains(msg, "forbidden"):
 		return ChannelErrorInfo{
 			Summary:   "Authentication failed",
-			Detail:    detail,
+			Detail:    "The upstream service rejected the configured credentials or session.",
 			Kind:      ChannelFailureKindAuth,
+			Retryable: false,
+		}
+	case strings.Contains(msg, "invalid proxy"):
+		return ChannelErrorInfo{
+			Summary:   "Configuration is invalid",
+			Detail:    "Configured proxy URL is invalid.",
+			Kind:      ChannelFailureKindConfig,
+			Retryable: false,
+		}
+	case strings.Contains(msg, "agent ") && strings.Contains(msg, " not found for channel"):
+		return ChannelErrorInfo{
+			Summary:   "Configuration is invalid",
+			Detail:    "The linked agent for this channel could not be found.",
+			Kind:      ChannelFailureKindConfig,
 			Retryable: false,
 		}
 	case strings.Contains(msg, "token is required"),
 		strings.Contains(msg, "missing credentials"),
-		strings.Contains(msg, "invalid proxy"),
 		strings.Contains(msg, "decode "),
 		strings.Contains(msg, "not found for channel"),
 		strings.Contains(msg, "required"):
+		safeDetail := "A required channel setting is missing or invalid."
+		switch {
+		case strings.Contains(msg, "token is required"), strings.Contains(msg, "missing credentials"):
+			safeDetail = "Required channel credentials are missing or incomplete."
+		case strings.Contains(msg, "decode "):
+			safeDetail = "Saved channel configuration could not be parsed."
+		}
 		return ChannelErrorInfo{
 			Summary:   "Configuration is invalid",
-			Detail:    detail,
+			Detail:    safeDetail,
 			Kind:      ChannelFailureKindConfig,
 			Retryable: false,
 		}
 	case strings.Contains(msg, "timeout"),
-		strings.Contains(msg, "connection refused"),
-		strings.Contains(msg, "connection reset"),
-		strings.Contains(msg, "no such host"),
-		strings.Contains(msg, "dial tcp"),
-		strings.Contains(msg, "context deadline exceeded"),
+		strings.Contains(msg, "i/o timeout"),
+		strings.Contains(msg, "deadline exceeded"),
+		strings.Contains(msg, "context deadline exceeded"):
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "Timed out while reaching the upstream service.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	case strings.Contains(msg, "connection refused"):
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "The upstream service refused the connection attempt.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	case strings.Contains(msg, "no such host"):
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "GoClaw could not resolve the upstream host.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	case strings.Contains(msg, "connection reset"),
 		strings.Contains(msg, "eof"):
 		return ChannelErrorInfo{
 			Summary:   "Network error",
-			Detail:    detail,
+			Detail:    "The upstream service closed the connection unexpectedly.",
+			Kind:      ChannelFailureKindNetwork,
+			Retryable: true,
+		}
+	case strings.Contains(msg, "dial tcp"),
+		strings.Contains(msg, "connection refused"),
+		strings.Contains(msg, "tcp "):
+		return ChannelErrorInfo{
+			Summary:   "Network error",
+			Detail:    "GoClaw could not open a network connection to the upstream service.",
 			Kind:      ChannelFailureKindNetwork,
 			Retryable: true,
 		}
 	default:
 		return ChannelErrorInfo{
 			Summary:   "Channel failed",
-			Detail:    detail,
+			Detail:    "An unexpected channel error occurred. Review server logs for the full error.",
 			Kind:      ChannelFailureKindUnknown,
 			Retryable: true,
 		}
@@ -168,7 +251,13 @@ func ClassifyChannelError(err error) ChannelErrorInfo {
 
 // NewChannelHealth builds a shared runtime snapshot with a current timestamp.
 func NewChannelHealth(state ChannelHealthState, summary, detail string, kind ChannelFailureKind, retryable bool) ChannelHealth {
+	return NewChannelHealthForType("", state, summary, detail, kind, retryable)
+}
+
+// NewChannelHealthForType builds a shared runtime snapshot for a specific channel type.
+func NewChannelHealthForType(channelType string, state ChannelHealthState, summary, detail string, kind ChannelFailureKind, retryable bool) ChannelHealth {
 	return ChannelHealth{
+		ChannelType: channelType,
 		Enabled:     true,
 		Running:     state == ChannelHealthStateHealthy || state == ChannelHealthStateDegraded,
 		State:       state,
@@ -182,11 +271,139 @@ func NewChannelHealth(state ChannelHealthState, summary, detail string, kind Cha
 
 // NewFailedChannelHealth builds a failed snapshot from a classified error.
 func NewFailedChannelHealth(summary string, err error) ChannelHealth {
+	return NewFailedChannelHealthForType("", summary, err)
+}
+
+// NewFailedChannelHealthForType builds a failed snapshot from a classified error for one channel type.
+func NewFailedChannelHealthForType(channelType, summary string, err error) ChannelHealth {
 	info := ClassifyChannelError(err)
 	if summary == "" {
 		summary = info.Summary
 	}
-	return NewChannelHealth(ChannelHealthStateFailed, summary, info.Detail, info.Kind, info.Retryable)
+	return NewChannelHealthForType(channelType, ChannelHealthStateFailed, summary, info.Detail, info.Kind, info.Retryable)
+}
+
+func isFailureState(state ChannelHealthState) bool {
+	return state == ChannelHealthStateFailed || state == ChannelHealthStateDegraded
+}
+
+func mergeChannelHealth(previous, snapshot ChannelHealth) ChannelHealth {
+	if snapshot.CheckedAt.IsZero() {
+		snapshot.CheckedAt = time.Now().UTC()
+	}
+	if snapshot.Enabled == false {
+		snapshot.Enabled = true
+	}
+	if snapshot.ChannelType == "" {
+		snapshot.ChannelType = previous.ChannelType
+	}
+
+	if isFailureState(snapshot.State) {
+		if snapshot.FailureCount == 0 {
+			snapshot.FailureCount = previous.FailureCount + 1
+		}
+		if snapshot.ConsecutiveFailures == 0 {
+			snapshot.ConsecutiveFailures = previous.ConsecutiveFailures + 1
+		}
+		if snapshot.FirstFailedAt.IsZero() {
+			if previous.FirstFailedAt.IsZero() || !isFailureState(previous.State) {
+				snapshot.FirstFailedAt = snapshot.CheckedAt
+			} else {
+				snapshot.FirstFailedAt = previous.FirstFailedAt
+			}
+		}
+		if snapshot.LastFailedAt.IsZero() {
+			snapshot.LastFailedAt = snapshot.CheckedAt
+		}
+		if snapshot.LastHealthyAt.IsZero() {
+			snapshot.LastHealthyAt = previous.LastHealthyAt
+		}
+	} else {
+		if snapshot.FailureCount == 0 {
+			snapshot.FailureCount = previous.FailureCount
+		}
+		snapshot.ConsecutiveFailures = 0
+		snapshot.FirstFailedAt = time.Time{}
+		if snapshot.LastFailedAt.IsZero() {
+			snapshot.LastFailedAt = previous.LastFailedAt
+		}
+		if snapshot.State == ChannelHealthStateHealthy {
+			snapshot.LastHealthyAt = snapshot.CheckedAt
+		} else if snapshot.LastHealthyAt.IsZero() {
+			snapshot.LastHealthyAt = previous.LastHealthyAt
+		}
+	}
+
+	snapshot.Remediation = buildChannelRemediation(snapshot)
+	return snapshot
+}
+
+func buildChannelRemediation(snapshot ChannelHealth) *ChannelRemediation {
+	if !isFailureState(snapshot.State) {
+		return nil
+	}
+
+	text := strings.ToLower(snapshot.Summary + " " + snapshot.Detail)
+
+	switch snapshot.FailureKind {
+	case ChannelFailureKindAuth:
+		if snapshot.ChannelType == TypeZaloPersonal {
+			return &ChannelRemediation{
+				Code:     ChannelRemediationCodeReauth,
+				Headline: "Reconnect the channel session",
+				Hint:     "Open the sign-in flow again to restore the current session.",
+				Target:   ChannelRemediationTargetReauth,
+			}
+		}
+		return &ChannelRemediation{
+			Code:     ChannelRemediationCodeOpenCredentials,
+			Headline: "Review channel credentials",
+			Hint:     "Open credentials and confirm the current token or secret is still valid.",
+			Target:   ChannelRemediationTargetCredentials,
+		}
+	case ChannelFailureKindConfig:
+		if strings.Contains(text, "credential") ||
+			strings.Contains(text, "token") ||
+			strings.Contains(text, "secret") ||
+			strings.Contains(text, "app_id") ||
+			strings.Contains(text, "app id") ||
+			strings.Contains(text, "required") {
+			return &ChannelRemediation{
+				Code:     ChannelRemediationCodeOpenCredentials,
+				Headline: "Complete required credentials",
+				Hint:     "Open credentials and fill the missing or invalid values for this channel.",
+				Target:   ChannelRemediationTargetCredentials,
+			}
+		}
+		return &ChannelRemediation{
+			Code:     ChannelRemediationCodeOpenAdvanced,
+			Headline: "Review channel settings",
+			Hint:     "Open advanced settings and correct the invalid channel configuration.",
+			Target:   ChannelRemediationTargetAdvanced,
+		}
+	case ChannelFailureKindNetwork:
+		return &ChannelRemediation{
+			Code:     ChannelRemediationCodeCheckNetwork,
+			Headline: "Check upstream reachability",
+			Hint:     "Verify the upstream service is reachable from GoClaw, then inspect proxy or API server settings if you use them.",
+			Target:   ChannelRemediationTargetDetails,
+		}
+	default:
+		if snapshot.Retryable {
+			return &ChannelRemediation{
+				Code:     ChannelRemediationCodeCheckNetwork,
+				Headline: "Inspect the latest failure",
+				Hint:     "Open the channel details and review the latest runtime error before retrying.",
+				Target:   ChannelRemediationTargetDetails,
+			}
+		}
+		return &ChannelRemediation{
+			Code:     ChannelRemediationCodeOpenAdvanced,
+			Headline: "Review channel settings",
+			Hint:     "Open channel settings and inspect the latest error detail.",
+			Target:   ChannelRemediationTargetAdvanced,
+		}
+	}
 }
 
 // Channel defines the interface that all channel implementations must satisfy.
@@ -293,7 +510,7 @@ func NewBaseChannel(name string, msgBus *bus.MessageBus, allowList []string) *Ba
 	return &BaseChannel{
 		name:      name,
 		bus:       msgBus,
-		health:    NewChannelHealth(ChannelHealthStateRegistered, "Configured", "", ChannelFailureKindUnknown, false),
+		health:    NewChannelHealthForType(name, ChannelHealthStateRegistered, "Configured", "", ChannelFailureKindUnknown, false),
 		allowList: allowList,
 	}
 }
@@ -345,27 +562,42 @@ func (c *BaseChannel) SetRunning(running bool) {
 	c.stateMu.Lock()
 	defer c.stateMu.Unlock()
 
-	c.running = running
-	c.health.Running = running
-
+	next := c.health
+	next.ChannelType = c.Type()
+	next.Running = running
 	switch {
-	case running && (c.health.State == "" ||
-		c.health.State == ChannelHealthStateRegistered ||
-		c.health.State == ChannelHealthStateStarting ||
-		c.health.State == ChannelHealthStateStopped):
-		c.health.State = ChannelHealthStateHealthy
-		if c.health.Summary == "" ||
-			c.health.Summary == "Configured" ||
-			c.health.Summary == "Starting" ||
-			c.health.Summary == "Stopped" {
-			c.health.Summary = "Connected"
+	case running && (next.State == "" ||
+		next.State == ChannelHealthStateRegistered ||
+		next.State == ChannelHealthStateStarting ||
+		next.State == ChannelHealthStateStopped):
+		next.State = ChannelHealthStateHealthy
+		if next.Summary == "" ||
+			next.Summary == "Configured" ||
+			next.Summary == "Starting" ||
+			next.Summary == "Stopped" {
+			next.Summary = "Connected"
 		}
-		c.health.CheckedAt = time.Now().UTC()
-	case !running && c.health.State == ChannelHealthStateHealthy:
-		c.health.State = ChannelHealthStateStopped
-		c.health.Summary = "Stopped"
-		c.health.CheckedAt = time.Now().UTC()
+		next.Detail = ""
+		next.FailureKind = ChannelFailureKindUnknown
+		next.Retryable = false
+		next.CheckedAt = time.Now().UTC()
+	case !running && next.State == ChannelHealthStateHealthy:
+		next.State = ChannelHealthStateStopped
+		next.Summary = "Stopped"
+		next.Detail = ""
+		next.FailureKind = ChannelFailureKindUnknown
+		next.Retryable = false
+		next.CheckedAt = time.Now().UTC()
+	default:
+		c.running = running
+		c.health.Running = running
+		return
 	}
+
+	next = mergeChannelHealth(c.health, next)
+	next.Running = running
+	c.running = running
+	c.health = next
 }
 
 // HealthSnapshot returns the current runtime health snapshot for the channel.
@@ -374,6 +606,7 @@ func (c *BaseChannel) HealthSnapshot() ChannelHealth {
 	defer c.stateMu.RUnlock()
 
 	snapshot := c.health
+	snapshot.ChannelType = c.Type()
 	snapshot.Enabled = true
 	snapshot.Running = c.running
 	return snapshot
@@ -427,19 +660,12 @@ func (c *BaseChannel) MarkStopped(summary string) {
 	c.setHealth(NewChannelHealth(ChannelHealthStateStopped, summary, "", ChannelFailureKindUnknown, false), false)
 }
 
-func (c *BaseChannel) setHealth(snapshot ChannelHealth, incrementFailure bool) {
+func (c *BaseChannel) setHealth(snapshot ChannelHealth, _ bool) {
 	c.stateMu.Lock()
 	defer c.stateMu.Unlock()
 
-	if snapshot.CheckedAt.IsZero() {
-		snapshot.CheckedAt = time.Now().UTC()
-	}
-	if incrementFailure {
-		snapshot.FailureCount = c.health.FailureCount + 1
-	} else {
-		snapshot.FailureCount = c.health.FailureCount
-	}
-	snapshot.Enabled = true
+	snapshot.ChannelType = c.Type()
+	snapshot = mergeChannelHealth(c.health, snapshot)
 	snapshot.Running = snapshot.State == ChannelHealthStateHealthy || snapshot.State == ChannelHealthStateDegraded
 	c.running = snapshot.Running
 	c.health = snapshot
