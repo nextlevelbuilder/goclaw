@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,6 +29,8 @@ type MarketplaceInstallHandler struct {
 	gatewayToken      string // for authenticating local /v1/teams/import calls
 	localAPIPort      int
 	db                *sql.DB
+	installTokens     map[string]time.Time // one-time tokens for POST install
+	tokenMu           sync.Mutex
 }
 
 // NewMarketplaceInstallHandler creates a new marketplace install page handler.
@@ -36,6 +40,7 @@ func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localA
 		gatewayToken:      gatewayToken,
 		localAPIPort:      localAPIPort,
 		db:                db,
+		installTokens:     make(map[string]time.Time),
 	}
 }
 
@@ -56,8 +61,12 @@ func (h *MarketplaceInstallHandler) handleConfirmPage(w http.ResponseWriter, r *
 
 	agents := strings.Split(params["agents"], ",")
 
+	// Generate one-time install token (prevents unauthenticated POST)
+	installToken := h.generateInstallToken()
+
 	// Check if already installed
 	existingTeam := h.findInstalledTeam(params["slug"])
+	params["install_token"] = installToken
 	h.renderConfirm(w, params, agents, existingTeam)
 }
 
@@ -65,6 +74,13 @@ func (h *MarketplaceInstallHandler) handleConfirmPage(w http.ResponseWriter, r *
 func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		h.renderError(w, "Invalid Request", err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Verify one-time install token (prevents unauthenticated POST)
+	installToken := r.FormValue("install_token")
+	if !h.consumeInstallToken(installToken) {
+		h.renderError(w, "Session Expired", "This install session has expired. Please start the install again from Hub.", http.StatusForbidden)
 		return
 	}
 
@@ -195,6 +211,40 @@ func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
 	return name
 }
 
+// generateInstallToken creates a one-time token valid for 10 minutes.
+func (h *MarketplaceInstallHandler) generateInstallToken() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	token := hex.EncodeToString(b)
+
+	h.tokenMu.Lock()
+	h.installTokens[token] = time.Now().Add(10 * time.Minute)
+	// Cleanup expired tokens
+	for k, exp := range h.installTokens {
+		if time.Now().After(exp) {
+			delete(h.installTokens, k)
+		}
+	}
+	h.tokenMu.Unlock()
+
+	return token
+}
+
+// consumeInstallToken validates and consumes a one-time install token.
+func (h *MarketplaceInstallHandler) consumeInstallToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	h.tokenMu.Lock()
+	defer h.tokenMu.Unlock()
+	exp, ok := h.installTokens[token]
+	if !ok || time.Now().After(exp) {
+		return false
+	}
+	delete(h.installTokens, token) // one-time use
+	return true
+}
+
 func (h *MarketplaceInstallHandler) extractParams(r *http.Request) map[string]string {
 	params := make(map[string]string)
 	// registry_key is intentionally NOT extracted from URL — injected in verifySignature (S2)
@@ -310,6 +360,7 @@ type confirmData struct {
 	BundleURL    string
 	Sig          string
 	Ts           string
+	InstallToken string
 	ButtonLabel  string
 }
 
@@ -351,6 +402,7 @@ var confirmTmpl = template.Must(template.New("confirm").Parse(`<!DOCTYPE html>
         <input type="hidden" name="bundle_url" value="{{.BundleURL}}">
         <input type="hidden" name="sig" value="{{.Sig}}">
         <input type="hidden" name="ts" value="{{.Ts}}">
+        <input type="hidden" name="install_token" value="{{.InstallToken}}">
         <button type="submit" class="btn btn-primary" style="flex:1">{{.ButtonLabel}}</button>
       </form>
       <a href="javascript:window.close()" class="btn btn-secondary">Cancel</a>
@@ -452,6 +504,7 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
 		BundleURL:     params["bundle_url"],
 		Sig:           params["sig"],
 		Ts:            params["ts"],
+		InstallToken:  params["install_token"],
 		ButtonLabel:   buttonLabel,
 	}
 
