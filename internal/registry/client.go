@@ -195,12 +195,12 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 
 	// Use background context for downloads — the agent's request context
 	// may be cancelled before the download completes, causing "unexpected EOF".
+	// B2: defer cancel to avoid context leak.
 	dlCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	_ = cancel // caller closes the body, which cancels implicitly
+	defer cancel()
 
 	req, err := http.NewRequestWithContext(dlCtx, "GET", reqURL, nil)
 	if err != nil {
-		cancel()
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
@@ -212,8 +212,9 @@ func (c *Client) Download(ctx context.Context, slug string, goclawVersion string
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		// B1: read body before closing, not after
 		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		return nil, fmt.Errorf("API returned %d: %s", resp.StatusCode, truncateBody(string(body), 200))
 	}
 

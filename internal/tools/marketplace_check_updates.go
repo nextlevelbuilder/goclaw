@@ -53,7 +53,7 @@ func (t *MarketplaceCheckUpdatesTool) Execute(ctx context.Context, args map[stri
 
 	// Find all teams with hub_slug in settings
 	rows, err := t.db.QueryContext(ctx,
-		`SELECT id, name, settings FROM agent_teams WHERE settings::text LIKE '%hub_slug%'`)
+		`SELECT id, name, settings FROM agent_teams WHERE settings->>'hub_slug' IS NOT NULL AND settings->>'hub_slug' != ''`)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to query teams: %v", err))
 	}

@@ -7,8 +7,11 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"html/template"
 	"io"
+	"log/slog"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 )
 
 // MarketplaceInstallHandler serves the install confirmation page for Hub marketplace.
@@ -39,7 +41,7 @@ func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localA
 
 // RegisterRoutes registers marketplace install routes on the mux.
 func (h *MarketplaceInstallHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)  // Public — just shows confirmation
+	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)   // Public — just shows confirmation
 	mux.HandleFunc("POST /marketplace/install", h.handleDoInstall) // Auth checked via gateway token in form
 }
 
@@ -67,7 +69,8 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 	}
 
 	params := make(map[string]string)
-	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig", "ts"} {
+	// registry_key is NOT accepted from form — injected from server config in verifySignature
+	for _, key := range []string{"slug", "title", "agents", "bundle_url", "sig", "ts"} {
 		v := r.FormValue(key)
 		if decoded, err := url.QueryUnescape(v); err == nil {
 			v = decoded
@@ -81,16 +84,25 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 	}
 
 	bundleURL := params["bundle_url"]
-	registryKey := params["registry_key"]
 
 	if bundleURL == "" {
 		h.renderError(w, "Missing Bundle URL", "No bundle URL provided.", http.StatusBadRequest)
 		return
 	}
 
-	// Download the bundle from Hub
-	dlReq, _ := http.NewRequest("GET", bundleURL, nil)
-	dlReq.Header.Set("X-Registry-Key", registryKey)
+	// S3: Validate bundle URL before requesting
+	if err := validateExternalURL(bundleURL); err != nil {
+		h.renderError(w, "Invalid Bundle URL", err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Download the bundle from Hub using server-side API key (S2: never from URL/form)
+	dlReq, err := http.NewRequest("GET", bundleURL, nil) // B3: check error
+	if err != nil {
+		h.renderError(w, "Download Failed", fmt.Sprintf("Could not create download request: %v", err), http.StatusInternalServerError)
+		return
+	}
+	dlReq.Header.Set("X-Registry-Key", h.marketplaceAPIKey)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	dlResp, err := client.Do(dlReq)
@@ -146,7 +158,10 @@ func (h *MarketplaceInstallHandler) importLocally(bundlePath string) (string, er
 	writer.Close()
 
 	importURL := fmt.Sprintf("http://localhost:%d/v1/teams/import", h.localAPIPort)
-	req, _ := http.NewRequest("POST", importURL, &body)
+	req, err := http.NewRequest("POST", importURL, &body) // B3: check error
+	if err != nil {
+		return "", fmt.Errorf("create import request: %v", err)
+	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	if h.gatewayToken != "" {
 		req.Header.Set("Authorization", "Bearer "+h.gatewayToken)
@@ -178,7 +193,8 @@ func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
 
 func (h *MarketplaceInstallHandler) extractParams(r *http.Request) map[string]string {
 	params := make(map[string]string)
-	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig", "ts"} {
+	// registry_key is intentionally NOT extracted from URL — injected in verifySignature (S2)
+	for _, key := range []string{"slug", "title", "agents", "bundle_url", "sig", "ts"} {
 		v := r.URL.Query().Get(key)
 		// URL-decode in case of double encoding (browser preserves encoded chars)
 		if decoded, err := url.QueryUnescape(v); err == nil {
@@ -212,6 +228,9 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 		return fmt.Errorf("install link expired")
 	}
 
+	// S2: Inject registry_key from server config (not from URL/form) before verifying
+	params["registry_key"] = h.marketplaceAPIKey
+
 	// Build the signing string: sorted key=value pairs (excluding sig)
 	var keys []string
 	for k := range params {
@@ -231,8 +250,8 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 	mac.Write([]byte(signingString))
 	expected := hex.EncodeToString(mac.Sum(nil))
 
-	fmt.Printf("[marketplace-install] key=%s..., signing=[%s], expected=%s, got=%s, match=%v\n",
-		h.marketplaceAPIKey[:8], signingString[:80], expected[:16], sig[:16], hmac.Equal([]byte(sig), []byte(expected)))
+	// S5: No key material in logs
+	slog.Debug("marketplace-install: signature check", "match", hmac.Equal([]byte(sig), []byte(expected)))
 
 	if !hmac.Equal([]byte(sig), []byte(expected)) {
 		return fmt.Errorf("invalid signature")
@@ -241,34 +260,50 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 	return nil
 }
 
-func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params map[string]string, agents []string, existingTeam string) {
-	title := params["title"]
-	slug := params["slug"]
-	var agentList strings.Builder
-	for _, a := range agents {
-		a = strings.TrimSpace(a)
-		if a != "" {
-			agentList.WriteString(fmt.Sprintf(`<li style="padding:4px 0">&#8226; %s</li>`, a))
+// validateExternalURL validates a bundle URL for SSRF protection (S3).
+func validateExternalURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "https" && u.Host != "localhost" && !strings.HasPrefix(u.Host, "127.0.0.1") {
+		return fmt.Errorf("URL must use HTTPS")
+	}
+	// Check for private IPs
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	if ip != nil {
+		if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			return fmt.Errorf("URL resolves to private/internal address")
 		}
 	}
+	return nil
+}
 
-	warningHTML := ""
-	buttonLabel := "Install Team"
-	if existingTeam != "" {
-		warningHTML = fmt.Sprintf(`<div style="padding:12px 16px;background:#c9834220;border:1px solid #c9834240;border-radius:8px;margin-bottom:16px;font-size:13px;color:#c98342"><strong>"%s"</strong> is already installed. This will re-import and update it.</div>`, existingTeam)
-		buttonLabel = "Update Team"
-	}
+// confirmData holds template data for the install confirmation page.
+type confirmData struct {
+	Title        string
+	AgentCount   int
+	WarningHTML  template.HTML
+	AgentListHTML template.HTML
+	Slug         string
+	Agents       string
+	BundleURL    string
+	Sig          string
+	Ts           string
+	ButtonLabel  string
+}
 
-	tmpl := `<!DOCTYPE html>
+var confirmTmpl = template.Must(template.New("confirm").Parse(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Install %s — GoClaw</title>
+  <title>Install {{.Title}} — GoClaw</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f1117;color:#e1e1e6;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
-    .card{background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%%}
+    .card{background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%}
     h1{font-size:20px;margin-bottom:8px}
     .subtitle{color:#8b8c96;font-size:14px;margin-bottom:24px}
     .agents{list-style:none;margin-bottom:24px;padding:16px;background:#12131a;border-radius:8px;font-size:14px}
@@ -285,43 +320,34 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
 <body>
   <div class="card">
     <span class="badge">From GoClaw Hub Marketplace</span>
-    <h1>Install "%s"?</h1>
-    <p class="subtitle">This will add %d agent(s) to your GoClaw instance.</p>
-    %s
-    <ul class="agents">%s</ul>
+    <h1>Install &#34;{{.Title}}&#34;?</h1>
+    <p class="subtitle">This will add {{.AgentCount}} agent(s) to your GoClaw instance.</p>
+    {{.WarningHTML}}
+    <ul class="agents">{{.AgentListHTML}}</ul>
     <div class="actions">
       <form method="POST" action="/marketplace/install" style="flex:1;display:flex">
-        <input type="hidden" name="slug" value="%s">
-        <input type="hidden" name="title" value="%s">
-        <input type="hidden" name="agents" value="%s">
-        <input type="hidden" name="bundle_url" value="%s">
-        <input type="hidden" name="registry_key" value="%s">
-        <input type="hidden" name="sig" value="%s">
-        <input type="hidden" name="ts" value="%s">
-        <button type="submit" class="btn btn-primary" style="flex:1">%s</button>
+        <input type="hidden" name="slug" value="{{.Slug}}">
+        <input type="hidden" name="title" value="{{.Title}}">
+        <input type="hidden" name="agents" value="{{.Agents}}">
+        <input type="hidden" name="bundle_url" value="{{.BundleURL}}">
+        <input type="hidden" name="sig" value="{{.Sig}}">
+        <input type="hidden" name="ts" value="{{.Ts}}">
+        <button type="submit" class="btn btn-primary" style="flex:1">{{.ButtonLabel}}</button>
       </form>
       <a href="javascript:window.close()" class="btn btn-secondary">Cancel</a>
     </div>
     <p class="from">Verify this is from a trusted Hub before installing.</p>
   </div>
 </body>
-</html>`
-	html := fmt.Sprintf(tmpl,
-		title, title, len(agents), warningHTML, agentList.String(),
-		slug, title, strings.Join(agents, ","),
-		params["bundle_url"],
-		params["registry_key"],
-		params["sig"],
-		params["ts"],
-		buttonLabel)
+</html>`))
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+// successData holds template data for the success page.
+type successData struct {
+	Title  string
+	Result string
 }
 
-func (h *MarketplaceInstallHandler) renderSuccess(w http.ResponseWriter, title, result string) {
-	html := fmt.Sprintf(`<!DOCTYPE html>
+var successTmpl = template.Must(template.New("success").Parse(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -330,7 +356,7 @@ func (h *MarketplaceInstallHandler) renderSuccess(w http.ResponseWriter, title, 
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f1117;color:#e1e1e6;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
-    .card{background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%%;text-align:center}
+    .card{background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%;text-align:center}
     .check{font-size:48px;margin-bottom:16px}
     h1{font-size:20px;color:#4ade80;margin-bottom:8px}
     .detail{color:#8b8c96;font-size:13px;margin:16px 0;padding:12px;background:#12131a;border-radius:8px;text-align:left;word-break:break-all;font-family:monospace}
@@ -339,21 +365,21 @@ func (h *MarketplaceInstallHandler) renderSuccess(w http.ResponseWriter, title, 
 </head>
 <body>
   <div class="card">
-    <div class="check">✓</div>
-    <h1>%s Installed!</h1>
-    <div class="detail">%s</div>
+    <div class="check">&#10003;</div>
+    <h1>{{.Title}} Installed!</h1>
+    <div class="detail">{{.Result}}</div>
     <a href="/" class="btn">Go to Dashboard</a>
   </div>
 </body>
-</html>`, title, result)
+</html>`))
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+// errorData holds template data for the error page.
+type errorData struct {
+	Title   string
+	Message string
 }
 
-func (h *MarketplaceInstallHandler) renderError(w http.ResponseWriter, title, message string, status int) {
-	html := fmt.Sprintf(`<!DOCTYPE html>
+var errorTmpl = template.Must(template.New("error").Parse(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -362,7 +388,7 @@ func (h *MarketplaceInstallHandler) renderError(w http.ResponseWriter, title, me
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0f1117;color:#e1e1e6;display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
-    .card{background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%%;text-align:center}
+    .card{background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%;text-align:center}
     h1{font-size:20px;color:#f87171;margin-bottom:12px}
     p{color:#8b8c96;font-size:14px}
     .btn{display:inline-block;padding:10px 24px;border-radius:8px;background:#2a2b35;color:#8b8c96;text-decoration:none;font-size:14px;margin-top:20px}
@@ -370,15 +396,59 @@ func (h *MarketplaceInstallHandler) renderError(w http.ResponseWriter, title, me
 </head>
 <body>
   <div class="card">
-    <h1>%s</h1>
-    <p>%s</p>
+    <h1>{{.Title}}</h1>
+    <p>{{.Message}}</p>
     <a href="javascript:window.close()" class="btn">Close</a>
   </div>
 </body>
-</html>`, title, message)
+</html>`))
+
+func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params map[string]string, agents []string, existingTeam string) {
+	var agentListHTML strings.Builder
+	for _, a := range agents {
+		a = strings.TrimSpace(a)
+		if a != "" {
+			agentListHTML.WriteString(`<li style="padding:4px 0">&#8226; `)
+			template.HTMLEscape(&agentListHTML, []byte(a))
+			agentListHTML.WriteString(`</li>`)
+		}
+	}
+
+	var warningHTML template.HTML
+	buttonLabel := "Install Team"
+	if existingTeam != "" {
+		warningHTML = template.HTML(`<div style="padding:12px 16px;background:#c9834220;border:1px solid #c9834240;border-radius:8px;margin-bottom:16px;font-size:13px;color:#c98342"><strong>`) +
+			template.HTML(template.HTMLEscapeString(existingTeam)) +
+			template.HTML(`</strong> is already installed. This will re-import and update it.</div>`)
+		buttonLabel = "Update Team"
+	}
+
+	data := confirmData{
+		Title:         params["title"],
+		AgentCount:    len(agents),
+		WarningHTML:   warningHTML,
+		AgentListHTML: template.HTML(agentListHTML.String()),
+		Slug:          params["slug"],
+		Agents:        strings.Join(agents, ","),
+		BundleURL:     params["bundle_url"],
+		Sig:           params["sig"],
+		Ts:            params["ts"],
+		ButtonLabel:   buttonLabel,
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	w.Write([]byte(html))
+	w.WriteHeader(http.StatusOK)
+	confirmTmpl.Execute(w, data)
 }
 
+func (h *MarketplaceInstallHandler) renderSuccess(w http.ResponseWriter, title, result string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	successTmpl.Execute(w, successData{Title: title, Result: result})
+}
+
+func (h *MarketplaceInstallHandler) renderError(w http.ResponseWriter, title, message string, status int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	errorTmpl.Execute(w, errorData{Title: title, Message: message})
+}

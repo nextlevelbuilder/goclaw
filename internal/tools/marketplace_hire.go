@@ -10,7 +10,9 @@ import (
 	"io"
 	"log/slog"
 	"mime/multipart"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,6 +66,12 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	if slug == "" {
 		return ErrorResult("slug is required")
 	}
+	// S6: Validate slug format to prevent path traversal
+	for _, c := range slug {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			return ErrorResult("invalid slug: must contain only lowercase letters, digits, and hyphens")
+		}
+	}
 
 	// Get listing details
 	listing, err := t.client.GetListing(ctx, slug)
@@ -102,14 +110,20 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	if _, err := os.Stat(dlDir); err != nil {
 		dlDir = filepath.Join(os.TempDir(), "marketplace")
 	}
-	os.MkdirAll(dlDir, 0777)
-	os.Chmod(dlDir, 0777)
+	os.MkdirAll(dlDir, 0755)
+	os.Chmod(dlDir, 0755)
 
 	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
 	bundlePath := filepath.Join(dlDir, filename)
 	os.Remove(bundlePath) // clean any stale file
 
 	dlURL := t.client.BaseURL + "/registry/download/" + slug
+
+	// S3: Validate URL before requesting
+	if err := validateExternalURL(dlURL); err != nil {
+		return ErrorResult(fmt.Sprintf("Invalid download URL: %v", err))
+	}
+
 	dlReq, err := http.NewRequestWithContext(ctx, "GET", dlURL, nil)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to create download request: %v", err))
@@ -131,7 +145,8 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to create file: %v", err))
 	}
-	written, err := io.Copy(outFile, dlResp.Body)
+	// S8: Limit download size to 100MB
+	written, err := io.Copy(outFile, io.LimitReader(dlResp.Body, 100*1024*1024))
 	outFile.Close()
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to write bundle: %v", err))
@@ -250,6 +265,28 @@ func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(respBody)), nil
+}
+
+// validateExternalURL validates a URL for SSRF protection (S3).
+func validateExternalURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	isLocal := u.Hostname() == "localhost" || strings.HasPrefix(u.Hostname(), "127.0.0.1")
+	if u.Scheme != "https" && !isLocal {
+		return fmt.Errorf("URL must use HTTPS")
+	}
+	if !isLocal {
+		host := u.Hostname()
+		ip := net.ParseIP(host)
+		if ip != nil {
+			if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				return fmt.Errorf("URL resolves to private/internal address")
+			}
+		}
+	}
+	return nil
 }
 
 // validateBundle validates that a file is a valid gzip archive.
