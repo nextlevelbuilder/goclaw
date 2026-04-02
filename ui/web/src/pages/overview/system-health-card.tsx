@@ -16,11 +16,7 @@ import type { HealthPayload, ChannelStatusEntry } from "./types";
 import type { RuntimeInfo } from "@/pages/skills/hooks/use-runtimes";
 import { formatUptime } from "./hooks/use-live-uptime";
 import { cleanVersion } from "@/lib/clean-version";
-import {
-  formatRelativeTime,
-  getChannelAttentionPriority,
-  getChannelStatusMeta,
-} from "@/pages/channels/channels-status-view";
+import { formatRelativeTime, getChannelAttentionPriority, getChannelStatusMeta } from "@/pages/channels/channels-status-view";
 
 function StatusDot({ ok }: { ok: boolean | undefined }) {
   if (ok === undefined)
@@ -57,25 +53,6 @@ function HealthCell({
       </div>
     </div>
   );
-}
-
-function channelDotClass(status: ChannelStatusEntry) {
-  switch (status.state) {
-    case "healthy":
-      return "bg-emerald-500";
-    case "degraded":
-      return "bg-amber-500";
-    case "starting":
-      return "bg-sky-500";
-    case "failed":
-      return "bg-red-500";
-    case "registered":
-      return "bg-slate-400";
-    case "stopped":
-      return "bg-muted-foreground/50";
-    default:
-      return status.running ? "bg-emerald-500" : "bg-red-400";
-  }
 }
 
 export function SystemHealthCard({
@@ -216,23 +193,37 @@ export function SystemHealthCard({
               {(degradedCount > 0 || failedCount > 0) && (
                 <span className="text-xs text-muted-foreground">
                   {failedCount > 0
-                    ? `${failedCount} failed`
-                    : `${degradedCount} warning${degradedCount === 1 ? "" : "s"}`}
+                    ? t("systemHealth.failedCount", {
+                        defaultValue: "{{count}} failed",
+                        count: failedCount,
+                      })
+                    : degradedCount === 1
+                      ? t("systemHealth.warningCountOne", {
+                          defaultValue: "{{count}} warning",
+                          count: degradedCount,
+                        })
+                      : t("systemHealth.warningCountOther", {
+                          defaultValue: "{{count}} warnings",
+                          count: degradedCount,
+                        })}
                 </span>
               )}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {channelEntries.map(([name, ch]) => (
-                <span
-                  key={name}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs"
-                >
+              {channelEntries.map(([name, ch]) => {
+                const meta = getChannelStatusMeta(ch, ch.enabled, t);
+                return (
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${channelDotClass(ch)}`}
-                  />
-                  {name}
-                </span>
-              ))}
+                    key={name}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-xs"
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${meta.dotClass}`}
+                    />
+                    {name}
+                  </span>
+                );
+              })}
             </div>
             {attentionPreview.length > 0 && (
               <div className="mt-3 rounded-lg border border-amber-200/70 bg-amber-500/[0.05] p-3 dark:border-amber-500/20 dark:bg-amber-500/10">

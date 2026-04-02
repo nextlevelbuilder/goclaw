@@ -20,13 +20,33 @@
   },
   "status": {
     "running": "运行中",
-    "stopped": "已停止"
+    "stopped": "已停止",
+    "checking": "检查中",
+    "degraded": "降级",
+    "starting": "启动中",
+    "registered": "已配置",
+    "failed": "失败"
   },
   "enabled": "已启用",
   "disabled": "已禁用",
   "actions": {
     "reauthenticate": "重新认证",
-    "authenticate": "认证以启动Channel"
+    "authenticate": "认证以启动Channel",
+    "reauthShort": "重新认证",
+    "openCredentials": "打开凭据",
+    "openAdvanced": "打开高级设置",
+    "inspect": "查看问题"
+  },
+  "list": {
+    "failureStreak": "连续 {{count}} 次失败",
+    "openChannelDetail": "打开 Channel 详情查看最新诊断",
+    "nextStep": "下一步"
+  },
+  "failureKind": {
+    "auth": "认证",
+    "config": "配置",
+    "network": "网络",
+    "unknown": "需关注"
   },
   "delete": {
     "title": "删除Channel实例",
@@ -74,6 +94,7 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "checkedRelative": "最近检查：{{value}}",
     "advanced": "高级设置",
     "advancedTitle": "高级配置",
     "policies": "策略",
@@ -88,6 +109,10 @@
     "behaviorDesc": "响应行为配置",
     "accessControl": "访问控制",
     "accessControlDesc": "用户访问限制",
+    "reviewDiagnostics": "在更改设置前，请先查看此 Channel 的最新诊断。",
+    "whatHappened": "发生了什么",
+    "recommendedAction": "建议操作",
+    "technicalDetail": "技术细节",
     "tabs": {
       "general": "基本信息",
       "config": "配置",
@@ -130,6 +155,16 @@
       "saved": "已保存",
       "saveGroups": "保存群组",
       "saving": "保存中..."
+    },
+    "timeline": {
+      "title": "时间线",
+      "firstFailed": "首次失败",
+      "lastChecked": "最近检查",
+      "failures": "失败次数",
+      "failureStreak": "连续 {{count}} 次",
+      "failureTotal": "共 {{count}} 次",
+      "lastHealthy": "最近健康",
+      "noData": "尚无最近的 Channel 检查记录。"
     },
     "managers": {
       "description": "管理群组聊天中具有管理员权限的用户。",
@@ -297,6 +332,16 @@
       "createLabel": "创建并认证",
       "formBanner": "创建后，您将通过二维码进行认证并配置允许的用户。"
     }
+  },
+  "fallback": {
+    "authRequiredSummary": "需要认证",
+    "authRequiredDetail": "该 Channel 已启用，但需要先登录才能连接。",
+    "authRequiredHeadline": "重新连接 Channel 会话",
+    "authRequiredHint": "请重新认证此 Channel，以恢复当前会话。",
+    "missingCredentialsSummary": "缺少凭据",
+    "missingCredentialsDetail": "该 Channel 已启用，但必填凭据不完整。",
+    "missingCredentialsHeadline": "补全必填凭据",
+    "missingCredentialsHint": "打开凭据设置，补全缺失或无效的字段。"
   },
   "scopes": {
     "title": "所需API权限",

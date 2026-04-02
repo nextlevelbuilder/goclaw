@@ -31,6 +31,22 @@ interface ChannelDetailPageProps {
   onDelete?: (instance: { id: string; name: string }) => void;
 }
 
+const DEFAULT_CHANNEL_DETAIL_TAB = "general";
+const baseChannelDetailTabs = new Set(["general", "credentials", "managers"]);
+
+export function resolveChannelDetailTab(
+  requestedTab: string | null,
+  isTelegram: boolean,
+) {
+  if (!requestedTab) return DEFAULT_CHANNEL_DETAIL_TAB;
+  if (requestedTab === "groups") {
+    return isTelegram ? "groups" : DEFAULT_CHANNEL_DETAIL_TAB;
+  }
+  return baseChannelDetailTabs.has(requestedTab)
+    ? requestedTab
+    : DEFAULT_CHANNEL_DETAIL_TAB;
+}
+
 export function ChannelDetailPage({
   instanceId,
   onBack,
@@ -75,10 +91,7 @@ export function ChannelDetailPage({
 
   useEffect(() => {
     if (!instance) return;
-    const requestedTab = searchParams.get("tab");
-    if (!requestedTab) return;
-    if (requestedTab === "groups" && !isTelegram) return;
-    setActiveTab(requestedTab);
+    setActiveTab(resolveChannelDetailTab(searchParams.get("tab"), isTelegram));
   }, [instance, isTelegram, searchParams]);
 
   useEffect(() => {

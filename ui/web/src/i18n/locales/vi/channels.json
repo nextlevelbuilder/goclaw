@@ -20,13 +20,33 @@
   },
   "status": {
     "running": "Đang chạy",
-    "stopped": "Đã dừng"
+    "stopped": "Đã dừng",
+    "checking": "Đang kiểm tra",
+    "degraded": "Suy giảm",
+    "starting": "Đang khởi động",
+    "registered": "Đã cấu hình",
+    "failed": "Thất bại"
   },
   "enabled": "Đã bật",
   "disabled": "Đã tắt",
   "actions": {
     "reauthenticate": "Xác thực lại",
-    "authenticate": "Xác thực để khởi động channel"
+    "authenticate": "Xác thực để khởi động channel",
+    "reauthShort": "Xác thực lại",
+    "openCredentials": "Mở thông tin xác thực",
+    "openAdvanced": "Mở nâng cao",
+    "inspect": "Xem sự cố"
+  },
+  "list": {
+    "failureStreak": "{{count}} lỗi liên tiếp",
+    "openChannelDetail": "Mở chi tiết channel để xem chẩn đoán mới nhất",
+    "nextStep": "Bước tiếp theo"
+  },
+  "failureKind": {
+    "auth": "Xác thực",
+    "config": "Cấu hình",
+    "network": "Mạng",
+    "unknown": "Cần chú ý"
   },
   "delete": {
     "title": "Xóa phiên bản channel",
@@ -74,6 +94,7 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "checkedRelative": "Đã kiểm tra {{value}}",
     "advanced": "Nâng cao",
     "advancedTitle": "Cài đặt nâng cao",
     "policies": "Chính sách",
@@ -88,6 +109,10 @@
     "behaviorDesc": "Cấu hình hành vi phản hồi",
     "accessControl": "Kiểm soát truy cập",
     "accessControlDesc": "Giới hạn truy cập người dùng",
+    "reviewDiagnostics": "Xem chẩn đoán mới nhất của channel này trước khi thay đổi cài đặt.",
+    "whatHappened": "Điều gì đã xảy ra",
+    "recommendedAction": "Hành động được khuyến nghị",
+    "technicalDetail": "Chi tiết kỹ thuật",
     "tabs": {
       "general": "Chung",
       "config": "Cấu hình",
@@ -130,6 +155,16 @@
       "saved": "Đã lưu",
       "saveGroups": "Lưu nhóm",
       "saving": "Đang lưu..."
+    },
+    "timeline": {
+      "title": "Dòng thời gian",
+      "firstFailed": "Lỗi đầu tiên",
+      "lastChecked": "Kiểm tra gần nhất",
+      "failures": "Lỗi",
+      "failureStreak": "{{count}} lần liên tiếp",
+      "failureTotal": "Tổng cộng {{count}}",
+      "lastHealthy": "Hoạt động tốt gần nhất",
+      "noData": "Chưa có lần kiểm tra channel nào gần đây."
     },
     "managers": {
       "description": "Quản lý người dùng có quyền quản lý trong cuộc trò chuyện nhóm.",
@@ -297,6 +332,16 @@
       "createLabel": "Tạo & Xác thực",
       "formBanner": "Sau khi tạo, bạn sẽ xác thực bằng mã QR và cấu hình người dùng được phép."
     }
+  },
+  "fallback": {
+    "authRequiredSummary": "Cần xác thực",
+    "authRequiredDetail": "Channel đã được bật nhưng cần đăng nhập trước khi có thể kết nối.",
+    "authRequiredHeadline": "Kết nối lại phiên channel",
+    "authRequiredHint": "Xác thực lại channel này để khôi phục phiên hiện tại.",
+    "missingCredentialsSummary": "Thiếu thông tin xác thực",
+    "missingCredentialsDetail": "Channel đã được bật nhưng thiếu thông tin xác thực bắt buộc.",
+    "missingCredentialsHeadline": "Điền thông tin xác thực bắt buộc",
+    "missingCredentialsHint": "Mở phần thông tin xác thực và điền các giá trị còn thiếu hoặc không hợp lệ cho channel này."
   },
   "scopes": {
     "title": "Quyền API cần thiết",

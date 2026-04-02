@@ -1,5 +1,6 @@
 import { Radio, RefreshCw } from "lucide-react";
 import type { TFunction } from "i18next";
+import i18next from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,11 @@ export interface ChannelRemediationMeta {
 
 export { channelTypeLabels };
 
+function translateChannelText(key: string, defaultValue: string) {
+  const value = i18next.t(`channels:${key}`, { defaultValue });
+  return typeof value === "string" && value.length > 0 ? value : defaultValue;
+}
+
 function getRelativeUnit(diffSeconds: number) {
   const abs = Math.abs(diffSeconds);
   if (abs < 60) return { value: Math.round(diffSeconds), unit: "second" as const };
@@ -65,7 +71,8 @@ export function formatRelativeTime(value?: string) {
   if (date.getUTCFullYear() <= 1) return null;
   const diffSeconds = (date.getTime() - Date.now()) / 1000;
   const { value: relativeValue, unit } = getRelativeUnit(diffSeconds);
-  return new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(
+  const language = i18next.resolvedLanguage || i18next.language || undefined;
+  return new Intl.RelativeTimeFormat(language, { numeric: "auto" }).format(
     relativeValue,
     unit,
   );
@@ -81,18 +88,60 @@ export function getChannelStatusFallback(
     return null;
   }
 
+  if (instance.channel_type === "zalo_personal") {
+    return {
+      enabled: true,
+      running: false,
+      state: "failed",
+      summary: translateChannelText(
+        "fallback.authRequiredSummary",
+        "Authentication required",
+      ),
+      detail: translateChannelText(
+        "fallback.authRequiredDetail",
+        "Channel instance is enabled but requires sign-in before it can connect.",
+      ),
+      failure_kind: "auth",
+      retryable: false,
+      remediation: {
+        code: "reauth",
+        headline: translateChannelText(
+          "fallback.authRequiredHeadline",
+          "Reconnect the channel session",
+        ),
+        hint: translateChannelText(
+          "fallback.authRequiredHint",
+          "Authenticate this channel again to restore the current session.",
+        ),
+        target: "reauth",
+      },
+    };
+  }
+
   return {
     enabled: true,
     running: false,
     state: "failed",
-    summary: "Missing credentials",
-    detail: "Channel instance is enabled but required credentials are incomplete.",
+    summary: translateChannelText(
+      "fallback.missingCredentialsSummary",
+      "Missing credentials",
+    ),
+    detail: translateChannelText(
+      "fallback.missingCredentialsDetail",
+      "Channel instance is enabled but required credentials are incomplete.",
+    ),
     failure_kind: "config",
     retryable: false,
     remediation: {
       code: "open_credentials",
-      headline: "Complete required credentials",
-      hint: "Open credentials and fill the missing or invalid values for this channel.",
+      headline: translateChannelText(
+        "fallback.missingCredentialsHeadline",
+        "Complete required credentials",
+      ),
+      hint: translateChannelText(
+        "fallback.missingCredentialsHint",
+        "Open credentials and fill the missing or invalid values for this channel.",
+      ),
       target: "credentials",
     },
   };
@@ -145,6 +194,7 @@ export function getChannelAttentionPriority(
   enabled = true,
 ) {
   if (!enabled) return 0;
+  if (!status) return 0;
   switch (status?.state) {
     case "failed":
       return 5;
@@ -173,6 +223,17 @@ export function getChannelStatusMeta(
       dotClass: "bg-muted-foreground/40",
       badgeVariant: "secondary",
       label: t("disabled", { defaultValue: "Disabled" }),
+      surfaceClass: "border-border bg-card",
+      priority: 0,
+      attention: false,
+    };
+  }
+
+  if (!status) {
+    return {
+      dotClass: "bg-slate-300 dark:bg-slate-600",
+      badgeVariant: "secondary",
+      label: t("status.checking", { defaultValue: "Checking" }),
       surfaceClass: "border-border bg-card",
       priority: 0,
       attention: false,

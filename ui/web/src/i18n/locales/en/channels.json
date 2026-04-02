@@ -21,6 +21,7 @@
   "status": {
     "running": "Running",
     "stopped": "Stopped",
+    "checking": "Checking",
     "degraded": "Degraded",
     "starting": "Starting",
     "registered": "Configured",
@@ -30,7 +31,22 @@
   "disabled": "Disabled",
   "actions": {
     "reauthenticate": "Re-authenticate",
-    "authenticate": "Authenticate to start channel"
+    "authenticate": "Authenticate to start channel",
+    "reauthShort": "Re-auth",
+    "openCredentials": "Open credentials",
+    "openAdvanced": "Open advanced",
+    "inspect": "Inspect issue"
+  },
+  "list": {
+    "failureStreak": "{{count}} failures in a row",
+    "openChannelDetail": "Open channel detail for the latest diagnosis",
+    "nextStep": "Next step"
+  },
+  "failureKind": {
+    "auth": "Auth",
+    "config": "Config",
+    "network": "Network",
+    "unknown": "Attention"
   },
   "delete": {
     "title": "Delete Channel Instance",
@@ -79,6 +95,7 @@
   "detail": {
     "agent": "Agent: {{name}}",
     "lastChecked": "Last checked: {{value}}",
+    "checkedRelative": "Checked {{value}}",
     "advanced": "Advanced",
     "advancedTitle": "Advanced Settings",
     "policies": "Policies",
@@ -93,6 +110,10 @@
     "behaviorDesc": "Response behavior configuration",
     "accessControl": "Access Control",
     "accessControlDesc": "User access restrictions",
+    "reviewDiagnostics": "Review the latest diagnosis in this channel before changing settings.",
+    "whatHappened": "What happened",
+    "recommendedAction": "Recommended action",
+    "technicalDetail": "Technical detail",
     "tabs": {
       "general": "General",
       "config": "Config",
@@ -135,6 +156,16 @@
       "saved": "Saved",
       "saveGroups": "Save Groups",
       "saving": "Saving..."
+    },
+    "timeline": {
+      "title": "Timeline",
+      "firstFailed": "First failed",
+      "lastChecked": "Last checked",
+      "failures": "Failures",
+      "failureStreak": "{{count}} in a row",
+      "failureTotal": "{{count}} total",
+      "lastHealthy": "Last healthy",
+      "noData": "No recent channel checks recorded yet."
     },
     "managers": {
       "description": "Manage which users have manager permissions in group chats.",
@@ -386,6 +417,16 @@
       "createLabel": "Create & Authenticate",
       "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
     }
+  },
+  "fallback": {
+    "authRequiredSummary": "Authentication required",
+    "authRequiredDetail": "Channel instance is enabled but requires sign-in before it can connect.",
+    "authRequiredHeadline": "Reconnect the channel session",
+    "authRequiredHint": "Authenticate this channel again to restore the current session.",
+    "missingCredentialsSummary": "Missing credentials",
+    "missingCredentialsDetail": "Channel instance is enabled but required credentials are incomplete.",
+    "missingCredentialsHeadline": "Complete required credentials",
+    "missingCredentialsHint": "Open credentials and fill the missing or invalid values for this channel."
   },
   "scopes": {
     "title": "Required API Permissions",

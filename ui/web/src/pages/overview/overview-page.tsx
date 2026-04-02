@@ -42,6 +42,7 @@ const UsagePage = lazy(() =>
 );
 
 const REFRESH_INTERVAL = 30_000;
+const MAX_OVERVIEW_CHANNEL_INSTANCES = 200;
 
 export function OverviewPage() {
   const { t } = useTranslation("overview");
@@ -60,8 +61,8 @@ export function OverviewPage() {
   const { providers, loading: providersLoading } = useProviders();
   const { runtimes } = useRuntimes();
   const { traces } = useTraces({ limit: 8 });
-  const { instances: channelInstances } = useChannelInstances({
-    limit: 100,
+  const { instances: channelInstances, total: channelInstanceTotal } = useChannelInstances({
+    limit: MAX_OVERVIEW_CHANNEL_INSTANCES,
     offset: 0,
   });
 
@@ -99,21 +100,31 @@ export function OverviewPage() {
   const runningAgents = agents.filter((a) => a.isRunning).length;
   const agentTotal = status?.agentTotal ?? agents.length;
   const channelStatusMap = channelStatusData?.channels ?? {};
+  const canSynthesizeOverviewFallbacks =
+    channelInstanceTotal > 0 &&
+    channelInstanceTotal <= MAX_OVERVIEW_CHANNEL_INSTANCES &&
+    channelInstances.length >= channelInstanceTotal;
   const channelEntries = (() => {
     const combined = new Map(Object.entries(channelStatusMap));
-    for (const instance of channelInstances) {
-      if (combined.has(instance.name)) continue;
-      const fallback = getChannelStatusFallback(instance);
-      if (fallback) {
-        combined.set(instance.name, fallback);
+    if (canSynthesizeOverviewFallbacks) {
+      for (const instance of channelInstances) {
+        if (combined.has(instance.name)) continue;
+        const fallback = getChannelStatusFallback(instance);
+        if (fallback) {
+          combined.set(instance.name, fallback);
+        }
       }
     }
     return [...combined.entries()];
   })();
+  const totalChannelCount = Math.max(channelEntries.length, channelInstanceTotal);
   const channelsOnline = channelEntries.filter(([, c]) => c.running).length;
   const channelsNeedingAttention = channelEntries.filter(
     ([, c]) => getChannelAttentionPriority(c, c.enabled) > 0,
   ).length;
+  const overviewAttentionCount = canSynthesizeOverviewFallbacks
+    ? channelsNeedingAttention
+    : null;
   const enabledProviders = providers.filter((p) => p.enabled);
   const clientList = health?.clients ?? [];
 
@@ -227,16 +238,16 @@ export function OverviewPage() {
               icon={Radio}
               label={t("statCards.channels")}
               value={
-                channelEntries.length > 0
-                  ? `${channelsOnline} / ${channelEntries.length}`
+                totalChannelCount > 0
+                  ? `${channelsOnline} / ${totalChannelCount}`
                   : "0"
               }
               sub={
-                channelEntries.length > 0
-                  ? channelsNeedingAttention > 0
+                totalChannelCount > 0
+                  ? overviewAttentionCount && overviewAttentionCount > 0
                     ? t("statCards.channelsAttention", {
                         defaultValue: "{{count}} need attention",
-                        count: channelsNeedingAttention,
+                        count: overviewAttentionCount,
                       })
                     : t("statCards.online")
                   : undefined
