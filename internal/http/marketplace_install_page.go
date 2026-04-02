@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -22,14 +23,16 @@ type MarketplaceInstallHandler struct {
 	marketplaceAPIKey string // GOCLAW_MARKETPLACE_API_KEY — used to verify signatures
 	gatewayToken      string // for authenticating local /v1/teams/import calls
 	localAPIPort      int
+	db                *sql.DB
 }
 
 // NewMarketplaceInstallHandler creates a new marketplace install page handler.
-func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localAPIPort int) *MarketplaceInstallHandler {
+func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localAPIPort int, db *sql.DB) *MarketplaceInstallHandler {
 	return &MarketplaceInstallHandler{
 		marketplaceAPIKey: marketplaceAPIKey,
 		gatewayToken:      gatewayToken,
 		localAPIPort:      localAPIPort,
+		db:                db,
 	}
 }
 
@@ -49,7 +52,10 @@ func (h *MarketplaceInstallHandler) handleConfirmPage(w http.ResponseWriter, r *
 	}
 
 	agents := strings.Split(params["agents"], ",")
-	h.renderConfirm(w, params, agents)
+
+	// Check if already installed
+	existingTeam := h.findInstalledTeam(params["slug"])
+	h.renderConfirm(w, params, agents, existingTeam)
 }
 
 // handleDoInstall downloads the bundle and imports it.
@@ -159,6 +165,16 @@ func (h *MarketplaceInstallHandler) importLocally(bundlePath string) (string, er
 	return string(respBody), nil
 }
 
+// findInstalledTeam checks if a team with this hub_slug is already installed.
+func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
+	if h.db == nil || slug == "" {
+		return ""
+	}
+	var name string
+	h.db.QueryRow(`SELECT name FROM agent_teams WHERE settings::text LIKE '%' || $1 || '%' LIMIT 1`, slug).Scan(&name)
+	return name
+}
+
 func (h *MarketplaceInstallHandler) extractParams(r *http.Request) map[string]string {
 	params := make(map[string]string)
 	for _, key := range []string{"slug", "title", "agents", "bundle_url", "registry_key", "sig"} {
@@ -211,18 +227,25 @@ func (h *MarketplaceInstallHandler) verifySignature(params map[string]string) er
 	return nil
 }
 
-func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params map[string]string, agents []string) {
+func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params map[string]string, agents []string, existingTeam string) {
 	title := params["title"]
 	slug := params["slug"]
 	var agentList strings.Builder
 	for _, a := range agents {
 		a = strings.TrimSpace(a)
 		if a != "" {
-			agentList.WriteString(fmt.Sprintf(`<li style="padding:4px 0">🤖 %s</li>`, a))
+			agentList.WriteString(fmt.Sprintf(`<li style="padding:4px 0">&#8226; %s</li>`, a))
 		}
 	}
 
-	html := fmt.Sprintf(`<!DOCTYPE html>
+	warningHTML := ""
+	buttonLabel := "Install Team"
+	if existingTeam != "" {
+		warningHTML = fmt.Sprintf(`<div style="padding:12px 16px;background:#c9834220;border:1px solid #c9834240;border-radius:8px;margin-bottom:16px;font-size:13px;color:#c98342"><strong>"%s"</strong> is already installed. This will re-import and update it.</div>`, existingTeam)
+		buttonLabel = "Update Team"
+	}
+
+	tmpl := `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -250,6 +273,7 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
     <span class="badge">From GoClaw Hub Marketplace</span>
     <h1>Install "%s"?</h1>
     <p class="subtitle">This will add %d agent(s) to your GoClaw instance.</p>
+    %s
     <ul class="agents">%s</ul>
     <div class="actions">
       <form method="POST" action="/marketplace/install" style="flex:1;display:flex">
@@ -259,19 +283,21 @@ func (h *MarketplaceInstallHandler) renderConfirm(w http.ResponseWriter, params 
         <input type="hidden" name="bundle_url" value="%s">
         <input type="hidden" name="registry_key" value="%s">
         <input type="hidden" name="sig" value="%s">
-        <button type="submit" class="btn btn-primary" style="flex:1">Install Team</button>
+        <button type="submit" class="btn btn-primary" style="flex:1">%s</button>
       </form>
       <a href="javascript:window.close()" class="btn btn-secondary">Cancel</a>
     </div>
     <p class="from">Verify this is from a trusted Hub before installing.</p>
   </div>
 </body>
-</html>`,
-		title, title, len(agents), agentList.String(),
+</html>`
+	html := fmt.Sprintf(tmpl,
+		title, title, len(agents), warningHTML, agentList.String(),
 		slug, title, strings.Join(agents, ","),
 		params["bundle_url"],
 		params["registry_key"],
-		params["sig"])
+		params["sig"],
+		buttonLabel)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

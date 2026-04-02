@@ -435,7 +435,7 @@ func runGateway() {
 			toolsReg.Register(tools.NewMarketplaceCheckUpdatesTool(mktClient, pgStores.DB))
 
 			// Install page handler
-			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort))
+			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort, pgStores.DB))
 
 			slog.Info("marketplace tools enabled", "api_base", apiBase, "auto_import", cfg.Gateway.Token != "")
 		}
