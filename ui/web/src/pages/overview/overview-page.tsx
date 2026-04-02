@@ -31,6 +31,11 @@ import { CronJobsCard } from "./cron-jobs-card";
 import { RecentRequestsCard } from "./recent-requests-card";
 import { QuotaUsageCard } from "./quota-usage-card";
 import { useRuntimes } from "@/pages/skills/hooks/use-runtimes";
+import {
+  getChannelAttentionPriority,
+  getChannelStatusFallback,
+} from "@/pages/channels/channels-status-view";
+import { useChannelInstances } from "@/pages/channels/hooks/use-channel-instances";
 
 const UsagePage = lazy(() =>
   import("@/pages/usage/usage-page").then((m) => ({ default: m.UsagePage })),
@@ -55,6 +60,10 @@ export function OverviewPage() {
   const { providers, loading: providersLoading } = useProviders();
   const { runtimes } = useRuntimes();
   const { traces } = useTraces({ limit: 8 });
+  const { instances: channelInstances } = useChannelInstances({
+    limit: 100,
+    offset: 0,
+  });
 
   const hasNoProviders = !providersLoading && providers.length === 0;
   const hasNoEnabledProviders =
@@ -89,10 +98,22 @@ export function OverviewPage() {
   const agents = status?.agents ?? [];
   const runningAgents = agents.filter((a) => a.isRunning).length;
   const agentTotal = status?.agentTotal ?? agents.length;
-  const channelEntries = channelStatusData?.channels
-    ? Object.entries(channelStatusData.channels)
-    : [];
+  const channelStatusMap = channelStatusData?.channels ?? {};
+  const channelEntries = (() => {
+    const combined = new Map(Object.entries(channelStatusMap));
+    for (const instance of channelInstances) {
+      if (combined.has(instance.name)) continue;
+      const fallback = getChannelStatusFallback(instance);
+      if (fallback) {
+        combined.set(instance.name, fallback);
+      }
+    }
+    return [...combined.entries()];
+  })();
   const channelsOnline = channelEntries.filter(([, c]) => c.running).length;
+  const channelsNeedingAttention = channelEntries.filter(
+    ([, c]) => getChannelAttentionPriority(c, c.enabled) > 0,
+  ).length;
   const enabledProviders = providers.filter((p) => p.enabled);
   const clientList = health?.clients ?? [];
 
@@ -210,7 +231,16 @@ export function OverviewPage() {
                   ? `${channelsOnline} / ${channelEntries.length}`
                   : "0"
               }
-              sub={channelEntries.length > 0 ? t("statCards.online") : undefined}
+              sub={
+                channelEntries.length > 0
+                  ? channelsNeedingAttention > 0
+                    ? t("statCards.channelsAttention", {
+                        defaultValue: "{{count}} need attention",
+                        count: channelsNeedingAttention,
+                      })
+                    : t("statCards.online")
+                  : undefined
+              }
             />
           </div>
 

@@ -41,6 +41,16 @@ export interface ChannelStatus {
   retryable?: boolean;
   checked_at?: string;
   failure_count?: number;
+  consecutive_failures?: number;
+  first_failed_at?: string;
+  last_failed_at?: string;
+  last_healthy_at?: string;
+  remediation?: {
+    code: "reauth" | "open_credentials" | "open_advanced" | "check_network";
+    headline: string;
+    hint?: string;
+    target?: "credentials" | "advanced" | "reauth" | "details";
+  };
 }
 
 // Pending pairing request from WS device.pair.list
