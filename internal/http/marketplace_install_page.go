@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -21,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 )
 
 // MarketplaceInstallHandler serves the install confirmation page for Hub marketplace.
@@ -46,8 +49,9 @@ func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localA
 
 // RegisterRoutes registers marketplace install routes on the mux.
 func (h *MarketplaceInstallHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)   // Public — just shows confirmation
-	mux.HandleFunc("POST /marketplace/install", h.handleDoInstall) // Auth checked via gateway token in form
+	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)                         // Shows confirmation (with JS auth check)
+	mux.HandleFunc("POST /marketplace/install", h.handleDoInstall)                          // Form-based install (one-time token + admin token)
+	mux.HandleFunc("POST /v1/marketplace/install", requireAuth(permissions.RoleAdmin, h.handleAPIInstall)) // API-based install (Bearer auth)
 }
 
 // handleConfirmPage shows the install confirmation page.
@@ -84,10 +88,14 @@ func (h *MarketplaceInstallHandler) handleDoInstall(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Verify admin authorization via gateway token
+	// Verify admin authorization via Bearer token or form token
 	adminToken := r.FormValue("admin_token")
+	if adminToken == "" {
+		// Try Authorization header (from JS fetch)
+		adminToken = extractBearerToken(r)
+	}
 	if h.gatewayToken != "" && adminToken != h.gatewayToken {
-		h.renderError(w, "Unauthorized", "Invalid admin token. Enter your GoClaw gateway token to authorize the install.", http.StatusForbidden)
+		h.renderError(w, "Unauthorized", "You must be logged in as admin to install teams.", http.StatusForbidden)
 		return
 	}
 
@@ -204,6 +212,89 @@ func (h *MarketplaceInstallHandler) importLocally(bundlePath string) (string, er
 	}
 
 	return string(respBody), nil
+}
+
+// handleAPIInstall handles POST /v1/marketplace/install — authenticated via Bearer token.
+// Called from the web UI (React SPA) which has the auth token.
+func (h *MarketplaceInstallHandler) handleAPIInstall(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Slug      string `json:"slug"`
+		BundleURL string `json:"bundle_url"`
+		Sig       string `json:"sig"`
+		Ts        string `json:"ts"`
+		Title     string `json:"title"`
+		Agents    string `json:"agents"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	params := map[string]string{
+		"slug": req.Slug, "bundle_url": req.BundleURL,
+		"sig": req.Sig, "ts": req.Ts,
+		"title": req.Title, "agents": req.Agents,
+	}
+
+	if err := h.verifySignature(params); err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid or expired install link"})
+		return
+	}
+
+	if req.BundleURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing bundle_url"})
+		return
+	}
+
+	if err := validateExternalURL(req.BundleURL); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Download bundle
+	dlReq, err := http.NewRequest("GET", req.BundleURL, nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create download request"})
+		return
+	}
+	dlReq.Header.Set("X-Registry-Key", h.marketplaceAPIKey)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	dlResp, err := client.Do(dlReq)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("download failed: %v", err)})
+		return
+	}
+	defer dlResp.Body.Close()
+
+	if dlResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(dlResp.Body)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("hub returned %d: %s", dlResp.StatusCode, string(body))})
+		return
+	}
+
+	tmpFile, err := os.CreateTemp("", "marketplace-*.tar.gz")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create temp file"})
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := io.Copy(tmpFile, io.LimitReader(dlResp.Body, 100*1024*1024)); err != nil {
+		tmpFile.Close()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save bundle"})
+		return
+	}
+	tmpFile.Close()
+
+	result, err := h.importLocally(tmpFile.Name())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "installed", "result": result})
 }
 
 // findInstalledTeam checks if a team with this hub_slug is already installed.
@@ -410,15 +501,63 @@ var confirmTmpl = template.Must(template.New("confirm").Parse(`<!DOCTYPE html>
         <input type="hidden" name="sig" value="{{.Sig}}">
         <input type="hidden" name="ts" value="{{.Ts}}">
         <input type="hidden" name="install_token" value="{{.InstallToken}}">
-        <div style="margin-bottom:12px">
-          <label style="display:block;color:#8b8c96;font-size:12px;margin-bottom:4px">Gateway Token (admin authorization)</label>
-          <input type="password" name="admin_token" required placeholder="Enter your GoClaw gateway token" style="width:100%;padding:8px 12px;background:#12131a;border:1px solid #2a2b35;border-radius:6px;color:#e1e1e6;font-size:13px;outline:none">
-        </div>
-        <button type="submit" class="btn btn-primary" style="flex:1">{{.ButtonLabel}}</button>
+        <input type="hidden" name="admin_token" id="admin_token" value="">
+        <button type="button" class="btn btn-primary" style="flex:1" id="install-btn" disabled>Checking login...</button>
       </form>
       <a href="javascript:window.close()" class="btn btn-secondary">Cancel</a>
     </div>
-    <p class="from">Verify this is from a trusted Hub before installing.</p>
+    <p class="from" id="auth-status"></p>
+    <script>
+    (function() {
+      var btn = document.getElementById('install-btn');
+      var status = document.getElementById('auth-status');
+      var token = localStorage.getItem('goclaw:token') || '';
+
+      if (token) {
+        btn.disabled = false;
+        btn.textContent = '{{.ButtonLabel}}';
+        status.textContent = 'Logged in as admin. Verify this is from a trusted Hub.';
+        status.style.color = '#4ade80';
+
+        btn.onclick = function() {
+          btn.disabled = true;
+          btn.textContent = 'Installing...';
+          fetch('/v1/marketplace/install', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({
+              slug: '{{.Slug}}',
+              title: '{{.Title}}',
+              agents: '{{.Agents}}',
+              bundle_url: '{{.BundleURL}}',
+              sig: '{{.Sig}}',
+              ts: '{{.Ts}}'
+            })
+          }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.error) {
+              btn.textContent = 'Failed';
+              status.textContent = data.error;
+              status.style.color = '#f87171';
+            } else {
+              document.body.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px"><div style="background:#1a1b23;border:1px solid #2a2b35;border-radius:16px;padding:32px;max-width:480px;width:100%;text-align:center"><div style="font-size:48px;margin-bottom:16px">&#10003;</div><h1 style="font-size:20px;color:#4ade80;margin-bottom:8px">{{.Title}} Installed!</h1><pre style="color:#8b8c96;font-size:13px;margin:16px 0;padding:12px;background:#12131a;border-radius:8px;text-align:left;white-space:pre-wrap">' + data.result + '</pre><a href="/" style="display:inline-block;padding:10px 24px;border-radius:8px;background:#c98342;color:#fff;text-decoration:none;font-size:14px;font-weight:600;margin-top:16px">Go to Dashboard</a></div></div>';
+            }
+          }).catch(function(e) {
+            btn.textContent = 'Failed';
+            status.textContent = 'Network error: ' + e.message;
+            status.style.color = '#f87171';
+          });
+        };
+      } else {
+        btn.disabled = true;
+        btn.textContent = 'Login Required';
+        status.innerHTML = 'Open <a href="/" target="_blank" style="color:#c98342">GoClaw admin panel</a> and log in first, then refresh this page.';
+        status.style.color = '#f87171';
+      }
+    })();
+    </script>
   </div>
 </body>
 </html>`))
