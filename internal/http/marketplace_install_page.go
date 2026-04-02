@@ -49,9 +49,8 @@ func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localA
 
 // RegisterRoutes registers marketplace install routes on the mux.
 func (h *MarketplaceInstallHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)                         // Shows confirmation (with JS auth check)
-	mux.HandleFunc("POST /marketplace/install", h.handleDoInstall)                          // Form-based install (one-time token + admin token)
-	mux.HandleFunc("POST /v1/marketplace/install", requireAuth(permissions.RoleAdmin, h.handleAPIInstall)) // API-based install (Bearer auth)
+	mux.HandleFunc("GET /marketplace/install", h.handleConfirmPage)                                         // Shows confirmation page (JS checks auth via localStorage)
+	mux.HandleFunc("POST /v1/marketplace/install", requireAuth(permissions.RoleAdmin, h.handleAPIInstall)) // Install API (Bearer auth required)
 }
 
 // handleConfirmPage shows the install confirmation page.
