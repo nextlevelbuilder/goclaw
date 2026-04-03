@@ -237,10 +237,18 @@ func normalizeOllamaAPIBase(p *store.LLMProviderData) {
 	}
 }
 
+// localProviderTypes are provider types that legitimately run on localhost
+// (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
+var localProviderTypes = map[string]bool{
+	store.ProviderOllama:    true,
+	store.ProviderClaudeCLI: true,
+	store.ProviderACP:       true,
+}
+
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
 func validateProviderURL(rawURL string, providerType string) error {
-	if rawURL == "" || providerType == store.ProviderACP {
+	if rawURL == "" || localProviderTypes[providerType] {
 		return nil
 	}
 	u, err := url.Parse(rawURL)
