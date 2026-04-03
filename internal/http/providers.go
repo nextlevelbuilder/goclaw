@@ -76,14 +76,22 @@ func (h *ProvidersHandler) SetAgentStore(as store.AgentCRUDStore) {
 }
 
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
+// For Ollama providers it also applies a safety-net normalization: if the stored value
+// is missing the /v1 suffix (i.e. a record created before write-time normalization was
+// added), the suffix is appended so all downstream call sites receive a ready-to-use URL.
 func (h *ProvidersHandler) resolveAPIBase(p *store.LLMProviderData) string {
+	base := ""
 	if p.APIBase != "" {
-		return p.APIBase
+		base = p.APIBase
+	} else if h.apiBaseFallback != nil {
+		base = h.apiBaseFallback(p.ProviderType)
 	}
-	if h.apiBaseFallback != nil {
-		return h.apiBaseFallback(p.ProviderType)
+	// Safety net: normalize Ollama URLs missing /v1 (pre-existing DB records written
+	// before write-time normalization was introduced in normalizeOllamaAPIBase).
+	if base != "" && p.ProviderType == store.ProviderOllama && !strings.HasSuffix(strings.TrimRight(base, "/"), "/v1") {
+		base = strings.TrimRight(base, "/") + "/v1"
 	}
-	return ""
+	return base
 }
 
 // emitProviderCacheInvalidate broadcasts a provider cache invalidation event.

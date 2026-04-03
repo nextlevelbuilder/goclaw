@@ -284,12 +284,14 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			continue
 		}
 		// Local Ollama requires no API key — handle before the key guard (same pattern as ClaudeCLI).
+		// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
+		// Default also includes /v1 to match the write-time normalization invariant.
 		if p.ProviderType == store.ProviderOllama {
 			host := p.APIBase
 			if host == "" {
-				host = "http://localhost:11434"
+				host = "http://localhost:11434/v1"
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host+"/v1"), "llama3.3"))
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}
