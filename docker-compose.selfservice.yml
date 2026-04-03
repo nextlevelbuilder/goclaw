@@ -24,3 +24,4 @@ services:
     depends_on:
       - goclaw
     restart: unless-stopped
+    stop_signal: SIGTERM
