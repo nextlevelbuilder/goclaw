@@ -204,10 +204,14 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 
 		delta := chunk.Choices[0].Delta
-		if delta.ReasoningContent != "" {
-			result.Thinking += delta.ReasoningContent
+		reasoning := delta.ReasoningContent
+		if reasoning == "" {
+			reasoning = delta.Reasoning
+		}
+		if reasoning != "" {
+			result.Thinking += reasoning
 			if onChunk != nil {
-				onChunk(StreamChunk{Thinking: delta.ReasoningContent})
+				onChunk(StreamChunk{Thinking: reasoning})
 			}
 		}
 		if delta.Content != "" {
@@ -494,6 +498,9 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 		msg := resp.Choices[0].Message
 		result.Content = msg.Content
 		result.Thinking = msg.ReasoningContent
+		if result.Thinking == "" {
+			result.Thinking = msg.Reasoning
+		}
 		result.FinishReason = resp.Choices[0].FinishReason
 
 		for _, tc := range msg.ToolCalls {
