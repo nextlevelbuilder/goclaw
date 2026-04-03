@@ -164,12 +164,13 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
+	// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
 	if p.ProviderType == store.ProviderOllama {
 		host := p.APIBase
 		if host == "" {
-			host = "http://localhost:11434"
+			host = "http://localhost:11434/v1"
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host+"/v1"), "llama3.3"))
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 		return
 	}
 	if p.APIKey == "" {
@@ -207,6 +208,22 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			prov.WithChatPath("/text/chatcompletion_v2")
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
+	}
+}
+
+// normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
+// /v1 suffix required for OpenAI-compatible endpoints. Normalizing at write time means
+// resolveAPIBase() always returns a ready-to-use base URL, eliminating per-call suffix logic.
+func normalizeOllamaAPIBase(p *store.LLMProviderData) {
+	if p.ProviderType != store.ProviderOllama && p.ProviderType != store.ProviderOllamaCloud {
+		return
+	}
+	if p.APIBase == "" {
+		return
+	}
+	p.APIBase = strings.TrimRight(p.APIBase, "/")
+	if !strings.HasSuffix(p.APIBase, "/v1") {
+		p.APIBase += "/v1"
 	}
 }
 
@@ -320,6 +337,10 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+
+	// Normalize Ollama base URL to include /v1 so all code paths
+	// (chat, model listing, embedding verify) use the same value from DB.
+	normalizeOllamaAPIBase(&p)
 
 	if err := h.store.CreateProvider(r.Context(), &p); err != nil {
 		slog.Error("providers.create", "error", err)
@@ -454,6 +475,13 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 	if err := validateProviderEmbeddingSettings(&candidate); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, err.Error())})
 		return
+	}
+
+	// Normalize Ollama base URL to include /v1 so all code paths
+	// (chat, model listing, embedding verify) use the same value from DB.
+	normalizeOllamaAPIBase(&candidate)
+	if candidate.APIBase != currentProvider.APIBase {
+		updates["api_base"] = candidate.APIBase
 	}
 
 	// Track old name before update for registry cleanup

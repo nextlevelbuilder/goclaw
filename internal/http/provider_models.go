@@ -70,6 +70,25 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Ollama doesn't need an API key — fetch live model list from the Ollama instance.
+	// api_base is stored with /v1 (normalized at write time); fetchOpenAIModels appends /models.
+	if p.ProviderType == store.ProviderOllama {
+		apiBase := strings.TrimRight(h.resolveAPIBase(p), "/")
+		if apiBase == "" {
+			apiBase = "http://localhost:11434/v1"
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		models, err := fetchOpenAIModels(ctx, apiBase, "")
+		if err != nil {
+			slog.Warn("providers.models", "provider", p.Name, "error", err)
+			respond([]ModelInfo{})
+			return
+		}
+		respond(models)
+		return
+	}
+
 	if p.APIKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "API key")})
 		return
