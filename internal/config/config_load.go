@@ -203,6 +203,11 @@ func (c *Config) applyEnvOverrides() {
 		c.Telemetry.Insecure = v == "true" || v == "1"
 	}
 
+	// LangSmith (uses standard LangSmith env var names)
+	envStr("LANGSMITH_API_KEY", &c.LangSmith.APIKey)
+	envStr("LANGSMITH_PROJECT", &c.LangSmith.Project)
+	envStr("LANGSMITH_ENDPOINT", &c.LangSmith.APIUrl)
+
 	// Owner IDs from env (comma-separated, whitespace-trimmed)
 	if v := os.Getenv("GOCLAW_OWNER_IDS"); v != "" {
 		var ids []string

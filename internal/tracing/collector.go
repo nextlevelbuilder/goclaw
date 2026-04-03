@@ -21,16 +21,31 @@ const (
 )
 
 // SpanExporter is implemented by backends that receive span data alongside
-// the PostgreSQL store (e.g. OpenTelemetry OTLP).  Keeping this as an
-// interface lets the OTel dependency live in a separate sub-package that can
-// be swapped out by commenting one import line.
+// the PostgreSQL store (e.g. OpenTelemetry OTLP, LangSmith).  Keeping this
+// as an interface lets each dependency live in a separate sub-package gated
+// by build tags.
 type SpanExporter interface {
 	ExportSpans(ctx context.Context, spans []store.SpanData)
 	Shutdown(ctx context.Context) error
 }
 
-// spanUpdate represents a deferred span field update, buffered alongside new
-// spans and applied during the same flush cycle (after batch INSERT).
+// SpanUpdateExporter is an optional extension of SpanExporter for exporters
+// that need to receive two-phase span updates (e.g. LangSmith RunUpdate).
+// Exporters that implement this interface will receive deferred span updates
+// during the flush cycle, after the initial spans have been exported.
+type SpanUpdateExporter interface {
+	ExportSpanUpdates(ctx context.Context, updates []SpanUpdate)
+}
+
+// SpanUpdate is the exported form of a deferred span field update, passed to
+// SpanUpdateExporter implementations during the flush cycle.
+type SpanUpdate struct {
+	SpanID  uuid.UUID
+	TraceID uuid.UUID
+	Updates map[string]any
+}
+
+// spanUpdate is the internal buffered form used by the collector channel.
 type spanUpdate struct {
 	SpanID  uuid.UUID
 	TraceID uuid.UUID
@@ -55,8 +70,8 @@ type Collector struct {
 	dirtyTraces   map[uuid.UUID]struct{}
 	dirtyTracesMu sync.Mutex
 
-	verbose  bool         // when true, LLM spans include full input messages
-	exporter SpanExporter // optional external exporter (nil = disabled)
+	verbose   bool           // when true, LLM spans include full input messages
+	exporters []SpanExporter // optional external exporters (OTel, LangSmith, etc.)
 
 	// OnFlush is called after each flush cycle with the trace IDs that had
 	// their aggregates updated. Used to broadcast realtime trace events.
@@ -91,10 +106,16 @@ func (c *Collector) PreviewMaxLen() int {
 	return previewMaxLen
 }
 
-// SetExporter attaches an external span exporter (e.g. OpenTelemetry OTLP).
-// When set, spans are exported to the external backend during each flush cycle.
+// SetExporter replaces all exporters with a single one (backward compat).
+// Prefer AddExporter for multi-exporter setups.
 func (c *Collector) SetExporter(exp SpanExporter) {
-	c.exporter = exp
+	c.exporters = []SpanExporter{exp}
+}
+
+// AddExporter appends an exporter to the list. Multiple exporters receive
+// the same batch of spans during each flush cycle (fan-out).
+func (c *Collector) AddExporter(exp SpanExporter) {
+	c.exporters = append(c.exporters, exp)
 }
 
 // Start begins the background flush loop.
@@ -109,12 +130,14 @@ func (c *Collector) Stop() {
 	close(c.stopCh)
 	c.wg.Wait()
 
-	// Shutdown external exporter (flushes remaining spans)
-	if c.exporter != nil {
+	// Shutdown all external exporters (flushes remaining spans).
+	if len(c.exporters) > 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := c.exporter.Shutdown(ctx); err != nil {
-			slog.Warn("tracing: span exporter shutdown failed", "error", err)
+		for _, exp := range c.exporters {
+			if err := exp.Shutdown(ctx); err != nil {
+				slog.Warn("tracing: span exporter shutdown failed", "error", err)
+			}
 		}
 	}
 
@@ -263,9 +286,9 @@ done:
 			slog.Debug("tracing: flushed spans", "count", len(spans))
 		}
 
-		// Export to external backend (non-blocking — errors logged, not propagated)
-		if c.exporter != nil {
-			c.exporter.ExportSpans(ctx, spans)
+		// Export to external backends (non-blocking — errors logged, not propagated).
+		for _, exp := range c.exporters {
+			exp.ExportSpans(ctx, spans)
 		}
 	}
 
@@ -290,6 +313,17 @@ doneUpdates:
 			}
 		}
 		slog.Debug("tracing: applied span updates", "count", len(updates))
+
+		// Fan out span updates to exporters that support two-phase tracing.
+		exported := make([]SpanUpdate, len(updates))
+		for i, u := range updates {
+			exported[i] = SpanUpdate{SpanID: u.SpanID, TraceID: u.TraceID, Updates: u.Updates}
+		}
+		for _, exp := range c.exporters {
+			if sue, ok := exp.(SpanUpdateExporter); ok {
+				sue.ExportSpanUpdates(ctx, exported)
+			}
+		}
 	}
 
 	// Update aggregates for dirty traces

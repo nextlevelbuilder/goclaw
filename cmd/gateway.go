@@ -129,6 +129,8 @@ func runGateway() {
 		defer traceCollector.Stop()
 		// OTel OTLP export: compiled via build tags. Build with 'go build -tags otel' to enable.
 		initOTelExporter(context.Background(), cfg, traceCollector)
+		// LangSmith export: compiled via build tags. Build with 'go build -tags langsmith' to enable.
+		initLangSmithExporter(context.Background(), cfg, traceCollector)
 	}
 	if snapshotWorker != nil {
 		defer snapshotWorker.Stop()
