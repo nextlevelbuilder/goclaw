@@ -120,7 +120,14 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 
 	// Emit running agent span immediately so it's visible in the trace UI.
 	if agentSpanID != uuid.Nil {
-		l.emitAgentSpanStart(ctx, agentSpanID, runStart, req.Message)
+		var agentSpanOpts []spanOption
+		if req.ModelOverride != "" {
+			agentSpanOpts = append(agentSpanOpts, withModel(req.ModelOverride))
+		}
+		if req.ProviderOverride != nil {
+			agentSpanOpts = append(agentSpanOpts, withProvider(req.ProviderOverride.Name()))
+		}
+		l.emitAgentSpanStart(ctx, agentSpanID, runStart, req.Message, agentSpanOpts...)
 	}
 
 	// Child trace (announce run): set parent trace back to "running" while

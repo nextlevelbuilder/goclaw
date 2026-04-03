@@ -32,30 +32,56 @@ func (l *Loop) Model() string { return l.model }
 func (l *Loop) IsRunning() bool { return l.activeRuns.Load() > 0 }
 
 // ---------------------------------------------------------------------------
+// Span options — functional options for overriding model/provider in spans.
+// ---------------------------------------------------------------------------
+
+// spanOption overrides span metadata (model, provider) when per-request
+// overrides are active (e.g. heartbeat with a cheaper model).
+type spanOption func(*spanOverrides)
+
+type spanOverrides struct {
+	model    string
+	provider string
+}
+
+func withModel(m string) spanOption    { return func(o *spanOverrides) { o.model = m } }
+func withProvider(p string) spanOption { return func(o *spanOverrides) { o.provider = p } }
+
+// resolveSpan returns (model, provider) applying any overrides on top of agent defaults.
+func (l *Loop) resolveSpan(opts []spanOption) (string, string) {
+	o := spanOverrides{model: l.model, provider: l.provider.Name()}
+	for _, fn := range opts {
+		fn(&o)
+	}
+	return o.model, o.provider
+}
+
+// ---------------------------------------------------------------------------
 // Two-phase LLM span: start (running) + end (completed/error)
 // ---------------------------------------------------------------------------
 
 // emitLLMSpanStart emits a "running" LLM span before the LLM call begins.
 // Returns the span ID so the caller can later call emitLLMSpanEnd to finalize it.
 // Goroutine-safe: only reads immutable Loop fields and does a channel send.
-func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration int, messages []providers.Message) uuid.UUID {
+func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration int, messages []providers.Message, opts ...spanOption) uuid.UUID {
 	collector := tracing.CollectorFromContext(ctx)
 	traceID := tracing.TraceIDFromContext(ctx)
 	if collector == nil || traceID == uuid.Nil {
 		return uuid.Nil
 	}
 
+	model, providerName := l.resolveSpan(opts)
 	spanID := store.GenNewID()
 	span := store.SpanData{
 		ID:        spanID,
 		TraceID:   traceID,
 		SpanType:  store.SpanTypeLLMCall,
-		Name:      fmt.Sprintf("%s/%s #%d", l.provider.Name(), l.model, iteration),
+		Name:      fmt.Sprintf("%s/%s #%d", providerName, model, iteration),
 		StartTime: start,
 		Status:    store.SpanStatusRunning,
 		Level:     store.SpanLevelDefault,
-		Model:     l.model,
-		Provider:  l.provider.Name(),
+		Model:     model,
+		Provider:  providerName,
 		CreatedAt: start,
 	}
 	if parentID := tracing.ParentSpanIDFromContext(ctx); parentID != uuid.Nil {
@@ -96,7 +122,7 @@ func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration 
 // emitLLMSpanEnd finalizes a running LLM span with results.
 // Uses EmitSpanUpdate (channel send) — does NOT depend on ctx being alive,
 // so it works correctly even after ctx cancellation or deadline exceeded.
-func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.Time, resp *providers.ChatResponse, callErr error) {
+func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.Time, resp *providers.ChatResponse, callErr error, opts ...spanOption) {
 	if spanID == uuid.Nil {
 		return // tracing disabled — no running span was emitted
 	}
@@ -139,7 +165,8 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 			}
 		}
 		// Calculate cost if pricing config is available.
-		if pricing := tracing.LookupPricing(l.modelPricing, l.provider.Name(), l.model); pricing != nil {
+		model, providerName := l.resolveSpan(opts)
+		if pricing := tracing.LookupPricing(l.modelPricing, providerName, model); pricing != nil {
 			cost := tracing.CalculateCost(pricing, resp.Usage)
 			if cost > 0 {
 				updates["total_cost"] = cost
@@ -282,7 +309,7 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 // emitAgentSpanStart emits a "running" root agent span at the beginning of a run.
 // The span is identified by agentSpanID (pre-generated, same ID used as ParentSpanID
 // for child LLM/tool spans).
-func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, start time.Time, inputPreview string) {
+func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, start time.Time, inputPreview string, opts ...spanOption) {
 	collector := tracing.CollectorFromContext(ctx)
 	traceID := tracing.TraceIDFromContext(ctx)
 	if collector == nil || traceID == uuid.Nil {
@@ -291,6 +318,7 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 
 	previewLimit := previewLimitForVerbose(collector.Verbose())
 
+	model, providerName := l.resolveSpan(opts)
 	spanName := l.id
 	span := store.SpanData{
 		ID:           agentSpanID,
@@ -300,8 +328,8 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		StartTime:    start,
 		Status:       store.SpanStatusRunning,
 		Level:        store.SpanLevelDefault,
-		Model:        l.model,
-		Provider:     l.provider.Name(),
+		Model:        model,
+		Provider:     providerName,
 		InputPreview: tracing.TruncateMid(inputPreview, previewLimit),
 		CreatedAt:    start,
 	}
