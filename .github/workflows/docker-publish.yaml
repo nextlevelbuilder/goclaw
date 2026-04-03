@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - "v*.*.*"
+    branches:
+      - dev
 
 env:
   GHCR_IMAGE: ghcr.io/${{ github.repository }}
@@ -79,10 +81,14 @@ jobs:
             ${{ env.GHCR_IMAGE }}
             ${{ env.DOCKERHUB_IMAGE }}
           tags: |
+            # Release tags (on version tag push)
             type=semver,pattern={{version}},suffix=${{ matrix.suffix }}
             type=semver,pattern={{major}}.{{minor}},suffix=${{ matrix.suffix }}
-            type=raw,value=latest,enable=${{ matrix.suffix == '' }},suffix=
-            type=raw,value=${{ matrix.variant }},enable=${{ matrix.suffix != '' }}
+            type=raw,value=latest,enable=${{ matrix.suffix == '' && github.ref_type == 'tag' }},suffix=
+            type=raw,value=${{ matrix.variant }},enable=${{ matrix.suffix != '' && github.ref_type == 'tag' }}
+            # Dev tags (on dev branch push)
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' && matrix.suffix == '' }},suffix=
+            type=raw,value=dev${{ matrix.suffix }},enable=${{ github.ref == 'refs/heads/dev' && matrix.suffix != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -97,7 +103,7 @@ jobs:
             ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
             ENABLE_PYTHON=${{ matrix.enable_python }}
             ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.sha) }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
 
@@ -137,7 +143,8 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
