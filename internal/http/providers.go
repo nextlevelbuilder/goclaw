@@ -88,8 +88,12 @@ func (h *ProvidersHandler) resolveAPIBase(p *store.LLMProviderData) string {
 	}
 	// Safety net: normalize Ollama URLs missing /v1 (pre-existing DB records written
 	// before write-time normalization was introduced in normalizeOllamaAPIBase).
-	if base != "" && p.ProviderType == store.ProviderOllama && !strings.HasSuffix(strings.TrimRight(base, "/"), "/v1") {
-		base = strings.TrimRight(base, "/") + "/v1"
+	// Always trim trailing slashes first so "http://host:11434/v1/" → "http://host:11434/v1".
+	if base != "" && p.ProviderType == store.ProviderOllama {
+		base = strings.TrimRight(base, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
 	}
 	return base
 }
