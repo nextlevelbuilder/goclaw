@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -67,6 +68,25 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	// ACP agents don't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderACP {
 		respond(acpModels())
+		return
+	}
+
+	// Ollama: use native /api/tags for richer metadata (parameter size, quantization, family).
+	// ProviderOllama has no API key; ProviderOllamaCloud requires one but both use the same endpoint.
+	if p.ProviderType == store.ProviderOllama || p.ProviderType == store.ProviderOllamaCloud {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		apiBase := h.resolveAPIBase(p)
+		if apiBase == "" {
+			apiBase = "http://localhost:11434"
+		}
+		models, err := h.fetchOllamaModels(ctx, apiBase, p.APIKey)
+		if err != nil {
+			slog.Warn("providers.models.ollama", "provider", p.Name, "error", err)
+			respond([]ModelInfo{})
+			return
+		}
+		respond(models)
 		return
 	}
 
@@ -341,6 +361,70 @@ func chatGPTOAuthModels() []ModelInfo {
 		{ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini"},
 		{ID: "gpt-5.1", Name: "GPT-5.1"},
 	})
+}
+
+// fetchOllamaModels calls Ollama's native /api/tags endpoint to get model metadata
+// including parameter size, quantization level, and model family.
+// The api_base may include a /v1 suffix (from issue #654 normalization) — strip it
+// before appending /api/tags since /api/tags lives at the root, not under /v1.
+func (h *ProvidersHandler) fetchOllamaModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo, error) {
+	// Strip /v1 suffix if present, then trim trailing slash.
+	base := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(apiBase, "/"), "/v1"), "/")
+	url := config.DockerLocalhost(base + "/api/tags")
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("ollama /api/tags returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Models []struct {
+			Name    string `json:"name"`
+			Details struct {
+				Family             string `json:"family"`
+				ParameterSize      string `json:"parameter_size"`
+				QuantizationLevel  string `json:"quantization_level"`
+			} `json:"details"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode ollama response: %w", err)
+	}
+
+	models := make([]ModelInfo, 0, len(result.Models))
+	for _, m := range result.Models {
+		// Build a human-readable display name: "family paramSize quantLevel" e.g. "gemma4 8.0B Q4_K_M"
+		var parts []string
+		if m.Details.Family != "" {
+			parts = append(parts, m.Details.Family)
+		}
+		if m.Details.ParameterSize != "" {
+			parts = append(parts, m.Details.ParameterSize)
+		}
+		if m.Details.QuantizationLevel != "" {
+			parts = append(parts, m.Details.QuantizationLevel)
+		}
+		name := m.Name
+		if len(parts) > 0 {
+			name = strings.Join(parts, " ")
+		}
+		models = append(models, ModelInfo{ID: m.Name, Name: name})
+	}
+	return models, nil
 }
 
 func withReasoningCapabilities(models []ModelInfo) []ModelInfo {
