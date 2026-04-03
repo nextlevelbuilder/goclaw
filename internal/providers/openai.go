@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -371,7 +372,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 					}
 				}
 				toolCalls[i] = map[string]any{
-					"id":       truncateToolCallID(tc.ID),
+					"id":       p.wireToolCallID(tc.ID),
 					"type":     "function",
 					"function": fn,
 				}
@@ -380,7 +381,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 
 		if m.ToolCallID != "" {
-			msg["tool_call_id"] = truncateToolCallID(m.ToolCallID)
+			msg["tool_call_id"] = p.wireToolCallID(m.ToolCallID)
 		}
 
 		msgs = append(msgs, msg)
@@ -604,6 +605,28 @@ func clampedLimit(body map[string]any) any {
 }
 
 const maxToolCallIDLen = 40
+
+var mistralToolIDNonAlnum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
+
+func stripMistralToolIDAlnum(s string) string {
+	return mistralToolIDNonAlnum.ReplaceAllString(s, "")
+}
+
+func normalizeMistralToolCallID(id string) string {
+	s := stripMistralToolIDAlnum(id)
+	if len(s) < 9 {
+		sum := sha1.Sum([]byte(id))
+		s = stripMistralToolIDAlnum(s + hex.EncodeToString(sum[:]))
+	}
+	return s[:9]
+}
+
+func (p *OpenAIProvider) wireToolCallID(id string) string {
+	if p.name == "mistral" {
+		return normalizeMistralToolCallID(id)
+	}
+	return truncateToolCallID(id)
+}
 
 // truncateToolCallID deterministically fits tool call IDs into OpenAI's 40-char
 // limit. Prefix truncation can alias distinct legacy IDs that only diverge after
