@@ -18,31 +18,43 @@ func (h *AgentsHandler) importTeamSection(ctx context.Context, ag *store.AgentDa
 	tid := importTenantID(ctx)
 	userID := store.UserIDFromContext(ctx)
 
-	// Check if agent is already a team lead — skip to prevent duplicate teams
-	var existingTeam bool
-	_ = h.db.QueryRowContext(ctx,
-		"SELECT EXISTS(SELECT 1 FROM agent_teams WHERE lead_agent_id = $1 AND tenant_id = $2)",
-		ag.ID, tid,
-	).Scan(&existingTeam)
-	if existingTeam {
-		slog.Info("import: agent already has a team, skipping team import", "agent_id", ag.ID)
-		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "team", Status: "done", Detail: "skipped (team exists)"})
-		}
-		return nil
-	}
+	// Check if a team with this name already exists — update instead of creating duplicate
+	var existingTeamID uuid.UUID
+	err := h.db.QueryRowContext(ctx,
+		"SELECT id FROM agent_teams WHERE name = $1 AND tenant_id = $2 LIMIT 1",
+		arc.teamMeta.Name, tid,
+	).Scan(&existingTeamID)
 
-	// Create team with new UUID
-	teamID := uuid.Must(uuid.NewV7())
-	_, err := h.db.ExecContext(ctx,
-		`INSERT INTO agent_teams (id, name, lead_agent_id, description, status, settings, created_by, created_at, updated_at, tenant_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), $8)`,
-		teamID, arc.teamMeta.Name, ag.ID,
-		arc.teamMeta.Description, arc.teamMeta.Status,
-		coalesceJSON(arc.teamMeta.Settings), userID, tid,
-	)
-	if err != nil {
-		return fmt.Errorf("create team: %w", err)
+	var teamID uuid.UUID
+	if err == nil {
+		// Team exists — update it
+		teamID = existingTeamID
+		slog.Info("import: updating existing team", "team_id", teamID, "name", arc.teamMeta.Name)
+		_, err = h.db.ExecContext(ctx,
+			`UPDATE agent_teams SET lead_agent_id = $1, description = $2, status = $3, settings = $4, updated_at = NOW()
+			 WHERE id = $5`,
+			ag.ID, arc.teamMeta.Description, arc.teamMeta.Status,
+			coalesceJSON(arc.teamMeta.Settings), teamID,
+		)
+		if err != nil {
+			return fmt.Errorf("update team: %w", err)
+		}
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "team", Status: "running", Detail: "updating " + arc.teamMeta.Name})
+		}
+	} else {
+		// Create new team
+		teamID = uuid.Must(uuid.NewV7())
+		_, err = h.db.ExecContext(ctx,
+			`INSERT INTO agent_teams (id, name, lead_agent_id, description, status, settings, created_by, created_at, updated_at, tenant_id)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW(), $8)`,
+			teamID, arc.teamMeta.Name, ag.ID,
+			arc.teamMeta.Description, arc.teamMeta.Status,
+			coalesceJSON(arc.teamMeta.Settings), userID, tid,
+		)
+		if err != nil {
+			return fmt.Errorf("create team: %w", err)
+		}
 	}
 
 	// Add lead as member
