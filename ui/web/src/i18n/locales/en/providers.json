@@ -233,6 +233,7 @@
     "reasoningFallbackBehavior": "Fallback Behavior",
     "codexPoolDefaultsTitle": "Pool Defaults",
     "codexPoolDefaultsDescription": "Define the reusable OpenAI Codex pool owned by this alias for agents that use it as their primary provider.",
+    "poolManagedByDescription": "This provider is a member of the pool owned by {{owner}}. To change pool settings, go to the pool owner.",
     "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple OpenAI Codex OAuth accounts appear in the pool.",
     "poolActivityTitle": "Pool Activity",
     "poolActivityDescription": "Aggregate runtime activity across all agents using this provider's Codex pool.",

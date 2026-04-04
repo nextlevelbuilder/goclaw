@@ -161,6 +161,7 @@
     "extraHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được tham gia.",
     "emptyExtras": "Đăng nhập thêm một bí danh OpenAI Codex OAuth để bật pooling.",
     "noReadyExtras": "Đăng nhập và bật thêm một bí danh OpenAI Codex OAuth để thêm vào đây.",
+    "clickToAdd": "Bấm để thêm",
     "extraSelectableHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được vào active pool.",
     "selectedAccountsLabel": "Tài khoản trong pool",
     "emptySelected": "Chưa chọn pool member bổ sung nào.",

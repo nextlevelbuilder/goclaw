@@ -161,6 +161,7 @@
     "extraHint": "Only enabled and signed-in OpenAI Codex OAuth aliases can participate.",
     "emptyExtras": "Sign in another OpenAI Codex OAuth alias to unlock pooling.",
     "noReadyExtras": "Sign in and enable another OpenAI Codex OAuth alias to add it here.",
+    "clickToAdd": "Click to add",
     "extraSelectableHint": "Only enabled, signed-in OpenAI Codex OAuth aliases can enter the active pool.",
     "selectedAccountsLabel": "Accounts in Pool",
     "emptySelected": "No extra pool members selected yet.",

@@ -237,6 +237,7 @@
     "reasoningFallbackBehavior": "Fallback Behavior",
     "codexPoolDefaultsTitle": "Thiết lập pool mặc định",
     "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
+    "poolManagedByDescription": "Provider này là thành viên của pool thuộc sở hữu bởi {{owner}}. Để thay đổi cài đặt pool, hãy vào trang pool owner.",
     "oauthDisplayNameRecommendation": "Thêm tên hiển thị nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool.",
     "poolActivityTitle": "Hoạt động pool",
     "poolActivityDescription": "Hoạt động runtime tổng hợp trên tất cả agent sử dụng pool Codex của provider này.",

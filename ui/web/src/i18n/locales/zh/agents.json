@@ -161,6 +161,7 @@
     "extraHint": "只有已启用且已登录的 OpenAI Codex OAuth 别名才能参与。",
     "emptyExtras": "再登录一个 OpenAI Codex OAuth 别名即可启用 pooling。",
     "noReadyExtras": "请先登录并启用另一个 OpenAI Codex OAuth 别名，然后再添加到这里。",
+    "clickToAdd": "点击添加",
     "extraSelectableHint": "只有已启用且已登录的 OpenAI Codex OAuth 别名才能进入 active pool。",
     "selectedAccountsLabel": "池中的账户",
     "emptySelected": "还没有选择额外的池成员。",
