@@ -25,8 +25,10 @@ interface ProviderOAuthPoolSummary {
 interface ProviderListRowProps {
   provider: ProviderData;
   oauthPool?: ProviderOAuthPoolSummary;
+  showPoolHint?: boolean;
   onClick: () => void;
   onDelete?: () => void;
+  onPoolSetup?: () => void;
 }
 
 function strategyLabelKey(strategy: EffectiveChatGPTOAuthRoutingStrategy): string {
@@ -38,8 +40,10 @@ function strategyLabelKey(strategy: EffectiveChatGPTOAuthRoutingStrategy): strin
 export function ProviderListRow({
   provider,
   oauthPool,
+  showPoolHint,
   onClick,
   onDelete,
+  onPoolSetup,
 }: ProviderListRowProps) {
   const { t: tc } = useTranslation("common");
   const { t } = useTranslation("providers");
@@ -139,6 +143,15 @@ export function ProviderListRow({
               {t(oauthPool.role === "owner" ? "list.poolOwner" : "list.poolMember")}
             </Badge>
           )}
+          {showPoolHint && !hasPoolRole && onPoolSetup ? (
+            <Badge
+              variant="outline"
+              className="h-5 cursor-pointer border-dashed border-primary/40 px-1.5 text-[10px] text-primary transition-colors hover:border-primary hover:bg-primary/10"
+              onClick={(event) => { event.stopPropagation(); onPoolSetup(); }}
+            >
+              {t("list.poolAvailable")}
+            </Badge>
+          ) : null}
           {reasoningDefaults ? (
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
               {t("list.reasoningDefault", {

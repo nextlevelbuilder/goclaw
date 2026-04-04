@@ -269,6 +269,7 @@
   "list": {
     "poolOwner": "池拥有者",
     "poolMember": "池成员",
+    "poolAvailable": "可组池",
     "standalone": "独立账户",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "由 {{provider}} 管理",
@@ -330,6 +331,27 @@
     "downgradeDesc": "Normalize to the nearest supported lower level, or disable when no lower supported level exists",
     "provider_default": "Use Model Default",
     "provider_defaultDesc": "Let the selected model fall back to its own default reasoning effort"
+  },
+  "poolCta": {
+    "unpooledCount": "{{count}} 个账户可以组建池",
+    "setupPool": "设置池",
+    "dismiss": "忽略"
+  },
+  "poolWizard": {
+    "title": "设置池",
+    "description": "合并 ChatGPT 账户以实现自动故障转移和负载均衡。",
+    "selectOwner": "池所有者",
+    "selectOwnerHint": "拥有池配置的主账户。",
+    "selectMembers": "池成员",
+    "selectMembersHint": "选择要加入池的账户。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "selectedCount": "已选 {{count}} 个",
+    "strategy": "策略",
+    "createPool": "创建池",
+    "noMembers": "至少选择一个成员才能创建池。",
+    "success": "池创建成功。",
+    "error": "池创建失败。"
   },
   "toast": {
     "created": "Provider已创建",

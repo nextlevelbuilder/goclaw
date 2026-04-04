@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Cpu, Info, Plus } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { Cpu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -16,6 +14,7 @@ import { useChatGPTOAuthProviderQuotas } from "./hooks/use-chatgpt-oauth-provide
 import { useChatGPTOAuthProviderStatuses } from "./hooks/use-chatgpt-oauth-provider-statuses";
 import { ProviderFormDialog } from "./provider-form-dialog";
 import { ProviderListRow } from "./provider-list-row";
+import { PoolSetupWizardDialog } from "./pool-setup-wizard-dialog";
 import {
   getChatGPTOAuthPoolOwnership,
   sortProvidersForPoolHierarchy,
@@ -40,19 +39,21 @@ export function ProvidersPage() {
   return <ProviderListView />;
 }
 
+
 function ProviderListView() {
   const { t } = useTranslation("providers");
   const navigate = useNavigate();
 
   const {
     providers, loading, refresh,
-    createProvider, deleteProvider,
+    createProvider, updateProvider, deleteProvider,
   } = useProviders();
   const showSkeleton = useDeferredLoading(loading && providers.length === 0);
   const { statuses } = useChatGPTOAuthProviderStatuses(providers);
 
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProviderData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const providerByName = useMemo(
@@ -67,10 +68,16 @@ function ProviderListView() {
     () => new Map(statuses.map((status) => [status.provider.name, status.availability])),
     [statuses],
   );
-  const readyOAuthCount = statuses.filter((status) => status.authenticated).length;
-  const poolOwnerCount = poolOwnership.membersByOwner.size;
-  const poolMemberCount = poolOwnership.ownerByMember.size;
-  const hasConnectedChatGPTOAuthProvider = readyOAuthCount > 0;
+  // Unpooled = chatgpt_oauth providers that are neither pool owners nor members
+  const unpooledProviders = useMemo(
+    () => providers.filter(
+      (p) =>
+        p.provider_type === "chatgpt_oauth" &&
+        !poolOwnership.membersByOwner.has(p.name) &&
+        !poolOwnership.ownerByMember.has(p.name),
+    ),
+    [providers, poolOwnership],
+  );
 
   const filtered = useMemo(() => providers.filter(
     (provider) =>
@@ -165,31 +172,6 @@ function ProviderListView() {
         />
       </div>
 
-      {hasConnectedChatGPTOAuthProvider && (
-        <Alert className="mt-4 border-primary/20 bg-primary/[0.04] px-3 py-2">
-          <Info className="h-4 w-4" />
-          <AlertTitle className="flex flex-wrap items-center gap-2">
-            <span>{t("pageHint.title")}</span>
-            <Badge variant="success" className="h-5 px-1.5 text-[10px]">
-              {t("pageHint.connected", { count: readyOAuthCount })}
-            </Badge>
-            {poolOwnerCount > 0 && (
-              <Badge variant="info" className="h-5 px-1.5 text-[10px]">
-                {t("pageHint.owners", { count: poolOwnerCount })}
-              </Badge>
-            )}
-            {poolMemberCount > 0 && (
-              <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                {t("pageHint.members", { count: poolMemberCount })}
-              </Badge>
-            )}
-          </AlertTitle>
-          <AlertDescription className="gap-1 text-xs">
-            <p>{t("pageHint.description")}</p>
-          </AlertDescription>
-        </Alert>
-      )}
-
       <div className="mt-6">
         {showSkeleton ? (
           <TableSkeleton />
@@ -227,8 +209,15 @@ function ProviderListView() {
                       ? quotasLoading || quotasFetching
                       : false,
                   } : undefined}
+                  showPoolHint={
+                    p.provider_type === "chatgpt_oauth" &&
+                    !poolOwnership.ownerByMember.has(p.name) &&
+                    !poolOwnership.membersByOwner.has(p.name) &&
+                    unpooledProviders.length >= 2
+                  }
                   onClick={() => navigate(`/providers/${p.id}`)}
                   onDelete={() => setDeleteTarget(p)}
+                  onPoolSetup={() => setWizardOpen(true)}
                 />
               ))}
             </div>
@@ -254,6 +243,17 @@ function ProviderListView() {
           refresh();
         }}
         existingProviders={providers}
+      />
+
+      <PoolSetupWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        providers={providers}
+        unpooledProviders={unpooledProviders}
+        onSave={async (ownerId, data) => {
+          await updateProvider(ownerId, data);
+          refresh();
+        }}
       />
 
       <ConfirmDeleteDialog

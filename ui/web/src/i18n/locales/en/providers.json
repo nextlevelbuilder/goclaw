@@ -283,6 +283,7 @@
   "list": {
     "poolOwner": "Pool owner",
     "poolMember": "Pool member",
+    "poolAvailable": "Pool available",
     "standalone": "Standalone",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "Managed by {{provider}}",
@@ -308,6 +309,27 @@
     "owners_other": "{{count}} pool owners",
     "members_one": "{{count}} member",
     "members_other": "{{count}} members"
+  },
+  "poolCta": {
+    "unpooledCount": "{{count}} accounts ready to pool",
+    "setupPool": "Set up pool",
+    "dismiss": "Dismiss"
+  },
+  "poolWizard": {
+    "title": "Set Up Pool",
+    "description": "Combine ChatGPT accounts for automatic failover and load balancing.",
+    "selectOwner": "Pool Owner",
+    "selectOwnerHint": "The primary account that owns the pool configuration.",
+    "selectMembers": "Pool Members",
+    "selectMembersHint": "Select accounts to include in the pool.",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "selectedCount": "{{count}} selected",
+    "strategy": "Strategy",
+    "createPool": "Create Pool",
+    "noMembers": "Select at least one member to create a pool.",
+    "success": "Pool created successfully.",
+    "error": "Failed to create pool."
   },
   "toast": {
     "created": "Provider created",
