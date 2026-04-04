@@ -10,9 +10,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 import { KeyValueEditor } from "@/components/shared/key-value-editor";
 import { toast } from "@/stores/use-toast-store";
 import { useHttp } from "@/hooks/use-ws";
@@ -52,9 +52,13 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
   // Form state
   const [editEntry, setEditEntry] = useState<UserCredEntry | null>(null);
   const [userId, setUserId] = useState("");
+  // Separate search text from selected value (onChange fires on every keystroke)
+  const [userSearchText, setUserSearchText] = useState("");
   const [env, setEnv] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeletingId] = useState<string | null>(null);
+
+  // User picker for the form
 
   const loadList = useCallback(async () => {
     setLoadingList(true);
@@ -75,6 +79,7 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
     setView("list");
     setEditEntry(null);
     setUserId("");
+    setUserSearchText("");
     setEnv({});
     loadList();
   }, [open, loadList]);
@@ -82,6 +87,7 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
   const openAdd = () => {
     setEditEntry(null);
     setUserId("");
+    setUserSearchText("");
     setEnv({});
     setView("form");
   };
@@ -89,6 +95,7 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
   const openEdit = async (entry: UserCredEntry) => {
     setEditEntry(entry);
     setUserId(entry.user_id);
+    setUserSearchText(entry.user_id);
     setEnv({});
     setView("form");
     // Load existing env for edit
@@ -230,15 +237,16 @@ export function CLIUserCredentialsDialog({ open, onOpenChange, binary }: CLIUser
           <>
             <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="uc-user-id">{t("userCredentials.userId")}</Label>
-                <Input
-                  id="uc-user-id"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
+                <Label>{t("userCredentials.userId")}</Label>
+                <UserPickerCombobox
+                  value={userSearchText}
+                  onChange={setUserSearchText}
+                  onSelect={(val) => { setUserId(val); setUserSearchText(val); }}
                   placeholder={t("userCredentials.userIdPlaceholder")}
-                  disabled={!!editEntry}
-                  className="text-base md:text-sm font-mono"
+                  source="tenant_user"
+                  allowCustom
                 />
+                <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2.5 py-1.5 border border-amber-200 dark:border-amber-800">{t("userCredentials.mergeHint")}</p>
               </div>
 
               <div className="flex flex-col gap-1.5">

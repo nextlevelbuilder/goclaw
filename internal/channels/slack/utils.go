@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -22,9 +21,6 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 	}
 
 	userID := senderID
-	if idx := strings.IndexByte(senderID, '|'); idx > 0 {
-		userID = senderID[:idx]
-	}
 
 	var mediaFiles []bus.MediaFile
 	for _, p := range mediaPaths {

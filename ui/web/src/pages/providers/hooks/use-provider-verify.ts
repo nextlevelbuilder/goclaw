@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useHttp } from "@/hooks/use-ws";
 
-interface VerifyResult {
+export interface VerifyResult {
   valid: boolean;
   error?: string;
   dimensions?: number;

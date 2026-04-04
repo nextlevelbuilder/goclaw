@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '../../../stores/ui-store'
 import { useAgentStore } from '../../../stores/agent-store'
-import { getWsClient } from '../../../lib/ws'
+import { teamService } from '../../../services/team-service'
 import { TeamCreateDialog } from '../../teams/TeamCreateDialog'
 import type { TeamData } from '../../../types/team'
 
@@ -18,9 +18,8 @@ export function SidebarTeams() {
   const agents = useAgentStore((s) => s.agents)
 
   useEffect(() => {
-    getWsClient().call('teams.list').then((res) => {
-      const r = res as { teams: TeamData[] | null }
-      setTeams(r.teams ?? [])
+    teamService.list().then((res) => {
+      setTeams(res.teams ?? [])
     }).catch(() => {})
   }, [])
 

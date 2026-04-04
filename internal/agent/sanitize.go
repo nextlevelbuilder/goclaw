@@ -168,21 +168,23 @@ func stripDowngradedToolCallText(content string) string {
 // --- 3. Thinking/reasoning tags ---
 
 // Matches TS stripThinkingTagsFromText() with strict mode.
-// Strips: <think>...</think>, <thinking>...</thinking>, <thought>...</thought>,
+// Strips: <redacted_thinking>...</redacted_thinking>, <think>...</think>,
+//         <thinking>...</thinking>, <thought>...</thought>,
 //         <antThinking>...</antThinking>
 // Go regexp doesn't support backreferences, so we use separate patterns.
 var thinkingTagPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?is)<think>.*?</think>`),
-	regexp.MustCompile(`(?is)<thinking>.*?</thinking>`),
-	regexp.MustCompile(`(?is)<thought>.*?</thought>`),
-	regexp.MustCompile(`(?is)<antThinking>.*?</antThinking>`),
-	regexp.MustCompile(`(?is)<antthinking>.*?</antthinking>`),
+	regexp.MustCompile(`(?is)<redacted_thinking\b[^>]*>.*?</redacted_thinking\s*>`),
+	regexp.MustCompile(`(?is)<thinking\b[^>]*>.*?</thinking\s*>`),
+	regexp.MustCompile(`(?is)<think\b[^>]*>.*?</think\s*>`),
+	regexp.MustCompile(`(?is)<thought\b[^>]*>.*?</thought\s*>`),
+	regexp.MustCompile(`(?is)<antThinking\b[^>]*>.*?</antThinking\s*>`),
+	regexp.MustCompile(`(?is)<antthinking\b[^>]*>.*?</antthinking\s*>`),
 }
 
 func stripThinkingTags(content string) string {
 	lower := strings.ToLower(content)
 	if !strings.Contains(lower, "<think") && !strings.Contains(lower, "<thought") &&
-		!strings.Contains(lower, "<antthinking") {
+		!strings.Contains(lower, "<antthinking") && !strings.Contains(lower, "<redacted_thinking") {
 		return content
 	}
 	result := content

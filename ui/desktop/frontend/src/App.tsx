@@ -8,7 +8,8 @@ import { wails } from './lib/wails'
 import { initWsClient } from './lib/ws'
 import { initApiClient } from './lib/api'
 import { useSessionStore } from './stores/session-store'
-import { useChatStore } from './stores/chat-store'
+import { useChatMessageStore } from './stores/chat-message-store'
+import { useChatActivityStore } from './stores/chat-activity-store'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { Toaster } from './components/common/Toaster'
 import { SplashScreen } from './components/common/SplashScreen'
@@ -27,7 +28,8 @@ function AppReady() {
         e.preventDefault()
         // "New Chat" — clear session + chat directly (avoids duplicate useSessions instance)
         useSessionStore.getState().setActiveSession(null)
-        useChatStore.getState().clear()
+        useChatMessageStore.getState().clear()
+        useChatActivityStore.getState().clear()
       }
       if (mod && e.key === ',') { e.preventDefault(); openSettings() }
       if (e.key === 'Escape' && activeView === 'settings') { closeSettings() }

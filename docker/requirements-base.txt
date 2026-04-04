@@ -1,0 +1,7 @@
+# Base Python dependencies — installed when ENABLE_PYTHON=true or ENABLE_FULL_SKILLS=true.
+# Uses compatible release (~=) to allow patch updates within the same minor version.
+# e.g. ~=7.2.8 allows >=7.2.8, <7.3.0
+#
+# Last reviewed: 2026-04-03
+
+edge-tts~=7.2.8

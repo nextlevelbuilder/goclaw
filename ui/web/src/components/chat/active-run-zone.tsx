@@ -38,7 +38,7 @@ export const ActiveRunZone = memo(function ActiveRunZone({
         <Bot className="h-4 w-4" />
       </div>
 
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 min-w-0 space-y-3">
         {blockReplies.map((msg, i) => (
           <BlockReplyBubble key={msg.timestamp ?? i} message={msg} />
         ))}

@@ -39,8 +39,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 	channelID := ev.Channel
 	content := ev.Text
 
-	displayName := strings.ReplaceAll(c.resolveDisplayName(senderID), "|", "_")
-	compoundSenderID := fmt.Sprintf("%s|%s", senderID, displayName)
+	displayName := c.resolveDisplayName(senderID)
 
 	if !c.checkGroupPolicy(ctx, senderID, channelID) {
 		return
@@ -99,7 +98,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		metadata["message_thread_id"] = replyThreadTS
 	}
 
-	c.HandleMessage(compoundSenderID, channelID, finalContent, nil, metadata, "group")
+	c.HandleMessage(senderID, channelID, finalContent, nil, metadata, "group")
 
 	// Record thread participation
 	if replyThreadTS != "" {

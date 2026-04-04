@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
-import {
-  useChatGPTOAuthProviderStatuses,
-  type ChatGPTOAuthAvailability,
-} from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
+import { useChatGPTOAuthProviderStatuses } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-statuses";
 import { useChatGPTOAuthProviderQuotas } from "@/pages/providers/hooks/use-chatgpt-oauth-provider-quotas";
 import { useAuthStore } from "@/stores/use-auth-store";
 import type { ChatGPTOAuthRoutingConfig } from "@/types/agent";
@@ -24,27 +21,14 @@ import {
 } from "./agent-display-utils";
 import { getRouteReadiness } from "./chatgpt-oauth-quota-utils";
 import { ChatGPTOAuthRoutingSection } from "./config-sections";
-import {
-  CodexPoolActivityPanel,
-  type CodexPoolEntry,
-} from "./codex-pool-activity-panel";
+import { CodexPoolActivityPanel } from "./codex-pool-activity-panel";
 import { CodexPoolPageHeader } from "./codex-pool-page-header";
 import {
   buildDraftRouting,
   routingDraftSignature,
 } from "./codex-pool-routing-draft-utils";
 import { useCodexPoolActivity } from "./hooks/use-codex-pool-activity";
-
-function providerStatus(
-  providerName: string,
-  statusByName: Map<string, { availability: ChatGPTOAuthAvailability }>,
-  enabled?: boolean,
-): ChatGPTOAuthAvailability {
-  return (
-    statusByName.get(providerName)?.availability ??
-    (enabled === false ? "disabled" : "needs_sign_in")
-  );
-}
+import { toPoolEntriesMerged } from "@/adapters/provider-pool.adapter";
 
 export function AgentCodexPoolPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -171,50 +155,13 @@ export function AgentCodexPoolPage() {
     refetch: refreshActivity,
   } = useCodexPoolActivity(agent?.id ?? id, 8, Boolean(agent && isEligible));
 
-  const buildEntries = useCallback(
-    (poolNames: string[]): CodexPoolEntry[] => {
-      if (!agent) return [];
-      const countsByName = new Map(
-        activity.provider_counts.map((item) => [item.provider_name, item]),
-      );
-      return poolNames.map((providerName) => {
-        const provider = providerByName.get(providerName);
-        const count = countsByName.get(providerName);
-        return {
-          name: providerName,
-          label: provider?.display_name || providerName,
-          availability: providerStatus(providerName, statusByName, provider?.enabled),
-          role: providerName === agent.provider ? "preferred" : "extra",
-          requestCount: count?.request_count ?? 0,
-          directSelectionCount:
-            count?.direct_selection_count ?? count?.request_count ?? 0,
-          failoverServeCount: count?.failover_serve_count ?? 0,
-          successCount: count?.success_count ?? 0,
-          failureCount: count?.failure_count ?? 0,
-          consecutiveFailures: count?.consecutive_failures ?? 0,
-          successRate: count?.success_rate ?? 0,
-          healthScore: count?.health_score ?? 0,
-          healthState: count?.health_state ?? "idle",
-          lastSelectedAt: count?.last_selected_at,
-          lastFailoverAt: count?.last_failover_at,
-          lastUsedAt: count?.last_used_at,
-          lastSuccessAt: count?.last_success_at,
-          lastFailureAt: count?.last_failure_at,
-          providerHref: provider?.id ? `/providers/${provider.id}` : undefined,
-          quota: quotaByName.get(providerName),
-        };
-      });
-    },
-    [activity.provider_counts, agent, providerByName, quotaByName, statusByName],
-  );
-
   const liveEntries = useMemo(
-    () => buildEntries(savedEffectiveRouting.poolProviderNames),
-    [buildEntries, savedEffectiveRouting.poolProviderNames],
+    () => !agent ? [] : toPoolEntriesMerged(savedEffectiveRouting.poolProviderNames, activity.provider_counts, agent.provider, providerByName, statusByName, quotaByName),
+    [activity.provider_counts, agent, providerByName, quotaByName, savedEffectiveRouting.poolProviderNames, statusByName],
   );
   const draftEntries = useMemo(
-    () => buildEntries(draftEffectiveRouting.poolProviderNames),
-    [buildEntries, draftEffectiveRouting.poolProviderNames],
+    () => !agent ? [] : toPoolEntriesMerged(draftEffectiveRouting.poolProviderNames, activity.provider_counts, agent.provider, providerByName, statusByName, quotaByName),
+    [activity.provider_counts, agent, draftEffectiveRouting.poolProviderNames, providerByName, quotaByName, statusByName],
   );
 
   const routeEntries = useMemo(

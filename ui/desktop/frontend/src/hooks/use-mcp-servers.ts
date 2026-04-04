@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getApiClient } from '../lib/api'
+import { mcpService } from '../services/mcp-service'
 import { toast } from '../stores/toast-store'
-import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo, MCPTestResult } from '../types/mcp'
+import type { MCPServerData, MCPServerInput, MCPAgentGrant, MCPToolInfo } from '../types/mcp'
 
 export const MAX_MCP_LITE = 5
 
@@ -11,7 +11,7 @@ export function useMcpServers() {
 
   const fetchServers = useCallback(async () => {
     try {
-      const res = await getApiClient().get<{ servers: MCPServerData[] | null }>('/v1/mcp/servers')
+      const res = await mcpService.list()
       setServers(res.servers ?? [])
     } catch (err) {
       console.error('Failed to fetch MCP servers:', err)
@@ -24,7 +24,7 @@ export function useMcpServers() {
 
   const createServer = useCallback(async (input: MCPServerInput) => {
     try {
-      const res = await getApiClient().post<MCPServerData>('/v1/mcp/servers', input)
+      const res = await mcpService.create(input)
       await fetchServers()
       toast.success('Server created')
       return res
@@ -36,7 +36,7 @@ export function useMcpServers() {
 
   const updateServer = useCallback(async (id: string, input: Partial<MCPServerInput>) => {
     try {
-      const res = await getApiClient().put<MCPServerData>(`/v1/mcp/servers/${id}`, input)
+      const res = await mcpService.update(id, input)
       await fetchServers()
       toast.success('Server updated')
       return res
@@ -48,7 +48,7 @@ export function useMcpServers() {
 
   const deleteServer = useCallback(async (id: string) => {
     try {
-      await getApiClient().delete(`/v1/mcp/servers/${id}`)
+      await mcpService.delete(id)
       setServers((prev) => prev.filter((s) => s.id !== id))
       toast.success('Server deleted')
     } catch (err) {
@@ -65,12 +65,12 @@ export function useMcpServers() {
     headers?: Record<string, string>
     env?: Record<string, string>
   }) => {
-    return getApiClient().post<MCPTestResult>('/v1/mcp/servers/test', data)
+    return mcpService.testConnection(data)
   }, [])
 
   const reconnectServer = useCallback(async (id: string) => {
     try {
-      await getApiClient().post(`/v1/mcp/servers/${id}/reconnect`, {})
+      await mcpService.reconnect(id)
       toast.success('Connection reset')
     } catch (err) {
       toast.error('Failed to reconnect', (err as Error).message)
@@ -78,23 +78,23 @@ export function useMcpServers() {
     }
   }, [])
 
-  const listServerTools = useCallback(async (serverId: string) => {
-    const res = await getApiClient().get<{ tools: MCPToolInfo[] | null }>(`/v1/mcp/servers/${serverId}/tools`)
+  const listServerTools = useCallback(async (serverId: string): Promise<MCPToolInfo[]> => {
+    const res = await mcpService.listTools(serverId)
     return res.tools ?? []
   }, [])
 
-  const listGrants = useCallback(async (serverId: string) => {
-    const res = await getApiClient().get<{ grants: MCPAgentGrant[] | null }>(`/v1/mcp/servers/${serverId}/grants`)
+  const listGrants = useCallback(async (serverId: string): Promise<MCPAgentGrant[]> => {
+    const res = await mcpService.listGrants(serverId)
     return res.grants ?? []
   }, [])
 
   const grantAgent = useCallback(async (serverId: string, agentId: string) => {
-    await getApiClient().post(`/v1/mcp/servers/${serverId}/grants/agent`, { agent_id: agentId })
+    await mcpService.grantAgent(serverId, agentId)
     await fetchServers()
   }, [fetchServers])
 
   const revokeAgent = useCallback(async (serverId: string, agentId: string) => {
-    await getApiClient().delete(`/v1/mcp/servers/${serverId}/grants/agent/${agentId}`)
+    await mcpService.revokeAgent(serverId, agentId)
     await fetchServers()
   }, [fetchServers])
 

@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -21,12 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ProviderData, ProviderInput } from "./hooks/use-providers";
-import { slugify, isValidSlug } from "@/lib/slug";
+import { slugify } from "@/lib/slug";
 import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
 import { Loader2 } from "lucide-react";
+import { providerCreateSchema, type ProviderCreateFormData } from "@/schemas/provider.schema";
 
 interface ProviderFormDialogProps {
   open: boolean;
@@ -38,81 +41,91 @@ interface ProviderFormDialogProps {
 export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProviders = [] }: ProviderFormDialogProps) {
   const { t } = useTranslation("providers");
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [providerType, setProviderType] = useState("openai_compat");
-  const [apiBase, setApiBase] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [enabled, setEnabled] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  // ACP fields
-  const [acpBinary, setAcpBinary] = useState("");
-  const [acpArgs, setAcpArgs] = useState("");
-  const [acpIdleTTL, setAcpIdleTTL] = useState("");
-  const [acpPermMode, setAcpPermMode] = useState("approve-all");
-  const [acpWorkDir, setAcpWorkDir] = useState("");
+  const form = useForm<ProviderCreateFormData>({
+    resolver: zodResolver(providerCreateSchema),
+    mode: "onChange",
+    defaultValues: {
+      name: "",
+      displayName: "",
+      providerType: "openai_compat",
+      apiBase: "",
+      apiKey: "",
+      enabled: true,
+      acpBinary: "",
+      acpArgs: "",
+      acpIdleTTL: "",
+      acpPermMode: "approve-all",
+      acpWorkDir: "",
+    },
+  });
+
+  const { register, control, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = form;
+
+  const providerType = watch("providerType");
+  const name = watch("name");
 
   const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
-
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
   const isACP = providerType === "acp";
 
+  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      setError("");
-      setName("");
-      setDisplayName("");
-      setProviderType("openai_compat");
-      setApiBase("");
-      setApiKey("");
-      setEnabled(true);
-      setAcpBinary("");
-      setAcpArgs("");
-      setAcpIdleTTL("");
-      setAcpPermMode("approve-all");
-      setAcpWorkDir("");
+      reset({
+        name: "",
+        displayName: "",
+        providerType: "openai_compat",
+        apiBase: "",
+        apiKey: "",
+        enabled: true,
+        acpBinary: "",
+        acpArgs: "",
+        acpIdleTTL: "",
+        acpPermMode: "approve-all",
+        acpWorkDir: "",
+      });
     }
-  }, [open]);
+  }, [open, reset]);
 
-  const handleSubmit = async () => {
-    if (!name.trim() || !providerType) return;
-    setLoading(true);
-    try {
-      const data: ProviderInput = {
-        name: name.trim(),
-        display_name: displayName.trim() || undefined,
-        provider_type: providerType,
-        api_base: apiBase.trim() || undefined,
-        enabled,
-      };
+  const onFormSubmit = async (data: ProviderCreateFormData) => {
+    const payload: ProviderInput = {
+      name: data.name,
+      display_name: data.displayName || undefined,
+      provider_type: data.providerType,
+      api_base: data.apiBase || undefined,
+      enabled: data.enabled,
+    };
 
-      if (isACP) {
-        data.api_base = acpBinary.trim() || undefined;
-        const settings: Record<string, unknown> = {};
-        if (acpArgs.trim()) {
-          settings.args = acpArgs.trim().split(/\s+/);
-        }
-        if (acpIdleTTL.trim()) settings.idle_ttl = acpIdleTTL.trim();
-        if (acpPermMode) settings.perm_mode = acpPermMode;
-        if (acpWorkDir.trim()) settings.work_dir = acpWorkDir.trim();
-        if (Object.keys(settings).length > 0) {
-          data.settings = settings;
-        }
+    if (isACP) {
+      payload.api_base = data.acpBinary || undefined;
+      const settings: Record<string, unknown> = {};
+      if (data.acpArgs?.trim()) settings.args = data.acpArgs.trim().split(/\s+/);
+      if (data.acpIdleTTL?.trim()) settings.idle_ttl = data.acpIdleTTL.trim();
+      if (data.acpPermMode) settings.perm_mode = data.acpPermMode;
+      if (data.acpWorkDir?.trim()) settings.work_dir = data.acpWorkDir.trim();
+      if (Object.keys(settings).length > 0) payload.settings = settings;
+    }
+
+    if (data.apiKey && data.apiKey !== "***") {
+      payload.api_key = data.apiKey;
+    }
+
+    await onSubmit(payload);
+    onOpenChange(false);
+  };
+
+  const handleProviderTypeChange = (v: string) => {
+    setValue("providerType", v, { shouldValidate: true });
+    const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
+    setValue("apiBase", preset?.apiBase || "");
+    if (v === "chatgpt_oauth") {
+      if (!name || providerType !== "chatgpt_oauth") {
+        setValue("name", suggestUniqueProviderAlias(existingProviders));
       }
-
-      if (apiKey && apiKey !== "***") {
-        data.api_key = apiKey;
-      }
-
-      await onSubmit(data);
-      onOpenChange(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("form.saving"));
-    } finally {
-      setLoading(false);
+    } else {
+      if (name === DEFAULT_CODEX_OAUTH_ALIAS) setValue("name", "");
     }
   };
 
@@ -129,19 +142,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
             hasClaudeCLI={hasClaudeCLI}
             alreadyAddedLabel={t("form.alreadyAdded")}
             providerTypeLabel={t("form.providerType")}
-            onChange={(v) => {
-              setProviderType(v);
-              const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
-              setApiBase(preset?.apiBase || "");
-              if (v === "chatgpt_oauth") {
-                if (!name || providerType !== "chatgpt_oauth") {
-                  setName(suggestUniqueProviderAlias(existingProviders));
-                }
-                if (displayName === "ChatGPT (OAuth)") setDisplayName("");
-              } else {
-                if (name === DEFAULT_CODEX_OAUTH_ALIAS) setName("");
-              }
-            }}
+            onChange={handleProviderTypeChange}
           />
 
           {isOAuth ? (
@@ -151,8 +152,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                   <Label htmlFor="oauth-name">{t("form.oauthAlias")}</Label>
                   <Input
                     id="oauth-name"
-                    value={name}
-                    onChange={(e) => setName(slugify(e.target.value))}
+                    {...register("name")}
+                    onChange={(e) => setValue("name", slugify(e.target.value), { shouldValidate: true })}
                     placeholder={t("form.oauthAliasPlaceholder")}
                     className="text-base md:text-sm"
                   />
@@ -161,8 +162,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                   <Label htmlFor="oauth-display-name">{t("form.displayName")}</Label>
                   <Input
                     id="oauth-display-name"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    {...register("displayName")}
                     placeholder={t("form.oauthDisplayNamePlaceholder")}
                     className="text-base md:text-sm"
                   />
@@ -170,8 +170,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
               </div>
               <OAuthSection
                 providerName={name}
-                displayName={displayName}
-                apiBase={apiBase}
+                displayName={watch("displayName") || ""}
+                apiBase={watch("apiBase") || ""}
                 authenticatedActionLabel={t("form.close")}
                 onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }}
               />
@@ -183,19 +183,22 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                   <Label htmlFor="name">{t("form.name")}</Label>
                   <Input
                     id="name"
-                    value={name}
-                    onChange={(e) => setName(slugify(e.target.value))}
+                    {...register("name")}
+                    onChange={(e) => setValue("name", slugify(e.target.value), { shouldValidate: true })}
                     placeholder={t("form.namePlaceholder")}
                     className="text-base md:text-sm"
                   />
-                  <p className="text-xs text-muted-foreground">{t("form.nameHint")}</p>
+                  {errors.name ? (
+                    <p className="text-xs text-destructive">{errors.name.message}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t("form.nameHint")}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="displayName">{t("form.displayName")}</Label>
                   <Input
                     id="displayName"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    {...register("displayName")}
                     placeholder={t("form.displayNamePlaceholder")}
                     className="text-base md:text-sm"
                   />
@@ -206,16 +209,16 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
 
               {isACP && (
                 <ACPSection
-                  binary={acpBinary}
-                  onBinaryChange={setAcpBinary}
-                  args={acpArgs}
-                  onArgsChange={setAcpArgs}
-                  idleTTL={acpIdleTTL}
-                  onIdleTTLChange={setAcpIdleTTL}
-                  permMode={acpPermMode}
-                  onPermModeChange={setAcpPermMode}
-                  workDir={acpWorkDir}
-                  onWorkDirChange={setAcpWorkDir}
+                  binary={watch("acpBinary") || ""}
+                  onBinaryChange={(v) => setValue("acpBinary", v)}
+                  args={watch("acpArgs") || ""}
+                  onArgsChange={(v) => setValue("acpArgs", v)}
+                  idleTTL={watch("acpIdleTTL") || ""}
+                  onIdleTTLChange={(v) => setValue("acpIdleTTL", v)}
+                  permMode={watch("acpPermMode") || "approve-all"}
+                  onPermModeChange={(v) => setValue("acpPermMode", v)}
+                  workDir={watch("acpWorkDir") || ""}
+                  onWorkDirChange={(v) => setValue("acpWorkDir", v)}
                 />
               )}
 
@@ -225,8 +228,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                     <Label htmlFor="apiBase">{t("form.apiBase")}</Label>
                     <Input
                       id="apiBase"
-                      value={apiBase}
-                      onChange={(e) => setApiBase(e.target.value)}
+                      {...register("apiBase")}
                       placeholder={PROVIDER_TYPES.find((pt) => pt.value === providerType)?.placeholder || PROVIDER_TYPES.find((pt) => pt.value === providerType)?.apiBase || "https://api.example.com/v1"}
                       className="text-base md:text-sm"
                     />
@@ -237,8 +239,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                     <Input
                       id="apiKey"
                       type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
+                      {...register("apiKey")}
                       placeholder={t("form.apiKeyPlaceholder")}
                       className="text-base md:text-sm"
                     />
@@ -248,26 +249,36 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
 
               <div className="flex items-center justify-between">
                 <Label htmlFor="enabled">{t("form.enabled")}</Label>
-                <Switch id="enabled" checked={enabled} onCheckedChange={setEnabled} />
+                <Controller
+                  control={control}
+                  name="enabled"
+                  render={({ field }) => (
+                    <Switch id="enabled" checked={field.value} onCheckedChange={field.onChange} />
+                  )}
+                />
               </div>
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
+              {errors.root && (
+                <p className="text-sm text-destructive">{errors.root.message}</p>
               )}
             </>
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {isOAuth ? t("form.close") : t("form.cancel")}
           </Button>
           {!isOAuth && (
             <Button
-              onClick={handleSubmit}
-              disabled={!name.trim() || !isValidSlug(name) || !providerType || loading}
+              onClick={handleSubmit(onFormSubmit, (errs) => {
+                // surface first field error as root error for display
+                const first = Object.values(errs)[0];
+                if (first?.message) form.setError("root", { message: first.message });
+              })}
+              disabled={!name || !!errors.name || !providerType || isSubmitting}
               className="gap-1"
             >
-              {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {loading ? t("form.creating") : t("form.create")}
+              {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {isSubmitting ? t("form.creating") : t("form.create")}
             </Button>
           )}
         </DialogFooter>

@@ -50,8 +50,9 @@ func (b *FsBridge) ReadFile(ctx context.Context, path string) (string, error) {
 }
 
 // WriteFile writes content to a file inside the container, creating directories as needed.
+// When append is true, content is appended (shell >>); otherwise the file is overwritten (shell >).
 // Matching TS FsBridge.writeFile().
-func (b *FsBridge) WriteFile(ctx context.Context, path, content string) error {
+func (b *FsBridge) WriteFile(ctx context.Context, path, content string, appendMode bool) error {
 	resolved := b.resolvePath(path)
 
 	// Create parent directory
@@ -60,8 +61,12 @@ func (b *FsBridge) WriteFile(ctx context.Context, path, content string) error {
 		_, _, _, _ = b.dockerExec(ctx, nil, "mkdir", "-p", dir)
 	}
 
+	redir := ">"
+	if appendMode {
+		redir = ">>"
+	}
 	// Write content via stdin pipe
-	_, stderr, exitCode, err := b.dockerExec(ctx, []byte(content), "sh", "-c", fmt.Sprintf("cat > %q", resolved))
+	_, stderr, exitCode, err := b.dockerExec(ctx, []byte(content), "sh", "-c", fmt.Sprintf("cat %s %q", redir, resolved))
 	if err != nil {
 		return fmt.Errorf("fsbridge write: %w", err)
 	}

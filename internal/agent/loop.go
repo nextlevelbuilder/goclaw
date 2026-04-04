@@ -290,7 +290,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 			callCtx = providers.WithReasoningDecision(callCtx, reasoningDecision)
 		}
 		llmSpanStart := time.Now().UTC()
-		llmSpanID := l.emitLLMSpanStart(callCtx, llmSpanStart, rs.iteration, messages)
+		llmSpanID := l.emitLLMSpanStart(callCtx, llmSpanStart, rs.iteration, messages, withModel(model), withProvider(provider.Name()))
 
 		if req.Stream {
 			resp, err = provider.ChatStream(callCtx, chatReq, func(chunk providers.StreamChunk) {
@@ -316,11 +316,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		}
 
 		if err != nil {
-			l.emitLLMSpanEnd(callCtx, llmSpanID, llmSpanStart, nil, err)
+			l.emitLLMSpanEnd(callCtx, llmSpanID, llmSpanStart, nil, err, withModel(model), withProvider(provider.Name()))
 			return nil, fmt.Errorf("LLM call failed (iteration %d): %w", rs.iteration, err)
 		}
 
-		l.emitLLMSpanEnd(callCtx, llmSpanID, llmSpanStart, resp, nil)
+		l.emitLLMSpanEnd(callCtx, llmSpanID, llmSpanStart, resp, nil, withModel(model), withProvider(provider.Name()))
 
 		// For non-streaming responses, emit thinking and content as single events
 		if !req.Stream {

@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
-import { Trash2, Plus, X, ChevronDownIcon, Pencil } from "lucide-react";
+import { Trash2, Plus, Pencil } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,7 @@ import {
 import { cn, uniqueId } from "@/lib/utils";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import type { MCPServerData, MCPAgentGrant, MCPToolInfo } from "./hooks/use-mcp";
+import { ToolMultiSelect } from "./mcp-tool-multi-select";
 
 interface MCPGrantsDialogProps {
   open: boolean;
@@ -71,12 +71,9 @@ export function MCPGrantsDialog({
     }
   }, [open, server.id, onLoadGrants, onLoadTools]);
 
-  // Resolve agent display name from UUID
   const agentNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const a of agents) {
-      map.set(a.id, a.display_name || a.agent_key);
-    }
+    for (const a of agents) map.set(a.id, a.display_name || a.agent_key);
     return map;
   }, [agents]);
 
@@ -99,27 +96,17 @@ export function MCPGrantsDialog({
   const isEditing = editingGrantId !== null;
 
   const handleGrant = async () => {
-    if (!agentId) {
-      setError(t("grants.agentRequired"));
-      return;
-    }
-
+    if (!agentId) { setError(t("grants.agentRequired")); return; }
     const existing = grants.find((g) => g.agent_id === agentId);
-
     setLoading(true);
     setError("");
     try {
       const allow = toolAllow.length > 0 ? toolAllow : undefined;
       const deny = toolDeny.length > 0 ? toolDeny : undefined;
       await onGrant(agentId, allow, deny);
-
       if (existing) {
         setGrants((prev) =>
-          prev.map((g) =>
-            g.agent_id === agentId
-              ? { ...g, tool_allow: allow ?? null, tool_deny: deny ?? null }
-              : g
-          )
+          prev.map((g) => g.agent_id === agentId ? { ...g, tool_allow: allow ?? null, tool_deny: deny ?? null } : g)
         );
       } else {
         setGrants((prev) => [
@@ -164,7 +151,7 @@ export function MCPGrantsDialog({
         </DialogHeader>
 
         <div className="space-y-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
-          {/* Existing grants */}
+          {/* Existing grants list */}
           {grants.length > 0 && (
             <div className="space-y-2">
               <Label>{t("grants.currentGrants")}</Label>
@@ -195,16 +182,16 @@ export function MCPGrantsDialog({
                               {hasAllow && (
                                 <div className="flex flex-wrap items-center gap-1">
                                   <Badge variant="success" className="text-[10px] px-1.5 py-0">allow</Badge>
-                                  {grant.tool_allow!.map((t) => (
-                                    <Badge key={t} variant="secondary" className="font-mono text-[10px] px-1.5 py-0">{t}</Badge>
+                                  {grant.tool_allow!.map((tool) => (
+                                    <Badge key={tool} variant="secondary" className="font-mono text-[10px] px-1.5 py-0">{tool}</Badge>
                                   ))}
                                 </div>
                               )}
                               {hasDeny && (
                                 <div className="flex flex-wrap items-center gap-1">
                                   <Badge variant="destructive" className="text-[10px] px-1.5 py-0">deny</Badge>
-                                  {grant.tool_deny!.map((t) => (
-                                    <Badge key={t} variant="secondary" className="font-mono text-[10px] px-1.5 py-0">{t}</Badge>
+                                  {grant.tool_deny!.map((tool) => (
+                                    <Badge key={tool} variant="secondary" className="font-mono text-[10px] px-1.5 py-0">{tool}</Badge>
                                   ))}
                                 </div>
                               )}
@@ -288,157 +275,13 @@ export function MCPGrantsDialog({
               )}
             </Button>
           </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
-        {/* Portal target for dropdowns — inside dialog (pointer events), outside overflow (no clipping) */}
+
+        {/* Portal target for dropdowns — inside dialog, outside overflow clipping */}
         <div ref={portalRef} className="relative" />
       </DialogContent>
     </Dialog>
-  );
-}
-
-// Inline multi-select for MCP tool names with dropdown + free-text support.
-function ToolMultiSelect({
-  value,
-  onChange,
-  options,
-  placeholder = "Select or type tool names...",
-  portalContainer,
-}: {
-  value: string[];
-  onChange: (value: string[]) => void;
-  options: MCPToolInfo[];
-  placeholder?: string;
-  portalContainer?: React.RefObject<HTMLDivElement | null>;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return options
-      .filter((t) => !value.includes(t.name))
-      .filter((t) => !q || t.name.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q));
-  }, [options, value, search]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      const inContainer = containerRef.current?.contains(target);
-      const inPortal = portalContainer?.current?.contains(target);
-      if (!inContainer && !inPortal) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open, portalContainer]);
-
-  const addTool = (name: string) => {
-    if (!value.includes(name)) onChange([...value, name]);
-    setSearch("");
-    inputRef.current?.focus();
-  };
-
-  const removeTool = (name: string) => {
-    onChange(value.filter((v) => v !== name));
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      const trimmed = search.trim().replace(/,$/, "");
-      if (trimmed) addTool(trimmed);
-    }
-    if (e.key === "Backspace" && !search && value.length > 0) {
-      removeTool(value[value.length - 1]!);
-    }
-  };
-
-  // Portal dropdown: compute position relative to the portal container.
-  // Can't use position:fixed because Radix Dialog's transform creates a new containing block.
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
-  useLayoutEffect(() => {
-    if (!open || filtered.length === 0 || !containerRef.current || !portalContainer?.current) return;
-    const inputRect = containerRef.current.getBoundingClientRect();
-    const portalRect = portalContainer.current.getBoundingClientRect();
-    setDropdownStyle({
-      position: "absolute",
-      top: inputRect.bottom - portalRect.top + 4,
-      left: inputRect.left - portalRect.left,
-      width: inputRect.width,
-      zIndex: 50,
-    });
-  }, [open, filtered.length, search, value, portalContainer]);
-
-  return (
-    <div ref={containerRef} className="relative">
-      <div
-        className={cn(
-          "border-input dark:bg-input/30 flex min-h-9 flex-wrap items-center gap-1 rounded-md border bg-transparent px-2 py-1 text-sm shadow-xs transition-[color,box-shadow]",
-          "focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-2",
-        )}
-        onClick={() => inputRef.current?.focus()}
-      >
-        {value.map((name) => (
-          <span
-            key={name}
-            className="bg-secondary text-secondary-foreground inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs"
-          >
-            {name}
-            <button
-              type="button"
-              className="hover:text-destructive ml-0.5"
-              onClick={(e) => { e.stopPropagation(); removeTool(name); }}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            if (!open) setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={handleKeyDown}
-          placeholder={value.length === 0 ? placeholder : ""}
-          className="placeholder:text-muted-foreground min-w-[80px] flex-1 bg-transparent py-0.5 text-base md:text-sm outline-none"
-        />
-        <ChevronDownIcon
-          className="text-muted-foreground size-4 shrink-0 cursor-pointer opacity-50"
-          onClick={() => setOpen(!open)}
-        />
-      </div>
-      {open && filtered.length > 0 && portalContainer?.current && createPortal(
-        <div
-          style={dropdownStyle}
-          className="bg-popover text-popover-foreground max-h-56 overflow-y-auto rounded-md border p-1 shadow-md"
-        >
-          {filtered.map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => addTool(t.name)}
-              className="hover:bg-accent hover:text-accent-foreground flex w-full cursor-pointer flex-col items-start rounded-sm px-2 py-1.5 outline-hidden select-none"
-            >
-              <span className="truncate font-mono text-xs">{t.name}</span>
-              {t.description && (
-                <span className="text-muted-foreground truncate text-[11px] w-full text-left">
-                  {t.description}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>,
-        portalContainer.current,
-      )}
-    </div>
   );
 }

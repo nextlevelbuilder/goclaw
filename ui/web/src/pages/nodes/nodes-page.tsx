@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link as LinkIcon, RefreshCw, Check, X, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,19 @@ import {
 } from "./hooks/use-nodes";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
 
 export function NodesPage() {
   const { t } = useTranslation("nodes");
   const { pendingPairings, pairedDevices, loading, refresh, approvePairing, denyPairing, revokePairing } = useNodes();
   const spinning = useMinLoading(loading);
+  const senderIds = useMemo(() => [
+    ...pendingPairings.map((p) => p.sender_id),
+    ...pairedDevices.map((d) => d.sender_id),
+    ...pairedDevices.map((d) => d.paired_by).filter(Boolean),
+  ].filter(Boolean) as string[], [pendingPairings, pairedDevices]);
+  const { resolve } = useContactResolver(senderIds);
   const isEmpty = pendingPairings.length === 0 && pairedDevices.length === 0;
   const showSkeleton = useDeferredLoading(loading && isEmpty);
   const [revokeTarget, setRevokeTarget] = useState<PairedDevice | null>(null);
@@ -64,7 +72,7 @@ export function NodesPage() {
                           <span className="font-mono text-sm font-medium">{p.code}</span>
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {t("sender")}{p.sender_id}
+                          {t("sender")}{formatUserLabel(p.sender_id, resolve)}
                           {p.chat_id && ` | ${t("chat")}${p.chat_id}`}
                           {" | "}
                           {formatRelativeTime(new Date(p.created_at))}
@@ -116,11 +124,11 @@ export function NodesPage() {
                           <td className="px-4 py-3">
                             <Badge variant="outline">{d.channel}</Badge>
                           </td>
-                          <td className="px-4 py-3 font-medium">{d.sender_id}</td>
+                          <td className="px-4 py-3 font-medium">{formatUserLabel(d.sender_id, resolve)}</td>
                           <td className="px-4 py-3 text-muted-foreground">
                             {formatDate(new Date(d.paired_at))}
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">{d.paired_by}</td>
+                          <td className="px-4 py-3 text-muted-foreground">{d.paired_by ? formatUserLabel(d.paired_by, resolve) : "--"}</td>
                           <td className="px-4 py-3 text-right">
                             <Button
                               variant="ghost"

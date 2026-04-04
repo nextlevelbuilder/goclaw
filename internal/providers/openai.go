@@ -24,6 +24,7 @@ type OpenAIProvider struct {
 	apiKey       string
 	apiBase      string
 	chatPath     string // defaults to "/chat/completions"
+	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
 	defaultModel string
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	client       *http.Client
@@ -38,6 +39,49 @@ func isOpenAINativeEndpoint(apiBase string) bool {
 	// Extract hostname from the API base URL.
 	lower := strings.ToLower(apiBase)
 	return strings.Contains(lower, "api.openai.com")
+}
+
+// isFireworksEndpoint returns true for Fireworks AI endpoints.
+// Fireworks requires stream=true for max_tokens > 4096.
+func (p *OpenAIProvider) isFireworksEndpoint() bool {
+	return strings.Contains(strings.ToLower(p.apiBase), "fireworks.ai")
+}
+
+// isTogetherEndpoint returns true for Together AI inference hosts.
+// Together rejects some OpenAI extensions (e.g. stream_options, reasoning_effort) with HTTP 400.
+// Uses URL, provider_type, and name so reverse-proxied Together endpoints are also detected.
+func (p *OpenAIProvider) isTogetherEndpoint() bool {
+	b := strings.ToLower(p.apiBase)
+	if strings.Contains(b, "together.xyz") || strings.Contains(b, "together.ai") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "together") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(p.name), "together") {
+		return true
+	}
+	return false
+}
+
+// isDashScopeAPIBase returns true for Alibaba DashScope OpenAI-compatible endpoints.
+func isDashScopeAPIBase(apiBase string) bool {
+	return strings.Contains(strings.ToLower(apiBase), "dashscope")
+}
+
+// dashScopePassthroughKeys is true when enable_thinking / thinking_budget may be added to the JSON body.
+// Uses URL, provider_type, and name so httptest DashScope URLs still work in tests.
+func (p *OpenAIProvider) dashScopePassthroughKeys() bool {
+	if isDashScopeAPIBase(p.apiBase) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(p.providerType)), "dashscope") {
+		return true
+	}
+	if strings.Contains(strings.ToLower(p.name), "dashscope") {
+		return true
+	}
+	return false
 }
 
 func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvider {
@@ -63,11 +107,19 @@ func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 	return p
 }
 
+// WithAuthPrefix sets a custom Authorization header prefix for providers with non-standard auth formats.
+// Default is "Bearer " if not set.
+func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
+	p.authPrefix = prefix
+	return p
+}
+
 func (p *OpenAIProvider) Name() string           { return p.name }
 func (p *OpenAIProvider) DefaultModel() string   { return p.defaultModel }
 func (p *OpenAIProvider) SupportsThinking() bool { return true }
 func (p *OpenAIProvider) APIKey() string         { return p.apiKey }
 func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
+func (p *OpenAIProvider) AuthPrefix() string     { return p.authPrefix }
 func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
 
 // schemaProviderName returns the most specific provider identifier for schema normalization.
@@ -204,10 +256,14 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 
 		delta := chunk.Choices[0].Delta
-		if delta.ReasoningContent != "" {
-			result.Thinking += delta.ReasoningContent
+		reasoning := delta.ReasoningContent
+		if reasoning == "" {
+			reasoning = delta.Reasoning
+		}
+		if reasoning != "" {
+			result.Thinking += reasoning
 			if onChunk != nil {
-				onChunk(StreamChunk{Thinking: delta.ReasoningContent})
+				onChunk(StreamChunk{Thinking: reasoning})
 			}
 		}
 		if delta.Content != "" {
@@ -315,8 +371,9 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 			"role": role,
 		}
 
-		// Echo reasoning_content for assistant messages (required by Kimi, DeepSeek when thinking is enabled)
-		if m.Thinking != "" && m.Role == "assistant" {
+		// Echo reasoning_content only for APIs/models that accept it on assistant history.
+		// Together Qwen and many OpenAI-compat gateways reject unknown message fields → HTTP 400.
+		if m.Thinking != "" && m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
 			msg["reasoning_content"] = m.Thinking
 		}
 
@@ -324,18 +381,19 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// (Gemini rejects empty content → "must include at least one parts field").
 		if m.Role == "user" && len(m.Images) > 0 {
 			var parts []map[string]any
+			// Text before images — Together / Qwen vision examples use this order; OpenAI accepts both.
+			if m.Content != "" {
+				parts = append(parts, map[string]any{
+					"type": "text",
+					"text": m.Content,
+				})
+			}
 			for _, img := range m.Images {
 				parts = append(parts, map[string]any{
 					"type": "image_url",
 					"image_url": map[string]any{
 						"url": fmt.Sprintf("data:%s;base64,%s", img.MimeType, img.Data),
 					},
-				})
-			}
-			if m.Content != "" {
-				parts = append(parts, map[string]any{
-					"type": "text",
-					"text": m.Content,
 				})
 			}
 			msg["content"] = parts
@@ -361,7 +419,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 					}
 				}
 				toolCalls[i] = map[string]any{
-					"id":       truncateToolCallID(tc.ID),
+					"id":       p.wireToolCallID(tc.ID),
 					"type":     "function",
 					"function": fn,
 				}
@@ -370,7 +428,7 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 
 		if m.ToolCallID != "" {
-			msg["tool_call_id"] = truncateToolCallID(m.ToolCallID)
+			msg["tool_call_id"] = p.wireToolCallID(m.ToolCallID)
 		}
 
 		msgs = append(msgs, msg)
@@ -398,7 +456,8 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		body["tool_choice"] = "auto"
 	}
 
-	if stream {
+	// Together returns HTTP 400 on some requests when stream_options is present.
+	if stream && !p.isTogetherEndpoint() {
 		body["stream_options"] = map[string]any{
 			"include_usage": true,
 		}
@@ -407,6 +466,15 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	// Merge options
 	capabilityModel := modelFamily(model)
 	if v, ok := req.Options[OptMaxTokens]; ok {
+		// Fireworks requires stream=true for max_tokens > 4096.
+		// Clamp proactively to avoid a 400 round-trip (their error format
+		// doesn't match the generic clampMaxTokensFromError regex).
+		if !stream && p.isFireworksEndpoint() {
+			if maxTokens, isInt := v.(int); isInt && maxTokens > 4096 {
+				v = 4096
+				slog.Debug("max_tokens clamped to 4096 for Fireworks non-streaming request", "provider", p.name, "model", model)
+			}
+		}
 		if strings.HasPrefix(capabilityModel, "gpt-5") || strings.HasPrefix(capabilityModel, "o1") || strings.HasPrefix(capabilityModel, "o3") || strings.HasPrefix(capabilityModel, "o4") {
 			body["max_completion_tokens"] = v
 		} else {
@@ -424,17 +492,21 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		}
 	}
 
-	// Inject reasoning_effort for o-series models (ignored by models that don't support it)
+	// reasoning_effort is OpenAI-specific; do not send to third-party OpenAI-compatible APIs.
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
-		body[OptReasoningEffort] = level
+		if openAIModelSupportsReasoningEffort(model) {
+			body[OptReasoningEffort] = level
+		}
 	}
 
-	// DashScope-specific passthrough keys
-	if v, ok := req.Options[OptEnableThinking]; ok {
-		body[OptEnableThinking] = v
-	}
-	if v, ok := req.Options[OptThinkingBudget]; ok {
-		body[OptThinkingBudget] = v
+	// DashScope-specific passthrough keys — never send to other OpenAI-compat hosts.
+	if p.dashScopePassthroughKeys() {
+		if v, ok := req.Options[OptEnableThinking]; ok {
+			body[OptEnableThinking] = v
+		}
+		if v, ok := req.Options[OptThinkingBudget]; ok {
+			body[OptThinkingBudget] = v
+		}
 	}
 
 	return body
@@ -447,6 +519,39 @@ func modelFamily(model string) string {
 		return model[idx+1:]
 	}
 	return model
+}
+
+// openAIModelSupportsReasoningEffort is true when the Chat Completions request may include
+// the top-level "reasoning_effort" field (OpenAI o-series / GPT-5 family).
+// Other OpenAI-compatible hosts (Together, Groq, vLLM, etc.) often reject unknown fields with HTTP 400.
+func openAIModelSupportsReasoningEffort(model string) bool {
+	if LookupReasoningCapability(model) != nil {
+		return true
+	}
+	fam := strings.ToLower(modelFamily(model))
+	for _, prefix := range []string{"gpt-5", "o1", "o3", "o4"} {
+		if strings.HasPrefix(fam, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// openAIWireAssistantReasoningContent is true when assistant message objects may include
+// "reasoning_content" (thinking replay). Narrow allowlist — most OpenAI-compat hosts reject it.
+func openAIWireAssistantReasoningContent(model string) bool {
+	if openAIModelSupportsReasoningEffort(model) {
+		return true
+	}
+	fam := strings.ToLower(modelFamily(model))
+	full := strings.ToLower(model)
+	if strings.Contains(fam, "deepseek") || strings.Contains(full, "deepseek") {
+		return true
+	}
+	if strings.Contains(fam, "kimi") || strings.Contains(full, "kimi") {
+		return true
+	}
+	return false
 }
 
 func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser, error) {
@@ -465,7 +570,11 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 	if strings.Contains(strings.ToLower(p.apiBase), "azure.com") {
 		httpReq.Header.Set("api-key", p.apiKey)
 	} else {
-		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+		prefix := p.authPrefix
+		if prefix == "" {
+			prefix = "Bearer "
+		}
+		httpReq.Header.Set("Authorization", prefix+p.apiKey)
 	}
 
 	resp, err := p.client.Do(httpReq)
@@ -494,6 +603,9 @@ func (p *OpenAIProvider) parseResponse(resp *openAIResponse) *ChatResponse {
 		msg := resp.Choices[0].Message
 		result.Content = msg.Content
 		result.Thinking = msg.ReasoningContent
+		if result.Thinking == "" {
+			result.Thinking = msg.Reasoning
+		}
 		result.FinishReason = resp.Choices[0].FinishReason
 
 		for _, tc := range msg.ToolCalls {
@@ -582,6 +694,23 @@ func clampedLimit(body map[string]any) any {
 }
 
 const maxToolCallIDLen = 40
+
+// normalizeMistralToolCallID deterministically maps any tool call ID to a
+// 9-character alphanumeric string required by the Mistral API.
+// Uses SHA-256 of the full ID to avoid prefix-dependent collisions.
+func normalizeMistralToolCallID(id string) string {
+	h := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(h[:])[:9]
+}
+
+// wireToolCallID dispatches to Mistral-specific normalization (9-char alnum)
+// or the standard OpenAI truncation (40-char max) based on the provider.
+func (p *OpenAIProvider) wireToolCallID(id string) string {
+	if p.name == "mistral" || p.providerType == "mistral" {
+		return normalizeMistralToolCallID(id)
+	}
+	return truncateToolCallID(id)
+}
 
 // truncateToolCallID deterministically fits tool call IDs into OpenAI's 40-char
 // limit. Prefix truncation can alias distinct legacy IDs that only diverge after

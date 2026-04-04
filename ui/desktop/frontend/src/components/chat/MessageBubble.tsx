@@ -1,4 +1,4 @@
-import type { Message } from '../../stores/chat-store'
+import type { ChatMessage as Message } from '../../stores/chat-store'
 import { formatTimestamp } from '../../lib/format'
 import { ThinkingBlock } from './ThinkingBlock'
 import { ToolCallBlock } from './ToolCallBlock'

@@ -66,12 +66,19 @@ func (l *Loop) filteredToolNamesForChannel(channelType string) []string {
 }
 
 // buildCredentialCLIContext generates the TOOLS.md supplement for credentialed CLIs.
-// Returns empty string if no secure CLI store is configured or no enabled CLIs.
+// Uses agent-scoped list when agent UUID is available: returns only global CLIs
+// plus explicitly granted CLIs, with grant overrides merged.
 func (l *Loop) buildCredentialCLIContext(ctx context.Context) string {
 	if l.secureCLIStore == nil {
 		return ""
 	}
-	creds, err := l.secureCLIStore.ListEnabled(ctx)
+	var creds []store.SecureCLIBinary
+	var err error
+	if l.agentUUID != uuid.Nil {
+		creds, err = l.secureCLIStore.ListForAgent(ctx, l.agentUUID)
+	} else {
+		creds, err = l.secureCLIStore.ListEnabled(ctx)
+	}
 	if err != nil || len(creds) == 0 {
 		return ""
 	}
@@ -228,9 +235,30 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		mcpToolDescs = nil
 	}
 
+	// Determine whether to inject team context into the system prompt.
+	// Team context (TEAM.md, workspace section, members roster) is injected when:
+	//   - This is a team-dispatched session (team: prefix), OR
+	//   - Agent is the lead of a team AND this is an inbound (non-dispatch) session.
+	// Member-only agents in inbound chat get spawn section instead of team context.
+	isTeamDispatch := bootstrap.IsTeamSession(sessionKey)
+	injectTeamContext := isTeamDispatch || (hasTeamTools && l.isTeamLead)
+
+	// Filter TEAM.md from context files when team context should not be injected
+	// (i.e. member-only agent in inbound chat — spawn section applies instead).
+	if !injectTeamContext {
+		filtered := make([]bootstrap.ContextFile, 0, len(contextFiles))
+		for _, cf := range contextFiles {
+			if cf.Path != bootstrap.TeamFile {
+				filtered = append(filtered, cf)
+			}
+		}
+		contextFiles = filtered
+	}
+
 	// Resolve team members so agent knows who to assign tasks to.
+	// Only resolve when team context is active — avoids unnecessary DB query for member-only inbound chats.
 	var teamMembers []store.TeamMemberData
-	if hasTeamTools && l.teamStore != nil && l.agentUUID != uuid.Nil {
+	if injectTeamContext && hasTeamTools && l.teamStore != nil && l.agentUUID != uuid.Nil {
 		if team, _ := l.teamStore.GetTeamForAgent(ctx, l.agentUUID); team != nil {
 			teamMembers, _ = l.teamStore.ListMembers(ctx, team.ID)
 		}
@@ -250,7 +278,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		SkillsSummary:          l.resolveSkillsSummary(ctx, skillFilter),
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
-		HasTeam:                hasTeamTools,
+		IsTeamContext:          injectTeamContext,
 		TeamWorkspace:          tools.ToolTeamWorkspaceFromCtx(ctx),
 		TeamMembers:            teamMembers,
 		TeamGuidance:           teamGuidance(edition.Current().TeamFullMode),
@@ -382,7 +410,7 @@ func filterBootstrapTools(toolNames []string) []string {
 // Above these limits, only include skill_search instructions.
 const (
 	skillInlineMaxCount  = 60   // max skills to inline
-	skillInlineMaxTokens = 5000 // max estimated tokens for skill descriptions
+	skillInlineMaxTokens = 3000 // max estimated tokens for skill descriptions
 )
 
 // resolveSkillsSummary dynamically builds the skills summary for the system prompt.
@@ -406,10 +434,15 @@ func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) s
 		return ""
 	}
 
-	// Estimate tokens: ~1 token per 4 chars for name+description
+	// Estimate tokens: ~1 token per 4 chars for name+description.
+	// Cap description length to match BuildSummary() truncation (skillDescMaxLen=200 runes).
 	totalChars := 0
 	for _, s := range filtered {
-		totalChars += len(s.Name) + len(s.Description) + 10 // +10 for XML tags overhead
+		descLen := len(s.Description)
+		if descLen > 200 {
+			descLen = 200
+		}
+		totalChars += len(s.Name) + descLen + 10 // +10 for XML tags overhead
 	}
 	estimatedTokens := totalChars / 4
 
@@ -478,7 +511,8 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 		return nil, dropped
 	}
 
-	// 2. Walk through messages ensuring tool_result follows matching tool_use.
+	// 2. Walk through messages ensuring tool_result follows matching tool_use
+	// and that roles alternate correctly (user↔assistant).
 	// Also dedup tool call IDs across the transcript for legacy sessions that
 	// may have persisted duplicates before the live uniquify fix was deployed.
 	var result []providers.Message
@@ -498,17 +532,25 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 			// results with the same raw ID pair correctly in encounter order.
 			idQueue := make(map[string][]string, len(msg.ToolCalls)) // origID → []newID
 			expectedIDs := make(map[string]bool, len(msg.ToolCalls))
+			didDedup := false
 			for j := range msg.ToolCalls {
 				origID := msg.ToolCalls[j].ID
 				newID := origID
 				if globalSeen[origID] {
 					newID = fmt.Sprintf("%s_dedup_%d", origID, j)
 					slog.Debug("sanitizeHistory: dedup tool call ID", "orig", origID, "new", newID)
+					didDedup = true
+					dropped++ // count as change so cleaned history is persisted back to DB
 				}
 				msg.ToolCalls[j].ID = newID
 				globalSeen[newID] = true
 				idQueue[origID] = append(idQueue[origID], newID)
 				expectedIDs[newID] = true
+			}
+			// When dedup rewrites IDs, clear RawAssistantContent so the provider
+			// uses the corrected ToolCalls instead of raw JSON with stale IDs.
+			if didDedup {
+				msg.RawAssistantContent = nil
 			}
 
 			result = append(result, msg)
@@ -550,6 +592,33 @@ func sanitizeHistory(msgs []providers.Message) ([]providers.Message, int) {
 		} else {
 			result = append(result, msg)
 		}
+	}
+
+	// 3. Fix role alternation: LLM APIs require user↔assistant alternation.
+	// Merge consecutive same-role messages (e.g. two user messages) into one,
+	// which can happen from bootstrap nudges, inject channel, or session corruption.
+	if len(result) > 1 {
+		merged := make([]providers.Message, 0, len(result))
+		merged = append(merged, result[0])
+		for j := 1; j < len(result); j++ {
+			prev := &merged[len(merged)-1]
+			curr := result[j]
+			// Only merge plain messages (no tool_calls, no tool role)
+			if curr.Role == prev.Role && curr.Role != "tool" && len(curr.ToolCalls) == 0 && len(prev.ToolCalls) == 0 {
+				slog.Debug("sanitizeHistory: merging consecutive same-role messages",
+					"role", curr.Role, "index", j)
+				prev.Content += "\n\n" + curr.Content
+				// Preserve media refs from merged message so compaction
+				// summary retains knowledge of shared media files.
+				if len(curr.MediaRefs) > 0 {
+					prev.MediaRefs = append(prev.MediaRefs, curr.MediaRefs...)
+				}
+				dropped++
+			} else {
+				merged = append(merged, curr)
+			}
+		}
+		result = merged
 	}
 
 	return result, dropped

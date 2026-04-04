@@ -320,6 +320,24 @@ func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID strin
 		}
 		stats.EntityTypes[t] = c
 	}
+
+	// Fetch distinct user IDs (only when not filtering by specific user)
+	if userID == "" {
+		uidRows, uidErr := s.db.QueryContext(ctx,
+			`SELECT DISTINCT user_id FROM kg_entities WHERE agent_id = $1`+tenantFilter+` AND user_id != '' ORDER BY user_id`,
+			append([]any{aid}, tcArgs...)...,
+		)
+		if uidErr == nil {
+			defer uidRows.Close()
+			for uidRows.Next() {
+				var uid string
+				if uidRows.Scan(&uid) == nil && uid != "" {
+					stats.UserIDs = append(stats.UserIDs, uid)
+				}
+			}
+		}
+	}
+
 	return stats, nil
 }
 

@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Trash2, RotateCcw, Info, Eye, Pencil, Check, X } from "lucide-react";
+import { ArrowLeft, Trash2, RotateCcw, Eye, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageBubble } from "@/components/chat/message-bubble";
-import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { useDebouncedCallback } from "@/hooks/use-debounced-callback";
@@ -14,6 +13,7 @@ import { formatDate, formatTokens } from "@/lib/format";
 import type { SessionInfo, SessionPreview, Message } from "@/types/session";
 import type { ChatMessage, AgentEventPayload, ToolStreamEntry } from "@/types/chat";
 import { messageToTimestamp } from "@/lib/message-utils";
+import { SystemMessageBlock, SummaryBlock } from "./session-message-blocks";
 
 /** Check if a message is an internal system message (subagent results, cron, etc.) */
 function isSystemMessage(msg: ChatMessage): boolean {
@@ -273,73 +273,3 @@ export function SessionDetailPage({
   );
 }
 
-function SystemMessageBlock({ content }: { content: string }) {
-  const { t } = useTranslation("sessions");
-  const [expanded, setExpanded] = useState(false);
-  // Extract the first line as title, rest as body
-  const lines = content.split("\n");
-  const title = (lines[0] ?? "").replace(/^\[System Message\]\s*/, "").trim();
-  const body = lines.slice(1).join("\n").trim();
-
-  return (
-    <div className="mx-auto flex max-w-3xl items-start gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 px-4 py-2">
-      <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 text-xs text-muted-foreground">
-        <span className="font-medium">{title || t("detail.systemMessage")}</span>
-        {body && (
-          <>
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="ml-1 cursor-pointer text-primary hover:underline"
-            >
-              {expanded ? t("detail.hide") : t("detail.showDetails")}
-            </button>
-            {expanded && (
-              <div className="mt-2">
-                <MarkdownRenderer content={body} className="text-xs" />
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const SUMMARY_MAX_HEIGHT = 72; // ~3 lines of text
-
-function SummaryBlock({ text }: { text: string }) {
-  const { t } = useTranslation("sessions");
-  const [expanded, setExpanded] = useState(false);
-  const [needsTruncation, setNeedsTruncation] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    if (contentRef.current) {
-      setNeedsTruncation(contentRef.current.scrollHeight > SUMMARY_MAX_HEIGHT);
-    }
-  }, [text]);
-
-  return (
-    <div className="border-b bg-muted/50 px-6 py-3 text-sm">
-      <span className="font-medium">{t("detail.summary")}: </span>
-      <div
-        ref={contentRef}
-        className="mt-1 overflow-hidden transition-[max-height] duration-200"
-        style={{ maxHeight: expanded ? contentRef.current?.scrollHeight : SUMMARY_MAX_HEIGHT }}
-      >
-        {text}
-      </div>
-      {needsTruncation && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-1 cursor-pointer text-xs font-medium text-primary hover:underline"
-        >
-          {expanded ? t("detail.showLess") : t("detail.showMore")}
-        </button>
-      )}
-    </div>
-  );
-}

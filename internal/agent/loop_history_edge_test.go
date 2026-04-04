@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -192,8 +193,9 @@ func TestSanitizeHistory_DedupAcrossTwoTurns(t *testing.T) {
 	if len(result) != 6 {
 		t.Fatalf("expected 6 messages preserved via dedup, got %d", len(result))
 	}
-	if dropped != 0 {
-		t.Fatalf("expected 0 dropped, got %d", dropped)
+	// Dedup rewrites count as changes (dropped > 0 triggers DB persistence).
+	if dropped != 1 {
+		t.Fatalf("expected 1 dropped (dedup counts as change), got %d", dropped)
 	}
 
 	// Turn 1 assistant should keep original ID
@@ -218,7 +220,7 @@ func TestSanitizeHistory_LargeHistory_Performance(t *testing.T) {
 	// Build 1000-message history with proper tool pairing
 	msgs := make([]providers.Message, 0, 1000)
 	for i := range 250 {
-		tcID := "tc_" + strings.Repeat("x", 5) + "_" + string(rune('a'+i%26)) + string(rune('0'+i%10))
+		tcID := fmt.Sprintf("tc_%05d", i)
 		msgs = append(msgs,
 			providers.Message{Role: "user", Content: "question " + tcID},
 			providers.Message{Role: "assistant", ToolCalls: []providers.ToolCall{

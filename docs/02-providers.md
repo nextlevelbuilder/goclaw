@@ -1,6 +1,6 @@
 # 02 - LLM Providers
 
-GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Six concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), Claude CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking).
+GoClaw abstracts LLM communication behind a single `Provider` interface, allowing the agent loop to work with any backend without knowing the wire format. Six concrete implementations exist: Anthropic (native HTTP+SSE), OpenAI-compatible (covering 10+ API endpoints), Claude CLI (local binary), Codex (OAuth-based), ACP (subagent orchestration), and DashScope (Alibaba Qwen with thinking). The OpenAI-compatible provider also supports BytePlus ModelArk (Seed 2.0 models with image/video generation).
 
 ---
 
@@ -75,6 +75,8 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 | bailian | `https://coding-intl.dashscope.aliyuncs.com/v1` | `qwen3.5-plus` | Alibaba Coding API |
 | zai | `https://api.z.ai/api/paas/v4` | `glm-5` | |
 | zai-coding | `https://api.z.ai/api/coding/paas/v4` | `glm-5` | |
+| byteplus | `https://ark.ap-southeast.bytepluses.com/api/v3` | `seed-2-0-lite-260228` | Seed 2.0 models |
+| byteplus_coding | `https://ark.ap-southeast.bytepluses.com/api/coding/v3` | `seed-2-0-lite-260228` | Seed 2.0 Coding Plan |
 
 ---
 
@@ -736,6 +738,8 @@ Reasoning behavior:
 | `internal/providers/schema_cleaner.go` | CleanSchemaForProvider, CleanToolSchemas, recursive schema field removal |
 | `internal/providers/registry.go` | Provider registry: registration, lookup, lifecycle management |
 | `cmd/gateway_providers.go` | Provider registration from config and database during gateway startup |
+| `internal/tools/create_image_byteplus.go` | BytePlus Seedream async image generation (async polling) |
+| `internal/tools/create_video_byteplus.go` | BytePlus Seedance async video generation (async polling, 2K resolution) |
 
 ---
 

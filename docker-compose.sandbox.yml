@@ -2,13 +2,14 @@
 #
 # Prerequisites:
 #   1. Build the sandbox image:  docker build -t goclaw-sandbox:bookworm-slim -f Dockerfile.sandbox .
-#   2. Ensure Docker socket is accessible
+#   2. Ensure Docker socket is accessible (required for container orchestration)
 #
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.sandbox.yml up
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml up
 #
-# SECURITY NOTE: Mounting Docker socket gives the container control over host Docker.
-# Only use in trusted environments where agent code execution isolation is required.
+# SECURITY WARNING: This overlay mounts the Docker socket, giving the container
+# control over host Docker. Deploy only behind a trusted network boundary.
+# For maximum isolation, consider using Docker-in-Docker (dind) or Sysbox instead.
 
 services:
   goclaw:
@@ -26,16 +27,12 @@ services:
       - GOCLAW_SANDBOX_CPUS=1.0
       - GOCLAW_SANDBOX_TIMEOUT_SEC=300
       - GOCLAW_SANDBOX_NETWORK=false
-    # Override base cap_drop to allow Docker socket access.
-    # Re-include base caps (SETUID/SETGID/CHOWN) lost when overriding cap_add.
-    # WARNING: SETUID/SETGID with security_opt cleared (no no-new-privileges)
-    # increases attack surface. Only use in trusted environments.
+    # Docker socket requires overriding base cap_drop to allow container orchestration.
+    # Keep security_opt (no-new-privileges) from base — do NOT clear it.
+    # Only add the minimum cap needed: NET_BIND_SERVICE for port binding.
+    # SETUID/SETGID/CHOWN removed to prevent privilege escalation.
     cap_drop: []
     cap_add:
       - NET_BIND_SERVICE
-      - SETUID
-      - SETGID
-      - CHOWN
-    security_opt: []
     group_add:
       - ${DOCKER_GID:-999}

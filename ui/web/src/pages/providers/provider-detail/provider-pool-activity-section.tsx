@@ -6,15 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { cn } from "@/lib/utils";
-import type { CodexPoolProviderCount } from "@/pages/agents/agent-detail/hooks/use-codex-pool-activity";
+import type { CodexPoolProviderCount, CodexPoolRecentRequest } from "@/pages/agents/agent-detail/hooks/use-codex-pool-activity";
 import { CodexPoolMemberCard } from "@/pages/agents/agent-detail/codex-pool-member-card";
 import { CodexPoolRecentRequestsList } from "@/pages/agents/agent-detail/codex-pool-recent-requests-list";
-import type { CodexPoolEntry } from "@/pages/agents/agent-detail/codex-pool-entry-types";
 import type { ChatGPTOAuthAvailability } from "../hooks/use-chatgpt-oauth-provider-statuses";
 import type { ChatGPTOAuthProviderQuota } from "../hooks/use-chatgpt-oauth-provider-quotas";
 import type { ProviderData } from "../hooks/use-providers";
 import type { ProviderCodexPoolAgentCount } from "../hooks/use-provider-codex-pool-activity";
-import type { CodexPoolRecentRequest } from "@/pages/agents/agent-detail/hooks/use-codex-pool-activity";
+import { toPoolEntriesWithCounts } from "@/adapters/provider-pool.adapter";
 
 function MonitorStat({ label, value }: { label: string; value: string }) {
   return (
@@ -57,36 +56,10 @@ export function ProviderPoolActivitySection({
   const { t } = useTranslation("providers");
   const { t: ta } = useTranslation("agents");
 
-  const entries = useMemo<CodexPoolEntry[]>(() => {
-    return providerCounts.map((c) => {
-      const p = providerByName.get(c.provider_name);
-      const availability: ChatGPTOAuthAvailability =
-        statusByName.get(c.provider_name)?.availability ??
-        (p?.enabled === false ? "disabled" : "needs_sign_in");
-      return {
-        name: c.provider_name,
-        label: p?.display_name || c.provider_name,
-        availability,
-        role: c.provider_name === provider.name ? "preferred" as const : "extra" as const,
-        requestCount: c.request_count,
-        directSelectionCount: c.direct_selection_count,
-        failoverServeCount: c.failover_serve_count,
-        successCount: c.success_count,
-        failureCount: c.failure_count,
-        consecutiveFailures: c.consecutive_failures,
-        successRate: c.success_rate,
-        healthScore: c.health_score,
-        healthState: c.health_state ?? "idle",
-        lastSelectedAt: c.last_selected_at,
-        lastFailoverAt: c.last_failover_at,
-        lastUsedAt: c.last_used_at,
-        lastSuccessAt: c.last_success_at,
-        lastFailureAt: c.last_failure_at,
-        providerHref: p?.id ? `/providers/${p.id}` : undefined,
-        quota: quotaByName.get(c.provider_name),
-      };
-    });
-  }, [provider.name, providerByName, providerCounts, quotaByName, statusByName]);
+  const entries = useMemo(
+    () => toPoolEntriesWithCounts(providerCounts, provider.name, providerByName, statusByName, quotaByName),
+    [provider.name, providerByName, providerCounts, quotaByName, statusByName],
+  );
 
   const failoverCount = recentRequests.filter((r) => r.used_failover).length;
 

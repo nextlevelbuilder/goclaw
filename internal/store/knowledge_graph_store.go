@@ -51,6 +51,7 @@ type GraphStats struct {
 	EntityCount   int            `json:"entity_count"`
 	RelationCount int            `json:"relation_count"`
 	EntityTypes   map[string]int `json:"entity_types"`
+	UserIDs       []string       `json:"user_ids,omitempty"`
 }
 
 // DedupCandidate represents a pair of entities that may be duplicates.

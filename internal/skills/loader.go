@@ -357,6 +357,11 @@ func (l *Loader) LoadForContext(ctx context.Context, allowList []string) string 
 	return "## Available Skills\n\n" + strings.Join(parts, "\n\n---\n\n")
 }
 
+// skillDescMaxLen is the max character length for skill descriptions
+// in the system prompt inline XML. ~200 chars ≈ ~50 tokens, balancing
+// discoverability with prompt budget. Full SKILL.md is read on actual use.
+const skillDescMaxLen = 200
+
 // BuildSummary returns an XML summary of skills for context injection.
 // If allowList is nil, all skills are included. If non-nil, only listed skills are included.
 // The format matches the TS <available_skills> XML used in system prompts.
@@ -391,7 +396,11 @@ func (l *Loader) BuildSummary(ctx context.Context, allowList []string) string {
 	for _, s := range filtered {
 		lines = append(lines, "  <skill>")
 		lines = append(lines, fmt.Sprintf("    <name>%s</name>", escapeXML(s.Name)))
-		lines = append(lines, fmt.Sprintf("    <description>%s</description>", escapeXML(s.Description)))
+		desc := s.Description
+		if len([]rune(desc)) > skillDescMaxLen {
+			desc = string([]rune(desc)[:skillDescMaxLen]) + "…"
+		}
+		lines = append(lines, fmt.Sprintf("    <description>%s</description>", escapeXML(desc)))
 		lines = append(lines, fmt.Sprintf("    <location>%s</location>", escapeXML(s.Path)))
 		lines = append(lines, "  </skill>")
 	}

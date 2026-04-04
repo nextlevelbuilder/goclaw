@@ -31,11 +31,18 @@ const (
 	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
 	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
 	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
-	ProviderNovita          = "novita"       // Novita AI (OpenAI-compatible endpoint)
+	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
+	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
+	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
 
 	// Novita AI defaults.
 	NovitaDefaultAPIBase = "https://api.novita.ai/openai"
 	NovitaDefaultModel   = "moonshotai/kimi-k2.5"
+
+	// BytePlus ModelArk defaults.
+	BytePlusDefaultAPIBase       = "https://ark.ap-southeast.bytepluses.com/api/v3"
+	BytePlusCodingDefaultAPIBase = "https://ark.ap-southeast.bytepluses.com/api/coding/v3"
+	BytePlusDefaultModel         = "seed-2-0-lite-260228"
 )
 
 // ValidProviderTypes lists all accepted provider_type values.
@@ -63,6 +70,8 @@ var ValidProviderTypes = map[string]bool{
 	ProviderOllamaCloud:     true,
 	ProviderACP:             true,
 	ProviderNovita:          true,
+	ProviderBytePlus:        true,
+	ProviderBytePlusCoding:  true,
 }
 
 // LLMProviderData represents an LLM provider configuration.

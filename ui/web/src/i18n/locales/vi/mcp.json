@@ -127,6 +127,7 @@
     "addHeader": "Thêm Header",
     "addEnv": "Thêm biến",
     "saveFailed": "Lưu credentials thất bại",
-    "deleteFailed": "Xóa credentials thất bại"
+    "deleteFailed": "Xóa credentials thất bại",
+    "mergeHint": "Người dùng chat (Telegram, Discord...) cần được gộp vào tenant user qua trang Contacts trước khi có thể thiết lập credentials riêng."
   }
 }

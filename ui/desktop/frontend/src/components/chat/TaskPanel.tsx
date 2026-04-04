@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getWsClient } from '../../lib/ws'
+import { teamService } from '../../services/team-service'
 import type { TeamTaskData } from '../../types/team'
 import { PRIORITY_BADGE } from '../../types/team'
 
@@ -55,8 +56,7 @@ export function TaskPanel({ sessionKey, onTaskClick }: TaskPanelProps) {
   const fetchActiveTasks = useCallback(async () => {
     if (!sessionKey) return
     try {
-      const ws = getWsClient()
-      const res = await ws.call('teams.tasks.active-by-session', { sessionKey }) as { tasks: ActiveTaskResponse[] | null }
+      const res = await teamService.activeTasksBySession(sessionKey)
       setTasks((res.tasks ?? []).map(normalizeActiveTask))
     } catch { /* session may not have team tasks */ }
   }, [sessionKey])

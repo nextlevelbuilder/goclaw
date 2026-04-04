@@ -213,7 +213,9 @@ type ProvidersConfig struct {
 	OllamaCloud ProviderConfig  `json:"ollama_cloud"` // Ollama Cloud (API key required)
 	ClaudeCLI   ClaudeCLIConfig `json:"claude_cli"`
 	ACP         ACPConfig       `json:"acp"`
-	Novita      ProviderConfig  `json:"novita"` // Novita AI (OpenAI-compatible endpoint)
+	Novita         ProviderConfig  `json:"novita"`          // Novita AI (OpenAI-compatible endpoint)
+	BytePlus       ProviderConfig  `json:"byteplus"`        // BytePlus ModelArk (Seed 2.0)
+	BytePlusCoding ProviderConfig  `json:"byteplus_coding"` // BytePlus ModelArk Coding Plan
 }
 
 // OllamaConfig configures a local (or self-hosted) Ollama instance.
@@ -284,6 +286,10 @@ func (p *ProvidersConfig) APIBaseForType(providerType string) string {
 		return p.OllamaCloud.APIBase
 	case "novita":
 		return p.Novita.APIBase
+	case "byteplus":
+		return p.BytePlus.APIBase
+	case "byteplus_coding":
+		return p.BytePlusCoding.APIBase
 	default:
 		return ""
 	}
@@ -311,7 +317,9 @@ func (c *Config) HasAnyProvider() bool {
 		p.OllamaCloud.APIKey != "" ||
 		p.ClaudeCLI.CLIPath != "" ||
 		p.ACP.Binary != "" ||
-		p.Novita.APIKey != ""
+		p.Novita.APIKey != "" ||
+		p.BytePlus.APIKey != "" ||
+		p.BytePlusCoding.APIKey != ""
 }
 
 // QuotaWindow defines request limits per time window. Zero means unlimited.

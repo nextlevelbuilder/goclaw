@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -13,8 +14,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CronSchedule } from "./hooks/use-cron";
-import { slugify, isValidSlug } from "@/lib/slug";
+import { slugify } from "@/lib/slug";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
+import { cronCreateSchema, type CronCreateFormData } from "@/schemas/cron.schema";
 
 interface CronFormDialogProps {
   open: boolean;
@@ -27,46 +29,43 @@ interface CronFormDialogProps {
   }) => Promise<void>;
 }
 
-type ScheduleKind = "every" | "cron" | "at";
-
 export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogProps) {
   const { t } = useTranslation("cron");
   const { agents } = useAgents();
-  const [name, setName] = useState("");
-  const [message, setMessage] = useState("");
-  const [agentId, setAgentId] = useState("");
-  const [scheduleKind, setScheduleKind] = useState<ScheduleKind>("every");
-  const [everyValue, setEveryValue] = useState("60");
-  const [cronExpr, setCronExpr] = useState("0 * * * *");
-  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!name.trim() || !message.trim()) return;
+  const { register, control, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<CronCreateFormData>({
+    resolver: zodResolver(cronCreateSchema),
+    mode: "onChange",
+    defaultValues: {
+      name: "",
+      message: "",
+      agentId: "",
+      scheduleKind: "every",
+      everyValue: "60",
+      cronExpr: "0 * * * *",
+    },
+  });
 
+  const scheduleKind = watch("scheduleKind");
+
+  const onFormSubmit = async (data: CronCreateFormData) => {
     let schedule: CronSchedule;
-    if (scheduleKind === "every") {
-      schedule = { kind: "every", everyMs: Number(everyValue) * 1000 };
-    } else if (scheduleKind === "cron") {
-      schedule = { kind: "cron", expr: cronExpr };
+    if (data.scheduleKind === "every") {
+      schedule = { kind: "every", everyMs: Number(data.everyValue) * 1000 };
+    } else if (data.scheduleKind === "cron") {
+      schedule = { kind: "cron", expr: data.cronExpr };
     } else {
       schedule = { kind: "at", atMs: Date.now() + 60000 };
     }
 
-    setSaving(true);
-    try {
-      await onSubmit({
-        name: name.trim(),
-        schedule,
-        message: message.trim(),
-        agentId: agentId.trim() || undefined,
-      });
-      onOpenChange(false);
-      setName("");
-      setMessage("");
-      setAgentId("");
-    } finally {
-      setSaving(false);
-    }
+    await onSubmit({
+      name: data.name,
+      schedule,
+      message: data.message,
+      agentId: data.agentId || undefined,
+    });
+    onOpenChange(false);
+    reset();
   };
 
   return (
@@ -78,25 +77,42 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
         <div className="space-y-4 -mx-4 px-4 sm:-mx-6 sm:px-6 overflow-y-auto min-h-0">
           <div className="space-y-2">
             <Label>{t("create.name")}</Label>
-            <Input value={name} onChange={(e) => setName(slugify(e.target.value))} placeholder={t("create.namePlaceholder")} />
-            <p className="text-xs text-muted-foreground">{t("create.nameHint")}</p>
+            <Input
+              {...register("name")}
+              onChange={(e) => setValue("name", slugify(e.target.value), { shouldValidate: true })}
+              placeholder={t("create.namePlaceholder")}
+            />
+            {errors.name ? (
+              <p className="text-xs text-destructive">{errors.name.message}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">{t("create.nameHint")}</p>
+            )}
           </div>
 
           <div className="space-y-2">
             <Label>{t("create.agentId")}</Label>
-            <Select name="agentId" value={agentId || "__default__"} onValueChange={(v) => setAgentId(v === "__default__" ? "" : v)}>
-              <SelectTrigger className="text-base md:text-sm">
-                <SelectValue placeholder={t("create.agentIdPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__default__">{t("create.agentIdPlaceholder")}</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.display_name || a.agent_key || a.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Controller
+              control={control}
+              name="agentId"
+              render={({ field }) => (
+                <Select
+                  value={field.value || "__default__"}
+                  onValueChange={(v) => field.onChange(v === "__default__" ? "" : v)}
+                >
+                  <SelectTrigger className="text-base md:text-sm">
+                    <SelectValue placeholder={t("create.agentIdPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__default__">{t("create.agentIdPlaceholder")}</SelectItem>
+                    {agents.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.display_name || a.agent_key || a.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
 
           <div className="space-y-2">
@@ -107,7 +123,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
                   key={kind}
                   variant={scheduleKind === kind ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setScheduleKind(kind)}
+                  onClick={() => setValue("scheduleKind", kind)}
                 >
                   {kind === "every" ? t("create.every") : kind === "cron" ? t("create.cron") : t("create.once")}
                 </Button>
@@ -121,8 +137,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
               <Input
                 type="number"
                 min={1}
-                value={everyValue}
-                onChange={(e) => setEveryValue(e.target.value)}
+                {...register("everyValue")}
                 placeholder="60"
               />
             </div>
@@ -132,8 +147,7 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
             <div className="space-y-2">
               <Label>{t("create.cronExpression")}</Label>
               <Input
-                value={cronExpr}
-                onChange={(e) => setCronExpr(e.target.value)}
+                {...register("cronExpr")}
                 placeholder="0 * * * *"
               />
               <p className="text-xs text-muted-foreground">{t("create.cronHint")}</p>
@@ -149,19 +163,24 @@ export function CronFormDialog({ open, onOpenChange, onSubmit }: CronFormDialogP
           <div className="space-y-2">
             <Label>{t("create.message")}</Label>
             <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              {...register("message")}
               placeholder={t("create.messagePlaceholder")}
               rows={3}
             />
+            {errors.message && (
+              <p className="text-xs text-destructive">{errors.message.message}</p>
+            )}
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {t("create.cancel")}
           </Button>
-          <Button onClick={handleSubmit} disabled={saving || !name.trim() || !isValidSlug(name.trim()) || !message.trim()}>
-            {saving ? t("create.creating") : t("create.create")}
+          <Button
+            onClick={handleSubmit(onFormSubmit)}
+            disabled={isSubmitting || !!errors.name || !!errors.message}
+          >
+            {isSubmitting ? t("create.creating") : t("create.create")}
           </Button>
         </DialogFooter>
       </DialogContent>

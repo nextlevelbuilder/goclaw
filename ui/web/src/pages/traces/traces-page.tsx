@@ -15,6 +15,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { formatDate, formatDuration, formatTokens, computeDurationMs } from "@/lib/format";
+import { formatUserLabel } from "@/lib/format-user-label";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { useTraces, type TraceData } from "./hooks/use-traces";
 import { TraceDetailDialog } from "./trace-detail-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
@@ -37,15 +39,6 @@ function parseSourceType(sessionKey: string): { type: string; topic?: string } {
   if (sessionKey.includes(":ws:")) return { type: "ws" };
   if (sessionKey.includes(":direct:")) return { type: "direct" };
   return { type: "unknown" };
-}
-
-/** Parse user_id into a human-readable display label */
-function parseUserDisplay(userId: string): string {
-  if (!userId) return "";
-  if (userId === "system") return "System";
-  if (userId.startsWith("group:")) return "Group";
-  if (/^\d+$/.test(userId)) return `#${userId}`;
-  return `@${userId}`;
 }
 
 const SOURCE_ICONS: Record<string, typeof Bot> = {
@@ -84,6 +77,9 @@ export function TracesPage() {
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
+
+  const traceUserIds = useMemo(() => traces.map((tr) => tr.user_id).filter(Boolean) as string[], [traces]);
+  const { resolve } = useContactResolver(traceUserIds);
 
   const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && traces.length === 0);
@@ -186,7 +182,7 @@ export function TracesPage() {
               <tbody>
                 {traces.map((trace: TraceData) => {
                   const source = parseSourceType(trace.session_key);
-                  const userLabel = parseUserDisplay(trace.user_id);
+                  const userLabel = formatUserLabel(trace.user_id, resolve);
                   const agentName = trace.agent_id ? agentMap.get(trace.agent_id) : undefined;
                   const SourceIcon = SOURCE_ICONS[source.type] || Bot;
 

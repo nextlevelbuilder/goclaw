@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getWsClient } from '../../lib/ws'
+import { teamService } from '../../services/team-service'
 import { toast } from '../../stores/toast-store'
 import { Combobox } from '../common/Combobox'
 import { IconClose, IconCheck } from '../common/Icons'
@@ -34,12 +34,11 @@ export function TeamCreateDialog({ agents, onClose, onCreated }: TeamCreateDialo
     if (!name.trim() || !lead) return
     setSaving(true)
     try {
-      const ws = getWsClient()
-      const res = await ws.call('teams.create', {
+      const res = await teamService.create({
         name: name.trim(),
         lead,
         members: memberKeys.filter((k) => k !== lead),
-      }) as { team: TeamData }
+      })
       toast.success(t('teamCreated', 'Team created'), name.trim())
       onCreated(res.team)
       onClose()

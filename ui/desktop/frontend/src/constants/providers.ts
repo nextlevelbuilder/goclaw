@@ -23,6 +23,8 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: 'yescale', label: 'YesScale', apiBase: 'https://api.yescale.one/v1', needsKey: true },
   { value: 'zai', label: 'Z.ai API', apiBase: 'https://api.z.ai/api/paas/v4', needsKey: true },
   { value: 'zai_coding', label: 'Z.ai Coding Plan', apiBase: 'https://api.z.ai/api/coding/paas/v4', needsKey: true },
+  { value: 'byteplus', label: 'BytePlus ModelArk', apiBase: 'https://ark.ap-southeast.bytepluses.com/api/v3', needsKey: true },
+  { value: 'byteplus_coding', label: 'BytePlus Coding Plan', apiBase: 'https://ark.ap-southeast.bytepluses.com/api/coding/v3', needsKey: true },
   { value: 'ollama', label: 'Ollama (Local)', apiBase: 'http://localhost:11434/v1', needsKey: false },
   { value: 'ollama_cloud', label: 'Ollama Cloud', apiBase: 'https://ollama.com/v1', needsKey: true },
   { value: 'claude_cli', label: 'Claude CLI (Local)', apiBase: '', needsKey: false },

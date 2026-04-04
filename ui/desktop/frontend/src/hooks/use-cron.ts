@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getWsClient } from '../lib/ws'
+import { cronService } from '../services/cron-service'
 import { toast } from '../stores/toast-store'
 import type { CronJob, CronRunLog, CronSchedule, CronPayload } from '../types/cron'
 
@@ -17,10 +17,7 @@ export function useCron(agentId?: string) {
 
   const fetchJobs = useCallback(async () => {
     try {
-      const ws = getWsClient()
-      const params: Record<string, unknown> = {}
-      if (agentId) params.agentId = agentId
-      const res = await ws.call('cron.list', params) as { jobs: CronJob[] | null }
+      const res = await cronService.list(agentId)
       setJobs(res.jobs ?? [])
     } catch (err) {
       console.error('Failed to fetch cron jobs:', err)
@@ -33,8 +30,7 @@ export function useCron(agentId?: string) {
 
   const createJob = useCallback(async (params: CreateJobParams) => {
     try {
-      const ws = getWsClient()
-      const job = await ws.call('cron.create', params as unknown as Record<string, unknown>) as CronJob
+      const job = await cronService.create(params)
       setJobs((prev) => [...prev, job])
       toast.success('Cron job created', params.name)
       return job
@@ -46,8 +42,7 @@ export function useCron(agentId?: string) {
 
   const deleteJob = useCallback(async (jobId: string) => {
     try {
-      const ws = getWsClient()
-      await ws.call('cron.delete', { jobId })
+      await cronService.delete(jobId)
       setJobs((prev) => prev.filter((j) => j.id !== jobId))
       toast.success('Cron job deleted')
     } catch (err) {
@@ -58,8 +53,7 @@ export function useCron(agentId?: string) {
 
   const toggleJob = useCallback(async (jobId: string) => {
     try {
-      const ws = getWsClient()
-      const res = await ws.call('cron.toggle', { jobId }) as { enabled: boolean }
+      const res = await cronService.toggle(jobId)
       setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, enabled: res.enabled } : j))
     } catch (err) {
       toast.error('Failed to toggle cron job', (err as Error).message)
@@ -69,8 +63,7 @@ export function useCron(agentId?: string) {
 
   const runJob = useCallback(async (jobId: string) => {
     try {
-      const ws = getWsClient()
-      await ws.call('cron.run', { jobId })
+      await cronService.run(jobId)
       toast.success('Cron job triggered')
     } catch (err) {
       toast.error('Failed to run cron job', (err as Error).message)
@@ -79,8 +72,7 @@ export function useCron(agentId?: string) {
   }, [])
 
   const fetchRuns = useCallback(async (jobId: string): Promise<CronRunLog[]> => {
-    const ws = getWsClient()
-    const res = await ws.call('cron.runs', { jobId, limit: 20 }) as { runs: CronRunLog[] | null }
+    const res = await cronService.runs(jobId)
     return res.runs ?? []
   }, [])
 

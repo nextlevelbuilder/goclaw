@@ -87,7 +87,7 @@ func (s *SQLitePairingStore) ApprovePairing(ctx context.Context, code, approvedB
 	var reqTenantID uuid.UUID
 
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, sender_id, channel, chat_id, COALESCE(metadata, '{}'), tenant_id FROM pairing_requests WHERE code = ?", code,
+		"SELECT id, sender_id, channel, chat_id, COALESCE(metadata, '{}'), tenant_id FROM pairing_requests WHERE code = ? AND expires_at > ?", code, now,
 	).Scan(&reqID, &senderID, &channel, &chatID, &metaJSON, &reqTenantID)
 	if err != nil {
 		return nil, fmt.Errorf("pairing code %s not found or expired", code)

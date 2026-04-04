@@ -27,11 +27,10 @@ export function useKnowledgeGraph(filters: KGFilters) {
       if (filters.userId) params.user_id = filters.userId;
       if (filters.entityType) params.type = filters.entityType;
       if (filters.query) params.q = filters.query;
-      params.limit = "100";
+      params.limit = "200";
       return (await http.get<KGEntity[]>(`/v1/agents/${filters.agentId}/kg/entities`, params)) ?? [];
     },
     enabled: !!filters.agentId,
-    placeholderData: (prev) => prev,
   });
 
   const entities = data ?? [];
@@ -141,12 +140,11 @@ export function useKGGraph(agentId: string, userId?: string) {
     queryKey: queryKeys.kg.graph(agentId, userId),
     queryFn: async () => {
       if (!agentId) return { entities: [], relations: [] };
-      const params: Record<string, string> = { limit: "50" };
+      const params: Record<string, string> = { limit: "500" };
       if (userId) params.user_id = userId;
       return http.get<KGGraphData>(`/v1/agents/${agentId}/kg/graph`, params);
     },
     enabled: !!agentId,
-    placeholderData: (prev) => prev,
   });
 
   return {
@@ -268,5 +266,7 @@ export function useKGTraversal(agentId: string) {
     [http, agentId],
   );
 
-  return { results, traversing, traverse };
+  const reset = useCallback(() => setResults([]), []);
+
+  return { results, traversing, traverse, reset };
 }

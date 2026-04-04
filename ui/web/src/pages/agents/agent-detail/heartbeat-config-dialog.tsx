@@ -1,27 +1,28 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Play, Loader2, ChevronDown, Heart, Clock, Send, FileText, Cpu } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Play, Loader2, Heart, Clock, FileText, Cpu } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useChannels } from "@/pages/channels/hooks/use-channels";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useUiStore } from "@/stores/use-ui-store";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
-import { Combobox } from "@/components/ui/combobox";
-import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { isValidIanaTimezone } from "@/lib/constants";
 import { toast } from "@/stores/use-toast-store";
 import type { HeartbeatConfig, DeliveryTarget } from "@/pages/agents/hooks/use-agent-heartbeat";
+import { HeartbeatScheduleSection } from "./heartbeat-schedule-section";
+import { HeartbeatAdvancedPanel } from "./heartbeat-advanced-panel";
+import { HeartbeatDeliverySection } from "./heartbeat-delivery-section";
+import { heartbeatConfigSchema, type HeartbeatConfigFormData } from "@/schemas/heartbeat.schema";
 
 interface HeartbeatConfigDialogProps {
   open: boolean;
@@ -34,9 +35,7 @@ interface HeartbeatConfigDialogProps {
   setChecklist: (content: string) => Promise<void>;
   fetchTargets: () => Promise<DeliveryTarget[]>;
   refresh: () => Promise<void>;
-  /** Agent's current provider name (used as default for heartbeat). */
   agentProvider?: string;
-  /** Agent's current model (used as default for heartbeat). */
   agentModel?: string;
 }
 
@@ -52,72 +51,102 @@ export function HeartbeatConfigDialog({
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const defaultTz = userTz && userTz !== "auto" ? userTz : browserTz;
 
-  // Form state
-  const [enabled, setEnabled] = useState(false);
-  const [intervalMin, setIntervalMin] = useState(30);
-  const [ackMaxChars, setAckMaxChars] = useState(300);
-  const [maxRetries, setMaxRetries] = useState(2);
-  const [isolatedSession, setIsolatedSession] = useState(false);
-  const [lightContext, setLightContext] = useState(false);
-  const [activeHoursStart, setActiveHoursStart] = useState("");
-  const [activeHoursEnd, setActiveHoursEnd] = useState("");
-  const [timezone, setTimezone] = useState("");
-  const [channel, setChannel] = useState("");
-  const [chatId, setChatId] = useState("");
-  const [hbProvider, setHbProvider] = useState("");
-  const [hbModel, setHbModel] = useState("");
-  const [checklist, setChecklistState] = useState("");
+  // Non-form state: checklist tracking, targets, test spinner
   const [originalChecklist, setOriginalChecklist] = useState("");
   const [checklistLoading, setChecklistLoading] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [targets, setTargets] = useState<DeliveryTarget[]>([]);
-
   const [testRunning, setTestRunning] = useState(false);
   const showTestSpin = useMinLoading(testRunning, 600);
 
-  const loadChecklist = useCallback(async () => {
-    setChecklistLoading(true);
-    try {
-      const content = await getChecklist();
-      setChecklistState(content);
-      setOriginalChecklist(content);
-    } catch { /* ignore */ } finally {
-      setChecklistLoading(false);
-    }
-  }, [getChecklist]);
-
-  // Map providerId UUID → provider name for the select component.
   const providerNameById = useMemo(() => {
     const map: Record<string, string> = {};
     for (const p of providers) map[p.id] = p.name;
     return map;
   }, [providers]);
 
-  // Sync form state only when dialog opens (false→true).
+  const form = useForm<HeartbeatConfigFormData>({
+    resolver: zodResolver(heartbeatConfigSchema),
+    mode: "onChange",
+    defaultValues: {
+      enabled: false,
+      intervalMin: 30,
+      ackMaxChars: 300,
+      maxRetries: 2,
+      isolatedSession: false,
+      lightContext: false,
+      activeHoursStart: "",
+      activeHoursEnd: "",
+      timezone: "",
+      channel: "",
+      chatId: "",
+      hbProvider: "",
+      hbModel: "",
+      checklist: "",
+    },
+  });
+
+  const { control, register, watch, setValue } = form;
+  const enabled = watch("enabled");
+  const hbProvider = watch("hbProvider") ?? "";
+  const hbModel = watch("hbModel") ?? "";
+  const channel = watch("channel") ?? "";
+  const chatId = watch("chatId") ?? "";
+  const activeHoursStart = watch("activeHoursStart") ?? "";
+  const activeHoursEnd = watch("activeHoursEnd") ?? "";
+  const timezone = watch("timezone") ?? "";
+  const ackMaxChars = watch("ackMaxChars");
+  const maxRetries = watch("maxRetries");
+  const isolatedSession = watch("isolatedSession");
+  const lightContext = watch("lightContext");
+
+  const loadChecklist = useCallback(async () => {
+    setChecklistLoading(true);
+    try {
+      const content = await getChecklist();
+      setValue("checklist", content);
+      setOriginalChecklist(content);
+    } catch { /* ignore */ } finally {
+      setChecklistLoading(false);
+    }
+  }, [getChecklist, setValue]);
+
   useEffect(() => {
     if (!open) return;
     if (config) {
-      setEnabled(config.enabled);
-      setIntervalMin(Math.round(config.intervalSec / 60));
-      setAckMaxChars(config.ackMaxChars);
-      setMaxRetries(config.maxRetries);
-      setIsolatedSession(config.isolatedSession);
-      setLightContext(config.lightContext);
-      setActiveHoursStart(config.activeHoursStart ?? "");
-      setActiveHoursEnd(config.activeHoursEnd ?? "");
-      setTimezone(config.timezone || defaultTz);
-      setChannel(config.channel ?? "");
-      setChatId(config.chatId ?? "");
-      // Map stored providerId UUID → name for the select
-      setHbProvider(config.providerId ? (providerNameById[config.providerId] ?? "") : "");
-      setHbModel(config.model ?? "");
+      form.reset({
+        enabled: config.enabled,
+        intervalMin: Math.round(config.intervalSec / 60),
+        ackMaxChars: config.ackMaxChars,
+        maxRetries: config.maxRetries,
+        isolatedSession: config.isolatedSession,
+        lightContext: config.lightContext,
+        activeHoursStart: config.activeHoursStart ?? "",
+        activeHoursEnd: config.activeHoursEnd ?? "",
+        timezone: config.timezone || defaultTz,
+        channel: config.channel ?? "",
+        chatId: config.chatId ?? "",
+        hbProvider: config.providerId ? (providerNameById[config.providerId] ?? "") : "",
+        hbModel: config.model ?? "",
+        checklist: "",
+      });
     } else {
-      // First-time setup defaults
-      setTimezone(defaultTz);
-      setHbProvider("");
-      setHbModel("");
+      form.reset({
+        enabled: false,
+        intervalMin: 30,
+        ackMaxChars: 300,
+        maxRetries: 2,
+        isolatedSession: false,
+        lightContext: false,
+        activeHoursStart: "",
+        activeHoursEnd: "",
+        timezone: defaultTz,
+        channel: "",
+        chatId: "",
+        hbProvider: "",
+        hbModel: "",
+        checklist: "",
+      });
     }
-    setShowAdvanced(false);
     loadChecklist();
     fetchTargets().then(setTargets).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,42 +157,42 @@ export function HeartbeatConfigDialog({
     try { await test(); } finally { setTestRunning(false); }
   };
 
-  const handleSave = async () => {
-    if (timezone && !isValidIanaTimezone(timezone)) {
+  const handleSave = form.handleSubmit(async (values) => {
+    if (values.timezone && !isValidIanaTimezone(values.timezone)) {
       toast.error(t("heartbeat.invalidTimezone", "Invalid timezone"));
       return;
     }
     try {
-      const clampedMin = Math.max(5, intervalMin);
+      const clampedMin = Math.max(5, values.intervalMin);
       await update({
-        enabled,
+        enabled: values.enabled,
         intervalSec: clampedMin * 60,
-        ackMaxChars: ackMaxChars,
-        maxRetries: maxRetries,
-        isolatedSession: isolatedSession,
-        lightContext: lightContext,
-        activeHoursStart: activeHoursStart || undefined,
-        activeHoursEnd: activeHoursEnd || undefined,
-        timezone: timezone || undefined,
-        channel: channel || undefined,
-        chatId: chatId || undefined,
-        model: hbModel || undefined,
-        providerName: hbProvider || undefined,
+        ackMaxChars: values.ackMaxChars,
+        maxRetries: values.maxRetries,
+        isolatedSession: values.isolatedSession,
+        lightContext: values.lightContext,
+        activeHoursStart: values.activeHoursStart || undefined,
+        activeHoursEnd: values.activeHoursEnd || undefined,
+        timezone: values.timezone || undefined,
+        channel: values.channel || undefined,
+        chatId: values.chatId || undefined,
+        model: values.hbModel || undefined,
+        providerName: values.hbProvider || undefined,
       });
-      if (checklist !== originalChecklist) {
-        await setChecklist(checklist);
-        setOriginalChecklist(checklist);
+      if (values.checklist !== originalChecklist) {
+        await setChecklist(values.checklist ?? "");
+        setOriginalChecklist(values.checklist ?? "");
       }
       await refresh();
       onOpenChange(false);
     } catch {
       // toast shown by hook — keep dialog open
     }
-  };
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Heart className="h-4 w-4 text-rose-500" />
@@ -174,13 +203,18 @@ export function HeartbeatConfigDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {/* Scrollable body — standard pattern: -mx-4 px-4 */}
         <div className="overflow-y-auto min-h-0 -mx-4 px-4 sm:-mx-6 sm:px-6 space-y-4 overscroll-contain">
 
-          {/* ── Enable + Interval (top priority) ── */}
+          {/* Enable + Interval */}
           <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
             <div className="flex items-center gap-3 min-w-0">
-              <Switch checked={enabled} onCheckedChange={setEnabled} />
+              <Controller
+                control={control}
+                name="enabled"
+                render={({ field }) => (
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                )}
+              />
               <div className="min-w-0">
                 <span className="text-sm font-medium">{t("heartbeat.enabled")}</span>
                 <p className="text-xs text-muted-foreground">{t("heartbeat.enabledHint")}</p>
@@ -191,15 +225,17 @@ export function HeartbeatConfigDialog({
               <Input
                 type="number"
                 min={5}
-                value={intervalMin}
-                onChange={(e) => setIntervalMin(Math.max(5, Number(e.target.value) || 5))}
+                {...register("intervalMin", {
+                  valueAsNumber: true,
+                  onChange: (e) => setValue("intervalMin", Math.max(5, Number(e.target.value) || 5)),
+                })}
                 className="w-[4.5rem] text-center text-base md:text-sm"
               />
               <span className="text-xs text-muted-foreground">min</span>
             </div>
           </div>
 
-          {/* ── Provider / Model override ── */}
+          {/* Provider / Model override */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Cpu className="h-3.5 w-3.5 text-orange-500" />
@@ -210,9 +246,9 @@ export function HeartbeatConfigDialog({
             <p className="text-xs text-muted-foreground">{t("heartbeat.modelHint")}</p>
             <ProviderModelSelect
               provider={hbProvider}
-              onProviderChange={setHbProvider}
+              onProviderChange={(v) => setValue("hbProvider", v)}
               model={hbModel}
-              onModelChange={setHbModel}
+              onModelChange={(v) => setValue("hbModel", v)}
               allowEmpty
               showVerify={!!(hbProvider && hbModel)}
               providerPlaceholder={agentProvider ? `(${agentProvider})` : "(agent default)"}
@@ -220,188 +256,28 @@ export function HeartbeatConfigDialog({
             />
           </div>
 
-          {/* ── Delivery — WHERE it sends ── */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Send className="h-3.5 w-3.5 text-blue-500" />
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("heartbeat.sectionDelivery")}
-              </h4>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
-              <div className="space-y-1">
-                <Label className="text-xs">{t("heartbeat.channel")}</Label>
-                {channelNames.length > 0 ? (
-                  <Select
-                    value={channel || "__none__"}
-                    onValueChange={(v) => { setChannel(v === "__none__" ? "" : v); setChatId(""); }}
-                  >
-                    <SelectTrigger className="text-base md:text-sm">
-                      <SelectValue placeholder={t("heartbeat.channelPlaceholder")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t("heartbeat.channelNone")}</SelectItem>
-                      {channelNames.map((ch) => (
-                        <SelectItem key={ch} value={ch}>{ch}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    placeholder="telegram"
-                    value={channel}
-                    onChange={(e) => setChannel(e.target.value)}
-                    className="text-base md:text-sm"
-                  />
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">{t("heartbeat.chatId")}</Label>
-                {(() => {
-                  if (!channel) {
-                    return (
-                      <Input
-                        placeholder={t("heartbeat.selectChannelFirst")}
-                        disabled
-                        className="text-base md:text-sm"
-                      />
-                    );
-                  }
-                  const filtered = targets.filter((t) => t.channel === channel);
-                  if (filtered.length > 0) {
-                    return (
-                      <Select
-                        value={chatId || "__none__"}
-                        onValueChange={(v) => setChatId(v === "__none__" ? "" : v)}
-                      >
-                        <SelectTrigger className="text-base md:text-sm">
-                          <SelectValue placeholder={t("heartbeat.chatIdPlaceholder")} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">{t("heartbeat.channelNone")}</SelectItem>
-                          {filtered.map((tgt) => (
-                            <SelectItem key={tgt.chatId} value={tgt.chatId}>
-                              {tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    );
-                  }
-                  return (
-                    <Input
-                      placeholder="-100123456789"
-                      value={chatId}
-                      onChange={(e) => setChatId(e.target.value)}
-                      className="text-base md:text-sm"
-                    />
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
+          <HeartbeatDeliverySection
+            channelNames={channelNames}
+            channel={channel} setChannel={(v) => setValue("channel", v)}
+            chatId={chatId} setChatId={(v) => setValue("chatId", v)}
+            targets={targets}
+          />
 
-          {/* ── Schedule — WHEN it runs ── */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 text-amber-500" />
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("heartbeat.sectionSchedule")}
-              </h4>
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1 w-24">
-                <Label htmlFor="hb-start" className="text-xs">{t("heartbeat.activeHoursStart")}</Label>
-                <Input
-                  id="hb-start"
-                  placeholder="08:00"
-                  value={activeHoursStart}
-                  onChange={(e) => setActiveHoursStart(e.target.value)}
-                  className="text-base md:text-sm"
-                />
-              </div>
-              <div className="space-y-1 w-24">
-                <Label htmlFor="hb-end" className="text-xs">{t("heartbeat.activeHoursEnd")}</Label>
-                <Input
-                  id="hb-end"
-                  placeholder="22:00"
-                  value={activeHoursEnd}
-                  onChange={(e) => setActiveHoursEnd(e.target.value)}
-                  className="text-base md:text-sm"
-                />
-              </div>
-              <div className="space-y-1 flex-1 min-w-[160px]">
-                <Label className="text-xs">{t("heartbeat.timezone")}</Label>
-                <Combobox
-                  value={timezone || "__auto__"}
-                  onChange={(v) => setTimezone(v === "__auto__" ? "" : v)}
-                  options={[{ value: "__auto__", label: defaultTz }, ...getAllIanaTimezones()]}
-                  placeholder={t("heartbeat.timezone")}
-                  className="text-base md:text-sm"
-                />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("heartbeat.scheduleHint")}</p>
-          </div>
+          <HeartbeatScheduleSection
+            activeHoursStart={activeHoursStart} setActiveHoursStart={(v) => setValue("activeHoursStart", v)}
+            activeHoursEnd={activeHoursEnd} setActiveHoursEnd={(v) => setValue("activeHoursEnd", v)}
+            timezone={timezone} setTimezone={(v) => setValue("timezone", v)}
+            defaultTz={defaultTz}
+          />
 
-          {/* ── Advanced (collapsible) ── */}
-          <div className="rounded-lg border">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <span>{t("heartbeat.advancedSettings")}</span>
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
-            </button>
-            {showAdvanced && (
-              <div className="border-t px-3 py-3 space-y-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="hb-ack" className="text-xs">{t("heartbeat.ackMaxChars")}</Label>
-                    <Input
-                      id="hb-ack"
-                      type="number"
-                      min={0}
-                      value={ackMaxChars}
-                      onChange={(e) => setAckMaxChars(Number(e.target.value))}
-                      className="text-base md:text-sm"
-                    />
-                    <p className="text-[11px] text-muted-foreground">{t("heartbeat.ackMaxCharsHint")}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="hb-retries" className="text-xs">{t("heartbeat.maxRetries")}</Label>
-                    <Input
-                      id="hb-retries"
-                      type="number"
-                      min={0}
-                      max={10}
-                      value={maxRetries}
-                      onChange={(e) => setMaxRetries(Number(e.target.value))}
-                      className="text-base md:text-sm"
-                    />
-                    <p className="text-[11px] text-muted-foreground">{t("heartbeat.maxRetriesHint")}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <span className="text-xs font-medium">{t("heartbeat.isolatedSession")}</span>
-                    <p className="text-[11px] text-muted-foreground">{t("heartbeat.isolatedSessionHint")}</p>
-                  </div>
-                  <Switch checked={isolatedSession} onCheckedChange={setIsolatedSession} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <span className="text-xs font-medium">{t("heartbeat.lightContext")}</span>
-                    <p className="text-[11px] text-muted-foreground">{t("heartbeat.lightContextHint")}</p>
-                  </div>
-                  <Switch checked={lightContext} onCheckedChange={setLightContext} />
-                </div>
-              </div>
-            )}
-          </div>
+          <HeartbeatAdvancedPanel
+            ackMaxChars={ackMaxChars} setAckMaxChars={(v) => setValue("ackMaxChars", v)}
+            maxRetries={maxRetries} setMaxRetries={(v) => setValue("maxRetries", v)}
+            isolatedSession={isolatedSession} setIsolatedSession={(v) => setValue("isolatedSession", v)}
+            lightContext={lightContext} setLightContext={(v) => setValue("lightContext", v)}
+          />
 
-          {/* ── Checklist — WHAT the agent does ── */}
+          {/* Checklist */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <FileText className="h-3.5 w-3.5 text-emerald-500" />
@@ -417,8 +293,7 @@ export function HeartbeatConfigDialog({
               </div>
             ) : (
               <Textarea
-                value={checklist}
-                onChange={(e) => setChecklistState(e.target.value)}
+                {...register("checklist")}
                 placeholder={t("heartbeat.checklistPlaceholder")}
                 rows={8}
                 className="text-base md:text-sm font-mono resize-y min-h-[120px] sm:min-h-[200px]"
@@ -426,22 +301,18 @@ export function HeartbeatConfigDialog({
             )}
           </div>
 
-          {/* Bottom padding for scroll */}
           <div className="h-1" />
         </div>
 
-        {/* Footer — fixed at bottom */}
+        {/* Footer */}
         <div className="flex items-center justify-between gap-2 border-t pt-3">
           <Button
-            variant="outline"
-            size="sm"
+            variant="outline" size="sm"
             onClick={handleTest}
             disabled={showTestSpin || saving}
             className="gap-1.5"
           >
-            {showTestSpin
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <Play className="h-3.5 w-3.5" />}
+            {showTestSpin ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
             {t("heartbeat.testRun")}
           </Button>
           <div className="flex gap-2">

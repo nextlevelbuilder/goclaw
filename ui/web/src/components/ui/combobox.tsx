@@ -41,6 +41,9 @@ export function Combobox({
   // Track whether user actively typed since last focus — when false, show all options
   const inputDirtyRef = React.useRef(false);
   const [inputDirty, setInputDirty] = React.useState(false);
+  // After selection, hold the selected value to suppress sync effects until user types again.
+  // Prevents label→UUID→label flash caused by options reloading after selection.
+  const selectedValueRef = React.useRef<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -48,6 +51,10 @@ export function Combobox({
 
   // Sync search text when value changes externally — show label if available
   React.useEffect(() => {
+    // After handleSelect, skip sync while value is still the selected value.
+    // handleSelect already set the display text to the label.
+    if (selectedValueRef.current !== null && selectedValueRef.current === value) return;
+    selectedValueRef.current = null;
     const match = options.find((o) => o.value === value);
     setSearch(match?.label || value);
   }, [value, options]);
@@ -162,6 +169,7 @@ export function Combobox({
   }, [options, search]);
 
   const handleSelect = (val: string) => {
+    selectedValueRef.current = val; // suppress value-sync until user types again
     onChange(val);
     onSelect?.(val);
     const match = options.find((o) => o.value === val);
@@ -173,6 +181,7 @@ export function Combobox({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    selectedValueRef.current = null; // user is typing — resume normal value sync
     setSearch(val);
     onChange(val);
     if (!inputDirtyRef.current) {

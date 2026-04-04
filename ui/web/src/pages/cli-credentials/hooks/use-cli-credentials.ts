@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
-import type { SecureCLIBinary, CLICredentialInput, CLIPreset } from "@/types/cli-credential";
+import type { SecureCLIBinary, CLICredentialInput, CLIPreset, CLIAgentGrant, CLIAgentGrantInput } from "@/types/cli-credential";
 
-export type { SecureCLIBinary, CLICredentialInput, CLIPreset };
+export type { SecureCLIBinary, CLICredentialInput, CLIPreset, CLIAgentGrant, CLIAgentGrantInput };
 
 const QUERY_KEY = ["cliCredentials"] as const;
 const PRESETS_KEY = ["cliCredentials", "presets"] as const;
@@ -92,4 +92,78 @@ export function useCliCredentialPresets() {
   });
 
   return { presets: data ?? {}, loading: isLoading };
+}
+
+/** Hook for managing per-agent grants on a specific CLI binary. */
+export function useCliCredentialGrants(binaryId: string) {
+  const http = useHttp();
+  const queryClient = useQueryClient();
+  const queryKey = ["cliCredentials", binaryId, "grants"] as const;
+
+  const { data, isLoading } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const res = await http.get<{ grants: CLIAgentGrant[] }>(
+        `/v1/cli-credentials/${binaryId}/agent-grants`,
+      );
+      return res.grants ?? [];
+    },
+    enabled: !!binaryId,
+  });
+
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey }),
+    [queryClient, queryKey],
+  );
+
+  const createGrant = useCallback(
+    async (input: CLIAgentGrantInput) => {
+      try {
+        const res = await http.post<CLIAgentGrant>(
+          `/v1/cli-credentials/${binaryId}/agent-grants`,
+          input,
+        );
+        await invalidate();
+        toast.success(i18n.t("cli-credentials:grants.toast.granted"));
+        return res;
+      } catch (err) {
+        toast.error(i18n.t("cli-credentials:grants.toast.grantFailed"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http, binaryId, invalidate],
+  );
+
+  const updateGrant = useCallback(
+    async (grantId: string, input: Partial<CLIAgentGrantInput>) => {
+      try {
+        await http.put(
+          `/v1/cli-credentials/${binaryId}/agent-grants/${grantId}`,
+          input,
+        );
+        await invalidate();
+        toast.success(i18n.t("cli-credentials:grants.toast.updated"));
+      } catch (err) {
+        toast.error(i18n.t("cli-credentials:grants.toast.updateFailed"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http, binaryId, invalidate],
+  );
+
+  const deleteGrant = useCallback(
+    async (grantId: string) => {
+      try {
+        await http.delete(`/v1/cli-credentials/${binaryId}/agent-grants/${grantId}`);
+        await invalidate();
+        toast.success(i18n.t("cli-credentials:grants.toast.revoked"));
+      } catch (err) {
+        toast.error(i18n.t("cli-credentials:grants.toast.revokeFailed"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http, binaryId, invalidate],
+  );
+
+  return { grants: data ?? [], loading: isLoading, createGrant, updateGrant, deleteGrant };
 }

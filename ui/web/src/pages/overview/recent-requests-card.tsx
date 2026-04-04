@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -9,6 +10,8 @@ import {
   formatTokens,
   formatDuration,
 } from "@/lib/format";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
 
 interface Trace {
   id: string;
@@ -24,6 +27,8 @@ interface Trace {
 
 export function RecentRequestsCard({ traces }: { traces: Trace[] }) {
   const { t } = useTranslation("overview");
+  const userIds = useMemo(() => traces.map((tr) => tr.user_id).filter(Boolean) as string[], [traces]);
+  const { resolve } = useContactResolver(userIds);
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -68,7 +73,7 @@ export function RecentRequestsCard({ traces }: { traces: Trace[] }) {
                       {t.name || "--"}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-xs">
-                      {t.user_id || "--"}
+                      {t.user_id ? formatUserLabel(t.user_id, resolve) : "--"}
                     </td>
                     <td className="py-2.5 px-4">{t.channel || "--"}</td>
                     <td className="py-2.5 px-4 text-right tabular-nums">

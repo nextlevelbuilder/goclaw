@@ -67,6 +67,7 @@ func (h *KnowledgeGraphHandler) handleGetEntity(w http.ResponseWriter, r *http.R
 
 	relations, err := h.store.ListRelations(r.Context(), agentID, userID, entityID)
 	if err != nil {
+		slog.Warn("kg.list_relations failed", "agent_id", agentID, "entity_id", entityID, "user_id", userID, "error", err)
 		relations = []store.Relation{}
 	}
 	if relations == nil {
@@ -139,8 +140,8 @@ func (h *KnowledgeGraphHandler) handleTraverse(w http.ResponseWriter, r *http.Re
 	if body.MaxDepth <= 0 {
 		body.MaxDepth = 2
 	}
-	if body.MaxDepth > 3 {
-		body.MaxDepth = 3
+	if body.MaxDepth > 5 {
+		body.MaxDepth = 5
 	}
 
 	results, err := h.store.Traverse(r.Context(), agentID, body.UserID, body.EntityID, body.MaxDepth)
@@ -343,6 +344,9 @@ func (h *KnowledgeGraphHandler) handleGraph(w http.ResponseWriter, r *http.Reque
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 200
+	}
+	if limit > 500 {
+		limit = 500
 	}
 
 	entities, err := h.store.ListEntities(r.Context(), agentID, userID, store.EntityListOptions{Limit: limit})

@@ -1,102 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import {
-  DndContext,
-  DragOverlay,
-  useDroppable,
-  useDraggable,
-} from "@dnd-kit/core";
-import {
-  Folder,
-  FolderOpen,
-  FileText,
-  FileCode2,
-  File,
-  FileImage,
-  FileJson2,
-  FileSpreadsheet,
-  FileTerminal,
-  FileArchive,
-  FileVideo,
-  FileAudio,
-  FileCog,
-  FileType,
-  FileLock,
-  ChevronRight,
-  Loader2,
-  Trash2,
-} from "lucide-react";
-import { extOf, CODE_EXTENSIONS, IMAGE_EXTENSIONS, formatSize, type TreeNode } from "@/lib/file-helpers";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { Folder, FolderOpen, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { formatSize, type TreeNode } from "@/lib/file-helpers";
 import { useTreeDnd } from "@/hooks/use-tree-dnd";
 import { DragPreview } from "@/components/shared/drag-preview";
-
-const cls = "h-4 w-4 shrink-0";
-
-function FileIcon({ name }: { name: string }) {
-  const ext = extOf(name);
-  if (ext === "md" || ext === "mdx") return <FileText className={`${cls} text-blue-500`} />;
-  if (ext === "json" || ext === "json5") return <FileJson2 className={`${cls} text-yellow-600`} />;
-  if (ext === "yaml" || ext === "yml" || ext === "toml") return <FileCog className={`${cls} text-orange-500`} />;
-  if (ext === "csv") return <FileSpreadsheet className={`${cls} text-green-600`} />;
-  if (ext === "sh" || ext === "bash" || ext === "zsh") return <FileTerminal className={`${cls} text-lime-600`} />;
-  if (IMAGE_EXTENSIONS.has(ext)) return <FileImage className={`${cls} text-emerald-500`} />;
-  if (ext === "mp4" || ext === "webm" || ext === "mov" || ext === "avi" || ext === "mkv") return <FileVideo className={`${cls} text-pink-500`} />;
-  if (ext === "mp3" || ext === "wav" || ext === "ogg" || ext === "flac" || ext === "m4a") return <FileAudio className={`${cls} text-orange-500`} />;
-  if (ext === "zip" || ext === "tar" || ext === "gz" || ext === "rar" || ext === "7z" || ext === "bz2") return <FileArchive className={`${cls} text-amber-600`} />;
-  if (ext === "ttf" || ext === "otf" || ext === "woff" || ext === "woff2") return <FileType className={`${cls} text-slate-500`} />;
-  if (ext === "env" || ext === "pem" || ext === "key" || ext === "crt") return <FileLock className={`${cls} text-red-500`} />;
-  if (CODE_EXTENSIONS.has(ext)) return <FileCode2 className={`${cls} text-orange-500`} />;
-  return <File className={`${cls} text-muted-foreground`} />;
-}
-
-/** Draggable wrapper for tree items (files and folders). */
-function DraggableItem({
-  id,
-  enabled,
-  children,
-}: {
-  id: string;
-  enabled: boolean;
-  children: React.ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id,
-    disabled: !enabled,
-  });
-
-  return (
-    <div
-      ref={setNodeRef}
-      {...(enabled ? { ...listeners, ...attributes } : {})}
-      className={isDragging ? "opacity-40" : ""}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** Droppable wrapper for folder items. */
-function DroppableFolder({
-  id,
-  enabled,
-  children,
-}: {
-  id: string;
-  enabled: boolean;
-  children: (props: { isDropTarget: boolean }) => React.ReactNode;
-}) {
-  const { setNodeRef, isOver } = useDroppable({
-    id,
-    disabled: !enabled,
-  });
-
-  return (
-    <div ref={setNodeRef}>
-      {children({ isDropTarget: isOver })}
-    </div>
-  );
-}
+import { FileIcon } from "./file-tree-file-icon";
+import { DraggableItem, DroppableFolder, RootDropZone } from "./file-tree-dnd-wrappers";
 
 export function TreeItem({
   node,
@@ -346,13 +257,3 @@ export function FileTreePanel({
   );
 }
 
-/** Root-level droppable zone — dropping here moves to root (""). */
-function RootDropZone({ children }: { children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: "__root__" });
-
-  return (
-    <div ref={setNodeRef} className={`min-h-full ${isOver ? "bg-primary/5" : ""}`}>
-      {children}
-    </div>
-  );
-}

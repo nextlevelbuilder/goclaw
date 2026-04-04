@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
+import { formatUserLabel } from "@/lib/format-user-label";
 import { useTranslation } from "react-i18next";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useMemoryDocuments } from "./hooks/use-memory";
 import type { AgentData } from "@/types/agent";
+import { memoryCreateSchema, type MemoryCreateFormData } from "@/schemas/memory.schema";
 
 interface MemoryCreateDialogProps {
   open: boolean;
@@ -30,15 +34,30 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
   const { t } = useTranslation("memory");
   const { t: tc } = useTranslation("common");
   const { agents } = useAgents();
-  const [selectedAgentId, setSelectedAgentId] = useState("");
-  const [path, setPath] = useState("");
-  const [content, setContent] = useState("");
-  const [scopeMode, setScopeMode] = useState<"global" | "existing" | "custom">("global");
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [customUserId, setCustomUserId] = useState("");
-  const [autoIndex, setAutoIndex] = useState(true);
+
+  // UI-only state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const form = useForm<MemoryCreateFormData>({
+    resolver: zodResolver(memoryCreateSchema),
+    mode: "onChange",
+    defaultValues: {
+      selectedAgentId: "",
+      path: "",
+      content: "",
+      scopeMode: "global",
+      selectedUserId: "",
+      customUserId: "",
+      autoIndex: true,
+    },
+  });
+
+  const { register, watch, setValue, reset } = form;
+  const selectedAgentId = watch("selectedAgentId");
+  const scopeMode = watch("scopeMode");
+  const selectedUserId = watch("selectedUserId");
+  const autoIndex = watch("autoIndex");
 
   const effectiveAgentId = selectedAgentId || parentAgentId || "";
   const { createDocument, indexDocument } = useMemoryDocuments({ agentId: effectiveAgentId || undefined });
@@ -47,33 +66,37 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
 
   useEffect(() => {
     if (open) {
-      setSelectedAgentId(parentAgentId || "");
-      setPath("");
-      setContent("");
-      setScopeMode("global");
-      setSelectedUserId("");
-      setCustomUserId("");
-      setAutoIndex(true);
+      reset({
+        selectedAgentId: parentAgentId || "",
+        path: "",
+        content: "",
+        scopeMode: "global",
+        selectedUserId: "",
+        customUserId: "",
+        autoIndex: true,
+      });
       setError("");
     }
-  }, [open, parentAgentId]);
+  }, [open, parentAgentId, reset]);
 
   const resolvedUserId = (): string | undefined => {
-    if (scopeMode === "global") return undefined;
-    if (scopeMode === "existing") return selectedUserId || undefined;
-    return customUserId.trim() || undefined;
+    const data = form.getValues();
+    if (data.scopeMode === "global") return undefined;
+    if (data.scopeMode === "existing") return data.selectedUserId || undefined;
+    return data.customUserId.trim() || undefined;
   };
 
   const handleSubmit = async () => {
+    const data = form.getValues();
     if (!effectiveAgentId) {
       setError(t("createDialog.agentRequired") ?? "Please select an agent");
       return;
     }
-    if (!path.trim()) {
+    if (!data.path.trim()) {
       setError(t("createDialog.pathRequired") ?? "Path is required");
       return;
     }
-    if (!content.trim()) {
+    if (!data.content.trim()) {
       setError(t("createDialog.contentRequired") ?? "Content is required");
       return;
     }
@@ -82,9 +105,9 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
     setError("");
     try {
       const uid = resolvedUserId();
-      await createDocument(path.trim(), content, uid);
-      if (autoIndex) {
-        await indexDocument(path.trim(), uid);
+      await createDocument(data.path.trim(), data.content, uid);
+      if (data.autoIndex) {
+        await indexDocument(data.path.trim(), uid);
       }
       onOpenChange(false);
     } catch (err) {
@@ -108,7 +131,7 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
             <select
               id="mc-agent"
               value={selectedAgentId || parentAgentId || ""}
-              onChange={(e) => setSelectedAgentId(e.target.value)}
+              onChange={(e) => setValue("selectedAgentId", e.target.value)}
               className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
             >
               <option value="">{t("createDialog.agentIdPlaceholder")}</option>
@@ -131,7 +154,7 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
                 type="button"
                 variant={scopeMode === "global" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setScopeMode("global")}
+                onClick={() => setValue("scopeMode", "global")}
               >
                 {t("scopeLabel.global")}
               </Button>
@@ -140,7 +163,7 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
                   type="button"
                   variant={scopeMode === "existing" ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setScopeMode("existing")}
+                  onClick={() => setValue("scopeMode", "existing")}
                 >
                   {t("createDialog.existingScope")}
                 </Button>
@@ -149,7 +172,7 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
                 type="button"
                 variant={scopeMode === "custom" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setScopeMode("custom")}
+                onClick={() => setValue("scopeMode", "custom")}
               >
                 {t("createDialog.customScope")}
               </Button>
@@ -157,23 +180,22 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
             {scopeMode === "existing" && knownUserIds.length > 0 && (
               <select
                 value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
+                onChange={(e) => setValue("selectedUserId", e.target.value)}
                 className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
               >
                 <option value="">{t("createDialog.selectGroupUser")}</option>
                 {knownUserIds.map((uid) => (
                   <option key={uid} value={uid}>
-                    {formatScopeLabel(uid)}
+                    {formatUserLabel(uid)}
                   </option>
                 ))}
               </select>
             )}
             {scopeMode === "custom" && (
               <Input
-                value={customUserId}
-                onChange={(e) => setCustomUserId(e.target.value)}
                 placeholder="e.g. group:telegram:-100123456"
                 className="font-mono text-sm"
+                {...register("customUserId")}
               />
             )}
             <p className="text-xs text-muted-foreground">
@@ -186,10 +208,9 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
             <Label htmlFor="mc-path">{t("createDialog.path")}</Label>
             <Input
               id="mc-path"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
               placeholder={t("createDialog.pathPlaceholder")}
               className="font-mono text-sm"
+              {...register("path")}
             />
           </div>
 
@@ -198,16 +219,15 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
             <Label htmlFor="mc-content">{t("createDialog.content")}</Label>
             <Textarea
               id="mc-content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
               placeholder={t("createDialog.contentPlaceholder")}
               className="font-mono text-xs min-h-[200px]"
               rows={10}
+              {...register("content")}
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <Switch id="mc-index" checked={autoIndex} onCheckedChange={setAutoIndex} />
+            <Switch id="mc-index" checked={autoIndex} onCheckedChange={(v) => setValue("autoIndex", v)} />
             <Label htmlFor="mc-index">{t("createDialog.autoIndex")}</Label>
           </div>
 
@@ -225,15 +245,4 @@ export function MemoryCreateDialog({ open, onOpenChange, agentId: parentAgentId,
       </DialogContent>
     </Dialog>
   );
-}
-
-function formatScopeLabel(userId: string): string {
-  if (userId.startsWith("group:")) {
-    const parts = userId.split(":");
-    if (parts.length >= 3) {
-      const channel = parts[1]!.charAt(0).toUpperCase() + parts[1]!.slice(1);
-      return `${channel} ${parts.slice(2).join(":")}`;
-    }
-  }
-  return userId;
 }

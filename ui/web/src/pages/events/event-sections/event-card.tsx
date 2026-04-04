@@ -3,6 +3,7 @@ import { Radio, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/format";
+import { formatUserLabel } from "@/lib/format-user-label";
 import type { TeamEventEntry } from "@/stores/use-team-event-store";
 import { useAgentResolver } from "./use-agent-resolver";
 import { getCategoryConfig } from "./event-categories";
@@ -129,7 +130,7 @@ function EventMetadataFooter({ payload }: { payload: unknown }) {
       {userId && (
         <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5">
           <User className="h-3 w-3" />
-          {userId}
+          {formatUserLabel(userId)}
         </span>
       )}
       {chatId && (

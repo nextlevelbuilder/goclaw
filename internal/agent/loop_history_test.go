@@ -257,8 +257,8 @@ func TestSanitizeHistory_DedupsDuplicateIDsWithinTurn(t *testing.T) {
 		{Role: "assistant", Content: "done"},
 	}
 	got, dropped := sanitizeHistory(msgs)
-	if dropped != 0 {
-		t.Errorf("expected 0 dropped, got %d", dropped)
+	if dropped != 1 {
+		t.Errorf("expected 1 dropped (dedup counts as change), got %d", dropped)
 	}
 
 	// Both tool results must be present and paired correctly
@@ -323,6 +323,111 @@ func TestSanitizeHistory_NoDedupWhenIDsUnique(t *testing.T) {
 	}
 	if got[4].ToolCalls[0].ID != "tc2" {
 		t.Errorf("expected tc2, got %s", got[4].ToolCalls[0].ID)
+	}
+}
+
+func TestSanitizeHistory_MergesConsecutiveUserMessages(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "hello"},
+		{Role: "user", Content: "world"},
+		{Role: "assistant", Content: "hi there"},
+	}
+	got, dropped := sanitizeHistory(msgs)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 messages after merge, got %d", len(got))
+	}
+	if got[0].Content != "hello\n\nworld" {
+		t.Errorf("expected merged content, got %q", got[0].Content)
+	}
+	if dropped != 1 {
+		t.Errorf("expected 1 dropped, got %d", dropped)
+	}
+}
+
+func TestSanitizeHistory_MergesConsecutiveAssistantMessages(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "question"},
+		{Role: "assistant", Content: "part 1"},
+		{Role: "assistant", Content: "part 2"},
+		{Role: "user", Content: "follow-up"},
+	}
+	got, dropped := sanitizeHistory(msgs)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 messages after merge, got %d", len(got))
+	}
+	if got[1].Content != "part 1\n\npart 2" {
+		t.Errorf("expected merged assistant content, got %q", got[1].Content)
+	}
+	if dropped != 1 {
+		t.Errorf("expected 1 dropped, got %d", dropped)
+	}
+}
+
+func TestSanitizeHistory_DedupClearsRawAssistantContent(t *testing.T) {
+	// When dedup rewrites tool call IDs, RawAssistantContent (which has the old IDs)
+	// must be cleared so the provider uses the corrected ToolCalls.
+	rawContent := []byte(`[{"type":"text","text":"ok"},{"type":"tool_use","id":"tool_1","name":"search","input":{}}]`)
+	msgs := []providers.Message{
+		{Role: "user", Content: "first"},
+		{Role: "assistant", ToolCalls: []providers.ToolCall{{ID: "tool_1", Name: "search"}}, RawAssistantContent: rawContent},
+		{Role: "tool", Content: "result1", ToolCallID: "tool_1"},
+		{Role: "assistant", Content: "ok"},
+		{Role: "user", Content: "second"},
+		// Second turn has same tool_1 ID — triggers dedup
+		{Role: "assistant", ToolCalls: []providers.ToolCall{{ID: "tool_1", Name: "search"}}, RawAssistantContent: rawContent},
+		{Role: "tool", Content: "result2", ToolCallID: "tool_1"},
+		{Role: "assistant", Content: "done"},
+	}
+	got, _ := sanitizeHistory(msgs)
+	// First assistant should keep RawAssistantContent (no dedup needed)
+	if got[1].RawAssistantContent == nil {
+		t.Error("first assistant should keep RawAssistantContent")
+	}
+	// Second assistant (index 5) should have RawAssistantContent cleared due to dedup
+	if got[5].RawAssistantContent != nil {
+		t.Error("dedup'd assistant should have RawAssistantContent cleared")
+	}
+	// Tool result for second turn should have dedup'd ID
+	if got[6].ToolCallID == "tool_1" {
+		t.Errorf("expected dedup'd tool_call_id, got %q", got[6].ToolCallID)
+	}
+}
+
+func TestSanitizeHistory_NoMergeForToolCallMessages(t *testing.T) {
+	// Assistant messages WITH tool_calls should NOT be merged
+	msgs := []providers.Message{
+		{Role: "user", Content: "do something"},
+		{Role: "assistant", Content: "ok", ToolCalls: []providers.ToolCall{{ID: "tc1", Name: "test"}}},
+		{Role: "tool", Content: "result", ToolCallID: "tc1"},
+		{Role: "assistant", Content: "done"},
+	}
+	got, dropped := sanitizeHistory(msgs)
+	if len(got) != 4 {
+		t.Fatalf("expected 4 messages (no merge), got %d", len(got))
+	}
+	if dropped != 0 {
+		t.Errorf("expected 0 dropped, got %d", dropped)
+	}
+}
+
+func TestSanitizeHistory_MergePreservesMediaRefs(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "here's a photo", MediaRefs: []providers.MediaRef{{Kind: "image", ID: "f1"}}},
+		{Role: "user", Content: "and another", MediaRefs: []providers.MediaRef{{Kind: "image", ID: "f2"}}},
+		{Role: "assistant", Content: "nice pics"},
+	}
+	got, dropped := sanitizeHistory(msgs)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 messages after merge, got %d", len(got))
+	}
+	if len(got[0].MediaRefs) != 2 {
+		t.Errorf("expected 2 media refs after merge, got %d", len(got[0].MediaRefs))
+	}
+	if got[0].MediaRefs[0].ID != "f1" || got[0].MediaRefs[1].ID != "f2" {
+		t.Errorf("media refs not preserved correctly: %+v", got[0].MediaRefs)
+	}
+	if dropped != 1 {
+		t.Errorf("expected 1 dropped, got %d", dropped)
 	}
 }
 

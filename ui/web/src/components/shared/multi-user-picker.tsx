@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
 import { UserPickerCombobox } from "./user-picker-combobox";
 
 interface MultiUserPickerProps {
@@ -34,6 +36,7 @@ export function MultiUserPicker({
   portalContainer,
 }: MultiUserPickerProps) {
   const [inputValue, setInputValue] = useState("");
+  const { resolve } = useContactResolver(value);
 
   const handleCommit = (val: string) => {
     const trimmed = val.trim();
@@ -59,7 +62,7 @@ export function MultiUserPicker({
         <div className="flex flex-wrap gap-1.5">
           {value.map((id) => (
             <Badge key={id} variant="secondary" className="gap-1 pr-1">
-              {id}
+              {formatUserLabel(id, resolve)}
               <button
                 type="button"
                 onClick={() => onChange(value.filter((v) => v !== id))}

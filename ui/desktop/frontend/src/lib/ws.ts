@@ -1,50 +1,14 @@
 // WebSocket v3 client for GoClaw gateway RPC protocol
 
-export type FrameType = 'req' | 'res' | 'event'
+import type { Frame, ResponseFrame, EventFrame, EventHandler, PendingRequest } from './ws-types'
+import {
+  DEFAULT_TIMEOUT_MS,
+  CHAT_SEND_TIMEOUT_MS,
+  RECONNECT_BASE_MS,
+  RECONNECT_MAX_MS,
+} from './ws-types'
 
-export interface RequestFrame {
-  type: 'req'
-  id: string
-  method: string
-  params?: Record<string, unknown>
-}
-
-export interface ResponseFrame {
-  type: 'res'
-  id: string
-  ok: boolean
-  payload?: unknown
-  error?: {
-    code: string
-    message: string
-    details?: unknown
-    retryable?: boolean
-    retryAfterMs?: number
-  }
-}
-
-export interface EventFrame {
-  type: 'event'
-  event: string
-  payload: unknown
-  seq?: number
-}
-
-export type Frame = RequestFrame | ResponseFrame | EventFrame
-
-export type EventHandler = (payload: unknown) => void
-
-interface PendingRequest {
-  resolve: (payload: unknown) => void
-  reject: (error: Error) => void
-  timer: ReturnType<typeof setTimeout>
-  timeoutMs: number
-}
-
-const DEFAULT_TIMEOUT_MS = 30_000
-const CHAT_SEND_TIMEOUT_MS = 600_000
-const RECONNECT_BASE_MS = 1_000
-const RECONNECT_MAX_MS = 30_000
+export type { FrameType, RequestFrame, ResponseFrame, EventFrame, Frame, EventHandler } from './ws-types'
 
 export class WsClient {
   private ws: WebSocket | null = null
@@ -113,7 +77,6 @@ export class WsClient {
   }
 
   private handleResponse(frame: ResponseFrame): void {
-    // connect handshake response — match by tracked ID
     if (this.connectRequestId && frame.id === this.connectRequestId) {
       this.connectRequestId = null
       if (frame.ok) {
@@ -157,7 +120,6 @@ export class WsClient {
     this.reconnectDelay = RECONNECT_BASE_MS
     this.connectionChangeHandler?.(true)
 
-    // flush queued calls
     const queued = this.queuedCalls.splice(0)
     for (const fn of queued) fn()
   }
@@ -170,7 +132,6 @@ export class WsClient {
 
     if (wasConnected) this.connectionChangeHandler?.(false)
 
-    // reject all pending requests
     for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timer)
       pending.reject(new Error('WebSocket disconnected'))

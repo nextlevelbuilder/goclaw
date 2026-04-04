@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getApiClient } from '../lib/api'
+import { agentService } from '../services/agent-service'
 import { toast } from '../stores/toast-store'
 import type { AgentData, AgentInput } from '../types/agent'
 
@@ -11,7 +11,7 @@ export function useAgentCrud() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await getApiClient().get<{ agents: AgentData[] | null }>('/v1/agents')
+      const res = await agentService.list()
       setAgents(res.agents ?? [])
     } catch (err) {
       console.error('Failed to fetch agents:', err)
@@ -24,7 +24,7 @@ export function useAgentCrud() {
 
   const createAgent = useCallback(async (input: AgentInput) => {
     try {
-      const res = await getApiClient().post<AgentData>('/v1/agents', input)
+      const res = await agentService.create(input)
       setAgents((prev) => [...prev, res])
       toast.success('Agent created')
       return res
@@ -36,7 +36,7 @@ export function useAgentCrud() {
 
   const updateAgent = useCallback(async (id: string, input: Partial<AgentData>) => {
     try {
-      const res = await getApiClient().put<AgentData>(`/v1/agents/${id}`, input)
+      const res = await agentService.update(id, input)
       setAgents((prev) => prev.map((a) => a.id === id ? res : a))
       toast.success('Agent updated')
       return res
@@ -48,7 +48,7 @@ export function useAgentCrud() {
 
   const deleteAgent = useCallback(async (id: string) => {
     try {
-      await getApiClient().delete(`/v1/agents/${id}`)
+      await agentService.delete(id)
       setAgents((prev) => prev.filter((a) => a.id !== id))
       toast.success('Agent deleted')
     } catch (err) {
@@ -58,7 +58,7 @@ export function useAgentCrud() {
   }, [])
 
   const resummonAgent = useCallback(async (id: string) => {
-    await getApiClient().post(`/v1/agents/${id}/resummon`, {})
+    await agentService.resummon(id)
     // Update status to summoning
     setAgents((prev) => prev.map((a) => a.id === id ? { ...a, status: 'summoning' } : a))
   }, [])

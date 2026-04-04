@@ -49,5 +49,11 @@ func (h *KnowledgeGraphHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *KnowledgeGraphHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth("", next)
+	return requireAuth("", func(w http.ResponseWriter, r *http.Request) {
+		// KG management endpoints serve the admin UI — use shared KG context
+		// so queries don't require exact user_id match. Tenant isolation is
+		// still enforced via scopeClause (tenant_id filter).
+		ctx := store.WithSharedKG(r.Context())
+		next(w, r.WithContext(ctx))
+	})
 }

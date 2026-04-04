@@ -9,6 +9,8 @@ import {
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useConfigPermissions, type ConfigPermission } from "../hooks/use-config-permissions";
 import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
 import { useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import type { DeliveryTarget } from "../hooks/use-agent-heartbeat";
@@ -121,6 +123,13 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
     [permissions],
   );
 
+  // Resolve user IDs to display names
+  const allPermUserIds = useMemo(
+    () => [...new Set(permissions.map((p) => p.userId))],
+    [permissions],
+  );
+  const { resolve } = useContactResolver(allPermUserIds);
+
   // Group file_writer by scope
   const fileWritersByScope = useMemo(() => {
     const map = new Map<string, ConfigPermission[]>();
@@ -228,7 +237,7 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                       <span className="text-xs font-medium text-muted-foreground">{scopeLabels.get(scopeKey) ?? scopeKey}</span>
                     </div>
                     {writers.map((p) => {
-                      const displayName = p.metadata?.displayName || p.userId;
+                      const label = p.metadata?.displayName || formatUserLabel(p.userId, resolve);
                       const username = p.metadata?.username ? ` @${p.metadata.username}` : "";
                       return (
                         <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 pl-7">
@@ -239,11 +248,10 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                             >
                               {p.permission}
                             </Badge>
-                            <span className="font-medium truncate">{displayName}</span>
+                            <span className="font-medium truncate">{label}</span>
                             {username && (
                               <span className="text-[11px] text-muted-foreground shrink-0">{username}</span>
                             )}
-                            <span className="text-[11px] text-muted-foreground shrink-0 font-mono">({p.userId})</span>
                           </div>
                           <Button
                             variant="ghost"
@@ -278,7 +286,7 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                       >
                         {p.permission}
                       </Badge>
-                      <span className="font-medium truncate">{p.userId}</span>
+                      <span className="font-medium truncate">{formatUserLabel(p.userId, resolve)}</span>
                       <span className="text-[11px] text-muted-foreground shrink-0">{p.configType}</span>
                       <span className="text-[11px] text-muted-foreground shrink-0">@ {scopeLabels.get(p.scope) ?? p.scope}</span>
                     </div>

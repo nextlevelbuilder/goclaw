@@ -50,7 +50,7 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 			},
 			"max_depth": map[string]any{
 				"type":        "number",
-				"description": "Maximum traversal depth (default 2, max 3)",
+				"description": "Maximum traversal depth (default 2, max 5)",
 			},
 		},
 		"required": []string{"query"},
@@ -76,7 +76,7 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	entityID, _ := args["entity_id"].(string)
 	maxDepth := 2
 	if md, ok := args["max_depth"].(float64); ok && md > 0 {
-		maxDepth = min(int(md), 3)
+		maxDepth = min(int(md), 5)
 	}
 
 	// Traversal mode: entity_id provided

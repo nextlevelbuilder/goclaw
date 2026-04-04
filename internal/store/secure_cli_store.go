@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -19,12 +20,32 @@ type SecureCLIBinary struct {
 	DenyVerbose    json.RawMessage `json:"deny_verbose"`    // blocked verbose/debug flags
 	TimeoutSeconds int             `json:"timeout_seconds"`
 	Tips           string          `json:"tips"`            // hint injected into TOOLS.md context
-	AgentID        *uuid.UUID      `json:"agent_id,omitempty"`
+	IsGlobal       bool            `json:"is_global"`
 	Enabled        bool            `json:"enabled"`
 	CreatedBy      string          `json:"created_by"`
 	UserEnv        []byte          `json:"-"` // per-user encrypted env (populated by LookupByBinary LEFT JOIN)
 	// EnvKeys is set by HTTP handlers only (names from decrypted env, no values); not a DB column.
 	EnvKeys []string `json:"env_keys,omitempty"`
+}
+
+// MergeGrantOverrides applies agent grant overrides onto a binary config.
+// Non-nil grant fields replace binary defaults; nil fields keep binary values.
+func (b *SecureCLIBinary) MergeGrantOverrides(g *SecureCLIAgentGrant) {
+	if g == nil {
+		return
+	}
+	if g.DenyArgs != nil {
+		b.DenyArgs = *g.DenyArgs
+	}
+	if g.DenyVerbose != nil {
+		b.DenyVerbose = *g.DenyVerbose
+	}
+	if g.TimeoutSeconds != nil {
+		b.TimeoutSeconds = *g.TimeoutSeconds
+	}
+	if g.Tips != nil {
+		b.Tips = *g.Tips
+	}
 }
 
 // SecureCLIUserCredential holds per-user encrypted env overrides for a binary.
@@ -39,6 +60,20 @@ type SecureCLIUserCredential struct {
 	EncryptedEnv []byte `json:"-"`
 }
 
+// SecureCLIAgentGrant represents a per-agent grant with optional setting overrides.
+type SecureCLIAgentGrant struct {
+	BaseModel
+	BinaryID       uuid.UUID        `json:"binary_id"`
+	AgentID        uuid.UUID        `json:"agent_id"`
+	DenyArgs       *json.RawMessage `json:"deny_args,omitempty"`
+	DenyVerbose    *json.RawMessage `json:"deny_verbose,omitempty"`
+	TimeoutSeconds *int             `json:"timeout_seconds,omitempty"`
+	Tips           *string          `json:"tips,omitempty"`
+	Enabled        bool             `json:"enabled"`
+	CreatedAt      time.Time        `json:"created_at"`
+	UpdatedAt      time.Time        `json:"updated_at"`
+}
+
 // SecureCLIStore manages secure CLI binary credential configurations.
 type SecureCLIStore interface {
 	Create(ctx context.Context, b *SecureCLIBinary) error
@@ -46,16 +81,18 @@ type SecureCLIStore interface {
 	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context) ([]SecureCLIBinary, error)
-	ListByAgent(ctx context.Context, agentID uuid.UUID) ([]SecureCLIBinary, error)
 
-	// LookupByBinary finds the best-matching credential config for a binary name.
-	// Priority: agent-specific > global (agent_id IS NULL). Returns nil if not found.
-	// If userID is non-empty, also fetches per-user env overrides via LEFT JOIN
-	// and populates SecureCLIBinary.UserEnv (zero extra queries).
+	// LookupByBinary finds the credential config for a binary name.
+	// If agentID is provided, checks grant authorization and merges overrides.
+	// If userID is non-empty, also fetches per-user env overrides via LEFT JOIN.
 	LookupByBinary(ctx context.Context, binaryName string, agentID *uuid.UUID, userID string) (*SecureCLIBinary, error)
 
 	// ListEnabled returns all enabled configs (for TOOLS.md context generation).
 	ListEnabled(ctx context.Context) ([]SecureCLIBinary, error)
+
+	// ListForAgent returns all CLIs accessible by an agent (global + granted),
+	// with grant overrides merged into the returned configs.
+	ListForAgent(ctx context.Context, agentID uuid.UUID) ([]SecureCLIBinary, error)
 
 	// --- Per-user credential management ---
 
@@ -63,4 +100,14 @@ type SecureCLIStore interface {
 	SetUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string, encryptedEnv []byte) error
 	DeleteUserCredentials(ctx context.Context, binaryID uuid.UUID, userID string) error
 	ListUserCredentials(ctx context.Context, binaryID uuid.UUID) ([]SecureCLIUserCredential, error)
+}
+
+// SecureCLIAgentGrantStore manages per-agent grants for secure CLI binaries.
+type SecureCLIAgentGrantStore interface {
+	Create(ctx context.Context, g *SecureCLIAgentGrant) error
+	Get(ctx context.Context, id uuid.UUID) (*SecureCLIAgentGrant, error)
+	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	ListByBinary(ctx context.Context, binaryID uuid.UUID) ([]SecureCLIAgentGrant, error)
+	ListByAgent(ctx context.Context, agentID uuid.UUID) ([]SecureCLIAgentGrant, error)
 }

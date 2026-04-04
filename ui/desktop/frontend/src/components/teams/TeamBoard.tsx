@@ -7,7 +7,8 @@ import { IconChevronLeft, IconGear, IconChevronDown, IconPlus, IconChat } from '
 import { KanbanColumn } from './KanbanColumn'
 import { TaskDetailModal } from './TaskDetailModal'
 import { TeamSettingsModal } from './TeamSettingsModal'
-import { KANBAN_STATUSES, TERMINAL_STATUSES, groupByStatus } from '../../types/team'
+import { TeamTaskListView } from './team-task-list-view'
+import { KANBAN_STATUSES, groupByStatus } from '../../types/team'
 import type { TeamTaskData } from '../../types/team'
 
 type ViewMode = 'kanban' | 'list'
@@ -34,16 +35,11 @@ export function TeamBoard() {
   const team = teams.find((t) => t.id === activeTeamId)
 
   useEffect(() => { fetchTeams() }, [fetchTeams])
-
   useEffect(() => {
     if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined)
   }, [activeTeamId, statusFilter, fetchTasks])
 
   const grouped = useMemo(() => groupByStatus(tasks), [tasks])
-
-  const handleRefresh = () => {
-    if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined)
-  }
 
   // Keep selected task in sync with tasks
   useEffect(() => {
@@ -76,18 +72,10 @@ export function TeamBoard() {
         <button onClick={closeSettings} className="text-text-muted hover:text-text-primary cursor-pointer" title="Back to chat">
           <IconChevronLeft size={16} />
         </button>
-
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-text-primary truncate">
-              {team?.name || t('team', 'Team')}
-            </h2>
-            {/* Gear — team settings */}
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="text-text-muted hover:text-text-primary cursor-pointer p-1 rounded hover:bg-surface-tertiary"
-              title={t('teamSettings', 'Team Settings')}
-            >
+            <h2 className="text-sm font-semibold text-text-primary truncate">{team?.name || t('team', 'Team')}</h2>
+            <button onClick={() => setSettingsOpen(true)} className="text-text-muted hover:text-text-primary cursor-pointer p-1 rounded hover:bg-surface-tertiary" title={t('teamSettings', 'Team Settings')}>
               <IconGear />
             </button>
           </div>
@@ -95,26 +83,17 @@ export function TeamBoard() {
 
         {/* View toggle */}
         <div className="flex items-center bg-surface-tertiary rounded-lg p-0.5">
-          <button
-            onClick={() => setViewMode('kanban')}
-            className={`text-[10px] px-2 py-1 rounded cursor-pointer ${viewMode === 'kanban' ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-muted'}`}
-          >
+          <button onClick={() => setViewMode('kanban')} className={`text-[10px] px-2 py-1 rounded cursor-pointer ${viewMode === 'kanban' ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-muted'}`}>
             {t('kanban', 'Kanban')}
           </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`text-[10px] px-2 py-1 rounded cursor-pointer ${viewMode === 'list' ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-muted'}`}
-          >
+          <button onClick={() => setViewMode('list')} className={`text-[10px] px-2 py-1 rounded cursor-pointer ${viewMode === 'list' ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-muted'}`}>
             {t('list', 'List')}
           </button>
         </div>
 
-        {/* Custom status filter dropdown */}
+        {/* Status filter */}
         <div className="relative">
-          <button
-            onClick={() => setFilterOpen((v) => !v)}
-            className="flex items-center gap-1.5 text-[11px] bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-text-secondary hover:border-accent/30 transition-colors cursor-pointer"
-          >
+          <button onClick={() => setFilterOpen((v) => !v)} className="flex items-center gap-1.5 text-[11px] bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-text-secondary hover:border-accent/30 transition-colors cursor-pointer">
             <span>{t(currentFilterLabel)}</span>
             <IconChevronDown size={10} />
           </button>
@@ -123,13 +102,8 @@ export function TeamBoard() {
               <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
               <div className="absolute right-0 top-full mt-1 z-50 bg-surface-primary border border-border rounded-lg shadow-lg py-1 min-w-[120px]">
                 {FILTER_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => { setStatusFilter(opt.value); setFilterOpen(false) }}
-                    className={[
-                      'w-full text-left px-3 py-1.5 text-[11px] transition-colors cursor-pointer',
-                      statusFilter === opt.value ? 'text-accent bg-accent/10' : 'text-text-secondary hover:bg-surface-tertiary',
-                    ].join(' ')}
+                  <button key={opt.value} onClick={() => { setStatusFilter(opt.value); setFilterOpen(false) }}
+                    className={['w-full text-left px-3 py-1.5 text-[11px] transition-colors cursor-pointer', statusFilter === opt.value ? 'text-accent bg-accent/10' : 'text-text-secondary hover:bg-surface-tertiary'].join(' ')}
                   >
                     {t(opt.label)}
                   </button>
@@ -139,14 +113,9 @@ export function TeamBoard() {
           )}
         </div>
 
-        <RefreshButton onRefresh={async () => { handleRefresh() }} />
+        <RefreshButton onRefresh={async () => { if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined) }} />
 
-        {/* "+" info button */}
-        <button
-          onClick={() => setInfoOpen(true)}
-          className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer transition-colors"
-          title={t('createTask', 'Create Task')}
-        >
+        <button onClick={() => setInfoOpen(true)} className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer transition-colors" title={t('createTask', 'Create Task')}>
           <IconPlus />
         </button>
       </div>
@@ -156,111 +125,30 @@ export function TeamBoard() {
         <div className="flex-1 overflow-x-auto overflow-y-hidden p-3">
           <div className="flex gap-3 h-full">
             {KANBAN_STATUSES.map((status) => (
-              <KanbanColumn
-                key={status}
-                status={status}
-                tasks={grouped.get(status) ?? []}
-                members={members}
-                onTaskClick={setSelectedTask}
-              />
+              <KanbanColumn key={status} status={status} tasks={grouped.get(status) ?? []} members={members} onTaskClick={setSelectedTask} />
             ))}
           </div>
         </div>
       ) : (
-        /* List view */
-        <div className="flex-1 overflow-auto p-3">
-          {selected.size > 0 && (
-            <div className="flex items-center gap-2 mb-2 px-2">
-              <span className="text-xs text-text-muted">{selected.size} selected</span>
-              <button onClick={handleBulkDelete} className="text-xs text-error hover:underline cursor-pointer">
-                {t('deleteSelected', 'Delete selected')}
-              </button>
-            </div>
-          )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs min-w-[600px]">
-              <thead>
-                <tr className="text-text-muted text-left border-b border-border">
-                  <th className="pb-2 pr-2 w-8">
-                    <input
-                      type="checkbox"
-                      checked={selected.size > 0 && selected.size === tasks.filter((t) => TERMINAL_STATUSES.has(t.status)).length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelected(new Set(tasks.filter((t) => TERMINAL_STATUSES.has(t.status)).map((t) => t.id)))
-                        } else {
-                          setSelected(new Set())
-                        }
-                      }}
-                    />
-                  </th>
-                  <th className="pb-2 pr-2 font-medium">{t('id', 'ID')}</th>
-                  <th className="pb-2 pr-2 font-medium">{t('subject', 'Subject')}</th>
-                  <th className="pb-2 pr-2 font-medium">{t('status', 'Status')}</th>
-                  <th className="pb-2 pr-2 font-medium">{t('owner', 'Owner')}</th>
-                  <th className="pb-2 font-medium">{t('priority', 'Priority')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => {
-                  const member = task.owner_agent_id ? members.find((m) => m.agent_id === task.owner_agent_id) : undefined
-                  const canSelect = TERMINAL_STATUSES.has(task.status)
-                  return (
-                    <tr
-                      key={task.id}
-                      onClick={() => setSelectedTask(task)}
-                      className="border-b border-border/50 hover:bg-surface-tertiary/50 cursor-pointer transition-colors"
-                    >
-                      <td className="py-2 pr-2" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          disabled={!canSelect}
-                          checked={selected.has(task.id)}
-                          onChange={(e) => {
-                            const next = new Set(selected)
-                            e.target.checked ? next.add(task.id) : next.delete(task.id)
-                            setSelected(next)
-                          }}
-                        />
-                      </td>
-                      <td className="py-2 pr-2 font-mono text-text-muted">{task.identifier || task.task_number}</td>
-                      <td className="py-2 pr-2 text-text-primary truncate max-w-[250px]">{task.subject}</td>
-                      <td className="py-2 pr-2">
-                        <span className="capitalize text-text-secondary">{task.status.replace('_', ' ')}</span>
-                      </td>
-                      <td className="py-2 pr-2 text-text-secondary">{member?.display_name || task.owner_agent_key || '—'}</td>
-                      <td className="py-2 text-text-secondary">P-{task.priority}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          {tasks.length === 0 && !loading && (
-            <div className="text-center py-8 text-text-muted text-xs">{t('noTasks', 'No tasks yet')}</div>
-          )}
-        </div>
+        <TeamTaskListView
+          tasks={tasks}
+          members={members}
+          loading={loading}
+          selected={selected}
+          onSelectChange={setSelected}
+          onTaskClick={setSelectedTask}
+          onBulkDelete={handleBulkDelete}
+        />
       )}
 
       {/* Task detail modal */}
       {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          members={members}
-          onClose={() => setSelectedTask(null)}
-          onAssign={assignTask}
-          onDelete={deleteTask}
-          onFetchDetail={fetchTaskDetail}
-        />
+        <TaskDetailModal task={selectedTask} members={members} onClose={() => setSelectedTask(null)} onAssign={assignTask} onDelete={deleteTask} onFetchDetail={fetchTaskDetail} />
       )}
 
       {/* Team settings modal */}
       {settingsOpen && activeTeamId && (
-        <TeamSettingsModal
-          teamId={activeTeamId}
-          onClose={() => setSettingsOpen(false)}
-          onSaved={() => { fetchTeams(); if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined) }}
-        />
+        <TeamSettingsModal teamId={activeTeamId} onClose={() => setSettingsOpen(false)} onSaved={() => { fetchTeams(); if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined) }} />
       )}
 
       {/* Task create info modal */}
@@ -276,16 +164,12 @@ export function TeamBoard() {
                 leader: team?.lead_display_name || team?.lead_agent_key || 'the leader',
               })}
             </p>
-            <button
-              onClick={() => setInfoOpen(false)}
-              className="mt-2 px-4 py-1.5 text-xs font-medium bg-surface-tertiary text-text-primary rounded-lg hover:bg-surface-tertiary/80 cursor-pointer"
-            >
+            <button onClick={() => setInfoOpen(false)} className="mt-2 px-4 py-1.5 text-xs font-medium bg-surface-tertiary text-text-primary rounded-lg hover:bg-surface-tertiary/80 cursor-pointer">
               {t('settings.ok', 'OK')}
             </button>
           </div>
         </div>
       )}
-
     </div>
   )
 }

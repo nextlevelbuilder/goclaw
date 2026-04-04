@@ -96,16 +96,12 @@ func buildToolCallStyleSection() []string {
 	return []string{
 		"## Tool Call Style",
 		"",
-		"Default: do not narrate routine, low-risk tool calls (just call the tool).",
-		"Narrate only when it helps: multi-step work, complex problems, sensitive actions, or when the user explicitly asks.",
-		"Keep narration brief and value-dense; avoid repeating obvious steps.",
-		"Use plain human language — never mention tool names, function names, or internal mechanics to users.",
+		"Default: call tools without narration. Narrate only for multi-step work or when user asks.",
+		"Never mention tool names or internal mechanics to users.",
 		"",
-		"WRONG: \"I searched memory_search and knowledge_graph_search but results were sparse...\"",
-		"RIGHT: \"Hmm, I remember you mentioned that before...\" or \"I don't recall that specifically.\"",
+		"WRONG: \"I searched memory_search and...\"  RIGHT: \"I recall you mentioned...\"",
 		"",
-		"When runtime-generated events (subagent completions, cron results) provide metadata, rewrite in your natural voice before relaying to the user.",
-		"When a first-class tool exists for an action, use the tool directly instead of asking the user to run equivalent CLI commands.",
+		"Rewrite runtime events in natural voice. Use tools directly instead of asking user to run CLI commands.",
 		"",
 	}
 }
@@ -271,12 +267,9 @@ func buildSpawnSection() []string {
 	return []string{
 		"## Sub-Agent Spawning",
 		"",
-		"If a task is complex or involves parallel work, spawn a sub-agent using the `spawn` tool.",
-		"You CAN and SHOULD spawn sub-agents for parallel or complex work.",
-		"When asked to create multiple independent items (e.g. poems, posts, articles, reports), you MUST use the `spawn` tool to create them in parallel — one spawn() call per item.",
-		"IMPORTANT: Do NOT just describe or narrate spawning. You MUST actually call the spawn tool. Saying 'I will spawn...' without a tool_call is wrong.",
-		"Completion is push-based: sub-agents auto-announce when done. Do not poll for status.",
-		"Coordinate their work and synthesize results before reporting back to the user.",
+		"Use `spawn` for complex/parallel work. For multiple independent items, MUST spawn one per item in parallel.",
+		"IMPORTANT: Actually call the spawn tool — do NOT just describe spawning without a tool_call.",
+		"Completion is push-based — do not poll. Synthesize results before reporting to user.",
 		"",
 	}
 }
@@ -516,21 +509,12 @@ func buildTeamWorkspaceSection(teamWsPath string) []string {
 	return []string{
 		"## Team Shared Workspace",
 		"",
-		fmt.Sprintf("Your team has a shared workspace at: %s", teamWsPath),
-		"",
-		fmt.Sprintf("- Use list_files(path=\"%s\") to browse shared files", teamWsPath),
-		fmt.Sprintf("- Use read_file(path=\"%s/filename.md\") to read team files", teamWsPath),
-		fmt.Sprintf("- Use write_file(path=\"%s/filename.md\", content=\"...\") to write team files", teamWsPath),
-		"- All files in the team workspace are visible to all team members",
-		"- When you delegate tasks, members can ONLY access team workspace files",
-		"- Your default workspace (for relative paths) is your personal workspace",
-		"- Files referenced in task descriptions are auto-copied to team workspace",
-		"- To delete a team file, use write_file with empty content",
+		fmt.Sprintf("Team shared workspace: %s", teamWsPath),
+		"All team files visible to all members. When delegating, members can ONLY access team workspace files.",
+		"Default workspace (relative paths) = personal. Files in task descriptions auto-copied to team workspace.",
 		"",
 		"## Auto-Status Updates",
-		"You may receive [Auto-status] messages about team task progress.",
-		"These are informational — simply relay the update to the user naturally.",
-		"Do NOT create, retry, reassign, or modify tasks based on these updates.",
+		"[Auto-status] messages are informational — relay naturally. Do NOT create, retry, or reassign tasks from them.",
 		"",
 	}
 }

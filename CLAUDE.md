@@ -2,6 +2,10 @@
 
 PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.
 
+## Language
+
+Always respond in the same language as the user's prompt. If the user writes in Vietnamese, respond in Vietnamese. If in English, respond in English. Match the user's language naturally.
+
 ## Tech Stack
 
 **Backend:** Go 1.26, Cobra CLI, gorilla/websocket, pgx/v5 (database/sql, no ORM), golang-migrate, go-rod/rod, telego (Telegram)

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { useTranslation } from "react-i18next";
 import { formatDate } from "@/lib/format";
+import { formatUserLabel } from "@/lib/format-user-label";
 import { CollapsibleSection } from "./task-detail-content";
 import type { TeamTaskComment } from "@/types/team";
 
@@ -46,7 +47,7 @@ export function TaskDetailComments({ comments, onAddComment }: TaskDetailComment
       {comments.length > 0 && (
         <div className="space-y-0">
           {comments.map((c) => {
-            const name = c.agent_key || (c.user_id ? "User" : "Unknown");
+            const name = c.agent_key || (c.user_id ? formatUserLabel(c.user_id) : "Unknown");
             const initial = (name[0] ?? "?").toUpperCase();
             return (
               <div key={c.id} className="flex gap-3 py-3 border-b border-border/50 last:border-0">

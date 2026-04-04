@@ -51,7 +51,16 @@ func (s *PGMemoryStore) GetDocument(ctx context.Context, agentID, userID, path s
 	var content string
 
 	var err error
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		// Shared: no user_id filter
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
+		if tcErr != nil {
+			return "", tcErr
+		}
+		err = s.db.QueryRowContext(ctx,
+			"SELECT content FROM memory_documents WHERE agent_id = $1 AND path = $2"+tc+" ORDER BY updated_at DESC LIMIT 1",
+			append([]any{aid, path}, tcArgs...)...).Scan(&content)
+	} else if userID == "" {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return "", tcErr
@@ -100,7 +109,16 @@ func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, pat
 	aid := mustParseUUID(agentID)
 	var res sql.Result
 	var err error
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		// Shared: delete any matching doc regardless of user_id
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
+		if tcErr != nil {
+			return tcErr
+		}
+		res, err = s.db.ExecContext(ctx,
+			"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2"+tc,
+			append([]any{aid, path}, tcArgs...)...)
+	} else if userID == "" {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return tcErr
@@ -132,7 +150,16 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 
 	var rows *sql.Rows
 	var err error
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		// Shared: list ALL docs for agent (global + per-user from all users)
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 2)
+		if tcErr != nil {
+			return nil, tcErr
+		}
+		rows, err = s.db.QueryContext(ctx,
+			"SELECT path, hash, user_id, updated_at FROM memory_documents WHERE agent_id = $1"+tc,
+			append([]any{aid}, tcArgs...)...)
+	} else if userID == "" {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 2)
 		if tcErr != nil {
 			return nil, tcErr
@@ -187,7 +214,16 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 
 	// Get document ID
 	var docID uuid.UUID
-	if userID == "" {
+	if store.IsSharedMemory(ctx) {
+		// Shared: no user_id filter
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
+		if tcErr != nil {
+			return tcErr
+		}
+		err = s.db.QueryRowContext(ctx,
+			"SELECT id FROM memory_documents WHERE agent_id = $1 AND path = $2"+tc+" ORDER BY updated_at DESC LIMIT 1",
+			append([]any{aid, path}, tcArgs...)...).Scan(&docID)
+	} else if userID == "" {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return tcErr

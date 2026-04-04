@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -135,6 +136,257 @@ func TestBuildRequestBody_TemperatureDependsOnModelNotAPIBase(t *testing.T) {
 	}
 }
 
+func TestBuildRequestBody_ReasoningEffortOpenAIOnly(t *testing.T) {
+	thinkOpts := map[string]any{OptThinkingLevel: "medium"}
+
+	t.Run("Together Qwen omits reasoning_effort", func(t *testing.T) {
+		p := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+		req := ChatRequest{
+			Messages: []Message{{Role: "user", Content: "hi"}},
+			Options:  thinkOpts,
+		}
+		body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, false)
+		if _, ok := body[OptReasoningEffort]; ok {
+			t.Fatalf("Qwen on Together must not send %q (HTTP 400 on unknown fields), body=%v", OptReasoningEffort, body)
+		}
+	})
+
+	t.Run("OpenAI gpt-5 keeps reasoning_effort", func(t *testing.T) {
+		p := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-5")
+		req := ChatRequest{
+			Messages: []Message{{Role: "user", Content: "hi"}},
+			Options:  thinkOpts,
+		}
+		body := p.buildRequestBody("gpt-5.4", req, false)
+		if got, ok := body[OptReasoningEffort].(string); !ok || got != "medium" {
+			t.Fatalf("gpt-5.4 should send reasoning_effort medium, got body=%v", body)
+		}
+	})
+
+	t.Run("OpenAI o3-mini keeps reasoning_effort", func(t *testing.T) {
+		p := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "")
+		req := ChatRequest{
+			Messages: []Message{{Role: "user", Content: "hi"}},
+			Options:  thinkOpts,
+		}
+		body := p.buildRequestBody("o3-mini", req, false)
+		if got, ok := body[OptReasoningEffort].(string); !ok || got != "medium" {
+			t.Fatalf("o3-mini should send reasoning_effort medium, got body=%v", body)
+		}
+	})
+}
+
+func TestBuildRequestBody_TogetherOmitsStreamOptions(t *testing.T) {
+	together := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+	openai := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-4")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	}
+
+	gotTogether := together.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, true)
+	if _, ok := gotTogether["stream_options"]; ok {
+		t.Fatalf("Together streaming must omit stream_options, got %v", gotTogether["stream_options"])
+	}
+
+	gotOpenAI := openai.buildRequestBody("gpt-4o", req, true)
+	if _, ok := gotOpenAI["stream_options"]; !ok {
+		t.Fatal("OpenAI streaming should include stream_options for usage")
+	}
+}
+
+func TestBuildRequestBody_TogetherOmitsStrayDashScopeKeys(t *testing.T) {
+	p := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options: map[string]any{
+			OptEnableThinking: true,
+			OptThinkingBudget: 4096,
+		},
+	}
+	body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, false)
+	if _, ok := body[OptEnableThinking]; ok {
+		t.Fatalf("Together must not send %q", OptEnableThinking)
+	}
+	if _, ok := body[OptThinkingBudget]; ok {
+		t.Fatalf("Together must not send %q", OptThinkingBudget)
+	}
+}
+
+func TestBuildRequestBody_MultimodalTextBeforeImages(t *testing.T) {
+	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: "describe",
+				Images: []ImageContent{
+					{MimeType: "image/jpeg", Data: "qq=="},
+				},
+			},
+		},
+	}
+	body := p.buildRequestBody("gpt-4o", req, false)
+	msgs := body["messages"].([]map[string]any)
+	parts, ok := msgs[0]["content"].([]map[string]any)
+	if !ok || len(parts) < 2 {
+		t.Fatalf("want multimodal parts, got %v", msgs[0]["content"])
+	}
+	if typ, _ := parts[0]["type"].(string); typ != "text" {
+		t.Fatalf("first part should be text, got type=%q parts=%v", typ, parts)
+	}
+	if typ, _ := parts[1]["type"].(string); typ != "image_url" {
+		t.Fatalf("second part should be image_url, got type=%q", typ)
+	}
+}
+
+func TestBuildRequestBody_TogetherDetectedByProviderType(t *testing.T) {
+	// Together behind reverse proxy — detected by providerType, not URL.
+	p := NewOpenAIProvider("my-proxy", "key", "https://proxy.internal/v1", "")
+	p.WithProviderType("together")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options:  map[string]any{OptThinkingLevel: "medium"},
+	}
+
+	body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, true)
+	if _, ok := body["stream_options"]; ok {
+		t.Fatal("Together (via providerType) must omit stream_options")
+	}
+	if _, ok := body[OptReasoningEffort]; ok {
+		t.Fatal("Together (via providerType) must omit reasoning_effort")
+	}
+}
+
+func TestBuildRequestBody_TogetherDetectedByName(t *testing.T) {
+	// Together detected by provider name.
+	p := NewOpenAIProvider("together-prod", "key", "https://proxy.internal/v1", "")
+
+	body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	}, true)
+	if _, ok := body["stream_options"]; ok {
+		t.Fatal("Together (via name) must omit stream_options")
+	}
+}
+
+func TestBuildRequestBody_MultimodalImagesOnlyNoEmptyTextPart(t *testing.T) {
+	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role:    "user",
+				Content: "", // no text
+				Images:  []ImageContent{{MimeType: "image/png", Data: "abc=="}},
+			},
+		},
+	}
+	body := p.buildRequestBody("gpt-4o", req, false)
+	msgs := body["messages"].([]map[string]any)
+	parts, ok := msgs[0]["content"].([]map[string]any)
+	if !ok {
+		t.Fatal("want multimodal parts array")
+	}
+	// Only image parts — no empty text part should be present
+	for _, part := range parts {
+		if typ, _ := part["type"].(string); typ == "text" {
+			t.Fatalf("images-only message should not have text part, got %v", parts)
+		}
+	}
+	if len(parts) != 1 {
+		t.Fatalf("want 1 image part, got %d parts: %v", len(parts), parts)
+	}
+}
+
+func TestBuildRequestBody_OllamaModelOmitsReasoningContent(t *testing.T) {
+	// Ollama/vLLM self-hosted models should NOT get reasoning_content
+	// since most don't support it and it causes HTTP 400.
+	p := NewOpenAIProvider("ollama", "key", "http://localhost:11434/v1", "")
+
+	req := ChatRequest{
+		Messages: []Message{
+			{Role: "assistant", Content: "sure", Thinking: "let me think..."},
+			{Role: "user", Content: "continue"},
+		},
+	}
+
+	body := p.buildRequestBody("qwen2:7b", req, false)
+	msgs := body["messages"].([]map[string]any)
+	for _, m := range msgs {
+		if role, _ := m["role"].(string); role == "assistant" {
+			if _, has := m["reasoning_content"]; has {
+				t.Fatalf("Ollama qwen2:7b must omit reasoning_content, got %v", m)
+			}
+		}
+	}
+}
+
+func TestBuildRequestBody_DeepSeekKeepsReasoningContent(t *testing.T) {
+	// DeepSeek models must keep reasoning_content (required for thinking replay).
+	p := NewOpenAIProvider("deepseek", "key", "https://api.deepseek.com/v1", "")
+
+	req := ChatRequest{
+		Messages: []Message{
+			{Role: "assistant", Content: "result", Thinking: "step by step"},
+			{Role: "user", Content: "next"},
+		},
+	}
+
+	body := p.buildRequestBody("deepseek-r1", req, false)
+	msgs := body["messages"].([]map[string]any)
+	for _, m := range msgs {
+		if role, _ := m["role"].(string); role == "assistant" {
+			if _, has := m["reasoning_content"]; !has {
+				t.Fatalf("DeepSeek must keep reasoning_content, got %v", m)
+			}
+		}
+	}
+}
+
+func TestBuildRequestBody_KimiKeepsReasoningContent(t *testing.T) {
+	p := NewOpenAIProvider("kimi", "key", "https://api.moonshot.cn/v1", "")
+
+	req := ChatRequest{
+		Messages: []Message{
+			{Role: "assistant", Content: "ok", Thinking: "reasoning"},
+			{Role: "user", Content: "next"},
+		},
+	}
+
+	body := p.buildRequestBody("kimi-k2", req, false)
+	msgs := body["messages"].([]map[string]any)
+	for _, m := range msgs {
+		if role, _ := m["role"].(string); role == "assistant" {
+			if _, has := m["reasoning_content"]; !has {
+				t.Fatalf("Kimi must keep reasoning_content, got %v", m)
+			}
+		}
+	}
+}
+
+func TestBuildRequestBody_DashScopePassthroughByProviderType(t *testing.T) {
+	// DashScope behind proxy — detected by providerType.
+	p := NewOpenAIProvider("my-qwen", "key", "https://proxy.internal/v1", "")
+	p.WithProviderType("dashscope")
+
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options: map[string]any{
+			OptEnableThinking: true,
+			OptThinkingBudget: 8192,
+		},
+	}
+
+	body := p.buildRequestBody("qwen3-max", req, false)
+	if _, ok := body[OptEnableThinking]; !ok {
+		t.Fatal("DashScope (via providerType) must pass through enable_thinking")
+	}
+	if _, ok := body[OptThinkingBudget]; !ok {
+		t.Fatal("DashScope (via providerType) must pass through thinking_budget")
+	}
+}
+
 func TestBuildRequestBody_PrefixedModelsUseCorrectTokenField(t *testing.T) {
 	p := NewOpenAIProvider("test", "key", "https://api.openai.com/v1", "gpt-4")
 
@@ -256,5 +508,79 @@ func TestBuildRequestBody_LegacyLongToolCallIDsStayUnique(t *testing.T) {
 	}
 	if got := msgs[2]["tool_call_id"].(string); got != assistantID2 {
 		t.Fatalf("second tool result ID = %q, want %q", got, assistantID2)
+	}
+}
+
+var mistralWireIDRe = regexp.MustCompile(`^[0-9a-f]{9}$`)
+
+func TestNormalizeMistralToolCallID_DeterministicNineChars(t *testing.T) {
+	id := "call_85f419357e554e8983a7edb4d2317e93e15"
+	a := normalizeMistralToolCallID(id)
+	b := normalizeMistralToolCallID(id)
+	if a != b {
+		t.Fatalf("normalizeMistralToolCallID not deterministic: %q vs %q", a, b)
+	}
+	if !mistralWireIDRe.MatchString(a) {
+		t.Fatalf("got %q, want exactly 9 hex chars", a)
+	}
+}
+
+func TestNormalizeMistralToolCallID_DistinctIDsStayUnique(t *testing.T) {
+	// IDs sharing a long prefix must not collide after normalization.
+	id1 := "call_a1b2c3d4e5f6a1b2c3d4e5f6_suffix1"
+	id2 := "call_a1b2c3d4e5f6a1b2c3d4e5f6_suffix2"
+	if normalizeMistralToolCallID(id1) == normalizeMistralToolCallID(id2) {
+		t.Fatal("distinct IDs must not collide after normalization")
+	}
+}
+
+func TestBuildRequestBody_MistralToolCallIDsWireFormat(t *testing.T) {
+	p := NewOpenAIProvider("mistral", "key", "https://api.mistral.ai/v1", "mistral-large-latest")
+	longID := "call_85f419357e554e8983a7edb4d2317e93e15"
+
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role: "assistant",
+				ToolCalls: []ToolCall{
+					{ID: longID, Name: "test_fn", Arguments: map[string]any{"x": 1}},
+				},
+			},
+			{Role: "tool", ToolCallID: longID, Content: "ok"},
+			{Role: "user", Content: "next"},
+		},
+	}
+
+	body := p.buildRequestBody("mistral-large-latest", req, false)
+	msgs := body["messages"].([]map[string]any)
+
+	var assistantID, toolResultID string
+	for _, msg := range msgs {
+		if tcs, ok := msg["tool_calls"]; ok {
+			toolCalls := tcs.([]map[string]any)
+			assistantID = toolCalls[0]["id"].(string)
+		}
+		if tcid, ok := msg["tool_call_id"]; ok {
+			toolResultID = tcid.(string)
+		}
+	}
+
+	if assistantID != toolResultID {
+		t.Fatalf("IDs must match: tool_calls.id=%q tool_call_id=%q", assistantID, toolResultID)
+	}
+	if !mistralWireIDRe.MatchString(assistantID) {
+		t.Fatalf("mistral wire id %q must be 9 hex chars", assistantID)
+	}
+}
+
+func TestBuildRequestBody_MistralDBProviderTypeDetected(t *testing.T) {
+	// DB-loaded Mistral providers use providerType="mistral" with a user-chosen name.
+	p := NewOpenAIProvider("my-mistral", "key", "https://api.mistral.ai/v1", "mistral-large-latest")
+	p.WithProviderType("mistral")
+
+	id := "call_85f419357e554e8983a7edb4d2317e93e15"
+	got := p.wireToolCallID(id)
+	if !mistralWireIDRe.MatchString(got) {
+		t.Fatalf("DB provider with providerType=mistral: got %q, want 9 hex chars", got)
 	}
 }

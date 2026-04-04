@@ -431,6 +431,11 @@ func (s *Server) SetSecureCLIHandler(h *httpapi.SecureCLIHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetSecureCLIGrantHandler sets the per-agent secure CLI grant handler.
+func (s *Server) SetSecureCLIGrantHandler(h *httpapi.SecureCLIGrantHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetPackagesHandler sets the runtime package management handler.
 func (s *Server) SetPackagesHandler(h *httpapi.PackagesHandler) {
 	s.handlers = append(s.handlers, h)

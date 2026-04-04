@@ -87,9 +87,10 @@ func (s *PGPairingStore) ApprovePairing(ctx context.Context, code, approvedBy st
 	var senderID, channel, chatID string
 	var metaJSON []byte
 	var reqTenantID uuid.UUID
-	// Code lookup is cross-tenant (random token, approver is WS/HTTP user)
+	// Code lookup is cross-tenant (random token, approver is WS/HTTP user).
+	// Also check expires_at to close race between prune DELETE and this SELECT.
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, sender_id, channel, chat_id, COALESCE(metadata, '{}'), tenant_id FROM pairing_requests WHERE code = $1", code,
+		"SELECT id, sender_id, channel, chat_id, COALESCE(metadata, '{}'), tenant_id FROM pairing_requests WHERE code = $1 AND expires_at > NOW()", code,
 	).Scan(&reqID, &senderID, &channel, &chatID, &metaJSON, &reqTenantID)
 	if err != nil {
 		return nil, fmt.Errorf("pairing code %s not found or expired", code)

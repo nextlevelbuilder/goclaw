@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
+import { persist } from "zustand/middleware";
 import { clearSetupSkippedState } from "@/lib/setup-skip";
 import type { TenantMembership } from "@/types/tenant";
 
@@ -29,63 +29,70 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  token: localStorage.getItem(LOCAL_STORAGE_KEYS.TOKEN) ?? "",
-  userId: localStorage.getItem(LOCAL_STORAGE_KEYS.USER_ID) ?? "",
-  senderID: localStorage.getItem(LOCAL_STORAGE_KEYS.SENDER_ID) ?? "",
-  connected: false,
-  role: "" as UserRole,
-  serverInfo: null,
-  tenantId: "",
-  tenantName: "",
-  tenantSlug: "",
-  isOwner: false,
-  availableTenants: [],
-  tenantSelected: !!localStorage.getItem(LOCAL_STORAGE_KEYS.TENANT_ID),
-
-  setCredentials: (token, userId) => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.TOKEN, token);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.USER_ID, userId);
-    set({ token, userId });
-  },
-
-  setPairing: (senderID, userId) => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.SENDER_ID, senderID);
-    localStorage.setItem(LOCAL_STORAGE_KEYS.USER_ID, userId);
-    set({ senderID, userId });
-  },
-
-  setConnected: (connected, serverInfo) => {
-    set({ connected, serverInfo: serverInfo ?? null });
-  },
-
-  setRole: (role) => {
-    set({ role });
-  },
-
-  setTenant: (id, name, slug, isOwner) => {
-    set({ tenantId: id, tenantName: name, tenantSlug: slug, isOwner });
-  },
-
-  setAvailableTenants: (tenants) => {
-    set({ availableTenants: tenants });
-  },
-
-  setTenantSelected: (selected) => {
-    set({ tenantSelected: selected });
-  },
-
-  logout: () => {
-    localStorage.removeItem(LOCAL_STORAGE_KEYS.TOKEN);
-    localStorage.removeItem(LOCAL_STORAGE_KEYS.USER_ID);
-    localStorage.removeItem(LOCAL_STORAGE_KEYS.SENDER_ID);
-    localStorage.removeItem(LOCAL_STORAGE_KEYS.TENANT_ID);
-    localStorage.removeItem(LOCAL_STORAGE_KEYS.TENANT_HINT);
-    clearSetupSkippedState();
-    set({
-      token: "", userId: "", senderID: "", connected: false, role: "", serverInfo: null,
-      tenantId: "", tenantName: "", tenantSlug: "", isOwner: false, availableTenants: [],
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: "",
+      userId: "",
+      senderID: "",
+      connected: false,
+      role: "" as UserRole,
+      serverInfo: null,
+      tenantId: "",
+      tenantName: "",
+      tenantSlug: "",
+      isOwner: false,
+      availableTenants: [],
       tenantSelected: false,
-    });
-  },
-}));
+
+      setCredentials: (token, userId) => {
+        set({ token, userId });
+      },
+
+      setPairing: (senderID, userId) => {
+        set({ senderID, userId });
+      },
+
+      setConnected: (connected, serverInfo) => {
+        set({ connected, serverInfo: serverInfo ?? null });
+      },
+
+      setRole: (role) => {
+        set({ role });
+      },
+
+      setTenant: (id, name, slug, isOwner) => {
+        set({ tenantId: id, tenantName: name, tenantSlug: slug, isOwner });
+      },
+
+      setAvailableTenants: (tenants) => {
+        set({ availableTenants: tenants });
+      },
+
+      setTenantSelected: (selected) => {
+        set({ tenantSelected: selected });
+      },
+
+      logout: () => {
+        // Remove tenant scope keys that are still managed outside persist
+        localStorage.removeItem("goclaw:tenant_id");
+        localStorage.removeItem("goclaw:tenant_hint");
+        clearSetupSkippedState();
+        set({
+          token: "", userId: "", senderID: "", connected: false, role: "", serverInfo: null,
+          tenantId: "", tenantName: "", tenantSlug: "", isOwner: false, availableTenants: [],
+          tenantSelected: false,
+        });
+      },
+    }),
+    {
+      name: "goclaw:auth", // localStorage key
+      partialize: (state) => ({
+        // Only persist credentials — not transient runtime state
+        token: state.token,
+        userId: state.userId,
+        senderID: state.senderID,
+      }),
+    }
+  )
+);

@@ -7,6 +7,8 @@ import { Shield, X, AlertTriangle, Plus, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { WorkspaceSharingConfig } from "@/types/agent";
 import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
 import { InfoLabel } from "./config-section";
 
 const MAX_SHARED_USERS = 100;
@@ -22,6 +24,7 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
   const [contactSearch, setContactSearch] = useState("");
 
   const existingUsers = value.shared_users ?? [];
+  const { resolve } = useContactResolver(existingUsers);
 
   const addUser = (userId: string) => {
     const trimmed = userId.trim();
@@ -118,7 +121,7 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
               <div className="flex flex-wrap gap-1.5">
                 {existingUsers.map((u, i) => (
                   <Badge key={i} variant="secondary" className="gap-1 pr-1">
-                    <span className="max-w-48 truncate">{u}</span>
+                    <span className="max-w-48 truncate">{formatUserLabel(u, resolve)}</span>
                     <button
                       type="button"
                       onClick={() => removeUser(i)}

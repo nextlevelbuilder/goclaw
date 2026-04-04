@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
-import { useSessions } from "@/pages/sessions/hooks/use-sessions";
-import { parseSessionKey } from "@/lib/session-key";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
+import { useKGStats } from "@/pages/memory/hooks/use-knowledge-graph";
 import { KGEntitiesTab } from "@/pages/memory/kg-entities-tab";
 
 export function KnowledgeGraphPage() {
@@ -17,29 +18,17 @@ export function KnowledgeGraphPage() {
   const [agentId, setAgentId] = useState("");
   const [userIdFilter, setUserIdFilter] = useState("");
 
-  // Resolve agent UUID → agent_key (sessions filter uses agent_key in session key pattern)
-  const selectedAgent = agents.find((a) => a.id === agentId);
-  const agentKey = selectedAgent?.agent_key ?? "";
+  // Fetch KG stats for the agent — includes distinct user_ids from KG entities
+  const { stats } = useKGStats(agentId);
+  const userIds = stats?.user_ids ?? [];
+  const { resolve } = useContactResolver(userIds);
 
-  // Fetch sessions for selected agent to build scope picker (DM + group chats)
-  const { sessions } = useSessions({ agentFilter: agentKey || undefined, limit: 200 });
-
-  // Dedupe sessions by userID → scope options showing chat title / display name
+  // Build scope options from KG entity user IDs (more reliable than sessions)
   const scopeOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const s of sessions) {
-      const uid = s.userID || parseSessionKey(s.key).scope;
-      if (!uid || seen.has(uid)) continue;
-      const meta = s.metadata;
-      const label = meta?.chat_title || meta?.display_name
-        || (meta?.username ? `@${meta.username}` : null)
-        || uid;
-      seen.set(uid, label);
-    }
-    return Array.from(seen.entries())
-      .map(([value, label]) => ({ value, label }))
+    return userIds
+      .map((uid) => ({ value: uid, label: formatUserLabel(uid, resolve) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [sessions]);
+  }, [userIds, resolve]);
 
   return (
     <div className="flex h-full flex-col p-4 sm:p-6">
@@ -107,7 +96,7 @@ export function KnowledgeGraphPage() {
             }
           />
         ) : (
-          <KGEntitiesTab agentId={agentId} userId={userIdFilter || undefined} />
+          <KGEntitiesTab key={`${agentId}-${userIdFilter}`} agentId={agentId} userId={userIdFilter || undefined} />
         )}
       </div>
     </div>

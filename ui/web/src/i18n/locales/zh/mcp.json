@@ -127,6 +127,7 @@
     "addHeader": "添加 Header",
     "addEnv": "添加变量",
     "saveFailed": "保存凭据失败",
-    "deleteFailed": "删除凭据失败"
+    "deleteFailed": "删除凭据失败",
+    "mergeHint": "聊天用户（Telegram、Discord 等）需要先通过联系人页面合并为租户用户，才能设置独立凭证。"
   }
 }

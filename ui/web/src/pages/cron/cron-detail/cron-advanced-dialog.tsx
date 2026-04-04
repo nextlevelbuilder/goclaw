@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +17,7 @@ import { useChannels } from "@/pages/channels/hooks/use-channels";
 import { useWs } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import type { CronJob, CronJobPatch } from "../hooks/use-cron";
+import { cronAdvancedSchema, type CronAdvancedFormData } from "@/schemas/cron-advanced.schema";
 
 interface DeliveryTarget {
   channel: string;
@@ -30,7 +33,7 @@ interface CronAdvancedDialogProps {
   onUpdate?: (id: string, params: CronJobPatch) => Promise<void>;
 }
 
-function deriveState(job: CronJob) {
+function deriveDefaults(job: CronJob): CronAdvancedFormData {
   return {
     timezone: job.schedule.tz ?? "UTC",
     deliver: job.deliver ?? false,
@@ -49,16 +52,24 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
   const { channels: availableChannels } = useChannels();
   const channelNames = Object.keys(availableChannels);
 
-  const init = deriveState(job);
-  const [timezone, setTimezone] = useState(init.timezone);
-  const [deliver, setDeliver] = useState(init.deliver);
-  const [channel, setChannel] = useState(init.channel);
-  const [to, setTo] = useState(init.to);
-  const [wakeHeartbeat, setWakeHeartbeat] = useState(init.wakeHeartbeat);
-  const [deleteAfterRun, setDeleteAfterRun] = useState(init.deleteAfterRun);
-  const [stateless, setStateless] = useState(init.stateless);
+  // UI-only state
   const [saving, setSaving] = useState(false);
   const [targets, setTargets] = useState<DeliveryTarget[]>([]);
+
+  const form = useForm<CronAdvancedFormData>({
+    resolver: zodResolver(cronAdvancedSchema),
+    mode: "onChange",
+    defaultValues: deriveDefaults(job),
+  });
+
+  const { watch, setValue, reset } = form;
+  const timezone = watch("timezone");
+  const deliver = watch("deliver");
+  const channel = watch("channel");
+  const to = watch("to");
+  const wakeHeartbeat = watch("wakeHeartbeat");
+  const deleteAfterRun = watch("deleteAfterRun");
+  const stateless = watch("stateless");
 
   const fetchTargets = useCallback(async () => {
     if (!job.agentId || !ws.isConnected) return;
@@ -73,14 +84,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
   // Re-sync when dialog opens
   useEffect(() => {
     if (!open) return;
-    const s = deriveState(job);
-    setTimezone(s.timezone);
-    setDeliver(s.deliver);
-    setChannel(s.channel);
-    setTo(s.to);
-    setWakeHeartbeat(s.wakeHeartbeat);
-    setDeleteAfterRun(s.deleteAfterRun);
-    setStateless(s.stateless);
+    reset(deriveDefaults(job));
     fetchTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -90,7 +94,8 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
       onOpenChange(false);
       return;
     }
-    if (timezone && timezone !== "UTC" && !isValidIanaTimezone(timezone)) {
+    const data = form.getValues();
+    if (data.timezone && data.timezone !== "UTC" && !isValidIanaTimezone(data.timezone)) {
       toast.error(t("detail.invalidTimezone", "Invalid timezone"));
       return;
     }
@@ -99,14 +104,14 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
       await onUpdate(job.id, {
         schedule: {
           ...job.schedule,
-          tz: timezone !== "UTC" ? timezone : "",
+          tz: data.timezone !== "UTC" ? data.timezone : "",
         },
-        deliver,
-        deliverChannel: deliver ? channel.trim() || undefined : undefined,
-        deliverTo: deliver ? to.trim() || undefined : undefined,
-        wakeHeartbeat,
-        deleteAfterRun,
-        stateless,
+        deliver: data.deliver,
+        deliverChannel: data.deliver ? data.channel.trim() || undefined : undefined,
+        deliverTo: data.deliver ? data.to.trim() || undefined : undefined,
+        wakeHeartbeat: data.wakeHeartbeat,
+        deleteAfterRun: data.deleteAfterRun,
+        stateless: data.stateless,
       });
       onOpenChange(false);
     } catch { // toast shown by hook
@@ -117,7 +122,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -137,7 +142,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
             <Label htmlFor="adv-timezone">{t("detail.timezone")}</Label>
             <Combobox
               value={timezone}
-              onChange={setTimezone}
+              onChange={(v) => setValue("timezone", v)}
               options={getAllIanaTimezones()}
               placeholder={t("detail.timezone")}
               className="text-base md:text-sm"
@@ -153,7 +158,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
               <p className="text-sm font-medium">{t("detail.deliverToChannel")}</p>
-              <Switch checked={deliver} onCheckedChange={setDeliver} />
+              <Switch checked={deliver} onCheckedChange={(v) => setValue("deliver", v)} />
             </div>
 
             {deliver && (
@@ -163,7 +168,10 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
                   {channelNames.length > 0 ? (
                     <Select
                       value={channel || "__none__"}
-                      onValueChange={(v) => { setChannel(v === "__none__" ? "" : v); setTo(""); }}
+                      onValueChange={(v) => {
+                        setValue("channel", v === "__none__" ? "" : v);
+                        setValue("to", "");
+                      }}
                     >
                       <SelectTrigger className="text-base md:text-sm">
                         <SelectValue placeholder={t("detail.channelPlaceholder")} />
@@ -178,7 +186,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
                   ) : (
                     <Input
                       value={channel}
-                      onChange={(e) => setChannel(e.target.value)}
+                      onChange={(e) => setValue("channel", e.target.value)}
                       placeholder={t("detail.channelPlaceholder")}
                       className="text-base md:text-sm"
                     />
@@ -201,7 +209,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
                       return (
                         <Select
                           value={to || "__none__"}
-                          onValueChange={(v) => setTo(v === "__none__" ? "" : v)}
+                          onValueChange={(v) => setValue("to", v === "__none__" ? "" : v)}
                         >
                           <SelectTrigger className="text-base md:text-sm">
                             <SelectValue placeholder={t("detail.toPlaceholder")} />
@@ -220,7 +228,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
                     return (
                       <Input
                         value={to}
-                        onChange={(e) => setTo(e.target.value)}
+                        onChange={(e) => setValue("to", e.target.value)}
                         placeholder={t("detail.toPlaceholder")}
                         className="text-base md:text-sm"
                       />
@@ -235,7 +243,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
                 <p className="text-sm font-medium">{t("detail.wakeHeartbeat")}</p>
                 <p className="text-xs text-muted-foreground">{t("detail.wakeHeartbeatDesc")}</p>
               </div>
-              <Switch checked={wakeHeartbeat} onCheckedChange={setWakeHeartbeat} />
+              <Switch checked={wakeHeartbeat} onCheckedChange={(v) => setValue("wakeHeartbeat", v)} />
             </div>
           </div>
 
@@ -249,7 +257,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
               <p className="text-sm font-medium">{t("detail.deleteAfterRun")}</p>
               <p className="text-xs text-muted-foreground">{t("detail.deleteAfterRunDesc")}</p>
             </div>
-            <Switch checked={deleteAfterRun} onCheckedChange={setDeleteAfterRun} />
+            <Switch checked={deleteAfterRun} onCheckedChange={(v) => setValue("deleteAfterRun", v)} />
           </div>
 
           <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
@@ -257,7 +265,7 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
               <p className="text-sm font-medium">{t("stateless")}</p>
               <p className="text-xs text-muted-foreground">{t("statelessHelp")}</p>
             </div>
-            <Switch checked={stateless} onCheckedChange={setStateless} />
+            <Switch checked={stateless} onCheckedChange={(v) => setValue("stateless", v)} />
           </div>
 
         </div>

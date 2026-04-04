@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InfoLabel } from "@/components/shared/info-label";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
+import { SubSection, Field } from "./ai-defaults-form-controls";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AgentsData = Record<string, any>;
@@ -263,66 +264,3 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
   );
 }
 
-/* --- Helper components --- */
-
-function SubSection({
-  title,
-  desc,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  desc: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-md border">
-      <button
-        type="button"
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
-        onClick={onToggle}
-      >
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <div>
-          <span className="font-medium">{title}</span>
-          <span className="ml-2 text-xs text-muted-foreground">{desc}</span>
-        </div>
-      </button>
-      {open && <div className="space-y-3 border-t px-4 py-3">{children}</div>}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  tip,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  step,
-}: {
-  label: string;
-  tip?: string;
-  value: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-  step?: string;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      {tip ? <InfoLabel tip={tip}>{label}</InfoLabel> : <Label>{label}</Label>}
-      <Input
-        type={type}
-        step={step}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-    </div>
-  );
-}

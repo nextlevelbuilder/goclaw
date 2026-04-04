@@ -432,8 +432,8 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		return
 	}
 
-	// Derive userID from senderID: strip "|username" suffix if present (Telegram format).
-	// For most channels, senderID == userID (platform user ID).
+	// Derive userID from senderID: strip "|username" suffix if present (legacy Slack compound format).
+	// All channels now pass plain senderID; kept for backward compat with stored compound IDs.
 	userID := senderID
 	if idx := strings.IndexByte(senderID, '|'); idx > 0 {
 		userID = senderID[:idx]

@@ -125,9 +125,7 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
                 <Input
                   type="password"
                   className="text-base md:text-sm"
-                  value={brave.api_key ?? ""}
-                  disabled={isSecret(brave.api_key)}
-                  readOnly={isSecret(brave.api_key)}
+                  value={isSecret(brave.api_key) ? "" : (brave.api_key ?? "")}
                   onChange={(e) =>
                     updateNested("web", { brave: { ...brave, api_key: e.target.value } })
                   }

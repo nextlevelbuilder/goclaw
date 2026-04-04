@@ -146,6 +146,30 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 		slog.Info("registered provider", "name", "novita")
 	}
 
+	// BytePlus ModelArk — OpenAI-compatible (standard Bearer auth).
+	if cfg.Providers.BytePlus.APIKey != "" {
+		base := cfg.Providers.BytePlus.APIBase
+		if base == "" {
+			base = store.BytePlusDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("byteplus", cfg.Providers.BytePlus.APIKey, base, store.BytePlusDefaultModel)
+		prov.WithProviderType(store.ProviderBytePlus)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "byteplus")
+	}
+
+	// BytePlus ModelArk Coding Plan — separate endpoint for developer tools quota.
+	if cfg.Providers.BytePlusCoding.APIKey != "" {
+		base := cfg.Providers.BytePlusCoding.APIBase
+		if base == "" {
+			base = store.BytePlusCodingDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("byteplus-coding", cfg.Providers.BytePlusCoding.APIKey, base, store.BytePlusDefaultModel)
+		prov.WithProviderType(store.ProviderBytePlusCoding)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "byteplus-coding")
+	}
+
 	// Claude CLI provider (subscription-based, no API key needed)
 	if cfg.Providers.ClaudeCLI.CLIPath != "" {
 		cliPath := cfg.Providers.ClaudeCLI.CLIPath
@@ -284,12 +308,13 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			continue
 		}
 		// Local Ollama requires no API key — handle before the key guard (same pattern as ClaudeCLI).
+		// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
 		if p.ProviderType == store.ProviderOllama {
 			host := p.APIBase
 			if host == "" {
-				host = "http://localhost:11434"
+				host = "http://localhost:11434/v1"
 			}
-			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host+"/v1"), "llama3.3"))
+			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 			slog.Info("registered provider from DB", "name", p.Name)
 			continue
 		}
@@ -357,6 +382,22 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				base = store.NovitaDefaultAPIBase
 			}
 			registry.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.NovitaDefaultModel))
+		case store.ProviderBytePlus:
+			base := p.APIBase
+			if base == "" {
+				base = store.BytePlusDefaultAPIBase
+			}
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.BytePlusDefaultModel)
+			prov.WithProviderType(p.ProviderType)
+			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderBytePlusCoding:
+			base := p.APIBase
+			if base == "" {
+				base = store.BytePlusCodingDefaultAPIBase
+			}
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.BytePlusDefaultModel)
+			prov.WithProviderType(p.ProviderType)
+			registry.RegisterForTenant(p.TenantID, prov)
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")
 			prov.WithProviderType(p.ProviderType)

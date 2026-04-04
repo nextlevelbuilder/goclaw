@@ -143,7 +143,8 @@
       "source": "来源：",
       "properties": "属性：",
       "relations": "关系",
-      "traverse": "遍历（3 跳）",
+      "traverse": "遍历",
+      "depthOption": "{{depth}} 跳",
       "tabs": {
         "table": "表格",
         "graph": "图谱"

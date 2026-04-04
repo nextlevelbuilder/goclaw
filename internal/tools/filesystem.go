@@ -139,7 +139,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 			if content == "" {
 				return SilentResult(fmt.Sprintf("(memory file %s does not exist yet — it will be created when memory is saved)", path))
 			}
-			return SilentResult(content)
+			return SilentResult(content + "\n\n[Source: database, not filesystem]")
 		}
 	}
 

@@ -76,14 +76,24 @@ func (h *ProvidersHandler) SetAgentStore(as store.AgentCRUDStore) {
 }
 
 // resolveAPIBase returns the provider's api_base, falling back to config/env if empty.
+// For Ollama/OllamaCloud providers, applies a safety-net normalization: if the stored
+// value is missing the /v1 suffix (pre-existing record before write-time normalization),
+// the suffix is appended so all downstream call sites receive a ready-to-use URL.
 func (h *ProvidersHandler) resolveAPIBase(p *store.LLMProviderData) string {
+	base := ""
 	if p.APIBase != "" {
-		return p.APIBase
+		base = p.APIBase
+	} else if h.apiBaseFallback != nil {
+		base = h.apiBaseFallback(p.ProviderType)
 	}
-	if h.apiBaseFallback != nil {
-		return h.apiBaseFallback(p.ProviderType)
+	// Safety net: normalize Ollama URLs missing /v1 (pre-existing DB records).
+	if base != "" && (p.ProviderType == store.ProviderOllama || p.ProviderType == store.ProviderOllamaCloud) {
+		base = strings.TrimRight(base, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
 	}
-	return ""
+	return base
 }
 
 // emitProviderCacheInvalidate broadcasts a provider cache invalidation event.
@@ -164,12 +174,13 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	}
 	// Ollama doesn't need an API key — handle before the key guard (same as startup).
 	// In Docker, swap localhost → host.docker.internal so the container can reach the host.
+	// api_base is stored with /v1 (normalized at write time), so no suffix appending needed.
 	if p.ProviderType == store.ProviderOllama {
 		host := p.APIBase
 		if host == "" {
-			host = "http://localhost:11434"
+			host = "http://localhost:11434/v1"
 		}
-		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host+"/v1"), "llama3.3"))
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, "ollama", config.DockerLocalhost(host), "llama3.3"))
 		return
 	}
 	if p.APIKey == "" {
@@ -210,10 +221,34 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 	}
 }
 
+// normalizeOllamaAPIBase ensures Ollama and OllamaCloud api_base values include the
+// /v1 suffix required for OpenAI-compatible endpoints. Normalizing at write time means
+// resolveAPIBase() always returns a ready-to-use base URL.
+func normalizeOllamaAPIBase(p *store.LLMProviderData) {
+	if p.ProviderType != store.ProviderOllama && p.ProviderType != store.ProviderOllamaCloud {
+		return
+	}
+	if p.APIBase == "" {
+		return
+	}
+	p.APIBase = strings.TrimRight(p.APIBase, "/")
+	if !strings.HasSuffix(p.APIBase, "/v1") {
+		p.APIBase += "/v1"
+	}
+}
+
+// localProviderTypes are provider types that legitimately run on localhost
+// (e.g. Ollama, Claude CLI). SSRF checks are skipped for these.
+var localProviderTypes = map[string]bool{
+	store.ProviderOllama:    true,
+	store.ProviderClaudeCLI: true,
+	store.ProviderACP:       true,
+}
+
 // validateProviderURL rejects provider base URLs pointing to internal/private networks.
 // Defense-in-depth: prevents SSRF when providers are later used for API calls.
 func validateProviderURL(rawURL string, providerType string) error {
-	if rawURL == "" || providerType == store.ProviderACP {
+	if rawURL == "" || localProviderTypes[providerType] {
 		return nil
 	}
 	u, err := url.Parse(rawURL)
@@ -320,6 +355,10 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+
+	// Normalize Ollama base URL to include /v1 so all code paths
+	// (chat, model listing, embedding verify) use the same value from DB.
+	normalizeOllamaAPIBase(&p)
 
 	if err := h.store.CreateProvider(r.Context(), &p); err != nil {
 		slog.Error("providers.create", "error", err)
@@ -445,6 +484,12 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 				return
 			}
 		}
+	}
+
+	// Normalize Ollama base URL to include /v1 so all code paths use the same value.
+	normalizeOllamaAPIBase(&candidate)
+	if candidate.APIBase != currentProvider.APIBase {
+		updates["api_base"] = candidate.APIBase
 	}
 
 	if err := validateChatGPTOAuthProviderCandidate(r.Context(), h.store, id, &candidate); err != nil {

@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react'
-import { getApiClient } from '../lib/api'
+import { agentService } from '../services/agent-service'
 import { useAgentStore } from '../stores/agent-store'
 import type { Agent } from '../stores/agent-store'
 
@@ -9,19 +9,10 @@ let didFetchAgents = false
 
 export function useAgents() {
   const { agents, selectedAgentId, setAgents, selectAgent } = useAgentStore()
-  const api = getApiClient()
 
   const fetchAgents = useCallback(async () => {
-    if (!api) return
     try {
-      const result = await api.get<{ agents: Array<{
-        id: string
-        agent_key: string
-        display_name?: string
-        model?: string
-        provider?: string
-        other_config?: Record<string, unknown> | null
-      }> }>('/v1/agents')
+      const result = await agentService.listItems()
 
       const mapped: Agent[] = (result.agents ?? []).map((a) => {
         const otherCfg = a.other_config ?? {}
@@ -41,7 +32,7 @@ export function useAgents() {
       console.error('Failed to fetch agents:', err)
       return []
     }
-  }, [api, setAgents])
+  }, [setAgents])
 
   // Fetch once globally, auto-select first agent only if none selected
   useEffect(() => {

@@ -3,6 +3,7 @@
  * Handles Vietnamese and other diacritical characters by stripping accents first.
  */
 export function slugify(input: string): string {
+  if (!input) return ''
   return input
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
