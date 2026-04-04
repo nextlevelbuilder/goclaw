@@ -13,6 +13,7 @@ import {
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { useProviderVerify } from "@/pages/providers/hooks/use-provider-verify";
+import { getChatGPTOAuthPoolOwnership } from "@/pages/providers/provider-utils";
 import { InfoLabel } from "./info-label";
 
 interface ProviderModelSelectProps {
@@ -66,9 +67,13 @@ export function ProviderModelSelect({
 }: ProviderModelSelectProps) {
   const { t } = useTranslation("common");
   const { providers } = useProviders();
+  const poolOwnership = useMemo(() => getChatGPTOAuthPoolOwnership(providers), [providers]);
+
   const enabledProviders = useMemo(
     () => providers.filter((p) => {
       if (!p.enabled) return false;
+      // Hide pool members — pool routing is handled via the owner provider
+      if (poolOwnership.ownerByMember.has(p.name)) return false;
       if (filterEmbedding) {
         const s = p.settings as Record<string, unknown> | undefined;
         const emb = s?.embedding as { enabled?: boolean } | undefined;
@@ -76,7 +81,7 @@ export function ProviderModelSelect({
       }
       return true;
     }),
-    [providers, filterEmbedding],
+    [providers, poolOwnership, filterEmbedding],
   );
 
   // Stable ref for callback — prevents the auto-select effect from re-running
