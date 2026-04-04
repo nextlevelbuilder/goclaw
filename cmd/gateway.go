@@ -434,11 +434,11 @@ func runGateway() {
 
 			// Agent tools
 			toolsReg.Register(tools.NewMarketplaceSearchTool(mktClient))
-			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, cfg.Gateway.Token, hubFrontendURL, pgStores.DB))
-			toolsReg.Register(tools.NewMarketplaceCheckUpdatesTool(mktClient, pgStores.DB))
+			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, cfg.Gateway.Token, hubFrontendURL, pgStores.Teams))
+			toolsReg.Register(tools.NewMarketplaceCheckUpdatesTool(mktClient, pgStores.Teams))
 
 			// Install page handler
-			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort, pgStores.DB))
+			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort, pgStores.Teams))
 
 			slog.Info("marketplace tools enabled", "api_base", apiBase, "auto_import", cfg.Gateway.Token != "")
 		}

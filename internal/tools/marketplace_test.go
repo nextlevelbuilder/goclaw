@@ -150,7 +150,7 @@ func TestMarketplaceHireTool(t *testing.T) {
 	defer server.Close()
 
 	client := registry.NewClient(server.URL, "test-key")
-	tool := NewMarketplaceHireTool(client, "http://localhost:18790", "", "", nil)
+	tool := NewMarketplaceHireTool(client, "http://localhost:18790", "", "", nil) // nil TeamCRUDStore — no metadata saving in test
 
 	// Test tool metadata
 	if tool.Name() != "marketplace_hire" {

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,25 +19,26 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/registry"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MarketplaceHireTool downloads and installs agent teams from the GoClaw Hub marketplace.
 type MarketplaceHireTool struct {
-	client           *registry.Client
-	gatewayURL       string // e.g. http://localhost:18790
-	gatewayToken     string
-	hubFrontendURL   string // e.g. https://hub.vibery.app
-	db               *sql.DB
+	client         *registry.Client
+	gatewayURL     string // e.g. http://localhost:18790
+	gatewayToken   string
+	hubFrontendURL string // e.g. https://hub.vibery.app
+	teams          store.TeamCRUDStore
 }
 
 // NewMarketplaceHireTool creates a new marketplace hire tool.
-func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken, hubFrontendURL string, db *sql.DB) *MarketplaceHireTool {
+func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken, hubFrontendURL string, teams store.TeamCRUDStore) *MarketplaceHireTool {
 	return &MarketplaceHireTool{
 		client:         client,
 		gatewayURL:     gatewayURL,
 		gatewayToken:   gatewayToken,
 		hubFrontendURL: hubFrontendURL,
-		db:             db,
+		teams:          teams,
 	}
 }
 
@@ -132,7 +132,8 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	}
 	dlReq.Header.Set("X-Registry-Key", t.client.APIKey)
 
-	dlResp, err := http.DefaultClient.Do(dlReq)
+	dlClient := &http.Client{Timeout: 60 * time.Second}
+	dlResp, err := dlClient.Do(dlReq)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v", listing.Title, err))
 	}
@@ -179,8 +180,10 @@ func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) 
 	}
 
 	// Save Hub metadata to the team's settings for update tracking
-	if t.db != nil {
-		t.saveHubMetadata(ctx, listing.Title, slug)
+	if t.teams != nil {
+		if err := t.saveHubMetadata(ctx, slug); err != nil {
+			slog.Warn("marketplace: failed to save hub metadata", "slug", slug, "error", err)
+		}
 	}
 
 	slog.Info("marketplace: hired", "slug", slug, "title", listing.Title)
@@ -340,24 +343,46 @@ func validateBundle(path string) error {
 	return nil
 }
 
-// saveHubMetadata updates the most recently imported team with Hub marketplace metadata.
-func (t *MarketplaceHireTool) saveHubMetadata(ctx context.Context, teamName, slug string) {
-	if t.db == nil {
-		return
+// saveHubMetadata saves hub_slug and hub_version into the most recently created team's settings.
+// Finds the team by listing teams and matching by name (most recent import), then updates via store.
+func (t *MarketplaceHireTool) saveHubMetadata(ctx context.Context, slug string) error {
+	if t.teams == nil {
+		return nil
 	}
-	// Find the team by name (just imported) and merge hub metadata into settings
-	metadata := map[string]any{
-		"hub_slug":    slug,
-		"hub_version": 1,
-	}
-	metaJSON, _ := json.Marshal(metadata)
 
-	// Merge into existing settings JSONB
-	_, err := t.db.ExecContext(ctx,
-		`UPDATE agent_teams SET settings = settings || $1::jsonb WHERE name = $2 AND (settings->>'hub_slug' IS NULL OR settings->>'hub_slug' = '')`,
-		string(metaJSON), teamName,
-	)
+	teams, err := t.teams.ListTeams(ctx)
 	if err != nil {
-		slog.Error("failed to save hub metadata", "team", teamName, "slug", slug, "error", err)
+		return fmt.Errorf("list teams: %w", err)
 	}
+
+	// Find matching team: prefer one already tagged with this slug, else the most recent by name
+	var targetTeam *store.TeamData
+	for i := range teams {
+		var hs struct {
+			HubSlug string `json:"hub_slug"`
+		}
+		_ = json.Unmarshal(teams[i].Settings, &hs)
+		if hs.HubSlug == slug {
+			targetTeam = &teams[i]
+			break
+		}
+	}
+	// Fallback: pick the last team (most recently created) — it was just imported
+	if targetTeam == nil && len(teams) > 0 {
+		targetTeam = &teams[len(teams)-1]
+	}
+	if targetTeam == nil {
+		return fmt.Errorf("no team found to tag with hub metadata")
+	}
+
+	// Merge hub metadata into existing settings
+	settings := make(map[string]any)
+	_ = json.Unmarshal(targetTeam.Settings, &settings)
+	settings["hub_slug"] = slug
+	settings["hub_version"] = 1
+	newSettings, _ := json.Marshal(settings)
+
+	return t.teams.UpdateTeam(ctx, targetTeam.ID, map[string]any{
+		"settings": string(newSettings),
+	})
 }

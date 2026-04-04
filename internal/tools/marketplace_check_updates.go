@@ -2,26 +2,26 @@ package tools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/registry"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MarketplaceCheckUpdatesTool checks for updates to installed marketplace teams.
 type MarketplaceCheckUpdatesTool struct {
 	client *registry.Client
-	db     *sql.DB
+	teams  store.TeamCRUDStore
 }
 
 // NewMarketplaceCheckUpdatesTool creates a new marketplace update checker tool.
-func NewMarketplaceCheckUpdatesTool(client *registry.Client, db *sql.DB) *MarketplaceCheckUpdatesTool {
+func NewMarketplaceCheckUpdatesTool(client *registry.Client, teams store.TeamCRUDStore) *MarketplaceCheckUpdatesTool {
 	return &MarketplaceCheckUpdatesTool{
 		client: client,
-		db:     db,
+		teams:  teams,
 	}
 }
 
@@ -46,44 +46,34 @@ type hubSettings struct {
 }
 
 func (t *MarketplaceCheckUpdatesTool) Execute(ctx context.Context, args map[string]any) *Result {
-	if t.db == nil {
-		slog.Warn("marketplace_check_updates: db is nil")
-		return ErrorResult("Database not available")
+	if t.teams == nil {
+		slog.Warn("marketplace_check_updates: teams store is nil")
+		return ErrorResult("Team store not available")
 	}
 
-	// Find all teams with hub_slug in settings
-	rows, err := t.db.QueryContext(ctx,
-		`SELECT id, name, settings FROM agent_teams WHERE settings->>'hub_slug' IS NOT NULL AND settings->>'hub_slug' != ''`)
+	// List all teams and filter those with hub_slug in settings
+	allTeams, err := t.teams.ListTeams(ctx)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to query teams: %v", err))
 	}
-	defer rows.Close()
 
 	type teamInfo struct {
-		id       string
-		name     string
-		slug     string
-		version  int
+		id      string
+		name    string
+		slug    string
+		version int
 	}
 
 	var teams []teamInfo
-	for rows.Next() {
-		var id, name string
-		var settingsRaw []byte
-		if err := rows.Scan(&id, &name, &settingsRaw); err != nil {
-			continue
-		}
+	for _, team := range allTeams {
 		var hs hubSettings
-		if err := json.Unmarshal(settingsRaw, &hs); err != nil || hs.HubSlug == "" {
+		if err := json.Unmarshal(team.Settings, &hs); err != nil || hs.HubSlug == "" {
 			continue
 		}
-		teams = append(teams, teamInfo{id: id, name: name, slug: hs.HubSlug, version: hs.HubVersion})
-	}
-	if err := rows.Err(); err != nil {
-		return ErrorResult(fmt.Sprintf("Error reading teams: %v", err))
+		teams = append(teams, teamInfo{id: team.ID.String(), name: team.Name, slug: hs.HubSlug, version: hs.HubVersion})
 	}
 
-	slog.Info("marketplace_check_updates", "teams_found", len(teams), "db_nil", t.db == nil)
+	slog.Info("marketplace_check_updates", "teams_found", len(teams))
 
 	if len(teams) == 0 {
 		return NewResult("No marketplace teams installed. Use marketplace_search to find teams.")

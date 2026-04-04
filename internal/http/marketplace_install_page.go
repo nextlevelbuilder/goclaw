@@ -2,10 +2,10 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
-	"crypto/sha256"
 	"crypto/rand"
-	"database/sql"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // MarketplaceInstallHandler serves the install confirmation page for Hub marketplace.
@@ -31,18 +32,18 @@ type MarketplaceInstallHandler struct {
 	marketplaceAPIKey string // GOCLAW_MARKETPLACE_API_KEY — used to verify signatures
 	gatewayToken      string // for authenticating local /v1/teams/import calls
 	localAPIPort      int
-	db                *sql.DB
+	teams             store.TeamCRUDStore
 	installTokens     map[string]time.Time // one-time tokens for POST install
 	tokenMu           sync.Mutex
 }
 
 // NewMarketplaceInstallHandler creates a new marketplace install page handler.
-func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localAPIPort int, db *sql.DB) *MarketplaceInstallHandler {
+func NewMarketplaceInstallHandler(marketplaceAPIKey, gatewayToken string, localAPIPort int, teams store.TeamCRUDStore) *MarketplaceInstallHandler {
 	return &MarketplaceInstallHandler{
 		marketplaceAPIKey: marketplaceAPIKey,
 		gatewayToken:      gatewayToken,
 		localAPIPort:      localAPIPort,
-		db:                db,
+		teams:             teams,
 		installTokens:     make(map[string]time.Time),
 	}
 }
@@ -68,7 +69,7 @@ func (h *MarketplaceInstallHandler) handleConfirmPage(w http.ResponseWriter, r *
 	installToken := h.generateInstallToken()
 
 	// Check if already installed
-	existingTeam := h.findInstalledTeam(params["slug"])
+	existingTeam := h.findInstalledTeam(r.Context(), params["slug"])
 	params["install_token"] = installToken
 	h.renderConfirm(w, params, agents, existingTeam)
 }
@@ -297,15 +298,25 @@ func (h *MarketplaceInstallHandler) handleAPIInstall(w http.ResponseWriter, r *h
 }
 
 // findInstalledTeam checks if a team with this hub_slug is already installed.
-func (h *MarketplaceInstallHandler) findInstalledTeam(slug string) string {
-	if h.db == nil || slug == "" {
+func (h *MarketplaceInstallHandler) findInstalledTeam(ctx context.Context, slug string) string {
+	if h.teams == nil || slug == "" {
 		return ""
 	}
-	var name string
-	if err := h.db.QueryRow(`SELECT name FROM agent_teams WHERE settings->>'hub_slug' = $1 LIMIT 1`, slug).Scan(&name); err != nil && err != sql.ErrNoRows {
-		slog.Warn("marketplace: findInstalledTeam query failed", "slug", slug, "error", err)
+	teams, err := h.teams.ListTeams(ctx)
+	if err != nil {
+		slog.Warn("marketplace: findInstalledTeam failed", "slug", slug, "error", err)
+		return ""
 	}
-	return name
+	for _, team := range teams {
+		var hs struct {
+			HubSlug string `json:"hub_slug"`
+		}
+		_ = json.Unmarshal(team.Settings, &hs)
+		if hs.HubSlug == slug {
+			return team.Name
+		}
+	}
+	return ""
 }
 
 // generateInstallToken creates a one-time token valid for 10 minutes.
