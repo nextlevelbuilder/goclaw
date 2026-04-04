@@ -66,7 +66,9 @@ func validateChatGPTOAuthPoolGraph(providers []store.LLMProviderData) error {
 
 			member, ok := providersByName[memberName]
 			if !ok {
-				return fmt.Errorf("provider %q references unknown OpenAI Codex pool member %q", provider.Name, memberName)
+				// Stale reference — member was deleted or disabled. Skip
+				// instead of blocking the pool owner from saving.
+				continue
 			}
 			if member.ProviderType != store.ProviderChatGPTOAuth {
 				return fmt.Errorf("provider %q can only add chatgpt_oauth members; %q is %s", provider.Name, memberName, member.ProviderType)
