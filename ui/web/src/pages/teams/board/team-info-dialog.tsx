@@ -5,8 +5,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { TeamSettingsTab } from "../team-settings-tab";
-import { TeamVersionModal } from "../team-version-modal";
-import type { TeamData, TeamMemberData, TeamAccessSettings } from "@/types/team";
+import { TeamFeaturesModal } from "../team-features-modal";
+import type { TeamData, TeamMemberData } from "@/types/team";
 
 interface TeamInfoDialogProps {
   open: boolean;
@@ -21,10 +21,7 @@ export function TeamInfoDialog({
   open, onOpenChange, team, teamId, members, onSaved,
 }: TeamInfoDialogProps) {
   const { t } = useTranslation("teams");
-  const [versionModalOpen, setVersionModalOpen] = useState(false);
-
-  const settings = (team.settings ?? {}) as TeamAccessSettings;
-  const isV2 = (settings.version ?? 1) >= 2;
+  const [featuresOpen, setFeaturesOpen] = useState(false);
 
   // Resolve lead name from members (more reliable than team.lead_display_name which can be empty)
   const leadMember = members.find((m) => m.role === "lead");
@@ -41,14 +38,11 @@ export function TeamInfoDialog({
               <Badge variant={team.status === "active" ? "success" : "secondary"} className="text-[10px]">
                 {team.status}
               </Badge>
-              {isV2 && (
-                <Badge
-                  className="bg-gradient-to-r from-violet-500 to-indigo-500 text-[10px] px-2 py-0.5 text-white border-0 font-semibold shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => setVersionModalOpen(true)}
-                >
-                  v2 Super Team (Beta)
+              <button type="button" className="relative inline-flex items-center" onClick={() => setFeaturesOpen(true)}>
+                <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-[10px] px-2 py-0.5 text-white border-0 font-semibold hover:from-orange-600 hover:to-amber-600">
+                  v2 Super Team
                 </Badge>
-              )}
+              </button>
             </DialogTitle>
           </DialogHeader>
 
@@ -76,8 +70,7 @@ export function TeamInfoDialog({
           </div>
         </DialogContent>
       </Dialog>
-
-      <TeamVersionModal open={versionModalOpen} onOpenChange={setVersionModalOpen} />
+      <TeamFeaturesModal open={featuresOpen} onOpenChange={setFeaturesOpen} />
     </>
   );
 }

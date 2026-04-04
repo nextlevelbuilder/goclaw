@@ -23,6 +23,7 @@ import (
 type Role string
 
 const (
+	RoleOwner    Role = "owner"    // Tenant management + full access (superset of admin)
 	RoleAdmin    Role = "admin"    // Full access to all methods
 	RoleOperator Role = "operator" // Read + write access (no admin operations)
 	RoleViewer   Role = "viewer"   // Read-only access
@@ -37,6 +38,7 @@ const (
 	ScopeWrite     Scope = "operator.write"
 	ScopeApprovals Scope = "operator.approvals"
 	ScopePairing   Scope = "operator.pairing"
+	ScopeProvision Scope = "operator.provision"
 )
 
 // AllScopes is the set of all valid API key scopes.
@@ -46,6 +48,7 @@ var AllScopes = map[Scope]bool{
 	ScopeWrite:     true,
 	ScopeApprovals: true,
 	ScopePairing:   true,
+	ScopeProvision: true,
 }
 
 // ValidScope reports whether s is a recognised API key scope.
@@ -177,6 +180,7 @@ func isAdminMethod(method string) bool {
 		protocol.MethodAPIKeysList,
 		protocol.MethodAPIKeysCreate,
 		protocol.MethodAPIKeysRevoke,
+		protocol.MethodSkillsUpdate,
 	}
 	return slices.Contains(adminMethods, method)
 }
@@ -192,7 +196,6 @@ func isWriteMethod(method string) bool {
 		protocol.MethodCronUpdate,
 		protocol.MethodCronDelete,
 		protocol.MethodCronToggle,
-		protocol.MethodSkillsUpdate,
 		"pairing.",
 		"device.pair.",
 		"approvals.",
@@ -219,6 +222,8 @@ func HasMinRole(role, required Role) bool {
 
 func roleLevel(r Role) int {
 	switch r {
+	case RoleOwner:
+		return 4
 	case RoleAdmin:
 		return 3
 	case RoleOperator:

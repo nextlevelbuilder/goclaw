@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -196,6 +197,13 @@ func (m *HeartbeatMethods) handleSet(ctx context.Context, client *gateway.Client
 		hb.ActiveHoursEnd = params.ActiveHoursEnd
 	}
 	if params.Timezone != nil {
+		if *params.Timezone != "" {
+			if _, err := time.LoadLocation(*params.Timezone); err != nil {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+					fmt.Sprintf("invalid timezone: %s", *params.Timezone)))
+				return
+			}
+		}
 		hb.Timezone = params.Timezone
 	}
 	if params.Channel != nil {
@@ -426,13 +434,13 @@ func (m *HeartbeatMethods) handleTargets(ctx context.Context, client *gateway.Cl
 		return
 	}
 
-	agentUUID, err := uuid.Parse(params.AgentID)
-	if err != nil {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid agentId"))
-		return
+	// agentId param kept for backward compat but not used — targets are tenant-scoped.
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
 	}
 
-	targets, err := m.hbStore.ListDeliveryTargets(ctx, agentUUID)
+	targets, err := m.hbStore.ListDeliveryTargets(ctx, tenantID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, heartbeatInternalErr("targets", err)))
 		return

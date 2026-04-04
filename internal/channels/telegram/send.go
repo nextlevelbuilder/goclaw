@@ -40,16 +40,19 @@ func stripHTML(s string) string {
 	return html.UnescapeString(htmlTagRe.ReplaceAllString(s, ""))
 }
 
-// isRetryableNetworkErr checks if a Telegram API error is a transient network/server error
-// worth retrying. Covers transport-level failures and Telegram 5xx server errors.
+// isRetryableNetworkErr checks if a Telegram API error is a transient error
+// worth retrying. Covers 429 rate limits, 5xx server errors, and transport failures.
 func isRetryableNetworkErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check for Telegram API 5xx errors via typed error.
+	// Check for Telegram API errors via typed error.
 	var apiErr *telegoapi.Error
-	if errors.As(err, &apiErr) && apiErr.ErrorCode >= 500 {
-		return true
+	if errors.As(err, &apiErr) {
+		// 429 = rate limited (transient), 5xx = server error (transient)
+		if apiErr.ErrorCode == 429 || apiErr.ErrorCode >= 500 {
+			return true
+		}
 	}
 	// Transport-level errors (timeout, reset, DNS, etc.)
 	s := err.Error()
@@ -107,15 +110,23 @@ func (c *Channel) retrySend(ctx context.Context, name string, resetFn func(), fn
 			c.enableIPv4Only()
 		}
 
+		// Honor Telegram's retry_after for 429 rate limit errors.
+		delay := sendRetryDelay * time.Duration(attempt)
+		var retryAPIErr *telegoapi.Error
+		if errors.As(err, &retryAPIErr) && retryAPIErr.ErrorCode == 429 &&
+			retryAPIErr.Parameters != nil && retryAPIErr.Parameters.RetryAfter > 0 {
+			delay = time.Duration(retryAPIErr.Parameters.RetryAfter+1) * time.Second // +1s safety margin
+		}
+
 		slog.Warn("telegram send retry",
-			"func", name, "attempt", attempt, "max", sendMaxRetries, "error", err)
+			"func", name, "attempt", attempt, "max", sendMaxRetries, "delay", delay, "error", err)
 		if resetFn != nil {
 			resetFn()
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(sendRetryDelay * time.Duration(attempt)):
+		case <-time.After(delay):
 		}
 	}
 	return err
@@ -159,6 +170,24 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		} else if idx := strings.Index(localKey, ":thread:"); idx > 0 {
 			fmt.Sscanf(localKey[idx+8:], "%d", &threadID)
 		}
+	}
+
+	// Captured draft cleanup: if this message follows a DM stream that used the
+	// draft transport, we must clear the stale draft as soon as this bubble is sent.
+	if pID, ok := c.pendingDraftID.LoadAndDelete(localKey); ok {
+		draftID := pID.(int)
+		go func() {
+			params := &telego.SendMessageDraftParams{
+				ChatID:          chatID,
+				DraftID:         draftID,
+				Text:            "",
+				MessageThreadID: resolveThreadIDForSend(threadID),
+			}
+			// Best-effort with Background ctx — caller ctx may already be cancelled.
+			if err := c.bot.SendMessageDraft(context.Background(), params); err != nil {
+				slog.Debug("telegram: draft clear failed (cosmetic)", "chat_id", chatID, "draft_id", draftID, "error", err)
+			}
+		}()
 	}
 
 	// Placeholder update (e.g. LLM retry notification): edit the placeholder
@@ -234,6 +263,13 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 				slog.Warn("telegram: final edit timed out or lost, skipping chunk 0 of multi-chunk response",
 					"chat_id", chatID, "message_id", msgID, "error", err)
 				startChunk = 1
+			} else if isRetryableNetworkErr(err) {
+				// Retryable error (429 rate limit, 5xx, network). The stream message
+				// still exists with valid streamed content — don't delete it.
+				// Sending fresh would also fail, so keep the stream message as-is.
+				slog.Warn("telegram: final edit failed with retryable error, keeping stream message",
+					"chat_id", chatID, "message_id", msgID, "error", err)
+				return nil
 			} else {
 				// Edit failed definitely (400 rejection), or a single-chunk edit timed out.
 				// For single-chunk answers, we delete (best-effort) and send fresh to

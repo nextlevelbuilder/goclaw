@@ -18,6 +18,7 @@
   },
   "viewTools": "View tools",
   "manageGrants": "Manage grants",
+  "reconnect": "Reconnect",
   "delete": {
     "title": "Delete MCP Server",
     "description": "Are you sure you want to delete \"{{name}}\"? This will also remove all associated grants.",
@@ -60,7 +61,9 @@
       "commandRequired": "Command is required for stdio transport",
       "urlRequired": "URL is required for SSE/HTTP transport",
       "connectionFailed": "Connection failed"
-    }
+    },
+    "requireUserCredentials": "Require User Credentials",
+    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials."
   },
   "grants": {
     "title": "Agent Grants - {{name}}",
@@ -96,6 +99,35 @@
     "deleted": "MCP server deleted",
     "failedCreate": "Failed to create MCP server",
     "failedUpdate": "Failed to update MCP server",
-    "failedDelete": "Failed to delete MCP server"
+    "failedDelete": "Failed to delete MCP server",
+    "reconnected": "MCP server connection reset",
+    "failedReconnect": "Failed to reconnect MCP server"
+  },
+  "userCredentials": {
+    "title": "My Credentials",
+    "description": "Set your personal credentials for this MCP server. These override the server defaults for your account only.",
+    "titleAdmin": "User Credentials",
+    "descriptionAdmin": "Set credentials for a specific user on this MCP server. These override the server defaults for the selected user only.",
+    "selectUser": "Select user",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Leave empty to keep current",
+    "headers": "Headers",
+    "env": "Environment Variables",
+    "headerPlaceholder": "KEY=VALUE, one per line",
+    "save": "Save",
+    "delete": "Delete",
+    "deleteAll": "Delete All",
+    "cancel": "Cancel",
+    "saved": "Credentials saved",
+    "deleted": "Credentials deleted",
+    "hasApiKey": "API Key set",
+    "hasHeaders": "Headers set",
+    "hasEnv": "Env vars set",
+    "noCredentials": "No credentials set",
+    "addHeader": "Add Header",
+    "addEnv": "Add Variable",
+    "saveFailed": "Failed to save credentials",
+    "deleteFailed": "Failed to delete credentials",
+    "mergeHint": "Chat users (Telegram, Discord, etc.) must be merged into a tenant user first via Contacts page before they can have per-user credentials."
   }
 }

@@ -21,9 +21,10 @@ func NewPGConfigSecretsStore(db *sql.DB, encryptionKey string) *PGConfigSecretsS
 }
 
 func (s *PGConfigSecretsStore) Get(ctx context.Context, key string) (string, error) {
+	tid := tenantIDForInsert(ctx) // fallback to master
 	var value []byte
 	err := s.db.QueryRowContext(ctx,
-		`SELECT value FROM config_secrets WHERE key = $1`, key).Scan(&value)
+		`SELECT value FROM config_secrets WHERE key = $1 AND tenant_id = $2`, key, tid).Scan(&value)
 	if err != nil {
 		return "", err
 	}
@@ -50,21 +51,24 @@ func (s *PGConfigSecretsStore) Set(ctx context.Context, key, value string) error
 		stored = []byte(value)
 	}
 
+	tid := tenantIDForInsert(ctx)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO config_secrets (key, value, updated_at) VALUES ($1, $2, $3)
-		 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = $3`,
-		key, stored, time.Now(),
+		`INSERT INTO config_secrets (key, value, updated_at, tenant_id) VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (key, tenant_id) DO UPDATE SET value = $2, updated_at = $3`,
+		key, stored, time.Now(), tid,
 	)
 	return err
 }
 
 func (s *PGConfigSecretsStore) Delete(ctx context.Context, key string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM config_secrets WHERE key = $1`, key)
+	tid := tenantIDForInsert(ctx)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM config_secrets WHERE key = $1 AND tenant_id = $2`, key, tid)
 	return err
 }
 
 func (s *PGConfigSecretsStore) GetAll(ctx context.Context) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM config_secrets`)
+	tid := tenantIDForInsert(ctx)
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM config_secrets WHERE tenant_id = $1`, tid)
 	if err != nil {
 		return nil, err
 	}

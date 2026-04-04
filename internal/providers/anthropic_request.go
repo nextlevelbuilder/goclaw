@@ -11,6 +11,9 @@ func (p *AnthropicProvider) buildRawBlock(blockType string, result *ChatResponse
 			"type":     "thinking",
 			"thinking": result.Thinking,
 		}
+		if result.ThinkingSignature != "" {
+			block["signature"] = result.ThinkingSignature
+		}
 		if b, err := json.Marshal(block); err == nil {
 			return b
 		}

@@ -4,18 +4,18 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ActivityHandler handles activity audit log endpoints.
 type ActivityHandler struct {
 	activity store.ActivityStore
-	token    string
 }
 
 // NewActivityHandler creates a handler for activity log endpoints.
-func NewActivityHandler(activity store.ActivityStore, token string) *ActivityHandler {
-	return &ActivityHandler{activity: activity, token: token}
+func NewActivityHandler(activity store.ActivityStore) *ActivityHandler {
+	return &ActivityHandler{activity: activity}
 }
 
 // RegisterRoutes registers activity routes on the given mux.
@@ -24,7 +24,7 @@ func (h *ActivityHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *ActivityHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *ActivityHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +38,13 @@ func (h *ActivityHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := r.URL.Query().Get("actor_id"); v != "" {
 		opts.ActorID = v
+	}
+
+	// Non-admin callers may only see their own activity logs.
+	auth := resolveAuth(r)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		opts.ActorID = callerID
 	}
 	if v := r.URL.Query().Get("action"); v != "" {
 		opts.Action = v

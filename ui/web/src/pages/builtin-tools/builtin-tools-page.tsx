@@ -1,50 +1,47 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Package, RefreshCw, Settings, Info } from "lucide-react";
+import { Package, RefreshCw, Settings, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { SearchInput } from "@/components/shared/search-input";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
 import { useBuiltinTools, type BuiltinToolData } from "./hooks/use-builtin-tools";
 import { BuiltinToolSettingsDialog } from "./builtin-tool-settings-dialog";
+import { MEDIA_TOOLS } from "./media-provider-params-schema";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useTenants } from "@/hooks/use-tenants";
+import { CategoryGroup } from "./builtin-tool-category-group";
 
 const CATEGORY_ORDER = [
   "filesystem", "runtime", "web", "memory", "media", "browser",
   "sessions", "messaging", "scheduling", "subagents", "skills", "delegation", "teams",
 ];
 
-function hasEditableSettings(tool: BuiltinToolData): boolean {
-  return tool.settings != null && Object.keys(tool.settings).length > 0;
-}
-
-function getConfigHint(tool: BuiltinToolData): string | undefined {
-  return (tool.metadata as any)?.config_hint as string | undefined;
-}
-
-function isDeprecated(tool: BuiltinToolData): boolean {
-  return (tool.metadata as any)?.deprecated === true;
+/** Media tool that is enabled but has no provider chain configured */
+function needsProviderConfig(tool: BuiltinToolData): boolean {
+  if (!MEDIA_TOOLS.has(tool.name) || !tool.enabled) return false;
+  const settings = tool.settings;
+  if (!settings) return true;
+  const providers = settings.providers as unknown[] | undefined;
+  return !providers || providers.length === 0;
 }
 
 export function BuiltinToolsPage() {
   const { t } = useTranslation("tools");
-  const { tools, loading, refresh, updateTool } = useBuiltinTools();
+  const { tools, loading, refresh, updateTool, setTenantConfig, deleteTenantConfig } = useBuiltinTools();
+  const { currentTenantId } = useTenants();
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && tools.length === 0);
   const [search, setSearch] = useState("");
   const [settingsTool, setSettingsTool] = useState<BuiltinToolData | null>(null);
+
+  // Media tools enabled but missing provider configuration
+  const unconfigured = useMemo(
+    () => tools.filter(needsProviderConfig),
+    [tools],
+  );
 
   const filtered = tools.filter(
     (t) =>
@@ -72,7 +69,7 @@ export function BuiltinToolsPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("builtin.title")}
         description={t("builtin.description")}
@@ -105,6 +102,31 @@ export function BuiltinToolsPage() {
         </span>
       </div>
 
+      {unconfigured.length > 0 && (
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/30">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              {t("builtin.unconfiguredWarning", { count: unconfigured.length })}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {unconfigured.map((tool) => (
+                <Button
+                  key={tool.name}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSettingsTool(tool)}
+                  className="h-6 gap-1 px-2 text-xs border-amber-300 dark:border-amber-800"
+                >
+                  <Settings className="h-3 w-3" />
+                  {tool.display_name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 space-y-3">
         {showSkeleton ? (
           <TableSkeleton rows={8} />
@@ -124,6 +146,9 @@ export function BuiltinToolsPage() {
               tools={grouped.get(category)!}
               onToggle={handleToggle}
               onSettings={setSettingsTool}
+              tenantId={currentTenantId ?? null}
+              onSetTenantConfig={setTenantConfig}
+              onDeleteTenantConfig={deleteTenantConfig}
             />
           ))
         )}
@@ -141,124 +166,3 @@ export function BuiltinToolsPage() {
   );
 }
 
-function CategoryGroup({
-  category,
-  tools,
-  onToggle,
-  onSettings,
-}: {
-  category: string;
-  tools: BuiltinToolData[];
-  onToggle: (tool: BuiltinToolData) => void;
-  onSettings: (tool: BuiltinToolData) => void;
-}) {
-  const { t } = useTranslation("tools");
-  return (
-    <div className="rounded-lg border">
-      <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2">
-        <span className="text-sm font-medium">{t(`builtin.categories.${category}`, category)}</span>
-        <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
-          {tools.length}
-        </Badge>
-      </div>
-      <div className="divide-y">
-        {tools.map((tool) => (
-          <ToolRow key={tool.name} tool={tool} onToggle={onToggle} onSettings={onSettings} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ToolRow({
-  tool,
-  onToggle,
-  onSettings,
-}: {
-  tool: BuiltinToolData;
-  onToggle: (tool: BuiltinToolData) => void;
-  onSettings: (tool: BuiltinToolData) => void;
-}) {
-  const { t } = useTranslation("tools");
-  const configHint = getConfigHint(tool);
-  const editable = hasEditableSettings(tool);
-  const deprecated = isDeprecated(tool);
-
-  return (
-    <div className={`flex items-center gap-4 px-4 py-2 hover:bg-muted/30 transition-colors${deprecated ? " opacity-60" : ""}`}>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-sm font-medium leading-tight">{tool.display_name}</span>
-          <code className="text-[11px] text-muted-foreground">{tool.name}</code>
-          {deprecated && (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="destructive" className="ml-1 h-4 px-1 text-[10px] leading-none cursor-default">
-                    {t("builtin.deprecated")}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p className="text-xs">{t("builtin.deprecatedTooltip")}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-          {!deprecated && tool.requires && tool.requires.length > 0 && (
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="outline" className="ml-1 h-4 px-1 text-[10px] leading-none cursor-default">
-                    {t("builtin.requires")}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p className="text-xs">{t("builtin.requiresTooltip", { list: tool.requires.join(", ") })}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-        {tool.description && (
-          <p className="text-xs text-muted-foreground leading-snug truncate mt-0.5">
-            {t(`builtin.descriptions.${tool.name}`, tool.description)}
-          </p>
-        )}
-      </div>
-
-      <div className="flex items-center gap-1.5 shrink-0">
-        {editable && !deprecated && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onSettings(tool)}
-            className="h-7 gap-1 px-2 text-xs"
-          >
-            <Settings className="h-3 w-3" />
-            {t("builtin.settings")}
-          </Button>
-        )}
-        {!editable && !deprecated && configHint && (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-default">
-                  <Info className="h-3 w-3" />
-                  {configHint}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                <p className="text-xs">{t("builtin.configuredVia")}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        <Switch
-          checked={tool.enabled}
-          onCheckedChange={() => onToggle(tool)}
-          disabled={deprecated}
-        />
-      </div>
-    </div>
-  );
-}

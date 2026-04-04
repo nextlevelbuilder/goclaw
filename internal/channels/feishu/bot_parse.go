@@ -99,12 +99,22 @@ func parseMessageContent(rawContent, messageType string) string {
 	}
 }
 
-func parsePostContent(rawContent string) string {
+// resolvePostElements extracts the flattened element list from a Lark post message JSON.
+// Handles two formats:
+//  1. Language-wrapped: {"zh_cn": {"title":"...", "content": [[...]]}}
+//  2. Flat (no language key): {"title":"...", "content": [[...]]}
+func resolvePostElements(rawContent string) []any {
 	var post map[string]any
 	if err := json.Unmarshal([]byte(rawContent), &post); err != nil {
-		return rawContent
+		return nil
 	}
 
+	// Format 2: flat — "content" at top level (no language wrapper).
+	if contentArr, ok := post["content"].([]any); ok {
+		return contentArr
+	}
+
+	// Format 1: language-wrapped — try known locales, then first map value.
 	var langContent any
 	for _, lang := range []string{"zh_cn", "en_us"} {
 		if lc, ok := post[lang]; ok {
@@ -114,21 +124,31 @@ func parsePostContent(rawContent string) string {
 	}
 	if langContent == nil {
 		for _, v := range post {
-			langContent = v
-			break
+			if _, ok := v.(map[string]any); ok {
+				langContent = v
+				break
+			}
 		}
 	}
 	if langContent == nil {
-		return rawContent
+		return nil
 	}
 
 	langMap, ok := langContent.(map[string]any)
 	if !ok {
-		return rawContent
+		return nil
 	}
 
 	contentArr, ok := langMap["content"].([]any)
 	if !ok {
+		return nil
+	}
+	return contentArr
+}
+
+func parsePostContent(rawContent string) string {
+	contentArr := resolvePostElements(rawContent)
+	if contentArr == nil {
 		return rawContent
 	}
 
@@ -177,6 +197,40 @@ func parsePostContent(rawContent string) string {
 	}
 
 	return strings.Join(textParts, "\n")
+}
+
+// extractPostImageKeys parses post content JSON and returns deduplicated image_key
+// values from embedded img tags. Used to download images inline in post messages.
+func extractPostImageKeys(rawContent string) []string {
+	contentArr := resolvePostElements(rawContent)
+	if contentArr == nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var keys []string
+	for _, para := range contentArr {
+		paraArr, ok := para.([]any)
+		if !ok {
+			continue
+		}
+		for _, elem := range paraArr {
+			elemMap, ok := elem.(map[string]any)
+			if !ok {
+				continue
+			}
+			tag, _ := elemMap["tag"].(string)
+			if tag == "img" {
+				if key, ok := elemMap["image_key"].(string); ok && key != "" {
+					if _, dup := seen[key]; !dup {
+						seen[key] = struct{}{}
+						keys = append(keys, key)
+					}
+				}
+			}
+		}
+	}
+	return keys
 }
 
 // resolveMentions replaces mention placeholders (@_user_1, @_user_2, etc.) in content.

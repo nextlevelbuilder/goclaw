@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // validColumnName matches safe SQL identifiers (letters, digits, underscores).
@@ -195,15 +197,62 @@ func execMapUpdate(ctx context.Context, db *sql.DB, table string, id uuid.UUID, 
 // tablesWithUpdatedAt lists tables that have an updated_at column.
 var tablesWithUpdatedAt = map[string]bool{
 	"agents": true, "llm_providers": true, "sessions": true,
-	"channel_instances": true, "cron_jobs": true, "custom_tools": true,
+	"channel_instances": true, "cron_jobs": true,
 	"skills": true, "mcp_servers": true, "agent_links": true,
 	"agent_teams": true, "team_tasks": true, "builtin_tools": true,
 	"agent_context_files": true, "user_context_files": true,
 	"user_agent_overrides": true, "config_secrets": true,
 	"memory_documents": true, "memory_chunks": true, "embedding_cache": true,
-	"secure_cli_binaries": true,
+	"secure_cli_binaries": true, "tenants": true,
 }
 
 func tableHasUpdatedAt(table string) bool {
 	return tablesWithUpdatedAt[table]
+}
+
+// --- Tenant filter helpers ---
+
+// tenantIDForInsert returns the tenant UUID for INSERT operations.
+// Falls back to MasterTenantID when no tenant in context.
+func tenantIDForInsert(ctx context.Context) uuid.UUID {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return store.MasterTenantID
+	}
+	return tid
+}
+
+// requireTenantID returns the tenant UUID or an error if missing (fail-closed).
+func requireTenantID(ctx context.Context) (uuid.UUID, error) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("tenant_id required")
+	}
+	return tid, nil
+}
+
+// --- Scope-based query helpers ---
+// Generate WHERE clauses for tenant + optional project-level isolation.
+// Uses store.QueryScope which extracts scope from context (fail-closed).
+
+// scopeClause extracts QueryScope from context and generates WHERE conditions.
+// Drop-in replacement for tenantClauseN that supports future project-level scoping.
+func scopeClause(ctx context.Context, startParam int) (clause string, args []any, nextParam int, err error) {
+	scope, err := store.ScopeFromContext(ctx)
+	if err != nil {
+		return "", nil, startParam, err
+	}
+	clause, args, nextParam = scope.WhereClause(startParam)
+	return clause, args, nextParam, nil
+}
+
+// scopeClauseAlias is like scopeClause but qualifies columns with a table alias.
+// SECURITY: alias is interpolated into SQL — callers MUST pass hardcoded string literals only.
+func scopeClauseAlias(ctx context.Context, startParam int, alias string) (clause string, args []any, nextParam int, err error) {
+	scope, err := store.ScopeFromContext(ctx)
+	if err != nil {
+		return "", nil, startParam, err
+	}
+	clause, args, nextParam = scope.WhereClauseAlias(startParam, alias)
+	return clause, args, nextParam, nil
 }

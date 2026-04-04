@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -33,7 +34,13 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 	var q string
 	var args []any
 	if store.IsSharedKG(ctx) {
-		q = `
+		// fixed params: $1=startID, $2=aid; tenant at $3 (if needed); maxDepth last
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
+		if tcErr != nil {
+			return nil, tcErr
+		}
+		depthN := 3 + len(tcArgs)
+		q = fmt.Sprintf(`
 		WITH RECURSIVE paths AS (
 			SELECT
 				e.id, e.agent_id, e.user_id, e.external_id,
@@ -44,7 +51,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				ARRAY[e.id::text] AS path,
 				''::text AS via
 			FROM kg_entities e
-			WHERE e.id = $1 AND e.agent_id = $2
+			WHERE e.id = $1 AND e.agent_id = $2%s
 
 			UNION ALL
 
@@ -55,11 +62,14 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				e.created_at, e.updated_at,
 				p.depth + 1,
 				p.path || e.id::text,
-				r.relation_type
+				CASE WHEN r.source_entity_id = p.id
+					THEN r.relation_type
+					ELSE '~' || r.relation_type
+				END
 			FROM paths p
-			JOIN kg_relations r ON p.id = r.source_entity_id AND r.agent_id = $2
-			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.agent_id = $2
-			WHERE p.depth < $3
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.agent_id = $2
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.agent_id = $2
+			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
 		)
 		SELECT
@@ -68,10 +78,17 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			properties, source_id, confidence,
 			created_at, updated_at,
 			depth, path, via
-		FROM paths WHERE depth > 1`
-		args = []any{startID, aid, maxDepth}
+		FROM paths WHERE depth > 1`, tc, depthN)
+		args = append([]any{startID, aid}, tcArgs...)
+		args = append(args, maxDepth)
 	} else {
-		q = `
+		// fixed params: $1=startID, $2=aid, $3=userID; tenant at $4 (if needed); maxDepth last
+		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
+		if tcErr != nil {
+			return nil, tcErr
+		}
+		depthN := 4 + len(tcArgs)
+		q = fmt.Sprintf(`
 		WITH RECURSIVE paths AS (
 			SELECT
 				e.id, e.agent_id, e.user_id, e.external_id,
@@ -82,7 +99,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				ARRAY[e.id::text] AS path,
 				''::text AS via
 			FROM kg_entities e
-			WHERE e.id = $1 AND e.agent_id = $2 AND e.user_id = $3
+			WHERE e.id = $1 AND e.agent_id = $2 AND e.user_id = $3%s
 
 			UNION ALL
 
@@ -93,11 +110,14 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				e.created_at, e.updated_at,
 				p.depth + 1,
 				p.path || e.id::text,
-				r.relation_type
+				CASE WHEN r.source_entity_id = p.id
+					THEN r.relation_type
+					ELSE '~' || r.relation_type
+				END
 			FROM paths p
-			JOIN kg_relations r ON p.id = r.source_entity_id AND r.user_id = $3
-			JOIN kg_entities  e ON r.target_entity_id = e.id AND e.user_id = $3
-			WHERE p.depth < $4
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.user_id = $3
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.user_id = $3
+			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
 		)
 		SELECT
@@ -106,8 +126,9 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 			properties, source_id, confidence,
 			created_at, updated_at,
 			depth, path, via
-		FROM paths WHERE depth > 1`
-		args = []any{startID, aid, userID, maxDepth}
+		FROM paths WHERE depth > 1`, tc, depthN)
+		args = append([]any{startID, aid, userID}, tcArgs...)
+		args = append(args, maxDepth)
 	}
 
 	rows, err := tx.QueryContext(ctx, q, args...)

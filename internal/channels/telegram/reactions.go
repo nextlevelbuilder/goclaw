@@ -41,15 +41,32 @@ var telegramSupportedEmojis = map[string]bool{
 // First emoji is preferred; fallback to next if chat restricts it.
 // Ref: TS src/telegram/status-reaction-variants.ts
 var statusReactionVariants = map[string][]string{
-	"queued":    {"👀", "👍", "🔥"},
+	"queued":    {"👀", "🙏", "🤝"},
 	"thinking":  {"🤔", "🤓", "👀"},
-	"tool":      {"🔥", "⚡", "👍"},
-	"coding":    {"👨\u200d💻", "🔥", "⚡"},
-	"web":       {"⚡", "🔥", "👍"},
+	"tool":      {"✍", "⚡", "🔥"},
+	"coding":    {"👨\u200d💻", "✍", "🤓"},
+	"web":       {"⚡", "🌚", "🔥"},
 	"done":      {"👍", "🎉", "💯"},
-	"error":     {"😱", "😨", "🤯"},
-	"stallSoft": {"🥱", "😴", "🤔"},
-	"stallHard": {"😨", "😱", "⚡"},
+	"error":     {"💔", "😱", "😨"},
+	"stallSoft": {"🥱", "😴", "😐"},
+	"stallHard": {"😨", "🤯", "😱"},
+}
+
+// ReactionLegend returns the primary emoji for each status, used by the /reactions command.
+var reactionLegend = []struct {
+	Status string
+	Emoji  string
+	Desc   string
+}{
+	{"queued", "👀", "Queued — waiting to process"},
+	{"thinking", "🤔", "Thinking — processing your request"},
+	{"tool", "✍", "Tool — executing a tool"},
+	{"coding", "👨\u200d💻", "Coding — running code"},
+	{"web", "⚡", "Web — browsing / API call"},
+	{"done", "👍", "Done — completed"},
+	{"error", "💔", "Error — something went wrong"},
+	{"stallSoft", "🥱", "Stall — no activity for 10s"},
+	{"stallHard", "😨", "Stall — no activity for 30s"},
 }
 
 // resolveReactionEmoji picks the first supported emoji for a given status.

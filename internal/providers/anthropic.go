@@ -155,11 +155,15 @@ func (p *AnthropicProvider) parseResponse(resp *anthropicResponse) *ChatResponse
 			// Encrypted thinking — cannot display but must preserve for passback
 		case "tool_use":
 			args := make(map[string]any)
-			_ = json.Unmarshal(block.Input, &args)
+			var parseErr string
+			if err := json.Unmarshal(block.Input, &args); err != nil && len(block.Input) > 0 {
+				parseErr = fmt.Sprintf("malformed JSON (%d chars): %v", len(block.Input), err)
+			}
 			result.ToolCalls = append(result.ToolCalls, ToolCall{
-				ID:        block.ID,
-				Name:      strings.TrimSpace(block.Name),
-				Arguments: args,
+				ID:         block.ID,
+				Name:       strings.TrimSpace(block.Name),
+				Arguments:  args,
+				ParseError: parseErr,
 			})
 		}
 	}

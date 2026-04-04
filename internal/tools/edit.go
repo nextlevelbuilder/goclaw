@@ -14,13 +14,13 @@ import (
 // EditTool performs search-and-replace edits on files.
 // Supports context file interceptor and sandbox routing.
 type EditTool struct {
-	workspace        string
-	restrict         bool
-	deniedPrefixes   []string // path prefixes to deny access to (e.g. .goclaw)
-	sandboxMgr       sandbox.Manager
-	contextFileIntc  *ContextFileInterceptor
-	memIntc          *MemoryInterceptor
-	permStore store.ConfigPermissionStore // nil = no group write restriction
+	workspace       string
+	restrict        bool
+	deniedPrefixes  []string // path prefixes to deny access to (e.g. .goclaw)
+	sandboxMgr      sandbox.Manager
+	contextFileIntc *ContextFileInterceptor
+	memIntc         *MemoryInterceptor
+	permStore       store.ConfigPermissionStore // nil = no group write restriction
 }
 
 // DenyPaths adds path prefixes that edit must reject.
@@ -215,7 +215,7 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 		return result
 	}
 
-	if err := bridge.WriteFile(ctx, containerPath, newContent); err != nil {
+	if err := bridge.WriteFile(ctx, containerPath, newContent, false); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to write file: %v", err) + MaybeFsBridgeHint(err))
 	}
 

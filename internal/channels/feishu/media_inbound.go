@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,13 +13,19 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 )
 
-// resolveMediaFromMessage extracts and downloads media from a Feishu message.
-// Returns a list of MediaInfo for each media item found.
-func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messageType, rawContent string) []media.MediaInfo {
+// mediaMaxBytes returns the configured per-file size limit in bytes.
+func (c *Channel) mediaMaxBytes() int64 {
 	maxBytes := int64(c.cfg.MediaMaxMB) * 1024 * 1024
 	if maxBytes <= 0 {
 		maxBytes = int64(defaultMediaMaxMB) * 1024 * 1024
 	}
+	return maxBytes
+}
+
+// resolveMediaFromMessage extracts and downloads media from a Feishu message.
+// Returns a list of MediaInfo for each media item found.
+func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messageType, rawContent string) []media.MediaInfo {
+	maxBytes := c.mediaMaxBytes()
 
 	var results []media.MediaInfo
 
@@ -37,13 +44,14 @@ func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messag
 			slog.Debug("feishu image too large", "size", len(data), "max", maxBytes)
 			return nil
 		}
-		path, err := saveMediaToTemp(data, "img", ".png")
+		ct, ext := detectImageFormat(data)
+		path, err := saveMediaToTemp(data, "img", ext)
 		if err != nil {
 			slog.Debug("feishu save image failed", "error", err)
 			return nil
 		}
 		results = append(results, media.MediaInfo{
-			Type: media.TypeImage, FilePath: path, ContentType: "image/png",
+			Type: media.TypeImage, FilePath: path, ContentType: ct,
 		})
 
 	case "file":
@@ -128,15 +136,45 @@ func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messag
 		if int64(len(data)) > maxBytes {
 			return nil
 		}
-		path, err := saveMediaToTemp(data, "sticker", ".png")
+		ct, ext := detectImageFormat(data)
+		path, err := saveMediaToTemp(data, "sticker", ext)
 		if err != nil {
 			return nil
 		}
 		results = append(results, media.MediaInfo{
-			Type: media.TypeImage, FilePath: path, ContentType: "image/png",
+			Type: media.TypeImage, FilePath: path, ContentType: ct,
 		})
 	}
 
+	return results
+}
+
+// resolvePostImages downloads images embedded in post messages by their image_key.
+// Uses continue-on-error so one failed image doesn't skip the rest.
+func (c *Channel) resolvePostImages(ctx context.Context, messageID string, imageKeys []string) []media.MediaInfo {
+	maxBytes := c.mediaMaxBytes()
+
+	var results []media.MediaInfo
+	for _, key := range imageKeys {
+		data, _, err := c.downloadMessageResource(ctx, messageID, key, "image")
+		if err != nil {
+			slog.Debug("feishu download post image failed", "message_id", messageID, "image_key", key, "error", err)
+			continue
+		}
+		if int64(len(data)) > maxBytes {
+			slog.Debug("feishu post image too large", "size", len(data), "max", maxBytes)
+			continue
+		}
+		ct, ext := detectImageFormat(data)
+		path, err := saveMediaToTemp(data, "img", ext)
+		if err != nil {
+			slog.Debug("feishu save post image failed", "error", err)
+			continue
+		}
+		results = append(results, media.MediaInfo{
+			Type: media.TypeImage, FilePath: path, ContentType: ct,
+		})
+	}
 	return results
 }
 
@@ -151,6 +189,26 @@ func saveMediaToTemp(data []byte, prefix, ext string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// detectImageFormat sniffs the actual image format from raw bytes using
+// http.DetectContentType and returns the correct MIME type and file extension.
+// Prevents MIME mismatch when Lark serves images in formats other than PNG
+// (e.g. WebP, JPEG) — which would cause LLM provider API errors.
+func detectImageFormat(data []byte) (contentType, ext string) {
+	ct := http.DetectContentType(data)
+	switch {
+	case strings.HasPrefix(ct, "image/jpeg"):
+		return "image/jpeg", ".jpg"
+	case strings.HasPrefix(ct, "image/png"):
+		return "image/png", ".png"
+	case strings.HasPrefix(ct, "image/gif"):
+		return "image/gif", ".gif"
+	case strings.HasPrefix(ct, "image/webp"):
+		return "image/webp", ".webp"
+	default:
+		return "image/png", ".png"
+	}
 }
 
 // extractJSONField is a simple helper to extract a string field from JSON content.

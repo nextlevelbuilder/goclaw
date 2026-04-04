@@ -23,6 +23,7 @@ func (c *Channel) resolveAgentUUID(ctx context.Context) (uuid.UUID, error) {
 	if id, err := uuid.Parse(key); err == nil {
 		return id, nil
 	}
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	agent, err := c.agentStore.GetByKey(ctx, key)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("agent %q not found: %w", key, err)
@@ -95,18 +96,25 @@ func (c *Channel) handleWriterCommand(m *discordgo.MessageCreate, action string)
 	scope := fmt.Sprintf("guild:%s:*", m.GuildID)
 	senderID := m.Author.ID
 
-	// Check sender's writer status using per-user scope. This matches both:
-	// - Auto-bootstrapped per-user perms (guild:{guildID}:user:{senderID}) via exact match
-	// - Guild-wide perms (guild:{guildID}:*) via matchWildcard
-	senderScope := fmt.Sprintf("guild:%s:user:%s", m.GuildID, senderID)
-	isWriter, err := c.configPermStore.CheckPermission(ctx, agentID, senderScope, "file_writer", senderID)
-	if err != nil {
-		slog.Warn("discord writer check failed", "error", err, "sender", senderID)
-		send("Failed to check permissions. Please try again.")
-		return
-	}
-	if !isWriter {
-		send("Only existing file writers can manage the writer list.")
+	// Fetch existing writers (cached 60s) for both permission check and remove guard.
+	// Bootstrap exception: if no writers exist yet, the first !addwriter caller
+	// is allowed to bootstrap the allowlist.
+	existingWriters, _ := c.configPermStore.ListFileWriters(ctx, agentID, scope)
+
+	if len(existingWriters) > 0 {
+		isWriter := false
+		for _, w := range existingWriters {
+			if w.UserID == senderID {
+				isWriter = true
+				break
+			}
+		}
+		if !isWriter {
+			send("Only existing file writers can manage the writer list.")
+			return
+		}
+	} else if action == "remove" {
+		send("No file writers configured yet. Use !addwriter to add the first one.")
 		return
 	}
 
@@ -145,7 +153,7 @@ func (c *Channel) handleWriterCommand(m *discordgo.MessageCreate, action string)
 		if err := c.configPermStore.Grant(ctx, &store.ConfigPermission{
 			AgentID:    agentID,
 			Scope:      scope,
-			ConfigType: "file_writer",
+			ConfigType: store.ConfigTypeFileWriter,
 			UserID:     targetID,
 			Permission: "allow",
 			Metadata:   meta,
@@ -157,25 +165,20 @@ func (c *Channel) handleWriterCommand(m *discordgo.MessageCreate, action string)
 		send(fmt.Sprintf("Added %s as a file writer.", targetName))
 
 	case "remove":
-		writers, listErr := c.configPermStore.List(ctx, agentID, "file_writer", scope)
-		if listErr != nil {
-			slog.Warn("discord list writers for remove failed", "error", listErr)
-			send("Failed to check writers. Please try again.")
-			return
-		}
-		if len(writers) <= 1 {
+		// Prevent removing the last writer (reuse cached existingWriters)
+		if len(existingWriters) <= 1 {
 			send("Cannot remove the last file writer.")
 			return
 		}
 		// Revoke guild-wide permission.
-		if err := c.configPermStore.Revoke(ctx, agentID, scope, "file_writer", targetID); err != nil {
+		if err := c.configPermStore.Revoke(ctx, agentID, scope, store.ConfigTypeFileWriter, targetID); err != nil {
 			slog.Warn("discord remove writer failed", "error", err, "target", targetID)
 			send("Failed to remove writer. Please try again.")
 			return
 		}
-		// Also revoke auto-bootstrapped per-user permission (guild:{guildID}:user:{userID}).
+		// Also revoke per-user scoped permission if it exists (guild:{guildID}:user:{userID}).
 		perUserScope := fmt.Sprintf("guild:%s:user:%s", m.GuildID, targetID)
-		_ = c.configPermStore.Revoke(ctx, agentID, perUserScope, "file_writer", targetID)
+		_ = c.configPermStore.Revoke(ctx, agentID, perUserScope, store.ConfigTypeFileWriter, targetID)
 		send(fmt.Sprintf("Removed %s from file writers.", targetName))
 	}
 }
@@ -211,7 +214,7 @@ func (c *Channel) handleListWriters(m *discordgo.MessageCreate) {
 	// via matchWildcard in CheckPermission.
 	scope := fmt.Sprintf("guild:%s:*", m.GuildID)
 
-	writers, err := c.configPermStore.List(ctx, agentID, "file_writer", scope)
+	writers, err := c.configPermStore.List(ctx, agentID, store.ConfigTypeFileWriter, scope)
 	if err != nil {
 		slog.Warn("discord list writers failed", "error", err)
 		send("Failed to list writers. Please try again.")
@@ -219,7 +222,7 @@ func (c *Channel) handleListWriters(m *discordgo.MessageCreate) {
 	}
 
 	if len(writers) == 0 {
-		send("No file writers configured for this server. The first person to interact with the bot will be added automatically.")
+		send("No file writers configured for this server. Use !addwriter to add one.")
 		return
 	}
 

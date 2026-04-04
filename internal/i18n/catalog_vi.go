@@ -10,7 +10,7 @@ func init() {
 		MsgInvalidRequest:   "yêu cầu không hợp lệ: %s",
 		MsgInvalidJSON:      "JSON không hợp lệ",
 		MsgUnauthorized:     "chưa xác thực",
-		MsgPermissionDenied: "từ chối quyền truy cập: không đủ quyền cho %s",
+		MsgPermissionDenied: "từ chối quyền truy cập: %s",
 		MsgInternalError:    "lỗi nội bộ: %s",
 		MsgInvalidSlug:      "%s phải là slug hợp lệ (chữ thường, số, dấu gạch ngang)",
 		MsgFailedToList:     "không thể liệt kê %s",
@@ -93,11 +93,9 @@ func init() {
 		MsgAgentIsTeamLead:      "agent đã là trưởng nhóm",
 		MsgCannotRemoveTeamLead: "không thể xóa trưởng nhóm",
 
-		// Delegations
-		MsgDelegationsUnavailable: "ủy quyền không khả dụng",
-
 		// Channels
 		MsgCannotDeleteDefaultInst: "không thể xóa phiên bản channel mặc định",
+		MsgCannotRemoveLastWriter:  "không thể xóa người quản lý cuối cùng",
 
 		// Skills
 		MsgSkillsUpdateNotSupported: "skills.update không được hỗ trợ với skill dựa trên tệp",
@@ -176,5 +174,13 @@ func init() {
 		MsgSkillNudgePostscript: "Tác vụ này cần nhiều bước. Bạn muốn tôi lưu quy trình này thành kỹ năng tái sử dụng không? Trả lời **\"lưu kỹ năng\"** hoặc **\"bỏ qua\"**.",
 		MsgSkillNudge70Pct:      "[System] Bạn đã dùng 70% ngân sách vòng lặp. Cân nhắc xem các mẫu trong phiên này có nên lưu thành kỹ năng không.",
 		MsgSkillNudge90Pct:      "[System] Bạn đã dùng 90% ngân sách vòng lặp. Nếu phiên này có quy trình tái sử dụng, hãy cân nhắc lưu thành kỹ năng trước khi hoàn thành.",
+
+		MsgInvalidRole: "vai trò không hợp lệ: giá trị cho phép là owner, admin, operator, member, viewer",
+
+		MsgContactIDsRequired:  "contact_ids là bắt buộc",
+		MsgMergeTargetRequired: "cần chính xác một trong tenant_user_id hoặc create_user",
+		MsgTenantUserNotFound:  "không tìm thấy tenant user",
+		MsgTenantMismatch:      "tenant user không thuộc tenant này",
+		MsgTenantScopeRequired: "cần xác định tenant để thực hiện thao tác này",
 	})
 }

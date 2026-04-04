@@ -25,6 +25,7 @@ interface AgentFilesTabProps {
   onSetFile: (name: string, content: string) => Promise<void>;
   onRegenerate?: (prompt: string) => Promise<void>;
   onResummon?: () => Promise<void>;
+  onRegenerateCompleted?: () => void;
 }
 
 export function AgentFilesTab({
@@ -34,6 +35,7 @@ export function AgentFilesTab({
   onSetFile,
   onRegenerate,
   onResummon,
+  onRegenerateCompleted,
 }: AgentFilesTabProps) {
   const { t } = useTranslation("agents");
   const userId = useAuthStore((s) => s.userId);
@@ -170,7 +172,9 @@ export function AgentFilesTab({
         <RegenerateDialog
           open={regenerateOpen}
           onOpenChange={setRegenerateOpen}
+          agentId={agent.id}
           onRegenerate={onRegenerate}
+          onCompleted={onRegenerateCompleted}
         />
       )}
 

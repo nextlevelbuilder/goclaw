@@ -59,7 +59,6 @@ export function MessageListDialog({
                 >
                   <div className="mb-1.5 flex items-center gap-2">
                     <span className="font-medium">{msg.sender}</span>
-                    <span className="text-xs text-muted-foreground">({msg.sender_id})</span>
                     {msg.is_summary && (
                       <Badge variant="warning" className="text-xs">{t("dialog.summary")}</Badge>
                     )}

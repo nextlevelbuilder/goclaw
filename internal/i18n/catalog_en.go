@@ -10,7 +10,7 @@ func init() {
 		MsgInvalidRequest:   "invalid request: %s",
 		MsgInvalidJSON:      "invalid JSON",
 		MsgUnauthorized:     "unauthorized",
-		MsgPermissionDenied: "permission denied: insufficient role for %s",
+		MsgPermissionDenied: "permission denied: %s",
 		MsgInternalError:    "internal error: %s",
 		MsgInvalidSlug:      "%s must be a valid slug (lowercase letters, numbers, hyphens only)",
 		MsgFailedToList:     "failed to list %s",
@@ -93,11 +93,9 @@ func init() {
 		MsgAgentIsTeamLead:      "agent is already the team lead",
 		MsgCannotRemoveTeamLead: "cannot remove the team lead",
 
-		// Delegations
-		MsgDelegationsUnavailable: "delegations not available",
-
 		// Channels
 		MsgCannotDeleteDefaultInst: "cannot delete default channel instance",
+		MsgCannotRemoveLastWriter:  "cannot remove the last file writer",
 
 		// Skills
 		MsgSkillsUpdateNotSupported: "skills.update not supported for file-based skills",
@@ -176,5 +174,13 @@ func init() {
 		MsgSkillNudgePostscript: "This task involved several steps. Want me to save the process as a reusable skill? Reply **\"save as skill\"** or **\"skip\"**.",
 		MsgSkillNudge70Pct:      "[System] You are at 70% of your iteration budget. Consider whether any patterns from this session would make a good skill.",
 		MsgSkillNudge90Pct:      "[System] You are at 90% of your iteration budget. If this session involved reusable patterns, consider saving them as a skill before completing.",
+
+		MsgInvalidRole: "invalid role: allowed values are owner, admin, operator, member, viewer",
+
+		MsgContactIDsRequired:  "contact_ids is required",
+		MsgMergeTargetRequired: "exactly one of tenant_user_id or create_user is required",
+		MsgTenantUserNotFound:  "tenant user not found",
+		MsgTenantMismatch:      "tenant user does not belong to this tenant",
+		MsgTenantScopeRequired: "tenant scope is required for this operation",
 	})
 }

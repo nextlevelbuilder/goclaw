@@ -1,10 +1,8 @@
 <p align="center">
-  <img src="_statics/goclaw.png" alt="GoClaw" />
+  <img src="_statics/goclaw-logo.svg" alt="GoClaw" height="200" />
 </p>
 
-<h1 align="center">GoClaw</h1>
-
-<p align="center"><strong>Enterprise AI Agent Platform</strong></p>
+<p align="center"><strong>Multi-Tenant AI Agent Platform</strong></p>
 
 <p align="center">
 Multi-agent AI gateway built in Go. 20+ LLM providers. 7 channels. Multi-tenant PostgreSQL.<br/>
@@ -25,7 +23,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
   <a href="https://opentelemetry.io/"><img src="https://img.shields.io/badge/OpenTelemetry-000000?style=flat-square&logo=opentelemetry&logoColor=white" alt="OpenTelemetry" /></a>
   <a href="https://www.anthropic.com/"><img src="https://img.shields.io/badge/Anthropic-191919?style=flat-square&logo=anthropic&logoColor=white" alt="Anthropic" /></a>
   <a href="https://openai.com/"><img src="https://img.shields.io/badge/OpenAI_Compatible-412991?style=flat-square&logo=openai&logoColor=white" alt="OpenAI" /></a>
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey?style=flat-square" alt="License: CC BY-NC 4.0" />
 </p>
 
 A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced security, multi-tenant PostgreSQL, and production-grade observability.
@@ -98,16 +96,71 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 | Skill system               | ✅ Embeddings/semantic               | ✅ SKILL.md + TOML                           | ✅ Basic                              | ✅ BM25 + pgvector hybrid      |
 | Lane-based scheduler       | ✅                                   | Bounded concurrency                          | —                                     | ✅ (main/subagent/team/cron)   |
 | Messaging channels         | 37+                                  | 15+                                          | 10+                                   | 7+                             |
-| Companion apps             | macOS, iOS, Android                  | Python SDK                                   | —                                     | Web dashboard                  |
+| Companion apps             | macOS, iOS, Android                  | Python SDK                                   | —                                     | Web dashboard + **Desktop app** |
 | Live Canvas / Voice        | ✅ (A2UI + TTS/STT)                  | —                                            | Voice transcription                   | TTS (4 providers)              |
 | LLM providers              | 10+                                  | 8 native + 29 compat                         | 13+                                   | **20+**                        |
 | Per-user workspaces        | ✅ (file-based)                      | —                                            | —                                     | ✅ (PostgreSQL)                |
 | Encrypted secrets          | — (env vars only)                    | ✅ ChaCha20-Poly1305                         | — (plaintext JSON)                    | ✅ AES-256-GCM in DB           |
 
+## Desktop Edition (GoClaw Lite)
+
+A native desktop app for local AI agents — no Docker, no PostgreSQL, no infrastructure.
+
+**macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/nextlevelbuilder/goclaw/main/scripts/install-lite.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/nextlevelbuilder/goclaw/main/scripts/install-lite.ps1 | iex
+```
+
+### What's Included
+- Single native app (Wails v2 + React), ~30 MB
+- SQLite database (zero setup)
+- Chat with agents (streaming, tools, media, file attachments)
+- Agent management (max 5), provider config, MCP servers, skills, cron
+- Team tasks with Kanban board and real-time updates
+- Auto-update from GitHub Releases
+
+### Lite vs Standard
+
+| Feature | Lite (Desktop) | Standard (Server) |
+|---------|---------------|-------------------|
+| Agents | Max 5 | Unlimited |
+| Teams | Max 1 (5 members) | Unlimited |
+| Database | SQLite (local) | PostgreSQL |
+| Memory | FTS5 text search | pgvector semantic |
+| Channels | — | Telegram, Discord, Slack, Zalo, Feishu, WhatsApp |
+| Knowledge Graph | — | Full |
+| RBAC / Multi-tenant | — | Full |
+| Auto-update | GitHub Releases | Docker / binary |
+
+### Building from Source
+```bash
+# Prerequisites: Go 1.26+, pnpm, Wails CLI (go install github.com/wailsapp/wails/v2/cmd/wails@latest)
+make desktop-build                    # Build .app (macOS) or .exe (Windows)
+make desktop-dmg VERSION=0.1.0        # Create .dmg installer (macOS only)
+make desktop-dev                      # Dev mode with hot reload
+```
+
+### Desktop Releases
+Desktop uses independent versioning with `lite-v*` tags:
+```bash
+git tag lite-v0.1.0 && git push origin lite-v0.1.0
+# → GitHub Actions builds macOS (.dmg + .tar.gz) + Windows (.zip)
+# → Creates GitHub Release with all assets
+```
+
 ## Architecture
 
 <p align="center">
   <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/goclaw_multi_tenant.png" alt="GoClaw Multi-Tenant" width="800" />
 </p>
 
 ## Quick Start
@@ -117,11 +170,13 @@ A Go port of [OpenClaw](https://github.com/openclaw/openclaw) with enhanced secu
 ### From Source
 
 ```bash
-git clone https://github.com/nextlevelbuilder/goclaw.git && cd goclaw
+git clone -b main https://github.com/nextlevelbuilder/goclaw.git && cd goclaw
 make build
 ./goclaw onboard        # Interactive setup wizard
 source .env.local && ./goclaw
 ```
+
+> **Note:** The default branch is `dev` (active development). Use `-b main` to clone the stable release branch.
 
 ### With Docker
 
@@ -130,16 +185,74 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Add at least one GOCLAW_*_API_KEY to .env, then:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Web Dashboard at http://localhost:3000
+# Web Dashboard at http://localhost:18790 (built-in)
 # Health check: curl http://localhost:18790/health
+
+# Optional: separate nginx for custom SSL/reverse proxy
+# make up WITH_WEB_NGINX=1  → Dashboard at http://localhost:3000
+```
+
+`make up` creates a Docker network, embeds the correct version from git tags, builds and starts all services, and runs database migrations automatically.
+
+**Common commands:**
+
+```bash
+make up                # Start all services (build + migrate)
+make down              # Stop all services
+make logs              # Tail logs (goclaw service)
+make reset             # Wipe volumes and rebuild from scratch
+```
+
+**Optional services** — enable with `WITH_*` flags:
+
+| Flag | Service | What it does |
+|------|---------|-------------|
+| `WITH_BROWSER=1` | Headless Chrome | Enables `browser` tool for web scraping, screenshots, automation |
+| `WITH_OTEL=1` | Jaeger | OpenTelemetry tracing UI for debugging LLM calls and latency |
+| `WITH_SANDBOX=1` | Docker sandbox | Isolated container for running untrusted code from agents |
+| `WITH_TAILSCALE=1` | Tailscale | Expose gateway over Tailscale private network |
+| `WITH_REDIS=1` | Redis | Redis-backed caching layer |
+
+Flags can be combined and work with all commands:
+
+```bash
+# Start with browser automation and tracing
+make up WITH_BROWSER=1 WITH_OTEL=1
+
+# Stop everything including optional services
+make down WITH_BROWSER=1 WITH_OTEL=1
 ```
 
 When `GOCLAW_*_API_KEY` environment variables are set, the gateway auto-onboards without interactive prompts — detects provider, runs migrations, and seeds default data.
 
-> For build variants (OTel, Tailscale, Redis), Docker image tags, and compose overlays, see the [Deployment Guide](https://docs.goclaw.sh/#deploy-docker-compose).
+> **Docker image variants:**
+> | Image | Description |
+> |-------|-------------|
+> | `latest` | Backend + embedded web UI + Python (**recommended**) |
+> | `latest-base` | Backend API-only, no web UI, no runtimes |
+> | `latest-full` | All runtimes + skill dependencies pre-installed |
+> | `latest-otel` | Latest + OpenTelemetry tracing |
+> | `goclaw-web` | Standalone nginx + React SPA (for custom reverse proxy) |
+>
+> For custom builds (Tailscale, Redis): `docker build --build-arg ENABLE_TSNET=true ...`
+> See the [Deployment Guide](https://docs.goclaw.sh/#deploy-docker-compose) for details.
+
+## Updating
+
+### Docker
+```bash
+docker compose pull && docker compose up -d
+```
+
+### Binary (with embedded web UI)
+```bash
+goclaw update --apply    # Downloads, verifies SHA256, swaps binary, restarts
+```
+
+### Web Dashboard
+Open **About** dialog → click **Update Now** (admin only). The update includes both backend and web dashboard when using the default `latest` image.
 
 ## Multi-Agent Orchestration
 
@@ -165,8 +278,7 @@ Agents communicate through explicit **permission links** with direction control 
 </p>
 
 - **Shared task board** — Create, claim, complete, search tasks with `blocked_by` dependencies
-- **Team mailbox** — Direct peer-to-peer messaging and broadcasts
-- **Tools**: `team_tasks` for task management, `team_message` for mailbox
+- **Tools**: `team_tasks` for task management, `spawn` for subagent orchestration
 
 > For delegation details, permission links, and concurrency control, see the [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams).
 
@@ -199,7 +311,6 @@ Agents communicate through explicit **permission links** with direction control 
 | `spawn`            | —             | Spawn a subagent                                             |
 | `subagents`        | sessions      | Control running subagents                                    |
 | `team_tasks`       | teams         | Shared task board (list, create, claim, complete, search)    |
-| `team_message`     | teams         | Team mailbox (send, broadcast, read)                         |
 | `sessions_list`    | sessions      | List active sessions                                         |
 | `sessions_history` | sessions      | View session history                                         |
 | `sessions_send`    | sessions      | Send message to a session                                    |
@@ -243,4 +354,4 @@ GoClaw is built upon the original [OpenClaw](https://github.com/openclaw/opencla
 
 ## License
 
-MIT
+[CC BY-NC 4.0](LICENSE) — Creative Commons Attribution-NonCommercial 4.0 International

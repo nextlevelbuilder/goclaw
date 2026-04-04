@@ -100,6 +100,7 @@ type TeamTaskEventPayload struct {
 	UserID           string `json:"user_id"`
 	Channel          string `json:"channel"`
 	ChatID           string `json:"chat_id"`
+	PeerKind         string `json:"peer_kind,omitempty"` // "group" or "direct" — for correct session routing (#266)
 	Timestamp        string `json:"timestamp"`
 
 	// Comment text preview (for team.task.commented events, truncated).

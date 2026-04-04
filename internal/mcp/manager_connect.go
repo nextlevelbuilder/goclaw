@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -37,9 +38,37 @@ func connectAndDiscover(ctx context.Context, name, transportType, command string
 		Version: "1.0.0",
 	}
 
-	if _, err := client.Initialize(ctx, initReq); err != nil {
+	// Retry initialization with exponential backoff for slow-starting stdio servers.
+	// Heavy MCP servers (FastMCP with 80+ tools, OAuth servers) can take 3-5s to start
+	// their stdin read loop. Without retries, Initialize sends JSON-RPC before the
+	// server is ready, gets EOF, and permanently fails. SSE/HTTP transports don't need
+	// this because the HTTP server rejects connections until ready (connection refused).
+	const maxInitAttempts = 4 // backoff: 2s + 4s + 8s = ~14s total before giving up
+	var initErr error
+	for attempt := range maxInitAttempts {
+		if attempt > 0 {
+			backoff := time.Duration(1<<attempt) * time.Second // 2s, 4s, 8s
+			slog.Debug("mcp.init.retry", "server", name, "attempt", attempt+1, "backoff", backoff)
+			select {
+			case <-time.After(backoff):
+			case <-ctx.Done():
+				_ = client.Close()
+				return nil, nil, fmt.Errorf("initialize: context cancelled during retry: %w", ctx.Err())
+			}
+		}
+		if _, err := client.Initialize(ctx, initReq); err == nil {
+			break
+		} else {
+			initErr = err
+			// Non-stdio transports: connection errors are definitive, don't retry.
+			if transportType != "stdio" {
+				break
+			}
+		}
+	}
+	if initErr != nil {
 		_ = client.Close()
-		return nil, nil, fmt.Errorf("initialize: %w", err)
+		return nil, nil, fmt.Errorf("initialize: %w", initErr)
 	}
 
 	toolsResult, err := client.ListTools(ctx, mcpgo.ListToolsRequest{})
@@ -123,8 +152,8 @@ func (m *Manager) registerBridgeTools(ss *serverState, mcpTools []mcpgo.Tool, se
 
 // connectViaPool acquires a shared connection from the pool and creates
 // per-agent BridgeTools pointing to the shared client/connected pointers.
-func (m *Manager) connectViaPool(ctx context.Context, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int) error {
-	entry, err := m.pool.Acquire(ctx, name, transportType, command, args, env, url, headers, timeoutSec)
+func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, transportType, command string, args []string, env map[string]string, url string, headers map[string]string, toolPrefix string, timeoutSec int) error {
+	entry, err := m.pool.Acquire(ctx, tenantID, name, transportType, command, args, env, url, headers, timeoutSec)
 	if err != nil {
 		return err
 	}
@@ -132,7 +161,9 @@ func (m *Manager) connectViaPool(ctx context.Context, name, transportType, comma
 	// Create per-agent BridgeTools from the pool's shared connection
 	registeredNames := m.registerPoolBridgeTools(entry, name, toolPrefix, timeoutSec)
 
-	// Track server state and per-agent tool names
+	// Track server state and per-agent tool names.
+	// poolServers/poolToolNames keyed by plain name for Close() iteration.
+	// poolKeys maps plain name → pool compound key for Release().
 	m.mu.Lock()
 	m.servers[name] = entry.state
 	if m.poolServers == nil {
@@ -143,6 +174,10 @@ func (m *Manager) connectViaPool(ctx context.Context, name, transportType, comma
 		m.poolToolNames = make(map[string][]string)
 	}
 	m.poolToolNames[name] = registeredNames
+	if m.poolKeys == nil {
+		m.poolKeys = make(map[string]string)
+	}
+	m.poolKeys[name] = poolKey(tenantID, name)
 	m.mu.Unlock()
 
 	if len(registeredNames) > 0 {
@@ -234,21 +269,30 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 					ss.connected.Store(true)
 					ss.mu.Lock()
 					ss.reconnAttempts = 0
+					ss.healthFailures = 0
 					ss.lastErr = ""
 					ss.mu.Unlock()
 					continue
 				}
-				ss.connected.Store(false)
 				ss.mu.Lock()
+				ss.healthFailures++
+				failures := ss.healthFailures
 				ss.lastErr = err.Error()
 				ss.mu.Unlock()
 
-				slog.Warn("mcp.server.health_failed", "server", ss.name, "error", err)
-				m.tryReconnect(ctx, ss)
+				slog.Warn("mcp.server.health_failed", "server", ss.name, "error", err, "consecutive", failures)
+
+				// Only mark disconnected and attempt reconnect after consecutive failures
+				// to tolerate transient errors (e.g. 504 from upstream proxy).
+				if failures >= healthFailThreshold {
+					ss.connected.Store(false)
+					m.tryReconnect(ctx, ss)
+				}
 			} else {
 				ss.connected.Store(true)
 				ss.mu.Lock()
 				ss.reconnAttempts = 0
+				ss.healthFailures = 0
 				ss.lastErr = ""
 				ss.mu.Unlock()
 			}

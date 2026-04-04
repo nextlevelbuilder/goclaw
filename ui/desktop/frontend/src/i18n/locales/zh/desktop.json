@@ -1,0 +1,163 @@
+{
+  "onboarding": {
+    "welcome": "GoClaw Setup",
+    "welcomeDesc": "Let's get your gateway up and running",
+    "providerStep": "Configure Provider",
+    "providerStepDesc": "Select an AI provider and enter your credentials.",
+    "modelStep": "Select & Verify Model",
+    "modelStepDesc": "Choose a model and test the connection.",
+    "agentStep": "Create Your Agent",
+    "agentStepDesc": "Give your agent a personality.",
+    "descPlaceholder": "Describe your agent's personality...",
+    "complete": "Setup Complete",
+    "stepProvider": "提供商",
+    "stepModel": "模型",
+    "stepAgent": "智能体",
+    "createProvider": "创建提供商"
+  },
+  "summoning": {
+    "title": "正在召唤智能体",
+    "weavingSoul": "正在为 {{name}} 编织灵魂",
+    "completed": "智能体已就绪！",
+    "completedTitle": "智能体已就绪！",
+    "failedTitle": "召唤失败",
+    "failed": "召唤失败",
+    "wait": "这可能需要一点时间",
+    "fileLabelSOUL": "核心个性",
+    "fileLabelIDENTITY": "身份与知识",
+    "agentReady": "{{name}} 已就绪！",
+    "retrying": "重试中..."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "providers": "Providers",
+      "agents": "Agents",
+      "channels": "频道",
+      "mcp": "MCP",
+      "skills": "Skills",
+      "tools": "Tools",
+      "cron": "Cron",
+      "traces": "Traces",
+      "storage": "存储",
+      "about": "About"
+    },
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "language": "Language",
+    "timezone": "Timezone",
+    "timezonePlaceholder": "Timezone selection coming soon."
+  },
+  "sidebar": {
+    "newChat": "新建对话",
+    "connected": "已连接",
+    "offline": "离线",
+    "lightMode": "浅色模式",
+    "darkMode": "深色模式",
+    "settings": "设置",
+    "teams": "团队"
+  },
+  "about": {
+    "title": "GoClaw Lite",
+    "subtitle": "Desktop Edition",
+    "version": "Version",
+    "edition": "Edition",
+    "runtime": "Runtime",
+    "runtimeValue": "Wails v2",
+    "editionLimits": "Edition Limits",
+    "agents": "Agents",
+    "teams": "Teams",
+    "teamMembers": "Team members",
+    "database": "Database",
+    "users": "Users",
+    "maxAgents": "5 max",
+    "maxTeams": "1 max",
+    "maxTeamMembers": "5 max",
+    "databaseValue": "SQLite (local)",
+    "usersValue": "Single user",
+    "builtWith": "Built with Go + React + Wails",
+    "reset": {
+      "title": "危险区域",
+      "description": "删除数据库并重启应用。所有智能体、会话、提供商和设置将被永久删除。",
+      "button": "重置数据库",
+      "confirmTitle": "重置数据库？",
+      "confirmDescription": "此操作将删除所有数据并从头开始重启应用。",
+      "confirmPrompt": "输入 {{word}} 以确认",
+      "cancel": "取消",
+      "confirm": "重置并重启",
+      "resetting": "重置中..."
+    }
+  },
+  "presets": {
+    "researcher": {
+      "label": "🔬 研究员",
+      "prompt": "名字：Scholar。一位一丝不苟的研究分析师，不放过任何细节。\n性格：有条不紊、严谨而精确。以结构清晰、附有引用的报告呈现信息。在深度与清晰度之间取得平衡。\n\n目的：跨领域深度研究——学术论文、市场分析、技术调查。将多个来源综合为可操作的洞察。始终区分事实与观点。"
+    },
+    "writer": {
+      "label": "✍️ 作家",
+      "prompt": "名字：Quill。一位多才多艺的作家，能根据不同受众调整语气和风格。\n性格：富有创意、表达清晰且富有同理心。深谙文字的力量。在清晰与优雅之间取得平衡。\n\n目的：内容创作专家——博客文章、文案、故事叙述、技术写作。擅长构建论点、打造叙事，并在长篇内容中保持一致的语调。"
+    },
+    "coder": {
+      "label": "👨‍💻 程序员",
+      "prompt": "名字：Dev。一位拥有全栈深厚专业知识的资深软件工程师。\n性格：务实高效。编写整洁、易维护的代码。善于用简单的方式解释复杂概念。遵循最佳实践，但懂得何时灵活变通。\n\n目的：代码审查、架构设计、调试、实现。精通多种语言和框架。优先考虑正确性、性能和安全性。"
+    }
+  },
+  "agent": {
+    "summon": "Summon",
+    "summoning": "Summoning...",
+    "verifyModel": "Verify Model",
+    "verifying": "Verifying...",
+    "verified": "Verified",
+    "verifyFailed": "Verification failed"
+  },
+  "chat": {
+    "emptyTitle": "与 {{name}} 对话",
+    "emptyTitleDefault": "开始对话",
+    "emptyDescAgent": "提问、写作或探索想法。",
+    "emptyDescNoAgent": "从侧边栏选择一个智能体开始。",
+    "suggestions": [
+      "今天有什么最新新闻？",
+      "讲一个笑话",
+      "AI时代的创意头脑风暴"
+    ]
+  },
+  "activity": {
+    "thinking": "思考中",
+    "executingTool": "执行工具中",
+    "compacting": "压缩上下文",
+    "streaming": "流式传输",
+    "retrying": "重试中",
+    "processing": "处理中",
+    "runningTool": "运行 {{tool}}",
+    "retryingAttempt": "重试（第 {{n}} 次）",
+    "step": "步骤 {{n}}"
+  },
+  "toast": {
+    "agentCreated": "Agent created",
+    "agentUpdated": "Agent updated",
+    "agentDeleted": "Agent deleted",
+    "providerCreated": "Provider created",
+    "providerUpdated": "Provider updated",
+    "providerDeleted": "Provider deleted",
+    "serverCreated": "MCP server created",
+    "serverUpdated": "MCP server updated",
+    "serverDeleted": "MCP server deleted",
+    "skillUploaded": "Skill uploaded",
+    "skillDeleted": "Skill deleted",
+    "grantUpdated": "Grant updated",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete",
+    "createFailed": "Failed to create"
+  },
+  "update": {
+    "available": "GoClaw Lite v{{version}} 新版本可用",
+    "now": "立即更新",
+    "downloading": "正在下载更新...",
+    "ready": "更新已安装！重启以应用。",
+    "restart": "立即重启",
+    "failed": "更新失败。",
+    "retry": "重试"
+  }
+}

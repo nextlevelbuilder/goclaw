@@ -73,10 +73,14 @@ func (ph *PendingHistory) signalFlush() {
 }
 
 // flushLoop runs in background, flushing buffer periodically or when signaled.
+// Also runs periodic compaction sweep as a safety net for post-restart scenarios.
 func (ph *PendingHistory) flushLoop() {
 	defer close(ph.stopped)
 	ticker := time.NewTicker(flushInterval)
 	defer ticker.Stop()
+
+	compactTicker := time.NewTicker(compactSweepInterval)
+	defer compactTicker.Stop()
 
 	for {
 		select {
@@ -87,13 +91,15 @@ func (ph *PendingHistory) flushLoop() {
 			ph.flushNow()
 		case <-ticker.C:
 			ph.flushNow()
+		case <-compactTicker.C:
+			ph.sweepCompaction()
 		}
 	}
 }
 
 // writeBatch writes a batch of messages to the DB store.
 func (ph *PendingHistory) writeBatch(batch []store.PendingMessage) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ph.tenantCtx(), 15*time.Second)
 	defer cancel()
 
 	if err := ph.store.AppendBatch(ctx, batch); err != nil {

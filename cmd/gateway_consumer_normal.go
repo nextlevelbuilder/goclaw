@@ -11,9 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram/voiceguard"
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
@@ -26,25 +24,23 @@ import (
 func processNormalMessage(
 	ctx context.Context,
 	msg bus.InboundMessage,
-	agents *agent.Router,
-	cfg *config.Config,
-	sched *scheduler.Scheduler,
-	channelMgr *channels.Manager,
-	teamStore store.TeamStore,
-	quotaChecker *channels.QuotaChecker,
-	sessStore store.SessionStore,
-	agentStore store.AgentStore,
-	contactCollector *store.ContactCollector,
-	postTurn tools.PostTurnProcessor,
-	msgBus *bus.MessageBus,
+	deps *ConsumerDeps,
 ) {
+	// Inject tenant from channel instance into context so all store operations
+	// (agent lookup, session creation, etc.) are tenant-scoped.
+	if msg.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, msg.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
+	}
+
 	// Determine target agent via bindings or explicit AgentID
 	agentID := msg.AgentID
 	if agentID == "" {
-		agentID = resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 
-	agentLoop, err := agents.Get(agentID)
+	agentLoop, err := deps.Agents.Get(ctx, agentID)
 	if err != nil {
 		slog.Warn("inbound: agent not found", "agent", agentID, "channel", msg.Channel)
 		return
@@ -55,13 +51,21 @@ func processNormalMessage(
 	if peerKind == "" {
 		peerKind = string(sessions.PeerDirect) // default to DM
 	}
-	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID)
+
+	// Thread-based isolation override (e.g. Slack DM threads, AI Panel)
+	if lk := msg.Metadata["local_key"]; lk != "" && strings.Contains(lk, ":thread:") {
+		parts := strings.SplitN(lk, ":thread:", 2)
+		if len(parts) == 2 {
+			sessionKey = sessions.BuildScopedThreadSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID, parts[1])
+		}
+	}
 
 	// Forum topic: override session key to isolate per-topic history.
 	// TS ref: buildTelegramGroupPeerId() in src/telegram/bot/helpers.ts
-	if msg.Metadata["is_forum"] == "true" && peerKind == string(sessions.PeerGroup) {
+	if msg.Metadata[tools.MetaIsForum] == "true" && peerKind == string(sessions.PeerGroup) {
 		var topicID int
-		fmt.Sscanf(msg.Metadata["message_thread_id"], "%d", &topicID)
+		fmt.Sscanf(msg.Metadata[tools.MetaMessageThreadID], "%d", &topicID)
 		if topicID > 0 {
 			sessionKey = sessions.BuildGroupTopicSessionKey(agentID, msg.Channel, msg.ChatID, topicID)
 		}
@@ -96,32 +100,59 @@ func processNormalMessage(
 	// Persist friendly names from channel metadata into session + user profile.
 	sessionMeta := extractSessionMetadata(msg, peerKind)
 	if len(sessionMeta) > 0 {
-		sessStore.SetSessionMetadata(sessionKey, sessionMeta)
-		if agentStore != nil {
+		deps.SessStore.SetSessionMetadata(ctx, sessionKey, sessionMeta)
+		if deps.AgentStore != nil {
 			if agentUUID, err := uuid.Parse(agentID); err == nil && agentUUID != uuid.Nil {
-				_ = agentStore.UpdateUserProfileMetadata(ctx, agentUUID, userID, sessionMeta)
+				_ = deps.AgentStore.UpdateUserProfileMetadata(ctx, agentUUID, userID, sessionMeta)
 			}
 		}
 	}
 
 	// Auto-collect channel contacts for the contact selector.
-	if contactCollector != nil && msg.SenderID != "" {
+	// Skip internal senders (system:*, notification:*, teammate:*, ticker:*, session_send_tool).
+	if deps.ContactCollector != nil && msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
 		senderNumericID := msg.SenderID
 		if idx := strings.IndexByte(senderNumericID, '|'); idx > 0 {
 			senderNumericID = senderNumericID[:idx]
 		}
-		channelType := channelMgr.ChannelTypeForName(msg.Channel)
+		channelType := deps.ChannelMgr.ChannelTypeForName(msg.Channel)
 		if channelType == "" {
 			channelType = msg.Channel // fallback to instance name
 		}
 		displayName := sessionMeta["display_name"]
 		username := sessionMeta["username"]
-		contactCollector.EnsureContact(ctx, channelType, msg.Channel, senderNumericID, userID, displayName, username, peerKind)
+		deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, senderNumericID, userID, displayName, username, peerKind, "user", "", "")
+
+		// Also collect group chat as a contact (for group permission management / merge).
+		// Group IDs (e.g., Telegram "-100456") differ from user IDs — no UNIQUE conflict.
+		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
+			groupTitle := msg.Metadata["chat_title"] // Telegram: message.Chat.Title
+			deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, msg.ChatID, "", groupTitle, "", "group", "group", "", "")
+		}
+	}
+
+	// --- Resolve merged tenant user identity ---
+	// If the sender has been merged to a tenant_user, use the tenant user's ID
+	// for DM sessions. This enables per-user features (MCP creds, SecureCLI creds).
+	// Group sessions keep the group-scoped userID; sender resolution happens via SenderID.
+	if deps.ContactCollector != nil && peerKind == string(sessions.PeerDirect) && msg.SenderID != "" && !bus.IsInternalSender(msg.SenderID) {
+		senderNumeric := msg.SenderID
+		if idx := strings.IndexByte(senderNumeric, '|'); idx > 0 {
+			senderNumeric = senderNumeric[:idx]
+		}
+		chType := deps.ChannelMgr.ChannelTypeForName(msg.Channel)
+		if chType == "" {
+			chType = msg.Channel
+		}
+		if resolved, err := deps.ContactCollector.ResolveTenantUserID(ctx, chType, senderNumeric); err == nil && resolved != "" {
+			slog.Debug("contact.resolved_tenant_user", "sender", senderNumeric, "tenant_user", resolved)
+			userID = resolved
+		}
 	}
 
 	// --- Quota check ---
-	if quotaChecker != nil {
-		qResult := quotaChecker.Check(ctx, userID, msg.Channel, agentLoop.ProviderName())
+	if deps.QuotaChecker != nil {
+		qResult := deps.QuotaChecker.Check(ctx, userID, msg.Channel, agentLoop.ProviderName())
 		if !qResult.Allowed {
 			slog.Warn("security.quota_exceeded",
 				"user_id", userID,
@@ -130,7 +161,7 @@ func processNormalMessage(
 				"used", qResult.Used,
 				"limit", qResult.Limit,
 			)
-			msgBus.PublishOutbound(bus.OutboundMessage{
+			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 				Channel:  msg.Channel,
 				ChatID:   msg.ChatID,
 				Content:  formatQuotaExceeded(qResult),
@@ -138,14 +169,14 @@ func processNormalMessage(
 			})
 			return
 		}
-		quotaChecker.Increment(userID)
+		deps.QuotaChecker.Increment(userID)
 	}
 
 	// Auto-clear followup reminders when user sends a message on a real channel.
 	// Fire-and-forget: don't block message processing.
-	if teamStore != nil && msg.Channel != tools.ChannelSystem && msg.Channel != tools.ChannelTeammate && msg.Channel != tools.ChannelDashboard {
+	if deps.TeamStore != nil && msg.Channel != tools.ChannelSystem && msg.Channel != tools.ChannelTeammate && msg.Channel != tools.ChannelDashboard {
 		go func(ch, cid string) {
-			if n, err := teamStore.ClearFollowupByScope(ctx, ch, cid); err != nil {
+			if n, err := deps.TeamStore.ClearFollowupByScope(ctx, ch, cid); err != nil {
 				slog.Warn("auto-clear followup failed", "channel", ch, "chat_id", cid, "error", err)
 			} else if n > 0 {
 				slog.Info("auto-clear followup: cleared", "channel", ch, "chat_id", cid, "count", n)
@@ -165,7 +196,7 @@ func processNormalMessage(
 	// Enable streaming when the channel supports it (so agent emits chunk events).
 	// The channel decides per chat type via separate dm_stream / group_stream flags.
 	isGroup := peerKind == string(sessions.PeerGroup)
-	enableStream := channelMgr != nil && channelMgr.IsStreamingChannel(msg.Channel, isGroup)
+	enableStream := deps.ChannelMgr != nil && deps.ChannelMgr.IsStreamingChannel(msg.Channel, isGroup)
 
 	// Group chats allow concurrent runs (multiple users can chat simultaneously).
 	maxConcurrent := 1
@@ -183,7 +214,7 @@ func processNormalMessage(
 			outMeta["reply_to_message_id"] = mid
 		}
 	}
-	for _, k := range []string{"message_thread_id", "local_key", "placeholder_key", "group_id"} {
+	for _, k := range []string{tools.MetaMessageThreadID, "local_key", "placeholder_key", "group_id"} {
 		if v := msg.Metadata[k]; v != "" {
 			outMeta[k] = v
 		}
@@ -197,10 +228,10 @@ func processNormalMessage(
 	if lk := msg.Metadata["local_key"]; lk != "" {
 		chatIDForRun = lk
 	}
-	blockReply := channelMgr != nil && channelMgr.ResolveBlockReply(msg.Channel, cfg.Gateway.BlockReply)
-	toolStatus := cfg.Gateway.ToolStatus == nil || *cfg.Gateway.ToolStatus // default true
-	if channelMgr != nil {
-		channelMgr.RegisterRun(runID, msg.Channel, chatIDForRun, messageID, outMeta, enableStream, blockReply, toolStatus)
+	blockReply := deps.ChannelMgr != nil && deps.ChannelMgr.ResolveBlockReply(msg.Channel, deps.Cfg.Gateway.BlockReply)
+	toolStatus := deps.Cfg.Gateway.ToolStatus == nil || *deps.Cfg.Gateway.ToolStatus // default true
+	if deps.ChannelMgr != nil {
+		deps.ChannelMgr.RegisterRun(runID, msg.Channel, chatIDForRun, messageID, outMeta, enableStream, blockReply, toolStatus)
 	}
 
 	// Group-aware system prompt: help the LLM adapt tone and behavior for group chats.
@@ -210,6 +241,7 @@ func processNormalMessage(
 			"- Messages may include a [Chat messages since your last reply] section with recent group history. Each history line shows \"sender [time]: message\".\n" +
 			"- The current message includes a [From: sender_name] tag identifying who @mentioned you.\n" +
 			"- Keep responses concise and focused; long replies are disruptive in groups.\n" +
+			"- Write like a human. Avoid Markdown tables. Use real line breaks sparingly.\n" +
 			"- Address the group naturally. If the history shows a multi-person conversation, consider the full context before answering."
 	}
 
@@ -239,7 +271,7 @@ func processNormalMessage(
 	// Intent classify fast-path: when agent is busy on DM, classify user intent
 	// to detect status queries, cancel requests, or steer/new_task for mid-run injection.
 	// Only for DM (maxConcurrent=1) where messages queue behind the active run.
-	if maxConcurrent == 1 && agents.IsSessionBusy(sessionKey) {
+	if maxConcurrent == 1 && deps.Agents.IsSessionBusy(sessionKey) {
 		if loop, ok := agentLoop.(*agent.Loop); ok && loop.Provider() != nil {
 			locale := msg.Metadata["locale"]
 			if locale == "" {
@@ -248,9 +280,9 @@ func processNormalMessage(
 			intent := agent.ClassifyIntent(ctx, loop.Provider(), loop.Model(), msg.Content)
 			switch intent {
 			case agent.IntentStatusQuery:
-				status := agents.GetActivity(sessionKey)
+				status := deps.Agents.GetActivity(sessionKey)
 				reply := agent.FormatStatusReply(status, locale)
-				msgBus.PublishOutbound(bus.OutboundMessage{
+				deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 					Channel:  msg.Channel,
 					ChatID:   msg.ChatID,
 					Content:  reply,
@@ -258,11 +290,11 @@ func processNormalMessage(
 				})
 				return
 			case agent.IntentCancel:
-				aborted := agents.AbortRunsForSession(sessionKey)
+				aborted := deps.Agents.AbortRunsForSession(sessionKey)
 				if len(aborted) > 0 {
 					slog.Info("inbound: cancelled runs via intent classify",
 						"session", sessionKey, "aborted", aborted)
-					msgBus.PublishOutbound(bus.OutboundMessage{
+					deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 						Channel:  msg.Channel,
 						ChatID:   msg.ChatID,
 						Content:  i18n.T(locale, i18n.MsgCancelledReply),
@@ -272,14 +304,14 @@ func processNormalMessage(
 				return
 			case agent.IntentSteer:
 				// Steer: inject into running loop to redirect/add to current task.
-				injected := agents.InjectMessage(sessionKey, agent.InjectedMessage{
+				injected := deps.Agents.InjectMessage(sessionKey, agent.InjectedMessage{
 					Content: msg.Content,
 					UserID:  userID,
 				})
 				if injected {
 					slog.Info("inbound: injected steer message",
 						"session", sessionKey)
-					msgBus.PublishOutbound(bus.OutboundMessage{
+					deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 						Channel:  msg.Channel,
 						ChatID:   msg.ChatID,
 						Content:  i18n.T(locale, i18n.MsgInjectedAck),
@@ -298,18 +330,29 @@ func processNormalMessage(
 		}
 	}
 
+	// Inject tenant context from channel instance so all store queries are tenant-scoped.
+	if msg.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, msg.TenantID)
+	}
+
 	// Inject post-turn dispatch tracker so team task creates are deferred.
 	ptd := tools.NewPendingTeamDispatch()
 	schedCtx := tools.WithPendingTeamDispatch(ctx, ptd)
 
+	// Propagate run_kind from metadata (e.g. "notification" for team task status relays).
+	if rk := msg.Metadata["run_kind"]; rk != "" {
+		schedCtx = tools.WithRunKind(schedCtx, rk)
+	}
+
 	// Schedule through main lane (per-session concurrency controlled by maxConcurrent)
-	outCh := sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
+	outCh := deps.Sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
 		SessionKey:        sessionKey,
 		Message:           msg.Content,
 		Media:             reqMedia,
 		ForwardMedia:      fwdMedia,
 		Channel:           msg.Channel,
-		ChannelType:       resolveChannelType(channelMgr, msg.Channel),
+		ChannelType:       resolveChannelType(deps.ChannelMgr, msg.Channel),
+		ChatTitle:         msg.Metadata["chat_title"],
 		ChatID:            msg.ChatID,
 		PeerKind:          peerKind,
 		LocalKey:          msg.Metadata["local_key"],
@@ -333,17 +376,17 @@ func processNormalMessage(
 		ptd.ReleaseTeamLock()
 
 		// Post-turn: dispatch pending team tasks created during this turn.
-		if postTurn != nil {
+		if deps.PostTurn != nil {
 			for teamID, taskIDs := range ptd.Drain() {
-				if err := postTurn.ProcessPendingTasks(ctx, teamID, taskIDs); err != nil {
+				if err := deps.PostTurn.ProcessPendingTasks(ctx, teamID, taskIDs); err != nil {
 					slog.Warn("post_turn: failed", "team_id", teamID, "error", err)
 				}
 			}
 		}
 
 		// Clean up run tracking (in case HandleAgentEvent didn't fire for terminal events)
-		if channelMgr != nil {
-			channelMgr.UnregisterRun(rID)
+		if deps.ChannelMgr != nil {
+			deps.ChannelMgr.UnregisterRun(rID)
 		}
 
 		if outcome.Err != nil {
@@ -351,7 +394,7 @@ func processNormalMessage(
 			// publish empty outbound to clean up thinking/typing indicators.
 			if errors.Is(outcome.Err, context.Canceled) {
 				slog.Info("inbound: run cancelled", "channel", channel, "session", session)
-				msgBus.PublishOutbound(bus.OutboundMessage{
+				deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 					Channel:  channel,
 					ChatID:   chatID,
 					Content:  "",
@@ -360,7 +403,7 @@ func processNormalMessage(
 				return
 			}
 			slog.Error("inbound: agent run failed", "error", outcome.Err, "channel", channel)
-			msgBus.PublishOutbound(bus.OutboundMessage{
+			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 				Channel:  channel,
 				ChatID:   chatID,
 				Content:  formatAgentError(outcome.Err),
@@ -377,7 +420,7 @@ func processNormalMessage(
 				"chat_id", chatID,
 				"session", session,
 			)
-			msgBus.PublishOutbound(bus.OutboundMessage{
+			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 				Channel:  channel,
 				ChatID:   chatID,
 				Content:  "",
@@ -392,7 +435,7 @@ func processNormalMessage(
 		if blockReplyEnabled && outcome.Result.BlockReplies > 0 && outcome.Result.Content == outcome.Result.LastBlockReply && len(outcome.Result.Media) == 0 {
 			slog.Debug("inbound: dedup final message (matches last block reply)",
 				"channel", channel, "run_id", rID)
-			msgBus.PublishOutbound(bus.OutboundMessage{
+			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 				Channel:  channel,
 				ChatID:   chatID,
 				Content:  "",
@@ -403,11 +446,11 @@ func processNormalMessage(
 
 		// Sanitize voice agent replies: replace technical errors with user-friendly fallback.
 		replyContent := voiceguard.SanitizeReply(
-			cfg.Channels.Telegram.VoiceAgentID, agentKey,
+			deps.Cfg.Channels.Telegram.VoiceAgentID, agentKey,
 			channel, peerKind, inboundContent, outcome.Result.Content,
-			cfg.Channels.Telegram.AudioGuardFallbackTranscript,
-			cfg.Channels.Telegram.AudioGuardFallbackNoTranscript,
-			cfg.Channels.Telegram.AudioGuardErrorMarkers,
+			deps.Cfg.Channels.Telegram.AudioGuardFallbackTranscript,
+			deps.Cfg.Channels.Telegram.AudioGuardFallbackNoTranscript,
+			deps.Cfg.Channels.Telegram.AudioGuardErrorMarkers,
 		)
 
 		// Publish response back to the channel
@@ -420,11 +463,11 @@ func processNormalMessage(
 
 		appendMediaToOutbound(&outMsg, outcome.Result.Media)
 
-		msgBus.PublishOutbound(outMsg)
+		deps.MsgBus.PublishOutbound(outMsg)
 
 		// Auto-set followup when lead agent replies on a real channel with in_progress tasks.
-		if teamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelTeammate && channel != tools.ChannelDashboard {
-			go autoSetFollowup(ctx, teamStore, agentStore, agentKey, channel, chatID, replyContent)
+		if deps.TeamStore != nil && channel != tools.ChannelSystem && channel != tools.ChannelTeammate && channel != tools.ChannelDashboard {
+			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, msg.Content, outMeta, blockReply, ptd)
 }

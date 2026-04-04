@@ -22,11 +22,46 @@
   "card": {
     "apiKeySet": "API key set",
     "authenticated": "Authenticated",
-    "oauthLinked": "OAuth linked"
+    "oauthAccount": "OAuth account",
+    "oauthAlias": "Alias: {{name}}",
+    "connected": "Connected",
+    "signInNeeded": "Sign in needed",
+    "disabled": "Disabled"
   },
-  "detail": {
-    "title": "Provider Details",
-    "advanced": "Advanced"
+  "quota": {
+    "checking": "Checking quota",
+    "plan": "Plan",
+    "lastChecked": "Checked {{value}}",
+    "failure": {
+      "billing": {
+        "label": "Billing",
+        "description": "Workspace billing or entitlement is blocking this account right now."
+      },
+      "exhausted": {
+        "label": "Exhausted",
+        "description": "This account is signed in, but one of its core quota windows is exhausted."
+      },
+      "reauth": {
+        "label": "Reauth",
+        "description": "Sign in again to refresh workspace access."
+      },
+      "forbidden": {
+        "label": "Forbidden",
+        "description": "This account cannot read upstream quota data."
+      },
+      "needs_setup": {
+        "label": "Needs setup",
+        "description": "Sign in again so GoClaw can restore the ChatGPT account workspace metadata."
+      },
+      "retry_later": {
+        "label": "Retry later",
+        "description": "The quota endpoint is temporarily unavailable or rate limited."
+      },
+      "unavailable": {
+        "label": "Unavailable",
+        "description": "Quota data is unavailable for this account right now."
+      }
+    }
   },
   "form": {
     "createTitle": "Add Provider",
@@ -53,6 +88,12 @@
     "alreadyAdded": "(already added)",
     "nameFixed": "Name",
     "configure": "Configure an LLM provider connection.",
+    "configureOauth": "Connect one OpenAI Codex OAuth account.",
+    "oauthAlias": "Account Alias *",
+    "oauthAliasPlaceholder": "e.g. primary",
+    "oauthAliasHint": "Lowercase alias used in routing and pools.",
+    "oauthDisplayNamePlaceholder": "Primary Codex account",
+    "oauthDisplayNameHint": "Optional label shown in the dashboard.",
     "lowercaseHint": "Lowercase, numbers, hyphens"
   },
   "delete": {
@@ -72,7 +113,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
-    "chatgpt_oauth": "ChatGPT (OAuth)",
+    "chatgpt_oauth": "ChatGPT Subscription (OAuth)",
     "yescale": "YesScale",
     "acp": "ACP"
   },
@@ -98,27 +139,32 @@
   "oauth": {
     "checkingStatus": "Checking authentication status...",
     "authSuccessful": "Authentication successful!",
-    "activeProvider": "Provider",
-    "closingIn": "is now active. Closing in {{count}}s...",
-    "authenticated": "Authenticated — provider",
+    "authSuccessfulDesc": "This named OpenAI/Codex account is ready to use.",
+    "activeProvider": "Account alias",
+    "authenticated": "Authenticated — account",
     "active": "active",
+    "poolBadge": "Pool ready",
+    "roundRobinBadge": "Round robin",
     "modelPrefixHint": "Use model prefix",
-    "modelPrefixExample": "in agent config (e.g. openai-codex/gpt-4o). Token refreshes automatically.",
-    "removeToken": "Remove Token",
-    "signInDesc": "Sign in with your ChatGPT account to use your subscription's models without a separate API key.",
+    "modelPrefixExample": "in agent config (for example {{example}}).",
+    "multiAccountHint": "Add more aliases later from an agent pool to enable pooling or round robin.",
+    "aliasRequired": "Enter a valid lowercase account alias before starting OpenAI Codex OAuth.",
+    "removeToken": "Disconnect Account",
+    "signInDesc": "Sign in with your ChatGPT/Codex subscription. No separate API key needed.",
     "waiting": "Waiting for authentication... Complete sign-in in the opened window.",
     "remoteVpsHint": "After signing in, your browser will try to open",
     "remoteVpsError": "and show a \"Can't reach this page\" error. That's normal — copy the full URL from the browser address bar and paste it below.",
     "pasteUrlPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
     "submit": "Submit",
-    "signInWithChatGPT": "Sign in with ChatGPT",
+    "signInWithChatGPT": "Connect OpenAI Account",
     "starting": "Starting...",
     "remoteVps": "Remote/VPS?",
     "loggedOut": "Logged out",
-    "loggedOutDesc": "OpenAI OAuth token removed",
+    "loggedOutDesc": "OpenAI Codex OAuth account disconnected",
     "oauthFailed": "OAuth failed",
     "exchangeFailed": "Exchange failed",
-    "logoutFailed": "Logout failed"
+    "logoutFailed": "Logout failed",
+    "done": "Done"
   },
   "cli": {
     "description": "Claude CLI uses your local",
@@ -148,6 +194,7 @@
     "authCheckFailed": "Failed to check auth status"
   },
   "detail": {
+    "title": "Provider Details",
     "advanced": "Advanced",
     "identity": "Identity",
     "identityDesc": "Provider identification",
@@ -159,15 +206,123 @@
     "cliConfigDesc": "Local CLI authentication",
     "cursorCliConfig": "Cursor CLI",
     "cursorCliConfigDesc": "Local Cursor agent authentication",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "ChatGPT OAuth authentication",
+    "oauthConfig": "ChatGPT Subscription (OAuth)",
+    "oauthConfigDesc": "Manage sign-in for this named OpenAI/Codex account",
     "nameReadonly": "Provider identifier, cannot be changed",
+    "oauthAliasReadonly": "OAuth account alias, cannot be changed",
     "providerType": "Provider Type",
     "apiKeySection": "API Key",
     "apiKeySectionDesc": "Authentication credentials",
     "statusSection": "Status",
     "statusSectionDesc": "Provider availability",
-    "enabledDesc": "Provider is active and available for agents"
+    "enabledDesc": "Provider is active and available for agents",
+    "embeddingSection": "Embedding",
+    "oauthAccountUsage": "Account Usage",
+    "oauthAccountUsageDesc": "How this alias works within provider-owned OpenAI Codex pooling.",
+    "oauthAccountUsageManagedDesc": "This alias is currently a pool member managed by {{provider}}.",
+    "oauthAccountUsageOwnerDesc": "This alias currently owns a reusable pool with {{count}} extra accounts.",
+    "oauthPoolRole": {
+      "member": "Pool Member",
+      "owner": "Pool Owner",
+      "standalone": "Standalone"
+    },
+    "oauthAliasLabel": "Account Alias",
+    "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
+    "oauthModelPrefix": "Model Prefix",
+    "oauthQuotaTitle": "Quota Status",
+    "oauthQuotaDescription": "Latest ChatGPT workspace quota for this account.",
+    "oauthModelPrefixCopied": "Model prefix copied",
+    "oauthPreferredHint": "Set an agent's Provider field to this alias to make it the primary OpenAI alias.",
+    "oauthProviderDefaultHint": "Use the pool defaults below to define the reusable OpenAI Codex routing policy for every agent that points at this alias.",
+    "oauthRoutingHint": "Agent pages now show the effective pool for that agent, plus whether it inherits these defaults or saves a custom override.",
+    "oauthManagedByHint": "This alias is managed by provider {{provider}}. Edit pool membership there instead of on this account.",
+    "reasoningDefaultsTitle": "Reasoning Defaults",
+    "reasoningDefaultsDescription": "Set the default reasoning policy for agents using this provider. Final runtime effort is still normalized against each agent's selected model.",
+    "reasoningPreset": "Default Preset",
+    "reasoningExpertMode": "Expert Defaults",
+    "reasoningExpertModeDesc": "Use provider-owned advanced reasoning defaults when you need efforts such as auto, none, minimal, or xhigh.",
+    "reasoningPreviewDescription": "Previewing explicit reasoning capability metadata for {{model}}.",
+    "reasoningPreviewLabel": "Capability Preview",
+    "reasoningPreviewDefault": "Preview model default reasoning: {{level}}",
+    "reasoningPreviewEmpty": "No explicit reasoning-capable models were returned for this provider yet.",
+    "reasoningRequestedEffort": "Requested Effort",
+    "reasoningFallbackBehavior": "Fallback Behavior",
+    "codexPoolDefaultsTitle": "Pool Defaults",
+    "codexPoolDefaultsDescription": "Define the reusable OpenAI Codex pool owned by this alias for agents that use it as their primary provider.",
+    "oauthDisplayNameRecommendation": "Add a display name if you want clearer labels when multiple OpenAI Codex OAuth accounts appear in the pool.",
+    "poolActivityTitle": "Pool Activity",
+    "poolActivityDescription": "Aggregate runtime activity across all agents using this provider's Codex pool.",
+    "poolActivityRefresh": "Refresh",
+    "poolActivityTopAgents": "Agents",
+    "poolActivityTopAgentsTitle": "Top agents using this pool",
+    "poolActivityRequests": "req",
+    "poolActivityEmpty": "No activity yet",
+    "poolActivityEmptyDesc": "Pool activity will appear here once agents start routing requests through this pool."
+  },
+  "embedding": {
+    "enable": "Enable Embedding",
+    "enableDesc": "Allow this provider to generate text embeddings for memory, skills, and knowledge graph",
+    "model": "Embedding Model",
+    "dimensions": "Output Dimensions",
+    "dimensionsHint": "GoClaw memory currently stores embeddings in vector(1536). Leave this empty when the model already outputs 1536, or set it to exactly 1536 when the provider supports truncation from larger native dimensions.",
+    "dimensionsInvalid": "Only 1536 is currently supported by GoClaw memory.",
+    "apiBase": "Embedding API Base",
+    "apiBasePlaceholder": "(same as provider)",
+    "apiBaseHint": "Override if embedding endpoint differs from the provider's main API base",
+    "verify": "Verify Embedding",
+    "verifyFailed": "Embedding verification failed",
+    "dimensionsMismatch": "{{count}} dimensions — does not match required 1536"
+  },
+  "reasoning": {
+    "off": "Off",
+    "offDesc": "No default extended thinking",
+    "auto": "Auto",
+    "autoDesc": "Ask the model to use its own default reasoning effort",
+    "none": "None",
+    "noneDesc": "Explicitly disable provider reasoning while keeping the advanced contract",
+    "minimal": "Minimal",
+    "minimalDesc": "Use the smallest supported reasoning effort above none",
+    "low": "Low",
+    "lowDesc": "~4K token budget",
+    "medium": "Medium",
+    "mediumDesc": "~10-16K token budget",
+    "high": "High",
+    "highDesc": "~32K token budget",
+    "xhigh": "XHigh",
+    "xhighDesc": "Use the maximum supported reasoning effort",
+    "downgrade": "Downgrade",
+    "downgradeDesc": "Normalize to the nearest supported lower level, or disable when no lower supported level exists",
+    "provider_default": "Use Model Default",
+    "provider_defaultDesc": "Let the selected model fall back to its own default reasoning effort"
+  },
+  "list": {
+    "poolOwner": "Pool owner",
+    "poolMember": "Pool member",
+    "standalone": "Standalone",
+    "reasoningDefault": "Reasoning {{level}}",
+    "managedBy": "Managed by {{provider}}",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "memberOverflow": "+{{count}}",
+    "strategy": {
+      "roundRobin": "Round robin",
+      "priorityOrder": "Priority order",
+      "primaryFirst": "Primary first"
+    },
+    "status": {
+      "needsSignIn": "Sign in needed",
+      "disabled": "Disabled"
+    }
+  },
+  "pageHint": {
+    "title": "ChatGPT Subscription (OAuth) accounts",
+    "description": "Each alias is one Codex account. Pool owners manage member accounts here, and agent pages only show the effective route.",
+    "connected_one": "{{count}} connected account",
+    "connected_other": "{{count}} connected accounts",
+    "owners_one": "{{count}} pool owner",
+    "owners_other": "{{count}} pool owners",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} members"
   },
   "toast": {
     "created": "Provider created",

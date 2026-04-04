@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,14 +27,21 @@ type Client struct {
 	connectedAt time.Time // when the client connected
 	remoteAddr  string    // peer IP (extracted from proxy headers or RemoteAddr)
 
-	locale string // user's preferred locale (e.g. "en", "vi", "zh")
+	locale string              // user's preferred locale (e.g. "en", "vi", "zh")
 	scopes []permissions.Scope // API key scopes (empty = role-based auth, no scope restriction)
 
 	// Browser pairing state
-	pairingCode     string // 8-char code if pending approval
-	pairingPending  bool   // true while waiting for admin approval
-	pairedSenderID  string // senderID used for browser pairing auth (for revocation lookup)
-	pairedChannel   string // channel used for pairing auth (e.g., "browser")
+	pairingCode    string // 8-char code if pending approval
+	pairingPending bool   // true while waiting for admin approval
+	pairedSenderID string // senderID used for browser pairing auth (for revocation lookup)
+	pairedChannel  string // channel used for pairing auth (e.g., "browser")
+
+	// Team access cache for event filtering (lazily populated).
+	teamIDs map[string]bool
+
+	tenantID   uuid.UUID // resolved tenant; always concrete after connect
+	tenantName string    // resolved tenant display name (set during connect)
+	tenantSlug string    // resolved tenant URL slug (set during connect)
 }
 
 func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
@@ -152,6 +160,11 @@ func (c *Client) SendResponse(resp *protocol.ResponseFrame) {
 		slog.Error("marshal response failed", "error", err)
 		return
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("client gone, dropping response", "client", c.id)
+		}
+	}()
 	select {
 	case c.send <- data:
 	default:
@@ -166,6 +179,11 @@ func (c *Client) SendEvent(event protocol.EventFrame) {
 		slog.Error("marshal event failed", "error", err)
 		return
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Debug("client gone, dropping event", "client", c.id)
+		}
+	}()
 	select {
 	case c.send <- data:
 	default:
@@ -191,6 +209,41 @@ func (c *Client) ConnectedAt() time.Time { return c.connectedAt }
 
 // RemoteAddr returns the peer IP:port.
 func (c *Client) RemoteAddr() string { return c.remoteAddr }
+
+// TenantID returns the resolved tenant UUID (uuid.Nil means cross-tenant).
+func (c *Client) TenantID() uuid.UUID { return c.tenantID }
+
+// TenantSlug returns the resolved tenant URL slug (set during connect).
+func (c *Client) TenantSlug() string { return c.tenantSlug }
+
+// IsOwner returns true if the client has the owner role (tenant management + full access).
+func (c *Client) IsOwner() bool { return c.role == permissions.RoleOwner }
+
+// HasScope reports whether the client has the given scope.
+func (c *Client) HasScope(scope permissions.Scope) bool {
+	return slices.Contains(c.scopes, scope)
+}
+
+// hasTeamAccess checks if the client has access to a team (for event filtering).
+// Returns true for admin role. For others, checks the lazily-populated teamIDs cache.
+// TODO: populate teamIDs from team_user_grants on connect or first team event.
+func (c *Client) hasTeamAccess(teamID string) bool {
+	if permissions.HasMinRole(c.role, permissions.RoleAdmin) {
+		return true
+	}
+	if c.teamIDs == nil {
+		return false
+	}
+	return c.teamIDs[teamID]
+}
+
+// SetTeamAccess sets the team access cache for this client.
+func (c *Client) SetTeamAccess(teamIDs []string) {
+	c.teamIDs = make(map[string]bool, len(teamIDs))
+	for _, id := range teamIDs {
+		c.teamIDs[id] = true
+	}
+}
 
 // Close shuts down the client connection.
 func (c *Client) Close() {

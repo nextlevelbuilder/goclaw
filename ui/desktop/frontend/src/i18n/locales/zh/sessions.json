@@ -1,0 +1,45 @@
+{
+  "title": "Session",
+  "description": "浏览对话Session",
+  "searchPlaceholder": "搜索Session...",
+  "emptyTitle": "暂无Session",
+  "emptyDescription": "开始聊天后Session将显示在此处。",
+  "noMatchTitle": "未找到匹配的Session",
+  "noMatchDescription": "请尝试其他搜索词。",
+  "columns": {
+    "session": "Session",
+    "agent": "Agent",
+    "context": "上下文",
+    "messages": "消息",
+    "updated": "更新时间"
+  },
+  "contextBar": {
+    "compacted": "已压缩 {{count}} 次"
+  },
+  "detail": {
+    "reset": "重置",
+    "delete": "删除",
+    "deleteTitle": "删除Session",
+    "deleteDescription": "这将永久删除此Session中的所有消息。",
+    "resetTitle": "重置Session",
+    "resetDescription": "这将清除所有消息但保留Session。",
+    "confirmDelete": "删除",
+    "confirmReset": "重置",
+    "noMessages": "此Session中没有消息",
+    "summary": "摘要",
+    "showMore": "显示更多",
+    "showLess": "收起",
+    "showDetails": "显示详情",
+    "hide": "隐藏",
+    "systemMessage": "系统消息",
+    "messages": "条消息"
+  },
+  "toast": {
+    "deleted": "Session已删除",
+    "deleteFailed": "删除Session失败",
+    "reset": "Session已重置",
+    "resetFailed": "重置Session失败",
+    "updated": "Session已更新",
+    "updateFailed": "更新Session失败"
+  }
+}

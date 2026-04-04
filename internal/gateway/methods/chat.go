@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -22,11 +23,11 @@ import (
 
 // ChatMethods handles chat.send, chat.history, chat.abort, chat.inject.
 type ChatMethods struct {
-	agents      *agent.Router
-	sessions    store.SessionStore
-	rateLimiter *gateway.RateLimiter
-	eventBus    bus.EventPublisher
-	postTurn    tools.PostTurnProcessor
+	agents         *agent.Router
+	sessions       store.SessionStore
+	rateLimiter    *gateway.RateLimiter
+	eventBus       bus.EventPublisher
+	postTurn tools.PostTurnProcessor
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
@@ -44,6 +45,39 @@ func (m *ChatMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodChatHistory, m.handleHistory)
 	router.Register(protocol.MethodChatAbort, m.handleAbort)
 	router.Register(protocol.MethodChatInject, m.handleInject)
+	router.Register(protocol.MethodChatSessionStatus, m.handleSessionStatus)
+}
+
+// handleSessionStatus returns the running state and activity for a session.
+// Used by the frontend to restore UI state after switching between sessions.
+func (m *ChatMethods) handleSessionStatus(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params struct {
+		SessionKey string `json:"sessionKey"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil || params.SessionKey == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "sessionKey required"))
+		return
+	}
+
+	isRunning := m.agents.IsSessionBusy(params.SessionKey)
+	var runId string
+	if rid, ok := m.agents.SessionRunID(params.SessionKey); ok {
+		runId = rid
+	}
+	var activity map[string]any
+	if status := m.agents.GetActivity(params.SessionKey); status != nil {
+		activity = map[string]any{
+			"phase":     status.Phase,
+			"tool":      status.Tool,
+			"iteration": status.Iteration,
+		}
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"isRunning": isRunning,
+		"runId":     runId,
+		"activity":  activity,
+	}))
 }
 
 // chatMediaItem represents a media file attached to a chat message.
@@ -114,7 +148,7 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		}
 	}
 
-	loop, err := m.agents.Get(params.AgentID)
+	loop, err := m.agents.Get(ctx, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
@@ -213,8 +247,12 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		})
 
 		if err != nil {
-			// Don't send error if context was cancelled (abort)
+			// Send cancelled response so the frontend's chat.send promise resolves
+			// instead of hanging until the 600s timeout.
 			if runCtx.Err() != nil {
+				client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+					"cancelled": true,
+				}))
 				return
 			}
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
@@ -222,24 +260,25 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		}
 
 		// Auto-generate conversation title on first message (label empty = never titled).
-		if label := m.sessions.GetLabel(sessionKey); label == "" {
+		if label := m.sessions.GetLabel(ctx, sessionKey); label == "" {
 			agentProvider := loop.Provider()
 			agentModel := loop.Model()
 			userMsg := params.Message
+			// Use runCtxBase (WithoutCancel + tenant-aware) so title save uses correct tenant.
+			titleCtx := runCtxBase
 			go func() {
-				title := agent.GenerateTitle(context.Background(), agentProvider, agentModel, userMsg)
+				title := agent.GenerateTitle(titleCtx, agentProvider, agentModel, userMsg)
 				if title == "" {
 					return
 				}
-				m.sessions.SetLabel(sessionKey, title)
-				if err := m.sessions.Save(sessionKey); err != nil {
+				m.sessions.SetLabel(titleCtx, sessionKey, title)
+				if err := m.sessions.Save(titleCtx, sessionKey); err != nil {
 					slog.Warn("failed to save session title", "sessionKey", sessionKey, "error", err)
 					return
 				}
-				m.eventBus.Broadcast(bus.Event{
-					Name:    protocol.EventSessionUpdated,
-					Payload: map[string]string{"sessionKey": sessionKey, "label": title},
-				})
+				bus.BroadcastForTenant(m.eventBus, protocol.EventSessionUpdated,
+					client.TenantID(),
+					map[string]string{"sessionKey": sessionKey, "label": title, "userId": userID})
 			}()
 		}
 
@@ -277,7 +316,16 @@ func (m *ChatMethods) handleHistory(ctx context.Context, client *gateway.Client,
 		sessionKey = sessions.BuildWSSessionKey(params.AgentID, uuid.NewString())
 	}
 
-	history := m.sessions.GetHistory(sessionKey)
+	history := m.sessions.GetHistory(ctx, sessionKey)
+
+	// Sign file URLs before delivery — sessions store clean paths.
+	secret := httpapi.FileSigningKey()
+	for i := range history {
+		history[i].Content = httpapi.SignFileURLs(history[i].Content, secret)
+		for j := range history[i].MediaRefs {
+			history[i].MediaRefs[j].Path = httpapi.SignMediaPath(history[i].MediaRefs[j].Path, secret)
+		}
+	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"messages": history,
@@ -320,7 +368,7 @@ func (m *ChatMethods) handleInject(ctx context.Context, client *gateway.Client, 
 
 	// Create an assistant message with gateway-injected metadata
 	messageID := uuid.NewString()
-	m.sessions.AddMessage(params.SessionKey, providers.Message{
+	m.sessions.AddMessage(ctx, params.SessionKey, providers.Message{
 		Role:    "assistant",
 		Content: text,
 	})

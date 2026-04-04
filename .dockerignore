@@ -16,6 +16,8 @@ tmp/
 .claude/
 .vscode/
 .idea/
-ui/
+ui/desktop/
+ui/simple-saas/
+!ui/web/
 plans/
 skills-store/

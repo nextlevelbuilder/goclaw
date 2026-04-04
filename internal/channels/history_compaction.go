@@ -15,8 +15,8 @@ import (
 
 // CompactionConfig configures LLM-based history compaction.
 type CompactionConfig struct {
-	Threshold  int                // trigger compaction when entries exceed this (default 100)
-	KeepRecent int                // keep this many recent raw messages (default 15)
+	Threshold  int                // trigger compaction when entries exceed this (default 200)
+	KeepRecent int                // keep this many recent raw messages (default 40)
 	MaxTokens  int                // max output tokens for summarization (default 4096)
 	Provider   providers.Provider // LLM provider for summarization
 	Model      string             // model to use for summarization
@@ -37,7 +37,7 @@ func (ph *PendingHistory) MaybeCompact(historyKey string, currentCount int, cfg 
 	// RAM count may be stale after restart (LoadFromDB doesn't warm full history).
 	// If RAM says below threshold, ask DB for the real count.
 	if currentCount <= threshold {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(ph.tenantCtx(), 10*time.Second)
 		defer cancel()
 		dbCount, err := ph.store.CountByKey(ctx, ph.channelName, historyKey)
 		if err != nil || dbCount <= threshold {
@@ -57,7 +57,7 @@ func (ph *PendingHistory) MaybeCompact(historyKey string, currentCount int, cfg 
 // Returns the number of entries remaining after compaction.
 func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName, historyKey string, provider providers.Provider, model string, keepRecent, maxTokens int) (int, error) {
 	if keepRecent <= 0 {
-		keepRecent = 15
+		keepRecent = 40
 	}
 	if maxTokens <= 0 {
 		maxTokens = 4096
@@ -129,6 +129,37 @@ func CompactGroup(ctx context.Context, s store.PendingMessageStore, channelName,
 	return remaining, nil
 }
 
+// sweepCompaction checks DB for groups exceeding compaction threshold.
+// Called periodically from flushLoop as a safety net for post-restart scenarios
+// where RAM is empty but DB has accumulated messages.
+func (ph *PendingHistory) sweepCompaction() {
+	cfg := ph.compactionCfg
+	if cfg == nil || cfg.Provider == nil || ph.store == nil {
+		return
+	}
+	threshold := cfg.Threshold
+	if threshold <= 0 {
+		threshold = DefaultGroupHistoryLimit
+	}
+
+	ctx, cancel := context.WithTimeout(ph.tenantCtx(), 30*time.Second)
+	defer cancel()
+
+	groups, err := ph.store.ListGroups(ctx)
+	if err != nil {
+		slog.Warn("compaction.sweep_failed", "channel", ph.channelName, "error", err)
+		return
+	}
+	for _, g := range groups {
+		if g.ChannelName != ph.channelName {
+			continue
+		}
+		if g.MessageCount > threshold {
+			ph.MaybeCompact(g.HistoryKey, g.MessageCount, cfg)
+		}
+	}
+}
+
 // runCompaction performs LLM-based summarization of old messages.
 // Wraps CompactGroup with flush + RAM update + threshold check.
 func (ph *PendingHistory) runCompaction(historyKey string, cfg *CompactionConfig) {
@@ -137,7 +168,7 @@ func (ph *PendingHistory) runCompaction(historyKey string, cfg *CompactionConfig
 	// Force-flush buffer to ensure DB is consistent
 	ph.flushNow()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+	ctx, cancel := context.WithTimeout(ph.tenantCtx(), 180*time.Second)
 	defer cancel()
 
 	// Check threshold from DB (may have been cleared since trigger)

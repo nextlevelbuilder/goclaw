@@ -1,0 +1,27 @@
+{
+  "app": {
+    "name": "GoClaw",
+    "tagline": "Cổng AI Agent"
+  },
+  "sidebar": {
+    "agents": "Agent",
+    "teams": "Nhóm",
+    "newChat": "Cuộc trò chuyện mới",
+    "settings": "Cài đặt"
+  },
+  "chat": {
+    "placeholder": "Nhập tin nhắn...",
+    "send": "Gửi",
+    "stop": "Dừng",
+    "thinking": "Đang suy nghĩ...",
+    "toolCalling": "Đang gọi {tool}...",
+    "toolCompleted": "Hoàn thành",
+    "toolError": "Lỗi"
+  },
+  "agent": {
+    "online": "Trực tuyến",
+    "busy": "Đang bận",
+    "offline": "Ngoại tuyến",
+    "idle": "Không hoạt động"
+  }
+}

@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GoClaw Codex Pool UI Before / After</title>
+    <style>
+      :root {
+        --bg: #120905;
+        --panel: #1c100b;
+        --panel-2: #24150f;
+        --text: #f6eee8;
+        --muted: #c5afa0;
+        --line: rgba(255, 220, 196, 0.16);
+        --accent: #ff7b3d;
+        --bad: #ff5d5d;
+        --good: #49d18c;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(255, 123, 61, 0.16), transparent 28%),
+          radial-gradient(circle at top right, rgba(255, 183, 120, 0.08), transparent 22%),
+          linear-gradient(180deg, #100704 0%, var(--bg) 100%);
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .wrap {
+        width: min(1500px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 32px 0 56px;
+      }
+
+      .hero {
+        padding: 28px 28px 24px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border: 1px solid rgba(255, 123, 61, 0.28);
+        border-radius: 999px;
+        color: #ffd2ba;
+        background: rgba(255, 123, 61, 0.1);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 14px 0 12px;
+        font-size: clamp(30px, 5vw, 52px);
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+      }
+
+      .hero p {
+        max-width: 980px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.6;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .meta-card {
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .meta-label {
+        color: #d9c1b2;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .meta-value {
+        margin-top: 8px;
+        font-size: 15px;
+        line-height: 1.45;
+        color: var(--text);
+        word-break: break-word;
+      }
+
+      .section {
+        margin-top: 28px;
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.022), rgba(255, 255, 255, 0.015));
+        box-shadow: var(--shadow);
+      }
+
+      .section h2 {
+        margin: 0;
+        font-size: 26px;
+        letter-spacing: -0.03em;
+      }
+
+      .section-intro {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .findings {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .finding {
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+      }
+
+      .finding strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+        letter-spacing: 0.01em;
+      }
+
+      .finding p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .comparison {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .shot {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel);
+      }
+
+      .shot-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .shot-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .tag.before {
+        color: #ffd3d3;
+        background: rgba(255, 93, 93, 0.14);
+        border: 1px solid rgba(255, 93, 93, 0.22);
+      }
+
+      .tag.after {
+        color: #d9ffea;
+        background: rgba(73, 209, 140, 0.14);
+        border: 1px solid rgba(73, 209, 140, 0.22);
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+        background: #0b0502;
+      }
+
+      .caption {
+        padding: 14px 16px 18px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .caption ul {
+        margin: 10px 0 0 18px;
+        padding: 0;
+      }
+
+      .caption li + li {
+        margin-top: 8px;
+      }
+
+      .foot {
+        margin-top: 28px;
+        padding: 18px 20px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #ffe8d8;
+        font-family:
+          ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          Consolas,
+          monospace;
+        font-size: 0.95em;
+      }
+
+      @media (max-width: 1100px) {
+        .meta-grid,
+        .comparison,
+        .findings {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .wrap {
+          width: min(100vw - 24px, 100%);
+          padding-top: 18px;
+        }
+
+        .hero,
+        .section {
+          padding: 18px;
+          border-radius: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <div class="eyebrow">UI Test Visual Report</div>
+        <h1>Provider-owned Codex pool UI before / after</h1>
+        <p>
+          This comparison uses two real local GoClaw dashboards seeded with the same fixture data.
+          The only difference is the code revision:
+          <code>main@b38a078e</code> versus <code>fix@faf98c73</code>.
+          The screenshots below isolate the two regressions fixed by the PR: hidden saved pool
+          membership on provider pages, and sticky custom routing state on agent pages.
+        </p>
+
+        <div class="meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Before Revision</div>
+            <div class="meta-value"><code>b38a078e</code><br />origin/main</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">After Revision</div>
+            <div class="meta-value"><code>faf98c73</code><br />PR branch</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Fixture</div>
+            <div class="meta-value">
+              <code>codex-owner</code> owns pool membership<br />
+              <code>codex-disabled</code> is saved as a disabled member<br />
+              <code>solo-agent</code> uses <code>codex-solo</code> with no saved pool defaults
+            </div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Capture Method</div>
+            <div class="meta-value">
+              Real local UI via Playwright<br />
+              SQLite-backed gateways on separate ports
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Scenario 1: provider page hides saved non-ready members</h2>
+        <p class="section-intro">
+          The provider page should show saved pool membership even when an extra account is disabled
+          or not ready. Before the fix, the page derived membership only from quota-fetched ready
+          accounts, so the saved member disappeared entirely.
+        </p>
+
+        <div class="findings">
+          <div class="finding">
+            <strong>What was broken on main</strong>
+            <p>
+              The pool owner <code>codex-owner</code> had a saved extra member
+              <code>codex-disabled</code>, but the UI rendered <code>0 in pool</code>, an empty
+              account list, and no selectable extra account.
+            </p>
+          </div>
+          <div class="finding">
+            <strong>What the patch changes</strong>
+            <p>
+              The page now renders membership from the saved provider settings, while still limiting
+              quota lookups to ready accounts only. The disabled member remains visible and clearly
+              labeled as blocked.
+            </p>
+          </div>
+        </div>
+
+        <div class="comparison">
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Provider Detail</div>
+              <span class="tag before">Before</span>
+            </div>
+            <img src="./before-provider-overview.png" alt="Before fix: provider detail hides the saved disabled pool member." />
+            <div class="caption">
+              Main branch behavior:
+              <ul>
+                <li><code>Available Extra Accounts</code> is effectively empty.</li>
+                <li><code>Accounts in Pool</code> shows <code>0 in pool</code>.</li>
+                <li>The saved disabled member is invisible, so the provider-owned pool looks unsaved.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Provider Detail</div>
+              <span class="tag after">After</span>
+            </div>
+            <img src="./after-provider-overview.png" alt="After fix: provider detail shows the saved disabled pool member and pool count." />
+            <div class="caption">
+              Fixed branch behavior:
+              <ul>
+                <li><code>Codex Disabled</code> is visible in <code>Available Extra Accounts</code>.</li>
+                <li><code>Accounts in Pool</code> correctly shows <code>2 in pool</code>.</li>
+                <li>The disabled member is still shown as saved, with blocked state clearly surfaced.</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Scenario 2: agent page manufactured a sticky custom override</h2>
+        <p class="section-intro">
+          When an agent had no explicit routing override and the provider had no saved pool yet,
+          the UI should have represented that state as <em>inherit / use provider defaults</em>.
+          Before the fix, the draft model incorrectly materialized it as a saved custom
+          <code>primary_first + []</code> state.
+        </p>
+
+        <div class="findings">
+          <div class="finding">
+            <strong>What was broken on main</strong>
+            <p>
+              The agent page defaulted to <code>Custom For This Agent</code> and framed the agent as
+              if it had its own routing policy, even though there was no provider-owned pool and no
+              explicit agent override saved.
+            </p>
+          </div>
+          <div class="finding">
+            <strong>What the patch changes</strong>
+            <p>
+              The draft state now preserves a true inherit mode. The UI shows
+              <code>Use Provider Defaults</code> and clarifies that the agent stays on its primary
+              account until provider-owned pool members are later added.
+            </p>
+          </div>
+        </div>
+
+        <div class="comparison">
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Agent Codex Pool</div>
+              <span class="tag before">Before</span>
+            </div>
+            <img src="./before-agent-codex-pool.png" alt="Before fix: agent page defaults to Custom For This Agent even with no provider-owned pool." />
+            <div class="caption">
+              Main branch behavior:
+              <ul>
+                <li><code>Custom For This Agent</code> is selected by default.</li>
+                <li>The copy tells the user to configure provider members first before enabling pooled routing.</li>
+                <li>This makes the implicit default state look like an explicit agent override.</li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="shot">
+            <div class="shot-head">
+              <div class="shot-title">Agent Codex Pool</div>
+              <span class="tag after">After</span>
+            </div>
+            <img src="./after-agent-codex-pool.png" alt="After fix: agent page defaults to Use Provider Defaults and explains the temporary primary-only behavior." />
+            <div class="caption">
+              Fixed branch behavior:
+              <ul>
+                <li><code>Use Provider Defaults</code> is selected.</li>
+                <li>The helper copy explains the temporary primary-only behavior without inventing a custom override.</li>
+                <li>The agent can stay in inherit mode now and automatically pick up provider pool members later.</li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="foot">
+        Generated from a real local browser session using two SQLite-backed GoClaw instances.
+        The frontends were served from separate Vite dev servers, authenticated with
+        <code>system</code> + a local owner token, and seeded through the HTTP API with the same
+        provider / agent records before capture.
+      </section>
+    </main>
+  </body>
+</html>

@@ -16,11 +16,10 @@ import (
 type UsageHandler struct {
 	snapshots store.SnapshotStore
 	db        *sql.DB
-	token     string
 }
 
-func NewUsageHandler(snapshots store.SnapshotStore, db *sql.DB, token string) *UsageHandler {
-	return &UsageHandler{snapshots: snapshots, db: db, token: token}
+func NewUsageHandler(snapshots store.SnapshotStore, db *sql.DB) *UsageHandler {
+	return &UsageHandler{snapshots: snapshots, db: db}
 }
 
 func (h *UsageHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -30,7 +29,7 @@ func (h *UsageHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *UsageHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *UsageHandler) handleTimeSeries(w http.ResponseWriter, r *http.Request) {
@@ -185,6 +184,17 @@ func (h *UsageHandler) queryLiveHour(r *http.Request, from, to time.Time, q stor
 
 	args := []any{from, to}
 	idx := 3
+
+	// Tenant isolation: scope to caller's tenant
+	if !store.IsOwnerRole(r.Context()) {
+		tid := store.TenantIDFromContext(r.Context())
+		if tid != uuid.Nil {
+			query += fmt.Sprintf(" AND tenant_id = $%d", idx)
+			args = append(args, tid)
+			idx++
+		}
+	}
+
 	if q.AgentID != nil {
 		query += fmt.Sprintf(" AND agent_id = $%d", idx)
 		args = append(args, *q.AgentID)

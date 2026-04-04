@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -137,12 +138,29 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 		return tools.ErrorResult("action is required")
 	}
 
+	// Propagate tenant ID from store context to browser context for page isolation.
+	if tid := store.TenantIDFromContext(ctx); tid.String() != "00000000-0000-0000-0000-000000000000" {
+		ctx = WithTenantID(ctx, tid.String())
+	}
+
 	// Auto-start browser for actions that need it
 	switch action {
 	case "open", "snapshot", "screenshot", "navigate", "act", "tabs":
 		if err := t.manager.Start(ctx); err != nil {
 			return tools.ErrorResult(fmt.Sprintf("failed to start browser: %v", err))
 		}
+	}
+
+	// Apply per-action timeout for heavy operations
+	switch action {
+	case "open", "navigate", "snapshot", "screenshot", "act":
+		timeout := t.manager.ActionTimeout()
+		if ms, ok := args["timeoutMs"].(float64); ok && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
 
 	switch action {
@@ -165,7 +183,7 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 	case "navigate":
 		return t.handleNavigate(ctx, args)
 	case "console":
-		return t.handleConsole(args)
+		return t.handleConsole(ctx, args)
 	case "act":
 		return t.handleAct(ctx, args)
 	default:
@@ -257,8 +275,16 @@ func (t *BrowserTool) handleScreenshot(ctx context.Context, args map[string]any)
 		return tools.ErrorResult(fmt.Sprintf("screenshot failed: %v", err))
 	}
 
-	// Save to temp file so the media pipeline can deliver it (e.g. Telegram sendPhoto)
-	imagePath := filepath.Join(os.TempDir(), fmt.Sprintf("goclaw_screenshot_%d.png", time.Now().UnixNano()))
+	// Save to workspace/screenshots/ so the agent can access the file.
+	// Falls back to os.TempDir() if workspace is not available.
+	screenshotDir := filepath.Join(os.TempDir(), "goclaw_screenshots")
+	if ws := tools.ToolWorkspaceFromCtx(ctx); ws != "" {
+		screenshotDir = filepath.Join(ws, "screenshots")
+	}
+	if err := os.MkdirAll(screenshotDir, 0755); err != nil {
+		return tools.ErrorResult(fmt.Sprintf("failed to create screenshots directory: %v", err))
+	}
+	imagePath := filepath.Join(screenshotDir, fmt.Sprintf("screenshot_%d.png", time.Now().UnixNano()))
 	if err := os.WriteFile(imagePath, data, 0644); err != nil {
 		return tools.ErrorResult(fmt.Sprintf("failed to save screenshot: %v", err))
 	}
@@ -279,9 +305,9 @@ func (t *BrowserTool) handleNavigate(ctx context.Context, args map[string]any) *
 	return tools.NewResult(fmt.Sprintf("Navigated to %s", url))
 }
 
-func (t *BrowserTool) handleConsole(args map[string]any) *tools.Result {
+func (t *BrowserTool) handleConsole(ctx context.Context, args map[string]any) *tools.Result {
 	targetID, _ := args["targetId"].(string)
-	msgs := t.manager.ConsoleMessages(targetID)
+	msgs := t.manager.ConsoleMessages(ctx, targetID)
 	return jsonResult(msgs)
 }
 

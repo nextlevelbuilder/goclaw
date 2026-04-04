@@ -29,6 +29,16 @@ const (
 	SharedKGKey contextKey = "goclaw_shared_kg"
 	// ShellDenyGroupsKey holds per-agent shell deny group overrides.
 	ShellDenyGroupsKey contextKey = "goclaw_shell_deny_groups"
+	// AgentKeyKey is the context key for the agent key/name (string identifier, e.g. "default").
+	AgentKeyKey contextKey = "goclaw_agent_key"
+	// TenantIDKey is the context key for the tenant UUID.
+	TenantIDKey contextKey = "goclaw_tenant_id"
+	// CrossTenantKey indicates the caller has cross-tenant access (owner/system admin).
+	CrossTenantKey contextKey = "goclaw_cross_tenant"
+	// TenantSlugKey stores the tenant's URL-safe slug for filesystem paths.
+	TenantSlugKey contextKey = "goclaw_tenant_slug"
+	// RoleKey is the context key for the caller's permission role (e.g. "admin", "operator", "viewer").
+	RoleKey contextKey = "goclaw_role"
 )
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
@@ -38,8 +48,13 @@ func WithShellDenyGroups(ctx context.Context, groups map[string]bool) context.Co
 
 // ShellDenyGroupsFromContext returns shell deny group overrides from the context, or nil.
 func ShellDenyGroupsFromContext(ctx context.Context) map[string]bool {
-	v, _ := ctx.Value(ShellDenyGroupsKey).(map[string]bool)
-	return v
+	if v, _ := ctx.Value(ShellDenyGroupsKey).(map[string]bool); v != nil {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.ShellDenyGroups
+	}
+	return nil
 }
 
 // WithUserID returns a new context with the given user ID.
@@ -49,8 +64,11 @@ func WithUserID(ctx context.Context, id string) context.Context {
 
 // UserIDFromContext extracts the user ID from context. Returns "" if not set.
 func UserIDFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(UserIDKey).(string); ok {
+	if v, ok := ctx.Value(UserIDKey).(string); ok && v != "" {
 		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.UserID
 	}
 	return ""
 }
@@ -62,8 +80,11 @@ func WithAgentID(ctx context.Context, id uuid.UUID) context.Context {
 
 // AgentIDFromContext extracts the agent UUID from context. Returns uuid.Nil if not set.
 func AgentIDFromContext(ctx context.Context) uuid.UUID {
-	if v, ok := ctx.Value(AgentIDKey).(uuid.UUID); ok {
+	if v, ok := ctx.Value(AgentIDKey).(uuid.UUID); ok && v != uuid.Nil {
 		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.AgentID
 	}
 	return uuid.Nil
 }
@@ -75,8 +96,27 @@ func WithAgentType(ctx context.Context, t string) context.Context {
 
 // AgentTypeFromContext extracts the agent type from context. Returns "" if not set.
 func AgentTypeFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(AgentTypeKey).(string); ok {
+	if v, ok := ctx.Value(AgentTypeKey).(string); ok && v != "" {
 		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.AgentType
+	}
+	return ""
+}
+
+// WithAgentKey returns a new context with the agent key/name (string identifier).
+func WithAgentKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, AgentKeyKey, key)
+}
+
+// AgentKeyFromContext extracts the agent key from context. Returns "" if not set.
+func AgentKeyFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(AgentKeyKey).(string); ok && v != "" {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.AgentKey
 	}
 	return ""
 }
@@ -88,8 +128,11 @@ func WithSenderID(ctx context.Context, id string) context.Context {
 
 // SenderIDFromContext extracts the sender ID from context. Returns "" if not set.
 func SenderIDFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(SenderIDKey).(string); ok {
+	if v, ok := ctx.Value(SenderIDKey).(string); ok && v != "" {
 		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.SenderID
 	}
 	return ""
 }
@@ -104,6 +147,9 @@ func SelfEvolveFromContext(ctx context.Context) bool {
 	if v, ok := ctx.Value(SelfEvolveKey).(bool); ok {
 		return v
 	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.SelfEvolve
+	}
 	return false
 }
 
@@ -114,8 +160,13 @@ func WithSharedMemory(ctx context.Context) context.Context {
 
 // IsSharedMemory returns true if memory should be shared across users.
 func IsSharedMemory(ctx context.Context) bool {
-	v, _ := ctx.Value(SharedMemoryKey).(bool)
-	return v
+	if v, ok := ctx.Value(SharedMemoryKey).(bool); ok {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.SharedMemory
+	}
+	return false
 }
 
 // MemoryUserID returns the userID to use for memory operations.
@@ -143,8 +194,13 @@ func WithSharedKG(ctx context.Context) context.Context {
 
 // IsSharedKG returns true if the knowledge graph should be shared across users.
 func IsSharedKG(ctx context.Context) bool {
-	v, _ := ctx.Value(SharedKGKey).(bool)
-	return v
+	if v, ok := ctx.Value(SharedKGKey).(bool); ok {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.SharedKG
+	}
+	return false
 }
 
 // WithLocale returns a new context with the given locale.
@@ -158,4 +214,72 @@ func LocaleFromContext(ctx context.Context) string {
 		return v
 	}
 	return "en"
+}
+
+// WithTenantID returns a new context with the given tenant UUID.
+func WithTenantID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, TenantIDKey, id)
+}
+
+// TenantIDFromContext extracts the tenant UUID from context.
+// Returns uuid.Nil if not set (fail-closed — callers must check).
+func TenantIDFromContext(ctx context.Context) uuid.UUID {
+	if v, ok := ctx.Value(TenantIDKey).(uuid.UUID); ok && v != uuid.Nil {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil {
+		return rc.TenantID
+	}
+	return uuid.Nil
+}
+
+// WithCrossTenant returns a context flagged for cross-tenant access.
+// Deprecated: Only used by skills store (is_system dual-visibility pattern).
+// All other callers must use explicit tenant context or unscoped store methods.
+func WithCrossTenant(ctx context.Context) context.Context {
+	return context.WithValue(ctx, CrossTenantKey, true)
+}
+
+// IsCrossTenant returns true if the caller has cross-tenant access.
+// Deprecated: Only used by skills store and inline pg/*.go tenant checks.
+// Permission guards should use IsOwnerRole(). SQL queries use tenantClauseN() (no bypass).
+func IsCrossTenant(ctx context.Context) bool {
+	v, _ := ctx.Value(CrossTenantKey).(bool)
+	return v
+}
+
+// IsOwnerRole returns true if the caller has the "owner" role.
+// Replaces IsCrossTenant for permission guards.
+func IsOwnerRole(ctx context.Context) bool {
+	return RoleFromContext(ctx) == string(RoleOwner)
+}
+
+// RoleOwner is the owner role constant for context checks.
+// Must match permissions.RoleOwner.
+const RoleOwner = "owner"
+
+// WithTenantSlug returns a new context with the given tenant slug.
+func WithTenantSlug(ctx context.Context, slug string) context.Context {
+	return context.WithValue(ctx, TenantSlugKey, slug)
+}
+
+// TenantSlugFromContext extracts the tenant slug from context. Returns "" if not set.
+func TenantSlugFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(TenantSlugKey).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// WithRole returns a new context with the caller's permission role.
+func WithRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, RoleKey, role)
+}
+
+// RoleFromContext extracts the permission role from context. Returns "" if not set.
+func RoleFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(RoleKey).(string); ok {
+		return v
+	}
+	return ""
 }

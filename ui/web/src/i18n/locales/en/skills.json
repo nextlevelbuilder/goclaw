@@ -73,6 +73,13 @@
     "disable": "Disable skill",
     "disabled": "Disabled"
   },
+  "tenant": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "default": "Default",
+    "overrideHint": "Per-tenant override for this skill",
+    "resetDefault": "Reset to default"
+  },
   "deps": {
     "rescan": "Rescan Deps",
     "rescanning": "Scanning...",
@@ -92,8 +99,9 @@
     "statusActive": "Active",
     "statusArchived": "Missing deps",
     "runtimeMissing": "Runtime Prerequisites Missing",
-    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
-    "runtimeRequired": "Install runtimes first"
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes inside the GoClaw runtime container. Host-installed runtimes are not used here. If you are using the published latest image, missing runtimes can be expected there.",
+    "runtimeMissingAction": "Open Packages to verify or install runtimes in this container.",
+    "runtimeRequired": "Install container runtimes first"
   },
   "detail": {
     "title": "Skill Detail",
@@ -107,6 +115,9 @@
     "updated": "Skill updated",
     "updateFailed": "Failed to update skill",
     "deleted": "Skill deleted",
-    "deleteFailed": "Failed to delete skill"
+    "deleteFailed": "Failed to delete skill",
+    "rescanUpdated": "{{count}} skill(s) updated",
+    "rescanNoChanges": "All skills up to date",
+    "rescanFailed": "Failed to rescan dependencies"
   }
 }

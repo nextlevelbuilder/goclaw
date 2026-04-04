@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Plus, Trash2, Loader2, Shield, FolderOpen, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,12 @@ import {
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { useConfigPermissions, type ConfigPermission } from "../hooks/use-config-permissions";
-import { useContactSearch } from "../hooks/use-contact-search";
-import type { ChannelContact } from "@/types/contact";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
+import { useWs } from "@/hooks/use-ws";
+import { Methods } from "@/api/protocol";
+import type { DeliveryTarget } from "../hooks/use-agent-heartbeat";
 
 const CONFIG_TYPES = [
   { value: "file_writer",   label: "File Writer",   descKey: "permissions.types.file_writer_desc" },
@@ -19,18 +23,26 @@ const CONFIG_TYPES = [
   { value: "*",             label: "All (*)",       descKey: "permissions.types.all_desc" },
 ];
 
-function getScopeOptions(configType: string, existingScopes: string[]): ComboboxOption[] {
+function getScopeOptions(configType: string, targets: DeliveryTarget[]): ComboboxOption[] {
+  // Only groups — topic-level permissions are not supported by the backend scope check
+  const groupOptions = targets
+    .filter((t) => t.kind === "group")
+    .map((t) => ({
+      value: `group:${t.channel}:${t.chatId}`,
+      label: t.title ? `${t.title} (${t.chatId})` : t.chatId,
+    }));
+
   if (configType === "file_writer") {
-    const dynamic = existingScopes.map((s) => ({ value: s, label: s }));
     return [
       { value: "group:*", label: "All Groups" },
-      ...dynamic,
+      ...groupOptions,
       { value: "*", label: "Global (*)" },
     ];
   }
   return [
     { value: "agent", label: "Agent (DM)" },
     { value: "group:*", label: "All Groups" },
+    ...groupOptions,
     { value: "*", label: "Global (*)" },
   ];
 }
@@ -41,6 +53,7 @@ interface AgentPermissionsTabProps {
 
 export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
   const { t } = useTranslation("agents");
+  const ws = useWs();
   const { permissions, loading, load, grant, revoke } = useConfigPermissions(agentId);
 
   const [userId, setUserId] = useState("");
@@ -48,34 +61,38 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
   const [scope, setScope] = useState("group:*");
   const [permission, setPermission] = useState("allow");
   const [adding, setAdding] = useState(false);
-  const [selectedContact, setSelectedContact] = useState<ChannelContact | null>(null);
+  const [targets, setTargets] = useState<DeliveryTarget[]>([]);
 
-  const { contacts } = useContactSearch(userId);
+  // Fetch delivery targets (groups/topics) from channel_contacts
+  const loadTargets = useCallback(async () => {
+    if (!agentId || !ws.isConnected) return;
+    try {
+      const res = await ws.call<{ targets: DeliveryTarget[] }>(
+        Methods.HEARTBEAT_TARGETS, { agentId },
+      );
+      setTargets(res.targets ?? []);
+    } catch { /* ignore — targets are optional enhancement */ }
+  }, [ws, agentId]);
 
-  const contactOptions: ComboboxOption[] = useMemo(() =>
-    contacts.map((c) => {
-      const name = c.display_name || c.sender_id;
-      const username = c.username ? ` @${c.username}` : "";
-      const channel = c.channel_type ? ` [${c.channel_type}]` : "";
-      return { value: c.sender_id, label: `${name}${username} (${c.sender_id})${channel}` };
-    }),
-    [contacts],
-  );
-
-  // Collect existing file_writer scopes for dynamic scope options
-  const existingFileWriterScopes = useMemo(() =>
-    [...new Set(
-      permissions
-        .filter((p) => p.configType === "file_writer")
-        .map((p) => p.scope)
-    )],
-    [permissions],
-  );
+  useEffect(() => { loadTargets(); }, [loadTargets]);
 
   const scopeOptions = useMemo(
-    () => getScopeOptions(configType, existingFileWriterScopes),
-    [configType, existingFileWriterScopes],
+    () => getScopeOptions(configType, targets),
+    [configType, targets],
   );
+
+  // Build scope → display label lookup from targets
+  const scopeLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set("group:*", t("permissions.scopes.group_all"));
+    map.set("*", t("permissions.scopes.global"));
+    map.set("agent", t("permissions.scopes.agent"));
+    for (const tgt of targets) {
+      const key = `group:${tgt.channel}:${tgt.chatId}`;
+      map.set(key, tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId);
+    }
+    return map;
+  }, [targets, t]);
 
   // Reset scope when configType changes
   useEffect(() => {
@@ -88,25 +105,11 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleUserChange = (val: string) => {
-    setUserId(val);
-    const contact = contacts.find((c) => c.sender_id === val);
-    setSelectedContact(contact ?? null);
-  };
-
   const handleAdd = async () => {
     if (!userId.trim()) return;
     setAdding(true);
-    const meta =
-      configType === "file_writer" && selectedContact
-        ? {
-            displayName: selectedContact.display_name ?? "",
-            username: selectedContact.username ?? "",
-          }
-        : undefined;
-    await grant(scope, configType, userId.trim(), permission, meta);
+    await grant(scope, configType, userId.trim(), permission);
     setUserId("");
-    setSelectedContact(null);
     setAdding(false);
   };
 
@@ -119,6 +122,13 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
     () => permissions.filter((p) => p.configType !== "file_writer"),
     [permissions],
   );
+
+  // Resolve user IDs to display names
+  const allPermUserIds = useMemo(
+    () => [...new Set(permissions.map((p) => p.userId))],
+    [permissions],
+  );
+  const { resolve } = useContactResolver(allPermUserIds);
 
   // Group file_writer by scope
   const fileWritersByScope = useMemo(() => {
@@ -158,10 +168,9 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
       {/* Add Rule form */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-end gap-2">
-          <Combobox
+          <UserPickerCombobox
             value={userId}
-            onChange={handleUserChange}
-            options={contactOptions}
+            onChange={setUserId}
             placeholder={t("permissions.userIdPlaceholder")}
             className="flex-1 min-w-[160px]"
           />
@@ -225,10 +234,10 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                   <div key={scopeKey}>
                     <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/40">
                       <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">{scopeKey}</span>
+                      <span className="text-xs font-medium text-muted-foreground">{scopeLabels.get(scopeKey) ?? scopeKey}</span>
                     </div>
                     {writers.map((p) => {
-                      const displayName = p.metadata?.displayName || p.userId;
+                      const label = p.metadata?.displayName || formatUserLabel(p.userId, resolve);
                       const username = p.metadata?.username ? ` @${p.metadata.username}` : "";
                       return (
                         <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 pl-7">
@@ -239,11 +248,10 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                             >
                               {p.permission}
                             </Badge>
-                            <span className="font-medium truncate">{displayName}</span>
+                            <span className="font-medium truncate">{label}</span>
                             {username && (
                               <span className="text-[11px] text-muted-foreground shrink-0">{username}</span>
                             )}
-                            <span className="text-[11px] text-muted-foreground shrink-0 font-mono">({p.userId})</span>
                           </div>
                           <Button
                             variant="ghost"
@@ -278,9 +286,9 @@ export function AgentPermissionsTab({ agentId }: AgentPermissionsTabProps) {
                       >
                         {p.permission}
                       </Badge>
-                      <span className="font-medium truncate">{p.userId}</span>
+                      <span className="font-medium truncate">{formatUserLabel(p.userId, resolve)}</span>
                       <span className="text-[11px] text-muted-foreground shrink-0">{p.configType}</span>
-                      <span className="text-[11px] text-muted-foreground shrink-0">@ {p.scope}</span>
+                      <span className="text-[11px] text-muted-foreground shrink-0">@ {scopeLabels.get(p.scope) ?? p.scope}</span>
                     </div>
                     <Button
                       variant="ghost"

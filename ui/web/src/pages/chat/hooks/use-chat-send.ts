@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useWs, useHttp } from "@/hooks/use-ws";
 import { Methods } from "@/api/protocol";
 import type { ChatMessage } from "@/types/chat";
@@ -25,6 +26,7 @@ export function useChatSend({
   onMessageAdded,
   onExpectRun,
 }: UseChatSendOptions) {
+  const { t } = useTranslation("chat");
   const ws = useWs();
   const http = useHttp();
   const [sending, setSending] = useState(false);
@@ -34,7 +36,11 @@ export function useChatSend({
     async (message: string, sessionKey: string, files?: AttachedFile[]) => {
       const hasMessage = message.trim().length > 0;
       const hasFiles = files && files.length > 0;
-      if (!ws.isConnected || (!hasMessage && !hasFiles) || !sessionKey) return;
+      if (!ws.isConnected) {
+        setError(t("error.notConnected"));
+        return;
+      }
+      if ((!hasMessage && !hasFiles) || !sessionKey) return;
 
       const trimmed = message.trim();
       setError(null);

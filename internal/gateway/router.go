@@ -5,8 +5,11 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
@@ -19,8 +22,10 @@ type MethodHandler func(ctx context.Context, client *Client, req *protocol.Reque
 
 // MethodRouter maps method names to handlers.
 type MethodRouter struct {
-	handlers map[string]MethodHandler
-	server   *Server
+	handlers    map[string]MethodHandler
+	server      *Server
+	tenantStore store.TenantStore      // optional, for enriching connect response
+	permCache   *cache.PermissionCache // optional, for caching tenant membership checks
 }
 
 func NewMethodRouter(server *Server) *MethodRouter {
@@ -31,6 +36,12 @@ func NewMethodRouter(server *Server) *MethodRouter {
 	r.registerDefaults()
 	return r
 }
+
+// SetTenantStore sets the tenant store for enriching connect responses with tenant name/slug.
+func (r *MethodRouter) SetTenantStore(ts store.TenantStore) { r.tenantStore = ts }
+
+// SetPermissionCache sets the permission cache for tenant membership checks.
+func (r *MethodRouter) SetPermissionCache(pc *cache.PermissionCache) { r.permCache = pc }
 
 // Register adds a method handler.
 func (r *MethodRouter) Register(method string, handler MethodHandler) {
@@ -60,15 +71,22 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 				client.SendResponse(protocol.NewErrorResponse(
 					req.ID,
 					protocol.ErrUnauthorized,
-					i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+					i18n.T(locale, i18n.MsgPermissionDenied, req.Method+" requires "+string(permissions.MethodRole(req.Method))+" role"),
 				))
 				return
 			}
 		}
 	}
 
-	// Inject locale into context for i18n support
+	// Inject locale + tenant into context.
+	// All connect paths guarantee client.tenantID is set (owner defaults to MasterTenantID).
 	ctx = store.WithLocale(ctx, i18n.Normalize(client.locale))
+	if client.TenantID() != uuid.Nil {
+		ctx = store.WithTenantID(ctx, client.TenantID())
+	}
+	if slug := client.TenantSlug(); slug != "" {
+		ctx = store.WithTenantSlug(ctx, slug)
+	}
 
 	slog.Debug("handling method", "method", req.Method, "client", client.id, "req_id", req.ID)
 	handler(ctx, client, req)
@@ -87,10 +105,13 @@ func (r *MethodRouter) registerDefaults() {
 func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *protocol.RequestFrame) {
 	// Parse connect params
 	var params struct {
-		Token    string `json:"token"`
-		UserID   string `json:"user_id"`
-		SenderID string `json:"sender_id"` // browser pairing: stored sender ID for reconnect
-		Locale   string `json:"locale"`    // user's preferred locale (en, vi, zh)
+		Token       string `json:"token"`
+		UserID      string `json:"user_id"`
+		SenderID    string `json:"sender_id"`    // browser pairing: stored sender ID for reconnect
+		Locale      string `json:"locale"`       // user's preferred locale (en, vi, zh)
+		TenantHint  string `json:"tenant_hint"`  // optional tenant slug for browser pairing multi-tenant
+		TenantID    string `json:"tenant_id"`    // cross-tenant admin: narrow scope to specific tenant (UUID or slug)
+		TenantScope string `json:"tenant_scope"` // deprecated: alias for tenant_id (backward compat)
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -106,7 +127,37 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		client.role = permissions.RoleAdmin
 		client.authenticated = true
 		client.userID = params.UserID
-		r.sendConnectResponse(client, req.ID)
+
+		// Owner IDs get RoleOwner; others keep RoleAdmin but are scoped to their tenant.
+		isOwner := isOwnerID(params.UserID, r.server.cfg.Gateway.OwnerIDs)
+		if isOwner {
+			client.role = permissions.RoleOwner
+			// Owner can narrow scope to a specific tenant via param
+			tenantScope := params.TenantID
+			if tenantScope == "" {
+				tenantScope = params.TenantScope // backward compat
+			}
+			r.applyTenantScope(ctx, client, tenantScope)
+			if client.tenantID == uuid.Nil {
+				client.tenantID = store.MasterTenantID
+			}
+		} else {
+			// Non-owner with gateway token: resolve tenant via hint or membership
+			hint := params.TenantID
+			if hint == "" {
+				hint = params.TenantHint
+			}
+			if hint == "" {
+				hint = params.TenantScope // deprecated
+			}
+			tid, errCode := r.resolveTenantHint(ctx, hint, params.UserID)
+			if errCode != "" {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, errCode, "tenant access revoked"))
+				return
+			}
+			client.tenantID = tid
+		}
+		r.sendConnectResponse(ctx, client, req.ID)
 		return
 	}
 
@@ -120,8 +171,43 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			client.role = role
 			client.scopes = scopes
 			client.authenticated = true
-			client.userID = params.UserID
-			r.sendConnectResponse(client, req.ID)
+			// If the key has a bound owner, force user_id to owner_id.
+			if keyData.OwnerID != "" {
+				if params.UserID != "" && params.UserID != keyData.OwnerID {
+					slog.Warn("security.ws_api_key_owner_override",
+						"param_user_id", params.UserID,
+						"owner_id", keyData.OwnerID,
+					)
+				}
+				client.userID = keyData.OwnerID
+			} else {
+				client.userID = params.UserID
+			}
+			if keyData.TenantID == uuid.Nil {
+				// System-level API keys keep their scope-derived role and may
+				// optionally narrow to a tenant without gaining owner privileges.
+				apiKeyScope := params.TenantID
+				if apiKeyScope == "" {
+					apiKeyScope = params.TenantScope // backward compat
+				}
+				r.applyTenantScope(ctx, client, apiKeyScope)
+				if client.tenantID == uuid.Nil {
+					client.tenantID = store.MasterTenantID
+				}
+				slog.Debug("security.ws_connect_resolved",
+					"client", client.id,
+					"role", string(client.role),
+					"tenant_id", client.tenantID.String(),
+				)
+			} else {
+				client.tenantID = keyData.TenantID
+				slog.Debug("security.ws_connect_resolved",
+					"client", client.id,
+					"role", string(client.role),
+					"tenant_id", client.tenantID.String(),
+				)
+			}
+			r.sendConnectResponse(ctx, client, req.ID)
 			return
 		}
 	}
@@ -131,7 +217,8 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		client.role = permissions.RoleOperator
 		client.authenticated = true
 		client.userID = params.UserID
-		r.sendConnectResponse(client, req.ID)
+		client.tenantID = store.MasterTenantID
+		r.sendConnectResponse(ctx, client, req.ID)
 		return
 	}
 
@@ -140,7 +227,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 
 	// Path 3a: Reconnecting with a previously-paired sender_id
 	if ps != nil && params.SenderID != "" {
-		paired, pairErr := ps.IsPaired(params.SenderID, "browser")
+		paired, pairErr := ps.IsPaired(ctx, params.SenderID, "browser")
 		if pairErr != nil {
 			slog.Warn("security.pairing_check_failed",
 				"sender_id", params.SenderID, "error", pairErr)
@@ -156,15 +243,21 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			client.userID = params.UserID
 			client.pairedSenderID = params.SenderID
 			client.pairedChannel = "browser"
-			slog.Info("browser pairing authenticated", "sender_id", params.SenderID, "client", client.id)
-			r.sendConnectResponse(client, req.ID)
+			tid, errCode := r.resolveTenantHint(ctx, params.TenantHint, params.UserID)
+			if errCode != "" {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, errCode, "tenant access revoked"))
+				return
+			}
+			client.tenantID = tid
+			slog.Info("browser pairing authenticated", "sender_id", params.SenderID, "client", client.id, "tenant_id", client.tenantID)
+			r.sendConnectResponse(ctx, client, req.ID)
 			return
 		}
 	}
 
 	// Path 3b: No token, no valid pairing → initiate browser pairing (if service available)
 	if ps != nil && params.Token == "" {
-		code, err := ps.RequestPairing(client.id, "browser", "", "default", nil)
+		code, err := ps.RequestPairing(ctx, client.id, "browser", "", "default", nil)
 		if err != nil {
 			slog.Warn("browser pairing request failed", "error", err, "client", client.id)
 			// Fall through to viewer role
@@ -179,7 +272,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				"sender_id":    client.id,
 				"server": map[string]any{
 					"name":    "goclaw",
-					"version": "0.2.0",
+					"version": r.server.version,
 				},
 			}))
 			return
@@ -190,19 +283,126 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 	client.role = permissions.RoleViewer
 	client.authenticated = true
 	client.userID = params.UserID
-	r.sendConnectResponse(client, req.ID)
+	tid, errCode := r.resolveTenantHint(ctx, params.TenantHint, params.UserID)
+	if errCode != "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, errCode, "tenant access revoked"))
+		return
+	}
+	client.tenantID = tid
+	r.sendConnectResponse(ctx, client, req.ID)
 }
 
-func (r *MethodRouter) sendConnectResponse(client *Client, reqID string) {
-	client.SendResponse(protocol.NewOKResponse(reqID, map[string]any{
-		"protocol": protocol.ProtocolVersion,
-		"role":     string(client.role),
-		"user_id":  client.userID,
+func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, reqID string) {
+	resp := map[string]any{
+		"protocol":  protocol.ProtocolVersion,
+		"role":      string(client.role),
+		"user_id":   client.userID,
+		"tenant_id": client.tenantID.String(),
+		"is_owner":  client.IsOwner(),
 		"server": map[string]any{
 			"name":    "goclaw",
-			"version": "0.2.0",
+			"version": r.server.version,
 		},
-	}))
+	}
+
+	// Enrich with tenant name/slug if tenant store available and tenant is set
+	if r.tenantStore != nil && client.tenantID != uuid.Nil {
+		if t, err := r.tenantStore.GetTenant(ctx, client.tenantID); err == nil && t != nil {
+			resp["tenant_name"] = t.Name
+			resp["tenant_slug"] = t.Slug
+			client.tenantName = t.Name
+			client.tenantSlug = t.Slug
+		}
+	}
+
+	client.SendResponse(protocol.NewOKResponse(reqID, resp))
+}
+
+// isOwnerID checks if the given user ID is in the configured owner list.
+// If no owner IDs configured, only "system" is treated as owner (fail-closed).
+func isOwnerID(userID string, ownerIDs []string) bool {
+	if userID == "" {
+		return false
+	}
+	if len(ownerIDs) == 0 {
+		return userID == "system"
+	}
+	return slices.Contains(ownerIDs, userID)
+}
+
+// resolveTenantHint resolves a tenant slug/UUID hint to a UUID with membership validation.
+// Non-admin users must be a member of the tenant.
+// Returns (uuid.Nil, ErrTenantAccessRevoked) when the user is not a member of the requested tenant.
+// Returns (MasterTenantID, "") when no hint is provided.
+func (r *MethodRouter) resolveTenantHint(ctx context.Context, hint, userID string) (uuid.UUID, string) {
+	if hint == "" || r.tenantStore == nil {
+		return store.MasterTenantID, ""
+	}
+	t, err := r.tenantStore.GetTenantBySlug(ctx, hint)
+	if err != nil || t == nil {
+		slog.Debug("tenant_hint not resolved, falling back to master", "hint", hint)
+		return store.MasterTenantID, ""
+	}
+
+	// Validate membership: user must belong to the requested tenant.
+	// Deny tenant access for anonymous users (no userID) — fail-closed.
+	if userID == "" {
+		slog.Warn("security.tenant_hint_denied_anonymous", "hint", hint, "tenant_id", t.ID)
+		return uuid.Nil, protocol.ErrTenantAccessRevoked
+	}
+	role, err := r.getUserTenantRole(ctx, t.ID, userID)
+	if err != nil || role == "" {
+		slog.Warn("security.tenant_access_revoked",
+			"hint", hint, "user", userID, "tenant_id", t.ID, "error", err)
+		return uuid.Nil, protocol.ErrTenantAccessRevoked
+	}
+	return t.ID, ""
+}
+
+// getUserTenantRole returns the user's role in a tenant, using permission cache if available.
+func (r *MethodRouter) getUserTenantRole(ctx context.Context, tenantID uuid.UUID, userID string) (string, error) {
+	// Check cache first
+	if r.permCache != nil {
+		if role, ok := r.permCache.GetTenantRole(ctx, tenantID, userID); ok {
+			slog.Debug("perm_cache.tenant_role.hit", "tenant", tenantID, "user", userID, "role", role)
+			return role, nil
+		}
+		slog.Debug("perm_cache.tenant_role.miss", "tenant", tenantID, "user", userID)
+	}
+
+	// Fallback to DB
+	role, err := r.tenantStore.GetUserRole(ctx, tenantID, userID)
+	if err != nil {
+		return "", err
+	}
+
+	// Cache the result (including empty role = not a member)
+	if r.permCache != nil {
+		r.permCache.SetTenantRole(ctx, tenantID, userID, role)
+	}
+	return role, nil
+}
+
+// applyTenantScope narrows an owner client's data scope to a specific tenant.
+// Sets client.tenantID so the router injects WithTenantID for data filtering.
+// Accepts both UUID and slug values.
+func (r *MethodRouter) applyTenantScope(ctx context.Context, client *Client, tenantVal string) {
+	if tenantVal == "" || r.tenantStore == nil {
+		return
+	}
+	var t *store.TenantData
+	var err error
+	if tid, parseErr := uuid.Parse(tenantVal); parseErr == nil {
+		t, err = r.tenantStore.GetTenant(ctx, tid)
+	} else {
+		t, err = r.tenantStore.GetTenantBySlug(ctx, tenantVal)
+	}
+	if err != nil || t == nil {
+		slog.Debug("tenant scope not resolved, keeping master", "value", tenantVal)
+		return
+	}
+	client.tenantID = t.ID
+	slog.Info("tenant scope applied", "client", client.id, "tenant", t.Slug, "tenant_id", t.ID)
 }
 
 func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *protocol.RequestFrame) {
@@ -249,7 +449,7 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 		toolCount = s.tools.Count()
 	}
 
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+	resp := map[string]any{
 		"status":    "ok",
 		"version":   s.version,
 		"uptime":    uptimeMs,
@@ -258,7 +458,16 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 		"tools":     toolCount,
 		"clients":   clientList,
 		"currentId": client.ID(),
-	}))
+	}
+	if s.updateChecker != nil {
+		if info := s.updateChecker.Info(); info != nil {
+			resp["latestVersion"] = info.LatestVersion
+			resp["updateAvailable"] = info.UpdateAvailable
+			resp["updateUrl"] = info.UpdateURL
+			resp["releaseNotes"] = info.ReleaseNotes
+		}
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, resp))
 }
 
 func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *protocol.RequestFrame) {
@@ -266,7 +475,7 @@ func (r *MethodRouter) handleStatus(ctx context.Context, client *Client, req *pr
 
 	sessionCount := 0
 	if r.server.sessions != nil {
-		sessionCount = len(r.server.sessions.List(""))
+		sessionCount = len(r.server.sessions.List(ctx, ""))
 	}
 
 	// Agents are lazily resolved — router only has loaded agents.

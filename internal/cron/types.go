@@ -27,9 +27,6 @@ type Payload struct {
 	Kind    string `json:"kind"`              // "agent_turn"
 	Message string `json:"message"`           // content to process
 	Command string `json:"command,omitempty"` // optional shell command
-	Deliver bool   `json:"deliver"`           // true = direct chat, false = agent processing
-	Channel string `json:"channel,omitempty"` // target channel (telegram, discord, etc.)
-	To      string `json:"to,omitempty"`      // target chat ID / recipient
 }
 
 // JobState tracks runtime state for a job.
@@ -52,6 +49,11 @@ type Job struct {
 	CreatedAtMS    int64    `json:"createdAtMs"`
 	UpdatedAtMS    int64    `json:"updatedAtMs"`
 	DeleteAfterRun bool     `json:"deleteAfterRun,omitempty"`
+	Stateless      bool     `json:"stateless"`
+	Deliver        bool     `json:"deliver"`
+	DeliverChannel string   `json:"deliverChannel"`
+	DeliverTo      string   `json:"deliverTo"`
+	WakeHeartbeat  bool     `json:"wakeHeartbeat"`
 }
 
 // Store is the persistent store for all cron jobs.
@@ -68,10 +70,12 @@ type JobPatch struct {
 	Enabled        *bool     `json:"enabled,omitempty"`
 	Schedule       *Schedule `json:"schedule,omitempty"`
 	Message        string    `json:"message,omitempty"`
-	Deliver        *bool     `json:"deliver,omitempty"`
-	Channel        *string   `json:"channel,omitempty"`
-	To             *string   `json:"to,omitempty"`
 	DeleteAfterRun *bool     `json:"deleteAfterRun,omitempty"`
+	Stateless      *bool     `json:"stateless,omitempty"`
+	Deliver        *bool     `json:"deliver,omitempty"`
+	DeliverChannel *string   `json:"deliverChannel,omitempty"`
+	DeliverTo      *string   `json:"deliverTo,omitempty"`
+	WakeHeartbeat  *bool     `json:"wakeHeartbeat,omitempty"`
 }
 
 // RunLogEntry is an in-memory record of a job execution.

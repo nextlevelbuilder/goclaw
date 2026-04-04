@@ -55,6 +55,7 @@
   "statCards": {
     "agents": "Agent",
     "channels": "Channel",
+    "channelsAttention": "{{count}} cần chú ý",
     "inOut": "Vào / Ra",
     "online": "Trực tuyến",
     "requestsToday": "Request hôm nay",
@@ -66,6 +67,12 @@
   "systemHealth": {
     "active": "hoạt động",
     "channels": "Channel",
+    "needsAttention": "Cần chú ý",
+    "channelsNeedingAttention": "{{count}} channel",
+    "failedCount": "{{count}} thất bại",
+    "warningCountOne": "{{count}} cảnh báo",
+    "warningCountOther": "{{count}} cảnh báo",
+    "moreAttention": "+{{count}} nữa",
     "clients": "Máy khách",
     "database": "Cơ sở dữ liệu",
     "none": "không có",
@@ -74,7 +81,13 @@
     "title": "Tình trạng hệ thống",
     "tools": "Công cụ",
     "uptime": "Thời gian hoạt động",
+    "version": "Phiên bản",
     "runtimes": "Môi trường runtime"
   },
-  "title": "Bảng điều khiển"
+  "title": "Bảng điều khiển",
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Chưa cấu hình",
+    "configure": "Cấu hình trong Providers →"
+  }
 }

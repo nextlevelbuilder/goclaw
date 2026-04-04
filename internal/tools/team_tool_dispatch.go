@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -15,6 +14,23 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// ============================================================
+// TeamToolBackend exported wrappers (dispatch layer)
+// ============================================================
+
+func (m *TeamToolManager) DispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, team *store.TeamData, agentID uuid.UUID) {
+	m.dispatchTaskToAgent(ctx, task, team, agentID)
+}
+func (m *TeamToolManager) BuildBlockerResultsSummary(ctx context.Context, task *store.TeamTaskData) string {
+	return m.buildBlockerResultsSummary(ctx, task)
+}
+func (m *TeamToolManager) BuildRecentCommentsSummary(ctx context.Context, taskID uuid.UUID) string {
+	return m.buildRecentCommentsSummary(ctx, taskID)
+}
+func (m *TeamToolManager) RestoreTraceContext(ctx context.Context, task *store.TeamTaskData) context.Context {
+	return m.restoreTraceContext(ctx, task)
+}
 
 // maxTaskDispatches is the max number of times a single task can be dispatched
 // before it auto-fails. Prevents infinite loops when agents can't complete a task.
@@ -28,8 +44,22 @@ const maxTaskDispatches = 3
 // falling back to ctx only for initial dispatch when the task is created and dispatched
 // in the same call. This ensures correct routing even when called from
 // DispatchUnblockedTasks (where ctx is the member agent's context, not the lead's).
-func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, teamID, agentID uuid.UUID) {
+func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, team *store.TeamData, agentID uuid.UUID) {
 	if m.msgBus == nil {
+		return
+	}
+	teamID := team.ID
+
+	// Safety net: never dispatch to the lead agent — causes dual-session loop.
+	// Self-assignment is blocked at create time, but catch edge cases
+	// from retry, ticker recovery, or manual DB edits.
+	if agentID == team.LeadAgentID {
+		slog.Warn("team_tasks.dispatch: blocked dispatch to lead agent",
+			"task_id", task.ID, "agent_id", agentID, "team_id", teamID)
+		_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
+			"status": store.TeamTaskStatusFailed,
+			"result": "Cannot dispatch task to the team lead — reassign to a team member",
+		})
 		return
 	}
 
@@ -62,23 +92,32 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		return
 	}
 
-	content := fmt.Sprintf("[Assigned task #%d (id: %s)]: %s", task.TaskNumber, task.ID, task.Subject)
+	var content strings.Builder
+	content.WriteString(fmt.Sprintf("[Assigned task #%d (id: %s)]: %s", task.TaskNumber, task.ID, task.Subject))
 	if task.Description != "" {
-		content += "\n\n" + task.Description
+		content.WriteString("\n\n" + task.Description)
 	}
 	// Hint: tell the agent it's on a team task and where the shared workspace is.
 	if ws := taskTeamWorkspace(task); ws != "" {
-		content += fmt.Sprintf("\n\n[Team workspace: %s — use read_file/write_file/list_files to access shared files. All files you write are visible to the team lead and other members.]", ws)
+		content.WriteString(fmt.Sprintf("\n\n[Team workspace: %s — use read_file/write_file/list_files to access shared files. All files you write are visible to the team lead and other members.]", ws))
 	}
 	// List attached files so member knows what's available to read.
 	if files, ok := task.Metadata["attached_files"].([]any); ok && len(files) > 0 {
-		content += "\n\n[Attached files in team workspace — use read_file to access:]"
+		content.WriteString("\n\n[Attached files in team workspace — use read_file to access:]")
 		for _, f := range files {
 			if path, ok := f.(string); ok {
-				content += "\n- attachments/" + filepath.Base(path)
+				content.WriteString("\n- attachments/" + filepath.Base(path))
 			}
 		}
 	}
+
+	// Hint: guide member on available team_tasks actions.
+	content.WriteString("\n\n[Instructions]\n" +
+		"- Use team_tasks(action=\"progress\", percent=N, text=\"...\") to report progress\n" +
+		"- Use team_tasks(action=\"comment\", text=\"...\") to share findings\n" +
+		"- Use team_tasks(action=\"comment\", type=\"blocker\", text=\"...\") when BLOCKED and need leader input — auto-fails task and notifies leader\n" +
+		"- When done: team_tasks(action=\"complete\", result=\"summary of your work\")\n" +
+		"- Write output files to team workspace so lead can review")
 
 	// Use task's stored channel/chat as primary source for routing.
 	// Falls back to ctx values for initial dispatch (task just created, fields match ctx).
@@ -92,10 +131,8 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	}
 	// Resolve lead agent key for completion announce routing.
 	fromAgent := ToolAgentKeyFromCtx(ctx)
-	if team, err := m.teamStore.GetTeamForAgent(ctx, store.AgentIDFromContext(ctx)); err == nil && team != nil {
-		if leadAg, err := m.cachedGetAgentByID(ctx, team.LeadAgentID); err == nil {
-			fromAgent = leadAg.AgentKey
-		}
+	if leadAg, err := m.cachedGetAgentByID(ctx, team.LeadAgentID); err == nil {
+		fromAgent = leadAg.AgentKey
 	}
 
 	// Resolve user ID: prefer context (available during leader's turn),
@@ -108,7 +145,7 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	// Resolve peer kind from context; fallback to task metadata, then "direct".
 	originPeerKind := ToolPeerKindFromCtx(ctx)
 	if originPeerKind == "" {
-		if pk, ok := task.Metadata["peer_kind"].(string); ok && pk != "" {
+		if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok && pk != "" {
 			originPeerKind = pk
 		} else {
 			originPeerKind = "direct"
@@ -116,56 +153,59 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	}
 
 	meta := map[string]string{
-		"origin_channel":   originChannel,
-		"origin_peer_kind": originPeerKind,
-		"origin_chat_id":   originChatID,
-		"origin_user_id":   originUserID,
-		"from_agent":          fromAgent,
-		"to_agent":            ag.AgentKey,
-		"to_agent_display":    ag.DisplayName,
-		"team_task_id":        task.ID.String(),
-		"team_id":             teamID.String(),
+		MetaOriginChannel:   originChannel,
+		MetaOriginPeerKind:  originPeerKind,
+		MetaOriginChatID:    originChatID,
+		MetaOriginUserID:    originUserID,
+		MetaFromAgent:       fromAgent,
+		MetaToAgent:         ag.AgentKey,
+		MetaToAgentDisplay:  ag.DisplayName,
+		MetaTeamTaskID:      task.ID.String(),
+		MetaTeamID:          teamID.String(),
 	}
 	// Resolve local key from context; fallback to task metadata for deferred dispatches.
 	localKey := ToolLocalKeyFromCtx(ctx)
 	if localKey == "" {
-		if lk, ok := task.Metadata["local_key"].(string); ok {
+		if lk, ok := task.Metadata[TaskMetaLocalKey].(string); ok {
 			localKey = lk
 		}
 	}
 	if localKey != "" {
-		meta["origin_local_key"] = localKey
+		meta[MetaOriginLocalKey] = localKey
 	}
 	// Resolve origin session key from context; fallback to task metadata for deferred dispatches.
 	// WS sessions use non-standard key format that BuildScopedSessionKey() cannot reproduce.
 	originSessionKey := ToolSessionKeyFromCtx(ctx)
 	if originSessionKey == "" {
-		if sk, ok := task.Metadata["origin_session_key"].(string); ok {
+		if sk, ok := task.Metadata[TaskMetaOriginSession].(string); ok {
 			originSessionKey = sk
 		}
 	}
 	if originSessionKey != "" {
-		meta["origin_session_key"] = originSessionKey
+		meta[MetaOriginSessionKey] = originSessionKey
 	}
+	// Pass leader agent ID so member agents can fallback-read leader's memory.
+	meta[MetaLeaderAgentID] = team.LeadAgentID.String()
 	// Pass the team workspace dir so member agents write files to the shared folder.
 	if ws := taskTeamWorkspace(task); ws != "" {
-		meta["team_workspace"] = ws
+		meta[MetaTeamWorkspace] = ws
 	}
 	// Propagate trace context so member agent's trace links back to the lead's trace,
 	// and the announce-back run nests under the lead's root span.
 	if traceID := tracing.TraceIDFromContext(ctx); traceID != uuid.Nil {
-		meta["origin_trace_id"] = traceID.String()
+		meta[MetaOriginTraceID] = traceID.String()
 	}
 	if rootSpanID := tracing.ParentSpanIDFromContext(ctx); rootSpanID != uuid.Nil {
-		meta["origin_root_span_id"] = rootSpanID.String()
+		meta[MetaOriginRootSpanID] = rootSpanID.String()
 	}
 
 	if !m.msgBus.TryPublishInbound(bus.InboundMessage{
 		Channel:  "system",
 		SenderID: "teammate:dashboard",
 		ChatID:   teamID.String(),
-		Content:  content,
+		Content:  content.String(),
 		UserID:   originUserID,
+		TenantID: store.TenantIDFromContext(ctx),
 		AgentID:  ag.AgentKey,
 		Metadata: meta,
 	}) {
@@ -259,12 +299,12 @@ func (m *TeamToolManager) restoreTraceContext(ctx context.Context, task *store.T
 	if task.Metadata == nil {
 		return ctx
 	}
-	if traceIDStr, ok := task.Metadata["origin_trace_id"].(string); ok {
+	if traceIDStr, ok := task.Metadata[TaskMetaOriginTrace].(string); ok {
 		if traceID, err := uuid.Parse(traceIDStr); err == nil {
 			ctx = tracing.WithTraceID(ctx, traceID)
 		}
 	}
-	if spanIDStr, ok := task.Metadata["origin_root_span_id"].(string); ok {
+	if spanIDStr, ok := task.Metadata[TaskMetaOriginRootSpan].(string); ok {
 		if spanID, err := uuid.Parse(spanIDStr); err == nil {
 			ctx = tracing.WithParentSpanID(ctx, spanID)
 		}
@@ -281,6 +321,10 @@ func (m *TeamToolManager) restoreTraceContext(ctx context.Context, task *store.T
 // Called after task completion/cancellation to start newly-unblocked work
 // instead of waiting for the ticker (up to 5 min delay).
 func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uuid.UUID) {
+	team, err := m.teamStore.GetTeam(ctx, teamID)
+	if err != nil || team == nil {
+		return
+	}
 	tasks, err := m.teamStore.ListRecoverableTasks(ctx, teamID)
 	if err != nil {
 		return
@@ -295,6 +339,17 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 			continue
 		}
 		ownerID := *task.OwnerAgentID
+		// Auto-fail tasks assigned to the lead agent — would cause self-dispatch loop.
+		// Don't just skip: pending lead-owned tasks would stay stuck until stale timeout.
+		if ownerID == team.LeadAgentID {
+			slog.Warn("DispatchUnblockedTasks: auto-failing lead-owned task",
+				"task_id", task.ID, "team_id", teamID)
+			_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
+				"status": store.TeamTaskStatusFailed,
+				"result": "Cannot dispatch task to the team lead — reassign to a team member",
+			})
+			continue
+		}
 		if dispatched[ownerID] {
 			continue // skip — this owner already has a higher-priority task dispatched
 		}
@@ -304,19 +359,20 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 			continue
 		}
 		dispatched[ownerID] = true
-		m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
-			TeamID:        teamID.String(),
-			TaskID:        task.ID.String(),
-			TaskNumber:    task.TaskNumber,
-			Subject:       task.Subject,
-			Status:        store.TeamTaskStatusInProgress,
-			OwnerAgentKey: m.agentKeyFromID(ctx, ownerID),
-			Channel:       task.Channel,
-			ChatID:        task.ChatID,
-			Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			ActorType:     "system",
-			ActorID:       "dispatch_unblocked",
-		})
+		taskPeerKind := ""
+		if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
+			taskPeerKind = pk
+		}
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, BuildTaskEventPayload(
+			teamID.String(), task.ID.String(),
+			store.TeamTaskStatusInProgress,
+			"system", "dispatch_unblocked",
+			WithTaskInfo(task.TaskNumber, task.Subject),
+			WithOwnerAgentKey(m.agentKeyFromID(ctx, ownerID)),
+			WithChannel(task.Channel),
+			WithChatID(task.ChatID),
+			WithPeerKind(taskPeerKind),
+		))
 
 		// Append completed blocker results so the member agent has context.
 		if summary := m.buildBlockerResultsSummary(ctx, task); summary != "" {
@@ -332,6 +388,6 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 		// Restore leader's trace context (stored in task metadata during creation)
 		// so the member agent's trace links back to the leader, not the completing member.
 		dispatchCtx := m.restoreTraceContext(ctx, task)
-		m.dispatchTaskToAgent(dispatchCtx, task, teamID, ownerID)
+		m.dispatchTaskToAgent(dispatchCtx, task, team, ownerID)
 	}
 }

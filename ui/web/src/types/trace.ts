@@ -47,6 +47,20 @@ export interface SpanData {
   tool_call_id: string;
   input_preview: string;
   output_preview: string;
-  metadata?: { cache_creation_tokens?: number; cache_read_tokens?: number; thinking_tokens?: number };
+  metadata?: {
+    cache_creation_tokens?: number;
+    cache_read_tokens?: number;
+    thinking_tokens?: number;
+    reasoning?: {
+      source?: string;
+      requested_effort?: string;
+      effective_effort?: string;
+      fallback?: string;
+      reason?: string;
+      known_model?: boolean;
+      supported_levels?: string[];
+      used_provider_default?: boolean;
+    };
+  };
   created_at: string;
 }

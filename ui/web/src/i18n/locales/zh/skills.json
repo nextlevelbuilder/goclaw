@@ -73,6 +73,13 @@
     "disable": "禁用Skill",
     "disabled": "已禁用"
   },
+  "tenant": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "default": "默认",
+    "overrideHint": "此租户的技能覆盖设置",
+    "resetDefault": "恢复默认"
+  },
   "deps": {
     "rescan": "Rescan Deps",
     "rescanning": "Scanning...",
@@ -92,8 +99,9 @@
     "statusActive": "Active",
     "statusArchived": "Missing deps",
     "runtimeMissing": "Runtime Prerequisites Missing",
-    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
-    "runtimeRequired": "Install runtimes first"
+    "runtimeMissingDesc": "核心技能需要在 GoClaw 运行时容器内提供 Python 和/或 Node.js 运行时。宿主机上的运行时不会在这里被使用。如果你使用的是已发布的 latest 镜像，那么缺少这些运行时可能是正常现象。",
+    "runtimeMissingAction": "打开 Packages 页面，在此容器中检查或安装运行时。",
+    "runtimeRequired": "请先安装容器内运行时"
   },
   "detail": {
     "title": "Skill详情",
@@ -107,6 +115,9 @@
     "updated": "技能已更新",
     "updateFailed": "更新技能失败",
     "deleted": "技能已删除",
-    "deleteFailed": "删除技能失败"
+    "deleteFailed": "删除技能失败",
+    "rescanUpdated": "已更新 {{count}} 个技能",
+    "rescanNoChanges": "所有技能已是最新",
+    "rescanFailed": "重新扫描依赖失败"
   }
 }

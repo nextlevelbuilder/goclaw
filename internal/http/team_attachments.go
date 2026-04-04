@@ -14,13 +14,12 @@ import (
 // TeamAttachmentsHandler serves team task attachment files for download.
 type TeamAttachmentsHandler struct {
 	teamStore store.TeamStore
-	token     string
 	dataDir   string
 }
 
 // NewTeamAttachmentsHandler creates a new handler for serving team attachments.
-func NewTeamAttachmentsHandler(teamStore store.TeamStore, token, dataDir string) *TeamAttachmentsHandler {
-	return &TeamAttachmentsHandler{teamStore: teamStore, token: token, dataDir: dataDir}
+func NewTeamAttachmentsHandler(teamStore store.TeamStore, dataDir string) *TeamAttachmentsHandler {
+	return &TeamAttachmentsHandler{teamStore: teamStore, dataDir: dataDir}
 }
 
 // RegisterRoutes registers the attachment download endpoint.
@@ -30,14 +29,27 @@ func (h *TeamAttachmentsHandler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *TeamAttachmentsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		provided := extractBearerToken(r)
-		if provided == "" {
-			provided = r.URL.Query().Get("token")
-		}
-		if !requireAuthBearer(h.token, "", provided, w, r) {
+		// Priority 1: HMAC-signed file token (?ft=) — no gateway token exposure.
+		if ft := r.URL.Query().Get("ft"); ft != "" {
+			path := r.URL.Path // full path for HMAC binding
+			if VerifyFileToken(ft, path, FileSigningKey()) {
+				next(w, r)
+				return
+			}
+			http.Error(w, "invalid or expired file token", http.StatusUnauthorized)
 			return
 		}
-		next(w, r)
+		// Priority 2: Bearer header (API clients).
+		provided := extractBearerToken(r)
+		if provided == "" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		authedReq, ok := requireAuthBearer("", provided, w, r)
+		if !ok {
+			return
+		}
+		next(w, authedReq)
 	}
 }
 
@@ -73,13 +85,18 @@ func (h *TeamAttachmentsHandler) handleDownload(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Resolve absolute disk path: {dataDir}/teams/{teamID}/{chatID}/{path}
-	absPath := filepath.Join(h.dataDir, "teams", att.TeamID.String(), att.ChatID, att.Path)
-
-	// Security: path traversal check — resolved path must stay within team workspace.
-	teamBase := filepath.Join(h.dataDir, "teams", att.TeamID.String())
-	cleanPath := filepath.Clean(absPath)
-	if !strings.HasPrefix(cleanPath, teamBase+string(filepath.Separator)) && cleanPath != teamBase {
+	// Resolve disk path. Absolute paths (new) are used directly;
+	// relative paths (legacy) are joined with the team workspace directory.
+	var cleanPath string
+	if filepath.IsAbs(att.Path) {
+		cleanPath = filepath.Clean(att.Path)
+	} else {
+		// Legacy: {workspace}/teams/{teamID}/{chatID}/{relPath}
+		cleanPath = filepath.Clean(filepath.Join(h.dataDir, "teams", att.TeamID.String(), att.ChatID, att.Path))
+	}
+	// Security: file must be within the workspace root to prevent path traversal.
+	wsRoot := filepath.Clean(h.dataDir) + string(filepath.Separator)
+	if !strings.HasPrefix(cleanPath, wsRoot) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid attachment path"})
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"regexp"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -11,6 +12,14 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+var validSenderIDRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:@-]*$`)
+
+// isValidSenderID checks that a sender ID contains only safe characters.
+// Prevents log injection and bus event poisoning.
+func isValidSenderID(id string) bool {
+	return len(id) <= 128 && validSenderIDRe.MatchString(id)
+}
 
 // PairingApproveCallback is called after a pairing is approved.
 // channel is the channel name (e.g., "telegram"), chatID is the chat to notify,
@@ -66,11 +75,16 @@ func (m *PairingMethods) handleRequest(ctx context.Context, client *gateway.Clie
 		return
 	}
 
+	if !isValidSenderID(params.SenderID) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid sender_id format"))
+		return
+	}
+
 	if params.AccountID == "" {
 		params.AccountID = "default"
 	}
 
-	code, err := m.service.RequestPairing(params.SenderID, params.Channel, params.ChatID, params.AccountID, nil)
+	code, err := m.service.RequestPairing(ctx, params.SenderID, params.Channel, params.ChatID, params.AccountID, nil)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
@@ -99,7 +113,7 @@ func (m *PairingMethods) handleApprove(ctx context.Context, client *gateway.Clie
 		params.ApprovedBy = "operator"
 	}
 
-	paired, err := m.service.ApprovePairing(params.Code, params.ApprovedBy)
+	paired, err := m.service.ApprovePairing(ctx, params.Code, params.ApprovedBy)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
@@ -135,7 +149,7 @@ func (m *PairingMethods) handleDeny(ctx context.Context, client *gateway.Client,
 		return
 	}
 
-	if err := m.service.DenyPairing(params.Code); err != nil {
+	if err := m.service.DenyPairing(ctx, params.Code); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
 	}
@@ -150,9 +164,9 @@ func (m *PairingMethods) handleDeny(ctx context.Context, client *gateway.Client,
 	}))
 }
 
-func (m *PairingMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	pending := m.service.ListPending()
-	paired := m.service.ListPaired()
+func (m *PairingMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	pending := m.service.ListPending(ctx)
+	paired := m.service.ListPaired(ctx)
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"pending": pending,
@@ -175,7 +189,12 @@ func (m *PairingMethods) handleRevoke(ctx context.Context, client *gateway.Clien
 		return
 	}
 
-	if err := m.service.RevokePairing(params.SenderID, params.Channel); err != nil {
+	if !isValidSenderID(params.SenderID) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid sender_id format"))
+		return
+	}
+
+	if err := m.service.RevokePairing(ctx, params.SenderID, params.Channel); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
 	}
@@ -222,7 +241,12 @@ func (m *PairingMethods) handleBrowserPairingStatus(ctx context.Context, client 
 		return
 	}
 
-	paired, pairErr := m.service.IsPaired(params.SenderID, "browser")
+	if !isValidSenderID(params.SenderID) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "invalid sender_id format"))
+		return
+	}
+
+	paired, pairErr := m.service.IsPaired(ctx, params.SenderID, "browser")
 	if pairErr != nil {
 		slog.Warn("security.pairing_check_failed", "sender_id", params.SenderID, "error", pairErr)
 	}
@@ -234,7 +258,7 @@ func (m *PairingMethods) handleBrowserPairingStatus(ctx context.Context, client 
 	}
 
 	// Check if the pairing request still exists (not expired)
-	pending := m.service.ListPending()
+	pending := m.service.ListPending(ctx)
 	for _, p := range pending {
 		if p.SenderID == params.SenderID && p.Channel == "browser" {
 			client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

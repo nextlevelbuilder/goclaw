@@ -3,8 +3,9 @@ package tools
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
+
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // SpawnTool spawns subagent clones to handle tasks in the background.
@@ -38,7 +39,7 @@ func (t *SpawnTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "'spawn' (default), 'list', 'cancel', or 'steer'",
+				"description": "'spawn' (default), 'list', 'cancel', 'steer', or 'wait'",
 			},
 			"task": map[string]any{
 				"type":        "string",
@@ -64,6 +65,10 @@ func (t *SpawnTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "New instructions (required for action=steer)",
 			},
+			"timeout": map[string]any{
+				"type":        "integer",
+				"description": "Timeout in seconds for action=wait (default 300)",
+			},
 		},
 		"required": []string{"task"},
 	}
@@ -82,6 +87,8 @@ func (t *SpawnTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return t.executeCancel(ctx, args)
 	case "steer":
 		return t.executeSteer(ctx, args)
+	case "wait":
+		return t.executeWait(ctx, args)
 	default:
 		return t.executeSpawn(ctx, args)
 	}
@@ -95,6 +102,12 @@ func (t *SpawnTool) executeSpawn(ctx context.Context, args map[string]any) *Resu
 			"spawn does not accept 'agent' parameter. spawn is for self-clone subagent only. "+
 				"To delegate work to team member %q, use: team_tasks(action=\"create\", subject=\"...\", description=\"...\", assignee=%q)",
 			agentKey, agentKey))
+	}
+
+	// Validate tenant isolation: callers must have a tenant in context.
+	// Self-clone subagents inherit caller's context (WithoutCancel), so tenant propagates automatically.
+	if store.TenantIDFromContext(ctx) == uuid.Nil {
+		return ErrorResult("spawn requires tenant context: no tenant ID found in request context")
 	}
 
 	task, _ := args["task"].(string)
@@ -171,72 +184,6 @@ func (t *SpawnTool) executeSubagentSync(ctx context.Context, args map[string]any
 	return &Result{ForLLM: forLLM, ForUser: forUser}
 }
 
-// executeList shows active subagent tasks.
-func (t *SpawnTool) executeList(ctx context.Context) *Result {
-	parentID := ToolAgentKeyFromCtx(ctx)
-	if parentID == "" {
-		parentID = t.parentID
-	}
-	tasks := t.subagentMgr.ListTasks(parentID)
-	if len(tasks) == 0 {
-		return &Result{ForLLM: "No active tasks found."}
-	}
-
-	var lines []string
-	running, completed, cancelled := 0, 0, 0
-	for _, task := range tasks {
-		switch task.Status {
-		case "running":
-			running++
-		case "completed":
-			completed++
-		case "cancelled":
-			cancelled++
-		}
-		line := fmt.Sprintf("- [%s] %s (id=%s, status=%s)", task.Label, truncate(task.Task, 60), task.ID, task.Status)
-		if task.CompletedAt > 0 {
-			dur := time.Duration(task.CompletedAt-task.CreatedAt) * time.Millisecond
-			line += fmt.Sprintf(", took %s", dur.Round(time.Millisecond))
-		}
-		lines = append(lines, line)
-	}
-
-	return &Result{ForLLM: fmt.Sprintf("Subagent tasks: %d running, %d completed, %d cancelled\n%s",
-		running, completed, cancelled, strings.Join(lines, "\n"))}
-}
-
-// executeCancel cancels a subagent task by ID.
-func (t *SpawnTool) executeCancel(ctx context.Context, args map[string]any) *Result {
-	id, _ := args["id"].(string)
-	if id == "" {
-		return ErrorResult("id is required for action=cancel")
-	}
-
-	if t.subagentMgr.CancelTask(id) {
-		return &Result{ForLLM: fmt.Sprintf("Task '%s' cancelled.", id)}
-	}
-
-	return ErrorResult(fmt.Sprintf("Task '%s' not found or not running.", id))
-}
-
-// executeSteer redirects a running subagent with new instructions.
-func (t *SpawnTool) executeSteer(ctx context.Context, args map[string]any) *Result {
-	id, _ := args["id"].(string)
-	if id == "" {
-		return ErrorResult("id is required for action=steer")
-	}
-	message, _ := args["message"].(string)
-	if message == "" {
-		return ErrorResult("message is required for action=steer")
-	}
-
-	msg, err := t.subagentMgr.Steer(ctx, id, message, nil)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-	return &Result{ForLLM: msg}
-}
-
 // SetContext is a no-op; channel/chatID are now read from ctx (thread-safe).
 func (t *SpawnTool) SetContext(channel, chatID string) {}
 
@@ -245,38 +192,3 @@ func (t *SpawnTool) SetPeerKind(peerKind string) {}
 
 // SetCallback is a no-op; callback is now read from ctx (thread-safe).
 func (t *SpawnTool) SetCallback(cb AsyncCallback) {}
-
-// --- Helpers moved from old subagent_tool.go ---
-
-// FilterDenyList returns tool names from the registry excluding denied tools.
-func FilterDenyList(reg *Registry, denyList []string) []string {
-	deny := make(map[string]bool, len(denyList))
-	for _, n := range denyList {
-		deny[n] = true
-	}
-
-	var allowed []string
-	for _, name := range reg.List() {
-		if !deny[name] {
-			allowed = append(allowed, name)
-		}
-	}
-	return allowed
-}
-
-// IsSubagentDenied checks if a tool name is in the subagent deny list.
-func IsSubagentDenied(toolName string, depth, maxDepth int) bool {
-	for _, d := range SubagentDenyAlways {
-		if strings.EqualFold(toolName, d) {
-			return true
-		}
-	}
-	if depth >= maxDepth {
-		for _, d := range SubagentDenyLeaf {
-			if strings.EqualFold(toolName, d) {
-				return true
-			}
-		}
-	}
-	return false
-}

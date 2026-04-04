@@ -11,7 +11,7 @@ const (
 	MsgInvalidRequest    = "error.invalid_request"    // "invalid request: %s"
 	MsgInvalidJSON       = "error.invalid_json"       // "invalid JSON"
 	MsgUnauthorized      = "error.unauthorized"       // "unauthorized"
-	MsgPermissionDenied  = "error.permission_denied"  // "permission denied: insufficient role for %s"
+	MsgPermissionDenied  = "error.permission_denied"  // "permission denied: %s"
 	MsgInternalError     = "error.internal"           // "internal error: %s"
 	MsgInvalidSlug       = "error.invalid_slug"       // "%s must be a valid slug (lowercase letters, numbers, hyphens only)"
 	MsgFailedToList      = "error.failed_to_list"     // "failed to list %s"
@@ -94,11 +94,9 @@ const (
 	MsgAgentIsTeamLead      = "error.agent_is_team_lead"      // "agent is already the team lead"
 	MsgCannotRemoveTeamLead = "error.cannot_remove_team_lead" // "cannot remove the team lead"
 
-	// --- Delegations ---
-	MsgDelegationsUnavailable = "error.delegations_not_available" // "delegations not available"
-
 	// --- Channels ---
 	MsgCannotDeleteDefaultInst  = "error.cannot_delete_default_inst"  // "cannot delete default channel instance"
+	MsgCannotRemoveLastWriter   = "error.cannot_remove_last_writer"   // "cannot remove the last file writer"
 
 	// --- Skills ---
 	MsgSkillsUpdateNotSupported = "error.skills_update_not_supported" // "skills.update not supported for file-based skills"
@@ -178,4 +176,14 @@ const (
 	MsgSkillNudgePostscript = "skill.nudge_postscript"
 	MsgSkillNudge70Pct      = "skill.nudge_70_pct"
 	MsgSkillNudge90Pct      = "skill.nudge_90_pct"
+
+	// --- Tenants ---
+	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
+
+	// --- Contact merge ---
+	MsgContactIDsRequired  = "error.contact_ids_required"  // "contact_ids is required"
+	MsgMergeTargetRequired = "error.merge_target_required"  // "exactly one of tenant_user_id or create_user is required"
+	MsgTenantUserNotFound  = "error.tenant_user_not_found"  // "tenant user not found"
+	MsgTenantMismatch      = "error.tenant_mismatch"        // "tenant user does not belong to this tenant"
+	MsgTenantScopeRequired = "error.tenant_scope_required"  // "tenant scope is required for this operation"
 )

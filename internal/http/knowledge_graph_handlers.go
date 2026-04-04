@@ -67,6 +67,7 @@ func (h *KnowledgeGraphHandler) handleGetEntity(w http.ResponseWriter, r *http.R
 
 	relations, err := h.store.ListRelations(r.Context(), agentID, userID, entityID)
 	if err != nil {
+		slog.Warn("kg.list_relations failed", "agent_id", agentID, "entity_id", entityID, "user_id", userID, "error", err)
 		relations = []store.Relation{}
 	}
 	if relations == nil {
@@ -139,8 +140,8 @@ func (h *KnowledgeGraphHandler) handleTraverse(w http.ResponseWriter, r *http.Re
 	if body.MaxDepth <= 0 {
 		body.MaxDepth = 2
 	}
-	if body.MaxDepth > 3 {
-		body.MaxDepth = 3
+	if body.MaxDepth > 5 {
+		body.MaxDepth = 5
 	}
 
 	results, err := h.store.Traverse(r.Context(), agentID, body.UserID, body.EntityID, body.MaxDepth)
@@ -179,7 +180,7 @@ func (h *KnowledgeGraphHandler) handleExtract(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	extractor := h.NewExtractor(body.Provider, body.Model, body.MinConf)
+	extractor := h.NewExtractor(r.Context(), body.Provider, body.Model, body.MinConf)
 	if extractor == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidProviderOrModel)})
 		return
@@ -202,15 +203,24 @@ func (h *KnowledgeGraphHandler) handleExtract(w http.ResponseWriter, r *http.Req
 		result.Relations[i].UserID = body.UserID
 	}
 
-	if err := h.store.IngestExtraction(r.Context(), agentID, body.UserID, result.Entities, result.Relations); err != nil {
+	entityIDs, err := h.store.IngestExtraction(r.Context(), agentID, body.UserID, result.Entities, result.Relations)
+	if err != nil {
 		slog.Warn("kg.ingest_extraction failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
+	// Run inline dedup on newly upserted entities (best-effort)
+	var dedupMerged, dedupFlagged int
+	if len(entityIDs) > 0 {
+		dedupMerged, dedupFlagged, _ = h.store.DedupAfterExtraction(r.Context(), agentID, body.UserID, entityIDs)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"entities":  len(result.Entities),
-		"relations": len(result.Relations),
+		"entities":       len(result.Entities),
+		"relations":      len(result.Relations),
+		"dedup_merged":   dedupMerged,
+		"dedup_flagged":  dedupFlagged,
 	})
 }
 
@@ -227,6 +237,105 @@ func (h *KnowledgeGraphHandler) handleStats(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, stats)
 }
 
+func (h *KnowledgeGraphHandler) handleScanDuplicates(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	agentID := r.PathValue("agentID")
+
+	var body struct {
+		UserID    string  `json:"user_id"`
+		Threshold float64 `json:"threshold"`
+		Limit     int     `json:"limit"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+	if body.Threshold <= 0 {
+		body.Threshold = 0.90
+	}
+	if body.Limit <= 0 {
+		body.Limit = 100
+	}
+
+	found, err := h.store.ScanDuplicates(r.Context(), agentID, body.UserID, body.Threshold, body.Limit)
+	if err != nil {
+		slog.Warn("kg.scan_duplicates failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"candidates_found": found})
+}
+
+func (h *KnowledgeGraphHandler) handleListDedupCandidates(w http.ResponseWriter, r *http.Request) {
+	agentID := r.PathValue("agentID")
+	userID := r.URL.Query().Get("user_id")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+
+	candidates, err := h.store.ListDedupCandidates(r.Context(), agentID, userID, limit)
+	if err != nil {
+		slog.Warn("kg.list_dedup_candidates failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if candidates == nil {
+		candidates = []store.DedupCandidate{}
+	}
+	writeJSON(w, http.StatusOK, candidates)
+}
+
+func (h *KnowledgeGraphHandler) handleMergeEntities(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	agentID := r.PathValue("agentID")
+
+	var body struct {
+		UserID   string `json:"user_id"`
+		TargetID string `json:"target_id"`
+		SourceID string `json:"source_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+	if body.TargetID == "" || body.SourceID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_id and source_id are required"})
+		return
+	}
+
+	if err := h.store.MergeEntities(r.Context(), agentID, body.UserID, body.TargetID, body.SourceID); err != nil {
+		slog.Warn("kg.merge_entities failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "merged"})
+}
+
+func (h *KnowledgeGraphHandler) handleDismissCandidate(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
+	agentID := r.PathValue("agentID")
+
+	var body struct {
+		CandidateID string `json:"candidate_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+	if body.CandidateID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "candidate_id is required"})
+		return
+	}
+
+	if err := h.store.DismissCandidate(r.Context(), agentID, body.CandidateID); err != nil {
+		slog.Warn("kg.dismiss_candidate failed", "error", err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "candidate not found or already resolved"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "dismissed"})
+}
+
 // handleGraph returns all entities + relations for graph visualization.
 func (h *KnowledgeGraphHandler) handleGraph(w http.ResponseWriter, r *http.Request) {
 	agentID := r.PathValue("agentID")
@@ -235,6 +344,9 @@ func (h *KnowledgeGraphHandler) handleGraph(w http.ResponseWriter, r *http.Reque
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 200
+	}
+	if limit > 500 {
+		limit = 500
 	}
 
 	entities, err := h.store.ListEntities(r.Context(), agentID, userID, store.EntityListOptions{Limit: limit})

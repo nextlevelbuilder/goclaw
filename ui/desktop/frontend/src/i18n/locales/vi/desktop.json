@@ -1,0 +1,163 @@
+{
+  "onboarding": {
+    "welcome": "GoClaw Setup",
+    "welcomeDesc": "Let's get your gateway up and running",
+    "providerStep": "Configure Provider",
+    "providerStepDesc": "Select an AI provider and enter your credentials.",
+    "modelStep": "Select & Verify Model",
+    "modelStepDesc": "Choose a model and test the connection.",
+    "agentStep": "Create Your Agent",
+    "agentStepDesc": "Give your agent a personality.",
+    "descPlaceholder": "Describe your agent's personality...",
+    "complete": "Setup Complete",
+    "stepProvider": "Nhà cung cấp",
+    "stepModel": "Mô hình",
+    "stepAgent": "Agent",
+    "createProvider": "Tạo nhà cung cấp"
+  },
+  "summoning": {
+    "title": "Đang triệu hồi Agent",
+    "weavingSoul": "Đang tạo linh hồn cho {{name}}",
+    "completed": "Agent đã sẵn sàng!",
+    "completedTitle": "Agent đã sẵn sàng!",
+    "failedTitle": "Triệu hồi thất bại",
+    "failed": "Triệu hồi thất bại",
+    "wait": "Có thể mất một lúc",
+    "fileLabelSOUL": "Tính cách cốt lõi",
+    "fileLabelIDENTITY": "Danh tính & kiến thức",
+    "agentReady": "{{name}} đã sẵn sàng!",
+    "retrying": "Đang thử lại..."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "providers": "Providers",
+      "agents": "Agents",
+      "channels": "Kênh",
+      "mcp": "MCP",
+      "skills": "Skills",
+      "tools": "Tools",
+      "cron": "Cron",
+      "traces": "Traces",
+      "storage": "Lưu trữ",
+      "about": "About"
+    },
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "language": "Language",
+    "timezone": "Timezone",
+    "timezonePlaceholder": "Timezone selection coming soon."
+  },
+  "sidebar": {
+    "newChat": "Trò chuyện mới",
+    "connected": "Connected",
+    "offline": "Offline",
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode",
+    "settings": "Settings",
+    "teams": "Nhóm"
+  },
+  "about": {
+    "title": "GoClaw Lite",
+    "subtitle": "Desktop Edition",
+    "version": "Version",
+    "edition": "Edition",
+    "runtime": "Runtime",
+    "runtimeValue": "Wails v2",
+    "editionLimits": "Edition Limits",
+    "agents": "Agents",
+    "teams": "Teams",
+    "teamMembers": "Team members",
+    "database": "Database",
+    "users": "Users",
+    "maxAgents": "5 max",
+    "maxTeams": "1 max",
+    "maxTeamMembers": "5 max",
+    "databaseValue": "SQLite (local)",
+    "usersValue": "Single user",
+    "builtWith": "Built with Go + React + Wails",
+    "reset": {
+      "title": "Vùng nguy hiểm",
+      "description": "Xóa database và khởi động lại ứng dụng. Tất cả agents, phiên chat, providers và cài đặt sẽ bị mất vĩnh viễn.",
+      "button": "Đặt lại Database",
+      "confirmTitle": "Đặt lại Database?",
+      "confirmDescription": "Thao tác này sẽ xóa toàn bộ dữ liệu và khởi động lại từ đầu.",
+      "confirmPrompt": "Nhập {{word}} để xác nhận",
+      "cancel": "Hủy",
+      "confirm": "Đặt lại & Khởi động lại",
+      "resetting": "Đang đặt lại..."
+    }
+  },
+  "presets": {
+    "researcher": {
+      "label": "🔬 Nhà nghiên cứu",
+      "prompt": "Tên: Scholar. Một nhà phân tích nghiên cứu tỉ mỉ, không bỏ sót bất kỳ chi tiết nào.\nTính cách: Có phương pháp, kỹ lưỡng và chính xác. Trình bày thông tin trong các báo cáo có cấu trúc rõ ràng kèm trích dẫn. Cân bằng giữa chiều sâu và sự rõ ràng.\n\nMục đích: Nghiên cứu chuyên sâu mọi lĩnh vực — bài báo học thuật, phân tích thị trường, điều tra kỹ thuật. Tổng hợp nhiều nguồn thành những insight hành động được. Luôn phân biệt sự thật với quan điểm cá nhân."
+    },
+    "writer": {
+      "label": "✍️ Nhà văn",
+      "prompt": "Tên: Quill. Một nhà văn đa năng, biết điều chỉnh giọng văn và phong cách cho mọi đối tượng.\nTính cách: Sáng tạo, diễn đạt rõ ràng và đồng cảm. Hiểu sức mạnh của ngôn từ. Cân bằng giữa sự rõ ràng và tinh tế.\n\nMục đích: Chuyên gia sáng tạo nội dung — bài blog, bài viết, copywriting, kể chuyện, viết kỹ thuật. Giỏi xây dựng lập luận, tạo câu chuyện và duy trì giọng văn nhất quán trong nội dung dài."
+    },
+    "coder": {
+      "label": "👨‍💻 Lập trình viên",
+      "prompt": "Tên: Dev. Một kỹ sư phần mềm senior với kiến thức chuyên sâu toàn diện.\nTính cách: Thực dụng và hiệu quả. Viết code sạch, dễ bảo trì. Giải thích khái niệm phức tạp một cách đơn giản. Tuân thủ best practices nhưng biết khi nào nên linh hoạt.\n\nMục đích: Review code, thiết kế kiến trúc, debug, triển khai. Thành thạo nhiều ngôn ngữ và framework. Ưu tiên tính đúng đắn, hiệu suất và bảo mật."
+    }
+  },
+  "agent": {
+    "summon": "Summon",
+    "summoning": "Summoning...",
+    "verifyModel": "Verify Model",
+    "verifying": "Verifying...",
+    "verified": "Verified",
+    "verifyFailed": "Verification failed"
+  },
+  "chat": {
+    "emptyTitle": "Trò chuyện với {{name}}",
+    "emptyTitleDefault": "Bắt đầu cuộc trò chuyện",
+    "emptyDescAgent": "Đặt câu hỏi, viết gì đó, hoặc khám phá ý tưởng.",
+    "emptyDescNoAgent": "Chọn một agent từ thanh bên để bắt đầu.",
+    "suggestions": [
+      "Tin tức mới nhất hôm nay có gì?",
+      "Kể một câu chuyện cười",
+      "Brainstorm các ideas thời đại AI"
+    ]
+  },
+  "activity": {
+    "thinking": "Đang suy nghĩ",
+    "executingTool": "Đang thực thi công cụ",
+    "compacting": "Đang nén ngữ cảnh",
+    "streaming": "Đang phát",
+    "retrying": "Đang thử lại",
+    "processing": "Đang xử lý",
+    "runningTool": "Đang chạy {{tool}}",
+    "retryingAttempt": "Thử lại (lần {{n}})",
+    "step": "bước {{n}}"
+  },
+  "toast": {
+    "agentCreated": "Agent created",
+    "agentUpdated": "Agent updated",
+    "agentDeleted": "Agent deleted",
+    "providerCreated": "Provider created",
+    "providerUpdated": "Provider updated",
+    "providerDeleted": "Provider deleted",
+    "serverCreated": "MCP server created",
+    "serverUpdated": "MCP server updated",
+    "serverDeleted": "MCP server deleted",
+    "skillUploaded": "Skill uploaded",
+    "skillDeleted": "Skill deleted",
+    "grantUpdated": "Grant updated",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete",
+    "createFailed": "Failed to create"
+  },
+  "update": {
+    "available": "GoClaw Lite v{{version}} đã có bản mới",
+    "now": "Cập nhật ngay",
+    "downloading": "Đang tải bản cập nhật...",
+    "ready": "Đã cài đặt! Khởi động lại để áp dụng.",
+    "restart": "Khởi động lại",
+    "failed": "Cập nhật thất bại.",
+    "retry": "Thử lại"
+  }
+}

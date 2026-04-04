@@ -1,41 +1,34 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Network } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
-import { useSessions } from "@/pages/sessions/hooks/use-sessions";
-import { parseSessionKey } from "@/lib/session-key";
+import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
+import { useContactResolver } from "@/hooks/use-contact-resolver";
+import { formatUserLabel } from "@/lib/format-user-label";
+import { useKGStats } from "@/pages/memory/hooks/use-knowledge-graph";
 import { KGEntitiesTab } from "@/pages/memory/kg-entities-tab";
 
 export function KnowledgeGraphPage() {
   const { t } = useTranslation("memory");
+  const { t: to } = useTranslation("overview");
   const { agents } = useAgents();
+  const { status: embStatus } = useEmbeddingStatus();
   const [agentId, setAgentId] = useState("");
   const [userIdFilter, setUserIdFilter] = useState("");
 
-  // Resolve agent UUID → agent_key (sessions filter uses agent_key in session key pattern)
-  const selectedAgent = agents.find((a) => a.id === agentId);
-  const agentKey = selectedAgent?.agent_key ?? "";
+  // Fetch KG stats for the agent — includes distinct user_ids from KG entities
+  const { stats } = useKGStats(agentId);
+  const userIds = stats?.user_ids ?? [];
+  const { resolve } = useContactResolver(userIds);
 
-  // Fetch sessions for selected agent to build scope picker (DM + group chats)
-  const { sessions } = useSessions({ agentFilter: agentKey || undefined, limit: 200 });
-
-  // Dedupe sessions by userID → scope options showing chat title / display name
+  // Build scope options from KG entity user IDs (more reliable than sessions)
   const scopeOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const s of sessions) {
-      const uid = s.userID || parseSessionKey(s.key).scope;
-      if (!uid || seen.has(uid)) continue;
-      const meta = s.metadata;
-      const label = meta?.chat_title || meta?.display_name
-        || (meta?.username ? `@${meta.username}` : null)
-        || uid;
-      seen.set(uid, label);
-    }
-    return Array.from(seen.entries())
-      .map(([value, label]) => ({ value, label }))
+    return userIds
+      .map((uid) => ({ value: uid, label: formatUserLabel(uid, resolve) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [sessions]);
+  }, [userIds, resolve]);
 
   return (
     <div className="flex h-full flex-col p-4 sm:p-6">
@@ -43,7 +36,14 @@ export function KnowledgeGraphPage() {
       <div className="flex flex-wrap items-center gap-3">
         <div className="mr-auto">
           <h1 className="text-lg font-semibold">{t("kg.pageTitle")}</h1>
-          <p className="text-xs text-muted-foreground">{t("kg.pageDescription")}</p>
+          <p className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+            {t("kg.pageDescription")}
+            {embStatus && (
+              <Badge variant={embStatus.configured ? "outline" : "secondary"} className="text-xs font-normal">
+                {embStatus.configured ? `${to("embedding.title")}: ${embStatus.model}` : `${to("embedding.title")}: ${to("embedding.notConfigured")}`}
+              </Badge>
+            )}
+          </p>
         </div>
         <select
           id="kg-agent"
@@ -96,7 +96,7 @@ export function KnowledgeGraphPage() {
             }
           />
         ) : (
-          <KGEntitiesTab agentId={agentId} userId={userIdFilter || undefined} />
+          <KGEntitiesTab key={`${agentId}-${userIdFilter}`} agentId={agentId} userId={userIdFilter || undefined} />
         )}
       </div>
     </div>

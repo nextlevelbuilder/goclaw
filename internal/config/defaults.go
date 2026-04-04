@@ -9,5 +9,5 @@ const (
 	DefaultMaxMessageChars = 32000
 	DefaultMaxIterations   = 30
 	DefaultTemperature     = 0.7
-	DefaultHistoryShare    = 0.75
+	DefaultHistoryShare    = 0.85
 )

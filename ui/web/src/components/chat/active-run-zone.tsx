@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Bot } from "lucide-react";
 import { ActivityIndicator } from "./activity-indicator";
 import { BlockReplyBubble } from "./block-reply-bubble";
@@ -15,7 +16,7 @@ interface ActiveRunZoneProps {
   blockReplies: ChatMessage[];
 }
 
-export function ActiveRunZone({
+export const ActiveRunZone = memo(function ActiveRunZone({
   isRunning,
   activity,
   thinkingText,
@@ -37,7 +38,7 @@ export function ActiveRunZone({
         <Bot className="h-4 w-4" />
       </div>
 
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 min-w-0 space-y-3">
         {blockReplies.map((msg, i) => (
           <BlockReplyBubble key={msg.timestamp ?? i} message={msg} />
         ))}
@@ -69,4 +70,4 @@ export function ActiveRunZone({
       </div>
     </div>
   );
-}
+});

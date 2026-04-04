@@ -21,7 +21,6 @@ import (
 type ChatCompletionsHandler struct {
 	agents      *agent.Router
 	sessions    store.SessionStore
-	token       string // expected bearer token (empty = no auth)
 	isManaged   bool
 	rateLimiter func(string) bool // rate limit check: key → allowed (nil = no limit)
 	postTurn    tools.PostTurnProcessor
@@ -33,11 +32,10 @@ func (h *ChatCompletionsHandler) SetPostTurnProcessor(pt tools.PostTurnProcessor
 }
 
 // NewChatCompletionsHandler creates a handler for the chat completions endpoint.
-func NewChatCompletionsHandler(agents *agent.Router, sess store.SessionStore, token string, isManaged bool) *ChatCompletionsHandler {
+func NewChatCompletionsHandler(agents *agent.Router, sess store.SessionStore, isManaged bool) *ChatCompletionsHandler {
 	return &ChatCompletionsHandler{
 		agents:    agents,
 		sessions:  sess,
-		token:     token,
 		isManaged: isManaged,
 	}
 }
@@ -91,7 +89,7 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Auth + RBAC check (gateway token or API key, operator required for POST)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s","type":"invalid_request_error"}}`, i18n.T(locale, i18n.MsgInvalidAuth)), http.StatusUnauthorized)
 		return
@@ -100,6 +98,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s","type":"invalid_request_error"}}`, i18n.T(locale, i18n.MsgPermissionDenied, "/v1/chat/completions")), http.StatusForbidden)
 		return
 	}
+
+	// Inject tenant, role, user, and locale into context for downstream stores/tools.
+	r = r.WithContext(enrichContext(r.Context(), r, auth))
 
 	// Rate limit check (per IP or bearer token)
 	if h.rateLimiter != nil {
@@ -130,13 +131,13 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	agentID := extractAgentID(r, req.Model)
-	userID := extractUserID(r)
+	userID := store.UserIDFromContext(r.Context()) // resolved by enrichContext (respects API key owner binding)
 	if h.isManaged && userID == "" {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s"}}`, i18n.T(locale, i18n.MsgUserIDHeader)), http.StatusBadRequest)
 		return
 	}
 
-	loop, err := h.agents.Get(agentID)
+	loop, err := h.agents.Get(r.Context(), agentID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":{"message":"%s"}}`, i18n.T(locale, i18n.MsgNotFound, "agent", agentID)), http.StatusNotFound)
 		return
@@ -155,12 +156,6 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Inject user_id and locale into context for downstream stores/tools
-	ctx := store.WithLocale(r.Context(), extractLocale(r))
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
-	}
-
 	runID := uuid.NewString()
 	// Include userID in session key for multi-tenant isolation
 	sessionSuffix := "http-" + runID[:8]
@@ -172,9 +167,9 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	slog.Info("chat completions request", "agent", agentID, "stream", req.Stream, "user", userID)
 
 	if req.Stream {
-		h.handleStream(w, r.WithContext(ctx), loop, runID, sessionKey, lastMessage, req.Model, userID)
+		h.handleStream(w, r, loop, runID, sessionKey, lastMessage, req.Model, userID)
 	} else {
-		h.handleNonStream(w, r.WithContext(ctx), loop, runID, sessionKey, lastMessage, req.Model, userID)
+		h.handleNonStream(w, r, loop, runID, sessionKey, lastMessage, req.Model, userID)
 	}
 }
 
@@ -205,7 +200,7 @@ func (h *ChatCompletionsHandler) handleNonStream(w http.ResponseWriter, r *http.
 		Model:   model,
 		Choices: []chatChoice{{
 			Index:        0,
-			Message:      &chatMessage{Role: "assistant", Content: result.Content},
+			Message:      &chatMessage{Role: "assistant", Content: SignFileURLs(result.Content, FileSigningKey())},
 			FinishReason: "stop",
 		}},
 	}
@@ -257,7 +252,7 @@ func (h *ChatCompletionsHandler) handleStream(w http.ResponseWriter, r *http.Req
 		writeSSEChunk(w, flusher, completionID, model, &chatMessage{Content: "Error: " + err.Error()}, "stop")
 	} else {
 		// Send content chunk
-		writeSSEChunk(w, flusher, completionID, model, &chatMessage{Content: result.Content}, "stop")
+		writeSSEChunk(w, flusher, completionID, model, &chatMessage{Content: SignFileURLs(result.Content, FileSigningKey())}, "stop")
 	}
 
 	// Send [DONE]

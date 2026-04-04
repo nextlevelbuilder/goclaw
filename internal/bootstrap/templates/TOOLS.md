@@ -31,6 +31,11 @@ Things like:
 - Default speaker: Kitchen HomePod
 ```
 
+## Media Files
+
+When users send images, videos, audio, or documents, use the `read_*` tools to analyze them.
+The `path` attribute in media tags points to the file — pass it directly to the tool.
+
 ## Why Separate?
 
 Skills are shared. Your setup is yours. Keeping them apart means you can update skills without losing your notes, and share skills without leaking your infrastructure.

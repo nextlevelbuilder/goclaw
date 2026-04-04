@@ -1,0 +1,175 @@
+name: Release Desktop
+
+on:
+  push:
+    tags: ['lite-v*']
+
+permissions:
+  contents: write
+
+env:
+  GITHUB_REPO: ${{ github.repository }}
+
+jobs:
+  # ── macOS builds (arm64 native + amd64 cross-compile on same runner) ──
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+          - arch: amd64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/desktop/frontend/pnpm-lock.yaml
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#lite-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Patch wails.json version
+        working-directory: ui/desktop
+        run: |
+          jq --arg v "${{ steps.version.outputs.version }}" \
+            '.info.productVersion = $v' wails.json > wails.json.tmp \
+            && mv wails.json.tmp wails.json
+
+      - name: Build desktop app
+        working-directory: ui/desktop
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          wails build -tags sqliteonly \
+            -ldflags "-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${{ steps.version.outputs.version }}"
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg-staging
+          cp -R ui/desktop/build/bin/goclaw-lite.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "GoClaw Lite ${{ steps.version.outputs.version }}" \
+            -srcfolder dmg-staging -ov -format UDZO \
+            "goclaw-lite-${{ steps.version.outputs.version }}-darwin-${{ matrix.arch }}.dmg"
+
+      - name: Create tar.gz (for auto-update)
+        run: |
+          cd ui/desktop/build/bin
+          tar czf "../../../../goclaw-lite-${{ steps.version.outputs.version }}-darwin-${{ matrix.arch }}.tar.gz" \
+            goclaw-lite.app
+
+      # TODO: Add code signing when Apple Developer cert is available
+      # - name: Sign app
+      #   run: codesign --deep --force --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" ...
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            goclaw-lite-*.dmg
+            goclaw-lite-*.tar.gz
+
+  # ── Windows build ──
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/desktop/frontend/pnpm-lock.yaml
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#lite-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Patch wails.json version
+        working-directory: ui/desktop
+        shell: pwsh
+        run: |
+          $json = Get-Content wails.json | ConvertFrom-Json
+          $json.info.productVersion = "${{ steps.version.outputs.version }}"
+          $json | ConvertTo-Json -Depth 10 | Set-Content wails.json
+
+      - name: Build desktop app
+        working-directory: ui/desktop
+        shell: bash
+        run: |
+          wails build -tags sqliteonly \
+            -ldflags "-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${{ steps.version.outputs.version }}"
+
+      - name: Create zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "ui/desktop/build/bin/goclaw-lite.exe" `
+            -DestinationPath "goclaw-lite-${{ steps.version.outputs.version }}-windows-amd64.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: goclaw-lite-*.zip
+
+  # ── Create GitHub Release ──
+  create-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#lite-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "GoClaw Lite v${{ steps.version.outputs.version }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

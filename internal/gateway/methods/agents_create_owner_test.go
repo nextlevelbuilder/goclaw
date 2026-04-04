@@ -31,6 +31,15 @@ func (s *createCaptureStore) GetByKey(_ context.Context, _ string) (*store.Agent
 func (s *createCaptureStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
 	return nil, nil
 }
+func (s *createCaptureStore) GetByIDUnscoped(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
+	return nil, nil
+}
+func (s *createCaptureStore) GetByKeys(_ context.Context, _ []string) ([]store.AgentData, error) {
+	return nil, nil
+}
+func (s *createCaptureStore) GetByIDs(_ context.Context, _ []uuid.UUID) ([]store.AgentData, error) {
+	return nil, nil
+}
 func (s *createCaptureStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil
 }
@@ -68,7 +77,13 @@ func (s *createCaptureStore) GetUserContextFiles(_ context.Context, _ uuid.UUID,
 func (s *createCaptureStore) SetUserContextFile(_ context.Context, _ uuid.UUID, _, _, _ string) error {
 	return nil
 }
+func (s *createCaptureStore) ListUserContextFilesByName(_ context.Context, _ uuid.UUID, _ string) ([]store.UserContextFileData, error) {
+	return nil, nil
+}
 func (s *createCaptureStore) DeleteUserContextFile(_ context.Context, _ uuid.UUID, _, _ string) error {
+	return nil
+}
+func (s *createCaptureStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _ string) error {
 	return nil
 }
 func (s *createCaptureStore) GetUserOverride(_ context.Context, _ uuid.UUID, _ string) (*store.UserAgentOverrideData, error) {
@@ -89,7 +104,9 @@ func (s *createCaptureStore) UpdateUserProfileMetadata(_ context.Context, _ uuid
 func (s *createCaptureStore) EnsureUserProfile(_ context.Context, _ uuid.UUID, _ string) error {
 	return nil
 }
-
+func (s *createCaptureStore) PropagateContextFile(_ context.Context, _ uuid.UUID, _ string) (int, error) {
+	return 0, nil
+}
 // ---- helpers ----
 
 // minimalConfig returns a config sufficient for handleCreate (provider + model defaults only).

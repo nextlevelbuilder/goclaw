@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // Tool execution context keys.
@@ -29,6 +30,7 @@ const (
 	ctxWorkspace   toolContextKey = "tool_workspace"
 	ctxAgentKey    toolContextKey = "tool_agent_key"
 	ctxSessionKey  toolContextKey = "tool_session_key" // origin session key for announce routing
+	ctxRunKind     toolContextKey = "tool_run_kind"    // "notification", "announce", "delegation"
 )
 
 // Well-known channel names used for routing and access control.
@@ -58,8 +60,13 @@ func WithToolChannelType(ctx context.Context, channelType string) context.Contex
 }
 
 func ToolChannelTypeFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxChannelType).(string)
-	return v
+	if v, _ := ctx.Value(ctxChannelType).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.ChannelType
+	}
+	return ""
 }
 
 func WithToolChatID(ctx context.Context, chatID string) context.Context {
@@ -114,8 +121,13 @@ func WithToolWorkspace(ctx context.Context, ws string) context.Context {
 }
 
 func ToolWorkspaceFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxWorkspace).(string)
-	return v
+	if v, _ := ctx.Value(ctxWorkspace).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.Workspace
+	}
+	return ""
 }
 
 // WithToolAgentKey injects the calling agent's key into context.
@@ -126,8 +138,13 @@ func WithToolAgentKey(ctx context.Context, key string) context.Context {
 }
 
 func ToolAgentKeyFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxAgentKey).(string)
-	return v
+	if v, _ := ctx.Value(ctxAgentKey).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.AgentToolKey
+	}
+	return ""
 }
 
 // WithToolSessionKey injects the parent's session key so subagent announce
@@ -142,6 +159,21 @@ func ToolSessionKeyFromCtx(ctx context.Context) string {
 	return v
 }
 
+// WithRunKind injects the run classification (e.g. "notification") into context.
+func WithRunKind(ctx context.Context, kind string) context.Context {
+	return context.WithValue(ctx, ctxRunKind, kind)
+}
+
+// RunKindFromCtx returns the run kind from context, or empty string.
+func RunKindFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxRunKind).(string)
+	return v
+}
+
+// RunKindNotification is the run kind for team task notification runs.
+// Leader agents in this mode can only relay status — mutations are blocked.
+const RunKindNotification = "notification"
+
 // --- Builtin tool settings (global DB overrides) ---
 
 const ctxBuiltinToolSettings toolContextKey = "tool_builtin_settings"
@@ -154,8 +186,13 @@ func WithBuiltinToolSettings(ctx context.Context, settings BuiltinToolSettings) 
 }
 
 func BuiltinToolSettingsFromCtx(ctx context.Context) BuiltinToolSettings {
-	v, _ := ctx.Value(ctxBuiltinToolSettings).(BuiltinToolSettings)
-	return v
+	if v, _ := ctx.Value(ctxBuiltinToolSettings).(BuiltinToolSettings); v != nil {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return BuiltinToolSettings(rc.BuiltinToolSettings)
+	}
+	return nil
 }
 
 // --- Per-agent restrict_to_workspace override ---
@@ -174,10 +211,9 @@ func RestrictFromCtx(ctx context.Context) (bool, bool) {
 }
 
 func effectiveRestrict(ctx context.Context, toolDefault bool) bool {
-	if v, ok := RestrictFromCtx(ctx); ok {
-		return v
-	}
-	return toolDefault
+	// Multi-tenant security: always restrict agents to their workspace.
+	// Agents must not access files outside their tenant-scoped workspace.
+	return true
 }
 
 // --- Parent agent model (for subagent inheritance) ---
@@ -191,8 +227,13 @@ func WithParentModel(ctx context.Context, model string) context.Context {
 
 // ParentModelFromCtx returns the parent agent's model from context.
 func ParentModelFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxParentModel).(string)
-	return v
+	if v, _ := ctx.Value(ctxParentModel).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.ParentModel
+	}
+	return ""
 }
 
 // --- Parent agent provider (for subagent inheritance) ---
@@ -206,8 +247,13 @@ func WithParentProvider(ctx context.Context, providerName string) context.Contex
 
 // ParentProviderFromCtx returns the parent agent's provider name from context.
 func ParentProviderFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxParentProvider).(string)
-	return v
+	if v, _ := ctx.Value(ctxParentProvider).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.ParentProvider
+	}
+	return ""
 }
 
 // --- Per-agent subagent config override ---
@@ -219,8 +265,13 @@ func WithSubagentConfig(ctx context.Context, cfg *config.SubagentsConfig) contex
 }
 
 func SubagentConfigFromCtx(ctx context.Context) *config.SubagentsConfig {
-	v, _ := ctx.Value(ctxSubagentCfg).(*config.SubagentsConfig)
-	return v
+	if v, _ := ctx.Value(ctxSubagentCfg).(*config.SubagentsConfig); v != nil {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.SubagentsCfg
+	}
+	return nil
 }
 
 // --- Per-agent memory config override ---
@@ -232,8 +283,13 @@ func WithMemoryConfig(ctx context.Context, cfg *config.MemoryConfig) context.Con
 }
 
 func MemoryConfigFromCtx(ctx context.Context) *config.MemoryConfig {
-	v, _ := ctx.Value(ctxMemoryCfg).(*config.MemoryConfig)
-	return v
+	if v, _ := ctx.Value(ctxMemoryCfg).(*config.MemoryConfig); v != nil {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.MemoryCfg
+	}
+	return nil
 }
 
 // --- Team ID propagation (task dispatch → workspace tools) ---
@@ -249,8 +305,13 @@ func WithToolTeamID(ctx context.Context, teamID string) context.Context {
 
 // ToolTeamIDFromCtx returns the dispatching team's ID from context.
 func ToolTeamIDFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxTeamID).(string)
-	return v
+	if v, _ := ctx.Value(ctxTeamID).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.TeamID
+	}
+	return ""
 }
 
 // --- Team workspace path (accessible but not default) ---
@@ -265,8 +326,13 @@ func WithToolTeamWorkspace(ctx context.Context, dir string) context.Context {
 
 // ToolTeamWorkspaceFromCtx returns the team shared workspace directory path.
 func ToolTeamWorkspaceFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxTeamWorkspace).(string)
-	return v
+	if v, _ := ctx.Value(ctxTeamWorkspace).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.TeamWorkspace
+	}
+	return ""
 }
 
 // --- Team task ID propagation (delegation origin → workspace tools) ---
@@ -281,8 +347,34 @@ func WithTeamTaskID(ctx context.Context, taskID string) context.Context {
 
 // TeamTaskIDFromCtx returns the delegation's team task ID from context.
 func TeamTaskIDFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxTeamTaskID).(string)
-	return v
+	if v, _ := ctx.Value(ctxTeamTaskID).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.TeamTaskID
+	}
+	return ""
+}
+
+// --- Leader agent ID propagation (team task dispatch → memory interceptor) ---
+
+const ctxLeaderAgentID toolContextKey = "tool_leader_agent_id"
+
+// WithLeaderAgentID injects the team leader's agent UUID string into context
+// so the memory interceptor can fallback-read leader's memory for team members.
+func WithLeaderAgentID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, ctxLeaderAgentID, id)
+}
+
+// LeaderAgentIDFromCtx returns the leader's agent UUID string from context.
+func LeaderAgentIDFromCtx(ctx context.Context) string {
+	if v, _ := ctx.Value(ctxLeaderAgentID).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.LeaderAgentID
+	}
+	return ""
 }
 
 // --- Workspace scope propagation (delegation origin) ---
@@ -297,8 +389,13 @@ func WithWorkspaceChannel(ctx context.Context, channel string) context.Context {
 }
 
 func WorkspaceChannelFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxWsChannel).(string)
-	return v
+	if v, _ := ctx.Value(ctxWsChannel).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.WorkspaceChannel
+	}
+	return ""
 }
 
 func WithWorkspaceChatID(ctx context.Context, chatID string) context.Context {
@@ -306,8 +403,13 @@ func WithWorkspaceChatID(ctx context.Context, chatID string) context.Context {
 }
 
 func WorkspaceChatIDFromCtx(ctx context.Context) string {
-	v, _ := ctx.Value(ctxWsChatID).(string)
-	return v
+	if v, _ := ctx.Value(ctxWsChatID).(string); v != "" {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.WorkspaceChatID
+	}
+	return ""
 }
 
 // --- Pending team task dispatch (post-turn processing) ---
@@ -392,17 +494,62 @@ func PendingTeamDispatchFromCtx(ctx context.Context) *PendingTeamDispatch {
 func InjectTeamDispatch(ctx context.Context, postTurn PostTurnProcessor) (context.Context, func()) {
 	ptd := NewPendingTeamDispatch()
 	ctx = WithPendingTeamDispatch(ctx, ptd)
+	// Detach from caller's cancel/deadline but keep values (tenant_id, user_id, etc.)
+	// so post-turn dispatch isn't aborted when the HTTP request or WS handler returns.
+	detached := context.WithoutCancel(ctx)
 	drain := func() {
 		ptd.ReleaseTeamLock()
 		if postTurn != nil {
 			for teamID, taskIDs := range ptd.Drain() {
-				if err := postTurn.ProcessPendingTasks(context.Background(), teamID, taskIDs); err != nil {
+				if err := postTurn.ProcessPendingTasks(detached, teamID, taskIDs); err != nil {
 					slog.Warn("post_turn: dispatch failed", "team_id", teamID, "error", err)
 				}
 			}
 		}
 	}
 	return ctx, drain
+}
+
+// --- Delivered media tracker (write_file → message self-send dedup) ---
+
+const ctxDeliveredMedia toolContextKey = "tool_delivered_media"
+
+// DeliveredMedia tracks file paths already queued for auto-delivery by write_file.
+// Injected once per run via WithDeliveredMedia; write_file marks paths, message reads them.
+// Thread-safe: tools may execute in parallel goroutines.
+type DeliveredMedia struct {
+	mu    sync.Mutex
+	paths map[string]bool
+}
+
+// NewDeliveredMedia creates an empty tracker.
+func NewDeliveredMedia() *DeliveredMedia {
+	return &DeliveredMedia{paths: make(map[string]bool)}
+}
+
+// Mark records a file path as queued for delivery.
+func (dm *DeliveredMedia) Mark(path string) {
+	dm.mu.Lock()
+	dm.paths[path] = true
+	dm.mu.Unlock()
+}
+
+// IsDelivered reports whether a file path has already been queued.
+func (dm *DeliveredMedia) IsDelivered(path string) bool {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	return dm.paths[path]
+}
+
+// WithDeliveredMedia injects a delivered media tracker into context.
+func WithDeliveredMedia(ctx context.Context, dm *DeliveredMedia) context.Context {
+	return context.WithValue(ctx, ctxDeliveredMedia, dm)
+}
+
+// DeliveredMediaFromCtx returns the delivered media tracker, or nil.
+func DeliveredMediaFromCtx(ctx context.Context) *DeliveredMedia {
+	v, _ := ctx.Value(ctxDeliveredMedia).(*DeliveredMedia)
+	return v
 }
 
 // --- Run media file paths (for team workspace auto-collect) ---
@@ -463,6 +610,11 @@ func WithSandboxConfig(ctx context.Context, cfg *sandbox.Config) context.Context
 }
 
 func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
-	v, _ := ctx.Value(ctxSandboxCfg).(*sandbox.Config)
-	return v
+	if v, _ := ctx.Value(ctxSandboxCfg).(*sandbox.Config); v != nil {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.SandboxCfg
+	}
+	return nil
 }

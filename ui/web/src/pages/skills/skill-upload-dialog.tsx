@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Upload, CheckCircle2, XCircle, Loader2, X } from "lucide-react";
+import { Upload, CheckCircle2, XCircle, Loader2, TriangleAlert, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +11,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { validateSkillZip } from "./lib/validate-skill-zip";
+import { uniqueId } from "@/lib/utils";
+import type { SkillUploadResponse } from "./hooks/use-skills";
 
-type FileStatus = "validating" | "valid" | "invalid" | "uploading" | "success" | "error";
+type FileStatus = "validating" | "valid" | "invalid" | "uploading" | "success" | "warning" | "error";
 
 interface FileEntry {
   id: string;
@@ -26,7 +28,7 @@ interface FileEntry {
 interface SkillUploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpload: (file: File) => Promise<unknown>;
+  onUpload: (file: File) => Promise<SkillUploadResponse>;
 }
 
 export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadDialogProps) {
@@ -46,7 +48,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
     if (fresh.length === 0) return;
 
     const pending: FileEntry[] = fresh.map((f) => ({
-      id: crypto.randomUUID(),
+      id: uniqueId(),
       file: f,
       status: "validating" as const,
     }));
@@ -92,9 +94,18 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
         prev.map((e) => (e.id === entry.id ? { ...e, status: "uploading" } : e)),
       );
       try {
-        await onUpload(entry.file);
+        const result = await onUpload(entry.file);
+        const detail = result.deps_warning
+          ? result.deps_errors?.length
+            ? `${result.deps_warning}: ${result.deps_errors.join("; ")}`
+            : result.deps_warning
+          : undefined;
         setEntries((prev) =>
-          prev.map((e) => (e.id === entry.id ? { ...e, status: "success" } : e)),
+          prev.map((e) => (e.id === entry.id ? {
+            ...e,
+            status: result.deps_warning ? "warning" : "success",
+            error: detail,
+          } : e)),
         );
       } catch (err) {
         setEntries((prev) =>
@@ -135,7 +146,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUpload }: SkillUploadD
   };
 
   const validCount = entries.filter((e) => e.status === "valid").length;
-  const successCount = entries.filter((e) => e.status === "success").length;
+  const successCount = entries.filter((e) => e.status === "success" || e.status === "warning").length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -247,6 +258,8 @@ function FileEntryRow({
         </div>
         {entry.status === "invalid" || entry.status === "error" ? (
           <p className="text-xs text-destructive truncate">{entry.error ? t(entry.error) : t("upload.failed")}</p>
+        ) : entry.status === "warning" ? (
+          <p className="text-xs text-amber-600 truncate">{entry.error ?? t("upload.failed")}</p>
         ) : entry.status === "validating" ? (
           <p className="text-xs text-muted-foreground">{t("upload.validating")}</p>
         ) : entry.name && entry.status !== "success" ? (
@@ -277,6 +290,8 @@ function StatusIcon({ status }: { status: FileStatus }) {
       return <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />;
     case "success":
       return <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />;
+    case "warning":
+      return <TriangleAlert className="h-4 w-4 shrink-0 text-amber-600" />;
     case "invalid":
     case "error":
       return <XCircle className="h-4 w-4 shrink-0 text-destructive" />;

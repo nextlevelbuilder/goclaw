@@ -29,8 +29,11 @@
       "operator.read": "Read-only access",
       "operator.write": "Read + write access",
       "operator.approvals": "Manage exec approvals",
-      "operator.pairing": "Manage device pairing"
+      "operator.pairing": "Manage device pairing",
+      "operator.provision": "Provision new tenants"
     },
+    "tenant": "Tenant",
+    "tenantSystem": "System (all tenants)",
     "expiry": "Expiry",
     "expiryOptions": {
       "never": "Never",
@@ -38,6 +41,7 @@
       "30d": "30 days",
       "90d": "90 days"
     },
+    "cancel": "Cancel",
     "create": "Create",
     "creating": "Creating..."
   },
@@ -59,5 +63,25 @@
     "failedCreate": "Failed to create API key",
     "failedRevoke": "Failed to revoke API key"
   },
-  "never": "Never"
+  "never": "Never",
+  "neverUsed": "Never used",
+  "tenantBadgeSystem": "System",
+  "tenantBadgeUnknown": "Unknown",
+  "columns.expiry": "Expiry",
+  "codeDialog": {
+    "title": "API Key Usage",
+    "description": "Use this API key to authenticate with the gateway HTTP API.",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "tabs": {
+      "curl": "cURL",
+      "typescript": "TypeScript",
+      "go": "Go"
+    },
+    "comments": {
+      "chat": "Chat with an agent (OpenAI-compatible)",
+      "listAgents": "List agents",
+      "listSessions": "List sessions"
+    }
+  }
 }

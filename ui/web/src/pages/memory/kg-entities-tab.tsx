@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Network, Trash2, Search, GitFork, Sparkles, RefreshCw, LayoutGrid, Share2 } from "lucide-react";
+import { Network, Trash2, Search, GitFork, Sparkles, RefreshCw, LayoutGrid, Share2, Merge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useKnowledgeGraph, useKGStats, useKGGraph } from "./hooks/use-knowledge-graph";
 import { KGEntityDetailDialog } from "./kg-entity-detail-dialog";
 import { KGExtractDialog } from "./kg-extract-dialog";
+import { KGDedupDialog } from "./kg-dedup-dialog";
 import { KGGraphView } from "./kg-graph-view";
 import type { KGEntity } from "@/types/knowledge-graph";
 
@@ -29,7 +30,8 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   const [deleteTarget, setDeleteTarget] = useState<KGEntity | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [dedupOpen, setDedupOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("graph");
 
   const { entities, loading, fetching, refresh, deleteEntity, getEntityWithRelations, extractFromText } = useKnowledgeGraph({
     agentId,
@@ -61,8 +63,8 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Search + stats + actions — single compact row */}
-      <div className="flex items-center gap-2 mb-3">
+      {/* Toolbar row: search + actions */}
+      <div className="flex items-center gap-2 mb-2">
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -77,17 +79,6 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
           <Button variant="ghost" size="sm" onClick={() => { setAppliedQuery(""); setSearchQuery(""); }} className="h-8 px-2 text-xs">
             {t("kg.search.clear")}
           </Button>
-        )}
-
-        {/* Inline stats */}
-        {stats && (
-          <div className="flex gap-2 text-[10px] text-muted-foreground ml-1">
-            <span>{t("kg.stats.entities", { count: stats.entity_count })}</span>
-            <span>{t("kg.stats.relations", { count: stats.relation_count })}</span>
-            {Object.entries(stats.entity_types).map(([type, count]) => (
-              <span key={type}>{type}: {count}</span>
-            ))}
-          </div>
         )}
 
         <div className="flex-1" />
@@ -113,12 +104,27 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         </div>
 
         <Button variant="outline" size="sm" onClick={() => refresh()} disabled={fetching} className="gap-1 h-8 px-2.5">
-          <RefreshCw className={"h-3.5 w-3.5" + (fetching ? " animate-spin" : "")} />
+          <RefreshCw className={`h-3.5 w-3.5${fetching ? " animate-spin" : ""}`} />
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setDedupOpen(true)} className="gap-1 h-8 px-2.5">
+          <Merge className="h-3.5 w-3.5" /> {t("kg.dedup.button")}
         </Button>
         <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1 h-8 px-2.5">
           <Sparkles className="h-3.5 w-3.5" /> {t("kg.extract")}
         </Button>
       </div>
+
+      {/* Stats row — separate line for entity type breakdown */}
+      {stats && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mb-3 text-[10px] text-muted-foreground">
+          <span className="font-medium">{t("kg.stats.entities", { count: stats.entity_count })}</span>
+          <span className="font-medium">{t("kg.stats.relations", { count: stats.relation_count })}</span>
+          <span className="text-muted-foreground/50">|</span>
+          {Object.entries(stats.entity_types).map(([type, count]) => (
+            <span key={type}>{type}: {count}</span>
+          ))}
+        </div>
+      )}
 
       {/* Content area */}
       <div className="min-h-0 flex-1">
@@ -194,11 +200,20 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
 
       {/* Entity detail dialog */}
       <KGEntityDetailDialog
+        key={viewEntity?.id}
         open={!!viewEntity}
         onOpenChange={(open) => !open && setViewEntity(null)}
         agentId={agentId}
         entity={viewEntity}
         getEntityWithRelations={getEntityWithRelations}
+      />
+
+      {/* Dedup dialog */}
+      <KGDedupDialog
+        open={dedupOpen}
+        onOpenChange={setDedupOpen}
+        agentId={agentId}
+        userId={userId}
       />
 
       {/* Extract dialog */}

@@ -1,21 +1,35 @@
 package pg
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGCronStore) scanJob(id uuid.UUID) (*store.CronJob, error) {
-	row := s.db.QueryRow(
-		`SELECT id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
-		 created_at, updated_at FROM cron_jobs WHERE id = $1`, id)
+// scanJob fetches a single cron job by ID with tenant filtering.
+func (s *PGCronStore) scanJob(ctx context.Context, id uuid.UUID) (*store.CronJob, error) {
+	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 next_run_at, last_run_at, last_status, last_error,
+		 created_at, updated_at FROM cron_jobs WHERE id = $1`
+	args := []any{id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return nil, fmt.Errorf("tenant_id required")
+		}
+		q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+
+	row := s.db.QueryRowContext(ctx, q, args...)
 	return scanCronSingleRow(row)
 }
 
@@ -27,30 +41,39 @@ type cronRowScanner interface {
 
 func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 	var id uuid.UUID
+	var tenantID uuid.UUID
 	var agentID *uuid.UUID
 	var userID *string
 	var name, scheduleKind string
 	var enabled, deleteAfterRun bool
+	var stateless, deliver, wakeHeartbeat bool
+	var deliverChannel, deliverTo string
 	var cronExpr, tz, lastStatus, lastError *string
 	var runAt, nextRunAt, lastRunAt *time.Time
 	var intervalMS *int64
 	var payloadJSON []byte
 	var createdAt, updatedAt time.Time
 
-	err := row.Scan(&id, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
-		&intervalMS, &payloadJSON, &deleteAfterRun, &nextRunAt, &lastRunAt, &lastStatus, &lastError,
+	err := row.Scan(&id, &tenantID, &agentID, &userID, &name, &enabled, &scheduleKind, &cronExpr, &runAt, &tz,
+		&intervalMS, &payloadJSON, &deleteAfterRun, &stateless, &deliver, &deliverChannel, &deliverTo, &wakeHeartbeat,
+		&nextRunAt, &lastRunAt, &lastStatus, &lastError,
 		&createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
 
 	var payload store.CronPayload
-	json.Unmarshal(payloadJSON, &payload)
+	if len(payloadJSON) > 0 {
+		if err := json.Unmarshal(payloadJSON, &payload); err != nil {
+			return nil, fmt.Errorf("failed to parse cron job payload: %w", err)
+		}
+	}
 
 	job := &store.CronJob{
-		ID:      id.String(),
-		Name:    name,
-		Enabled: enabled,
+		ID:       id.String(),
+		TenantID: tenantID,
+		Name:     name,
+		Enabled:  enabled,
 		Schedule: store.CronSchedule{
 			Kind: scheduleKind,
 		},
@@ -58,6 +81,11 @@ func scanCronRow(row cronRowScanner) (*store.CronJob, error) {
 		CreatedAtMS:    createdAt.UnixMilli(),
 		UpdatedAtMS:    updatedAt.UnixMilli(),
 		DeleteAfterRun: deleteAfterRun,
+		Stateless:      stateless,
+		Deliver:        deliver,
+		DeliverChannel: deliverChannel,
+		DeliverTo:      deliverTo,
+		WakeHeartbeat:  wakeHeartbeat,
 	}
 
 	if agentID != nil {
@@ -107,42 +135,5 @@ func scanCronSingleRow(row *sql.Row) (*store.CronJob, error) {
 // defaultTZ is the gateway-level fallback IANA timezone used when the
 // schedule itself does not specify a timezone (existing jobs with TZ = NULL).
 func computeNextRun(schedule *store.CronSchedule, now time.Time, defaultTZ string) *time.Time {
-	switch schedule.Kind {
-	case "at":
-		if schedule.AtMS != nil {
-			t := time.UnixMilli(*schedule.AtMS)
-			if t.After(now) {
-				return &t
-			}
-		}
-		return nil
-	case "every":
-		if schedule.EveryMS != nil && *schedule.EveryMS > 0 {
-			t := now.Add(time.Duration(*schedule.EveryMS) * time.Millisecond)
-			return &t
-		}
-		return nil
-	case "cron":
-		if schedule.Expr == "" {
-			return nil
-		}
-		tz := schedule.TZ
-		if tz == "" {
-			tz = defaultTZ
-		}
-		evalTime := now
-		if tz != "" {
-			if loc, err := time.LoadLocation(tz); err == nil {
-				evalTime = now.In(loc)
-			}
-		}
-		nextTime, err := gronx.NextTickAfter(schedule.Expr, evalTime, false)
-		if err != nil {
-			return nil
-		}
-		utcNext := nextTime.UTC()
-		return &utcNext
-	default:
-		return nil
-	}
+	return store.ComputeNextRun(schedule, now, defaultTZ)
 }

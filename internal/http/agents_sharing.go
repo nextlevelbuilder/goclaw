@@ -168,7 +168,7 @@ func (h *AgentsHandler) handleRegenerate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	go h.summoner.RegenerateAgent(id, ag.Provider, ag.Model, req.Prompt)
+	go h.summoner.RegenerateAgent(id, store.TenantIDFromContext(r.Context()), ag.Provider, ag.Model, req.Prompt)
 
 	emitAudit(h.msgBus, r, "agent.regenerated", "agent", id.String())
 	writeJSON(w, http.StatusAccepted, map[string]string{"ok": "true", "status": store.AgentStatusSummoning})
@@ -214,7 +214,7 @@ func (h *AgentsHandler) handleResummon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.summoner.SummonAgent(id, ag.Provider, ag.Model, description)
+	go h.summoner.SummonAgent(id, store.TenantIDFromContext(r.Context()), ag.Provider, ag.Model, description)
 
 	emitAudit(h.msgBus, r, "agent.resummoned", "agent", id.String())
 	writeJSON(w, http.StatusAccepted, map[string]string{"ok": "true", "status": store.AgentStatusSummoning})
@@ -233,8 +233,4 @@ func extractDescription(raw json.RawMessage) string {
 	return desc
 }
 
-func writeJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
+// writeJSON moved to response_helpers.go

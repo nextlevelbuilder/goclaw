@@ -19,6 +19,7 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   pageSizes?: number[];
+  className?: string;
 }
 
 export function Pagination({
@@ -29,12 +30,13 @@ export function Pagination({
   onPageChange,
   onPageSizeChange,
   pageSizes = PAGE_SIZES,
+  className,
 }: PaginationProps) {
   const { t } = useTranslation("common");
   if (total === 0) return null;
 
   return (
-    <div className="flex flex-col items-center gap-2 border-t px-4 py-3 sm:flex-row sm:justify-between">
+    <div className={`flex flex-col items-center gap-2 border-t px-4 py-3 sm:flex-row sm:justify-between ${className ?? ""}`}>
       <div className="text-sm text-muted-foreground">
         {total} {t("items")}
       </div>

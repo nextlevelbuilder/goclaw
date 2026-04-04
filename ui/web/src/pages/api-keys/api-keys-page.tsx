@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, RefreshCw, Key, Ban, Copy, Check } from "lucide-react";
+import { Plus, RefreshCw, Key, Ban, Copy, Check, Building2, Code2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,14 +22,16 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
 import { useApiKeys } from "./hooks/use-api-keys";
 import { ApiKeyCreateDialog } from "./api-key-create-dialog";
+import { ApiKeyCodeDialog } from "./api-key-code-dialog";
+import { useTenants } from "@/hooks/use-tenants";
+import { formatRelativeTime } from "@/lib/format";
 import type { ApiKeyData } from "@/types/api-key";
 
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+function fullDateTime(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 }
 
@@ -43,6 +45,7 @@ export function ApiKeysPage() {
   const { t } = useTranslation("api-keys");
   const { t: tc } = useTranslation("common");
   const { apiKeys, loading, refresh, createApiKey, revokeApiKey } = useApiKeys();
+  const { isOwner, tenants } = useTenants();
 
   const spinning = useMinLoading(loading);
   const showSkeleton = useDeferredLoading(loading && apiKeys.length === 0);
@@ -52,6 +55,7 @@ export function ApiKeysPage() {
   const [revokeLoading, setRevokeLoading] = useState(false);
   const [newKeyRaw, setNewKeyRaw] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
 
   const filtered = apiKeys.filter(
     (k) => k.name.toLowerCase().includes(search.toLowerCase()) || k.prefix.includes(search),
@@ -79,13 +83,21 @@ export function ApiKeysPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const tenantName = (tenantId?: string) => {
+    if (!tenantId) return t("tenantBadgeSystem");
+    return tenants.find((tn) => tn.id === tenantId)?.name ?? t("tenantBadgeUnknown");
+  };
+
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("title")}
         description={t("description")}
         actions={
           <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setCodeOpen(true)} className="gap-1">
+              <Code2 className="h-3.5 w-3.5" /> {t("codeDialog.title")}
+            </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1">
               <Plus className="h-3.5 w-3.5" /> {t("addKey")}
             </Button>
@@ -106,63 +118,90 @@ export function ApiKeysPage() {
         ) : filtered.length === 0 ? (
           <EmptyState icon={Key} title={t("emptyTitle")} description={t("emptyDescription")} />
         ) : (
-          <>
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full min-w-[700px] text-base md:text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-2 text-left font-medium">{t("columns.name")}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t("columns.prefix")}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t("columns.scopes")}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t("columns.lastUsed")}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t("columns.created")}</th>
-                    <th className="px-4 py-2 text-left font-medium">{t("columns.status")}</th>
-                    <th className="px-4 py-2 text-right font-medium">{t("columns.actions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageItems.map((key) => {
-                    const status = keyStatus(key, t);
-                    return (
-                      <tr key={key.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="px-4 py-2 font-medium">{key.name}</td>
-                        <td className="px-4 py-2">
-                          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{key.prefix}...***</code>
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {key.scopes.map((s) => (
-                              <Badge key={s} variant="outline" className="text-xs">
-                                {s.replace("operator.", "")}
-                              </Badge>
-                            ))}
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full min-w-[600px] text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.scopes")}</th>
+                  {isOwner && (
+                    <th className="px-4 py-3 text-left font-medium">Tenant</th>
+                  )}
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.status")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.expiry")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.lastUsed")}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t("columns.actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.map((key) => {
+                  const status = keyStatus(key, t);
+                  return (
+                    <tr key={key.id} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Key className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-medium">{key.name}</div>
+                            <code className="text-[11px] text-muted-foreground font-mono">{key.prefix}...***</code>
                           </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {key.scopes.map((s) => (
+                            <Badge key={s} variant="secondary" className="text-[11px] font-mono px-1.5 py-0">
+                              {s.replace("operator.", "")}
+                            </Badge>
+                          ))}
+                        </div>
+                      </td>
+                      {isOwner && (
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className="text-xs gap-1">
+                            <Building2 className="h-3 w-3" />
+                            {tenantName(key.tenant_id)}
+                          </Badge>
                         </td>
-                        <td className="px-4 py-2 text-muted-foreground">{formatDate(key.last_used_at)}</td>
-                        <td className="px-4 py-2 text-muted-foreground">{formatDate(key.created_at)}</td>
-                        <td className="px-4 py-2">
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                        </td>
-                        <td className="px-4 py-2 text-right">
+                      )}
+                      <td className="px-4 py-3">
+                        <Badge variant={status.variant} className="text-xs">{status.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground" title={key.expires_at ? fullDateTime(key.expires_at) : undefined}>
+                        {key.expires_at ? formatRelativeTime(key.expires_at) : t("never")}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground" title={key.last_used_at ? fullDateTime(key.last_used_at) : undefined}>
+                        {key.last_used_at ? formatRelativeTime(key.last_used_at) : t("neverUsed")}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
                           {!key.revoked && (
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => setRevokeTarget(key)}
-                              className="gap-1 text-destructive hover:text-destructive"
+                              className="text-destructive hover:text-destructive"
+                              title={t("revoke.confirmLabel")}
                             >
                               <Ban className="h-3.5 w-3.5" />
                             </Button>
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <Pagination {...pagination} onPageChange={setPage} onPageSizeChange={setPageSize} />
-          </>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <Pagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              total={pagination.total}
+              totalPages={pagination.totalPages}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          </div>
         )}
       </div>
 
@@ -208,6 +247,8 @@ export function ApiKeysPage() {
         onConfirm={handleRevoke}
         loading={revokeLoading}
       />
+
+      <ApiKeyCodeDialog open={codeOpen} onOpenChange={setCodeOpen} />
     </div>
   );
 }

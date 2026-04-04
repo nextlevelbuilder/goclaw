@@ -2,143 +2,49 @@ package pg
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/adhocore/gronx"
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.CronJob, error) {
+func (s *PGCronStore) UpdateJob(ctx context.Context, jobID string, patch store.CronJobPatch) (*store.CronJob, error) {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid job ID: %s", jobID)
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	current, err := s.lockCronJobForMutation(ctx, tx, id, true)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
 	updates := make(map[string]any)
+	effectiveEnabled := current.Enabled
+	if patch.Enabled != nil {
+		effectiveEnabled = *patch.Enabled
+		updates["enabled"] = effectiveEnabled
+	}
+
 	if patch.Name != "" {
 		updates["name"] = patch.Name
-	}
-	if patch.Enabled != nil {
-		updates["enabled"] = *patch.Enabled
-	}
-	if patch.Schedule != nil {
-		// Fetch current schedule to merge with patch (partial updates)
-		var curKind string
-		var curExpr, curTZ *string
-		var curIntervalMS *int64
-		var curRunAt *time.Time
-		s.db.QueryRow(
-			"SELECT schedule_kind, cron_expression, timezone, interval_ms, run_at FROM cron_jobs WHERE id = $1", id,
-		).Scan(&curKind, &curExpr, &curTZ, &curIntervalMS, &curRunAt)
-
-		// Resolve the effective schedule kind
-		newKind := patch.Schedule.Kind
-		if newKind == "" {
-			newKind = curKind // keep current kind if not specified
-		}
-		updates["schedule_kind"] = newKind
-
-		// Set type-specific fields and clear others
-		switch newKind {
-		case "cron":
-			if patch.Schedule.Expr != "" {
-				updates["cron_expression"] = patch.Schedule.Expr
-			}
-			if patch.Schedule.TZ != "" {
-				if _, err := time.LoadLocation(patch.Schedule.TZ); err != nil {
-					return nil, fmt.Errorf("invalid timezone: %s", patch.Schedule.TZ)
-				}
-				updates["timezone"] = patch.Schedule.TZ
-			}
-			// Clear other type fields when switching to cron
-			if curKind != "cron" {
-				updates["interval_ms"] = nil
-				updates["run_at"] = nil
-			}
-		case "every":
-			if patch.Schedule.EveryMS != nil {
-				updates["interval_ms"] = *patch.Schedule.EveryMS
-			}
-			// Clear other type fields when switching to every
-			if curKind != "every" {
-				updates["cron_expression"] = nil
-				updates["timezone"] = nil
-				updates["run_at"] = nil
-			}
-		case "at":
-			if patch.Schedule.AtMS != nil {
-				t := time.UnixMilli(*patch.Schedule.AtMS)
-				updates["run_at"] = t
-			}
-			// Clear other type fields when switching to at
-			if curKind != "at" {
-				updates["cron_expression"] = nil
-				updates["timezone"] = nil
-				updates["interval_ms"] = nil
-			}
-		}
-
-		// Build merged schedule for recomputing next_run_at
-		merged := store.CronSchedule{Kind: newKind}
-		switch newKind {
-		case "cron":
-			if patch.Schedule.Expr != "" {
-				merged.Expr = patch.Schedule.Expr
-			} else if curExpr != nil {
-				merged.Expr = *curExpr
-			}
-			if patch.Schedule.TZ != "" {
-				merged.TZ = patch.Schedule.TZ
-			} else if curTZ != nil && newKind == curKind {
-				merged.TZ = *curTZ
-			}
-		case "every":
-			if patch.Schedule.EveryMS != nil {
-				merged.EveryMS = patch.Schedule.EveryMS
-			} else if curIntervalMS != nil {
-				merged.EveryMS = curIntervalMS
-			}
-		case "at":
-			if patch.Schedule.AtMS != nil {
-				merged.AtMS = patch.Schedule.AtMS
-			} else if curRunAt != nil {
-				ms := curRunAt.UnixMilli()
-				merged.AtMS = &ms
-			}
-		}
-
-		// Validate the merged schedule before applying
-		switch merged.Kind {
-		case "cron":
-			if merged.Expr == "" {
-				return nil, fmt.Errorf("cron schedule requires expr")
-			}
-			gx := gronx.New()
-			if !gx.IsValid(merged.Expr) {
-				return nil, fmt.Errorf("invalid cron expression: %s", merged.Expr)
-			}
-		case "every":
-			if merged.EveryMS == nil || *merged.EveryMS <= 0 {
-				return nil, fmt.Errorf("every schedule requires positive everyMs")
-			}
-		case "at":
-			if merged.AtMS == nil {
-				return nil, fmt.Errorf("at schedule requires atMs")
-			}
-		}
-
-		next := computeNextRun(&merged, time.Now(), s.defaultTZ)
-		updates["next_run_at"] = next
 	}
 	if patch.DeleteAfterRun != nil {
 		updates["delete_after_run"] = *patch.DeleteAfterRun
 	}
-
-	// Update agent_id column
 	if patch.AgentID != nil {
 		if *patch.AgentID == "" {
 			updates["agent_id"] = nil
@@ -147,42 +53,170 @@ func (s *PGCronStore) UpdateJob(jobID string, patch store.CronJobPatch) (*store.
 		}
 	}
 
-	// Update payload JSONB — fetch current, merge patch fields, re-serialize
-	needsPayloadUpdate := patch.Message != "" || patch.Deliver != nil || patch.Channel != nil || patch.To != nil || patch.WakeHeartbeat != nil
-	if needsPayloadUpdate {
-		var payloadJSON []byte
-		if scanErr := s.db.QueryRow("SELECT payload FROM cron_jobs WHERE id = $1", id).Scan(&payloadJSON); scanErr == nil {
-			var payload store.CronPayload
-			json.Unmarshal(payloadJSON, &payload)
-
-			if patch.Message != "" {
-				payload.Message = patch.Message
-			}
-			if patch.Deliver != nil {
-				payload.Deliver = *patch.Deliver
-			}
-			if patch.Channel != nil {
-				payload.Channel = *patch.Channel
-			}
-			if patch.To != nil {
-				payload.To = *patch.To
-			}
-			if patch.WakeHeartbeat != nil {
-				payload.WakeHeartbeat = *patch.WakeHeartbeat
-			}
-
-			merged, _ := json.Marshal(payload)
-			updates["payload"] = merged
+	if patch.Schedule != nil {
+		merged := store.MergeCronSchedule(current.Schedule, patch.Schedule)
+		if err := store.ValidateCronSchedule(&merged); err != nil {
+			return nil, err
 		}
+
+		store.ApplyCronScheduleUpdates(updates, merged)
+
+		nextRun, err := store.NextRunForSchedule(&merged, effectiveEnabled, now, s.defaultTZ)
+		if err != nil {
+			return nil, err
+		}
+		updates["next_run_at"] = nextRun
+	} else if patch.Enabled != nil {
+		nextRun, err := store.NextRunForToggle(&current.Schedule, effectiveEnabled, current.Enabled, current.NextRunAt, now, s.defaultTZ)
+		if err != nil {
+			return nil, err
+		}
+		updates["next_run_at"] = nextRun
 	}
 
-	updates["updated_at"] = time.Now()
+	if patch.Stateless != nil {
+		updates["stateless"] = *patch.Stateless
+	}
+	if patch.Deliver != nil {
+		updates["deliver"] = *patch.Deliver
+	}
+	if patch.DeliverChannel != nil {
+		updates["deliver_channel"] = *patch.DeliverChannel
+	}
+	if patch.DeliverTo != nil {
+		updates["deliver_to"] = *patch.DeliverTo
+	}
+	if patch.WakeHeartbeat != nil {
+		updates["wake_heartbeat"] = *patch.WakeHeartbeat
+	}
 
-	if err := execMapUpdate(context.Background(), s.db, "cron_jobs", id, updates); err != nil {
+	if patch.Message != "" {
+		payload := current.Payload
+		payload.Message = patch.Message
+		mergedPayload, err := json.Marshal(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal payload for job %s: %w", jobID, err)
+		}
+		updates["payload"] = mergedPayload
+	}
+
+	updates["updated_at"] = now
+	if err := execCronJobUpdateTx(ctx, tx, id, updates); err != nil {
 		return nil, err
 	}
 
-	s.cacheLoaded = false
-	job, _ := s.scanJob(id)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	s.InvalidateCache()
+	job, _ := s.scanJob(ctx, id)
 	return job, nil
 }
+
+func (s *PGCronStore) lockCronJobForMutation(ctx context.Context, tx *sql.Tx, id uuid.UUID, loadPayload bool) (*store.CronJobMutableState, error) {
+	q := `SELECT enabled, schedule_kind, cron_expression, run_at, timezone, interval_ms, next_run_at, payload
+		FROM cron_jobs WHERE id = $1`
+	args := []any{id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return nil, fmt.Errorf("tenant_id required")
+		}
+		q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+	q += " FOR UPDATE"
+
+	var (
+		state        store.CronJobMutableState
+		scheduleKind string
+		cronExpr     *string
+		runAt        *time.Time
+		tz           *string
+		intervalMS   *int64
+		nextRunAt    *time.Time
+		payloadJSON  []byte
+	)
+
+	if err := tx.QueryRowContext(ctx, q, args...).Scan(
+		&state.Enabled,
+		&scheduleKind,
+		&cronExpr,
+		&runAt,
+		&tz,
+		&intervalMS,
+		&nextRunAt,
+		&payloadJSON,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrCronJobNotFound
+		}
+		return nil, err
+	}
+
+	state.Schedule = store.CronSchedule{Kind: scheduleKind}
+	if cronExpr != nil {
+		state.Schedule.Expr = *cronExpr
+	}
+	if runAt != nil {
+		ms := runAt.UnixMilli()
+		state.Schedule.AtMS = &ms
+	}
+	if tz != nil {
+		state.Schedule.TZ = *tz
+	}
+	if intervalMS != nil {
+		state.Schedule.EveryMS = intervalMS
+	}
+	state.NextRunAt = nextRunAt
+
+	if loadPayload && len(payloadJSON) > 0 {
+		if err := json.Unmarshal(payloadJSON, &state.Payload); err != nil {
+			return nil, fmt.Errorf("failed to parse existing payload for job %s: %w", id, err)
+		}
+	}
+
+	return &state, nil
+}
+
+
+func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates map[string]any) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	var (
+		setClauses []string
+		args       []any
+	)
+	for idx, col := range store.SortedUpdateColumns(updates) {
+		if !validColumnName.MatchString(col) {
+			return fmt.Errorf("invalid column name: %q", col)
+		}
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, idx+1))
+		args = append(args, updates[col])
+	}
+
+	args = append(args, id)
+	q := fmt.Sprintf("UPDATE cron_jobs SET %s WHERE id = $%d", strings.Join(setClauses, ", "), len(args))
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return fmt.Errorf("tenant_id required")
+		}
+		args = append(args, tid)
+		q += fmt.Sprintf(" AND tenant_id = $%d", len(args))
+	}
+
+	res, err := tx.ExecContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrCronJobNotFound
+	}
+	return nil
+}
+

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -268,10 +269,13 @@ func (t *HeartbeatTool) checkPermission(ctx context.Context, agentID uuid.UUID) 
 	if t.permStore == nil {
 		return nil // no permission store = allow all (backward compat)
 	}
-	userID := store.UserIDFromContext(ctx)
-	if userID == "" {
+	// Use individual sender ID for permission check (not group-scoped UserID).
+	// This matches the pattern used by file_writer and /addwriter commands.
+	senderID := store.SenderIDFromContext(ctx)
+	if senderID == "" {
 		return nil // system context (cron, subagent) = allow
 	}
+	numericID := strings.SplitN(senderID, "|", 2)[0]
 
 	// Determine scope from context: "agent" for DM, "group:{channel}:{chatId}" for groups.
 	scope := "agent"
@@ -281,7 +285,7 @@ func (t *HeartbeatTool) checkPermission(ctx context.Context, agentID uuid.UUID) 
 		}
 	}
 
-	allowed, err := t.permStore.CheckPermission(ctx, agentID, scope, "heartbeat", userID)
+	allowed, err := t.permStore.CheckPermission(ctx, agentID, scope, store.ConfigTypeHeartbeat, numericID)
 	if err != nil {
 		return fmt.Errorf("permission check failed: %w", err)
 	}
@@ -292,14 +296,8 @@ func (t *HeartbeatTool) checkPermission(ctx context.Context, agentID uuid.UUID) 
 	// Fallback: check if user is agent owner (via agent store).
 	if t.agentStore != nil {
 		ag, agErr := t.agentStore.GetByID(ctx, agentID)
-		if agErr == nil {
-			senderID := store.SenderIDFromContext(ctx)
-			if senderID == "" {
-				senderID = userID
-			}
-			if ag.OwnerID != "" && ag.OwnerID == senderID {
-				return nil // agent owner = allow
-			}
+		if agErr == nil && ag.OwnerID != "" && ag.OwnerID == senderID {
+			return nil // agent owner = allow
 		}
 	}
 

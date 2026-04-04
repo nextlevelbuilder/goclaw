@@ -1,0 +1,122 @@
+{
+  "title": "Skill",
+  "description": "Quản lý skill và khả năng của agent",
+  "searchPlaceholder": "Tìm kiếm skill...",
+  "emptyTitle": "Chưa có skill",
+  "emptyDescription": "Chưa có skill nào được đăng ký.",
+  "noMatchTitle": "Không tìm thấy skill phù hợp",
+  "noMatchDescription": "Thử từ khóa tìm kiếm khác.",
+  "columns": {
+    "name": "Tên",
+    "description": "Mô tả",
+    "source": "Nguồn",
+    "author": "Tác giả",
+    "visibility": "Hiển thị",
+    "status": "Trạng thái",
+    "actions": "Thao tác"
+  },
+  "noDescription": "Không có mô tả",
+  "visibility": {
+    "clickToCycle": "Nhấp để thay đổi hiển thị"
+  },
+  "delete": {
+    "title": "Xóa skill",
+    "description": "Bạn có chắc chắn muốn xóa \"{{name}}\"? Hành động này không thể hoàn tác.",
+    "confirmLabel": "Xóa"
+  },
+  "upload": {
+    "title": "Tải lên Skill",
+    "description": "Tải lên tệp ZIP chứa SKILL.md với YAML frontmatter (name, description, slug).",
+    "button": "Tải lên",
+    "uploading": "Đang tải lên...",
+    "dropOrClick": "Nhấp hoặc kéo thả tệp .zip",
+    "dropHere": "Thả tệp .zip vào đây",
+    "onlyZip": "Chỉ chấp nhận tệp .zip",
+    "cancel": "Hủy",
+    "done": "Xong",
+    "tooLarge": "Tệp vượt quá giới hạn 20MB",
+    "invalidZip": "Tệp ZIP không hợp lệ",
+    "noSkillMd": "ZIP phải chứa SKILL.md ở thư mục gốc",
+    "emptySkillMd": "SKILL.md trống",
+    "noFrontmatter": "SKILL.md thiếu YAML frontmatter",
+    "nameRequired": "Cần có name trong SKILL.md frontmatter",
+    "invalidSlug": "Định dạng slug không hợp lệ",
+    "failed": "Tải lên thất bại",
+    "validating": "Đang xác thực...",
+    "validCount": "{{valid}} / {{total}} hợp lệ",
+    "uploadCount": "Tải lên ({{count}})",
+    "successCount": "{{success}} / {{total}} đã tải lên thành công",
+    "remove": "Xóa tệp"
+  },
+  "edit": {
+    "title": "Chỉnh sửa skill",
+    "name": "Tên",
+    "description": "Mô tả",
+    "visibility": "Hiển thị",
+    "tags": "Thẻ",
+    "addTag": "Thêm thẻ...",
+    "add": "Thêm",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "saving": "Đang lưu...",
+    "privateOption": "Riêng tư (chỉ chủ sở hữu)",
+    "internalOption": "Nội bộ (agent/người dùng được cấp quyền)",
+    "publicOption": "Công khai (tất cả agent)"
+  },
+  "system": "Hệ thống",
+  "tabs": {
+    "core": "Hệ thống",
+    "custom": "Tùy chỉnh"
+  },
+  "toggle": {
+    "enable": "Bật skill",
+    "disable": "Tắt skill",
+    "disabled": "Đã tắt"
+  },
+  "tenant": {
+    "enabled": "Đã bật",
+    "disabled": "Đã tắt",
+    "default": "Mặc định",
+    "overrideHint": "Ghi đè riêng cho tenant này",
+    "resetDefault": "Đặt lại mặc định"
+  },
+  "deps": {
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed",
+    "installPartial": "Some dependencies failed",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
+  },
+  "detail": {
+    "title": "Chi tiết skill",
+    "content": "Nội dung",
+    "files": "Tệp",
+    "version": "Phiên bản:",
+    "current": "(hiện tại)",
+    "noContent": "Không có nội dung."
+  },
+  "toast": {
+    "updated": "Đã cập nhật skill",
+    "updateFailed": "Không thể cập nhật skill",
+    "deleted": "Đã xóa skill",
+    "deleteFailed": "Không thể xóa skill",
+    "rescanUpdated": "Đã cập nhật {{count}} skill",
+    "rescanNoChanges": "Tất cả skill đã cập nhật",
+    "rescanFailed": "Không thể quét lại dependencies"
+  }
+}

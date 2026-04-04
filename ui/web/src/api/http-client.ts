@@ -69,15 +69,9 @@ export class HttpClient {
   }
 
   async upload<T>(path: string, formData: FormData): Promise<T> {
-    const headers: Record<string, string> = {};
-    const token = this.getToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const userId = this.getUserId();
-    if (userId) headers["X-GoClaw-User-Id"] = userId;
-
     const res = await fetch(this.buildUrl(path), {
       method: "POST",
-      headers,
+      headers: this.authHeaders(),
       body: formData,
     });
 
@@ -102,6 +96,11 @@ export class HttpClient {
     return url.toString();
   }
 
+  /** Public auth headers — for SSE streams and custom fetch calls. */
+  getAuthHeaders(): Record<string, string> {
+    return this.authHeaders();
+  }
+
   /** Auth-only headers (no Content-Type), for SSE / blob requests. */
   private authHeaders(): Record<string, string> {
     const h: Record<string, string> = {};
@@ -111,6 +110,9 @@ export class HttpClient {
     if (userId) h["X-GoClaw-User-Id"] = userId;
     const senderID = this.getSenderID();
     if (senderID) h["X-GoClaw-Sender-Id"] = senderID;
+    // Tenant scope: narrow cross-tenant admin to a specific tenant
+    const tenantScope = localStorage.getItem("goclaw:tenant_id");
+    if (tenantScope) h["X-GoClaw-Tenant-Id"] = tenantScope;
     return h;
   }
 
@@ -130,10 +132,10 @@ export class HttpClient {
     }
 
     if (!res.ok) {
-      if (res.status === 401) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      if (res.status === 401 || err.code === "TENANT_ACCESS_REVOKED") {
         this.onAuthFailure?.();
       }
-      const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new ApiError(
         err.code ?? "HTTP_ERROR",
         err.error ?? err.message ?? res.statusText,

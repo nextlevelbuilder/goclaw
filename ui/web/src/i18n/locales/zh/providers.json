@@ -22,7 +22,47 @@
   "card": {
     "apiKeySet": "已设置API密钥",
     "authenticated": "已认证",
-    "oauthLinked": "已链接OAuth"
+    "oauthLinked": "已链接OAuth",
+    "oauthAccount": "OAuth 账户",
+    "oauthAlias": "别名：{{name}}",
+    "connected": "已连接",
+    "signInNeeded": "需要登录",
+    "disabled": "已禁用"
+  },
+  "quota": {
+    "checking": "正在检查配额",
+    "plan": "套餐",
+    "lastChecked": "检查于 {{value}}",
+    "failure": {
+      "billing": {
+        "label": "账单",
+        "description": "当前账单状态或权限正在阻止此账户使用。"
+      },
+      "exhausted": {
+        "label": "已耗尽",
+        "description": "该账户已登录，但其核心配额窗口之一已经耗尽。"
+      },
+      "reauth": {
+        "label": "重新登录",
+        "description": "请重新登录以刷新工作区访问权限。"
+      },
+      "forbidden": {
+        "label": "无权限",
+        "description": "此账户无法读取上游配额数据。"
+      },
+      "needs_setup": {
+        "label": "需要设置",
+        "description": "请重新登录，以便 GoClaw 恢复 ChatGPT 账户工作区元数据。"
+      },
+      "retry_later": {
+        "label": "稍后重试",
+        "description": "配额接口暂时不可用或已被限流。"
+      },
+      "unavailable": {
+        "label": "不可用",
+        "description": "当前无法获取此账户的配额数据。"
+      }
+    }
   },
   "detail": {
     "title": "提供商详情",
@@ -53,6 +93,21 @@
     "alreadyAdded": "（已添加）",
     "nameFixed": "名称",
     "configure": "配置 LLM Provider连接。",
+    "configureOauth": "连接一个 OpenAI Codex OAuth 账户。之后可在 agent 账户池中继续添加更多别名。",
+    "oauthAlias": "账户别名 *",
+    "oauthAliasPlaceholder": "例如 primary",
+    "oauthAliasHint": "为这个 OpenAI/Codex 账户使用唯一的小写别名，例如 primary、work 或 team。之后可以再添加更多别名用于池或 round robin。",
+    "oauthDisplayNamePlaceholder": "主 Codex 账户",
+    "oauthDisplayNameHint": "界面里显示的友好标签。当您拥有多个 OpenAI Codex OAuth 账户时会更清晰。",
+    "oauthSetupBadge": "1 个别名 = 1 个账户",
+    "oauthSetupAliasTitle": "别名",
+    "oauthSetupAliasDesc": "Agent 池和路由里使用的小写路由键。",
+    "oauthSetupLabelTitle": "显示名称",
+    "oauthSetupLabelDesc": "可选标签，多个账户时在面板里更容易分辨。",
+    "oauthSetupPoolTitle": "后续",
+    "oauthSetupPoolDesc": "稍后可在 agent 中继续添加已登录别名，用于池成员或 round robin。",
+    "oauthAliasBadge": "路由键",
+    "oauthDisplayNameBadge": "可选",
     "lowercaseHint": "小写字母、数字、连字符"
   },
   "delete": {
@@ -72,7 +127,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
-    "chatgpt_oauth": "ChatGPT (OAuth)",
+    "chatgpt_oauth": "ChatGPT Subscription (OAuth)",
     "yescale": "YesScale",
     "acp": "ACP"
   },
@@ -98,27 +153,41 @@
   "oauth": {
     "checkingStatus": "正在检查认证状态...",
     "authSuccessful": "认证成功！",
+    "authSuccessfulDesc": "这个具名的 OpenAI/Codex 账户已经可以使用。",
     "activeProvider": "Provider",
-    "closingIn": "现已激活。{{count}} 秒后关闭...",
     "authenticated": "已认证 — Provider",
     "active": "活跃",
+    "poolBadge": "可加入账户池",
+    "roundRobinBadge": "Round robin",
     "modelPrefixHint": "在Agent配置中使用模型前缀",
-    "modelPrefixExample": "（例如 openai-codex/gpt-4o）。令牌自动刷新。",
-    "removeToken": "移除令牌",
-    "signInDesc": "使用您的 ChatGPT 账户登录，无需单独的 API 密钥即可使用订阅中的模型。",
+    "modelPrefixExample": "（例如 {{example}}）。令牌会自动刷新。",
+    "multiAccountHint": "之后可在 agent 账户池中继续添加别名，以启用 pooling 或 round robin。",
+    "aliasRequired": "开始 OpenAI Codex OAuth 之前，请先输入有效的小写账户别名。",
+    "removeToken": "断开账户",
+    "signInDesc": "每个 OpenAI Codex OAuth provider 都代表一个具名账户。登录后即可直接使用您的 ChatGPT/Codex 订阅，无需单独 API 密钥。",
+    "subscriptionBadge": "订阅登录",
+    "poolBadge": "可加入账户池",
+    "aliasBadge": "别名",
+    "accountCardTitle": "当前账户",
+    "accountCardDesc": "通过订阅登录连接一个 OpenAI/Codex 账户。",
+    "routingCardTitle": "池与 round robin",
+    "routingCardDesc": "稍后可从使用该账户的 agent 中再添加更多已登录别名。",
+    "prefixCardTitle": "模型前缀",
+    "prefixCardDesc": "在 agent 配置里把这个别名用作 provider 前缀。",
     "waiting": "等待认证中... 请在已打开的窗口中完成登录。",
     "remoteVpsHint": "登录后，您的浏览器将尝试打开",
     "remoteVpsError": "并显示「无法访问此页面」错误。这是正常的 — 从浏览器地址栏复制完整 URL 并粘贴到下方。",
     "pasteUrlPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
     "submit": "提交",
-    "signInWithChatGPT": "使用 ChatGPT 登录",
+    "signInWithChatGPT": "连接 OpenAI 账户",
     "starting": "启动中...",
     "remoteVps": "远程/VPS?",
     "loggedOut": "已登出",
-    "loggedOutDesc": "OpenAI OAuth 令牌已移除",
+    "loggedOutDesc": "OpenAI Codex OAuth 账户已断开",
     "oauthFailed": "OAuth 失败",
     "exchangeFailed": "交换失败",
-    "logoutFailed": "登出失败"
+    "logoutFailed": "登出失败",
+    "done": "完成"
   },
   "cli": {
     "description": "Claude CLI 使用本地",
@@ -159,15 +228,123 @@
     "cliConfigDesc": "本地CLI认证",
     "cursorCliConfig": "Cursor CLI",
     "cursorCliConfigDesc": "本地 Cursor agent 认证",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "ChatGPT OAuth认证",
+    "oauthConfig": "ChatGPT Subscription (OAuth)",
+    "oauthConfigDesc": "管理这个具名 OpenAI/Codex 账户的登录状态",
     "nameReadonly": "Provider标识符，无法更改",
+    "oauthAliasReadonly": "OAuth 账户别名无法更改",
     "providerType": "Provider类型",
     "apiKeySection": "API密钥",
     "apiKeySectionDesc": "认证凭证",
     "statusSection": "状态",
     "statusSectionDesc": "Provider可用性",
-    "enabledDesc": "Provider已激活并可供Agent使用"
+    "enabledDesc": "Provider已激活并可供Agent使用",
+    "embeddingSection": "Embedding",
+    "oauthAccountUsage": "账户用法",
+    "oauthAccountUsageDesc": "这个别名如何参与由 provider 拥有的 OpenAI Codex 账户池。",
+    "oauthAccountUsageManagedDesc": "这个别名当前是由 {{provider}} 管理的池成员。",
+    "oauthAccountUsageOwnerDesc": "这个别名当前拥有一个可复用账户池，包含 {{count}} 个附加账户。",
+    "oauthPoolRole": {
+      "member": "池成员",
+      "owner": "池拥有者",
+      "standalone": "独立账户"
+    },
+    "oauthAliasLabel": "账户别名",
+    "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
+    "oauthModelPrefix": "模型前缀",
+    "oauthQuotaTitle": "配额状态",
+    "oauthQuotaDescription": "此账户最新的 ChatGPT 工作区配额。",
+    "oauthModelPrefixCopied": "模型前缀已复制",
+    "oauthPreferredHint": "把 agent 的 Provider 字段设为这个别名，就能把它作为主 OpenAI 别名。",
+    "oauthProviderDefaultHint": "使用下方的默认账户池设置，为所有把这个别名设为主 provider 的 agent 定义可复用的 OpenAI Codex 路由策略。",
+    "oauthRoutingHint": "Agent 页面现在会展示该 agent 的最终生效账户池，以及它是继承这里的默认值还是使用自己的覆盖配置。",
+    "oauthManagedByHint": "这个别名由 provider {{provider}} 管理。请到那个 provider 上编辑池成员，而不是在这个账户上修改。",
+    "reasoningDefaultsTitle": "Reasoning Defaults",
+    "reasoningDefaultsDescription": "Set the default reasoning policy for agents using this provider. Final runtime effort is still normalized against each agent's selected model.",
+    "reasoningPreset": "Default Preset",
+    "reasoningExpertMode": "Expert Defaults",
+    "reasoningExpertModeDesc": "Use provider-owned advanced reasoning defaults when you need efforts such as auto, none, minimal, or xhigh.",
+    "reasoningPreviewDescription": "Previewing explicit reasoning capability metadata for {{model}}.",
+    "reasoningPreviewLabel": "Capability Preview",
+    "reasoningPreviewDefault": "Preview model default reasoning: {{level}}",
+    "reasoningPreviewEmpty": "No explicit reasoning-capable models were returned for this provider yet.",
+    "reasoningRequestedEffort": "Requested Effort",
+    "reasoningFallbackBehavior": "Fallback Behavior",
+    "codexPoolDefaultsTitle": "默认账户池",
+    "codexPoolDefaultsDescription": "为把这个别名作为主 provider 的 agent 定义由该别名拥有的可复用 OpenAI Codex 账户池。",
+    "oauthDisplayNameRecommendation": "如果您希望多个 OpenAI Codex OAuth 账户在池里显示得更清楚，可以补充显示名称。",
+    "poolActivityTitle": "池活动",
+    "poolActivityDescription": "汇总所有使用该 provider Codex 池的 agent 的运行时活动。",
+    "poolActivityRefresh": "刷新",
+    "poolActivityTopAgents": "Agent",
+    "poolActivityTopAgentsTitle": "使用该池最多的 agent",
+    "poolActivityRequests": "请求",
+    "poolActivityEmpty": "暂无活动",
+    "poolActivityEmptyDesc": "当 agent 开始通过此池路由请求时，池活动将在此显示。"
+  },
+  "list": {
+    "poolOwner": "池拥有者",
+    "poolMember": "池成员",
+    "standalone": "独立账户",
+    "reasoningDefault": "Reasoning {{level}}",
+    "managedBy": "由 {{provider}} 管理",
+    "memberCount_one": "{{count}} 个成员",
+    "memberCount_other": "{{count}} 个成员",
+    "memberOverflow": "+{{count}}",
+    "strategy": {
+      "roundRobin": "轮询",
+      "priorityOrder": "按优先级",
+      "primaryFirst": "主账号优先"
+    },
+    "status": {
+      "needsSignIn": "需要登录",
+      "disabled": "已禁用"
+    }
+  },
+  "pageHint": {
+    "title": "ChatGPT Subscription (OAuth) 账户",
+    "description": "每个别名就是一个 Codex 账户。池拥有者在这里管理成员账户，而 agent 页面只展示最终生效的路由。",
+    "connected_one": "{{count}} 个已连接账户",
+    "connected_other": "{{count}} 个已连接账户",
+    "owners_one": "{{count}} 个池拥有者",
+    "owners_other": "{{count}} 个池拥有者",
+    "members_one": "{{count}} 个成员",
+    "members_other": "{{count}} 个成员"
+  },
+  "embedding": {
+    "enable": "启用Embedding",
+    "enableDesc": "允许此Provider为记忆、技能和知识图谱生成文本嵌入",
+    "model": "Embedding模型",
+    "dimensions": "输出维度",
+    "dimensionsHint": "GoClaw memory 当前以 vector(1536) 存储 embedding。若模型本身输出 1536 维则留空；若 provider 支持从更高原生维度截断，则只能设置为 1536。",
+    "dimensionsInvalid": "GoClaw memory 当前只支持精确的 1536 维。",
+    "apiBase": "Embedding API地址",
+    "apiBasePlaceholder": "(与Provider相同)",
+    "apiBaseHint": "如果Embedding端点与Provider的主API地址不同，可在此覆盖",
+    "verify": "验证Embedding",
+    "verifyFailed": "Embedding验证失败",
+    "dimensionsMismatch": "{{count}}维 — 不符合要求的1536"
+  },
+  "reasoning": {
+    "off": "Off",
+    "offDesc": "No default extended thinking",
+    "auto": "Auto",
+    "autoDesc": "Ask the model to use its own default reasoning effort",
+    "none": "None",
+    "noneDesc": "Explicitly disable provider reasoning while keeping the advanced contract",
+    "minimal": "Minimal",
+    "minimalDesc": "Use the smallest supported reasoning effort above none",
+    "low": "Low",
+    "lowDesc": "~4K token budget",
+    "medium": "Medium",
+    "mediumDesc": "~10-16K token budget",
+    "high": "High",
+    "highDesc": "~32K token budget",
+    "xhigh": "XHigh",
+    "xhighDesc": "Use the maximum supported reasoning effort",
+    "downgrade": "Downgrade",
+    "downgradeDesc": "Normalize to the nearest supported lower level, or disable when no lower supported level exists",
+    "provider_default": "Use Model Default",
+    "provider_defaultDesc": "Let the selected model fall back to its own default reasoning effort"
   },
   "toast": {
     "created": "Provider已创建",

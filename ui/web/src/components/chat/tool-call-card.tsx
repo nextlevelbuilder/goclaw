@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Wrench, AlertTriangle, Loader2, ChevronDown, ChevronRight, Zap } from "lucide-react";
+import { Wrench, AlertTriangle, ChevronRight, Zap } from "lucide-react";
 import type { ToolStreamEntry } from "@/types/chat";
 
 const isSkillTool = (name: string) => name === "use_skill";
@@ -44,9 +44,7 @@ export function ToolCallCard({ entry, compact }: ToolCallCardProps) {
         <span className="ml-auto flex items-center gap-1 shrink-0">
           <PhaseLabel phase={entry.phase} isSkill={skill} />
           {canExpand && (
-            expanded
-              ? <ChevronDown className="h-3 w-3 text-muted-foreground" />
-              : <ChevronRight className="h-3 w-3 text-muted-foreground" />
+            <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`} />
           )}
         </span>
       </button>
@@ -88,7 +86,7 @@ function ToolIcon({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSkill
     }
   }
   switch (phase) {
-    case "calling": return <Loader2 className={`${cls} animate-spin text-blue-500`} />;
+    case "calling": return <Wrench className={`${cls} animate-wobble text-blue-500`} />;
     case "completed": return <Wrench className={`${cls} text-blue-500`} />;
     case "error": return <AlertTriangle className={`${cls} text-red-500`} />;
     default: return <Wrench className={`${cls} text-muted-foreground`} />;

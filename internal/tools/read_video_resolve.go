@@ -37,9 +37,17 @@ func (t *ReadVideoTool) resolveVideoFile(ctx context.Context, mediaID string) (p
 		ref = &refs[len(refs)-1]
 	}
 
-	p, err := t.mediaLoader.LoadPath(ref.ID)
-	if err != nil {
-		return "", "", fmt.Errorf("video file not found: %v", err)
+	// Prefer persisted workspace path; fall back to legacy .media/ lookup.
+	p := ref.Path
+	if p == "" {
+		var err error
+		if t.mediaLoader == nil {
+			return "", "", fmt.Errorf("no media storage configured")
+		}
+		p, err = t.mediaLoader.LoadPath(ref.ID)
+		if err != nil {
+			return "", "", fmt.Errorf("video file not found: %v", err)
+		}
 	}
 
 	mime = ref.MimeType
@@ -70,7 +78,7 @@ func (t *ReadVideoTool) callProvider(ctx context.Context, cp credentialProvider,
 	}
 
 	// Other providers: try standard Chat API with base64 as image_url (best effort).
-	p, err := t.registry.Get(providerName)
+	p, err := t.registry.Get(ctx, providerName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provider %q not available: %w", providerName, err)
 	}

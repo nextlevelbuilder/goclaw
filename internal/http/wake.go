@@ -20,7 +20,6 @@ import (
 // Allows orchestrators (Paperclip, n8n, etc.) to trigger agent runs via HTTP.
 type WakeHandler struct {
 	agents   *agent.Router
-	token    string
 	postTurn tools.PostTurnProcessor
 }
 
@@ -30,8 +29,8 @@ func (h *WakeHandler) SetPostTurnProcessor(pt tools.PostTurnProcessor) {
 }
 
 // NewWakeHandler creates a handler for the wake endpoint.
-func NewWakeHandler(agents *agent.Router, token string) *WakeHandler {
-	return &WakeHandler{agents: agents, token: token}
+func NewWakeHandler(agents *agent.Router) *WakeHandler {
+	return &WakeHandler{agents: agents}
 }
 
 // RegisterRoutes registers wake routes on the given mux.
@@ -62,7 +61,7 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 	locale := extractLocale(r)
 
 	// Auth + RBAC check (gateway token or API key, operator required for POST)
-	auth := resolveAuth(r, h.token)
+	auth := resolveAuth(r)
 	if !auth.Authenticated {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": i18n.T(locale, i18n.MsgUnauthorized)})
 		return
@@ -71,6 +70,9 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path)})
 		return
 	}
+
+	// Inject tenant, role, user, and locale into context for downstream stores/tools.
+	r = r.WithContext(enrichContext(r.Context(), r, auth))
 
 	agentID := r.PathValue("id")
 	if agentID == "" {
@@ -93,7 +95,7 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loop, err := h.agents.Get(agentID)
+	loop, err := h.agents.Get(r.Context(), agentID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "agent", agentID)})
 		return
@@ -105,14 +107,19 @@ func (h *WakeHandler) handleWake(w http.ResponseWriter, r *http.Request) {
 		sessionKey = sessions.SessionKey(agentID, "wake-"+uuid.NewString()[:8])
 	}
 
-	userID := req.UserID
-	if userID == "" {
-		userID = extractUserID(r)
-	}
-
-	ctx := store.WithLocale(r.Context(), locale)
-	if userID != "" {
-		ctx = store.WithUserID(ctx, userID)
+	// Body user_id override: allowed only when API key has no bound owner (prevents impersonation).
+	userID := store.UserIDFromContext(r.Context())
+	ctx := r.Context()
+	if req.UserID != "" && req.UserID != userID {
+		if auth.KeyData != nil && auth.KeyData.OwnerID != "" {
+			slog.Warn("security.wake_owner_override_blocked",
+				"req_user_id", req.UserID,
+				"owner_id", auth.KeyData.OwnerID,
+			)
+		} else {
+			userID = req.UserID
+			ctx = store.WithUserID(ctx, req.UserID)
+		}
 	}
 
 	runID := uuid.NewString()

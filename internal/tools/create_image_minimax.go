@@ -13,42 +13,46 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
-// callMinimaxImageGen calls the MiniMax image generation API.
-// Endpoint: POST {apiBase}/image_generation
-// Response: base64 image data in data.image_list[0].base64_image
-// aspectRatioToMinimaxSize converts aspect_ratio (e.g. "16:9") to MiniMax size format.
-// Falls back to explicit "size" param if set, otherwise uses aspect_ratio mapping.
-func aspectRatioToMinimaxSize(params map[string]any) string {
-	// Explicit size param takes priority (from UI provider settings)
+// minimaxImageAspectRatio returns the aspect_ratio string for MiniMax image_generation.
+// See: https://platform.minimax.io/docs/guides/image-generation
+// Legacy chain settings may still pass "size" as "WIDTH*HEIGHT"; map those to ratios.
+func minimaxImageAspectRatio(params map[string]any) string {
 	if s := GetParamString(params, "size", ""); s != "" {
-		return s
+		switch strings.ReplaceAll(s, " ", "") {
+		case "1280*720":
+			return "16:9"
+		case "720*1280":
+			return "9:16"
+		case "1024*768":
+			return "4:3"
+		case "768*1024":
+			return "3:4"
+		case "1024*1024":
+			return "1:1"
+		}
 	}
-	ar := GetParamString(params, "aspect_ratio", "1:1")
+	ar := GetParamString(params, "aspect_ratio", "")
 	switch ar {
-	case "16:9":
-		return "1280*720"
-	case "9:16":
-		return "720*1280"
-	case "4:3":
-		return "1024*768"
-	case "3:4":
-		return "768*1024"
+	case "1:1", "3:4", "4:3", "9:16", "16:9":
+		return ar
+	case "":
+		return "1:1"
 	default:
-		return "1024*1024"
+		return "1:1"
 	}
 }
 
+// callMinimaxImageGen calls the MiniMax image generation API.
+// Endpoint: POST {apiBase}/image_generation
+// Response: base64 strings in data.image_base64 (per official guide).
 func callMinimaxImageGen(ctx context.Context, apiKey, apiBase, model, prompt string, params map[string]any) ([]byte, *providers.Usage, error) {
-	size := aspectRatioToMinimaxSize(params)
-	promptOptimizer := GetParamBool(params, "prompt_optimizer", true)
+	aspectRatio := minimaxImageAspectRatio(params)
 
 	body := map[string]any{
-		"model":                model,
-		"prompt":               prompt,
-		"size":                 size,
-		"num_images":           1,
-		"enable_base64_output": true,
-		"prompt_optimizer":     promptOptimizer,
+		"model":           model,
+		"prompt":          prompt,
+		"aspect_ratio":    aspectRatio,
+		"response_format": "base64",
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -81,7 +85,8 @@ func callMinimaxImageGen(ctx context.Context, apiKey, apiBase, model, prompt str
 
 	var minimaxResp struct {
 		Data *struct {
-			ImageList []struct {
+			ImageBase64 []string `json:"image_base64"`
+			ImageList   []struct {
 				Base64Image string `json:"base64_image"`
 			} `json:"image_list"`
 		} `json:"data"`
@@ -99,13 +104,18 @@ func callMinimaxImageGen(ctx context.Context, apiKey, apiBase, model, prompt str
 			minimaxResp.BaseResp.StatusCode, minimaxResp.BaseResp.StatusMsg)
 	}
 
-	if minimaxResp.Data == nil || len(minimaxResp.Data.ImageList) == 0 {
+	if minimaxResp.Data == nil {
 		return nil, nil, fmt.Errorf("no image data in MiniMax response")
 	}
 
-	b64 := minimaxResp.Data.ImageList[0].Base64Image
+	var b64 string
+	if len(minimaxResp.Data.ImageBase64) > 0 {
+		b64 = minimaxResp.Data.ImageBase64[0]
+	} else if len(minimaxResp.Data.ImageList) > 0 {
+		b64 = minimaxResp.Data.ImageList[0].Base64Image
+	}
 	if b64 == "" {
-		return nil, nil, fmt.Errorf("empty base64_image in MiniMax response")
+		return nil, nil, fmt.Errorf("no image data in MiniMax response")
 	}
 
 	imageBytes, err := base64.StdEncoding.DecodeString(b64)

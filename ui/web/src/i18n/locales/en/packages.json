@@ -1,10 +1,14 @@
 {
   "title": "Runtime & Packages",
-  "description": "Manage system runtimes and installed packages",
+  "description": "Manage runtimes and installed packages inside the active GoClaw runtime container",
   "runtimes": {
     "title": "Runtimes",
+    "scopeTitle": "Container-scoped runtime status",
+    "scopeDesc": "These checks run inside the active GoClaw runtime container. Host-installed runtimes, shell profile changes, and nvm-managed binaries are not used here.",
+    "minimalImageHint": "The published latest image is minimal, so missing Python or Node runtimes can be expected there. Use the python, node, or full image variant, rebuild with ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, or install runtimes manually in this container.",
     "available": "Available",
-    "missing": "Missing"
+    "missing": "Missing",
+    "missingInContainer": "Missing in container"
   },
   "system": {
     "title": "System Packages",

@@ -115,15 +115,17 @@ func (s *PGTeamStore) SearchTasksByEmbedding(ctx context.Context, teamID uuid.UU
 		limit = 5
 	}
 	vecStr := vectorToString(embedding)
+	tid := tenantIDForInsert(ctx)
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
 		 WHERE t.team_id = $1 AND t.embedding IS NOT NULL
 		   AND ($4 = '' OR t.user_id = $4)
+		   AND t.tenant_id = $5
 		 ORDER BY t.embedding <=> $2::vector
 		 LIMIT $3`,
-		teamID, vecStr, limit, userID)
+		teamID, vecStr, limit, userID, tid)
 	if err != nil {
 		return nil, err
 	}

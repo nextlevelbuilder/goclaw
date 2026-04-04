@@ -12,7 +12,7 @@
   "search": "Search",
   "retry": "Retry",
   "manage": "Manage",
-  "upload": "Upload",
+  "uploadLabel": "Upload",
   "close": "Close",
   "back": "Back",
   "update": "Update",
@@ -119,6 +119,20 @@
   "loadMore": "Load more...",
   "viewCard": "Card view",
   "viewList": "List view",
+  "done": "Done",
+  "upload": {
+    "title": "Upload Files",
+    "dropOrClick": "Drop files here or click to browse",
+    "dropHere": "Drop files here",
+    "maxSize": "Max 50 MB per file",
+    "blockedType": "File type {{ext}} is not allowed",
+    "tooLarge": "File exceeds 50 MB limit",
+    "failed": "Upload failed",
+    "readyCount": "{{ready}} of {{total}} files ready",
+    "successCount": "{{success}} of {{total}} files uploaded",
+    "uploading": "Uploading...",
+    "uploadCount": "Upload {{count}} file(s)"
+  },
   "errors": {
     "serverError": "Something went wrong. Please try again later."
   }

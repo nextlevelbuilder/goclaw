@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Legg til minst én GOCLAW_*_API_KEY i .env, deretter:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Web-dashbord på http://localhost:3000
+# Web-dashbord på http://localhost:18790
 # Helsesjekk: curl http://localhost:18790/health
 ```
 

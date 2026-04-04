@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -59,14 +58,11 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		if err := m.teamStore.FailPendingTask(ctx, taskID, teamID, errMsg); err != nil {
 			slog.Warn("post_turn: FailPendingTask error", "task_id", taskID, "error", err)
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    taskID.String(),
-			Status:    store.TeamTaskStatusFailed,
-			Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			ActorType: "system",
-			ActorID:   "post_turn",
-		})
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, BuildTaskEventPayload(
+			teamID.String(), taskID.String(),
+			store.TeamTaskStatusFailed,
+			"system", "post_turn",
+		))
 		slog.Warn("post_turn: task failed — invalid blocked_by",
 			"task_id", taskID, "identifier", task.Identifier, "bad_ref", badRef)
 	}
@@ -74,6 +70,13 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 	// Fail cycled tasks and notify leader.
 	if len(cycled) > 0 {
 		m.failCycledTasks(ctx, teamID, cycled, taskMap)
+	}
+
+	// Fetch team once for lead-agent guard in dispatchTaskToAgent.
+	team, err := m.teamStore.GetTeam(ctx, teamID)
+	if err != nil || team == nil {
+		slog.Warn("post_turn: cannot fetch team", "team_id", teamID, "error", err)
+		return fmt.Errorf("cannot fetch team %s: %w", teamID, err)
 	}
 
 	// Dispatch pending assigned tasks (not blocked, not failed).
@@ -87,27 +90,32 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 		if task.Status != store.TeamTaskStatusPending || task.OwnerAgentID == nil {
 			continue
 		}
+		// Skip tasks assigned to the lead agent — would cause self-dispatch loop.
+		if *task.OwnerAgentID == team.LeadAgentID {
+			continue
+		}
 		if err := m.teamStore.AssignTask(ctx, task.ID, *task.OwnerAgentID, teamID); err != nil {
 			slog.Warn("post_turn: assign failed", "task_id", task.ID, "error", err)
 			continue
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
-			TeamID:        teamID.String(),
-			TaskID:        task.ID.String(),
-			TaskNumber:    task.TaskNumber,
-			Subject:       task.Subject,
-			Status:        store.TeamTaskStatusInProgress,
-			OwnerAgentKey: m.agentKeyFromID(ctx, *task.OwnerAgentID),
-			Channel:       task.Channel,
-			ChatID:        task.ChatID,
-			Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			ActorType:     "system",
-			ActorID:       "post_turn",
-		})
+		taskPeerKind := ""
+		if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
+			taskPeerKind = pk
+		}
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, BuildTaskEventPayload(
+			teamID.String(), task.ID.String(),
+			store.TeamTaskStatusInProgress,
+			"system", "post_turn",
+			WithTaskInfo(task.TaskNumber, task.Subject),
+			WithOwnerAgentKey(m.agentKeyFromID(ctx, *task.OwnerAgentID)),
+			WithChannel(task.Channel),
+			WithChatID(task.ChatID),
+			WithPeerKind(taskPeerKind),
+		))
 		// Restore leader's trace context from task metadata (ctx here is the
 		// consumer goroutine context which has no trace after the turn ends).
 		dispatchCtx := m.restoreTraceContext(ctx, task)
-		m.dispatchTaskToAgent(dispatchCtx, task, teamID, *task.OwnerAgentID)
+		m.dispatchTaskToAgent(dispatchCtx, task, team, *task.OwnerAgentID)
 	}
 
 	slog.Info("post_turn: processed pending tasks",
@@ -133,14 +141,11 @@ func (m *TeamToolManager) failCycledTasks(ctx context.Context, teamID uuid.UUID,
 		if err := m.teamStore.FailPendingTask(ctx, id, teamID, cycleDesc); err != nil {
 			slog.Warn("post_turn: FailPendingTask (cycle) error", "task_id", id, "error", err)
 		}
-		m.broadcastTeamEvent(protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    id.String(),
-			Status:    store.TeamTaskStatusFailed,
-			Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			ActorType: "system",
-			ActorID:   "post_turn",
-		})
+		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, BuildTaskEventPayload(
+			teamID.String(), id.String(),
+			store.TeamTaskStatusFailed,
+			"system", "post_turn",
+		))
 	}
 
 	// Notify leader via system message.
@@ -177,6 +182,8 @@ func (m *TeamToolManager) notifyLeaderCycleError(ctx context.Context, teamID uui
 		ChatID:   chatID,
 		AgentID:  leadAgent.AgentKey,
 		UserID:   team.CreatedBy,
+		PeerKind: ToolPeerKindFromCtx(ctx),
+		TenantID: store.TenantIDFromContext(ctx),
 		Content:  content,
 	})
 }

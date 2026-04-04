@@ -33,6 +33,9 @@ export interface TeamAccessSettings {
     enabled?: boolean;
     auto_dispatch?: boolean;
   };
+  blocker_escalation?: {
+    enabled?: boolean;
+  };
 }
 
 export interface TeamData {
@@ -148,4 +151,5 @@ export interface TeamTaskAttachment {
   created_by_sender_id?: string;
   metadata?: Record<string, unknown>;
   created_at: string;
+  download_url?: string;
 }

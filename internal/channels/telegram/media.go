@@ -14,6 +14,7 @@ import (
 
 	"github.com/mymmrac/telego"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -396,6 +397,104 @@ func lightweightMediaTags(msg *telego.Message) string {
 		return ""
 	}
 	return strings.Join(tags, "\n")
+}
+
+// extractMediaRefs extracts lightweight media references (file_ids + sizes) from a Telegram
+// message without downloading any files. Stored in HistoryEntry.MediaRefs for lazy download
+// when the bot is later mentioned.
+func extractMediaRefs(msg *telego.Message) []channels.MediaRef {
+	var refs []channels.MediaRef
+	if msg.Photo != nil && len(msg.Photo) > 0 {
+		photo := msg.Photo[len(msg.Photo)-1] // highest resolution
+		refs = append(refs, channels.MediaRef{Type: "image", FileID: photo.FileID, FileSize: int64(photo.FileSize)})
+	}
+	if msg.Video != nil {
+		refs = append(refs, channels.MediaRef{Type: "video", FileID: msg.Video.FileID, FileSize: int64(msg.Video.FileSize)})
+	}
+	if msg.VideoNote != nil {
+		refs = append(refs, channels.MediaRef{Type: "video", FileID: msg.VideoNote.FileID, FileSize: int64(msg.VideoNote.FileSize)})
+	}
+	if msg.Animation != nil {
+		refs = append(refs, channels.MediaRef{Type: "animation", FileID: msg.Animation.FileID, FileSize: int64(msg.Animation.FileSize)})
+	}
+	if msg.Audio != nil {
+		refs = append(refs, channels.MediaRef{Type: "audio", FileID: msg.Audio.FileID, FileSize: int64(msg.Audio.FileSize)})
+	}
+	if msg.Voice != nil {
+		refs = append(refs, channels.MediaRef{Type: "voice", FileID: msg.Voice.FileID, FileSize: int64(msg.Voice.FileSize)})
+	}
+	if msg.Document != nil {
+		refs = append(refs, channels.MediaRef{Type: "document", FileID: msg.Document.FileID, FileSize: int64(msg.Document.FileSize)})
+	}
+	return refs
+}
+
+// historyMediaMaxBytes is the max file size for deferred history media downloads.
+// Caps large files (videos, big documents) to prevent slow mention handling.
+const historyMediaMaxBytes int64 = 5 * 1024 * 1024 // 5 MB
+
+// maxHistoryMediaRefs is the max number of deferred media refs to resolve per mention.
+// Caps total download time — at worst ~2s each = ~30s for 15 files.
+const maxHistoryMediaRefs = 15
+
+// resolveMediaRefs downloads media from deferred file_id references stored in pending history.
+// Used to resolve history media when the bot is mentioned.
+// Caps at maxHistoryMediaRefs most-recent refs and skips files exceeding historyMediaMaxBytes.
+func (c *Channel) resolveMediaRefs(ctx context.Context, refs []channels.MediaRef) ([]MediaInfo, []MediaError) {
+	// Only resolve the most recent refs to avoid blocking mention handling.
+	if len(refs) > maxHistoryMediaRefs {
+		slog.Debug("telegram: capping history media refs",
+			"total", len(refs), "cap", maxHistoryMediaRefs)
+		refs = refs[len(refs)-maxHistoryMediaRefs:]
+	}
+
+	maxBytes := c.config.MediaMaxBytes
+	if maxBytes == 0 {
+		if c.config.APIServer != "" {
+			maxBytes = localAPIDefaultMaxBytes
+		} else {
+			maxBytes = defaultMediaMaxBytes
+		}
+	}
+	// Use the stricter of channel config and history cap.
+	if historyMediaMaxBytes < maxBytes {
+		maxBytes = historyMediaMaxBytes
+	}
+
+	// Batch timeout: abort remaining downloads if total time exceeds limit.
+	batchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var results []MediaInfo
+	var errs []MediaError
+	for _, ref := range refs {
+		// Pre-flight size check — skip without downloading if known to exceed limit.
+		if ref.FileSize > 0 && ref.FileSize > maxBytes {
+			slog.Debug("telegram: skipping oversized history media ref",
+				"type", ref.Type, "size", ref.FileSize, "max", maxBytes)
+			errs = append(errs, MediaError{Type: ref.Type, Reason: "file too large for history resolve", MaxBytes: maxBytes})
+			continue
+		}
+		filePath, err := c.downloadMedia(batchCtx, ref.FileID, maxBytes)
+		if err != nil {
+			// On batch timeout, stop processing remaining refs.
+			if batchCtx.Err() != nil {
+				slog.Warn("telegram: history media batch timeout, skipping remaining",
+					"resolved", len(results), "remaining", len(refs))
+				break
+			}
+			slog.Warn("telegram: history media ref download failed",
+				"type", ref.Type, "file_id", ref.FileID, "error", err)
+			errs = append(errs, newMediaError(ref.Type, err, maxBytes))
+			continue
+		}
+		results = append(results, MediaInfo{
+			Type:     ref.Type,
+			FilePath: filePath,
+			FileID:   ref.FileID,
+		})
+	}
+	return results, errs
 }
 
 // lightweightTagForType returns the single lightweight tag that matches a given media type

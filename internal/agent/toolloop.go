@@ -15,8 +15,17 @@ const (
 	toolLoopCriticalThreshold = 5 // force stop the iteration loop
 
 	// Read-only streak: consecutive non-mutating tool calls without any write/edit.
+	// Stuck mode (uniqueness ratio ≤ 0.6): original thresholds.
 	readOnlyStreakWarning  = 8
 	readOnlyStreakCritical = 12
+
+	// Exploration mode (uniqueness ratio > 0.6): relaxed thresholds.
+	// Agents exploring unique files should not be killed as early as stuck loops.
+	readOnlyExplorationWarning  = 24
+	readOnlyExplorationCritical = 36
+
+	// Uniqueness ratio threshold: above this = exploration, below = stuck.
+	readOnlyUniquenessThreshold = 0.6
 
 	// Same-result: same tool returning identical results with different args.
 	sameResultWarning  = 4
@@ -26,19 +35,34 @@ const (
 // mutatingTools are tools that indicate real progress (write/create/action).
 // exec is excluded: ambiguous (could be ls or rm). It neither resets nor
 // increments the read-only streak.
+// team_tasks is excluded: action-level classification in recordMutation.
 var mutatingTools = map[string]bool{
 	"write_file": true, "edit": true, "edit_file": true,
-	"spawn": true, "team_tasks": true, "message": true,
+	"spawn": true, "message": true,
 	"create_image": true, "create_video": true, "create_audio": true,
 	"tts": true, "cron": true, "publish_skill": true,
 	"sessions_send": true,
+}
+
+// teamTasksReadOnlyActions are team_tasks actions that don't indicate real progress.
+// They increment the read-only streak like read_file/list_files.
+var teamTasksReadOnlyActions = map[string]bool{
+	"list": true, "get": true, "search": true,
+}
+
+// teamTasksNeutralActions are team_tasks actions that are heartbeat/status only.
+// They neither reset nor increment the read-only streak (like exec).
+var teamTasksNeutralActions = map[string]bool{
+	"progress": true,
 }
 
 // toolLoopState tracks recent tool calls within a single agent run
 // to detect infinite loops (same tool + same args + same result).
 type toolLoopState struct {
 	history        []toolCallRecord
-	readOnlyStreak int // consecutive non-mutating, non-exec tool calls
+	readOnlyStreak int             // consecutive non-mutating, non-exec tool calls
+	readOnlyUnique int             // unique args hashes in current streak
+	seenReadArgs   map[string]bool // tracks unique read arg hashes for uniqueness ratio
 }
 
 type toolCallRecord struct {
@@ -118,32 +142,100 @@ func (s *toolLoopState) detect(toolName string, argsHash string) (level, message
 }
 
 // recordMutation updates the read-only streak based on tool type.
-// Mutating tools reset the streak; exec is neutral (ambiguous); all others increment.
-func (s *toolLoopState) recordMutation(toolName string) {
-	if mutatingTools[toolName] {
-		s.readOnlyStreak = 0
+// Mutating tools reset the streak; exec/bash/mcp are neutral (ambiguous); all others increment.
+// team_tasks is classified by action: read-only (list/get/search), neutral (progress),
+// or mutating (create/complete/cancel/comment/etc.).
+func (s *toolLoopState) recordMutation(toolName string, args map[string]any) {
+	// team_tasks: action-level classification instead of blanket mutating.
+	if toolName == "team_tasks" {
+		action, _ := args["action"].(string)
+		switch {
+		case teamTasksReadOnlyActions[action]:
+			s.incrementReadOnly(toolName, args)
+		case teamTasksNeutralActions[action]:
+			// Heartbeat — no effect on streak.
+		case action == "":
+			// Missing action arg — treat as neutral to avoid crash.
+		default:
+			// All other actions (create, complete, cancel, comment, etc.) = mutating.
+			s.resetStreak()
+		}
 		return
 	}
-	if toolName == "exec" || toolName == "bash" {
-		return // ambiguous — neither reset nor increment
+
+	if mutatingTools[toolName] {
+		s.resetStreak()
+		return
 	}
+	// exec/bash: ambiguous (could be ls or rm).
+	// mcp_*: user-defined external tools — GoClaw cannot determine read vs write.
+	// Neither reset nor increment the read-only streak.
+	if toolName == "exec" || toolName == "bash" || strings.HasPrefix(toolName, "mcp_") {
+		return
+	}
+	s.incrementReadOnly(toolName, args)
+}
+
+// resetStreak clears the read-only streak and uniqueness tracking.
+func (s *toolLoopState) resetStreak() {
+	s.readOnlyStreak = 0
+	s.readOnlyUnique = 0
+	s.seenReadArgs = nil
+}
+
+// incrementReadOnly increments the read-only streak and tracks uniqueness.
+func (s *toolLoopState) incrementReadOnly(toolName string, args map[string]any) {
 	s.readOnlyStreak++
+	argsHash := hashToolCall(toolName, args)
+	if s.seenReadArgs == nil {
+		s.seenReadArgs = make(map[string]bool)
+	}
+	if !s.seenReadArgs[argsHash] {
+		s.seenReadArgs[argsHash] = true
+		s.readOnlyUnique++
+	}
 }
 
 // detectReadOnlyStreak checks for long runs of read-only tool calls
-// without any write/edit action. Returns level and message.
+// without any write/edit action. Uses uniqueness ratio to distinguish
+// exploration (many unique files) from stuck loops (re-reading same files).
+//
+// Stuck mode (ratio ≤ 0.6): warn at 8, kill at 12.
+// Exploration mode (ratio > 0.6): warn at 24, kill at 36.
 func (s *toolLoopState) detectReadOnlyStreak() (level, message string) {
+	if s.readOnlyStreak < readOnlyStreakWarning {
+		return "", ""
+	}
+
+	uniqueRatio := float64(s.readOnlyUnique) / float64(s.readOnlyStreak)
+
+	if uniqueRatio > readOnlyUniquenessThreshold {
+		// Exploration mode: agent is reading unique files. Relaxed thresholds.
+		if s.readOnlyStreak >= readOnlyExplorationCritical {
+			return "critical", fmt.Sprintf(
+				"CRITICAL: %d consecutive read-only tool calls (%d unique files). "+
+					"Stopping — write your findings before reading more.", s.readOnlyStreak, s.readOnlyUnique)
+		}
+		if s.readOnlyStreak >= readOnlyExplorationWarning {
+			return "warning", fmt.Sprintf(
+				"[System: You have read %d files (%d unique). "+
+					"Summarize what you have learned so far using write_file, then continue reading if needed.]",
+				s.readOnlyStreak, s.readOnlyUnique)
+		}
+		return "", ""
+	}
+
+	// Stuck mode: low uniqueness — agent is re-reading same files. Original thresholds.
 	if s.readOnlyStreak >= readOnlyStreakCritical {
 		return "critical", fmt.Sprintf(
-			"CRITICAL: %d consecutive read-only tool calls without any write/edit action. "+
-				"Stopping to prevent runaway loop.", s.readOnlyStreak)
+			"CRITICAL: %d consecutive read-only tool calls (only %d unique). "+
+				"Stopping — you are re-reading the same files without making progress.", s.readOnlyStreak, s.readOnlyUnique)
 	}
 	if s.readOnlyStreak >= readOnlyStreakWarning {
 		return "warning", fmt.Sprintf(
-			"[System: WARNING — You have made %d consecutive read-only tool calls (list_files, read_file, find, etc.) "+
-				"without writing or editing any file. If you already have the information you need, use the edit or "+
-				"write_file tool to take action. If you cannot proceed, respond directly to the user explaining "+
-				"what is blocking you.]", s.readOnlyStreak)
+			"[System: WARNING — You have made %d consecutive read-only tool calls (only %d unique files). "+
+				"Stop re-reading and take action with what you have — use edit or write_file, "+
+				"or respond to the user if you are stuck.]", s.readOnlyStreak, s.readOnlyUnique)
 	}
 	return "", ""
 }

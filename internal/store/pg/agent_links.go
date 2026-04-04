@@ -55,18 +55,31 @@ func (s *PGAgentLinkStore) CreateLink(ctx context.Context, link *store.AgentLink
 		settings = json.RawMessage(`{}`)
 	}
 
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_links (id, source_agent_id, target_agent_id, direction, team_id, description,
-		 max_concurrent, settings, status, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		 max_concurrent, settings, status, created_by, created_at, updated_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		link.ID, link.SourceAgentID, link.TargetAgentID, link.Direction, link.TeamID, link.Description,
-		link.MaxConcurrent, settings, link.Status, link.CreatedBy, now, now,
+		link.MaxConcurrent, settings, link.Status, link.CreatedBy, now, now, tenantID,
 	)
 	return err
 }
 
 func (s *PGAgentLinkStore) DeleteLink(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM agent_links WHERE id = $1`, id)
+	if store.IsCrossTenant(ctx) {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM agent_links WHERE id = $1`, id)
+		return err
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for delete")
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM agent_links WHERE id = $1 AND tenant_id = $2`, id, tid)
 	return err
 }
 
@@ -75,16 +88,33 @@ func (s *PGAgentLinkStore) UpdateLink(ctx context.Context, id uuid.UUID, updates
 		return nil
 	}
 	updates["updated_at"] = time.Now()
-	return execMapUpdate(ctx, s.db, "agent_links", id, updates)
+	if store.IsCrossTenant(ctx) {
+		return execMapUpdate(ctx, s.db, "agent_links", id, updates)
+	}
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return fmt.Errorf("tenant_id required for update")
+	}
+	return execMapUpdateWhereTenant(ctx, s.db, "agent_links", updates, id, tid)
 }
 
 func (s *PGAgentLinkStore) GetLink(ctx context.Context, id uuid.UUID) (*store.AgentLinkData, error) {
+	if store.IsCrossTenant(ctx) {
+		row := s.db.QueryRowContext(ctx,
+			`SELECT `+linkSelectCols+` FROM agent_links WHERE id = $1`, id)
+		return scanLinkRow(row)
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return nil, fmt.Errorf("link not found: %w", sql.ErrNoRows)
+	}
 	row := s.db.QueryRowContext(ctx,
-		`SELECT `+linkSelectCols+` FROM agent_links WHERE id = $1`, id)
+		`SELECT `+linkSelectCols+` FROM agent_links WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	return scanLinkRow(row)
 }
 
 func (s *PGAgentLinkStore) ListLinksFrom(ctx context.Context, agentID uuid.UUID) ([]store.AgentLinkData, error) {
+	tenantClause, qArgs := linkTenantClause(ctx, agentID, "l.source_agent_id = $1")
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 sa.agent_key AS source_agent_key,
@@ -98,8 +128,8 @@ func (s *PGAgentLinkStore) ListLinksFrom(ctx context.Context, agentID uuid.UUID)
 		 JOIN agents sa ON sa.id = l.source_agent_id
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
-		 WHERE l.source_agent_id = $1
-		 ORDER BY l.created_at`, agentID)
+		 WHERE `+tenantClause+`
+		 ORDER BY l.created_at`, qArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +138,7 @@ func (s *PGAgentLinkStore) ListLinksFrom(ctx context.Context, agentID uuid.UUID)
 }
 
 func (s *PGAgentLinkStore) ListLinksTo(ctx context.Context, agentID uuid.UUID) ([]store.AgentLinkData, error) {
+	tenantClause, qArgs := linkTenantClause(ctx, agentID, "l.target_agent_id = $1")
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+linkSelectColsJoined+`,
 		 sa.agent_key AS source_agent_key,
@@ -121,13 +152,29 @@ func (s *PGAgentLinkStore) ListLinksTo(ctx context.Context, agentID uuid.UUID) (
 		 JOIN agents sa ON sa.id = l.source_agent_id
 		 JOIN agents ta ON ta.id = l.target_agent_id
 		 LEFT JOIN agent_teams tm ON tm.id = l.team_id
-		 WHERE l.target_agent_id = $1
-		 ORDER BY l.created_at`, agentID)
+		 WHERE `+tenantClause+`
+		 ORDER BY l.created_at`, qArgs...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	return scanLinkRowsJoined(rows)
+}
+
+// linkTenantClause builds the WHERE clause for agent_links queries.
+// baseCondition must use $1 for the agentID parameter.
+// Returns the full WHERE clause and args slice.
+func linkTenantClause(ctx context.Context, agentID uuid.UUID, baseCondition string) (string, []any) {
+	args := []any{agentID}
+	if store.IsCrossTenant(ctx) {
+		return baseCondition, args
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		// fail-closed: return impossible condition
+		return baseCondition + " AND l.tenant_id = $2", append(args, uuid.Nil)
+	}
+	return baseCondition + " AND l.tenant_id = $2", append(args, tenantID)
 }
 
 func (s *PGAgentLinkStore) CanDelegate(ctx context.Context, fromAgentID, toAgentID uuid.UUID) (bool, error) {

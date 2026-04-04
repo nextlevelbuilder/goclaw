@@ -158,6 +158,33 @@
     "detail": {
       "title": "文件内容",
       "empty": "文件为空或为二进制文件"
+    },
+    "upload": {
+      "title": "上传到工作区",
+      "description": "上传文件供 Agent 在协作中读取"
+    },
+    "crossScopeMoveError": "无法在不同范围之间移动文件",
+    "moveFailed": "移动文件失败"
+  },
+  "auditLogs": {
+    "title": "审计日志",
+    "empty": "暂无事件",
+    "loadMore": "加载更多",
+    "event": {
+      "created": "创建",
+      "claimed": "领取",
+      "assigned": "分配",
+      "dispatched": "派发",
+      "completed": "完成",
+      "failed": "失败",
+      "cancelled": "取消",
+      "reviewed": "审核",
+      "approved": "批准",
+      "rejected": "拒绝",
+      "commented": "评论",
+      "progress": "进度",
+      "updated": "更新",
+      "stale": "超时"
     }
   },
   "settings": {
@@ -212,6 +239,9 @@
     "escalationPolicy": "升级策略",
     "escalationMode": "升级模式",
     "escalationModeHint": "控制Agent请求执行敏感工作空间操作（置顶、标记、删除他人文件、设置模板）时的处理方式。",
+    "blockerEscalation": "阻塞升级",
+    "blockerEscalationEnabled": "启用阻塞升级",
+    "blockerEscalationHint": "当成员标记阻塞时，任务自动失败并通知领导重试。",
     "escalationModeAuto": "自动（默认）",
     "escalationModeAutoDesc": "LLM负责人评估请求——拒绝或创建审核任务。从不直接执行。",
     "escalationModeReview": "审核",
@@ -241,7 +271,7 @@
     "versionAdvancedDesc": "所有V1功能，外加执行锁定、跟进提醒、审核工作流、进度追踪、评论、审计日志和自动恢复。",
     "whatsNew": "有什么不同？",
     "versionModal": {
-      "title": "团队版本",
+      "title": "超级团队功能",
       "feature": "功能",
       "taskManagement": "任务管理",
       "taskManagementDesc": "创建、分配、完成、取消任务",
@@ -259,11 +289,11 @@
       "commentsAuditDesc": "任务评论和完整事件历史",
       "autoRecovery": "自动恢复",
       "autoRecoveryDesc": "卡住的任务在超时后自动重置",
-      "escalationPolicy": "升级策略",
-      "escalationPolicyDesc": "控制代理可以自主执行的操作",
+      "escalationPolicy": "阻塞升级",
+      "escalationPolicyDesc": "成员可以标记阻塞 — 自动失败任务并通知领导重试",
       "comingSoon": "即将推出",
       "downgradeNote": "降级是安全的 — V2数据会保留但隐藏。",
-      "betaNote": "V2目前处于Beta阶段。",
+      "betaNote": "部分功能目前处于Beta阶段。",
       "gotIt": "知道了"
     }
   },
@@ -280,6 +310,7 @@
     "noActiveAgents": "未找到活跃Agent，请先创建Agent。",
     "members": "成员",
     "membersTooltip": "只有预定义Agent才能作为Team成员添加。开放Agent是按用户划分的，缺乏Team协作所需的共享上下文。",
+    "needMembers": "请至少选择1名团队成员",
     "searchMembers": "搜索并添加成员...",
     "displayName": "显示名称",
     "displayNamePlaceholder": "支持Team",

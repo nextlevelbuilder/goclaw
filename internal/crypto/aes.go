@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"strings"
 )
 
@@ -55,6 +56,9 @@ func Decrypt(ciphertext, key string) (string, error) {
 	}
 
 	if !IsEncrypted(ciphertext) {
+		slog.Warn("crypto.unencrypted_value_read",
+			"hint", "value lacks aes-gcm: prefix — may be legacy plaintext or tampered",
+		)
 		return ciphertext, nil
 	}
 
@@ -65,7 +69,8 @@ func Decrypt(ciphertext, key string) (string, error) {
 
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(ciphertext, prefix))
 	if err != nil {
-		return ciphertext, nil // not valid base64 → treat as plain text
+		slog.Warn("crypto.invalid_base64_in_encrypted_value")
+		return ciphertext, nil
 	}
 
 	block, err := aes.NewCipher(keyBytes)
@@ -80,7 +85,8 @@ func Decrypt(ciphertext, key string) (string, error) {
 
 	nonceSize := gcm.NonceSize()
 	if len(data) < nonceSize {
-		return ciphertext, nil // too short → treat as plain text
+		slog.Warn("crypto.encrypted_value_too_short", "len", len(data), "min", nonceSize)
+		return ciphertext, nil
 	}
 
 	plaintext, err := gcm.Open(nil, data[:nonceSize], data[nonceSize:], nil)

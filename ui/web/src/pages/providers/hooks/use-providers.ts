@@ -8,12 +8,13 @@ import type { ProviderData, ProviderInput } from "@/types/provider";
 
 export type { ProviderData, ProviderInput };
 
-export function useProviders() {
+export function useProviders(enabled = true) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
   const { data: providers = [], isLoading: loading } = useQuery({
     queryKey: queryKeys.providers.all,
+    enabled,
     queryFn: async () => {
       const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
       return res.providers ?? [];

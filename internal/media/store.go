@@ -36,7 +36,7 @@ func (s *Store) SaveFile(sessionKey, srcPath, mime string) (id string, dstPath s
 	}
 
 	mediaID := uuid.New().String()
-	ext := extFromMime(mime)
+	ext := ExtFromMime(mime)
 	if ext == "" {
 		ext = filepath.Ext(srcPath)
 	}
@@ -88,8 +88,8 @@ func (s *Store) sessionDir(sessionKey string) string {
 	return filepath.Join(s.baseDir, hash)
 }
 
-// extFromMime returns a file extension (with dot) for a MIME type.
-func extFromMime(mime string) string {
+// ExtFromMime returns a file extension (with dot) for a MIME type.
+func ExtFromMime(mime string) string {
 	switch {
 	case strings.HasPrefix(mime, "image/jpeg"):
 		return ".jpg"

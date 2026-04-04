@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
@@ -64,7 +66,7 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 		BaseChannel:    base,
 		config:         cfg,
 		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeZaloPersonal, pendingStore),
+		groupHistory:   channels.MakeHistory(channels.TypeZaloPersonal, pendingStore, base.TenantID()),
 		historyLimit:   historyLimit,
 		requireMention: requireMention,
 		stopCh:         make(chan struct{}),
@@ -127,6 +129,9 @@ func (c *Channel) Start(ctx context.Context) error {
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
 	c.groupHistory.SetCompactionConfig(cfg)
 }
+
+// SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
 
 // Stop gracefully shuts down the Zalo Personal channel.
 func (c *Channel) Stop(_ context.Context) error {

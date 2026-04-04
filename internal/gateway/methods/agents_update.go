@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
+	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -21,11 +22,18 @@ import (
 func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
 	var params struct {
-		AgentID   string `json:"agentId"`
-		Name      string `json:"name"`
-		Workspace string `json:"workspace"`
-		Model     string `json:"model"`
-		Avatar    string `json:"avatar"`
+		AgentID           string `json:"agentId"`
+		Name              string `json:"name"`
+		Workspace         string `json:"workspace"`
+		Provider          string `json:"provider"`
+		Model             string `json:"model"`
+		Avatar            string `json:"avatar"`
+		Status            string `json:"status"`
+		Frontmatter       string `json:"frontmatter"`
+		ContextWindow     *int   `json:"context_window"`
+		MaxToolIterations *int   `json:"max_tool_iterations"`
+		IsDefault         *bool  `json:"is_default"`
+		BudgetCents       *int   `json:"budget_monthly_cents"`
 		// Per-agent config overrides
 		ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 		SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`
@@ -46,7 +54,6 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 
 	if m.agentStore != nil {
 		// --- DB-backed: update agent in store ---
-		ctx := context.Background()
 		ag, err := m.agentStore.GetByKey(ctx, params.AgentID)
 		if err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgAgentNotFound, params.AgentID)))
@@ -62,8 +69,29 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			updates["workspace"] = ws
 			os.MkdirAll(ws, 0755)
 		}
+		if params.Provider != "" {
+			updates["provider"] = params.Provider
+		}
 		if params.Model != "" {
 			updates["model"] = params.Model
+		}
+		if params.Status != "" {
+			updates["status"] = params.Status
+		}
+		if params.Frontmatter != "" {
+			updates["frontmatter"] = params.Frontmatter
+		}
+		if params.ContextWindow != nil {
+			updates["context_window"] = *params.ContextWindow
+		}
+		if params.MaxToolIterations != nil {
+			updates["max_tool_iterations"] = *params.MaxToolIterations
+		}
+		if params.IsDefault != nil {
+			updates["is_default"] = *params.IsDefault
+		}
+		if params.BudgetCents != nil {
+			updates["budget_monthly_cents"] = *params.BudgetCents
 		}
 		// Per-agent JSONB config overrides
 		if len(params.ToolsConfig) > 0 {
@@ -95,86 +123,62 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			}
 		}
 
-		// Update identity in DB bootstrap — preserve existing fields not being changed.
+		// Update identity in DB bootstrap — targeted field replacement to preserve all other fields.
 		if params.Avatar != "" || params.Name != "" {
-			// Read existing identity to preserve emoji and other fields.
-			existingEmoji, existingAvatar, existingName := "", "", ""
+			// Read existing agent-level IDENTITY.md content.
+			existingContent := ""
 			if dbFiles, err := m.agentStore.GetAgentContextFiles(ctx, ag.ID); err == nil {
 				for _, f := range dbFiles {
 					if f.FileName == "IDENTITY.md" {
-						if identity := parseIdentityContent(f.Content); identity != nil {
-							existingEmoji = identity["Emoji"]
-							existingAvatar = identity["Avatar"]
-							existingName = identity["Name"]
-						}
+						existingContent = f.Content
 						break
 					}
 				}
 			}
-			name := params.Name
-			if name == "" {
-				name = existingName
+
+			// Apply targeted replacements, preserving all other fields (Creature, Purpose, Vibe, etc.).
+			newContent := existingContent
+			if params.Name != "" {
+				newContent = bootstrap.UpdateIdentityField(newContent, "Name", params.Name)
 			}
-			avatar := params.Avatar
-			if avatar == "" {
-				avatar = existingAvatar
+			if params.Avatar != "" {
+				newContent = bootstrap.UpdateIdentityField(newContent, "Avatar", params.Avatar)
 			}
-			content := buildIdentityContent(name, existingEmoji, avatar)
-			if err := m.agentStore.SetAgentContextFile(ctx, ag.ID, "IDENTITY.md", content); err != nil {
-				slog.Warn("failed to update IDENTITY.md", "agent", params.AgentID, "error", err)
+			// Fallback: if content was empty (no IDENTITY.md yet), build minimal content.
+			if strings.TrimSpace(newContent) == "" {
+				newContent = buildIdentityContent(params.Name, "", params.Avatar)
 			}
-			// Invalidate interceptor cache so updated IDENTITY.md is served immediately
+
+			if err := m.agentStore.SetAgentContextFile(ctx, ag.ID, "IDENTITY.md", newContent); err != nil {
+				slog.Warn("failed to update agent IDENTITY.md", "agent", params.AgentID, "error", err)
+			}
+
+			// For open agents: also update Name in all per-user IDENTITY.md copies.
+			// Per-user files take precedence in LoadContextFiles, so they must be updated too.
+			if params.Name != "" && ag.AgentType == store.AgentTypeOpen {
+				if userFiles, err := m.agentStore.ListUserContextFilesByName(ctx, ag.ID, "IDENTITY.md"); err == nil {
+					for _, uf := range userFiles {
+						updated := bootstrap.UpdateIdentityField(uf.Content, "Name", params.Name)
+						if updated == uf.Content {
+							continue // no change needed
+						}
+						if err := m.agentStore.SetUserContextFile(ctx, ag.ID, uf.UserID, "IDENTITY.md", updated); err != nil {
+							slog.Warn("failed to update user IDENTITY.md on rename", "agent", params.AgentID, "user", uf.UserID, "error", err)
+						}
+					}
+				}
+			}
+
+			// Invalidate interceptor cache so updated IDENTITY.md is served immediately.
 			if m.interceptor != nil {
 				m.interceptor.InvalidateAgent(ag.ID)
 			}
 		}
 
 		m.agents.InvalidateAgent(params.AgentID)
-	} else {
-		// --- Fallback: config.json ---
-		spec, ok := m.cfg.Agents.List[params.AgentID]
-		if !ok {
-			if params.AgentID != "default" {
-				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgAgentNotFound, params.AgentID)))
-				return
-			}
-		}
-
-		if params.Name != "" {
-			spec.DisplayName = params.Name
-		}
-		if params.Workspace != "" {
-			spec.Workspace = config.ExpandHome(params.Workspace)
-			os.MkdirAll(spec.Workspace, 0755)
-		}
-		if params.Model != "" {
-			spec.Model = params.Model
-		}
-
-		if params.AgentID == "default" {
-			if params.Model != "" {
-				m.cfg.Agents.Defaults.Model = params.Model
-			}
-			if params.Workspace != "" {
-				m.cfg.Agents.Defaults.Workspace = params.Workspace
-			}
-		} else {
-			m.cfg.Agents.List[params.AgentID] = spec
-		}
-
-		if params.Avatar != "" {
-			ws := spec.Workspace
-			if ws == "" {
-				ws = config.ExpandHome(m.cfg.Agents.Defaults.Workspace)
-			}
-			identityPath := filepath.Join(ws, "IDENTITY.md")
-			appendIdentityFields(identityPath, "", "", params.Avatar)
-		}
-
-		if err := config.Save(m.cfgPath, m.cfg); err != nil {
-			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToSave, "config", err.Error())))
-			return
-		}
+		// Also invalidate by UUID — heartbeat/cron sessions cached under UUID key
+		// before the agentKey fix may still be in the router cache.
+		m.agents.InvalidateAgent(ag.ID.String())
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

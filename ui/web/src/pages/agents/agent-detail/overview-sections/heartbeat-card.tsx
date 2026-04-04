@@ -89,7 +89,7 @@ export function HeartbeatCard({ heartbeat }: HeartbeatCardProps) {
               <span>{config.channel}{config.chatId ? `/${config.chatId}` : ""}</span>
             )}
             {config.model && (
-              <span className="text-violet-600 dark:text-violet-400">{config.model}</span>
+              <span className="text-orange-600 dark:text-orange-400">{config.model}</span>
             )}
           </div>
 

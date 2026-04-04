@@ -107,9 +107,13 @@ func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Resul
 		chain[i].Params["images"] = images
 	}
 
+	if len(chain) == 0 {
+		return ErrorResult("No vision provider configured. Ask the user to add a vision-capable provider (e.g. Gemini, Anthropic, OpenRouter) in the system settings.")
+	}
+
 	chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("image analysis failed: %v", err))
+		return ErrorResult(fmt.Sprintf("Image analysis failed — all vision providers returned errors: %v. The user may need to check their provider API keys or configuration.", err))
 	}
 
 	result := NewResult(string(chainResult.Data))
@@ -125,7 +129,7 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 	images, _ := params["images"].([]providers.ImageContent)
 
 	// Get the full provider for Chat() access
-	p, err := t.registry.Get(providerName)
+	p, err := t.registry.Get(ctx, providerName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("provider %q not available: %w", providerName, err)
 	}

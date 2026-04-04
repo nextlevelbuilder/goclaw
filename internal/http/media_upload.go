@@ -19,13 +19,11 @@ const (
 )
 
 // MediaUploadHandler handles media file uploads for WebSocket clients.
-type MediaUploadHandler struct {
-	token string
-}
+type MediaUploadHandler struct{}
 
 // NewMediaUploadHandler creates a media upload handler.
-func NewMediaUploadHandler(token string) *MediaUploadHandler {
-	return &MediaUploadHandler{token: token}
+func NewMediaUploadHandler() *MediaUploadHandler {
+	return &MediaUploadHandler{}
 }
 
 // RegisterRoutes registers the upload endpoint.
@@ -34,7 +32,7 @@ func (h *MediaUploadHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *MediaUploadHandler) auth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 func (h *MediaUploadHandler) handleUpload(w http.ResponseWriter, r *http.Request) {

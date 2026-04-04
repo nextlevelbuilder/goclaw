@@ -103,7 +103,7 @@
   "unknown": "未知",
   "unsavedChanges": "有未保存的更改",
   "update": "更新",
-  "upload": "上传",
+  "uploadLabel": "上传",
   "usingGlobalDefaults": "使用 config.json 中的全局默认值",
   "verificationFailed": "验证失败",
   "view": "查看",
@@ -119,6 +119,20 @@
   "loadMore": "加载更多...",
   "viewCard": "卡片视图",
   "viewList": "列表视图",
+  "done": "完成",
+  "upload": {
+    "title": "上传文件",
+    "dropOrClick": "拖放文件或点击浏览",
+    "dropHere": "将文件拖放到这里",
+    "maxSize": "每个文件最大 50 MB",
+    "blockedType": "不允许 {{ext}} 文件类型",
+    "tooLarge": "文件超过 50 MB 限制",
+    "failed": "上传失败",
+    "readyCount": "{{total}} 个文件中有 {{ready}} 个就绪",
+    "successCount": "{{total}} 个文件中已上传 {{success}} 个",
+    "uploading": "上传中...",
+    "uploadCount": "上传 {{count}} 个文件"
+  },
   "errors": {
     "serverError": "出了点问题，请稍后重试。"
   }

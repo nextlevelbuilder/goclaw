@@ -59,7 +59,7 @@ func (m *AgentLinksMethods) handleList(ctx context.Context, client *gateway.Clie
 		return
 	}
 
-	agentID, err := resolveAgentUUID(m.agentStore, params.AgentID)
+	agentID, err := resolveAgentUUID(ctx, m.agentStore, params.AgentID)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
@@ -133,12 +133,12 @@ func (m *AgentLinksMethods) handleCreate(ctx context.Context, client *gateway.Cl
 		return
 	}
 
-	sourceAgent, err := resolveAgentInfo(m.agentStore, params.SourceAgent)
+	sourceAgent, err := resolveAgentInfo(ctx, m.agentStore, params.SourceAgent)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "source agent: "+err.Error()))
 		return
 	}
-	targetAgent, err := resolveAgentInfo(m.agentStore, params.TargetAgent)
+	targetAgent, err := resolveAgentInfo(ctx, m.agentStore, params.TargetAgent)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "target agent: "+err.Error()))
 		return
@@ -408,15 +408,15 @@ func (m *AgentLinksMethods) invalidateLinkAgentsByID(ctx context.Context, source
 
 // --- helpers ---
 
-func resolveAgentUUID(agentStore store.AgentStore, keyOrID string) (uuid.UUID, error) {
+func resolveAgentUUID(ctx context.Context, agentStore store.AgentStore, keyOrID string) (uuid.UUID, error) {
 	if id, err := uuid.Parse(keyOrID); err == nil {
-		ag, err := agentStore.GetByID(context.Background(), id)
+		ag, err := agentStore.GetByID(ctx, id)
 		if err != nil {
 			return uuid.Nil, err
 		}
 		return ag.ID, nil
 	}
-	ag, err := agentStore.GetByKey(context.Background(), keyOrID)
+	ag, err := agentStore.GetByKey(ctx, keyOrID)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -424,9 +424,9 @@ func resolveAgentUUID(agentStore store.AgentStore, keyOrID string) (uuid.UUID, e
 }
 
 // resolveAgentInfo returns full agent data for validation and cache invalidation.
-func resolveAgentInfo(agentStore store.AgentStore, keyOrID string) (*store.AgentData, error) {
+func resolveAgentInfo(ctx context.Context, agentStore store.AgentStore, keyOrID string) (*store.AgentData, error) {
 	if id, err := uuid.Parse(keyOrID); err == nil {
-		return agentStore.GetByID(context.Background(), id)
+		return agentStore.GetByID(ctx, id)
 	}
-	return agentStore.GetByKey(context.Background(), keyOrID)
+	return agentStore.GetByKey(ctx, keyOrID)
 }

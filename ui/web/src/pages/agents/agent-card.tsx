@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
+import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
 
 interface AgentCardProps {
   agent: AgentData;
@@ -12,15 +13,13 @@ interface AgentCardProps {
   onDelete?: () => void;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardProps) {
   const { t } = useTranslation("agents");
-  const displayName = agent.display_name
-    || (UUID_RE.test(agent.agent_key) ? t("card.unnamedAgent") : agent.agent_key);
+  const displayName = agentDisplayName(agent, t("card.unnamedAgent"));
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
   const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
   const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
 
   // Show agent_key as subtitle only if there's a display_name and agent_key is meaningful
   const showSubtitle = agent.display_name && !UUID_RE.test(agent.agent_key);
@@ -48,7 +47,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           )}
         </div>
         {agent.status === "summoning" ? (
-          <Badge variant="outline" className="shrink-0 animate-pulse border-violet-400 text-violet-600 dark:text-violet-400">
+          <Badge variant="outline" className="shrink-0 animate-pulse border-orange-400 text-orange-600 dark:text-orange-400">
             {t("card.summoning")}
           </Badge>
         ) : agent.status === "summon_failed" ? (
@@ -93,7 +92,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
             <TooltipTrigger asChild>
               <Badge
                 variant={selfEvolve ? "default" : "outline"}
-                className={`text-[11px] ${selfEvolve ? "bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300" : "text-muted-foreground"}`}
+                className={`text-[11px] ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
               >
                 <Sparkles className="mr-0.5 h-3 w-3" />
                 {selfEvolve ? t("card.evolving") : t("card.static")}
@@ -105,6 +104,11 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
                 : t("card.staticTooltip")}
             </TooltipContent>
           </Tooltip>
+        )}
+        {hasOAuthRouting && (
+          <Badge variant="outline" className="text-[11px]">
+            {t("chatgptOAuthRouting.badge")}
+          </Badge>
         )}
         {agent.context_window > 0 && (
           <span className="text-[11px] text-muted-foreground">

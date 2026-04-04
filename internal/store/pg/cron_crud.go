@@ -1,8 +1,10 @@
 package pg
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,7 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-func (s *PGCronStore) AddJob(name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
+func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.CronSchedule, message string, deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
 	// Apply default timezone for cron expressions when not set per-job.
 	if schedule.TZ == "" && schedule.Kind == "cron" && s.defaultTZ != "" {
 		schedule.TZ = s.defaultTZ
@@ -22,7 +24,7 @@ func (s *PGCronStore) AddJob(name string, schedule store.CronSchedule, message s
 	}
 
 	payload := store.CronPayload{
-		Kind: "agent_turn", Message: message, Deliver: deliver, Channel: channel, To: to,
+		Kind: "agent_turn", Message: message,
 	}
 	payloadJSON, _ := json.Marshal(payload)
 
@@ -64,12 +66,12 @@ func (s *PGCronStore) AddJob(name string, schedule store.CronSchedule, message s
 
 	nextRun := computeNextRun(&schedule, now, s.defaultTZ)
 
-	_, err := s.db.Exec(
-		`INSERT INTO cron_jobs (id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, next_run_at, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, true, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		id, agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
-		intervalMS, payloadJSON, deleteAfterRun, nextRun, now, now,
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO cron_jobs (id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+		 interval_ms, payload, delete_after_run, deliver, deliver_channel, deliver_to, wake_heartbeat, next_run_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+		id, tenantIDForInsert(ctx), agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
+		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create cron job: %w", err)
@@ -77,25 +79,26 @@ func (s *PGCronStore) AddJob(name string, schedule store.CronSchedule, message s
 
 	s.cacheLoaded = false // invalidate cache
 
-	job, _ := s.GetJob(id.String())
+	job, _ := s.GetJob(ctx, id.String())
 	return job, nil
 }
 
-func (s *PGCronStore) GetJob(jobID string) (*store.CronJob, bool) {
+func (s *PGCronStore) GetJob(ctx context.Context, jobID string) (*store.CronJob, bool) {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
 		return nil, false
 	}
-	job, err := s.scanJob(id)
+	job, err := s.scanJob(ctx, id)
 	if err != nil {
 		return nil, false
 	}
 	return job, true
 }
 
-func (s *PGCronStore) ListJobs(includeDisabled bool, agentID, userID string) []store.CronJob {
-	q := `SELECT id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
-		 interval_ms, payload, delete_after_run, next_run_at, last_run_at, last_status, last_error,
+func (s *PGCronStore) ListJobs(ctx context.Context, includeDisabled bool, agentID, userID string) []store.CronJob {
+	q := `SELECT id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
+		 interval_ms, payload, delete_after_run, stateless, deliver, deliver_channel, deliver_to, wake_heartbeat,
+		 next_run_at, last_run_at, last_status, last_error,
 		 created_at, updated_at FROM cron_jobs WHERE 1=1`
 
 	var args []any
@@ -118,10 +121,20 @@ func (s *PGCronStore) ListJobs(includeDisabled bool, agentID, userID string) []s
 		args = append(args, userID)
 		argIdx++
 	}
+	clause, targs, _, tErr := scopeClause(ctx, argIdx)
+	if tErr != nil {
+		slog.Warn("cron.ListJobs: tenant context missing, returning empty (fail-closed)", "error", tErr)
+		return nil
+	}
+	if clause != "" {
+		q += clause
+		args = append(args, targs...)
+		argIdx++
+	}
 
 	q += " ORDER BY created_at DESC"
 
-	rows, err := s.db.Query(q, args...)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil
 	}
@@ -138,28 +151,70 @@ func (s *PGCronStore) ListJobs(includeDisabled bool, agentID, userID string) []s
 	return result
 }
 
-func (s *PGCronStore) RemoveJob(jobID string) error {
+func (s *PGCronStore) RemoveJob(ctx context.Context, jobID string) error {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
 		return fmt.Errorf("invalid job ID: %s", jobID)
 	}
-	_, err = s.db.Exec("DELETE FROM cron_jobs WHERE id = $1", id)
+
+	q := "DELETE FROM cron_jobs WHERE id = $1"
+	args := []any{id}
+
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return fmt.Errorf("tenant_id required")
+		}
+		q += fmt.Sprintf(" AND tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+
+	res, err := s.db.ExecContext(ctx, q, args...)
 	if err != nil {
 		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("job not found")
 	}
 	s.cacheLoaded = false
 	return nil
 }
 
-func (s *PGCronStore) EnableJob(jobID string, enabled bool) error {
+func (s *PGCronStore) EnableJob(ctx context.Context, jobID string, enabled bool) error {
 	id, err := uuid.Parse(jobID)
 	if err != nil {
 		return fmt.Errorf("invalid job ID: %s", jobID)
 	}
-	_, err = s.db.Exec("UPDATE cron_jobs SET enabled = $1, updated_at = $2 WHERE id = $3", enabled, time.Now(), id)
+
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	s.cacheLoaded = false
+	defer tx.Rollback()
+
+	current, err := s.lockCronJobForMutation(ctx, tx, id, false)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	nextRun, err := store.NextRunForToggle(&current.Schedule, enabled, current.Enabled, current.NextRunAt, now, s.defaultTZ)
+	if err != nil {
+		return err
+	}
+
+	if err := execCronJobUpdateTx(ctx, tx, id, map[string]any{
+		"enabled":     enabled,
+		"next_run_at": nextRun,
+		"updated_at":  now,
+	}); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	s.InvalidateCache()
 	return nil
 }

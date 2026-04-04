@@ -10,7 +10,7 @@ func init() {
 		MsgInvalidRequest:   "无效请求：%s",
 		MsgInvalidJSON:      "无效的 JSON",
 		MsgUnauthorized:     "未授权",
-		MsgPermissionDenied: "权限不足：无法访问 %s",
+		MsgPermissionDenied: "权限不足：%s",
 		MsgInternalError:    "内部错误：%s",
 		MsgInvalidSlug:      "%s 必须是有效的 slug（小写字母、数字、连字符）",
 		MsgFailedToList:     "获取 %s 列表失败",
@@ -93,11 +93,9 @@ func init() {
 		MsgAgentIsTeamLead:      "该Agent已是团队负责人",
 		MsgCannotRemoveTeamLead: "无法移除团队负责人",
 
-		// Delegations
-		MsgDelegationsUnavailable: "委派功能不可用",
-
 		// Channels
 		MsgCannotDeleteDefaultInst: "无法删除默认Channel实例",
+		MsgCannotRemoveLastWriter:  "无法移除最后一个文件管理员",
 
 		// Skills
 		MsgSkillsUpdateNotSupported: "基于文件的Skill不支持 skills.update",
@@ -176,5 +174,13 @@ func init() {
 		MsgSkillNudgePostscript: "此任务涉及多个步骤。要我将此过程保存为可重用技能吗？回复 **\"保存技能\"** 或 **\"跳过\"**。",
 		MsgSkillNudge70Pct:      "[System] 您已使用 70% 的迭代预算。请考虑本次会话中的模式是否值得保存为技能。",
 		MsgSkillNudge90Pct:      "[System] 您已使用 90% 的迭代预算。如果本次会话涉及可重用的模式，请考虑在完成前将其保存为技能。",
+
+		MsgInvalidRole: "无效角色：允许的值为 owner、admin、operator、member、viewer",
+
+		MsgContactIDsRequired:  "contact_ids 为必填项",
+		MsgMergeTargetRequired: "必须提供 tenant_user_id 或 create_user 其中之一",
+		MsgTenantUserNotFound:  "未找到租户用户",
+		MsgTenantMismatch:      "租户用户不属于此租户",
+		MsgTenantScopeRequired: "此操作需要指定租户范围",
 	})
 }

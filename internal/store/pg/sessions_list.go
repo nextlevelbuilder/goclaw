@@ -1,7 +1,7 @@
 package pg
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -41,6 +41,12 @@ func buildSessionFilter(opts store.SessionListOpts, tableAlias string) (string, 
 		args = append(args, opts.UserID)
 		idx++
 	}
+	if opts.TenantID != uuid.Nil {
+		conditions = append(conditions, fmt.Sprintf("%stenant_id = $%d", prefix, idx))
+		args = append(args, opts.TenantID)
+		idx++
+	}
+	_ = idx // consumed
 
 	if len(conditions) == 0 {
 		return "", nil
@@ -48,17 +54,34 @@ func buildSessionFilter(opts store.SessionListOpts, tableAlias string) (string, 
 	return " WHERE " + strings.Join(conditions, " AND "), args
 }
 
-func (s *PGSessionStore) List(agentID string) []store.SessionInfo {
-	var rows *sql.Rows
-	var err error
+func (s *PGSessionStore) List(ctx context.Context, agentID string) []store.SessionInfo {
+	var conditions []string
+	var args []any
+	idx := 1
+
 	if agentID != "" {
-		prefix := "agent:" + agentID + ":%"
-		rows, err = s.db.Query(
-			"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions WHERE session_key LIKE $1 ORDER BY updated_at DESC", prefix)
-	} else {
-		rows, err = s.db.Query(
-			"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions ORDER BY updated_at DESC")
+		conditions = append(conditions, fmt.Sprintf("session_key LIKE $%d", idx))
+		args = append(args, "agent:"+agentID+":%")
+		idx++
 	}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid != uuid.Nil {
+			conditions = append(conditions, fmt.Sprintf("tenant_id = $%d", idx))
+			args = append(args, tid)
+			idx++
+		}
+	}
+	_ = idx
+
+	where := ""
+	if len(conditions) > 0 {
+		where = " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions"+where+" ORDER BY updated_at DESC",
+		args...)
 	if err != nil {
 		return nil
 	}
@@ -94,7 +117,7 @@ func (s *PGSessionStore) List(agentID string) []store.SessionInfo {
 	return result
 }
 
-func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionListResult {
+func (s *PGSessionStore) ListPaged(ctx context.Context, opts store.SessionListOpts) store.SessionListResult {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 20
@@ -106,7 +129,7 @@ func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionList
 	// Count total
 	var total int
 	countQ := "SELECT COUNT(*) FROM sessions" + where
-	if err := s.db.QueryRow(countQ, whereArgs...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, countQ, whereArgs...).Scan(&total); err != nil {
 		return store.SessionListResult{Sessions: []store.SessionInfo{}, Total: 0}
 	}
 
@@ -116,7 +139,7 @@ func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionList
 		FROM sessions%s ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, where, nextIdx, nextIdx+1)
 	selectArgs := append(append([]any{}, whereArgs...), limit, offset)
 
-	rows, err := s.db.Query(selectQ, selectArgs...)
+	rows, err := s.db.QueryContext(ctx, selectQ, selectArgs...)
 	if err != nil {
 		return store.SessionListResult{Sessions: []store.SessionInfo{}, Total: total}
 	}
@@ -154,7 +177,7 @@ func (s *PGSessionStore) ListPaged(opts store.SessionListOpts) store.SessionList
 }
 
 // ListPagedRich returns enriched session info for API responses (includes model, tokens, agent name).
-func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.SessionListRichResult {
+func (s *PGSessionStore) ListPagedRich(ctx context.Context, opts store.SessionListOpts) store.SessionListRichResult {
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 20
@@ -166,7 +189,7 @@ func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.Session
 	// Count total
 	var total int
 	countQ := "SELECT COUNT(*) FROM sessions s" + where
-	if err := s.db.QueryRow(countQ, whereArgs...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, countQ, whereArgs...).Scan(&total); err != nil {
 		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: 0}
 	}
 
@@ -185,7 +208,7 @@ func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.Session
 		%s ORDER BY s.updated_at DESC LIMIT $%d OFFSET $%d`, richCols, where, nextIdx, nextIdx+1)
 	selectArgs := append(append([]any{}, whereArgs...), limit, offset)
 
-	rows, err := s.db.Query(selectQ, selectArgs...)
+	rows, err := s.db.QueryContext(ctx, selectQ, selectArgs...)
 	if err != nil {
 		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: total}
 	}
@@ -238,9 +261,9 @@ func (s *PGSessionStore) ListPagedRich(opts store.SessionListOpts) store.Session
 	return store.SessionListRichResult{Sessions: result, Total: total}
 }
 
-func (s *PGSessionStore) Save(key string) error {
+func (s *PGSessionStore) Save(ctx context.Context, key string) error {
 	s.mu.RLock()
-	data, ok := s.cache[key]
+	data, ok := s.cache[sessionCacheKey(ctx, key)]
 	if !ok {
 		s.mu.RUnlock()
 		return nil
@@ -258,7 +281,7 @@ func (s *PGSessionStore) Save(key string) error {
 		metaJSON, _ = json.Marshal(snapshot.Metadata)
 	}
 
-	_, err := s.db.Exec(
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE sessions SET
 			messages = $1, summary = $2, model = $3, provider = $4, channel = $5,
 			input_tokens = $6, output_tokens = $7, compaction_count = $8,
@@ -266,30 +289,64 @@ func (s *PGSessionStore) Save(key string) error {
 			label = $11, spawned_by = $12, spawn_depth = $13,
 			agent_id = $14, user_id = $15, metadata = $16, updated_at = $17,
 			team_id = $18
-		 WHERE session_key = $19`,
+		 WHERE session_key = $19 AND tenant_id = $20`,
 		msgsJSON, nilStr(snapshot.Summary), nilStr(snapshot.Model), nilStr(snapshot.Provider), nilStr(snapshot.Channel),
 		snapshot.InputTokens, snapshot.OutputTokens, snapshot.CompactionCount,
 		snapshot.MemoryFlushCompactionCount, snapshot.MemoryFlushAt,
 		nilStr(snapshot.Label), nilStr(snapshot.SpawnedBy), snapshot.SpawnDepth,
 		nilSessionUUID(snapshot.AgentUUID), nilStr(snapshot.UserID), metaJSON, snapshot.Updated,
 		snapshot.TeamID,
-		key,
+		key, tenantIDForInsert(ctx),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Session not yet in DB (e.g. cron/heartbeat sessions) — insert it.
+		_, err = s.db.ExecContext(ctx,
+			`INSERT INTO sessions (id, session_key, messages, summary, model, provider, channel,
+				input_tokens, output_tokens, compaction_count,
+				memory_flush_compaction_count, memory_flush_at,
+				label, spawned_by, spawn_depth, agent_id, user_id, metadata, updated_at, team_id, tenant_id, created_at)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+			 ON CONFLICT (tenant_id, session_key) DO UPDATE SET
+				messages = EXCLUDED.messages, summary = EXCLUDED.summary, model = EXCLUDED.model,
+				provider = EXCLUDED.provider, channel = EXCLUDED.channel,
+				input_tokens = EXCLUDED.input_tokens, output_tokens = EXCLUDED.output_tokens,
+				compaction_count = EXCLUDED.compaction_count,
+				memory_flush_compaction_count = EXCLUDED.memory_flush_compaction_count,
+				memory_flush_at = EXCLUDED.memory_flush_at,
+				label = EXCLUDED.label, spawned_by = EXCLUDED.spawned_by, spawn_depth = EXCLUDED.spawn_depth,
+				agent_id = EXCLUDED.agent_id, user_id = EXCLUDED.user_id, metadata = EXCLUDED.metadata,
+				updated_at = EXCLUDED.updated_at, team_id = EXCLUDED.team_id`,
+			uuid.Must(uuid.NewV7()), key, msgsJSON,
+			nilStr(snapshot.Summary), nilStr(snapshot.Model), nilStr(snapshot.Provider), nilStr(snapshot.Channel),
+			snapshot.InputTokens, snapshot.OutputTokens, snapshot.CompactionCount,
+			snapshot.MemoryFlushCompactionCount, snapshot.MemoryFlushAt,
+			nilStr(snapshot.Label), nilStr(snapshot.SpawnedBy), snapshot.SpawnDepth,
+			nilSessionUUID(snapshot.AgentUUID), nilStr(snapshot.UserID), metaJSON, snapshot.Updated,
+			snapshot.TeamID, tenantIDForInsert(ctx), snapshot.Updated,
+		)
+		return err
+	}
+	return nil
 }
 
-func (s *PGSessionStore) LastUsedChannel(agentID string) (string, string) {
+func (s *PGSessionStore) LastUsedChannel(ctx context.Context, agentID string) (string, string) {
 	prefix := "agent:" + agentID + ":%"
+	tid := tenantIDForInsert(ctx)
 	var sessionKey string
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		`SELECT session_key FROM sessions
 		 WHERE session_key LIKE $1
 		   AND session_key NOT LIKE $2
 		   AND session_key NOT LIKE $3
+		   AND tenant_id = $4
 		 ORDER BY updated_at DESC LIMIT 1`,
 		prefix,
 		"agent:"+agentID+":cron:%",
 		"agent:"+agentID+":subagent:%",
+		tid,
 	).Scan(&sessionKey)
 	if err != nil {
 		return "", ""
@@ -303,15 +360,15 @@ func (s *PGSessionStore) LastUsedChannel(agentID string) (string, string) {
 
 // --- helpers ---
 
-func (s *PGSessionStore) getOrInit(key string) *store.SessionData {
-	if data, ok := s.cache[key]; ok {
+func (s *PGSessionStore) getOrInit(ctx context.Context, key string) *store.SessionData {
+	if data, ok := s.cache[sessionCacheKey(ctx, key)]; ok {
 		return data
 	}
 
 	// Try loading from DB first to avoid overwriting existing messages
-	data := s.loadFromDB(key)
+	data := s.loadFromDB(ctx, key)
 	if data != nil {
-		s.cache[key] = data
+		s.cache[sessionCacheKey(ctx, key)] = data
 		return data
 	}
 
@@ -323,18 +380,18 @@ func (s *PGSessionStore) getOrInit(key string) *store.SessionData {
 		Created:  now,
 		Updated:  now,
 	}
-	s.cache[key] = data
+	s.cache[sessionCacheKey(ctx, key)] = data
 
 	msgsJSON, _ := json.Marshal([]providers.Message{})
-	s.db.Exec(
-		`INSERT INTO sessions (id, session_key, messages, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (session_key) DO NOTHING`,
-		uuid.Must(uuid.NewV7()), key, msgsJSON, now, now,
+	s.db.ExecContext(ctx,
+		`INSERT INTO sessions (id, session_key, messages, created_at, updated_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (tenant_id, session_key) DO NOTHING`,
+		uuid.Must(uuid.NewV7()), key, msgsJSON, now, now, tenantIDForInsert(ctx),
 	)
 	return data
 }
 
-func (s *PGSessionStore) loadFromDB(key string) *store.SessionData {
+func (s *PGSessionStore) loadFromDB(ctx context.Context, key string) *store.SessionData {
 	var sessionKey string
 	var msgsJSON []byte
 	var summary, model, provider, channel, label, spawnedBy, userID *string
@@ -345,13 +402,14 @@ func (s *PGSessionStore) loadFromDB(key string) *store.SessionData {
 	var createdAt, updatedAt time.Time
 	var metaJSON *[]byte
 
-	err := s.db.QueryRow(
+	tid := tenantIDForInsert(ctx)
+	err := s.db.QueryRowContext(ctx,
 		`SELECT session_key, messages, summary, model, provider, channel,
 		 input_tokens, output_tokens, compaction_count,
 		 memory_flush_compaction_count, memory_flush_at,
 		 label, spawned_by, spawn_depth, agent_id, user_id,
 		 COALESCE(metadata, '{}'), created_at, updated_at, team_id
-		 FROM sessions WHERE session_key = $1`, key,
+		 FROM sessions WHERE session_key = $1 AND tenant_id = $2`, key, tid,
 	).Scan(&sessionKey, &msgsJSON, &summary, &model, &provider, &channel,
 		&inputTokens, &outputTokens, &compactionCount,
 		&memoryFlushCompactionCount, &memoryFlushAt,

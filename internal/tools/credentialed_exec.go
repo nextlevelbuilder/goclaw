@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"regexp"
@@ -103,8 +104,13 @@ func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCLIBinary,
 	binary string, args []string, cwd string, sandboxKey string) *Result {
 
-	// Step 1: Check for shell operators (early detection for clear error)
+	// Step 0: Reject NUL bytes (defense-in-depth — also checked in Execute()).
 	rawCommand := binary + " " + strings.Join(args, " ")
+	if strings.ContainsRune(rawCommand, '\x00') {
+		return ErrorResult("command contains invalid NUL byte")
+	}
+
+	// Step 1: Check for shell operators (early detection for clear error)
 	if ops := detectShellOperators(rawCommand); len(ops) > 0 {
 		return credentialedShellOperatorError(rawCommand, ops)
 	}
@@ -133,6 +139,14 @@ func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCL
 	if len(cred.EncryptedEnv) > 0 {
 		if err := json.Unmarshal(cred.EncryptedEnv, &envMap); err != nil {
 			return ErrorResult(fmt.Sprintf("credentialed exec: invalid env JSON for %q: %v", binary, err))
+		}
+	}
+
+	// Step 4b: Merge per-user env overrides (user takes priority over base)
+	if len(cred.UserEnv) > 0 {
+		var userEnvMap map[string]string
+		if err := json.Unmarshal(cred.UserEnv, &userEnvMap); err == nil {
+			maps.Copy(envMap, userEnvMap)
 		}
 	}
 
@@ -209,7 +223,9 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 	if output == "" {
 		output = "(command completed with no output)"
 	}
-	return SilentResult(ScrubCredentials(output))
+	output = ScrubCredentials(output)
+	output = capExecOutput(output, execMaxOutputChars)
+	return SilentResult(output)
 }
 
 // buildCredentialedEnv creates a minimal environment with injected credentials.
@@ -256,13 +272,16 @@ func formatCredentialedResult(binary string, args []string,
 	if output == "" {
 		output = "(command completed with no output)"
 	}
-	return SilentResult(ScrubCredentials(output))
+	output = ScrubCredentials(output)
+	output = capExecOutput(output, execMaxOutputChars)
+	return SilentResult(output)
 }
 
 // lookupCredentialedBinary checks if a command's binary has credential config.
 // Returns the credential config and parsed args, or nil if not credentialed.
 func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string) (*store.SecureCLIBinary, string, []string) {
 	if t.secureCLIStore == nil {
+		slog.Warn("secure_cli.lookup: store is nil, skipping credentialed exec", "command", command)
 		return nil, "", nil
 	}
 	binary, args, err := parseCommandBinary(command)
@@ -275,10 +294,18 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 	if agentID != uuid.Nil {
 		agentIDPtr = &agentID
 	}
-	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr)
-	if err != nil || cred == nil {
+	// Pass userID for per-user credential resolution (LEFT JOIN, zero extra queries).
+	userID := store.UserIDFromContext(ctx)
+	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr, userID)
+	if err != nil {
+		slog.Warn("secure_cli.lookup: query failed", "binary", binary, "agent_id", agentID, "error", err)
 		return nil, "", nil
 	}
+	if cred == nil {
+		slog.Warn("secure_cli.lookup: no credential found", "binary", binary, "agent_id", agentID)
+		return nil, "", nil
+	}
+	slog.Info("secure_cli.lookup: found credential", "binary", binary, "cred_id", cred.ID, "env_size", len(cred.EncryptedEnv))
 	return cred, binary, args
 }
 

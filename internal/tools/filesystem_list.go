@@ -73,7 +73,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 			if listing == "" {
 				return SilentResult("No memory files stored yet")
 			}
-			return SilentResult(listing)
+			return SilentResult(listing + "\n[Source: database, not filesystem]")
 		}
 	}
 

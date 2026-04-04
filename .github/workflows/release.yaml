@@ -53,13 +53,24 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build web UI
+        run: |
+          corepack enable && corepack prepare pnpm@10.28.2 --activate
+          cd ui/web && pnpm install --frozen-lockfile && pnpm build && cd ../..
+          mkdir -p internal/webui/dist
+          cp -r ui/web/dist/* internal/webui/dist/
+
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           VERSION: v${{ needs.release.outputs.version }}
         run: |
-          CGO_ENABLED=0 go build \
+          CGO_ENABLED=0 go build -tags embedui \
             -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
             -o goclaw .
           tar -czf "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw migrations/
@@ -72,6 +83,38 @@ jobs:
             "goclaw-${{ needs.release.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
             --clobber
 
+  # Generate SHA256 checksums for all binary assets
+  checksums:
+    needs: [release, build-binaries]
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all binary assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p assets
+          gh release download "v${{ needs.release.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --pattern "goclaw-*.tar.gz" \
+            --dir assets
+
+      - name: Generate checksums
+        run: |
+          cd assets
+          sha256sum goclaw-*.tar.gz > CHECKSUMS.sha256
+          echo "Generated checksums:"
+          cat CHECKSUMS.sha256
+
+      - name: Upload checksums to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ needs.release.outputs.version }}" \
+            assets/CHECKSUMS.sha256 \
+            --repo "${{ github.repository }}" \
+            --clobber
+
   # Build and push Docker images to GHCR + Docker Hub
   docker-images:
     needs: release
@@ -80,61 +123,33 @@ jobs:
     strategy:
       matrix:
         include:
+          # Base: backend API-only, no web UI, no runtimes
+          - variant: base
+            suffix: "-base"
+            enable_otel: "false"
+            enable_embedui: "false"
+            enable_python: "false"
+            enable_full_skills: "false"
+          # Latest: backend + embedded web UI + Python
           - variant: latest
             suffix: ""
             enable_otel: "false"
-            enable_tsnet: "false"
-            enable_redis: "false"
-            enable_node: "false"
-            enable_python: "false"
-            enable_full_skills: "false"
-          - variant: node
-            suffix: "-node"
-            enable_otel: "false"
-            enable_tsnet: "false"
-            enable_redis: "false"
-            enable_node: "true"
-            enable_python: "false"
-            enable_full_skills: "false"
-          - variant: python
-            suffix: "-python"
-            enable_otel: "false"
-            enable_tsnet: "false"
-            enable_redis: "false"
-            enable_node: "false"
+            enable_embedui: "true"
             enable_python: "true"
             enable_full_skills: "false"
+          # Full: all runtimes + skills pre-installed
           - variant: full
             suffix: "-full"
             enable_otel: "false"
-            enable_tsnet: "false"
-            enable_redis: "false"
-            enable_node: "true"
+            enable_embedui: "true"
             enable_python: "true"
             enable_full_skills: "true"
+          # OTel: latest + OpenTelemetry tracing
           - variant: otel
             suffix: "-otel"
             enable_otel: "true"
-            enable_tsnet: "false"
-            enable_redis: "false"
-            enable_node: "false"
-            enable_python: "false"
-            enable_full_skills: "false"
-          - variant: tsnet
-            suffix: "-tsnet"
-            enable_otel: "false"
-            enable_tsnet: "true"
-            enable_redis: "false"
-            enable_node: "false"
-            enable_python: "false"
-            enable_full_skills: "false"
-          - variant: redis
-            suffix: "-redis"
-            enable_otel: "false"
-            enable_tsnet: "false"
-            enable_redis: "true"
-            enable_node: "false"
-            enable_python: "false"
+            enable_embedui: "true"
+            enable_python: "true"
             enable_full_skills: "false"
     steps:
       - uses: actions/checkout@v4
@@ -178,9 +193,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ENABLE_OTEL=${{ matrix.enable_otel }}
-            ENABLE_TSNET=${{ matrix.enable_tsnet }}
-            ENABLE_REDIS=${{ matrix.enable_redis }}
-            ENABLE_NODE=${{ matrix.enable_node }}
+            ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
             ENABLE_PYTHON=${{ matrix.enable_python }}
             ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
             VERSION=v${{ needs.release.outputs.version }}

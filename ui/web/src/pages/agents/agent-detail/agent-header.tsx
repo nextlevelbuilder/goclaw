@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import type { AgentData } from "@/types/agent";
 import type { HeartbeatConfig } from "@/pages/agents/hooks/use-agent-heartbeat";
 import { useCountdown } from "@/hooks/use-countdown";
-import { agentDisplayName, agentKeyDisplay } from "./agent-display-utils";
+import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting } from "./agent-display-utils";
 import { cn } from "@/lib/utils";
 
 interface AgentHeaderProps {
@@ -26,6 +26,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
   const selfEvolve = Boolean(otherCfg.self_evolve);
   const title = agentDisplayName(agent, t("card.unnamedAgent"));
   const keyDisplay = agentKeyDisplay(agent.agent_key);
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
 
   const hbConfigured = heartbeat != null;
   const hbEnabled = heartbeat?.enabled ?? false;
@@ -85,7 +86,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
                 <TooltipTrigger asChild>
                   <Badge
                     variant={selfEvolve ? "default" : "outline"}
-                    className={`text-[10px] ${selfEvolve ? "bg-violet-100 text-violet-700 hover:bg-violet-100 dark:bg-violet-900/30 dark:text-violet-300" : "text-muted-foreground"}`}
+                    className={`text-[10px] ${selfEvolve ? "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-300" : "text-muted-foreground"}`}
                   >
                     <Sparkles className="h-2.5 w-2.5 sm:mr-0.5" />
                     <span className="hidden sm:inline">{selfEvolve ? t("detail.evolving") : t("detail.static")}</span>
@@ -93,6 +94,18 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-[240px] text-xs">
                   {selfEvolve ? t("detail.evolvingTooltipDetail") : t("detail.staticTooltipDetail")}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {hasOAuthRouting && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-[10px]">
+                    {t("chatgptOAuthRouting.badge")}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+                  {t("chatgptOAuthRouting.badgeTooltip")}
                 </TooltipContent>
               </Tooltip>
             )}

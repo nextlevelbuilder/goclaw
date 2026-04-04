@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -68,15 +69,18 @@ func (t *SessionsSendTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult("either session_key or label is required")
 	}
 
-	agentID := resolveAgentIDString(ctx)
+	// Security: fail-closed when agent key missing.
+	// Session keys use agent_key (e.g. "agent:victoria:..."), not UUID.
+	agentKey := ToolAgentKeyFromCtx(ctx)
+	if agentKey == "" {
+		return ErrorResult("agent context required")
+	}
 
 	// Resolve by label if needed
 	if sessionKey == "" && label != "" {
-		sessions := t.sessions.List(agentID)
+		sessions := t.sessions.List(ctx, agentKey)
 		for _, s := range sessions {
-			// Check if label matches by loading session data
-			data := t.sessions.GetOrCreate(s.Key)
-			if data.Label == label {
+			if s.Label == label {
 				sessionKey = s.Key
 				break
 			}
@@ -87,8 +91,15 @@ func (t *SessionsSendTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 
 	// Security: validate target session belongs to same agent
-	if agentID != "" && !strings.HasPrefix(sessionKey, "agent:"+agentID+":") {
+	if !strings.HasPrefix(sessionKey, "agent:"+agentKey+":") {
 		return ErrorResult("access denied: target session belongs to a different agent")
+	}
+
+	// Block self-send: agent should not send to its own current session
+	// to prevent re-processing loops (same pattern as message tool).
+	currentSession := ToolSandboxKeyFromCtx(ctx)
+	if currentSession != "" && sessionKey == currentSession {
+		return ErrorResult("cannot send to your own current session — your response is already delivered to it")
 	}
 
 	// Publish as an inbound message (same mechanism as channels)
@@ -98,9 +109,14 @@ func (t *SessionsSendTool) Execute(ctx context.Context, args map[string]any) *Re
 		ChatID:   sessionKey,
 		Content:  message,
 		PeerKind: "direct",
+		TenantID: store.TenantIDFromContext(ctx),
 	})
 
-	return SilentResult(fmt.Sprintf(`{"status":"accepted","session_key":"%s"}`, sessionKey))
+	out, _ := json.Marshal(map[string]any{
+		"status":      "accepted",
+		"session_key": sessionKey,
+	})
+	return SilentResult(string(out))
 }
 
 // ============================================================

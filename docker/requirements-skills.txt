@@ -1,0 +1,21 @@
+# Additional Python dependencies for full skill runtime (ENABLE_FULL_SKILLS=true).
+# Installed on top of requirements-base.txt.
+# Uses compatible release (~=) to allow patch updates within the same minor version.
+#
+# Last reviewed: 2026-04-03
+
+# Document processing
+pypdf~=6.9.2
+openpyxl~=3.1.5
+python-pptx~=1.0.2
+pdfplumber~=0.11.9
+pdf2image~=1.17.0
+markitdown<0.2.0
+
+# Data & XML
+pandas~=3.0.2
+defusedxml~=0.7.1
+lxml~=6.0.2
+
+# AI SDK — relaxed to allow minor updates (fast-moving SDK)
+anthropic>=0.88.0,<2.0.0

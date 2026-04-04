@@ -3,6 +3,9 @@ package bus
 import (
 	"context"
 	"encoding/json"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
 // MediaFile represents an inbound media file with its MIME type.
@@ -21,6 +24,7 @@ type InboundMessage struct {
 	Media        []MediaFile       `json:"media,omitempty"`
 	SessionKey   string            `json:"session_key"`             // deprecated: gateway builds canonical key
 	PeerKind     string            `json:"peer_kind,omitempty"`     // "direct" or "group" (used for session key)
+	TenantID     uuid.UUID         `json:"tenant_id,omitempty"`     // tenant scope from channel instance
 	AgentID      string            `json:"agent_id,omitempty"`      // target agent (for multi-agent routing)
 	UserID       string            `json:"user_id,omitempty"`       // external user ID for per-user scoping (memory, bootstrap)
 	HistoryLimit int               `json:"history_limit,omitempty"` // max turns to keep in context (0=unlimited, from channel config)
@@ -46,8 +50,9 @@ type MediaAttachment struct {
 
 // Event represents a server-side event to broadcast to WebSocket clients.
 type Event struct {
-	Name    string `json:"name"` // event name (e.g. "agent", "chat", "health")
-	Payload any    `json:"payload,omitempty"`
+	Name     string    `json:"name"`              // event name (e.g. "agent", "chat", "health")
+	Payload  any       `json:"payload,omitempty"`
+	TenantID uuid.UUID `json:"-"` // tenant scope for event filtering (not serialized to clients)
 }
 
 // Cache invalidation kind constants.
@@ -56,7 +61,6 @@ const (
 	CacheKindBootstrap        = "bootstrap"
 	CacheKindSkills           = "skills"
 	CacheKindCron             = "cron"
-	CacheKindCustomTools      = "custom_tools"
 	CacheKindChannelInstances = "channel_instances"
 	CacheKindBuiltinTools     = "builtin_tools"
 	CacheKindTeam             = "team"
@@ -67,6 +71,10 @@ const (
 	CacheKindAPIKeys          = "api_keys"
 	CacheKindHeartbeat        = "heartbeat"
 	CacheKindConfigPerms      = "config_perms"
+	CacheKindTenantUsers      = "tenant_users"
+	CacheKindAgentAccess      = "agent_access"
+	CacheKindTeamAccess       = "team_access"
+	CacheKindTenants          = "tenants"
 )
 
 // Topic constants for msgBus.Subscribe() / Broadcast().
@@ -75,7 +83,6 @@ const (
 	TopicCacheAgent            = "cache:agent"
 	TopicCacheSkills           = "cache:skills"
 	TopicCacheCron             = "cache:cron"
-	TopicCacheCustomTools      = "cache:custom_tools"
 	TopicCacheBuiltinTools     = "cache:builtin_tools"
 	TopicCacheTeam             = "cache:team"
 	TopicCacheUserWorkspace    = "cache:user_workspace"
@@ -89,8 +96,10 @@ const (
 	TopicTeamTaskAudit         = "team-task-audit"
 	TopicChannelStreaming      = "channel-streaming"
 	TopicConfigChanged         = "config:changed"
+	TopicSystemConfigChanged   = "system_config:changed"
 	TopicPairingRevoked        = "pairing:revoked"
 	TopicAgentStatusChanged    = "agent:status_changed"
+	TopicAgentDeleted          = "agent:deleted"
 )
 
 // EventPairingRevoked is the event name broadcast when a paired device is revoked.
@@ -112,6 +121,13 @@ type AgentStatusChangedPayload struct {
 	NewStatus string `json:"new_status"`
 }
 
+// AgentDeletedPayload carries agent deletion info for async cleanup (e.g. orphaned provider removal).
+type AgentDeletedPayload struct {
+	AgentKey string    `json:"agent_key"`
+	Provider string    `json:"provider,omitempty"` // provider name for orphan cleanup
+	TenantID uuid.UUID `json:"tenant_id,omitempty"`
+}
+
 // AuditEventPayload carries audit log data emitted by handlers.
 // A single subscriber persists these to the activity_logs table.
 type AuditEventPayload struct {
@@ -122,6 +138,7 @@ type AuditEventPayload struct {
 	EntityID   string          `json:"entity_id"`
 	IPAddress  string          `json:"ip_address,omitempty"`
 	Details    json.RawMessage `json:"details,omitempty"`
+	TenantID   uuid.UUID       `json:"tenant_id,omitempty"` // for async subscriber tenant scoping
 }
 
 // CacheInvalidatePayload signals cache layers to evict stale entries.
@@ -151,4 +168,14 @@ type MessageRouter interface {
 	ConsumeInbound(ctx context.Context) (InboundMessage, bool)
 	PublishOutbound(msg OutboundMessage)
 	SubscribeOutbound(ctx context.Context) (OutboundMessage, bool)
+}
+
+// IsInternalSender returns true if the senderID belongs to an internal system
+// component (not a real channel user). These should not be stored as contacts.
+func IsInternalSender(senderID string) bool {
+	return strings.HasPrefix(senderID, "system:") ||
+		strings.HasPrefix(senderID, "notification:") ||
+		strings.HasPrefix(senderID, "teammate:") ||
+		strings.HasPrefix(senderID, "ticker:") ||
+		senderID == "session_send_tool"
 }

@@ -1,0 +1,157 @@
+{
+  "title": "Kênh",
+  "description": "Kết nối ứng dụng nhắn tin với agent",
+  "addChannel": "Thêm kênh",
+  "atLimit": "Phiên bản Lite: tối đa 1 Telegram + 1 Discord.",
+  "emptyTitle": "Chưa có kênh",
+  "emptyDesc": "Kết nối Telegram hoặc Discord để trò chuyện với agent từ ứng dụng nhắn tin.",
+  "status": {
+    "running": "Đang chạy",
+    "stopped": "Đã dừng",
+    "disabled": "Tắt",
+    "degraded": "Suy giảm",
+    "starting": "Đang khởi động",
+    "registered": "Đã cấu hình",
+    "failed": "Thất bại"
+  },
+  "channelTypes": {
+    "telegram": "Telegram",
+    "discord": "Discord"
+  },
+  "form": {
+    "createTitle": "Thêm kênh",
+    "displayName": "Tên hiển thị",
+    "displayNamePlaceholder": "Bot Telegram của tôi",
+    "channelType": "Loại kênh",
+    "selectType": "Chọn loại",
+    "agent": "Agent",
+    "selectAgent": "Chọn agent",
+    "enabled": "Bật",
+    "credentials": "Thông tin xác thực",
+    "credentialsHint": "(để trống để giữ nguyên)",
+    "configuration": "Cấu hình",
+    "cancel": "Hủy",
+    "save": "Lưu",
+    "create": "Tạo",
+    "saving": "Đang lưu...",
+    "errors": {
+      "agentRequired": "Vui lòng chọn agent",
+      "typeRequired": "Vui lòng chọn loại kênh",
+      "tokenRequired": "Token bot là bắt buộc"
+    }
+  },
+  "detail": {
+    "back": "Quay lại",
+    "lastChecked": "Kiểm tra gần nhất: {{value}}",
+    "tabs": {
+      "general": "Chung",
+      "credentials": "Xác thực",
+      "managers": "Quản lý",
+      "advanced": "Nâng cao"
+    },
+    "general": {
+      "identity": "Thông tin",
+      "name": "Tên",
+      "nameHint": "Định danh slug (chỉ đọc)",
+      "channelType": "Loại kênh",
+      "displayName": "Tên hiển thị",
+      "displayNamePlaceholder": "Nhập tên hiển thị",
+      "agent": "Agent",
+      "selectAgent": "Chọn agent",
+      "enabled": "Bật",
+      "saveChanges": "Lưu thay đổi",
+      "saving": "Đang lưu..."
+    },
+    "policies": "Chính sách",
+    "credentials": {
+      "hint": "Để trống các trường để giữ giá trị hiện tại. Thông tin xác thực được mã hóa.",
+      "updateCredentials": "Cập nhật xác thực",
+      "saving": "Đang lưu...",
+      "saved": "Đã cập nhật xác thực"
+    },
+    "managers": {
+      "description": "Chỉ định người quản lý cho các nhóm kênh. Quản lý có thể điều phối cuộc trò chuyện.",
+      "groups": "Nhóm",
+      "noManagerGroups": "Chưa có nhóm quản lý",
+      "noManagerGroupsHint": "Nhóm sẽ xuất hiện khi người dùng tương tác với bot trong nhóm chat.",
+      "loadingManagers": "Đang tải...",
+      "noManagers": "Chưa có quản lý trong nhóm này",
+      "managersCount": "{{count}} quản lý",
+      "managersCountPlural": "{{count}} quản lý",
+      "columns": {
+        "userId": "User ID",
+        "name": "Tên",
+        "username": "Username"
+      },
+      "addForm": {
+        "title": "Thêm quản lý",
+        "hint": "Nhập thông tin nhóm và người dùng",
+        "groupId": "ID nhóm",
+        "groupIdPlaceholder": "VD: group:telegram:-100123456",
+        "userId": "User ID",
+        "userIdPlaceholder": "Tìm hoặc nhập user ID",
+        "addManager": "Thêm quản lý",
+        "add": "Thêm",
+        "errors": {
+          "groupUserRequired": "ID nhóm và User ID là bắt buộc",
+          "failedAdd": "Không thể thêm quản lý"
+        }
+      }
+    },
+    "advanced": "Nâng cao",
+    "advancedTitle": "Cài đặt nâng cao",
+    "network": "Mạng",
+    "networkDesc": "Cấu hình API server và proxy",
+    "limits": "Giới hạn",
+    "limitsDesc": "Giới hạn tin nhắn và media",
+    "streaming": "Streaming",
+    "streamingDesc": "Phản hồi từng phần",
+    "behavior": "Hành vi",
+    "behaviorDesc": "Phản ứng, xem trước và chế độ trả lời",
+    "accessControl": "Kiểm soát truy cập",
+    "accessControlDesc": "Giới hạn danh sách cho phép",
+    "saveConfig": "Lưu",
+    "noAdvanced": "Không có cài đặt nâng cao cho loại kênh này."
+  },
+  "pairing": {
+    "title": "Thiết bị đã ghép nối",
+    "pending": "Yêu cầu chờ ({{count}})",
+    "paired": "Thiết bị đã ghép ({{count}})",
+    "empty": "Chưa có thiết bị",
+    "emptyDesc": "Thiết bị sẽ xuất hiện khi người dùng nhắn tin cho bot và cần phê duyệt.",
+    "sender": "Người gửi: ",
+    "chat": "Chat: ",
+    "code": "Mã",
+    "approve": "Phê duyệt",
+    "deny": "Từ chối",
+    "revoke": "Thu hồi",
+    "confirmApprove": {
+      "title": "Phê duyệt ghép nối",
+      "description": "Phê duyệt {{channel}}:{{senderId}} (mã: {{code}})? Thiết bị này sẽ có thể tương tác với agent.",
+      "confirmLabel": "Phê duyệt"
+    },
+    "confirmDeny": {
+      "title": "Từ chối ghép nối",
+      "description": "Từ chối {{channel}}:{{senderId}} (mã: {{code}})? Yêu cầu sẽ bị xóa.",
+      "confirmLabel": "Từ chối"
+    },
+    "confirmRevoke": {
+      "title": "Thu hồi thiết bị",
+      "description": "Thu hồi {{channel}}:{{senderId}}? Thiết bị sẽ cần ghép nối lại.",
+      "confirmLabel": "Thu hồi"
+    }
+  },
+  "toast": {
+    "created": "Đã tạo kênh",
+    "updated": "Đã cập nhật kênh",
+    "deleted": "Đã xóa kênh",
+    "failedCreate": "Không thể tạo kênh",
+    "failedUpdate": "Không thể cập nhật kênh",
+    "failedDelete": "Không thể xóa kênh"
+  },
+  "delete": {
+    "title": "Xóa kênh",
+    "description": "Xóa {{name}}? Hành động này không thể hoàn tác.",
+    "confirmLabel": "Xóa"
+  }
+}

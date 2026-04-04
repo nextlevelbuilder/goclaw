@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -21,17 +24,32 @@ import (
 // Safe because cron jobs only fire after Start(), well after this is set.
 var cronHeartbeatWakeFn func(agentID string)
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager) func(job *store.CronJob) (*store.CronJobResult, error) {
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
 		agentID := job.AgentID
-		if agentID == "" {
+		if agentID == "" && agentStore != nil {
+			// Resolve real default agent from DB instead of using literal "default" string.
+			tenantCtx := store.WithTenantID(context.Background(), job.TenantID)
+			if defaultAgent, err := agentStore.GetDefault(tenantCtx); err == nil {
+				agentID = defaultAgent.AgentKey
+			} else {
+				agentID = cfg.ResolveDefaultAgentID()
+			}
+		} else if agentID == "" {
 			agentID = cfg.ResolveDefaultAgentID()
+		} else if id, err := uuid.Parse(agentID); err == nil && agentStore != nil {
+			// Resolve agentKey from UUID so session key uses agentKey
+			// (consistent with chat/WS/team paths, fixes cache invalidation mismatch).
+			cronCtx := store.WithTenantID(context.Background(), job.TenantID)
+			if ag, err := agentStore.GetByID(cronCtx, id); err == nil {
+				agentID = ag.AgentKey
+			}
 		} else {
 			agentID = config.NormalizeAgentID(agentID)
 		}
 
 		sessionKey := sessions.BuildCronSessionKey(agentID, job.ID)
-		channel := job.Payload.Channel
+		channel := job.DeliverChannel
 		if channel == "" {
 			channel = "cron"
 		}
@@ -45,12 +63,12 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 
 		// Build cron context so the agent knows delivery target and requester.
 		var extraPrompt string
-		if job.Payload.Deliver && job.Payload.Channel != "" && job.Payload.To != "" {
+		if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
 			extraPrompt = fmt.Sprintf(
 				"[Cron Job]\nThis is scheduled job \"%s\" (ID: %s).\n"+
 					"Requester: user %s on channel \"%s\" (chat %s).\n"+
 					"Your response will be automatically delivered to that chat — just produce the content directly.",
-				job.Name, job.ID, job.UserID, job.Payload.Channel, job.Payload.To,
+				job.Name, job.ID, job.UserID, job.DeliverChannel, job.DeliverTo,
 			)
 		} else {
 			extraPrompt = fmt.Sprintf(
@@ -60,13 +78,25 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			)
 		}
 
+		// Build context with tenant scope so agent loop events are scoped correctly.
+		cronCtx := store.WithTenantID(context.Background(), job.TenantID)
+
+		// Reset session before each cron run to prevent tool errors from previous
+		// runs from polluting the context and blocking future executions (#294).
+		// Save() persists the empty session to DB so stale data won't reload after restart.
+		// Stateless jobs skip this — they intentionally carry no session history.
+		if !job.Stateless {
+			sessionMgr.Reset(cronCtx, sessionKey)
+			sessionMgr.Save(cronCtx, sessionKey)
+		}
+
 		// Schedule through cron lane — scheduler handles agent resolution and concurrency
-		outCh := sched.Schedule(context.Background(), scheduler.LaneCron, agent.RunRequest{
+		outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
 			SessionKey:        sessionKey,
 			Message:           job.Payload.Message,
 			Channel:           channel,
 			ChannelType:       channelType,
-			ChatID:            job.Payload.To,
+			ChatID:            job.DeliverTo,
 			PeerKind:          peerKind,
 			UserID:            job.UserID,
 			RunID:             fmt.Sprintf("cron:%s", job.ID),
@@ -85,17 +115,20 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		result := outcome.Result
 
 		// If job wants delivery to a channel, send the agent response to the target chat.
-		if job.Payload.Deliver && job.Payload.Channel != "" && job.Payload.To != "" {
+		if job.Deliver && job.DeliverChannel != "" && job.DeliverTo != "" {
 			outMsg := bus.OutboundMessage{
-				Channel: job.Payload.Channel,
-				ChatID:  job.Payload.To,
+				Channel: job.DeliverChannel,
+				ChatID:  job.DeliverTo,
 				Content: result.Content,
 			}
 			if peerKind == "group" {
-				outMsg.Metadata = map[string]string{"group_id": job.Payload.To}
+				outMsg.Metadata = map[string]string{"group_id": job.DeliverTo}
 			}
 			appendMediaToOutbound(&outMsg, result.Media)
 			msgBus.PublishOutbound(outMsg)
+		} else if job.Deliver {
+			slog.Warn("cron: delivery configured but channel/chatID missing — output discarded",
+				"job_id", job.ID, "job_name", job.Name, "channel", job.DeliverChannel, "to", job.DeliverTo)
 		}
 
 		cronResult := &store.CronJobResult{
@@ -106,9 +139,10 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			cronResult.OutputTokens = result.Usage.CompletionTokens
 		}
 
-		// wakeMode: trigger heartbeat after cron job completes
-		if job.Payload.WakeHeartbeat && cronHeartbeatWakeFn != nil {
-			cronHeartbeatWakeFn(agentID)
+		// wakeMode: trigger heartbeat after cron job completes.
+		// Use original job.AgentID (UUID) — cronHeartbeatWakeFn expects UUID for ticker.Wake().
+		if job.WakeHeartbeat && cronHeartbeatWakeFn != nil {
+			cronHeartbeatWakeFn(job.AgentID)
 		}
 
 		return cronResult, nil

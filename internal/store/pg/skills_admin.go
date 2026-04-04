@@ -13,7 +13,7 @@ import (
 // Returns (id, changed, actualFilePath, error).
 // When hash is unchanged, returns the existing file_path from DB so the caller
 // uses the correct directory for dep scanning (not a non-existent next-version dir).
-func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParams) (uuid.UUID, bool, string, error) {
+func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error) {
 	// Check if skill already exists
 	var existingID uuid.UUID
 	var existingHash *string
@@ -57,10 +57,10 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParam
 	fmJSON := marshalFrontmatter(p.Frontmatter)
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO skills (id, name, slug, description, owner_id, visibility, version, status,
-		 is_system, frontmatter, file_path, file_size, file_hash, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, NOW(), NOW())`,
+		 is_system, frontmatter, file_path, file_size, file_hash, tenant_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, 'system', 'public', $5, $6, true, $7, $8, $9, $10, $11, NOW(), NOW())`,
 		id, p.Name, p.Slug, p.Description, p.Version, p.Status,
-		fmJSON, p.FilePath, p.FileSize, p.FileHash,
+		fmJSON, p.FilePath, p.FileSize, p.FileHash, store.MasterTenantID,
 	)
 	if err != nil {
 		return uuid.Nil, false, "", fmt.Errorf("insert system skill: %w", err)
@@ -77,8 +77,8 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p SkillCreateParam
 
 // ListSystemSkillDirs returns slug->file_path map for all enabled system skills.
 // Disabled system skills are excluded — dep checking and injection are skipped for them.
-func (s *PGSkillStore) ListSystemSkillDirs() map[string]string {
-	rows, err := s.db.Query(
+func (s *PGSkillStore) ListSystemSkillDirs(ctx context.Context) map[string]string {
+	rows, err := s.db.QueryContext(ctx,
 		`SELECT slug, file_path FROM skills WHERE is_system = true AND enabled = true`)
 	if err != nil {
 		return nil
@@ -95,9 +95,12 @@ func (s *PGSkillStore) ListSystemSkillDirs() map[string]string {
 	return dirs
 }
 
-// IsSystemSkill checks if a skill slug belongs to a system skill.
+// IsSystemSkill checks if a skill slug belongs to a system skill (master tenant only).
 func (s *PGSkillStore) IsSystemSkill(slug string) bool {
 	var isSystem bool
-	err := s.db.QueryRow("SELECT is_system FROM skills WHERE slug = $1", slug).Scan(&isSystem)
+	err := s.db.QueryRow(
+		"SELECT is_system FROM skills WHERE slug = $1 AND tenant_id = $2 AND is_system = true",
+		slug, store.MasterTenantID,
+	).Scan(&isSystem)
 	return err == nil && isSystem
 }

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -146,10 +147,8 @@ func dedup(items []string) []string {
 
 // appendIfAbsent appends s to slice only if not already present.
 func appendIfAbsent(slice []string, s string) []string {
-	for _, existing := range slice {
-		if existing == s {
-			return slice
-		}
+	if slices.Contains(slice, s) {
+		return slice
 	}
 	return append(slice, s)
 }

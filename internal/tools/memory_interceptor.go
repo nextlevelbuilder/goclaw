@@ -117,7 +117,16 @@ func (m *MemoryInterceptor) ReadFile(ctx context.Context, path string) (string, 
 		content, err = m.memStore.GetDocument(ctx, agentStr, "", relPath)
 	}
 	if err != nil {
-		// Not found is OK — return empty
+		// Not found in own memory — try leader's memory as fallback (team members only).
+		if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {
+			leaderContent, lerr := m.memStore.GetDocument(ctx, leaderID, userID, relPath)
+			if lerr != nil && userID != "" {
+				leaderContent, lerr = m.memStore.GetDocument(ctx, leaderID, "", relPath)
+			}
+			if lerr == nil && leaderContent != "" {
+				return leaderContent, true, nil
+			}
+		}
 		slog.Debug("memory interceptor: document not found", "path", path, "agent", agentStr)
 		return "", true, nil
 	}
@@ -147,11 +156,17 @@ func (m *MemoryInterceptor) WriteFile(ctx context.Context, path, content string,
 		return MemoryWriteResult{}, nil // no agent context
 	}
 
+	// Block memory writes for team members — memory is leader-only.
+	agentStr := agentID.String()
+	if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {
+		return MemoryWriteResult{Handled: true}, fmt.Errorf(
+			"memory is read-only for team members — only the team leader can save memory files")
+	}
+
 	// Normalize absolute path to workspace-relative for DB storage
 	relPath := normalizeToRelative(path, ws)
 
 	userID := store.MemoryUserID(ctx)
-	agentStr := agentID.String()
 
 	var previousContent string
 
@@ -208,9 +223,28 @@ func (m *MemoryInterceptor) ListFiles(ctx context.Context, path string) (string,
 	}
 
 	userID := store.MemoryUserID(ctx)
-	docs, err := m.memStore.ListDocuments(ctx, agentID.String(), userID)
+	agentStr := agentID.String()
+	docs, err := m.memStore.ListDocuments(ctx, agentStr, userID)
 	if err != nil {
 		return "", true, err
+	}
+
+	// Merge leader's documents for team members (fallback, deduplicate by path).
+	if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {
+		seen := make(map[string]bool, len(docs))
+		for _, d := range docs {
+			seen[d.Path] = true
+		}
+		leaderDocs, _ := m.memStore.ListDocuments(ctx, leaderID, userID)
+		// Also try global scope if per-user returned nothing.
+		if len(leaderDocs) == 0 && userID != "" {
+			leaderDocs, _ = m.memStore.ListDocuments(ctx, leaderID, "")
+		}
+		for _, d := range leaderDocs {
+			if !seen[d.Path] {
+				docs = append(docs, d)
+			}
+		}
 	}
 
 	if len(docs) == 0 {

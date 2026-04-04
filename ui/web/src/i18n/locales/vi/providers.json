@@ -22,7 +22,47 @@
   "card": {
     "apiKeySet": "Đã đặt API key",
     "authenticated": "Đã xác thực",
-    "oauthLinked": "Đã liên kết OAuth"
+    "oauthLinked": "Đã liên kết OAuth",
+    "oauthAccount": "Tài khoản OAuth",
+    "oauthAlias": "Bí danh: {{name}}",
+    "connected": "Đã kết nối",
+    "signInNeeded": "Cần đăng nhập",
+    "disabled": "Đã tắt"
+  },
+  "quota": {
+    "checking": "Đang kiểm tra quota",
+    "plan": "Gói",
+    "lastChecked": "Kiểm tra {{value}}",
+    "failure": {
+      "billing": {
+        "label": "Thanh toán",
+        "description": "Gói thanh toán hoặc quyền truy cập hiện đang chặn tài khoản này."
+      },
+      "exhausted": {
+        "label": "Hết quota",
+        "description": "Tài khoản đã đăng nhập nhưng một trong các cửa sổ quota chính đã cạn."
+      },
+      "reauth": {
+        "label": "Đăng nhập lại",
+        "description": "Đăng nhập lại để làm mới quyền truy cập workspace."
+      },
+      "forbidden": {
+        "label": "Bị chặn",
+        "description": "Tài khoản này không thể đọc dữ liệu quota từ upstream."
+      },
+      "needs_setup": {
+        "label": "Cần thiết lập",
+        "description": "Đăng nhập lại để GoClaw khôi phục metadata workspace ChatGPT."
+      },
+      "retry_later": {
+        "label": "Thử lại sau",
+        "description": "Endpoint quota đang tạm thời không khả dụng hoặc bị giới hạn tốc độ."
+      },
+      "unavailable": {
+        "label": "Không khả dụng",
+        "description": "Hiện không lấy được dữ liệu quota cho tài khoản này."
+      }
+    }
   },
   "detail": {
     "title": "Chi tiết Provider",
@@ -53,6 +93,12 @@
     "alreadyAdded": "(đã thêm)",
     "nameFixed": "Tên",
     "configure": "Cấu hình kết nối provider LLM.",
+    "configureOauth": "Kết nối một tài khoản OpenAI Codex OAuth.",
+    "oauthAlias": "Bí danh tài khoản *",
+    "oauthAliasPlaceholder": "vd: primary",
+    "oauthAliasHint": "Bí danh chữ thường dùng cho routing và pool.",
+    "oauthDisplayNamePlaceholder": "Tài khoản Codex chính",
+    "oauthDisplayNameHint": "Nhãn tùy chọn hiển thị trên giao diện.",
     "lowercaseHint": "Chữ thường, số, dấu gạch ngang"
   },
   "delete": {
@@ -72,7 +118,7 @@
     "minimax_native": "MiniMax",
     "cohere": "Cohere",
     "perplexity": "Perplexity",
-    "chatgpt_oauth": "ChatGPT (OAuth)",
+    "chatgpt_oauth": "ChatGPT Subscription (OAuth)",
     "yescale": "YesScale",
     "acp": "ACP"
   },
@@ -98,27 +144,32 @@
   "oauth": {
     "checkingStatus": "Đang kiểm tra trạng thái xác thực...",
     "authSuccessful": "Xác thực thành công!",
+    "authSuccessfulDesc": "Tài khoản OpenAI/Codex có bí danh này đã sẵn sàng để dùng.",
     "activeProvider": "Provider",
-    "closingIn": "đang hoạt động. Đóng sau {{count}} giây...",
     "authenticated": "Đã xác thực — provider",
     "active": "đang hoạt động",
+    "poolBadge": "Sẵn sàng cho pool",
+    "roundRobinBadge": "Round robin",
     "modelPrefixHint": "Dùng tiền tố model",
-    "modelPrefixExample": "trong cấu hình agent (vd: openai-codex/gpt-4o). Token tự động làm mới.",
-    "removeToken": "Xóa Token",
-    "signInDesc": "Đăng nhập bằng tài khoản ChatGPT để sử dụng các model trong gói đăng ký mà không cần API key riêng.",
+    "modelPrefixExample": "trong cấu hình agent (vd: {{example}}).",
+    "multiAccountHint": "Sau này bạn có thể thêm bí danh khác từ pool của agent để bật pooling hoặc round robin.",
+    "aliasRequired": "Nhập một bí danh tài khoản hợp lệ dạng chữ thường trước khi bắt đầu OpenAI Codex OAuth.",
+    "removeToken": "Ngắt kết nối tài khoản",
+    "signInDesc": "Đăng nhập bằng gói ChatGPT/Codex của bạn. Không cần API key riêng.",
     "waiting": "Đang chờ xác thực... Hoàn tất đăng nhập trong cửa sổ đã mở.",
     "remoteVpsHint": "Sau khi đăng nhập, trình duyệt sẽ cố mở",
     "remoteVpsError": "và hiển thị lỗi \"Không thể truy cập trang này\". Điều này là bình thường — sao chép URL đầy đủ từ thanh địa chỉ trình duyệt và dán vào bên dưới.",
     "pasteUrlPlaceholder": "http://localhost:1455/auth/callback?code=...&state=...",
     "submit": "Gửi",
-    "signInWithChatGPT": "Đăng nhập với ChatGPT",
+    "signInWithChatGPT": "Kết nối tài khoản OpenAI",
     "starting": "Đang bắt đầu...",
     "remoteVps": "Remote/VPS?",
     "loggedOut": "Đã đăng xuất",
-    "loggedOutDesc": "Đã xóa OAuth token OpenAI",
+    "loggedOutDesc": "Đã ngắt kết nối tài khoản OpenAI Codex OAuth",
     "oauthFailed": "OAuth thất bại",
     "exchangeFailed": "Trao đổi thất bại",
-    "logoutFailed": "Đăng xuất thất bại"
+    "logoutFailed": "Đăng xuất thất bại",
+    "done": "Xong"
   },
   "cli": {
     "description": "Claude CLI sử dụng tệp nhị phân",
@@ -159,15 +210,123 @@
     "cliConfigDesc": "Xác thực CLI cục bộ",
     "cursorCliConfig": "Cursor CLI",
     "cursorCliConfigDesc": "Xác thực agent Cursor cục bộ",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "Xác thực OAuth ChatGPT",
+    "oauthConfig": "ChatGPT Subscription (OAuth)",
+    "oauthConfigDesc": "Quản lý đăng nhập cho tài khoản OpenAI/Codex có bí danh này",
     "nameReadonly": "Định danh provider, không thể thay đổi",
+    "oauthAliasReadonly": "Bí danh tài khoản OAuth, không thể thay đổi",
     "providerType": "Loại provider",
     "apiKeySection": "API Key",
     "apiKeySectionDesc": "Thông tin xác thực",
     "statusSection": "Trạng thái",
     "statusSectionDesc": "Tình trạng hoạt động của provider",
-    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent"
+    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
+    "embeddingSection": "Embedding",
+    "oauthAccountUsage": "Cách dùng tài khoản",
+    "oauthAccountUsageDesc": "Cách bí danh này hoạt động trong mô hình OpenAI Codex pool do provider sở hữu.",
+    "oauthAccountUsageManagedDesc": "Bí danh này hiện là pool member được quản lý bởi {{provider}}.",
+    "oauthAccountUsageOwnerDesc": "Bí danh này hiện đang sở hữu một pool dùng lại với {{count}} tài khoản phụ.",
+    "oauthPoolRole": {
+      "member": "Thành viên pool",
+      "owner": "Chủ pool",
+      "standalone": "Độc lập"
+    },
+    "oauthAliasLabel": "Bí danh tài khoản",
+    "oauthAccountBadge": "ChatGPT Subscription (OAuth)",
+    "oauthModelPrefix": "Tiền tố model",
+    "oauthQuotaTitle": "Trạng thái quota",
+    "oauthQuotaDescription": "Quota ChatGPT workspace mới nhất của tài khoản này.",
+    "oauthModelPrefixCopied": "Đã sao chép tiền tố model",
+    "oauthPreferredHint": "Đặt trường Provider của agent thành bí danh này để biến nó thành bí danh OpenAI chính.",
+    "oauthProviderDefaultHint": "Dùng phần thiết lập pool mặc định bên dưới để định nghĩa chính sách routing OpenAI Codex dùng lại cho mọi agent trỏ vào bí danh này.",
+    "oauthRoutingHint": "Trang agent giờ sẽ hiển thị pool hiệu lực của agent đó, cùng việc nó đang kế thừa mặc định này hay đang dùng override riêng.",
+    "oauthManagedByHint": "Bí danh này đang được quản lý bởi provider {{provider}}. Hãy chỉnh membership ở provider đó thay vì tại tài khoản này.",
+    "reasoningDefaultsTitle": "Reasoning Defaults",
+    "reasoningDefaultsDescription": "Set the default reasoning policy for agents using this provider. Final runtime effort is still normalized against each agent's selected model.",
+    "reasoningPreset": "Default Preset",
+    "reasoningExpertMode": "Expert Defaults",
+    "reasoningExpertModeDesc": "Use provider-owned advanced reasoning defaults when you need efforts such as auto, none, minimal, or xhigh.",
+    "reasoningPreviewDescription": "Previewing explicit reasoning capability metadata for {{model}}.",
+    "reasoningPreviewLabel": "Capability Preview",
+    "reasoningPreviewDefault": "Preview model default reasoning: {{level}}",
+    "reasoningPreviewEmpty": "No explicit reasoning-capable models were returned for this provider yet.",
+    "reasoningRequestedEffort": "Requested Effort",
+    "reasoningFallbackBehavior": "Fallback Behavior",
+    "codexPoolDefaultsTitle": "Thiết lập pool mặc định",
+    "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
+    "oauthDisplayNameRecommendation": "Thêm tên hiển thị nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool.",
+    "poolActivityTitle": "Hoạt động pool",
+    "poolActivityDescription": "Hoạt động runtime tổng hợp trên tất cả agent sử dụng pool Codex của provider này.",
+    "poolActivityRefresh": "Làm mới",
+    "poolActivityTopAgents": "Agent",
+    "poolActivityTopAgentsTitle": "Agent sử dụng pool nhiều nhất",
+    "poolActivityRequests": "req",
+    "poolActivityEmpty": "Chưa có hoạt động",
+    "poolActivityEmptyDesc": "Hoạt động pool sẽ xuất hiện ở đây khi agent bắt đầu gửi request qua pool này."
+  },
+  "list": {
+    "poolOwner": "Chủ pool",
+    "poolMember": "Thành viên pool",
+    "standalone": "Độc lập",
+    "reasoningDefault": "Reasoning {{level}}",
+    "managedBy": "Được quản lý bởi {{provider}}",
+    "memberCount_one": "{{count}} tài khoản",
+    "memberCount_other": "{{count}} tài khoản",
+    "memberOverflow": "+{{count}}",
+    "strategy": {
+      "roundRobin": "Luân phiên",
+      "priorityOrder": "Theo thứ tự ưu tiên",
+      "primaryFirst": "Ưu tiên chính"
+    },
+    "status": {
+      "needsSignIn": "Cần đăng nhập",
+      "disabled": "Đã tắt"
+    }
+  },
+  "pageHint": {
+    "title": "Tài khoản ChatGPT Subscription (OAuth)",
+    "description": "Mỗi bí danh là một tài khoản Codex. Pool owner quản lý các member tại đây, còn trang agent chỉ hiển thị route đang có hiệu lực.",
+    "connected_one": "{{count}} tài khoản đã kết nối",
+    "connected_other": "{{count}} tài khoản đã kết nối",
+    "owners_one": "{{count}} pool owner",
+    "owners_other": "{{count}} pool owner",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} member"
+  },
+  "embedding": {
+    "enable": "Bật Embedding",
+    "enableDesc": "Cho phép provider này tạo embedding cho bộ nhớ, kỹ năng và đồ thị tri thức",
+    "model": "Model Embedding",
+    "dimensions": "Số chiều đầu ra",
+    "dimensionsHint": "Bộ nhớ GoClaw hiện lưu embedding với vector(1536). Để trống nếu model đã xuất 1536 chiều, hoặc đặt đúng 1536 nếu provider hỗ trợ cắt từ chiều gốc lớn hơn.",
+    "dimensionsInvalid": "Hiện tại bộ nhớ GoClaw chỉ hỗ trợ đúng 1536 chiều.",
+    "apiBase": "API Base Embedding",
+    "apiBasePlaceholder": "(giống provider)",
+    "apiBaseHint": "Ghi đè nếu endpoint embedding khác với API base chính của provider",
+    "verify": "Kiểm tra Embedding",
+    "verifyFailed": "Kiểm tra embedding thất bại",
+    "dimensionsMismatch": "{{count}} chiều — không khớp yêu cầu 1536"
+  },
+  "reasoning": {
+    "off": "Off",
+    "offDesc": "No default extended thinking",
+    "auto": "Auto",
+    "autoDesc": "Ask the model to use its own default reasoning effort",
+    "none": "None",
+    "noneDesc": "Explicitly disable provider reasoning while keeping the advanced contract",
+    "minimal": "Minimal",
+    "minimalDesc": "Use the smallest supported reasoning effort above none",
+    "low": "Low",
+    "lowDesc": "~4K token budget",
+    "medium": "Medium",
+    "mediumDesc": "~10-16K token budget",
+    "high": "High",
+    "highDesc": "~32K token budget",
+    "xhigh": "XHigh",
+    "xhighDesc": "Use the maximum supported reasoning effort",
+    "downgrade": "Downgrade",
+    "downgradeDesc": "Normalize to the nearest supported lower level, or disable when no lower supported level exists",
+    "provider_default": "Use Model Default",
+    "provider_defaultDesc": "Let the selected model fall back to its own default reasoning effort"
   },
   "toast": {
     "created": "Đã tạo provider",

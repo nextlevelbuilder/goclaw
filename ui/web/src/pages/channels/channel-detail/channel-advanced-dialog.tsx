@@ -20,7 +20,7 @@ interface ChannelAdvancedDialogProps {
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
 }
 
-const ESSENTIAL_CONFIG_KEYS = new Set(["dm_policy", "group_policy", "require_mention"]);
+const ESSENTIAL_CONFIG_KEYS = new Set(["dm_policy", "group_policy", "require_mention", "mention_mode"]);
 
 const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
 const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"]);
@@ -93,7 +93,7 @@ export function ChannelAdvancedDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-4 w-4" />

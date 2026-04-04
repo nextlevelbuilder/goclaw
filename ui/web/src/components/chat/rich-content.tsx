@@ -18,109 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-// --- Patterns to detect special blocks ---
-
-// <media:image>, <media:video>, <media:audio>, <media:voice>, <media:document>
-const MEDIA_TAG_RE = /<media:(image|video|audio|voice|document|animation)>/g;
-
-// <file name="..." mime="...">content</file>
-const FILE_BLOCK_RE = /<file\s+name="([^"]+)"\s+mime="([^"]*)">([\s\S]*?)<\/file>/g;
-
-// [Forwarded from Name at Date] at the start
-const FORWARD_RE = /^\[Forwarded from (.+?) at (.+?)\]\n?/;
-
-// [Replying to Sender]\nbody\n[/Replying]
-const REPLY_RE = /\[Replying to (.+?)\]\n([\s\S]*?)\n\[\/Replying\]/;
-
-// [Video received — ...]
-const VIDEO_NOTICE_RE = /\[Video received[^\]]*\]/g;
-
-// Location: Coordinates: lat, lng
-const LOCATION_RE = /Coordinates:\s*([-\d.]+),\s*([-\d.]+)/;
-
-type RichBlock =
-  | { type: "markdown"; content: string }
-  | { type: "media"; mediaType: string }
-  | { type: "video-notice"; content: string }
-  | { type: "file"; name: string; mime: string; content: string }
-  | { type: "forward"; from: string; date: string }
-  | { type: "reply"; sender: string; body: string }
-  | { type: "location"; lat: string; lng: string };
-
-/** Parse message content into rich blocks for rendering */
-function parseRichContent(content: string): RichBlock[] {
-  const blocks: RichBlock[] = [];
-  let text = content;
-
-  // Extract forward info (always at start)
-  const fwdMatch = text.match(FORWARD_RE);
-  if (fwdMatch) {
-    blocks.push({ type: "forward", from: fwdMatch[1]!, date: fwdMatch[2]! });
-    text = text.slice(fwdMatch[0].length);
-  }
-
-  // Extract reply block
-  const replyMatch = text.match(REPLY_RE);
-  let replyBlock: RichBlock | null = null;
-  if (replyMatch) {
-    replyBlock = { type: "reply", sender: replyMatch[1]!, body: replyMatch[2]! };
-    text = text.replace(REPLY_RE, "");
-  }
-
-  // Extract file blocks
-  const fileBlocks: RichBlock[] = [];
-  text = text.replace(FILE_BLOCK_RE, (_match, name: string, mime: string, body: string) => {
-    fileBlocks.push({ type: "file", name, mime, content: body });
-    return "";
-  });
-
-  // Extract media tags
-  const mediaBlocks: RichBlock[] = [];
-  text = text.replace(MEDIA_TAG_RE, (_match, mediaType: string) => {
-    mediaBlocks.push({ type: "media", mediaType });
-    return "";
-  });
-
-  // Extract video notices
-  text = text.replace(VIDEO_NOTICE_RE, (match) => {
-    mediaBlocks.push({ type: "video-notice", content: match });
-    return "";
-  });
-
-  // Extract location
-  const locMatch = text.match(LOCATION_RE);
-  let locationBlock: RichBlock | null = null;
-  if (locMatch) {
-    locationBlock = { type: "location", lat: locMatch[1]!, lng: locMatch[2]! };
-    text = text.replace(LOCATION_RE, "");
-  }
-
-  // Build final block list: forward → media → markdown → files → reply → location
-  if (mediaBlocks.length > 0) {
-    blocks.push(...mediaBlocks);
-  }
-
-  // Clean up leftover whitespace
-  const trimmed = text.replace(/\n{3,}/g, "\n\n").trim();
-  if (trimmed) {
-    blocks.push({ type: "markdown", content: trimmed });
-  }
-
-  if (fileBlocks.length > 0) {
-    blocks.push(...fileBlocks);
-  }
-
-  if (replyBlock) {
-    blocks.push(replyBlock);
-  }
-
-  if (locationBlock) {
-    blocks.push(locationBlock);
-  }
-
-  return blocks;
-}
+import { parseRichContent, deduplicateMediaLinks } from "./rich-content-parser";
 
 // --- Renderers for each block type ---
 
@@ -177,7 +75,9 @@ function isMarkdownFile(name: string, mime: string): boolean {
   return /\.(md|mdx|markdown)$/i.test(name) || mime.startsWith("text/markdown");
 }
 
-function FileBlock({ name, mime, content }: { name: string; mime: string; content: string }) {
+function FileBlock({ name: rawName, mime, content }: { name: string; mime: string; content: string }) {
+  // Strip query params (e.g. ?ft=token) from filename for display and extension detection
+  const name = rawName.replace(/\?.*$/, "");
   const [open, setOpen] = useState(false);
 
   const handleDownload = useCallback(() => {
@@ -259,12 +159,13 @@ interface RichContentProps {
 }
 
 export function RichContent({ content, role }: RichContentProps) {
-  const blocks = parseRichContent(content);
+  const cleaned = deduplicateMediaLinks(content);
+  const blocks = parseRichContent(cleaned);
 
   // If no special blocks found, render as plain markdown (fast path)
   const first = blocks[0];
   if (blocks.length === 1 && first?.type === "markdown") {
-    return <MarkdownRenderer content={content} className={role === "user" ? "text-sm prose-invert" : ""} />;
+    return <MarkdownRenderer content={cleaned} className={role === "user" ? "text-sm" : ""} />;
   }
 
   return (
@@ -278,7 +179,7 @@ export function RichContent({ content, role }: RichContentProps) {
           case "video-notice":
             return <VideoNoticeBadge key={i} content={block.content} />;
           case "markdown":
-            return <MarkdownRenderer key={i} content={block.content} className={role === "user" ? "text-sm prose-invert" : ""} />;
+            return <MarkdownRenderer key={i} content={block.content} className={role === "user" ? "text-sm" : ""} />;
           case "file":
             return <FileBlock key={i} name={block.name} mime={block.mime} content={block.content} />;
           case "reply":

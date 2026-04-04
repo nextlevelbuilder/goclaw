@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -13,15 +14,29 @@ import (
 // GrantToAgent grants a skill to an agent with version pinning.
 // Auto-promotes visibility from 'private' to 'internal' so the skill
 // becomes accessible via ListAccessible for granted agents.
+// Validates the agent belongs to the requesting tenant (prevents cross-tenant grant injection).
 func (s *PGSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uuid.UUID, version int, grantedBy string) error {
 	if err := store.ValidateUserID(grantedBy); err != nil {
 		return err
 	}
+	tid := tenantIDForInsert(ctx)
+
+	// Verify agent belongs to the requesting tenant.
+	var agentTenantID uuid.UUID
+	if err := s.db.QueryRowContext(ctx,
+		"SELECT tenant_id FROM agents WHERE id = $1", agentID,
+	).Scan(&agentTenantID); err != nil {
+		return fmt.Errorf("agent not found")
+	}
+	if agentTenantID != tid {
+		return fmt.Errorf("agent not found")
+	}
+
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO skill_agent_grants (id, skill_id, agent_id, pinned_version, granted_by, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
+		`INSERT INTO skill_agent_grants (id, skill_id, agent_id, pinned_version, granted_by, created_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (skill_id, agent_id) DO UPDATE SET pinned_version = EXCLUDED.pinned_version`,
-		store.GenNewID(), skillID, agentID, version, grantedBy, time.Now(),
+		store.GenNewID(), skillID, agentID, version, grantedBy, time.Now(), tid,
 	)
 	if err != nil {
 		return err
@@ -43,8 +58,13 @@ func (s *PGSkillStore) GrantToAgent(ctx context.Context, skillID, agentID uuid.U
 // RevokeFromAgent revokes a skill grant from an agent.
 // Auto-demotes visibility from 'internal' back to 'private' when no agent grants remain.
 func (s *PGSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM skill_agent_grants WHERE skill_id = $1 AND agent_id = $2", skillID, agentID)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		"DELETE FROM skill_agent_grants WHERE skill_id = $1 AND agent_id = $2"+tClause,
+		append([]any{skillID, agentID}, tArgs...)...)
 	if err != nil {
 		return err
 	}
@@ -67,8 +87,13 @@ func (s *PGSkillStore) RevokeFromAgent(ctx context.Context, skillID, agentID uui
 
 // ListAgentGrants returns all skill grants for an agent.
 func (s *PGSkillStore) ListAgentGrants(ctx context.Context, agentID uuid.UUID) ([]SkillGrantInfo, error) {
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT skill_id, pinned_version, granted_by FROM skill_agent_grants WHERE agent_id = $1", agentID)
+		"SELECT skill_id, pinned_version, granted_by FROM skill_agent_grants WHERE agent_id = $1"+tClause,
+		append([]any{agentID}, tArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,35 +120,60 @@ func (s *PGSkillStore) GrantToUser(ctx context.Context, skillID uuid.UUID, userI
 		return err
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO skill_user_grants (id, skill_id, user_id, granted_by, created_at)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO skill_user_grants (id, skill_id, user_id, granted_by, created_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (skill_id, user_id) DO NOTHING`,
-		store.GenNewID(), skillID, userID, grantedBy, time.Now(),
+		store.GenNewID(), skillID, userID, grantedBy, time.Now(), tenantIDForInsert(ctx),
 	)
 	return err
 }
 
 // RevokeFromUser revokes a skill grant from a user.
 func (s *PGSkillStore) RevokeFromUser(ctx context.Context, skillID uuid.UUID, userID string) error {
-	_, err := s.db.ExecContext(ctx,
-		"DELETE FROM skill_user_grants WHERE skill_id = $1 AND user_id = $2", skillID, userID)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		"DELETE FROM skill_user_grants WHERE skill_id = $1 AND user_id = $2"+tClause,
+		append([]any{skillID, userID}, tArgs...)...)
 	return err
 }
 
 // ListAccessible returns skills accessible to a given agent+user combination.
 // Access logic: public → all, private → owner only, internal → check grants.
+// System skills (is_system=true) are always visible regardless of tenant.
 func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.SkillInfo, error) {
+	// tenant filter: system skills bypass it, tenant-owned skills are filtered
+	tc, tcArgs, _, err := scopeClause(ctx, 3)
+	if err != nil {
+		return nil, err
+	}
+	tenantCond := ""
+	if tc != "" {
+		// tc is " AND tenant_id = $3"; we need it as an OR condition inside the WHERE
+		tenantCond = fmt.Sprintf(" AND (s.is_system = true OR s.tenant_id = $%d)", 3)
+		_ = tc // tcArgs carries the value
+	}
+	// LEFT JOIN skill_tenant_configs to exclude per-tenant disabled skills.
+	// stc.enabled = false → skill explicitly disabled for this tenant.
+	stcJoin := ""
+	stcFilter := ""
+	if len(tcArgs) > 0 {
+		stcJoin = fmt.Sprintf(" LEFT JOIN skill_tenant_configs stc ON s.id = stc.skill_id AND stc.tenant_id = $%d", 3)
+		stcFilter = " AND (stc.enabled IS NULL OR stc.enabled = true)"
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT s.name, s.slug, s.description, s.version, s.file_path FROM skills s
 		LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
-		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND sug.user_id = $2
-		WHERE s.status = 'active' AND (
+		LEFT JOIN skill_user_grants sug ON s.id = sug.skill_id AND sug.user_id = $2`+stcJoin+`
+		WHERE s.status = 'active'`+tenantCond+stcFilter+` AND (
 			s.is_system = true
 			OR s.visibility = 'public'
 			OR (s.visibility = 'private' AND s.owner_id = $2)
 			OR (s.visibility = 'internal' AND (sag.id IS NOT NULL OR sug.id IS NOT NULL))
 		)
-		ORDER BY s.name`, agentID, userID)
+		ORDER BY s.name`, append([]any{agentID, userID}, tcArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -151,21 +201,16 @@ type SkillGrantInfo struct {
 	GrantedBy     string    `json:"granted_by"`
 }
 
-// SkillWithGrantStatus represents a skill with its grant status for a specific agent.
-type SkillWithGrantStatus struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
-	Visibility  string    `json:"visibility"`
-	Version     int       `json:"version"`
-	Granted     bool      `json:"granted"`
-	PinnedVer   *int      `json:"pinned_version,omitempty"`
-	IsSystem    bool      `json:"is_system"`
-}
-
 // ListWithGrantStatus returns all active skills with grant status for a specific agent.
-func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]SkillWithGrantStatus, error) {
+func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUID) ([]store.SkillWithGrantStatus, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+	tenantCond := ""
+	if tc != "" {
+		tenantCond = fmt.Sprintf(" AND (s.is_system = true OR s.tenant_id = $%d)", 2)
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT s.id, s.name, s.slug, COALESCE(s.description, ''), s.visibility, s.version,
 		        (sag.id IS NOT NULL) AS granted,
@@ -173,16 +218,16 @@ func (s *PGSkillStore) ListWithGrantStatus(ctx context.Context, agentID uuid.UUI
 		        s.is_system
 		 FROM skills s
 		 LEFT JOIN skill_agent_grants sag ON s.id = sag.skill_id AND sag.agent_id = $1
-		 WHERE s.status = 'active'
-		 ORDER BY s.name`, agentID)
+		 WHERE s.status = 'active'`+tenantCond+`
+		 ORDER BY s.name`, append([]any{agentID}, tcArgs...)...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var result []SkillWithGrantStatus
+	var result []store.SkillWithGrantStatus
 	for rows.Next() {
-		var r SkillWithGrantStatus
+		var r store.SkillWithGrantStatus
 		if err := rows.Scan(&r.ID, &r.Name, &r.Slug, &r.Description, &r.Visibility, &r.Version, &r.Granted, &r.PinnedVer, &r.IsSystem); err != nil {
 			slog.Warn("skill_grants: scan error in ListWithGrantStatus", "error", err)
 			continue

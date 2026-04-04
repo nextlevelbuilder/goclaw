@@ -103,7 +103,7 @@
   "unknown": "Không xác định",
   "unsavedChanges": "Có thay đổi chưa lưu",
   "update": "Cập nhật",
-  "upload": "Tải lên",
+  "uploadLabel": "Tải lên",
   "usingGlobalDefaults": "Đang dùng giá trị mặc định toàn cục từ config.json",
   "verificationFailed": "Xác minh thất bại",
   "view": "Xem",
@@ -119,6 +119,20 @@
   "loadMore": "Tải thêm...",
   "viewCard": "Dạng thẻ",
   "viewList": "Dạng danh sách",
+  "done": "Xong",
+  "upload": {
+    "title": "Tải tệp lên",
+    "dropOrClick": "Kéo thả tệp hoặc nhấp để chọn",
+    "dropHere": "Thả tệp vào đây",
+    "maxSize": "Tối đa 50 MB mỗi tệp",
+    "blockedType": "Loại tệp {{ext}} không được phép",
+    "tooLarge": "Tệp vượt quá giới hạn 50 MB",
+    "failed": "Tải lên thất bại",
+    "readyCount": "{{ready}} trong {{total}} tệp sẵn sàng",
+    "successCount": "{{success}} trong {{total}} tệp đã tải lên",
+    "uploading": "Đang tải lên...",
+    "uploadCount": "Tải lên {{count}} tệp"
+  },
   "errors": {
     "serverError": "Đã xảy ra lỗi. Vui lòng thử lại sau."
   }

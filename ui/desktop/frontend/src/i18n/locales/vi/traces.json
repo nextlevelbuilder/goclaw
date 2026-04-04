@@ -1,0 +1,63 @@
+{
+  "title": "Theo dõi",
+  "description": "Theo dõi lệnh gọi LLM và dữ liệu hiệu suất",
+  "filterPlaceholder": "Lọc theo agent ID...",
+  "filter": "Lọc",
+  "allAgents": "Tất cả agent",
+  "allChannels": "Tất cả kênh",
+  "emptyTitle": "Không có dữ liệu theo dõi",
+  "emptyDescription": "Không tìm thấy dữ liệu theo dõi. Theo dõi được ghi lại khi agent xử lý yêu cầu.",
+  "columns": {
+    "name": "Tên",
+    "status": "Trạng thái",
+    "duration": "Thời lượng",
+    "tokens": "Token",
+    "spans": "Khoảng",
+    "time": "Thời gian"
+  },
+  "unnamed": "Không tên",
+  "stopRun": "Dừng chạy",
+  "cached": "đã cache",
+  "detail": {
+    "title": "Chi tiết theo dõi",
+    "copyTraceId": "Sao chép ID theo dõi",
+    "notFound": "Không tìm thấy theo dõi.",
+    "name": "Tên:",
+    "status": "Trạng thái:",
+    "duration": "Thời lượng:",
+    "channel": "Channel:",
+    "tokens": "Token:",
+    "spans": "Khoảng:",
+    "started": "Bắt đầu:",
+    "delegatedFrom": "Ủy quyền từ:",
+    "createdAt": "Tạo lúc:",
+    "input": "Đầu vào",
+    "output": "Đầu ra",
+    "copy": "Sao chép",
+    "spansCount": "Khoảng ({{count}})",
+    "llmCalls": "LLM",
+    "toolCalls": "công cụ",
+    "export": "Xuất trace",
+    "stopRun": "Dừng chạy"
+  },
+  "span": {
+    "model": "Model:",
+    "tokens": "Token:",
+    "createdAt": "Tạo lúc:",
+    "input": "Đầu vào:",
+    "output": "Đầu ra:",
+    "copy": "Sao chép",
+    "startTime": "Bắt đầu:",
+    "endTime": "Kết thúc:",
+    "cacheRead": "đọc",
+    "cacheWrite": "ghi",
+    "thinking": "suy nghĩ",
+    "cached": "đã cache"
+  },
+  "toast": {
+    "failedLoad": "Không thể tải dữ liệu theo dõi",
+    "abortSent": "Đã dừng chạy",
+    "abortFailed": "Không thể dừng chạy",
+    "abortNotFound": "Lệnh đã hoàn tất hoặc không tìm thấy"
+  }
+}

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -95,6 +97,18 @@ func setupToolRegistry(
 		} else {
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
 			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+		}
+		if cfg.Tools.Browser.ActionTimeoutMs > 0 {
+			opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
+		}
+		if cfg.Tools.Browser.IdleTimeoutMs > 0 {
+			opts = append(opts, browser.WithIdleTimeout(time.Duration(cfg.Tools.Browser.IdleTimeoutMs)*time.Millisecond))
+		} else if cfg.Tools.Browser.IdleTimeoutMs < 0 {
+			// Explicitly disable idle reaper with negative value
+			opts = append(opts, browser.WithIdleTimeout(0))
+		}
+		if cfg.Tools.Browser.MaxPages > 0 {
+			opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
 		}
 		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
@@ -201,6 +215,18 @@ func setupToolRegistry(
 		if et, ok := execTool.(*tools.ExecTool); ok {
 			et.DenyPaths(dataDir, ".goclaw/")
 			et.AllowPathExemptions(".goclaw/skills-store/")
+			// Harden: block access to internal workspace files via shell commands.
+			// Prevents `cat ../config.json`, `cat memory.db` etc. from user workspaces.
+			et.DenyPaths(
+				filepath.Join(workspace, "memory.db"),
+				filepath.Join(workspace, "memory.db-wal"),
+				filepath.Join(workspace, "memory.db-shm"),
+				filepath.Join(workspace, "config.json"),
+				filepath.Join(workspace, "delegate"),
+				filepath.Join(dataDir, "goclaw.db"),
+				filepath.Join(dataDir, "goclaw.db-wal"),
+				filepath.Join(dataDir, "goclaw.db-shm"),
+			)
 			if cfgPath := os.Getenv("GOCLAW_CONFIG"); cfgPath != "" {
 				et.DenyPaths(cfgPath)
 			}
@@ -214,11 +240,19 @@ func setupToolRegistry(
 	// deny paths add defense-in-depth.
 	internalDenyPaths := []string{
 		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
-		"memory/", ".media/", "delegate/",
+		"goclaw.db", "goclaw.db-wal", "goclaw.db-shm",
+		"memory/", ".media/", ".uploads/", "delegate/",
+	}
+	// read_file: allow .media/ access (uploaded documents accessed via AllowPaths
+	// for backward compat; new uploads go to per-user .uploads/ within workspace).
+	readFileDenyPaths := []string{
+		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
+		"goclaw.db", "goclaw.db-wal", "goclaw.db-shm",
+		"memory/", "delegate/",
 	}
 	if rf, ok := toolsReg.Get("read_file"); ok {
 		if t, ok := rf.(*tools.ReadFileTool); ok {
-			t.DenyPaths(internalDenyPaths...)
+			t.DenyPaths(readFileDenyPaths...)
 		}
 	}
 	if wf, ok := toolsReg.Get("write_file"); ok {
@@ -240,39 +274,17 @@ func setupToolRegistry(
 	return
 }
 
-// setupStoresAndTracing creates PG stores, tracing collector, snapshot worker, and wires cron config.
-// Exits the process on unrecoverable errors (missing DSN, schema mismatch, store creation failure).
-func setupStoresAndTracing(
+// wireTracingAndCron sets up tracing collector, snapshot worker, and cron config
+// on an already-created store set. Shared between PG and SQLite build variants.
+func wireTracingAndCron(
 	cfg *config.Config,
-	dataDir string,
+	stores *store.Stores,
 	msgBus *bus.MessageBus,
-) (*store.Stores, *tracing.Collector, *tracing.SnapshotWorker) {
-	// --- Store creation (Postgres) ---
-	if cfg.Database.PostgresDSN == "" {
-		slog.Error("GOCLAW_POSTGRES_DSN is required. Set it in your environment or .env.local file.")
-		os.Exit(1)
-	}
-
+	dataDir string,
+) (*tracing.Collector, *tracing.SnapshotWorker) {
 	var traceCollector *tracing.Collector
-
-	// Schema compatibility check: ensure DB schema matches this binary.
-	if err := checkSchemaOrAutoUpgrade(cfg.Database.PostgresDSN); err != nil {
-		slog.Error("schema compatibility check failed", "error", err)
-		os.Exit(1)
-	}
-
-	storeCfg := store.StoreConfig{
-		PostgresDSN:      cfg.Database.PostgresDSN,
-		EncryptionKey:    os.Getenv("GOCLAW_ENCRYPTION_KEY"),
-		SkillsStorageDir: filepath.Join(dataDir, "skills-store"),
-	}
-	pgStores, pgErr := pg.NewPGStores(storeCfg)
-	if pgErr != nil {
-		slog.Error("failed to create PG stores", "error", pgErr)
-		os.Exit(1)
-	}
-	if pgStores.Tracing != nil {
-		traceCollector = tracing.NewCollector(pgStores.Tracing)
+	if stores.Tracing != nil {
+		traceCollector = tracing.NewCollector(stores.Tracing)
 		traceCollector.OnFlush = func(traceIDs []uuid.UUID) {
 			ids := make([]string, len(traceIDs))
 			for i, id := range traceIDs {
@@ -289,8 +301,8 @@ func setupStoresAndTracing(
 
 	// Start snapshot worker for hourly usage aggregation
 	var snapshotWorker *tracing.SnapshotWorker
-	if pgStores.Snapshots != nil {
-		snapshotWorker = tracing.NewSnapshotWorker(pgStores.DB, pgStores.Snapshots)
+	if stores.Snapshots != nil {
+		snapshotWorker = tracing.NewSnapshotWorker(stores.DB, stores.Snapshots)
 		snapshotWorker.Start()
 
 		// Backfill historical data in background
@@ -306,46 +318,35 @@ func setupStoresAndTracing(
 
 	// Wire cron config from config.json
 	cronRetryCfg := cfg.Cron.ToRetryConfig()
-	// Apply retry config via type assertion on the concrete cron store.
-	pgStores.Cron.SetOnJob(nil) // ensure initialized; actual handler set below
-	_ = cronRetryCfg            // config available; pg cron store reads it internally
-	if cfg.Cron.DefaultTimezone != "" {
-		pgStores.Cron.SetDefaultTimezone(cfg.Cron.DefaultTimezone)
+	if stores.Cron != nil {
+		stores.Cron.SetOnJob(nil) // ensure initialized; actual handler set below
+		_ = cronRetryCfg          // config available; cron store reads it internally
+		if cfg.Cron.DefaultTimezone != "" {
+			stores.Cron.SetDefaultTimezone(cfg.Cron.DefaultTimezone)
+		}
 	}
 
 	// Load secrets from config_secrets table before env overrides.
 	// Precedence: config.json → DB secrets → env vars (highest).
-	if pgStores.ConfigSecrets != nil {
-		if secrets, err := pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+	if stores.ConfigSecrets != nil {
+		if secrets, err := stores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
 			cfg.ApplyDBSecrets(secrets)
 			cfg.ApplyEnvOverrides()
 			slog.Info("config secrets loaded from DB", "count", len(secrets))
 		}
 	}
 
-	return pgStores, traceCollector, snapshotWorker
+	return traceCollector, snapshotWorker
 }
 
 // setupMemoryEmbeddings wires embedding provider to PGMemoryStore and triggers backfill.
-// Per-agent DB config takes priority over config file defaults.
+// Resolves embedding provider from DB providers with settings.embedding.enabled.
 func setupMemoryEmbeddings(
-	cfg *config.Config,
 	pgStores *store.Stores,
 	providerRegistry *providers.Registry,
 ) {
-	// Wire embedding provider to PGMemoryStore so IndexDocument generates vectors.
-	// Per-agent DB config takes priority over config file defaults.
 	if pgStores.Memory != nil {
-		memCfg := cfg.Agents.Defaults.Memory
-		if pgStores.Agents != nil {
-			if defaultAgent, agErr := pgStores.Agents.GetByKey(context.Background(), "default"); agErr == nil {
-				if agentMemCfg := defaultAgent.ParseMemoryConfig(); agentMemCfg != nil {
-					memCfg = agentMemCfg
-					slog.Debug("using per-agent memory config from DB", "agent", defaultAgent.AgentKey)
-				}
-			}
-		}
-		if embProvider := resolveEmbeddingProvider(cfg, memCfg, providerRegistry); embProvider != nil {
+		if embProvider := resolveEmbeddingProvider(pgStores.Providers, providerRegistry, pgStores.SystemConfigs); embProvider != nil {
 			pgStores.Memory.SetEmbeddingProvider(embProvider)
 			slog.Info("memory embeddings enabled", "provider", embProvider.Name(), "model", embProvider.Model())
 
@@ -376,10 +377,28 @@ func setupMemoryEmbeddings(
 					}
 				}()
 			}
+
+			// Wire embedding provider into KG store for entity semantic search.
+			if pgKG, ok := pgStores.KnowledgeGraph.(*pg.PGKnowledgeGraphStore); ok {
+				pgKG.SetEmbeddingProvider(embProvider)
+				go func() {
+					if count, err := pgKG.BackfillKGEmbeddings(context.Background()); err != nil {
+						slog.Warn("KG embeddings backfill failed", "error", err)
+					} else if count > 0 {
+						slog.Info("KG embeddings backfill complete", "entities_updated", count)
+					}
+				}()
+			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")
 		}
 	}
+}
+
+// seedSystemConfigs ensures system_configs has all expected keys for all tenants.
+// Inserts missing keys from config.json without overwriting existing values.
+func seedSystemConfigs(sc store.SystemConfigStore, ts store.TenantStore, cfg *config.Config) {
+	syncSystemConfigs(sc, ts, cfg, true) // onlyMissing=true
 }
 
 // loadBootstrapFiles loads bootstrap files for the default agent's system prompt from DB.
@@ -452,7 +471,9 @@ func setupSkillsSystem(
 	toolsReg *tools.Registry,
 	providerRegistry *providers.Registry,
 	msgBus *bus.MessageBus,
-) (*skills.Loader, *tools.SkillSearchTool, string) {
+) (*skills.Loader, *tools.SkillSearchTool, string, string, string) {
+	var bundledSkillsDir string // resolved later; returned for HTTP handler fallback
+
 	// Skills loader + search tool
 	// Global skills live under ~/.goclaw/skills/ (user-managed), not data/skills/.
 	globalSkillsDir := os.Getenv("GOCLAW_SKILLS_DIR")
@@ -469,7 +490,7 @@ func setupSkillsSystem(
 	skillSearchTool := tools.NewSkillSearchTool(skillsLoader)
 	toolsReg.Register(skillSearchTool)
 	toolsReg.Register(tools.NewUseSkillTool())
-	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills()))
+	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(context.Background())))
 
 	// Wire skills-store directory into filesystem loader so agents
 	// can discover uploaded skills in their system prompt and BM25 search index.
@@ -480,7 +501,7 @@ func setupSkillsSystem(
 			slog.Info("skills-store directory wired into loader", "dir", storeDirs[0])
 
 			// Seed system/bundled skills into DB
-			bundledSkillsDir := os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
+			bundledSkillsDir = os.Getenv("GOCLAW_BUNDLED_SKILLS_DIR")
 			if bundledSkillsDir == "" {
 				// Check common locations: Docker default, then local dev
 				for _, candidate := range []string{"bundled-skills", "/app/bundled-skills", "skills"} {
@@ -491,8 +512,8 @@ func setupSkillsSystem(
 				}
 			}
 			if bundledSkillsDir != "" {
-				if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
-					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], pgSkills)
+				if seederStore, ok := pgStores.Skills.(skills.SystemSkillStore); ok {
+					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], seederStore)
 					seeded, skipped, seededSkills, err := seeder.Seed(context.Background())
 					if err != nil {
 						slog.Warn("system skills seed failed", "error", err)
@@ -511,14 +532,15 @@ func setupSkillsSystem(
 		}
 	}
 
-	// Publish skill tool — lets agents register created skills in the database
-	if pgStores.Skills != nil {
-		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
+	// Publish skill tool — lets agents register created skills in the database.
+	// Disabled in lite edition: agents should not self-manage skills on desktop.
+	if pgStores.Skills != nil && edition.Current().TeamFullMode {
+		if manageStore, ok := pgStores.Skills.(store.SkillManageStore); ok {
 			storeDirs := pgStores.Skills.Dirs()
 			if len(storeDirs) > 0 {
-				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], skillsLoader))
+				toolsReg.Register(tools.NewPublishSkillTool(manageStore, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("publish_skill tool registered")
-				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], skillsLoader))
+				toolsReg.Register(tools.NewSkillManageTool(manageStore, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("skill_manage tool registered")
 			}
 		}
@@ -530,8 +552,7 @@ func setupSkillsSystem(
 			skillSearchTool.SetSkillAccessStore(sas)
 		}
 		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
-			memCfg := cfg.Agents.Defaults.Memory
-			if embProvider := resolveEmbeddingProvider(cfg, memCfg, providerRegistry); embProvider != nil {
+			if embProvider := resolveEmbeddingProvider(pgStores.Providers, providerRegistry, pgStores.SystemConfigs); embProvider != nil {
 				pgSkills.SetEmbeddingProvider(embProvider)
 				skillSearchTool.SetEmbeddingSearcher(pgSkills, embProvider)
 				slog.Info("skill embeddings enabled", "provider", embProvider.Name())
@@ -549,6 +570,6 @@ func setupSkillsSystem(
 		}
 	}
 
-	return skillsLoader, skillSearchTool, globalSkillsDir
+	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
 

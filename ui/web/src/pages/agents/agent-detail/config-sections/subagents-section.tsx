@@ -27,7 +27,7 @@ export function SubagentsSection({ enabled, value, onToggle, onChange }: Subagen
   const { providers } = useProviders();
   const enabledProviders = providers.filter((p) => p.enabled);
   const defaultProvider = useMemo(() => enabledProviders[0], [enabledProviders]);
-  const { models, loading: modelsLoading } = useProviderModels(defaultProvider?.id, defaultProvider?.provider_type);
+  const { models, loading: modelsLoading } = useProviderModels(defaultProvider?.id);
 
   return (
     <ConfigSection

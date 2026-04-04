@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Shield, Clock, Building2, KeyRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useTenants } from "@/hooks/use-tenants";
 import type { ApiKeyCreateInput } from "@/types/api-key";
 
 const ALL_SCOPES = [
@@ -19,6 +29,7 @@ const ALL_SCOPES = [
   "operator.write",
   "operator.approvals",
   "operator.pairing",
+  "operator.provision",
 ] as const;
 
 const EXPIRY_OPTIONS = [
@@ -28,6 +39,9 @@ const EXPIRY_OPTIONS = [
   { value: "90d", seconds: 90 * 86400 },
 ] as const;
 
+// Sentinel for "system (all tenants)" — no tenant_id sent
+const SYSTEM_TENANT = "__system__";
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,9 +50,14 @@ interface Props {
 
 export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
   const { t } = useTranslation("api-keys");
+  const { isOwner, currentTenantId, currentTenantName } = useTenants();
+
+  const defaultTenant = currentTenantId || SYSTEM_TENANT;
+
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
   const [expiry, setExpiry] = useState("never");
+  const [tenantValue, setTenantValue] = useState(defaultTenant);
   const [saving, setSaving] = useState(false);
 
   const toggleScope = (scope: string) => {
@@ -53,15 +72,19 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
     setSaving(true);
     try {
       const expiryOption = EXPIRY_OPTIONS.find((o) => o.value === expiry);
-      await onCreate({
+      const input: ApiKeyCreateInput = {
         name: name.trim(),
         scopes,
         expires_in: expiryOption && expiryOption.seconds > 0 ? expiryOption.seconds : undefined,
-      });
-      // Reset form
+      };
+      if (isOwner && tenantValue !== SYSTEM_TENANT) {
+        input.tenant_id = tenantValue;
+      }
+      await onCreate(input);
       setName("");
       setScopes([]);
       setExpiry("never");
+      setTenantValue(defaultTenant);
     } finally {
       setSaving(false);
     }
@@ -69,65 +92,122 @@ export function ApiKeyCreateDialog({ open, onOpenChange, onCreate }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 sm:max-w-md">
+      <DialogContent className="max-sm:inset-0 max-sm:translate-x-0 max-sm:translate-y-0 sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("form.title")}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5" />
+            {t("form.title")}
+          </DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="key-name">{t("form.name")}</Label>
-            <Input
-              id="key-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("form.namePlaceholder")}
-              className="text-base md:text-sm"
-              required
-            />
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Name + Tenant row */}
+          <div className={`grid gap-4 ${isOwner ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
+            <div className="space-y-1.5">
+              <Label htmlFor="key-name">{t("form.name")}</Label>
+              <Input
+                id="key-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t("form.namePlaceholder")}
+                className="text-base md:text-sm"
+                required
+              />
+            </div>
+
+            {isOwner && (
+              <div className="space-y-1.5">
+                <Label htmlFor="key-tenant" className="flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5" />
+                  Tenant
+                </Label>
+                <Select value={tenantValue} onValueChange={setTenantValue}>
+                  <SelectTrigger id="key-tenant" className="text-base md:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SYSTEM_TENANT}>
+                      {t("form.tenantSystem")}
+                    </SelectItem>
+                    {currentTenantId && (
+                      <SelectItem value={currentTenantId}>
+                        {currentTenantName || currentTenantId}
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
+          {/* Scopes */}
           <div className="space-y-2">
-            <Label>{t("form.scopes")}</Label>
-            <div className="space-y-2">
-              {ALL_SCOPES.map((scope) => (
-                <label key={scope} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={scopes.includes(scope)}
-                    onChange={() => toggleScope(scope)}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <span className="text-base md:text-sm">
-                    <span className="font-medium">{scope.replace("operator.", "")}</span>
-                    <span className="text-muted-foreground ml-1">
-                      — {t(`form.scopeDescriptions.${scope}`)}
-                    </span>
-                  </span>
-                </label>
-              ))}
+            <Label className="flex items-center gap-1.5">
+              <Shield className="h-3.5 w-3.5" />
+              {t("form.scopes")}
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {ALL_SCOPES.map((scope) => {
+                const shortName = scope.replace("operator.", "");
+                const isSelected = scopes.includes(scope);
+                return (
+                  <button
+                    key={scope}
+                    type="button"
+                    onClick={() => toggleScope(scope)}
+                    className={`flex items-center gap-2.5 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border hover:bg-accent text-muted-foreground"
+                    }`}
+                  >
+                    <div className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 ${
+                      isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+                    }`}>
+                      {isSelected && (
+                        <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <Badge variant={isSelected ? "default" : "secondary"} className="text-[11px] font-mono px-1.5 py-0">
+                        {shortName}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-tight">
+                        {t(`form.scopeDescriptions.${scope}`)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="key-expiry">{t("form.expiry")}</Label>
-            <select
-              id="key-expiry"
-              value={expiry}
-              onChange={(e) => setExpiry(e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-sm"
-            >
-              {EXPIRY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {t(`form.expiryOptions.${opt.value}`)}
-                </option>
-              ))}
-            </select>
+          {/* Expiry */}
+          <div className="space-y-1.5">
+            <Label htmlFor="key-expiry" className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              {t("form.expiry")}
+            </Label>
+            <Select value={expiry} onValueChange={setExpiry}>
+              <SelectTrigger id="key-expiry" className="text-base md:text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EXPIRY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {t(`form.expiryOptions.${opt.value}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {t("created.done")}
+              {t("form.cancel")}
             </Button>
             <Button type="submit" disabled={saving || !name.trim() || scopes.length === 0}>
               {saving ? t("form.creating") : t("form.create")}

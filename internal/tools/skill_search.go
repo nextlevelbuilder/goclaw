@@ -33,7 +33,7 @@ type SkillSearchTool struct {
 func NewSkillSearchTool(loader *skills.Loader) *SkillSearchTool {
 	idx := skills.NewIndex()
 	t := &SkillSearchTool{index: idx, loader: loader}
-	t.rebuildIndex()
+	t.rebuildIndex(context.Background())
 	return t
 }
 
@@ -49,18 +49,18 @@ func (t *SkillSearchTool) SetSkillAccessStore(sas store.SkillAccessStore) {
 }
 
 // rebuildIndex refreshes the BM25 index from the current skill set.
-func (t *SkillSearchTool) rebuildIndex() {
-	allSkills := t.loader.ListSkills()
+func (t *SkillSearchTool) rebuildIndex(ctx context.Context) {
+	allSkills := t.loader.ListSkills(ctx)
 	t.index.Build(allSkills)
 	t.lastVersion = t.loader.Version()
 	slog.Info("skill_search index rebuilt", "docs", len(allSkills), "version", t.lastVersion)
 }
 
 // ensureIndex rebuilds the BM25 index if skills have changed since last build.
-func (t *SkillSearchTool) ensureIndex() {
+func (t *SkillSearchTool) ensureIndex(ctx context.Context) {
 	current := t.loader.Version()
 	if current > t.lastVersion {
-		t.rebuildIndex()
+		t.rebuildIndex(ctx)
 	}
 }
 
@@ -99,7 +99,7 @@ func (t *SkillSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 	}
 
 	// Lazy rebuild: check if skills changed since last index build
-	t.ensureIndex()
+	t.ensureIndex(ctx)
 
 	// BM25 search (always available)
 	bm25Results := t.index.Search(query, maxResults*2)

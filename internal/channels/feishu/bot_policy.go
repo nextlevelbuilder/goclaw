@@ -46,7 +46,7 @@ func (c *Channel) fetchSenderName(ctx context.Context, openID string) string {
 
 // --- Policy checks ---
 
-func (c *Channel) checkGroupPolicy(senderID, chatID string) bool {
+func (c *Channel) checkGroupPolicy(ctx context.Context, senderID, chatID string) bool {
 	groupPolicy := c.cfg.GroupPolicy
 	if groupPolicy == "" {
 		groupPolicy = "open"
@@ -85,7 +85,7 @@ func (c *Channel) checkGroupPolicy(senderID, chatID string) bool {
 		}
 		groupSenderID := fmt.Sprintf("group:%s", chatID)
 		if c.pairingService != nil {
-			paired, err := c.pairingService.IsPaired(groupSenderID, c.Name())
+			paired, err := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
 			if err != nil {
 				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 					"group_sender", groupSenderID, "channel", c.Name(), "error", err)
@@ -96,14 +96,14 @@ func (c *Channel) checkGroupPolicy(senderID, chatID string) bool {
 				return true
 			}
 		}
-		c.sendPairingReply(groupSenderID, chatID)
+		c.sendPairingReply(ctx, groupSenderID, chatID)
 		return false
 	default: // "open"
 		return true
 	}
 }
 
-func (c *Channel) checkDMPolicy(senderID, chatID string) bool {
+func (c *Channel) checkDMPolicy(ctx context.Context, senderID, chatID string) bool {
 	dmPolicy := c.cfg.DMPolicy
 	if dmPolicy == "" {
 		dmPolicy = "pairing"
@@ -124,7 +124,7 @@ func (c *Channel) checkDMPolicy(senderID, chatID string) bool {
 	default: // "pairing"
 		paired := false
 		if c.pairingService != nil {
-			p, err := c.pairingService.IsPaired(senderID, c.Name())
+			p, err := c.pairingService.IsPaired(ctx, senderID, c.Name())
 			if err != nil {
 				slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
 					"sender_id", senderID, "channel", c.Name(), "error", err)
@@ -139,12 +139,12 @@ func (c *Channel) checkDMPolicy(senderID, chatID string) bool {
 			return true
 		}
 
-		c.sendPairingReply(senderID, chatID)
+		c.sendPairingReply(ctx, senderID, chatID)
 		return false
 	}
 }
 
-func (c *Channel) sendPairingReply(senderID, chatID string) {
+func (c *Channel) sendPairingReply(ctx context.Context, senderID, chatID string) {
 	if c.pairingService == nil {
 		return
 	}
@@ -156,7 +156,7 @@ func (c *Channel) sendPairingReply(senderID, chatID string) {
 		}
 	}
 
-	code, err := c.pairingService.RequestPairing(senderID, c.Name(), chatID, "default", nil)
+	code, err := c.pairingService.RequestPairing(ctx, senderID, c.Name(), chatID, "default", nil)
 	if err != nil {
 		slog.Debug("feishu pairing request failed", "sender_id", senderID, "error", err)
 		return

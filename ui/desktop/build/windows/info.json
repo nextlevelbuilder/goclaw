@@ -1,0 +1,15 @@
+{
+  "fixed": {
+    "file_version": "0.1.0.0"
+  },
+  "info": {
+    "0409": {
+      "ProductVersion": "0.1.0.0",
+      "CompanyName": "GoClaw",
+      "FileDescription": "GoClaw Lite Desktop — AI Agent Gateway",
+      "LegalCopyright": "Copyright (c) 2025-2026 GoClaw",
+      "ProductName": "GoClaw Lite",
+      "Comments": "Local AI agent desktop app powered by SQLite"
+    }
+  }
+}

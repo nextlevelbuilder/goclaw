@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+@theme {
+  /* GoClaw Brand — OKLCH values from web dashboard */
+
+  /* Dark mode defaults (primary build) */
+  --color-surface-primary: oklch(0.15 0.02 45);
+  --color-surface-secondary: oklch(0.20 0.02 45);
+  --color-surface-tertiary: oklch(0.25 0.02 45);
+  --color-text-primary: oklch(0.94 0.01 80);
+  --color-text-secondary: oklch(0.78 0.015 50);
+  --color-text-muted: oklch(0.65 0.015 50);
+  --color-accent: oklch(0.68 0.18 38);
+  --color-accent-hover: oklch(0.72 0.18 38);
+  --color-border: oklch(0.30 0.02 45);
+  --color-user-bubble: oklch(0.50 0.17 38);
+  --color-agent-bubble: oklch(0.20 0.02 45);
+  --color-success: oklch(0.45 0.15 145);
+  --color-warning: oklch(0.65 0.15 75);
+  --color-error: oklch(0.65 0.23 25);
+  --color-idle: oklch(0.52 0.02 50);
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Radii — matches web (0.75rem) */
+  --radius-card: 12px;
+  --radius-button: 8px;
+  --radius-input: 6px;
+}
+
+/* Light mode */
+:root:not(.dark) {
+  --color-surface-primary: oklch(0.97 0.005 80);
+  --color-surface-secondary: oklch(1 0 0);
+  --color-surface-tertiary: oklch(0.94 0.01 80);
+  --color-text-primary: oklch(0.17 0.02 55);
+  --color-text-secondary: oklch(0.35 0.02 50);
+  --color-text-muted: oklch(0.45 0.02 50);
+  --color-accent: oklch(0.62 0.19 38);
+  --color-accent-hover: oklch(0.58 0.19 38);
+  --color-border: oklch(0.90 0.01 70);
+  --color-user-bubble: oklch(0.40 0.14 38);
+  --color-agent-bubble: oklch(0.94 0.01 80);
+  --color-success: oklch(0.55 0.2 145);
+  --color-warning: oklch(0.77 0.16 75);
+  --color-error: oklch(0.577 0.245 27.325);
+}
+
+.dark {
+  color-scheme: dark;
+  --color-surface-primary: oklch(0.15 0.02 45);
+  --color-surface-secondary: oklch(0.20 0.02 45);
+  --color-surface-tertiary: oklch(0.25 0.02 45);
+  --color-text-primary: oklch(0.94 0.01 80);
+  --color-text-secondary: oklch(0.78 0.015 50);
+  --color-text-muted: oklch(0.65 0.015 50);
+  --color-accent: oklch(0.68 0.18 38);
+  --color-accent-hover: oklch(0.72 0.18 38);
+  --color-border: oklch(0.30 0.02 45);
+  --color-user-bubble: oklch(0.50 0.17 38);
+  --color-agent-bubble: oklch(0.20 0.02 45);
+  --color-success: oklch(0.45 0.15 145);
+  --color-warning: oklch(0.65 0.15 75);
+  --color-error: oklch(0.65 0.23 25);
+}
+
+/* Floating panel design system */
+.canvas-dots {
+  background-image: radial-gradient(circle, oklch(0.22 0.01 45) 0.5px, transparent 0.5px);
+  background-size: 36px 36px;
+}
+:root:not(.dark) .canvas-dots {
+  background-image: radial-gradient(circle, oklch(0.90 0.005 70) 0.5px, transparent 0.5px);
+}
+.floating-panel {
+  background: var(--color-surface-secondary);
+  border-radius: 16px;
+  box-shadow: 0 2px 20px oklch(0 0 0 / 0.2);
+  border: 1px solid var(--color-border);
+}
+
+/* Base styles */
+body {
+  margin: 0;
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* All interactive elements get pointer cursor */
+button, a, [role="switch"], [role="button"] {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Scrollbar — thin, auto-hide */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--color-surface-tertiary) transparent;
+}
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 1.5px;
+}
+*:hover > ::-webkit-scrollbar-thumb,
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--color-surface-tertiary);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-accent);
+  color: white;
+}
+
+/* Wails drag region for frameless window */
+.wails-drag {
+  --wails-draggable: drag;
+}
+.wails-no-drag {
+  --wails-draggable: no-drag;
+}
+
+/* Toast slide-in animation */
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Wobble animation for active tool calls — gentler than spin */
+@keyframes wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-12deg); }
+  75% { transform: rotate(12deg); }
+}
+.animate-wobble {
+  animation: wobble 1s ease-in-out infinite;
+}
+
+/* Fade-in for splash screen */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out;
+}
+
+/* Transitions are applied via Tailwind utilities (transition-colors, transition-opacity, etc.)
+   instead of a global * rule to avoid layout jank and performance overhead. */

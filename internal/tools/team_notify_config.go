@@ -18,12 +18,12 @@ type TeamNotifyConfig struct {
 func DefaultTeamNotifyConfig() TeamNotifyConfig {
 	return TeamNotifyConfig{
 		Dispatched: true,
-		Progress:   true,
-		Failed:     true,
+		Progress:   false,
+		Failed:     false,
 		Completed:  true,
-		Commented:  true,
+		Commented:  false,
 		NewTask:    true,
-		SlowTool:   true,
+		SlowTool:   false,
 		Mode:       "direct",
 	}
 }

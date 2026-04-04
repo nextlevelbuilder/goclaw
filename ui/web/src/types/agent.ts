@@ -22,7 +22,6 @@ export interface SubagentsConfig {
 export interface CompactionConfig {
   reserveTokensFloor?: number;
   maxHistoryShare?: number;
-  minMessages?: number;
   keepLastMessages?: number;
   memoryFlush?: {
     enabled?: boolean;
@@ -64,8 +63,10 @@ export interface MemoryConfig {
   embedding_model?: string;
   max_results?: number;
   max_chunk_len?: number;
+  chunk_overlap?: number;
   vector_weight?: number;
   text_weight?: number;
+  min_score?: number;
 }
 
 export interface WorkspaceSharingConfig {
@@ -73,6 +74,32 @@ export interface WorkspaceSharingConfig {
   shared_group?: boolean;
   shared_users?: string[];
   share_memory?: boolean;
+}
+
+export type ChatGPTOAuthRoutingStrategy =
+  | "manual"
+  | "primary_first"
+  | "round_robin"
+  | "priority_order";
+
+export type EffectiveChatGPTOAuthRoutingStrategy =
+  | "primary_first"
+  | "round_robin"
+  | "priority_order";
+
+export type ChatGPTOAuthRoutingOverrideMode = "inherit" | "custom";
+export type ReasoningOverrideMode = "inherit" | "custom";
+
+export interface AgentReasoningConfig {
+  override_mode?: ReasoningOverrideMode;
+  effort?: string;
+  fallback?: "downgrade" | "provider_default" | "off";
+}
+
+export interface ChatGPTOAuthRoutingConfig {
+  override_mode?: ChatGPTOAuthRoutingOverrideMode;
+  strategy?: ChatGPTOAuthRoutingStrategy;
+  extra_provider_names?: string[];
 }
 
 export interface AgentData {
@@ -102,6 +129,7 @@ export interface AgentData {
   context_pruning?: ContextPruningConfig | null;
   other_config?: Record<string, unknown> | null;
   budget_monthly_cents?: number | null;
+  tenant_id?: string;
 }
 
 export interface AgentShareData {

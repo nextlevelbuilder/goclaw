@@ -2,6 +2,7 @@ package tools
 
 import (
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 
@@ -22,7 +23,7 @@ var toolGroups = map[string][]string{
 	"ui":         {"browser"},
 	"automation": {"cron"},
 	"messaging":  {"message", "create_forum_topic", "list_group_members"},
-	"team": {"team_tasks"},
+	"team":       {"team_tasks"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec",
@@ -99,7 +100,7 @@ func NewPolicyEngine(cfg *config.ToolsConfig) *PolicyEngine {
 // FilterTools returns only the tools allowed by the policy for the given context.
 // It evaluates the 7-step pipeline and returns filtered provider definitions.
 func (pe *PolicyEngine) FilterTools(
-	registry *Registry,
+	registry ToolExecutor,
 	agentID string,
 	providerName string,
 	agentToolPolicy *config.ToolPolicySpec,
@@ -385,10 +386,8 @@ func matchDenySpec(name string, spec []string) bool {
 	for _, s := range spec {
 		if after, ok := strings.CutPrefix(s, "group:"); ok {
 			if members, ok := toolGroups[after]; ok {
-				for _, m := range members {
-					if m == name {
-						return true
-					}
+				if slices.Contains(members, name) {
+					return true
 				}
 			}
 		} else if s == name {

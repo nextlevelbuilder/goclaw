@@ -11,6 +11,7 @@ import (
 // ChannelInstanceData represents a channel instance in the database.
 type ChannelInstanceData struct {
 	BaseModel
+	TenantID    uuid.UUID       `json:"tenant_id,omitempty"`
 	Name        string          `json:"name"`
 	DisplayName string          `json:"display_name"`
 	ChannelType string          `json:"channel_type"`
@@ -51,6 +52,8 @@ type ChannelInstanceStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListEnabled(ctx context.Context) ([]ChannelInstanceData, error)
 	ListAll(ctx context.Context) ([]ChannelInstanceData, error)
+	ListAllInstances(ctx context.Context) ([]ChannelInstanceData, error)
+	ListAllEnabled(ctx context.Context) ([]ChannelInstanceData, error)
 	ListPaged(ctx context.Context, opts ChannelInstanceListOpts) ([]ChannelInstanceData, error)
 	CountInstances(ctx context.Context, opts ChannelInstanceListOpts) (int, error)
 }

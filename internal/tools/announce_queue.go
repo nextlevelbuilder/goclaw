@@ -6,18 +6,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
 
 // AnnounceQueueItem represents a single subagent result waiting to be announced.
 type AnnounceQueueItem struct {
-	SubagentID string
-	Label      string
-	Status     string // "completed", "failed", "cancelled"
-	Result     string
-	Media      []bus.MediaFile // media files from tool results
-	Runtime    time.Duration
-	Iterations int
+	SubagentID    string
+	Label         string
+	Status        string // "completed", "failed", "cancelled"
+	Result        string
+	Media         []bus.MediaFile // media files from tool results
+	Runtime       time.Duration
+	Iterations    int
+	InputTokens   int64
+	OutputTokens  int64
 }
 
 // AnnounceMetadata carries origin info for routing the batched announce.
@@ -28,6 +32,7 @@ type AnnounceMetadata struct {
 	OriginLocalKey   string // composite key with topic/thread suffix for routing
 	OriginUserID     string
 	OriginSessionKey string // exact parent session key (WS uses non-standard format)
+	OriginTenantID   uuid.UUID // parent tenant for announce routing
 	ParentAgent      string
 	OriginTraceID    string // parent trace UUID for announce linking
 	OriginRootSpanID string // parent agent's root span UUID
@@ -137,15 +142,16 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, roster SubagentRoster) str
 			statusLabel = "was cancelled"
 		}
 
-		replyInstruction := buildReplyInstruction(roster)
+		replyInstruction := BuildReplyInstruction(roster)
 
 		return fmt.Sprintf(
 			"[System Message] A subagent task %q just %s.\n\n"+
 				"Result:\n%s\n\n"+
-				"Stats: runtime %s, iterations %d\n\n"+
+				"Stats: runtime %s, iterations %d, tokens %d in / %d out\n\n"+
 				"%s",
 			item.Label, statusLabel, item.Result,
 			item.Runtime.Round(time.Millisecond), item.Iterations,
+			item.InputTokens, item.OutputTokens,
 			replyInstruction,
 		)
 	}
@@ -163,22 +169,23 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, roster SubagentRoster) str
 		}
 
 		sb.WriteString(fmt.Sprintf(
-			"\n---\nTask #%d: %q %s (runtime %s, iterations %d)\nResult: %s\n",
+			"\n---\nTask #%d: %q %s (runtime %s, iterations %d, tokens %d/%d)\nResult: %s\n",
 			i+1, item.Label, statusLabel,
 			item.Runtime.Round(time.Millisecond), item.Iterations,
+			item.InputTokens, item.OutputTokens,
 			item.Result,
 		))
 	}
 
 	sb.WriteString("---\n\n")
-	sb.WriteString(buildReplyInstruction(roster))
+	sb.WriteString(BuildReplyInstruction(roster))
 
 	return sb.String()
 }
 
 // buildReplyInstruction generates the instruction block for the parent LLM,
 // including a deterministic roster of all subagent tasks with their statuses.
-func buildReplyInstruction(roster SubagentRoster) string {
+func BuildReplyInstruction(roster SubagentRoster) string {
 	// Count running tasks from roster
 	running := 0
 	for _, e := range roster.Entries {

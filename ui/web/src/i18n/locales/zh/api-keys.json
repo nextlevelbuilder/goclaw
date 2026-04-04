@@ -1,10 +1,10 @@
 {
-  "title": "API 密钥",
-  "description": "管理网关 API 密钥及细粒度权限。",
-  "addKey": "创建 API 密钥",
+  "title": "API Key",
+  "description": "管理网关 API Key及细粒度权限。",
+  "addKey": "创建 API Key",
   "searchPlaceholder": "搜索密钥...",
-  "emptyTitle": "暂无 API 密钥",
-  "emptyDescription": "创建第一个 API 密钥以对网关进行身份验证。",
+  "emptyTitle": "暂无 API Key",
+  "emptyDescription": "创建第一个 API Key以对网关进行身份验证。",
   "columns": {
     "name": "名称",
     "prefix": "密钥",
@@ -20,7 +20,7 @@
     "expired": "已过期"
   },
   "form": {
-    "title": "创建 API 密钥",
+    "title": "创建 API Key",
     "name": "名称",
     "namePlaceholder": "例如 ci-deploy、dashboard-readonly",
     "scopes": "权限范围",
@@ -29,8 +29,11 @@
       "operator.read": "只读权限",
       "operator.write": "读写权限",
       "operator.approvals": "管理执行审批",
-      "operator.pairing": "管理设备配对"
+      "operator.pairing": "管理设备配对",
+      "operator.provision": "开通新租户"
     },
+    "tenant": "租户",
+    "tenantSystem": "系统（所有租户）",
     "expiry": "有效期",
     "expiryOptions": {
       "never": "永不过期",
@@ -38,26 +41,47 @@
       "30d": "30 天",
       "90d": "90 天"
     },
+    "cancel": "取消",
     "create": "创建",
     "creating": "创建中..."
   },
   "created": {
-    "title": "API 密钥已创建",
+    "title": "API Key已创建",
     "description": "请立即复制密钥 — 之后将不再显示。",
     "copied": "已复制！",
     "copy": "复制到剪贴板",
     "done": "完成"
   },
   "revoke": {
-    "title": "撤销 API 密钥",
+    "title": "撤销 API Key",
     "description": "确定要撤销 \"{{name}}\" 吗？此操作不可撤销。",
     "confirmLabel": "撤销"
   },
   "toast": {
-    "created": "API 密钥已创建",
-    "revoked": "API 密钥已撤销",
-    "failedCreate": "创建 API 密钥失败",
-    "failedRevoke": "撤销 API 密钥失败"
+    "created": "API Key已创建",
+    "revoked": "API Key已撤销",
+    "failedCreate": "创建 API Key失败",
+    "failedRevoke": "撤销 API Key失败"
   },
-  "never": "永不"
+  "never": "永不过期",
+  "neverUsed": "从未使用",
+  "tenantBadgeSystem": "系统",
+  "tenantBadgeUnknown": "未知",
+  "columns.expiry": "有效期",
+  "codeDialog": {
+    "title": "API Key 使用指南",
+    "description": "使用此 API Key 对网关 HTTP API 进行身份验证。",
+    "copy": "复制",
+    "copied": "已复制！",
+    "tabs": {
+      "curl": "cURL",
+      "typescript": "TypeScript",
+      "go": "Go"
+    },
+    "comments": {
+      "chat": "与 Agent 聊天（兼容 OpenAI）",
+      "listAgents": "获取 Agent 列表",
+      "listSessions": "获取会话列表"
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams, useNavigate } from "react-router";
 import { Eye, PanelLeftOpen } from "lucide-react";
@@ -10,11 +10,13 @@ import { ChatThread } from "./chat-thread";
 import { ChatInput, type AttachedFile } from "@/components/chat/chat-input";
 import { ChatTopBar } from "@/components/chat/chat-top-bar";
 import { DropZone } from "@/components/chat/drop-zone";
+import { AgentPickerPrompt } from "@/components/chat/agent-picker-prompt";
 import { useChatSessions } from "./hooks/use-chat-sessions";
 import { useChatMessages } from "./hooks/use-chat-messages";
 import { useChatSend } from "./hooks/use-chat-send";
 import { isOwnSession, parseSessionKey } from "@/lib/session-key";
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard";
+import { TaskPanel } from "@/components/chat/task-panel";
 
 export function ChatPage() {
   const { t } = useTranslation("chat");
@@ -29,13 +31,20 @@ export function ChatPage() {
   // sessionKey derived from URL — single source of truth, no separate state
   const sessionKey = urlSessionKey ?? "";
 
-  const [agentId, setAgentId] = useState(() => {
+  // Fallback agent ID used only when URL has no session key
+  const [agentIdFallback, setAgentIdFallback] = useState("");
+
+  // Agent is confirmed when URL has a session (agentId parsed) or user explicitly picked one
+  const agentConfirmed = !!urlSessionKey || !!agentIdFallback;
+
+  // Derive agentId from URL (source of truth), fallback to state when no session
+  const agentId = useMemo(() => {
     if (urlSessionKey) {
       const { agentId: parsed } = parseSessionKey(urlSessionKey);
       if (parsed) return parsed;
     }
-    return "default";
-  });
+    return agentIdFallback;
+  }, [urlSessionKey, agentIdFallback]);
 
   const {
     sessions,
@@ -91,12 +100,10 @@ export function ChatPage() {
   const handleSessionSelect = useCallback(
     (key: string) => {
       const { agentId: parsed } = parseSessionKey(key);
-      if (parsed && parsed !== agentId) {
-        setAgentId(parsed);
-      }
+      if (parsed) setAgentIdFallback(parsed);
       navigate(`/chat/${encodeURIComponent(key)}`);
     },
-    [navigate, agentId],
+    [navigate],
   );
 
   const handleDeleteSession = useCallback(async (key: string) => {
@@ -113,10 +120,12 @@ export function ChatPage() {
 
   const handleAgentChange = useCallback(
     (newAgentId: string) => {
-      setAgentId(newAgentId);
-      navigate(`/chat/${encodeURIComponent(`agent:${newAgentId}:ws:direct:${crypto.randomUUID()}`)}`);
+      setAgentIdFallback(newAgentId);
+      if (sessionKey) {
+        navigate("/chat");
+      }
     },
-    [navigate],
+    [navigate, sessionKey],
   );
 
   const handleSend = useCallback(
@@ -143,6 +152,17 @@ export function ChatPage() {
   const isMobile = useIsMobile();
   useVirtualKeyboard();
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+
+  // Auto-open task panel when first task appears, auto-close when all done.
+  const prevTaskCountRef = useRef(0);
+  useEffect(() => {
+    const prev = prevTaskCountRef.current;
+    const curr = teamTasks.length;
+    if (prev === 0 && curr > 0) setTaskPanelOpen(true);
+    if (curr === 0 && prev > 0) setTaskPanelOpen(false);
+    prevTaskCountRef.current = curr;
+  }, [teamTasks.length]);
 
   const handleSessionSelectMobile = useCallback(
     (key: string) => {
@@ -200,7 +220,7 @@ export function ChatPage() {
       )}
 
       {/* Main chat area */}
-      <div className="flex flex-1 min-h-0 flex-col">
+      <div className="flex min-w-0 flex-1 min-h-0 flex-col">
         {isMobile && (
           <div className="flex shrink-0 items-center border-b px-3 py-2 landscape-compact">
             <button
@@ -214,7 +234,7 @@ export function ChatPage() {
         )}
 
         <div className="shrink-0">
-          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} />
+          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)} taskPanelOpen={taskPanelOpen} />
         </div>
 
         {sendError && (
@@ -236,9 +256,17 @@ export function ChatPage() {
             isBusy={isBusy}
             loading={messagesLoading}
             scrollTrigger={scrollTrigger}
+            onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)}
           />
 
-          {isOwn ? (
+          {!isOwn ? (
+            <div className="mx-3 mb-3 flex items-center gap-2 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground shadow-sm">
+              <Eye className="h-4 w-4" />
+              {t("readOnly")}
+            </div>
+          ) : !agentConfirmed ? (
+            <AgentPickerPrompt onSelect={handleAgentChange} />
+          ) : (
             <ChatInput
               onSend={handleSend}
               onAbort={handleAbort}
@@ -247,14 +275,17 @@ export function ChatPage() {
               files={files}
               onFilesChange={setFiles}
             />
-          ) : (
-            <div className="mx-3 mb-3 flex items-center gap-2 rounded-xl border bg-muted/50 px-4 py-3 text-sm text-muted-foreground shadow-sm">
-              <Eye className="h-4 w-4" />
-              {t("readOnly")}
-            </div>
           )}
         </DropZone>
       </div>
+
+      {/* Mobile overlay backdrop — must render before TaskPanel so panel sits above */}
+      {isMobile && taskPanelOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setTaskPanelOpen(false)} />
+      )}
+
+      {/* Task panel — toggleable sidebar on the right */}
+      <TaskPanel tasks={teamTasks} open={taskPanelOpen} onClose={() => setTaskPanelOpen(false)} />
     </div>
   );
 }

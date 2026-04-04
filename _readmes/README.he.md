@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # הוסף לפחות GOCLAW_*_API_KEY אחד ל-.env, ואז:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# לוח הבקרה הווב בכתובת http://localhost:3000
+# לוח הבקרה הווב בכתובת http://localhost:18790
 # בדיקת תקינות: curl http://localhost:18790/health
 ```
 

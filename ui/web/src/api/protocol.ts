@@ -54,6 +54,7 @@ export const Methods = {
   CHAT_HISTORY: "chat.history",
   CHAT_ABORT: "chat.abort",
   CHAT_INJECT: "chat.inject",
+  CHAT_SESSION_STATUS: "chat.session.status",
 
   // Agents management
   AGENTS_LIST: "agents.list",
@@ -143,6 +144,7 @@ export const Methods = {
   TEAMS_TASK_DELETE: "teams.tasks.delete",
   TEAMS_TASK_DELETE_BULK: "teams.tasks.delete-bulk",
   TEAMS_TASK_ASSIGN: "teams.tasks.assign",
+  TEAMS_TASK_ACTIVE_BY_SESSION: "teams.tasks.active-by-session",
   TEAMS_MEMBERS_ADD: "teams.members.add",
   TEAMS_MEMBERS_REMOVE: "teams.members.remove",
   TEAMS_UPDATE: "teams.update",
@@ -151,6 +153,7 @@ export const Methods = {
   TEAMS_WORKSPACE_LIST: "teams.workspace.list",
   TEAMS_WORKSPACE_READ: "teams.workspace.read",
   TEAMS_WORKSPACE_DELETE: "teams.workspace.delete",
+  TEAMS_EVENTS_LIST: "teams.events.list",
 
   // Heartbeat
   HEARTBEAT_GET: "heartbeat.get",
@@ -166,6 +169,16 @@ export const Methods = {
   CONFIG_PERMISSIONS_LIST: "config.permissions.list",
   CONFIG_PERMISSIONS_GRANT: "config.permissions.grant",
   CONFIG_PERMISSIONS_REVOKE: "config.permissions.revoke",
+
+  // Tenants (multi-tenant)
+  TENANTS_MINE: "tenants.mine",
+  TENANTS_LIST: "tenants.list",
+  TENANTS_GET: "tenants.get",
+  TENANTS_CREATE: "tenants.create",
+  TENANTS_UPDATE: "tenants.update",
+  TENANTS_USERS_LIST: "tenants.users.list",
+  TENANTS_USERS_ADD: "tenants.users.add",
+  TENANTS_USERS_REMOVE: "tenants.users.remove",
 
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
@@ -205,6 +218,7 @@ export const Events = {
   TEAM_TASK_ASSIGNED: "team.task.assigned",
   TEAM_TASK_DISPATCHED: "team.task.dispatched",
   TEAM_TASK_DELETED: "team.task.deleted",
+  TEAM_TASK_ATTACHMENT_ADDED: "team.task.attachment_added",
 
   // Team leader processing (bridges gap between last task.completed and announce run.started)
   TEAM_LEADER_PROCESSING: "team.leader.processing",
@@ -250,7 +264,7 @@ export const TEAM_RELATED_EVENTS: Set<string> = new Set([
   Events.TEAM_TASK_COMPLETED, Events.TEAM_TASK_CANCELLED,
   Events.TEAM_TASK_REVIEWED, Events.TEAM_TASK_APPROVED,
   Events.TEAM_TASK_REJECTED, Events.TEAM_TASK_PROGRESS,
-  Events.TEAM_TASK_COMMENTED, Events.TEAM_TASK_ASSIGNED, Events.TEAM_TASK_DISPATCHED, Events.TEAM_TASK_DELETED,
+  Events.TEAM_TASK_COMMENTED, Events.TEAM_TASK_ASSIGNED, Events.TEAM_TASK_DISPATCHED, Events.TEAM_TASK_DELETED, Events.TEAM_TASK_ATTACHMENT_ADDED,
   Events.TEAM_MESSAGE_SENT,
   Events.TEAM_CREATED, Events.TEAM_UPDATED, Events.TEAM_DELETED,
   Events.TEAM_MEMBER_ADDED, Events.TEAM_MEMBER_REMOVED,
@@ -265,6 +279,7 @@ export const AgentEventTypes = {
   RUN_STARTED: "run.started",
   RUN_COMPLETED: "run.completed",
   RUN_FAILED: "run.failed",
+  RUN_CANCELLED: "run.cancelled",
   TOOL_CALL: "tool.call",
   TOOL_RESULT: "tool.result",
   BLOCK_REPLY: "block.reply",

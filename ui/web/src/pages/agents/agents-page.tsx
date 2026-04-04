@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
-import { Plus, Bot, LayoutGrid, List } from "lucide-react";
+import { Plus, Bot, LayoutGrid, List, ArrowLeftRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -91,14 +91,19 @@ export function AgentsPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("title")}
         description={t("description")}
         actions={
-          <Button onClick={() => setCreateOpen(true)} className="gap-1">
-            <Plus className="h-4 w-4" /> {t("createAgent")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => navigate("/import-export?tab=agents")} className="gap-1">
+              <ArrowLeftRight className="h-4 w-4" /> {t("transfer.title")}
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} className="gap-1">
+              <Plus className="h-4 w-4" /> {t("createAgent")}
+            </Button>
+          </div>
         }
       />
 

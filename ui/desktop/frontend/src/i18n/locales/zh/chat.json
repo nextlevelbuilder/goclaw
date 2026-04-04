@@ -1,0 +1,25 @@
+{
+  "empty": {
+    "description": "发送消息开始与Agent对话。",
+    "title": "开始对话"
+  },
+  "forwardedFrom": "转发自",
+  "media": {
+    "animation": "动画",
+    "attached": "已附加",
+    "audio": "音频",
+    "document": "文档",
+    "image": "图片",
+    "video": "视频",
+    "voice": "语音消息"
+  },
+  "deleteChat": "删除对话",
+  "deleteChatConfirm": "此操作将永久删除此对话及其所有消息。",
+  "newChat": "新建对话",
+  "openSessions": "打开Session",
+  "readOnly": "只读 — 此Session属于其他用户",
+  "replyingTo": "回复",
+  "error": {
+    "notConnected": "未连接。请等待连接建立。"
+  }
+}

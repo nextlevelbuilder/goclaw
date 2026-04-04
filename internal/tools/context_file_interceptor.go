@@ -212,7 +212,7 @@ func (b *ContextFileInterceptor) WriteFile(ctx context.Context, path, content st
 			senderID := store.SenderIDFromContext(ctx)
 			if senderID != "" && b.permStore != nil {
 				numericID := strings.SplitN(senderID, "|", 2)[0]
-				allowed, err := b.permStore.CheckPermission(ctx, agentID, userID, "file_writer", numericID)
+				allowed, err := b.permStore.CheckPermission(ctx, agentID, userID, store.ConfigTypeFileWriter, numericID)
 				if err != nil {
 					slog.Warn("security.group_file_writer_check_failed",
 						"error", err, "sender", numericID, "file", fileName, "group", userID)

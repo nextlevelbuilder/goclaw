@@ -161,29 +161,41 @@ flowchart TD
 | `retry` | Re-dispatch stale or failed tasks back to pending | Admin |
 | `update` | Update task metadata (priority, description, etc.) | Lead |
 
-### Team Versioning
-
-Many task actions require **team version >= 2**. Teams created with v1 only support basic actions.
-
-**V2-Required Actions:**
-- `approve` — Approve completed task
-- `reject` — Reject and cancel task
-- `review` — Submit for review
-- `comment` — Add comments
-- `progress` — Update progress
-- `attach` — Attach files
-- `update` — Update metadata
-- `ask_user` — Set reminders
-- `clear_ask_user` — Cancel reminders
-- `retry` — Retry failed tasks
-
-**V1 Teams** support only: `create`, `claim`, `complete`, `cancel`, `assign`, `list`, `get`, `search`
-
-If a v1 team tries a v2 action, error: `"action 'X' requires team version 2 — upgrade in team settings"`
-
 ### Atomic Claiming
 
 Two agents grabbing the same task is prevented at the database level. The claim operation uses a conditional update: `SET status = 'in_progress', owner = agent WHERE status = 'pending' AND owner IS NULL`. One row updated means claimed; zero rows means someone else got it first. No distributed mutex needed.
+
+### Blocker Escalation
+
+Members can flag themselves as blocked on a task by adding a blocker comment:
+
+```
+team_tasks(action="comment", task_id="...", text="Cannot find API documentation", type="blocker")
+```
+
+When a blocker comment is posted:
+1. The comment is saved with `comment_type='blocker'`
+2. The task is **auto-failed** (status: in_progress → failed)
+3. An `EventTeamTaskFailed` is broadcast:
+   - Member's session is cancelled via scheduler
+   - Chat channel receives "❌ Task failed" notification
+   - Web UI dashboard updates in real-time
+4. The **lead agent receives an escalation message** from `system:escalation` with:
+   - Blocked member name
+   - Task number and subject
+   - Blocker reason
+   - Instructions to retry with `team_tasks(action="retry", task_id="...")`
+
+Blocker escalation is **enabled by default** but can be disabled per-team via settings:
+```json
+{
+  "blocker_escalation": {
+    "enabled": false
+  }
+}
+```
+
+When disabled, blocker comments are saved but do not trigger auto-fail or escalation.
 
 ### Task Dependencies & Blocking
 
@@ -289,6 +301,30 @@ Workspace files can be attached to tasks:
 - Auto-links files created during task execution
 - Metadata captures which agent/user attached the file
 
+### Review Workflow
+
+Tasks can require human approval before final completion. When creating a task, pass `require_approval: true`:
+
+```
+team_tasks(action="create", ..., require_approval=true)
+```
+
+**Flow:**
+
+1. **Create with approval flag**: Task created with status `pending`, `require_approval` set
+2. **Member submits for review**: When done, member calls `team_tasks(action="review", task_id="...")`
+   - Task transitions to `in_review` status
+   - Emits `EventTeamTaskReviewed` event
+3. **Human approves**: Via dashboard, human clicks "Approve" → `teams.tasks.approve` RPC
+   - Task transitions to `completed`
+   - Emits `EventTeamTaskApproved` event
+4. **Human rejects**: Via dashboard, human clicks "Reject" with reason → `teams.tasks.reject` RPC
+   - Task transitions to `cancelled` with reason
+   - Emits `EventTeamTaskRejected` event
+   - Lead receives notification to retry or investigate
+
+Without `require_approval`, tasks move directly to `completed` after member calls `complete` (no in-review stage).
+
 ---
 
 ## 5. Team Mailbox
@@ -370,70 +406,77 @@ File tools use this context to resolve workspace paths and auto-link files to ta
 
 ---
 
-## 7. Delegation Integration
+## 7. Task Dispatch Integration
 
-Teams integrate deeply with the delegation system. The mandatory workflow ensures every piece of delegated work is tracked.
+Teams use a task-board-driven dispatch model. The lead creates tasks with an assignee; the system auto-dispatches to the assigned member agent via the message bus. The legacy `spawn(agent=..., team_task_id=...)` flow has been removed — `spawn` now only supports self-clone subagents.
 
 ```mermaid
 flowchart TD
-    LEAD["Lead receives user request"] --> CREATE["1. Create task on board<br/>team_tasks action=create<br/>→ returns task_id"]
-    CREATE --> SPAWN["2. Delegate to member<br/>spawn agent=member,<br/>team_task_id=task_id"]
-    SPAWN --> INJECT["Inject team workspace context<br/>WithToolTeamID<br/>WithToolTeamWorkspace<br/>WithTeamTaskID"]
-    INJECT --> LANE["Scheduled through<br/>team lane"]
-    LANE --> MEMBER["Member agent executes<br/>in isolated session<br/>with workspace access"]
-    MEMBER --> COMPLETE["3. Task auto-completed<br/>with delegation result"]
-    COMPLETE --> DISPATCH["Files auto-linked to task<br/>Comments/events recorded"]
-    DISPATCH --> CLEANUP["Session cleaned up"]
+    LEAD["Lead receives user request"] --> CREATE["1. Create task on board<br/>team_tasks(action='create',<br/>assignee='member')"]
+    CREATE --> QUEUE["2. Task queued for<br/>post-turn dispatch<br/>(PendingTeamDispatchFromCtx)"]
+    QUEUE --> ASSIGN["3. AssignTask<br/>(pending → in_progress)"]
+    ASSIGN --> DISPATCH["4. dispatchTaskToAgent<br/>publishes to message bus<br/>(teammate:dashboard sender)"]
+    DISPATCH --> CONSUMER["Gateway consumer<br/>routes to team lane"]
+    CONSUMER --> MEMBER["Member agent executes<br/>in isolated session<br/>with workspace access"]
+    MEMBER --> COMPLETE["5. Member calls<br/>team_tasks(action='complete')"]
+    COMPLETE --> UNBLOCK["DispatchUnblockedTasks<br/>auto-dispatches<br/>dependent tasks"]
 
-    subgraph "Parallel Delegation"
-        SPAWN2["spawn member_A, task_id=1"] --> RUN_A["Member A works<br/>with workspace"]
-        SPAWN3["spawn member_B, task_id=2"] --> RUN_B["Member B works<br/>with workspace"]
-        RUN_A --> COLLECT["Results collected"]
-        RUN_B --> COLLECT
-        COLLECT --> ANNOUNCE["4. Single combined<br/>announcement to lead"]
+    subgraph "Parallel Dispatch"
+        CREATE2["create task #1<br/>assignee=member_A"] --> DISPATCH_A["dispatchTaskToAgent<br/>→ Member A"]
+        CREATE3["create task #2<br/>assignee=member_B"] --> DISPATCH_B["dispatchTaskToAgent<br/>→ Member B"]
+        DISPATCH_A --> RUN_A["Member A works"]
+        DISPATCH_B --> RUN_B["Member B works"]
     end
 ```
 
-### Task ID Enforcement
+### Dispatch Mechanism
 
-When a team member delegates work, the system requires a valid `team_task_id`:
+Task dispatch uses `dispatchTaskToAgent()` (`team_tool_dispatch.go`) which publishes an inbound message via the message bus:
 
-- **Missing task ID**: Delegation is rejected with an error explaining the requirement. The error includes a list of pending tasks to help the LLM self-correct.
-- **Invalid task ID**: If the LLM hallucinates a UUID that doesn't exist, the error includes pending tasks as a hint.
-- **Cross-team task ID**: If the task belongs to a different team, the delegation is rejected.
-- **Auto-claim**: When delegation starts, the linked task is automatically claimed (status: pending → in_progress).
+- **Post-turn dispatch** (default): Tasks created during a lead's turn are queued via `PendingTeamDispatchFromCtx` and dispatched after the turn ends. This avoids race conditions with `blocked_by` setup.
+- **Fallback dispatch**: If no post-turn hook is available (e.g., HTTP API context), the task is assigned and dispatched immediately.
+- **Routing**: Uses `task.Channel`/`task.ChatID` as primary source, falling back to context values for initial dispatch.
+
+### Spawn Rejection
+
+The `spawn` tool no longer accepts an `agent` parameter. If an LLM attempts `spawn(agent="member")`, it receives an error directing it to use `team_tasks(action="create", assignee="member")` instead.
+
+### Dispatch Safety
+
+- **Lead self-dispatch guard**: Tasks assigned to the lead agent are auto-failed (prevents dual-session loop).
+- **Circuit breaker**: Tasks auto-fail after 3 dispatch attempts (`maxTaskDispatches`). Prevents infinite loops when agents can't complete a task.
+- **Dispatch count tracking**: Each dispatch increments `metadata.dispatch_count`.
 
 ### Auto-Completion
 
-When a delegation finishes (success or failure):
+When a member calls `team_tasks(action="complete")`:
 
-1. The linked task is marked as `completed` with the delegation result
+1. Task marked as `completed` with result summary
 2. Files created during execution are auto-linked to the task
-3. Workspace events are recorded (modified/created file events)
-4. A team message audit record is created (from member → lead)
-5. The delegation session is cleaned up (deleted)
-6. Delegation history is saved with team context (team_id, team_task_id, trace_id)
+3. Workspace events recorded (modified/created file events)
+4. `DispatchUnblockedTasks` runs — pending tasks with satisfied blockers are auto-dispatched
+5. Only one task per owner dispatched per round (priority-ordered) to prevent cancellation bugs
 
-### Parallel Delegation Batching
+### Unblocked Task Dispatch
 
-When the lead delegates to multiple members simultaneously:
+`DispatchUnblockedTasks()` runs after task completion/cancellation:
 
-- Each delegation runs independently in the team lane
-- Intermediate completions accumulate their results (artifacts)
-- When the **last** sibling delegation finishes, all accumulated results are collected
-- A single combined announcement is delivered to the lead with all results
-- Each individual task is still auto-completed independently — the batching only affects the announcement
+- Finds pending tasks with assigned owners (ordered by priority DESC)
+- Dispatches highest-priority task per owner (one at a time)
+- Appends completed blocker results and recent comments to dispatch content
+- Restores leader's trace context from task metadata for proper trace linking
+- Remaining tasks stay pending until the current one completes
 
-### Announcement Format
+### Dispatch Content
 
-The combined announcement includes:
+Each dispatched task includes in its message to the member:
 
-- Results from each member agent, separated clearly
-- Deliverables and media files (auto-delivered)
-- Elapsed time statistics
-- Guidance for the lead: present results to user, delegate follow-ups, or ask for revisions
-
-If all delegations failed, the lead receives a friendly error notification with guidance to retry or handle it directly. The announcement also asks the lead to notify the user of the hiccup before retrying.
+- Task number, ID, subject, and description
+- Team workspace path (if configured)
+- List of attached files (from task metadata)
+- Instructions for available actions: progress, comment, blocker, complete
+- Completed blocker results (for unblocked tasks)
+- Recent comments (for re-dispatched tasks after reject/retry)
 
 ---
 
@@ -546,6 +589,7 @@ Teams support fine-grained access control through team settings.
 | `followup_max_reminders` | Integer | Max ask_user reminders before escalation |
 | `escalation_mode` | String | How to escalate stale tasks: "notify_lead", "fail_task" |
 | `escalation_actions` | String list | Actions to take on escalation |
+| `blocker_escalation` | Object | Blocker comment escalation settings: `{enabled: true}` (default enabled) |
 
 System channels (`teammate`, `system`) always pass access checks. Empty settings mean open access.
 

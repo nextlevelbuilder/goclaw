@@ -13,22 +13,30 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 // SkillManageTool provides agent-driven skill lifecycle management.
 // Complements publish_skill (directory-based) with a content-string interface
 // so agents can create/patch/delete skills without pre-writing files to disk.
 type SkillManageTool struct {
-	skills *pg.PGSkillStore
-	base   string         // skills-store/ base directory
-	loader *skills.Loader // cache invalidation
+	skills  store.SkillManageStore
+	base    string         // skills-store/ base directory (master tenant)
+	dataDir string         // parent data dir for tenant-scoped skill paths
+	loader  *skills.Loader // cache invalidation
 }
 
-func NewSkillManageTool(skills *pg.PGSkillStore, baseDir string, loader *skills.Loader) *SkillManageTool {
-	return &SkillManageTool{skills: skills, base: baseDir, loader: loader}
+func NewSkillManageTool(skills store.SkillManageStore, baseDir, dataDir string, loader *skills.Loader) *SkillManageTool {
+	return &SkillManageTool{skills: skills, base: baseDir, dataDir: dataDir, loader: loader}
+}
+
+// tenantSkillsDir returns the skills-store directory scoped to the calling agent's tenant.
+func (t *SkillManageTool) tenantSkillsDir(ctx context.Context) string {
+	tid := store.TenantIDFromContext(ctx)
+	slug := store.TenantSlugFromContext(ctx)
+	return config.TenantSkillsStoreDir(t.dataDir, tid, slug)
 }
 
 func (t *SkillManageTool) Name() string { return "skill_manage" }
@@ -124,9 +132,9 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 		return ErrorResult(fmt.Sprintf("cannot manage system skill %q", slug))
 	}
 
-	// Version + destination
-	version := t.skills.GetNextVersion(slug)
-	destDir := filepath.Join(t.base, slug, fmt.Sprintf("%d", version))
+	// Version + destination (tenant-scoped)
+	version := t.skills.GetNextVersion(ctx, slug)
+	destDir := filepath.Join(t.tenantSkillsDir(ctx), slug, fmt.Sprintf("%d", version))
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create skill directory: %v", err))
 	}
@@ -150,7 +158,7 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 		userID = "system"
 	}
 	desc := description
-	id, err := t.skills.CreateSkillManaged(ctx, pg.SkillCreateParams{
+	id, err := t.skills.CreateSkillManaged(ctx, store.SkillCreateParams{
 		Name:        name,
 		Slug:        slug,
 		Description: &desc,
@@ -189,7 +197,7 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 	if manifest != nil && !manifest.IsEmpty() {
 		ok, missing := skills.CheckSkillDeps(manifest)
 		if !ok {
-			_ = t.skills.StoreMissingDeps(id, missing)
+			_ = t.skills.StoreMissingDeps(ctx, id, missing)
 			depsWarning = skills.FormatMissing(missing)
 		}
 	}
@@ -217,7 +225,7 @@ func (t *SkillManageTool) executePatch(ctx context.Context, args map[string]any)
 		return ErrorResult("find is required for action=patch")
 	}
 
-	info, ok := t.skills.GetSkill(slug)
+	info, ok := t.skills.GetSkill(ctx, slug)
 	if !ok {
 		return ErrorResult(fmt.Sprintf("skill %q not found or archived", slug))
 	}
@@ -227,7 +235,7 @@ func (t *SkillManageTool) executePatch(ctx context.Context, args map[string]any)
 
 	// Ownership check: only the skill owner can patch
 	userID := store.UserIDFromContext(ctx)
-	if ownerID, found := t.skills.GetSkillOwnerIDBySlug(slug); found && ownerID != userID {
+	if ownerID, found := t.skills.GetSkillOwnerIDBySlug(ctx, slug); found && ownerID != userID {
 		return ErrorResult(fmt.Sprintf("cannot manage skill %q: you are not the owner", slug))
 	}
 
@@ -254,7 +262,7 @@ func (t *SkillManageTool) executePatch(ctx context.Context, args map[string]any)
 		return ErrorResult(fmt.Sprintf("failed to lock version: %v", lockErr))
 	}
 	defer commitLock() //nolint:errcheck
-	destDir := filepath.Join(t.base, slug, fmt.Sprintf("%d", newVer))
+	destDir := filepath.Join(t.tenantSkillsDir(ctx), slug, fmt.Sprintf("%d", newVer))
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create new version directory: %v", err))
 	}
@@ -281,7 +289,7 @@ func (t *SkillManageTool) executePatch(ctx context.Context, args map[string]any)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("invalid skill ID in database: %v", err))
 	}
-	if err := t.skills.UpdateSkill(skillID, map[string]any{
+	if err := t.skills.UpdateSkill(ctx, skillID, map[string]any{
 		"version":    newVer,
 		"file_path":  destDir,
 		"file_size":  fileSize,
@@ -307,7 +315,7 @@ func (t *SkillManageTool) executeDelete(ctx context.Context, args map[string]any
 		return ErrorResult("slug is required for action=delete")
 	}
 
-	info, ok := t.skills.GetSkill(slug)
+	info, ok := t.skills.GetSkill(ctx, slug)
 	if !ok {
 		return ErrorResult(fmt.Sprintf("skill %q not found or already archived", slug))
 	}
@@ -317,17 +325,18 @@ func (t *SkillManageTool) executeDelete(ctx context.Context, args map[string]any
 
 	// Ownership check: only the skill owner can delete
 	deleteUserID := store.UserIDFromContext(ctx)
-	if ownerID, found := t.skills.GetSkillOwnerIDBySlug(slug); found && ownerID != deleteUserID {
+	if ownerID, found := t.skills.GetSkillOwnerIDBySlug(ctx, slug); found && ownerID != deleteUserID {
 		return ErrorResult(fmt.Sprintf("cannot manage skill %q: you are not the owner", slug))
 	}
 
 	// Soft-delete on disk: move to .trash/<slug>.<unix-timestamp>
-	trashDir := filepath.Join(t.base, ".trash")
+	skillsDir := t.tenantSkillsDir(ctx)
+	trashDir := filepath.Join(skillsDir, ".trash")
 	if err := os.MkdirAll(trashDir, 0755); err != nil {
 		slog.Warn("skill_manage: failed to create .trash dir", "error", err)
 	} else {
 		timestamp := fmt.Sprintf("%d", time.Now().Unix())
-		src := filepath.Join(t.base, slug)
+		src := filepath.Join(skillsDir, slug)
 		dst := filepath.Join(trashDir, slug+"."+timestamp)
 		if err := os.Rename(src, dst); err != nil {
 			// Cross-device rename fails on some setups — log and continue (DB archive is primary)
@@ -340,7 +349,7 @@ func (t *SkillManageTool) executeDelete(ctx context.Context, args map[string]any
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("invalid skill ID in database: %v", err))
 	}
-	if err := t.skills.DeleteSkill(skillID); err != nil {
+	if err := t.skills.DeleteSkill(ctx, skillID); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to archive skill in database: %v", err))
 	}
 

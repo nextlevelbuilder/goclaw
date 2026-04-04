@@ -30,7 +30,7 @@ func makeSchedulerRunFunc(agents *agent.Router, cfg *config.Config) scheduler.Ru
 			}
 		}
 
-		loop, err := agents.Get(agentID)
+		loop, err := agents.Get(ctx, agentID)
 		if err != nil {
 			return nil, fmt.Errorf("agent %s not found: %w", agentID, err)
 		}

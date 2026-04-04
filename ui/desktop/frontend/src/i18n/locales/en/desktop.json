@@ -1,0 +1,159 @@
+{
+  "onboarding": {
+    "welcome": "GoClaw Setup",
+    "welcomeDesc": "Let's get your gateway up and running",
+    "providerStep": "Configure Provider",
+    "providerStepDesc": "Select an AI provider and enter your credentials.",
+    "modelStep": "Select & Verify Model",
+    "modelStepDesc": "Choose a model and test the connection.",
+    "agentStep": "Create Your Agent",
+    "agentStepDesc": "Give your agent a personality.",
+    "descPlaceholder": "Describe your agent's personality...",
+    "complete": "Setup Complete",
+    "stepProvider": "Provider",
+    "stepModel": "Model",
+    "stepAgent": "Agent",
+    "createProvider": "Create Provider"
+  },
+  "summoning": {
+    "title": "Summoning Agent",
+    "weavingSoul": "Weaving soul for {{name}}",
+    "completed": "Agent Ready!",
+    "completedTitle": "Agent Ready!",
+    "failedTitle": "Summoning Failed",
+    "failed": "Summoning Failed",
+    "wait": "This may take a moment",
+    "fileLabelSOUL": "Core personality",
+    "fileLabelIDENTITY": "Identity & knowledge",
+    "agentReady": "{{name}} is ready!",
+    "retrying": "Retrying..."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "appearance": "Appearance",
+      "providers": "Providers",
+      "agents": "Agents",
+      "channels": "Channels",
+      "mcp": "MCP",
+      "skills": "Skills",
+      "tools": "Tools",
+      "cron": "Cron",
+      "traces": "Traces",
+      "storage": "Storage",
+      "about": "About"
+    },
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "language": "Language",
+    "timezone": "Timezone",
+    "timezoneHint": "Change timezone from the clock icon in the top bar."
+  },
+  "sidebar": {
+    "newChat": "New Chat",
+    "connected": "Connected",
+    "offline": "Offline",
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode",
+    "settings": "Settings",
+    "teams": "Teams"
+  },
+  "about": {
+    "title": "GoClaw Lite",
+    "subtitle": "Desktop Edition",
+    "version": "Version",
+    "edition": "Edition",
+    "runtime": "Runtime",
+    "runtimeValue": "Wails v2",
+    "editionLimits": "Edition Limits",
+    "agents": "Agents",
+    "teams": "Teams",
+    "teamMembers": "Team members",
+    "database": "Database",
+    "users": "Users",
+    "maxAgents": "5 max",
+    "maxTeams": "1 max",
+    "maxTeamMembers": "5 max",
+    "databaseValue": "SQLite (local)",
+    "usersValue": "Single user",
+    "builtWith": "Built with Go + React + Wails",
+    "reset": {
+      "title": "Danger Zone",
+      "description": "Delete the database and restart the app. All agents, sessions, providers, and settings will be permanently lost.",
+      "button": "Reset Database",
+      "confirmTitle": "Reset Database?",
+      "confirmDescription": "This will delete all your data and restart the app from scratch.",
+      "confirmPrompt": "Type {{word}} to confirm",
+      "cancel": "Cancel",
+      "confirm": "Reset & Restart",
+      "resetting": "Resetting..."
+    }
+  },
+  "presets": {
+    "researcher": {
+      "label": "🔬 Researcher",
+      "prompt": "Name: Scholar. A meticulous research analyst who leaves no stone unturned.\nPersonality: Methodical, thorough, and precise. Presents information in well-structured reports with citations. Balances depth with clarity.\n\nPurpose: Deep research across any domain — academic papers, market analysis, technical investigations. Synthesizes multiple sources into actionable insights. Always distinguishes facts from opinions."
+    },
+    "writer": {
+      "label": "✍️ Writer",
+      "prompt": "Name: Quill. A versatile writer who adapts voice and tone to any audience.\nPersonality: Creative, articulate, and empathetic. Understands the power of words. Balances clarity with elegance.\n\nPurpose: Content creation specialist — blog posts, articles, copywriting, storytelling, technical writing. Skilled at structuring arguments, crafting narratives, and maintaining consistent tone across long-form content."
+    },
+    "coder": {
+      "label": "👨‍💻 Coder",
+      "prompt": "Name: Dev. A senior software engineer with deep expertise across the full stack.\nPersonality: Pragmatic and efficient. Writes clean, maintainable code. Explains complex concepts simply. Follows best practices but knows when to bend rules.\n\nPurpose: Code reviews, architecture design, debugging, implementation. Proficient in multiple languages and frameworks. Prioritizes correctness, performance, and security."
+    }
+  },
+  "agent": {
+    "summon": "Summon",
+    "summoning": "Summoning...",
+    "verifyModel": "Verify Model",
+    "verifying": "Verifying...",
+    "verified": "Verified",
+    "verifyFailed": "Verification failed"
+  },
+  "chat": {
+    "emptyTitle": "Chat with {{name}}",
+    "emptyTitleDefault": "Start a conversation",
+    "emptyDescAgent": "Ask a question, write something, or explore ideas.",
+    "emptyDescNoAgent": "Select an agent from the sidebar to begin.",
+    "suggestions": ["What's the latest news today?", "Tell me a joke", "Brainstorm ideas for the AI era"]
+  },
+  "activity": {
+    "thinking": "Thinking",
+    "executingTool": "Executing tool",
+    "compacting": "Compacting context",
+    "streaming": "Streaming",
+    "retrying": "Retrying",
+    "processing": "Processing",
+    "runningTool": "Running {{tool}}",
+    "retryingAttempt": "Retrying (attempt {{n}})",
+    "step": "step {{n}}"
+  },
+  "toast": {
+    "agentCreated": "Agent created",
+    "agentUpdated": "Agent updated",
+    "agentDeleted": "Agent deleted",
+    "providerCreated": "Provider created",
+    "providerUpdated": "Provider updated",
+    "providerDeleted": "Provider deleted",
+    "serverCreated": "MCP server created",
+    "serverUpdated": "MCP server updated",
+    "serverDeleted": "MCP server deleted",
+    "skillUploaded": "Skill uploaded",
+    "skillDeleted": "Skill deleted",
+    "grantUpdated": "Grant updated",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete",
+    "createFailed": "Failed to create"
+  },
+  "update": {
+    "available": "GoClaw Lite v{{version}} is available",
+    "now": "Update Now",
+    "downloading": "Downloading update...",
+    "ready": "Update installed! Restart to apply.",
+    "restart": "Restart Now",
+    "failed": "Update failed.",
+    "retry": "Retry"
+  }
+}

@@ -53,7 +53,7 @@ func (m *TeamsMethods) handleAddMember(ctx context.Context, client *gateway.Clie
 	}
 
 	// Resolve agent
-	ag, err := resolveAgentInfo(m.agentStore, params.Agent)
+	ag, err := resolveAgentInfo(ctx, m.agentStore, params.Agent)
 	if err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "agent: "+err.Error()))
 		return

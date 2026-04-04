@@ -67,6 +67,18 @@ func TestToolContextKeys_AsyncCB(t *testing.T) {
 	}
 }
 
+func TestToolContextKeys_LeaderAgentID(t *testing.T) {
+	ctx := context.Background()
+	if v := LeaderAgentIDFromCtx(ctx); v != "" {
+		t.Errorf("expected empty, got %q", v)
+	}
+
+	ctx = WithLeaderAgentID(ctx, "leader-uuid-123")
+	if v := LeaderAgentIDFromCtx(ctx); v != "leader-uuid-123" {
+		t.Errorf("expected leader-uuid-123, got %q", v)
+	}
+}
+
 func TestToolContextKeys_MultipleValues(t *testing.T) {
 	ctx := context.Background()
 	ctx = WithToolChannel(ctx, "slack")

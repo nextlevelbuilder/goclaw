@@ -104,6 +104,17 @@ func (m *TeamToolManager) InvalidateAgentCache() {
 	m.agentKeyCache.Range(func(k, _ any) bool { m.agentKeyCache.Delete(k); return true })
 }
 
+// agentKeyCacheKey builds a tenant-scoped cache key for agentKeyCache.
+// Agent keys (e.g. "my-agent") are unique per-tenant, not globally,
+// so the cache key must include tenant to prevent cross-tenant pollution.
+func agentKeyCacheKey(ctx context.Context, key string) string {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		return "0:" + key
+	}
+	return tid.String() + ":" + key
+}
+
 // cachedGetAgentByID returns agent data from cache or DB with TTL.
 func (m *TeamToolManager) cachedGetAgentByID(ctx context.Context, id uuid.UUID) (*store.AgentData, error) {
 	if entry, ok := m.agentCache.Load(id); ok {
@@ -120,18 +131,19 @@ func (m *TeamToolManager) cachedGetAgentByID(ctx context.Context, id uuid.UUID) 
 	now := time.Now()
 	e := &agentCacheEntry{agent: ag, cachedAt: now}
 	m.agentCache.Store(id, e)
-	m.agentKeyCache.Store(ag.AgentKey, e)
+	m.agentKeyCache.Store(agentKeyCacheKey(ctx, ag.AgentKey), e)
 	return ag, nil
 }
 
 // cachedGetAgentByKey returns agent data from cache or DB with TTL.
 func (m *TeamToolManager) cachedGetAgentByKey(ctx context.Context, key string) (*store.AgentData, error) {
-	if entry, ok := m.agentKeyCache.Load(key); ok {
+	ck := agentKeyCacheKey(ctx, key)
+	if entry, ok := m.agentKeyCache.Load(ck); ok {
 		ce := entry.(*agentCacheEntry)
 		if time.Since(ce.cachedAt) < teamCacheTTL {
 			return ce.agent, nil
 		}
-		m.agentKeyCache.Delete(key)
+		m.agentKeyCache.Delete(ck)
 	}
 	ag, err := m.agentStore.GetByKey(ctx, key)
 	if err != nil {
@@ -139,7 +151,7 @@ func (m *TeamToolManager) cachedGetAgentByKey(ctx context.Context, key string) (
 	}
 	now := time.Now()
 	e := &agentCacheEntry{agent: ag, cachedAt: now}
-	m.agentKeyCache.Store(key, e)
+	m.agentKeyCache.Store(ck, e)
 	m.agentCache.Store(ag.ID, e)
 	return ag, nil
 }
@@ -155,9 +167,87 @@ func (m *TeamToolManager) cachedListMembers(ctx context.Context, teamID uuid.UUI
 	return m.teamStore.ListMembers(ctx, teamID)
 }
 
+// preWarmAgentKeyCache batch-fetches agents by key and populates the cache.
+// Reduces N+1 queries when rendering task lists with agent display names.
+func (m *TeamToolManager) preWarmAgentKeyCache(ctx context.Context, keys []string) {
+	// Deduplicate and filter already-cached keys.
+	unique := make(map[string]bool)
+	var missing []string
+	for _, k := range keys {
+		if k == "" || unique[k] {
+			continue
+		}
+		unique[k] = true
+		ck := agentKeyCacheKey(ctx, k)
+		if entry, ok := m.agentKeyCache.Load(ck); ok {
+			ce := entry.(*agentCacheEntry)
+			if time.Since(ce.cachedAt) < teamCacheTTL {
+				continue // still valid
+			}
+		}
+		missing = append(missing, k)
+	}
+	if len(missing) == 0 {
+		return
+	}
+
+	agents, err := m.agentStore.GetByKeys(ctx, missing)
+	if err != nil {
+		slog.Debug("preWarmAgentKeyCache: batch fetch failed", "error", err)
+		return
+	}
+	now := time.Now()
+	for i := range agents {
+		ag := &agents[i]
+		e := &agentCacheEntry{agent: ag, cachedAt: now}
+		ck := agentKeyCacheKey(ctx, ag.AgentKey)
+		m.agentKeyCache.Store(ck, e)
+		m.agentCache.Store(ag.ID, e)
+	}
+}
+
+// preWarmAgentIDCache batch-fetches agents by UUID and populates the cache.
+// Reduces N+1 queries when rendering task comments with agent keys.
+func (m *TeamToolManager) preWarmAgentIDCache(ctx context.Context, ids []uuid.UUID) {
+	// Deduplicate and filter already-cached IDs.
+	seen := make(map[uuid.UUID]bool)
+	var missing []uuid.UUID
+	for _, id := range ids {
+		if id == uuid.Nil || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if entry, ok := m.agentCache.Load(id); ok {
+			ce := entry.(*agentCacheEntry)
+			if time.Since(ce.cachedAt) < teamCacheTTL {
+				continue
+			}
+		}
+		missing = append(missing, id)
+	}
+	if len(missing) == 0 {
+		return
+	}
+
+	agents, err := m.agentStore.GetByIDs(ctx, missing)
+	if err != nil {
+		slog.Debug("preWarmAgentIDCache: batch fetch failed", "error", err)
+		return
+	}
+	now := time.Now()
+	for i := range agents {
+		ag := &agents[i]
+		e := &agentCacheEntry{agent: ag, cachedAt: now}
+		m.agentCache.Store(ag.ID, e)
+		ck := agentKeyCacheKey(ctx, ag.AgentKey)
+		m.agentKeyCache.Store(ck, e)
+	}
+}
+
 // resolveAgentByKey looks up an agent by key and returns its UUID.
-func (m *TeamToolManager) resolveAgentByKey(key string) (uuid.UUID, error) {
-	ag, err := m.cachedGetAgentByKey(context.Background(), key)
+// Uses the caller's tenant-scoped context for isolation.
+func (m *TeamToolManager) resolveAgentByKey(ctx context.Context, key string) (uuid.UUID, error) {
+	ag, err := m.cachedGetAgentByKey(ctx, key)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("agent %q not found: %w", key, err)
 	}
@@ -173,11 +263,40 @@ func (m *TeamToolManager) agentKeyFromID(ctx context.Context, id uuid.UUID) stri
 	return ag.AgentKey
 }
 
+// ============================================================
+// TeamToolBackend exported wrappers (cache layer)
+// ============================================================
+
+func (m *TeamToolManager) ResolveTeam(ctx context.Context) (*store.TeamData, uuid.UUID, error) {
+	return m.resolveTeam(ctx)
+}
+func (m *TeamToolManager) RequireLead(ctx context.Context, team *store.TeamData, agentID uuid.UUID) error {
+	return m.requireLead(ctx, team, agentID)
+}
+func (m *TeamToolManager) ResolveAgentByKey(ctx context.Context, key string) (uuid.UUID, error) {
+	return m.resolveAgentByKey(ctx, key)
+}
+func (m *TeamToolManager) AgentKeyFromID(ctx context.Context, id uuid.UUID) string {
+	return m.agentKeyFromID(ctx, id)
+}
+func (m *TeamToolManager) CachedListMembers(ctx context.Context, teamID, agentID uuid.UUID) ([]store.TeamMemberData, error) {
+	return m.cachedListMembers(ctx, teamID, agentID)
+}
+func (m *TeamToolManager) CachedGetAgentByID(ctx context.Context, id uuid.UUID) (*store.AgentData, error) {
+	return m.cachedGetAgentByID(ctx, id)
+}
+func (m *TeamToolManager) PreWarmAgentKeyCache(ctx context.Context, keys []string) {
+	m.preWarmAgentKeyCache(ctx, keys)
+}
+func (m *TeamToolManager) PreWarmAgentIDCache(ctx context.Context, ids []uuid.UUID) {
+	m.preWarmAgentIDCache(ctx, ids)
+}
+
 // taskTeamWorkspace extracts the team_workspace path from task metadata.
 func taskTeamWorkspace(task *store.TeamTaskData) string {
 	if task.Metadata == nil {
 		return ""
 	}
-	ws, _ := task.Metadata["team_workspace"].(string)
+	ws, _ := task.Metadata[TaskMetaTeamWorkspace].(string)
 	return ws
 }

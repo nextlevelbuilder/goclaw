@@ -1,0 +1,157 @@
+{
+  "title": "频道",
+  "description": "将消息应用连接到您的代理",
+  "addChannel": "添加频道",
+  "atLimit": "Lite版：最多1个Telegram + 1个Discord。",
+  "emptyTitle": "暂无频道",
+  "emptyDesc": "连接Telegram或Discord，通过消息应用与代理聊天。",
+  "status": {
+    "running": "运行中",
+    "stopped": "已停止",
+    "disabled": "已禁用",
+    "degraded": "降级",
+    "starting": "启动中",
+    "registered": "已配置",
+    "failed": "失败"
+  },
+  "channelTypes": {
+    "telegram": "Telegram",
+    "discord": "Discord"
+  },
+  "form": {
+    "createTitle": "添加频道",
+    "displayName": "显示名称",
+    "displayNamePlaceholder": "我的Telegram机器人",
+    "channelType": "频道类型",
+    "selectType": "选择类型",
+    "agent": "代理",
+    "selectAgent": "选择代理",
+    "enabled": "启用",
+    "credentials": "凭据",
+    "credentialsHint": "（留空保持不变）",
+    "configuration": "配置",
+    "cancel": "取消",
+    "save": "保存",
+    "create": "创建",
+    "saving": "保存中...",
+    "errors": {
+      "agentRequired": "请选择代理",
+      "typeRequired": "请选择频道类型",
+      "tokenRequired": "机器人令牌为必填项"
+    }
+  },
+  "detail": {
+    "back": "返回",
+    "lastChecked": "最近检查：{{value}}",
+    "tabs": {
+      "general": "常规",
+      "credentials": "凭据",
+      "managers": "管理员",
+      "advanced": "高级"
+    },
+    "general": {
+      "identity": "身份信息",
+      "name": "名称",
+      "nameHint": "只读标识符",
+      "channelType": "频道类型",
+      "displayName": "显示名称",
+      "displayNamePlaceholder": "输入显示名称",
+      "agent": "代理",
+      "selectAgent": "选择代理",
+      "enabled": "启用",
+      "saveChanges": "保存更改",
+      "saving": "保存中..."
+    },
+    "policies": "策略",
+    "credentials": {
+      "hint": "留空字段以保持当前值。凭据已加密存储。",
+      "updateCredentials": "更新凭据",
+      "saving": "保存中...",
+      "saved": "凭据已更新"
+    },
+    "managers": {
+      "description": "为频道群组分配管理员。管理员可以管理对话。",
+      "groups": "群组",
+      "noManagerGroups": "暂无管理组",
+      "noManagerGroupsHint": "当用户在群聊中与机器人互动时，群组将出现在这里。",
+      "loadingManagers": "加载中...",
+      "noManagers": "此群组暂无管理员",
+      "managersCount": "{{count}}位管理员",
+      "managersCountPlural": "{{count}}位管理员",
+      "columns": {
+        "userId": "用户ID",
+        "name": "名称",
+        "username": "用户名"
+      },
+      "addForm": {
+        "title": "添加管理员",
+        "hint": "输入群组和用户信息",
+        "groupId": "群组ID",
+        "groupIdPlaceholder": "如：group:telegram:-100123456",
+        "userId": "用户ID",
+        "userIdPlaceholder": "搜索或输入用户ID",
+        "addManager": "添加管理员",
+        "add": "添加",
+        "errors": {
+          "groupUserRequired": "群组ID和用户ID为必填项",
+          "failedAdd": "添加管理员失败"
+        }
+      }
+    },
+    "advanced": "高级",
+    "advancedTitle": "高级设置",
+    "network": "网络",
+    "networkDesc": "API服务器和代理配置",
+    "limits": "限制",
+    "limitsDesc": "消息和媒体限制",
+    "streaming": "流式传输",
+    "streamingDesc": "渐进式响应传输",
+    "behavior": "行为",
+    "behaviorDesc": "反应、预览和回复模式",
+    "accessControl": "访问控制",
+    "accessControlDesc": "用户白名单限制",
+    "saveConfig": "保存",
+    "noAdvanced": "此频道类型没有高级设置。"
+  },
+  "pairing": {
+    "title": "已配对设备",
+    "pending": "待处理请求（{{count}}）",
+    "paired": "已配对设备（{{count}}）",
+    "empty": "暂无配对设备",
+    "emptyDesc": "当用户向机器人发消息需要审批时，设备将出现在这里。",
+    "sender": "发送者：",
+    "chat": "聊天：",
+    "code": "配对码",
+    "approve": "批准",
+    "deny": "拒绝",
+    "revoke": "撤销",
+    "confirmApprove": {
+      "title": "批准配对",
+      "description": "批准 {{channel}}:{{senderId}}（配对码：{{code}}）？该设备将能与代理交互。",
+      "confirmLabel": "批准"
+    },
+    "confirmDeny": {
+      "title": "拒绝配对",
+      "description": "拒绝 {{channel}}:{{senderId}}（配对码：{{code}}）？请求将被删除。",
+      "confirmLabel": "拒绝"
+    },
+    "confirmRevoke": {
+      "title": "撤销设备",
+      "description": "撤销 {{channel}}:{{senderId}}？该设备需要重新配对。",
+      "confirmLabel": "撤销"
+    }
+  },
+  "toast": {
+    "created": "频道已创建",
+    "updated": "频道已更新",
+    "deleted": "频道已删除",
+    "failedCreate": "创建频道失败",
+    "failedUpdate": "更新频道失败",
+    "failedDelete": "删除频道失败"
+  },
+  "delete": {
+    "title": "删除频道",
+    "description": "删除 {{name}}？此操作无法撤销。",
+    "confirmLabel": "删除"
+  }
+}

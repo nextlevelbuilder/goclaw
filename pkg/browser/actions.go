@@ -12,7 +12,7 @@ import (
 
 // Click clicks an element by ref.
 func (m *Manager) Click(ctx context.Context, targetID, ref string, opts ClickOpts) error {
-	_, el, err := m.getPageAndResolve(targetID, ref)
+	_, el, err := m.getPageAndResolve(ctx, targetID, ref)
 	if err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func (m *Manager) Click(ctx context.Context, targetID, ref string, opts ClickOpt
 
 // Type types text into an element by ref.
 func (m *Manager) Type(ctx context.Context, targetID, ref, text string, opts TypeOpts) error {
-	page, el, err := m.getPageAndResolve(targetID, ref)
+	page, el, err := m.getPageAndResolve(ctx, targetID, ref)
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,9 @@ func (m *Manager) Type(ctx context.Context, targetID, ref, text string, opts Typ
 
 // Press presses a keyboard key.
 func (m *Manager) Press(ctx context.Context, targetID, key string) error {
+	tenantID := tenantIDFromCtx(ctx)
 	m.mu.Lock()
-	page, err := m.getPage(targetID)
+	page, err := m.getPageForTenant(targetID, tenantID)
 	m.mu.Unlock()
 	if err != nil {
 		return err
@@ -76,7 +77,7 @@ func (m *Manager) Press(ctx context.Context, targetID, key string) error {
 
 // Hover hovers over an element by ref.
 func (m *Manager) Hover(ctx context.Context, targetID, ref string) error {
-	_, el, err := m.getPageAndResolve(targetID, ref)
+	_, el, err := m.getPageAndResolve(ctx, targetID, ref)
 	if err != nil {
 		return err
 	}
@@ -86,8 +87,9 @@ func (m *Manager) Hover(ctx context.Context, targetID, ref string) error {
 
 // Wait waits for a condition on a page.
 func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) error {
+	tenantID := tenantIDFromCtx(ctx)
 	m.mu.Lock()
-	page, err := m.getPage(targetID)
+	page, err := m.getPageForTenant(targetID, tenantID)
 	m.mu.Unlock()
 	if err != nil {
 		return err
@@ -148,8 +150,9 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 
 // Evaluate runs JavaScript on a page.
 func (m *Manager) Evaluate(ctx context.Context, targetID, js string) (string, error) {
+	tenantID := tenantIDFromCtx(ctx)
 	m.mu.Lock()
-	page, err := m.getPage(targetID)
+	page, err := m.getPageForTenant(targetID, tenantID)
 	m.mu.Unlock()
 	if err != nil {
 		return "", err

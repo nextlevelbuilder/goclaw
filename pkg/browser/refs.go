@@ -81,6 +81,14 @@ func NormalizeRef(raw string) string {
 	return s
 }
 
+// Remove deletes all refs for a target.
+func (rs *RefStore) Remove(targetID string) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	rs.removeFromOrder(targetID)
+	delete(rs.entries, targetID)
+}
+
 func (rs *RefStore) removeFromOrder(targetID string) {
 	for i, id := range rs.order {
 		if id == targetID {

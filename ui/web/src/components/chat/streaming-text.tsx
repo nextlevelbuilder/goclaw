@@ -1,10 +1,11 @@
+import { memo } from "react";
 import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 
 interface StreamingTextProps {
   text: string;
 }
 
-export function StreamingText({ text }: StreamingTextProps) {
+export const StreamingText = memo(function StreamingText({ text }: StreamingTextProps) {
   if (!text) return <ThinkingIndicator />;
 
   return (
@@ -13,7 +14,7 @@ export function StreamingText({ text }: StreamingTextProps) {
       <span className="inline-block h-4 w-0.5 animate-pulse bg-foreground align-text-bottom" />
     </div>
   );
-}
+});
 
 function ThinkingIndicator() {
   return (

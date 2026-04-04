@@ -15,6 +15,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -28,23 +29,27 @@ const (
 
 // TickerConfig holds dependencies for the heartbeat ticker.
 type TickerConfig struct {
-	Store    store.HeartbeatStore
-	Agents   store.AgentStore
-	Sessions store.SessionStore // optional: for cleaning up isolated heartbeat sessions
-	MsgBus   *bus.MessageBus
-	Sched    *scheduler.Scheduler
-	RunAgent func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
+	Store         store.HeartbeatStore
+	Agents        store.AgentStore
+	Sessions      store.SessionStore // optional: for cleaning up isolated heartbeat sessions
+	ProviderStore store.ProviderStore
+	ProviderReg   *providers.Registry
+	MsgBus        *bus.MessageBus
+	Sched         *scheduler.Scheduler
+	RunAgent      func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
 }
 
 // Ticker polls for due heartbeats and runs them through the agent loop.
 type Ticker struct {
-	store    store.HeartbeatStore
-	agents   store.AgentStore
-	sessions store.SessionStore
-	msgBus   *bus.MessageBus
-	sched    *scheduler.Scheduler
-	runAgent func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
-	onEvent  func(store.HeartbeatEvent)
+	store         store.HeartbeatStore
+	agents        store.AgentStore
+	sessions      store.SessionStore
+	providerStore store.ProviderStore
+	providerReg   *providers.Registry
+	msgBus        *bus.MessageBus
+	sched         *scheduler.Scheduler
+	runAgent      func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
+	onEvent       func(store.HeartbeatEvent)
 
 	wakeCh chan uuid.UUID
 	stopCh chan struct{}
@@ -54,12 +59,14 @@ type Ticker struct {
 // NewTicker creates a new heartbeat ticker.
 func NewTicker(cfg TickerConfig) *Ticker {
 	return &Ticker{
-		store:    cfg.Store,
-		agents:   cfg.Agents,
-		sessions: cfg.Sessions,
-		msgBus:   cfg.MsgBus,
-		sched:    cfg.Sched,
-		runAgent: cfg.RunAgent,
+		store:         cfg.Store,
+		agents:        cfg.Agents,
+		sessions:      cfg.Sessions,
+		providerStore: cfg.ProviderStore,
+		providerReg:   cfg.ProviderReg,
+		msgBus:        cfg.MsgBus,
+		sched:         cfg.Sched,
+		runAgent:      cfg.RunAgent,
 		wakeCh:   make(chan uuid.UUID, 16),
 		stopCh:   make(chan struct{}),
 	}
@@ -152,10 +159,22 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	start := time.Now()
 	agentIDStr := hb.AgentID.String()
 
-	// Resolve agent key for events.
+	// Resolve agent to get tenant scope + display key.
+	// Unscoped lookup since ticker is a global scheduler.
 	agentKey := agentIDStr
-	if ag, err := t.agents.GetByID(ctx, hb.AgentID); err == nil {
-		agentKey = ag.AgentKey
+	ag, agErr := t.agents.GetByIDUnscoped(context.Background(), hb.AgentID)
+	if agErr != nil {
+		slog.Warn("heartbeat.agent_not_found", "agent_id", agentIDStr, "error", agErr)
+		return
+	}
+	agentKey = ag.AgentKey
+
+	// Inject agent's tenant into context so all store operations
+	// (context files, sessions, etc.) are tenant-scoped.
+	if ag.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, ag.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
 	}
 
 	// [1] Active hours filter.
@@ -166,7 +185,7 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	}
 
 	// [2] Queue-aware: skip if agent is busy (active runs in scheduler).
-	if t.sched != nil && t.sched.HasActiveSessionsForAgent(agentIDStr) {
+	if t.sched != nil && t.sched.HasActiveSessionsForAgent(agentKey) {
 		t.logSkipped(ctx, hb, "queue_busy", agentKey)
 		// Don't advance next_run_at — retry on next poll.
 		return
@@ -199,12 +218,16 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 			"- Your response will be delivered to the configured channel as-is.\n"+
 			"- HEARTBEAT_OK suppression: If your response contains the token HEARTBEAT_OK anywhere, "+
 			"the ENTIRE response is suppressed and NOT delivered to the channel.\n"+
-			"- Use HEARTBEAT_OK ONLY when there is nothing to deliver (e.g. monitoring checks all passed, no news).\n"+
-			"- Do NOT include HEARTBEAT_OK if the checklist asks you to send content (jokes, greetings, reports, etc.).",
+			"- Decision criteria for HEARTBEAT_OK:\n"+
+			"  - Respond with ONLY \"HEARTBEAT_OK\" (nothing else) when: all checks passed, nothing new or actionable was found, "+
+			"status is unchanged from last run. A \"no news\" summary is NOT worth delivering — use HEARTBEAT_OK instead.\n"+
+			"  - Do NOT use HEARTBEAT_OK when: you found new issues, status changes, alerts, errors, "+
+			"or the checklist explicitly asks you to send content every run (jokes, greetings, scheduled reports, etc.).",
 		agentKey, checklistContent,
 	)
 
-	sessionKey := sessions.BuildHeartbeatSessionKey(agentIDStr, hb.IsolatedSession)
+	// Use agentKey (not UUID) — session keys must use agentKey for cache invalidation consistency.
+	sessionKey := sessions.BuildHeartbeatSessionKey(agentKey, hb.IsolatedSession)
 
 	channel := "heartbeat"
 	if hb.Channel != nil && *hb.Channel != "" {
@@ -226,6 +249,24 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 		modelOverride = *hb.Model
 	}
 
+	// Provider override: use heartbeat-specific provider if configured.
+	var providerOverride providers.Provider
+	if hb.ProviderID != nil && t.providerStore != nil && t.providerReg != nil {
+		if provData, err := t.providerStore.GetProvider(ctx, *hb.ProviderID); err == nil {
+			if prov, err := t.providerReg.GetForTenant(ag.TenantID, provData.Name); err == nil {
+				providerOverride = prov
+				slog.Info("heartbeat.provider_override",
+					"agent", agentKey, "provider", provData.Name)
+			} else {
+				slog.Warn("heartbeat.provider_not_in_registry",
+					"agent", agentKey, "provider_id", hb.ProviderID, "error", err)
+			}
+		} else {
+			slog.Warn("heartbeat.provider_not_found",
+				"agent", agentKey, "provider_id", hb.ProviderID, "error", err)
+		}
+	}
+
 	for attempt := range maxAttempts {
 		outCh := t.runAgent(ctx, agent.RunRequest{
 			SessionKey:        sessionKey,
@@ -236,9 +277,10 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 			Stream:            false,
 			ExtraSystemPrompt: extraSystem,
 			ModelOverride:     modelOverride,
+			ProviderOverride:  providerOverride,
 			LightContext:      hb.LightContext,
 			TraceName:         fmt.Sprintf("Heartbeat [%s]", agentKey),
-			TraceTags:         []string{"heartbeat"},
+			TraceTags:         heartbeatTraceTags(providerOverride),
 		})
 
 		outcome := <-outCh
@@ -336,7 +378,7 @@ func (t *Ticker) finishRun(ctx context.Context, hb store.AgentHeartbeat, session
 
 	// Cleanup isolated session — data is already in heartbeat_run_logs.
 	if hb.IsolatedSession && t.sessions != nil && sessionKey != "" {
-		if err := t.sessions.Delete(sessionKey); err != nil {
+		if err := t.sessions.Delete(ctx, sessionKey); err != nil {
 			slog.Debug("heartbeat.session_cleanup_failed", "session_key", sessionKey, "error", err)
 		}
 	}
@@ -469,4 +511,12 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// heartbeatTraceTags returns trace tags, including provider name when overridden.
+func heartbeatTraceTags(providerOverride providers.Provider) []string {
+	if providerOverride != nil {
+		return []string{"heartbeat", "provider:" + providerOverride.Name()}
+	}
+	return []string{"heartbeat"}
 }

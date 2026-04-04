@@ -3,6 +3,7 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -20,11 +21,12 @@ type skillOwnerGetter interface {
 
 // SkillsMethods handles skills.list, skills.get, skills.update.
 type SkillsMethods struct {
-	store store.SkillStore
+	store          store.SkillStore
+	tenantCfgStore store.SkillTenantConfigStore
 }
 
-func NewSkillsMethods(s store.SkillStore) *SkillsMethods {
-	return &SkillsMethods{store: s}
+func NewSkillsMethods(s store.SkillStore, tenantCfg store.SkillTenantConfigStore) *SkillsMethods {
+	return &SkillsMethods{store: s, tenantCfgStore: tenantCfg}
 }
 
 func (m *SkillsMethods) Register(router *gateway.MethodRouter) {
@@ -33,8 +35,8 @@ func (m *SkillsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodSkillsUpdate, m.handleUpdate)
 }
 
-func (m *SkillsMethods) handleList(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	allSkills := m.store.ListSkills()
+func (m *SkillsMethods) handleList(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	allSkills := m.store.ListSkills(ctx)
 
 	result := make([]map[string]any, 0, len(allSkills))
 	for _, s := range allSkills {
@@ -68,6 +70,28 @@ func (m *SkillsMethods) handleList(_ context.Context, client *gateway.Client, re
 		result = append(result, entry)
 	}
 
+	// Merge per-tenant overrides when tenant-scoped
+	tid := store.TenantIDFromContext(ctx)
+	if tid != uuid.Nil && m.tenantCfgStore != nil {
+		overrides, err := m.tenantCfgStore.ListAll(ctx, tid)
+		if err != nil {
+			slog.Warn("skill tenant config list failed", "tenant", tid, "error", err)
+		}
+		if err == nil && len(overrides) > 0 {
+			for i, entry := range result {
+				idStr, _ := entry["id"].(string)
+				if idStr == "" {
+					continue
+				}
+				if skID, err := uuid.Parse(idStr); err == nil {
+					if enabled, ok := overrides[skID]; ok {
+						result[i]["tenant_enabled"] = enabled
+					}
+				}
+			}
+		}
+	}
+
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"skills": result,
 	}))
@@ -86,13 +110,13 @@ func (m *SkillsMethods) handleGet(ctx context.Context, client *gateway.Client, r
 		return
 	}
 
-	info, ok := m.store.GetSkill(params.Name)
+	info, ok := m.store.GetSkill(ctx, params.Name)
 	if !ok {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "skill", params.Name)))
 		return
 	}
 
-	content, _ := m.store.LoadSkill(params.Name)
+	content, _ := m.store.LoadSkill(ctx, params.Name)
 
 	resp := map[string]any{
 		"name":        info.Name,
@@ -116,7 +140,7 @@ func (m *SkillsMethods) handleGet(ctx context.Context, client *gateway.Client, r
 
 // skillUpdater is an optional interface for stores that support skill updates (e.g. PGSkillStore).
 type skillUpdater interface {
-	UpdateSkill(id uuid.UUID, updates map[string]any) error
+	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error
 }
 
 func (m *SkillsMethods) handleUpdate(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
@@ -153,7 +177,7 @@ func (m *SkillsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 	} else {
 		// Look up by name — use GetSkill which returns path info, but we need DB ID
 		// For PGSkillStore, the name is the slug
-		info, exists := m.store.GetSkill(params.Name)
+		info, exists := m.store.GetSkill(ctx, params.Name)
 		if !exists {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "skill", params.Name)))
 			return
@@ -172,17 +196,21 @@ func (m *SkillsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		return
 	}
 
-	// Ownership check: only skill owner or admin can update
+	// Ownership check: only skill owner or admin can update.
+	// Fail-closed: if store doesn't implement skillOwnerGetter, deny non-admin callers.
 	if !permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
-		if ownerGetter, ok := m.store.(skillOwnerGetter); ok {
-			if ownerID, found := ownerGetter.GetSkillOwnerID(skillID); found && ownerID != client.UserID() {
-				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "skills.update")))
-				return
-			}
+		ownerGetter, ok := m.store.(skillOwnerGetter)
+		if !ok {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "skills.update")))
+			return
+		}
+		if ownerID, found := ownerGetter.GetSkillOwnerID(skillID); found && ownerID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "skills.update")))
+			return
 		}
 	}
 
-	if err := updater.UpdateSkill(skillID, params.Updates); err != nil {
+	if err := updater.UpdateSkill(ctx, skillID, params.Updates); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
 		return
 	}

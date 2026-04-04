@@ -1,0 +1,122 @@
+{
+  "title": "Skills",
+  "description": "Manage agent skills and capabilities",
+  "searchPlaceholder": "Search skills...",
+  "emptyTitle": "No skills",
+  "emptyDescription": "No skills have been registered yet.",
+  "noMatchTitle": "No matching skills",
+  "noMatchDescription": "Try a different search term.",
+  "columns": {
+    "name": "Name",
+    "description": "Description",
+    "source": "Source",
+    "author": "Author",
+    "visibility": "Visibility",
+    "status": "Status",
+    "actions": "Actions"
+  },
+  "noDescription": "No description",
+  "visibility": {
+    "clickToCycle": "Click to change visibility"
+  },
+  "delete": {
+    "title": "Delete Skill",
+    "description": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirmLabel": "Delete"
+  },
+  "upload": {
+    "title": "Upload Skills",
+    "description": "Upload ZIP files containing SKILL.md with YAML frontmatter (name, description, slug).",
+    "button": "Upload",
+    "uploading": "Uploading...",
+    "dropOrClick": "Click or drag & drop .zip files",
+    "dropHere": "Drop .zip files here",
+    "onlyZip": "Only .zip files are accepted",
+    "cancel": "Cancel",
+    "done": "Done",
+    "tooLarge": "File exceeds 20MB limit",
+    "invalidZip": "Invalid ZIP file",
+    "noSkillMd": "ZIP must contain SKILL.md at root",
+    "emptySkillMd": "SKILL.md is empty",
+    "noFrontmatter": "SKILL.md missing YAML frontmatter",
+    "nameRequired": "name required in SKILL.md frontmatter",
+    "invalidSlug": "Invalid slug format",
+    "failed": "Upload failed",
+    "validating": "Validating...",
+    "validCount": "{{valid}} of {{total}} valid",
+    "uploadCount": "Upload ({{count}})",
+    "successCount": "{{success}} of {{total}} uploaded successfully",
+    "remove": "Remove file"
+  },
+  "edit": {
+    "title": "Edit Skill",
+    "name": "Name",
+    "description": "Description",
+    "visibility": "Visibility",
+    "tags": "Tags",
+    "addTag": "Add tag...",
+    "add": "Add",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "privateOption": "Private (owner only)",
+    "internalOption": "Internal (granted agents/users)",
+    "publicOption": "Public (all agents)"
+  },
+  "system": "System",
+  "tabs": {
+    "core": "Core",
+    "custom": "Custom"
+  },
+  "toggle": {
+    "enable": "Enable skill",
+    "disable": "Disable skill",
+    "disabled": "Disabled"
+  },
+  "tenant": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "default": "Default",
+    "overrideHint": "Per-tenant override for this skill",
+    "resetDefault": "Reset to default"
+  },
+  "deps": {
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed successfully",
+    "installPartial": "Some dependencies failed to install",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
+  },
+  "detail": {
+    "title": "Skill Detail",
+    "content": "Content",
+    "files": "Files",
+    "version": "Version:",
+    "current": "(current)",
+    "noContent": "No content available."
+  },
+  "toast": {
+    "updated": "Skill updated",
+    "updateFailed": "Failed to update skill",
+    "deleted": "Skill deleted",
+    "deleteFailed": "Failed to delete skill",
+    "rescanUpdated": "{{count}} skill(s) updated",
+    "rescanNoChanges": "All skills up to date",
+    "rescanFailed": "Failed to rescan dependencies"
+  }
+}

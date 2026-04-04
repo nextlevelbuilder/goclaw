@@ -60,14 +60,32 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	// 3. Resolve sender name (cached)
 	senderName := c.resolveSenderName(ctx, mc.SenderID)
 
-	// 4. Group policy
+	// 4. Resolve media BEFORE mention gate so non-mentioned messages
+	// also have their files downloaded and stored in pending history.
+	var earlyMedia []media.MediaInfo
+	switch mc.ContentType {
+	case "image", "file", "audio", "video", "sticker":
+		earlyMedia = c.resolveMediaFromMessage(ctx, mc.MessageID, mc.ContentType, msg.Content)
+	case "post":
+		if imageKeys := extractPostImageKeys(msg.Content); len(imageKeys) > 0 {
+			earlyMedia = c.resolvePostImages(ctx, mc.MessageID, imageKeys)
+		}
+	}
+	var earlyMediaPaths []string
+	for _, m := range earlyMedia {
+		if m.FilePath != "" {
+			earlyMediaPaths = append(earlyMediaPaths, m.FilePath)
+		}
+	}
+
+	// 5. Group policy
 	if mc.ChatType == "group" {
-		if !c.checkGroupPolicy(mc.SenderID, mc.ChatID) {
+		if !c.checkGroupPolicy(ctx, mc.SenderID, mc.ChatID) {
 			slog.Debug("feishu group message rejected by policy", "sender_id", mc.SenderID, "chat_id", mc.ChatID)
 			return
 		}
 
-		// 5. RequireMention check — record to history if not mentioned
+		// 6. RequireMention check — record to history if not mentioned
 		requireMention := true
 		if c.cfg.RequireMention != nil {
 			requireMention = *c.cfg.RequireMention
@@ -81,13 +99,14 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 				Sender:    senderName,
 				SenderID:  mc.SenderID,
 				Body:      mc.Content,
+				Media:     earlyMediaPaths,
 				Timestamp: time.Now(),
 				MessageID: messageID,
 			}, c.historyLimit)
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", "group", "user", "", "")
 			}
 
 			slog.Debug("feishu group message recorded (no mention)",
@@ -99,7 +118,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// 6. DM policy (pairing flow)
 	if mc.ChatType == "p2p" {
-		if !c.checkDMPolicy(mc.SenderID, mc.ChatID) {
+		if !c.checkDMPolicy(ctx, mc.SenderID, mc.ChatID) {
 			return
 		}
 	}
@@ -143,13 +162,14 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", peerKind)
+		cc.EnsureContact(ctx, c.Type(), c.Name(), mc.SenderID, mc.SenderID, senderName, "", peerKind, "user", "", "")
 	}
 
 	metadata := map[string]string{
 		"message_id":    messageID,
 		"chat_type":     mc.ChatType,
 		"sender_name":   senderName,
+		"display_name":  senderName,
 		"mentioned_bot": fmt.Sprintf("%t", mc.MentionedBot),
 		"platform":      channels.TypeFeishu,
 	}
@@ -173,19 +193,26 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		}
 	}
 
-	// 10. Resolve inbound media (image, file, audio, video, sticker)
+	// 10. Build media list from early-resolved media (step 4) + reply media.
+	// Media was already downloaded before the mention gate — reuse results.
 	var mediaList []media.MediaInfo
-	// Reply media first (context), current media second.
+	// Reply media first (context), current-message media second.
 	if len(replyMediaList) > 0 {
 		mediaList = append(mediaList, replyMediaList...)
 	}
-	switch mc.ContentType {
-	case "image", "file", "audio", "video", "sticker":
-		mediaList = append(mediaList, c.resolveMediaFromMessage(ctx, mc.MessageID, mc.ContentType, msg.Content)...)
+	mediaList = append(mediaList, earlyMedia...)
+
+	// 10b. Collect media from pending history (files downloaded by earlier non-mentioned messages).
+	var mediaFiles []bus.MediaFile
+	if mc.ChatType == "group" && c.historyLimit > 0 {
+		if histMediaPaths := c.groupHistory.CollectMedia(chatID); len(histMediaPaths) > 0 {
+			for _, p := range histMediaPaths {
+				mediaFiles = append(mediaFiles, bus.MediaFile{Path: p}) // cannot use append(slice, other...) — different types
+			}
+		}
 	}
 
 	// 11. Process media: STT transcription, document extraction, build tags
-	var mediaFiles []bus.MediaFile
 	if len(mediaList) > 0 {
 		var extraContent string
 		for i := range mediaList {
@@ -264,6 +291,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 		UserID:       userID,
 		AgentID:      targetAgentID,
 		HistoryLimit: c.historyLimit,
+		TenantID:     c.TenantID(),
 		Metadata:     metadata,
 	})
 
@@ -273,7 +301,7 @@ func (c *Channel) handleMessageEvent(ctx context.Context, event *MessageEvent) {
 	}
 }
 
-const replyContextMaxLen = 500
+const replyContextMaxLen = 2000
 
 // fetchReplyContext fetches the parent message content and returns a formatted
 // reply context string + any downloaded media from the parent message.
@@ -305,18 +333,22 @@ func (c *Channel) fetchReplyContext(ctx context.Context, parentID string) (strin
 		replyCtx = fmt.Sprintf("[Replying to %s]\n%s\n[/Replying]", senderName, body)
 	}
 
-	// Download media from parent message (image, file, audio, video, sticker).
+	// Download media from parent message (image, file, audio, video, sticker, post).
 	var replyMedia []media.MediaInfo
 	switch item.MsgType {
 	case "image", "file", "audio", "video", "sticker":
 		replyMedia = c.resolveMediaFromMessage(ctx, parentID, item.MsgType, item.Body.Content)
-		for i := range replyMedia {
-			replyMedia[i].FromReply = true
+	case "post":
+		if imageKeys := extractPostImageKeys(item.Body.Content); len(imageKeys) > 0 {
+			replyMedia = c.resolvePostImages(ctx, parentID, imageKeys)
 		}
-		if len(replyMedia) > 0 {
-			slog.Debug("feishu: resolved media from replied message",
-				"parent_id", parentID, "media_count", len(replyMedia))
-		}
+	}
+	for i := range replyMedia {
+		replyMedia[i].FromReply = true
+	}
+	if len(replyMedia) > 0 {
+		slog.Debug("feishu: resolved media from replied message",
+			"parent_id", parentID, "media_count", len(replyMedia))
 	}
 
 	return replyCtx, replyMedia

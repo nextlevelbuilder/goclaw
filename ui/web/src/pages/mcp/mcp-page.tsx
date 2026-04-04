@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Plug, Plus, RefreshCw, Pencil, Trash2, Users, Wrench } from "lucide-react";
+import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -13,6 +13,7 @@ import { useMCP, type MCPServerData, type MCPServerInput } from "./hooks/use-mcp
 import { MCPFormDialog } from "./mcp-form-dialog";
 import { MCPGrantsDialog } from "./mcp-grants-dialog";
 import { MCPToolsDialog } from "./mcp-tools-dialog";
+import { MCPUserCredentialsDialog } from "./mcp-user-credentials-dialog";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePagination } from "@/hooks/use-pagination";
@@ -26,8 +27,8 @@ const transportBadge: Record<string, string> = {
 export function MCPPage() {
   const { t } = useTranslation("mcp");
   const { t: tc } = useTranslation("common");
-  const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, listServerTools } = useMCP();
-  const spinning = useMinLoading(loading);
+  const { servers, loading, fetching, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, reconnectServer, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials } = useMCP();
+  const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -36,6 +37,8 @@ export function MCPPage() {
   const [toolsServer, setToolsServer] = useState<MCPServerData | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MCPServerData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [credentialsServer, setCredentialsServer] = useState<MCPServerData | null>(null);
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
 
   const filtered = servers.filter(
     (s) =>
@@ -68,7 +71,7 @@ export function MCPPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 pb-10">
       <PageHeader
         title={t("title")}
         description={t("description")}
@@ -164,11 +167,31 @@ export function MCPPage() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          disabled={reconnectingId === srv.id}
+                          onClick={async () => {
+                            setReconnectingId(srv.id);
+                            try { await reconnectServer(srv.id); } finally { setReconnectingId(null); }
+                          }}
+                          title={t("reconnect")}
+                        >
+                          <RotateCcw className={"h-3.5 w-3.5" + (reconnectingId === srv.id ? " animate-spin" : "")} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => setGrantsServer(srv)}
                           className="gap-1"
                           title={t("manageGrants")}
                         >
                           <Users className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setCredentialsServer(srv)}
+                          title={t("userCredentials.title")}
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -243,6 +266,17 @@ export function MCPPage() {
         onConfirm={handleDelete}
         loading={deleteLoading}
       />
+
+      {credentialsServer && (
+        <MCPUserCredentialsDialog
+          open={!!credentialsServer}
+          onOpenChange={(open) => !open && setCredentialsServer(null)}
+          server={credentialsServer}
+          onGetCredentials={getUserCredentials}
+          onSetCredentials={setUserCredentials}
+          onDeleteCredentials={deleteUserCredentials}
+        />
+      )}
     </div>
   );
 }

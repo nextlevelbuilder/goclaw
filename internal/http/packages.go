@@ -15,13 +15,11 @@ import (
 var validPkgName = regexp.MustCompile(`^[a-zA-Z0-9@][a-zA-Z0-9._+\-/@]*$`)
 
 // PackagesHandler handles runtime package management HTTP endpoints.
-type PackagesHandler struct {
-	token string
-}
+type PackagesHandler struct{}
 
 // NewPackagesHandler creates a handler for package management endpoints.
-func NewPackagesHandler(token string) *PackagesHandler {
-	return &PackagesHandler{token: token}
+func NewPackagesHandler() *PackagesHandler {
+	return &PackagesHandler{}
 }
 
 // RegisterRoutes registers all package management routes on the given mux.
@@ -35,14 +33,14 @@ func (h *PackagesHandler) RegisterRoutes(mux *http.ServeMux) {
 
 // readAuth allows viewer+ for read operations.
 func (h *PackagesHandler) readAuth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, "", next)
+	return requireAuth("", next)
 }
 
 // adminAuth requires admin role for write operations (install/uninstall).
 // Prevents agents from calling these endpoints even if they obtain the gateway token,
 // since agent requests via browser pairing only get operator role.
 func (h *PackagesHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
-	return requireAuth(h.token, permissions.RoleAdmin, next)
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 // handleList returns all installed packages grouped by category (system/pip/npm).

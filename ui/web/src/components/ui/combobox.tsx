@@ -11,6 +11,9 @@ export interface ComboboxOption {
 interface ComboboxProps {
   value: string;
   onChange: (value: string) => void;
+  /** Fires only on dropdown item click or custom value commit (not on keystrokes).
+   *  Use this for multi-select wrappers that need to distinguish typing from selection. */
+  onSelect?: (value: string) => void;
   options: ComboboxOption[];
   placeholder?: string;
   className?: string;
@@ -25,6 +28,7 @@ interface ComboboxProps {
 export function Combobox({
   value,
   onChange,
+  onSelect,
   options,
   placeholder,
   className,
@@ -37,6 +41,9 @@ export function Combobox({
   // Track whether user actively typed since last focus — when false, show all options
   const inputDirtyRef = React.useRef(false);
   const [inputDirty, setInputDirty] = React.useState(false);
+  // After selection, hold the selected value to suppress sync effects until user types again.
+  // Prevents label→UUID→label flash caused by options reloading after selection.
+  const selectedValueRef = React.useRef<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -44,6 +51,10 @@ export function Combobox({
 
   // Sync search text when value changes externally — show label if available
   React.useEffect(() => {
+    // After handleSelect, skip sync while value is still the selected value.
+    // handleSelect already set the display text to the label.
+    if (selectedValueRef.current !== null && selectedValueRef.current === value) return;
+    selectedValueRef.current = null;
     const match = options.find((o) => o.value === value);
     setSearch(match?.label || value);
   }, [value, options]);
@@ -75,28 +86,62 @@ export function Combobox({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalContainer, open]);
 
-  // Compute dropdown position — always use fixed positioning for portal rendering
+  // Compute dropdown position — flip above input when near viewport bottom.
+  // When flipped up, use `bottom` anchoring so the dropdown grows upward
+  // from the input edge (filtering reduces items without creating a gap).
   React.useLayoutEffect(() => {
     if (!open || !containerRef.current) return;
     const inputRect = containerRef.current.getBoundingClientRect();
+    const DROP_H = 256; // max-h-60 ≈ 240px + border/padding
+    const GAP = 4;
+    const spaceBelow = window.innerHeight - inputRect.bottom;
+    const flipUp = spaceBelow < DROP_H && inputRect.top > DROP_H;
+
     if (resolvedPortal) {
       const portalRect = resolvedPortal.getBoundingClientRect();
       const scrollTop = resolvedPortal.scrollTop || 0;
       const scrollLeft = resolvedPortal.scrollLeft || 0;
       const left = inputRect.left - portalRect.left + scrollLeft;
       const maxWidth = portalRect.width - (inputRect.left - portalRect.left);
+      const portalRelativeTop = inputRect.top - portalRect.top + scrollTop;
+      const portalFlipUp = spaceBelow < DROP_H && portalRelativeTop > DROP_H;
+      if (portalFlipUp) {
+        // Anchor bottom edge to input top — dropdown grows upward.
+        const portalH = resolvedPortal.scrollHeight || portalRect.height;
+        setDropdownStyle({
+          position: "absolute",
+          bottom: portalH - portalRelativeTop + GAP,
+          left,
+          width: inputRect.width,
+          maxWidth,
+          maxHeight: DROP_H,
+          zIndex: 50,
+        });
+      } else {
+        setDropdownStyle({
+          position: "absolute",
+          top: inputRect.bottom - portalRect.top + scrollTop + GAP,
+          left,
+          width: inputRect.width,
+          maxWidth,
+          zIndex: 50,
+        });
+      }
+    } else if (flipUp) {
+      // Fixed: anchor bottom edge to input top — dropdown grows upward.
+      const bottomFromViewport = window.innerHeight - inputRect.top;
       setDropdownStyle({
-        position: "absolute",
-        top: inputRect.bottom - portalRect.top + scrollTop + 4,
-        left,
+        position: "fixed",
+        bottom: bottomFromViewport + GAP,
+        left: inputRect.left,
         width: inputRect.width,
-        maxWidth,
-        zIndex: 50,
+        maxHeight: DROP_H,
+        zIndex: 9999,
       });
     } else {
       setDropdownStyle({
         position: "fixed",
-        top: inputRect.bottom + 4,
+        top: inputRect.bottom + GAP,
         left: inputRect.left,
         width: inputRect.width,
         zIndex: 9999,
@@ -124,7 +169,9 @@ export function Combobox({
   }, [options, search]);
 
   const handleSelect = (val: string) => {
+    selectedValueRef.current = val; // suppress value-sync until user types again
     onChange(val);
+    onSelect?.(val);
     const match = options.find((o) => o.value === val);
     setSearch(match?.label || val);
     setOpen(false);
@@ -134,6 +181,7 @@ export function Combobox({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    selectedValueRef.current = null; // user is typing — resume normal value sync
     setSearch(val);
     onChange(val);
     if (!inputDirtyRef.current) {
@@ -143,12 +191,13 @@ export function Combobox({
     if (!open && options.length > 0) setOpen(true);
   };
 
-  const handleFocus = () => {
-    // Reset dirty state on focus — shows all options initially
+  const handleFocus = (e: React.FocusEvent) => {
+    // Only open dropdown on user-initiated focus (click/tab), not programmatic.
+    // relatedTarget is null for programmatic focus or first tab into page.
+    if (!e.relatedTarget && document.hasFocus()) return;
     inputDirtyRef.current = false;
     setInputDirty(false);
     if (options.length > 0) setOpen(true);
-    // Select all text so user can start typing to replace
     requestAnimationFrame(() => inputRef.current?.select());
   };
 
@@ -197,7 +246,7 @@ export function Combobox({
         placeholder={placeholder}
         className={cn(
           "border-input placeholder:text-muted-foreground dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 pr-8 text-base md:text-sm shadow-xs outline-none transition-[color,box-shadow]",
-          "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+          "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-1",
         )}
       />
       {options.length > 0 && (

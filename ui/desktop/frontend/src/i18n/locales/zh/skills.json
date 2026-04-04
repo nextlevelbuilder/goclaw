@@ -1,0 +1,122 @@
+{
+  "title": "Skill",
+  "description": "管理AgentSkill和能力",
+  "searchPlaceholder": "搜索Skill...",
+  "emptyTitle": "暂无Skill",
+  "emptyDescription": "尚未注册任何Skill。",
+  "noMatchTitle": "未找到匹配的Skill",
+  "noMatchDescription": "请尝试其他搜索词。",
+  "columns": {
+    "name": "名称",
+    "description": "描述",
+    "source": "来源",
+    "author": "作者",
+    "visibility": "可见性",
+    "status": "状态",
+    "actions": "操作"
+  },
+  "noDescription": "暂无描述",
+  "visibility": {
+    "clickToCycle": "点击更改可见性"
+  },
+  "delete": {
+    "title": "删除Skill",
+    "description": "确定要删除「{{name}}」吗？此操作无法撤销。",
+    "confirmLabel": "删除"
+  },
+  "upload": {
+    "title": "上传Skill",
+    "description": "上传包含带 YAML frontmatter (name, description, slug) 的 SKILL.md 的 ZIP 文件。",
+    "button": "上传",
+    "uploading": "上传中...",
+    "dropOrClick": "点击或拖放 .zip 文件",
+    "dropHere": "将 .zip 文件拖放到此处",
+    "onlyZip": "只接受 .zip 文件",
+    "cancel": "取消",
+    "done": "完成",
+    "tooLarge": "文件超过 20MB 限制",
+    "invalidZip": "无效的 ZIP 文件",
+    "noSkillMd": "ZIP 必须包含根目录的 SKILL.md",
+    "emptySkillMd": "SKILL.md 为空",
+    "noFrontmatter": "SKILL.md 缺少 YAML frontmatter",
+    "nameRequired": "SKILL.md frontmatter 中需要 name",
+    "invalidSlug": "slug 格式无效",
+    "failed": "上传失败",
+    "validating": "验证中...",
+    "validCount": "{{valid}} / {{total}} 有效",
+    "uploadCount": "上传 ({{count}})",
+    "successCount": "{{success}} / {{total}} 上传成功",
+    "remove": "移除文件"
+  },
+  "edit": {
+    "title": "编辑Skill",
+    "name": "名称",
+    "description": "描述",
+    "visibility": "可见性",
+    "tags": "标签",
+    "addTag": "添加标签...",
+    "add": "添加",
+    "cancel": "取消",
+    "save": "保存",
+    "saving": "保存中...",
+    "privateOption": "私有（仅所有者）",
+    "internalOption": "内部（已授权的Agent/用户）",
+    "publicOption": "公开（所有Agent）"
+  },
+  "system": "系统",
+  "tabs": {
+    "core": "核心",
+    "custom": "自定义"
+  },
+  "toggle": {
+    "enable": "启用Skill",
+    "disable": "禁用Skill",
+    "disabled": "已禁用"
+  },
+  "tenant": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "default": "默认",
+    "overrideHint": "此租户的技能覆盖设置",
+    "resetDefault": "恢复默认"
+  },
+  "deps": {
+    "rescan": "Rescan Deps",
+    "rescanning": "Scanning...",
+    "rescanSuccess": "Updated {{count}} skills",
+    "missing": "Missing: {{deps}}",
+    "install": "Install Dependencies",
+    "installing": "Installing...",
+    "installSuccess": "Dependencies installed",
+    "installPartial": "Some dependencies failed",
+    "installItem": "Install",
+    "itemSuccess": "Installed",
+    "itemError": "Failed",
+    "missingTitle": "Missing Dependencies",
+    "systemLabel": "System",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Active",
+    "statusArchived": "Missing deps",
+    "runtimeMissing": "Runtime Prerequisites Missing",
+    "runtimeMissingDesc": "Core skills require Python and/or Node.js runtimes. Rebuild with ENABLE_PYTHON=true, ENABLE_NODE=true, or ENABLE_FULL_SKILLS=true, or install manually.",
+    "runtimeRequired": "Install runtimes first"
+  },
+  "detail": {
+    "title": "Skill详情",
+    "content": "内容",
+    "files": "文件",
+    "version": "版本：",
+    "current": "（当前）",
+    "noContent": "无可用内容。"
+  },
+  "toast": {
+    "updated": "技能已更新",
+    "updateFailed": "更新技能失败",
+    "deleted": "技能已删除",
+    "deleteFailed": "删除技能失败",
+    "rescanUpdated": "已更新 {{count}} 个技能",
+    "rescanNoChanges": "所有技能已是最新",
+    "rescanFailed": "重新扫描依赖失败"
+  }
+}

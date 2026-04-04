@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "GoClaw Gateway API",
-    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no token is configured on the server, authentication is disabled (backward compatibility).\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
+    "description": "PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.\n\n## Authentication\n\nAll endpoints require a Bearer token in the `Authorization` header:\n\n```\nAuthorization: Bearer <gateway-token-or-api-key>\n```\n\nYou can use either the **gateway token** (grants admin access) or an **API key** created via the API Keys endpoints (grants scoped access).\n\nIf no token is configured on the server, authentication is disabled (backward compatibility).\n\n## Common Headers\n\n| Header | Description |\n|--------|-------------|\n| `X-GoClaw-User-Id` | External user ID for multi-tenant context |\n| `X-GoClaw-Agent-Id` | Target agent ID (alternative to model prefix) |\n| `X-GoClaw-Tenant-Id` | Tenant scope — UUID or slug (gateway token / cross-tenant API keys) |\n| `Accept-Language` | Locale for error messages (`en`, `vi`, `zh`) |\n\n## WebSocket Protocol\n\nConnect via `POST /ws` (upgrade). Protocol v3 uses frame types: `req`, `res`, `event`.\nFirst request must be `connect` with `{\"token\": \"...\", \"user_id\": \"...\", \"locale\": \"en\"}`.",
     "version": "0.2.0",
     "contact": {
       "name": "GoClaw",
@@ -21,6 +21,7 @@
     { "name": "Agents", "description": "Agent CRUD and configuration" },
     { "name": "Sessions", "description": "Chat session management (via WebSocket RPC)" },
     { "name": "Providers", "description": "LLM provider configuration" },
+    { "name": "OAuth", "description": "Provider-scoped OAuth status and quota endpoints" },
     { "name": "Skills", "description": "Skill management and grants" },
     { "name": "MCP Servers", "description": "MCP server configuration and grants" },
     { "name": "Custom Tools", "description": "Custom tool definitions" },
@@ -196,6 +197,112 @@
         }
       }
     },
+    "/v1/auth/chatgpt/{provider}/quota": {
+      "get": {
+        "tags": ["OAuth"],
+        "summary": "Fetch OpenAI Codex OAuth quota for a provider",
+        "description": "Returns structured Codex/OpenAI quota state for a specific OpenAI Codex OAuth (`chatgpt_oauth`) provider. Missing provider returns `404`, provider type conflicts return `409`, and upstream quota problems return `200` with `success=false` so dashboards can render inline action states.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Provider alias (for example `openai-codex` or `codex-work`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider quota payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["provider_name", "success", "windows", "last_updated"],
+                  "properties": {
+                    "provider_name": { "type": "string", "example": "openai-codex" },
+                    "success": { "type": "boolean" },
+                    "plan_type": { "type": "string", "nullable": true, "example": "team" },
+                    "windows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "label": { "type": "string", "example": "Primary" },
+                          "used_percent": { "type": "integer", "example": 24 },
+                          "remaining_percent": { "type": "integer", "example": 76 },
+                          "reset_after_seconds": { "type": "integer", "nullable": true, "example": 3600 },
+                          "reset_at": { "type": "string", "format": "date-time", "nullable": true }
+                        }
+                      }
+                    },
+                    "core_usage": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "five_hour": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "label": { "type": "string" },
+                            "remaining_percent": { "type": "integer" },
+                            "reset_after_seconds": { "type": "integer", "nullable": true },
+                            "reset_at": { "type": "string", "format": "date-time", "nullable": true }
+                          }
+                        },
+                        "weekly": {
+                          "type": "object",
+                          "nullable": true,
+                          "properties": {
+                            "label": { "type": "string" },
+                            "remaining_percent": { "type": "integer" },
+                            "reset_after_seconds": { "type": "integer", "nullable": true },
+                            "reset_at": { "type": "string", "format": "date-time", "nullable": true }
+                          }
+                        }
+                      }
+                    },
+                    "last_updated": { "type": "string", "format": "date-time" },
+                    "error": { "type": "string" },
+                    "error_code": { "type": "string" },
+                    "action_hint": { "type": "string" },
+                    "needs_reauth": { "type": "boolean" },
+                    "is_forbidden": { "type": "boolean" },
+                    "retryable": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/v1/auth/openai/quota": {
+      "get": {
+        "tags": ["OAuth"],
+        "summary": "Fetch quota for the default OpenAI Codex OAuth provider",
+        "description": "Compatibility alias for `/v1/auth/chatgpt/openai-codex/quota`.",
+        "responses": {
+          "200": {
+            "description": "Provider quota payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/paths/~1v1~1auth~1chatgpt~1{provider}~1quota/get/responses/200/content/application~1json/schema"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
     "/v1/agents": {
       "get": {
         "tags": ["Agents"],
@@ -240,6 +347,96 @@
         "summary": "Delete agent",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": { "200": { "description": "Agent deleted" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/v1/agents/{id}/codex-pool-activity": {
+      "get": {
+        "tags": ["Agents"],
+        "summary": "Summarize recent OpenAI Codex OAuth pool activity for an agent",
+        "description": "Returns explicit router-backed evidence for recent OpenAI Codex OAuth calls in the configured provider pool. Direct router selections are reported separately from failover serves, and each recent request shows both the selected alias and the alias that actually served the call.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 18, "minimum": 1, "maximum": 50 },
+            "description": "Maximum number of recent routed Codex LLM calls to include."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Codex pool activity payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["strategy", "pool_providers", "stats_sample_size", "provider_counts", "recent_requests"],
+                  "properties": {
+                    "strategy": { "type": "string", "enum": ["primary_first", "round_robin", "priority_order"] },
+                    "pool_providers": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "stats_sample_size": {
+                      "type": "integer",
+                      "description": "Number of recent routed llm_call spans used to derive runtime health. The server samples max(limit, 120) spans even when recent_requests remains capped by limit."
+                    },
+                    "provider_counts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["provider_name", "request_count", "direct_selection_count", "failover_serve_count", "success_count", "failure_count", "consecutive_failures", "success_rate", "health_score", "health_state"],
+                        "properties": {
+                          "provider_name": { "type": "string", "description": "Provider alias in the configured pool." },
+                          "request_count": { "type": "integer", "description": "Backward-compatible count of requests where this alias was directly selected by the router." },
+                          "direct_selection_count": { "type": "integer", "description": "Number of recent requests where the router selected this alias first." },
+                          "failover_serve_count": { "type": "integer", "description": "Number of recent requests this alias served after another alias was selected first." },
+                          "success_count": { "type": "integer", "description": "Trace-backed successes attributed to the alias that actually served the request." },
+                          "failure_count": { "type": "integer", "description": "Trace-backed failures attributed to earlier attempted aliases on successful failover, or to every attempted alias on terminal error." },
+                          "consecutive_failures": { "type": "integer", "description": "Newest-first failure streak for this alias." },
+                          "success_rate": { "type": "integer", "description": "Success rate percent derived from recent runtime outcomes." },
+                          "health_score": { "type": "integer", "description": "Heuristic runtime health score from 0 to 100." },
+                          "health_state": { "type": "string", "description": "Health band derived from recent runtime outcomes: idle when there are no outcomes, critical at 3+ consecutive failures or score < 40, degraded below 80, otherwise healthy.", "enum": ["idle", "healthy", "degraded", "critical"] },
+                          "last_selected_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "last_failover_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "last_used_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "last_success_at": { "type": "string", "format": "date-time", "nullable": true },
+                          "last_failure_at": { "type": "string", "format": "date-time", "nullable": true }
+                        }
+                      }
+                    },
+                    "recent_requests": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["span_id", "trace_id", "started_at", "status", "duration_ms", "provider_name", "model", "attempt_count", "used_failover"],
+                        "properties": {
+                          "span_id": { "type": "string", "format": "uuid" },
+                          "trace_id": { "type": "string", "format": "uuid" },
+                          "started_at": { "type": "string", "format": "date-time" },
+                          "status": { "type": "string" },
+                          "duration_ms": { "type": "integer" },
+                          "provider_name": { "type": "string", "description": "Alias that actually served the request. Empty when a terminal failure completed without any alias serving successfully." },
+                          "selected_provider": { "type": "string", "description": "Alias chosen first by the router before any failover." },
+                          "model": { "type": "string" },
+                          "attempt_count": { "type": "integer" },
+                          "used_failover": { "type": "boolean" },
+                          "failover_providers": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/v1/agents/{id}/wake": {
@@ -290,7 +487,56 @@
         "tags": ["Providers"],
         "summary": "List available models",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
-        "responses": { "200": { "description": "Model list" } }
+        "responses": {
+          "200": {
+            "description": "Model list with optional reasoning capability metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "reasoning": {
+                            "type": "object",
+                            "properties": {
+                              "levels": {
+                                "type": "array",
+                                "items": { "type": "string" }
+                              },
+                              "default_effort": { "type": "string" }
+                            }
+                          }
+                        },
+                        "required": ["id"]
+                      }
+                    },
+                    "reasoning_defaults": {
+                      "type": "object",
+                      "description": "Provider-owned default reasoning policy returned when the provider has saved defaults and at least one discovered model exposes reasoning capability metadata.",
+                      "properties": {
+                        "effort": {
+                          "type": "string",
+                          "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+                        },
+                        "fallback": {
+                          "type": "string",
+                          "enum": ["downgrade", "off", "provider_default"]
+                        }
+                      }
+                    }
+                  },
+                  "required": ["models"]
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/providers/{id}/verify": {
@@ -640,7 +886,45 @@
           "description": { "type": "string" },
           "provider": { "type": "string", "description": "LLM provider name" },
           "model": { "type": "string", "description": "Model ID" },
-          "system_prompt": { "type": "string" }
+                  "system_prompt": { "type": "string" },
+                  "other_config": {
+                    "type": "object",
+                    "description": "Optional per-agent JSON config.",
+                    "properties": {
+                      "thinking_level": {
+                        "type": "string",
+                        "enum": ["off", "low", "medium", "high"],
+                        "description": "Legacy coarse reasoning shim. Unset means off."
+                      },
+                      "reasoning": {
+                        "type": "object",
+                        "description": "Capability-aware reasoning policy for GPT-5/Codex models.",
+                        "properties": {
+                          "override_mode": {
+                            "type": "string",
+                            "enum": ["inherit", "custom"]
+                          },
+                          "effort": {
+                            "type": "string",
+                            "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+                          },
+                          "fallback": {
+                            "type": "string",
+                            "enum": ["downgrade", "off", "provider_default"]
+                          }
+                        }
+                      },
+                      "chatgpt_oauth_routing": {
+                        "type": "object",
+                        "description": "Optional agent-side routing override for ChatGPT OAuth providers. The main provider field remains the preferred/default account, while provider settings may supply inherited defaults.",
+                "properties": {
+                  "override_mode": { "type": "string", "enum": ["inherit", "custom"] },
+                  "strategy": { "type": "string", "enum": ["manual", "primary_first", "round_robin", "priority_order"] },
+                  "extra_provider_names": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            }
+          }
         }
       },
       "ProviderInput": {
@@ -649,10 +933,42 @@
         "properties": {
           "name": { "type": "string", "description": "Unique provider slug" },
           "display_name": { "type": "string" },
-          "provider_type": { "type": "string", "enum": ["anthropic_native", "openai_compat", "gemini_native", "groq", "deepseek", "mistral", "xai", "ollama"] },
+          "provider_type": { "type": "string", "enum": ["anthropic_native", "openai_compat", "gemini_native", "openrouter", "groq", "deepseek", "mistral", "xai", "minimax_native", "cohere", "perplexity", "dashscope", "bailian", "chatgpt_oauth", "claude_cli", "suno", "yescale", "zai", "zai_coding", "ollama", "ollama_cloud", "acp"] },
           "api_base": { "type": "string" },
           "api_key": { "type": "string" },
-          "enabled": { "type": "boolean", "default": true }
+          "enabled": { "type": "boolean", "default": true },
+          "settings": {
+            "type": "object",
+            "description": "Provider-specific settings such as provider-owned Codex pool defaults and reasoning defaults.",
+            "properties": {
+              "reasoning_defaults": {
+                "type": "object",
+                "properties": {
+                  "effort": {
+                    "type": "string",
+                    "enum": ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"]
+                  },
+                  "fallback": {
+                    "type": "string",
+                    "enum": ["downgrade", "off", "provider_default"]
+                  }
+                }
+              },
+              "codex_pool": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": ["manual", "primary_first", "round_robin", "priority_order"]
+                  },
+                  "extra_provider_names": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "Error": {
@@ -673,6 +989,10 @@
       },
       "NotFound": {
         "description": "Resource not found",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "Conflict": {
+        "description": "Resource state conflict",
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
       }
     }

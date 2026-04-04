@@ -1,0 +1,191 @@
+{
+  "title": "Bộ nhớ",
+  "description": "Duyệt và quản lý tài liệu bộ nhớ, đoạn trích và nhúng của agent",
+  "search": "Tìm kiếm",
+  "create": "Tạo",
+  "indexAll": "Lập chỉ mục tất cả",
+  "indexing": "Đang lập chỉ mục...",
+  "emptyTitle": "Không có tài liệu bộ nhớ",
+  "emptyAgentDescription": "Agent này chưa có tài liệu bộ nhớ.",
+  "emptyGlobalDescription": "Không tìm thấy tài liệu bộ nhớ trên bất kỳ agent nào.",
+  "filters": {
+    "agent": "Agent",
+    "allAgents": "Tất cả agent",
+    "scope": "Phạm vi",
+    "allScope": "Tất cả (toàn cục + cá nhân)",
+    "selectAgent": "Chọn agent"
+  },
+  "tabs": {
+    "documents": "Tài liệu",
+    "knowledgeGraph": "Đồ thị tri thức"
+  },
+  "columns": {
+    "path": "Đường dẫn",
+    "agent": "Agent",
+    "scope": "Phạm vi",
+    "hash": "Mã băm",
+    "updated": "Cập nhật",
+    "actions": "Thao tác"
+  },
+  "scopeLabel": {
+    "personal": "Cá nhân",
+    "global": "Toàn cục"
+  },
+  "delete": {
+    "title": "Xóa tài liệu bộ nhớ",
+    "description": "Bạn có chắc muốn xóa \"{{path}}\"? Tất cả đoạn trích và nhúng liên quan cũng sẽ bị xóa.",
+    "confirmLabel": "Xóa"
+  },
+  "createDialog": {
+    "title": "Tạo tài liệu bộ nhớ",
+    "path": "Đường dẫn *",
+    "pathPlaceholder": "vd. notes/project-overview.md",
+    "content": "Nội dung *",
+    "contentPlaceholder": "Nội dung tài liệu...",
+    "agentId": "Agent *",
+    "agentIdPlaceholder": "Chọn agent...",
+    "scope": "Phạm vi",
+    "existingScope": "Phạm vi hiện có",
+    "customScope": "Tùy chỉnh",
+    "selectGroupUser": "Chọn nhóm/người dùng...",
+    "scopeHint": "Toàn cục = chia sẻ với mọi người dùng. Cá nhân = giới hạn cho người dùng hoặc chat nhóm cụ thể.",
+    "autoIndex": "Tự động lập chỉ mục sau khi tạo",
+    "agentRequired": "Vui lòng chọn agent",
+    "pathRequired": "Đường dẫn là bắt buộc",
+    "contentRequired": "Nội dung là bắt buộc",
+    "cancel": "Hủy",
+    "create": "Tạo",
+    "creating": "Đang tạo..."
+  },
+  "documentDialog": {
+    "title": "Tài liệu bộ nhớ",
+    "path": "Đường dẫn:",
+    "agent": "Agent:",
+    "scope": "Phạm vi:",
+    "hash": "Mã băm:",
+    "updated": "Cập nhật:",
+    "content": "Nội dung",
+    "chunks": "Đoạn trích ({{count}})",
+    "chunkIndex": "Đoạn {{index}}",
+    "noChunks": "Không có đoạn trích",
+    "embedded": "Đã nhúng",
+    "noEmbedding": "Chưa nhúng"
+  },
+  "searchDialog": {
+    "title": "Tìm kiếm bộ nhớ",
+    "query": "Truy vấn tìm kiếm",
+    "queryPlaceholder": "Nhập truy vấn tìm kiếm...",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "Lọc theo agent...",
+    "limit": "Giới hạn",
+    "search": "Tìm kiếm",
+    "searching": "Đang tìm kiếm...",
+    "results": "Kết quả",
+    "noResults": "Không tìm thấy kết quả",
+    "similarity": "tương đồng",
+    "path": "Đường dẫn:"
+  },
+  "kg": {
+    "pageTitle": "Knowledge Graph",
+    "pageDescription": "Khám phá các thực thể và quan hệ được trích xuất từ bộ nhớ agent.",
+    "selectAgentTitle": "Chọn agent",
+    "selectAgentDescription": "Chọn agent để xem đồ thị tri thức.",
+    "emptyTitle": "Không có thực thể",
+    "emptyDescription": "Chưa có thực thể đồ thị tri thức nào cho agent này.",
+    "emptySearchDescription": "Không có thực thể nào khớp với tìm kiếm của bạn.",
+    "stats": {
+      "entities": "Thực thể: {{count}}",
+      "relations": "Quan hệ: {{count}}"
+    },
+    "search": {
+      "placeholder": "Tìm kiếm thực thể...",
+      "button": "Tìm kiếm",
+      "clear": "Xóa"
+    },
+    "refresh": "Làm mới",
+    "extract": "Trích xuất",
+    "columns": {
+      "name": "Tên",
+      "type": "Loại",
+      "description": "Mô tả",
+      "confidence": "Độ tin cậy",
+      "actions": "Thao tác",
+      "observations": "Quan sát",
+      "relations": "Quan hệ"
+    },
+    "deleteEntity": {
+      "title": "Xóa thực thể",
+      "description": "Xóa \"{{name}}\"? Tất cả quan hệ liên quan cũng sẽ bị xóa.",
+      "confirmLabel": "Xóa"
+    },
+    "entity": {
+      "externalId": "ID ngoài:",
+      "confidence": "Độ tin cậy:",
+      "description": "Mô tả:",
+      "source": "Nguồn:",
+      "properties": "Thuộc tính:",
+      "relations": "Quan hệ",
+      "traverse": "Duyệt (2 bước)",
+      "traversing": "Đang duyệt...",
+      "loading": "Đang tải...",
+      "noRelations": "Không tìm thấy quan hệ.",
+      "traversalResults": "Kết quả duyệt ({{count}})",
+      "direction": {
+        "outgoing": "→ đi ra",
+        "incoming": "← đi vào"
+      },
+      "columns": {
+        "direction": "Chiều",
+        "relation": "Quan hệ",
+        "target": "Đích",
+        "confidence": "Độ tin cậy"
+      }
+    },
+    "extractDialog": {
+      "title": "Trích xuất thực thể từ văn bản",
+      "providerLabel": "Provider trích xuất",
+      "modelLabel": "Mô hình trích xuất",
+      "textLabel": "Văn bản để trích xuất",
+      "textPlaceholder": "Dán nội dung hội thoại, ghi chú hoặc bất kỳ văn bản nào để trích xuất thực thể và quan hệ...",
+      "extract": "Trích xuất",
+      "extracting": "Đang trích xuất...",
+      "cancel": "Hủy",
+      "agentId": "Agent ID",
+      "agentIdPlaceholder": "Để trống cho toàn cục"
+    },
+    "graphView": {
+      "loading": "Đang tải đồ thị...",
+      "empty": "Không có thực thể nào để hiển thị",
+      "nodes": "{{count}} nút",
+      "edges": "{{count}} cạnh"
+    }
+  },
+  "toast": {
+    "created": "Đã tạo tài liệu bộ nhớ",
+    "deleted": "Đã xóa tài liệu bộ nhớ",
+    "indexed": "Đã lập chỉ mục tất cả tài liệu",
+    "failedCreate": "Không thể tạo tài liệu",
+    "failedDelete": "Không thể xóa tài liệu",
+    "failedIndex": "Không thể lập chỉ mục tài liệu",
+    "entitySaved": "Đã lưu thực thể",
+    "entitySaveFailed": "Không thể lưu thực thể",
+    "entityDeleted": "Đã xóa thực thể",
+    "entityDeleteFailed": "Không thể xóa thực thể",
+    "extractionComplete": "Trích xuất hoàn tất",
+    "extractionFailed": "Trích xuất thất bại",
+    "traversalFailed": "Duyệt thất bại",
+    "unknownError": "Lỗi không xác định",
+    "docCreated": "Đã tạo tài liệu",
+    "docCreateFailed": "Không thể tạo tài liệu",
+    "docUpdated": "Đã cập nhật tài liệu",
+    "docUpdateFailed": "Không thể cập nhật tài liệu",
+    "docDeleted": "Đã xóa tài liệu",
+    "docDeleteFailed": "Không thể xóa tài liệu",
+    "docIndexed": "Đã lập chỉ mục tài liệu",
+    "docIndexFailed": "Không thể lập chỉ mục tài liệu",
+    "allIndexed": "Đã lập chỉ mục tất cả tài liệu",
+    "allIndexFailed": "Không thể lập chỉ mục tất cả",
+    "searchFailed": "Tìm kiếm thất bại",
+    "docLoadFailed": "Không thể tải tài liệu"
+  }
+}

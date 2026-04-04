@@ -160,11 +160,13 @@ func extractBoolOpt(opts map[string]any, key string) bool {
 // bridgeContextFromOpts builds a BridgeContext from the Options map.
 func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 	return BridgeContext{
-		AgentID:  extractStringOpt(opts, OptAgentID),
-		UserID:   extractStringOpt(opts, OptUserID),
-		Channel:  extractStringOpt(opts, OptChannel),
-		ChatID:   extractStringOpt(opts, OptChatID),
-		PeerKind: extractStringOpt(opts, OptPeerKind),
+		AgentID:   extractStringOpt(opts, OptAgentID),
+		UserID:    extractStringOpt(opts, OptUserID),
+		Channel:   extractStringOpt(opts, OptChannel),
+		ChatID:    extractStringOpt(opts, OptChatID),
+		PeerKind:  extractStringOpt(opts, OptPeerKind),
+		Workspace: extractStringOpt(opts, OptWorkspace),
+		TenantID:  extractStringOpt(opts, OptTenantID),
 	}
 }
 
@@ -270,7 +272,8 @@ func ResetCLISession(baseWorkDir, sessionKey string) {
 	}
 }
 
-// filterCLIEnv removes CLAUDE* env vars to prevent nested session conflicts.
+// filterCLIEnv removes CLAUDE* env vars to prevent nested session conflicts,
+// but preserves CLAUDE_CODE_OAUTH_TOKEN for authentication.
 func filterCLIEnv(environ []string) []string {
 	var filtered []string
 	for _, e := range environ {
@@ -278,8 +281,9 @@ func filterCLIEnv(environ []string) []string {
 		if before, _, ok := strings.Cut(e, "="); ok {
 			key = before
 		}
-		// Filter out variables that could cause nested CLI conflicts
-		if strings.HasPrefix(key, "CLAUDE") {
+		// Filter out variables that could cause nested CLI conflicts,
+		// but preserve auth token needed by the subprocess.
+		if strings.HasPrefix(key, "CLAUDE") && key != "CLAUDE_CODE_OAUTH_TOKEN" {
 			continue
 		}
 		filtered = append(filtered, e)

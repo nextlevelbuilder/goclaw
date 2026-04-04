@@ -131,6 +131,110 @@ func TestBridgeToolNaming(t *testing.T) {
 	}
 }
 
+func TestIsPlaceholderValue(t *testing.T) {
+	// Should be detected as placeholder.
+	placeholders := []string{
+		"null", "None", "nil", "UNDEFINED", "n/a",
+		"optional", "Optional", "OPTIONAL",
+		"skip", "Skip",
+		"__OMIT__", "__skip__", "__EMPTY__",
+		"http://example.com", "https://example.com",
+		"http://localhost", "https://localhost",
+		"PLACEHOLDER", "NOT_SET", "DO_NOT_SEND",
+	}
+	for _, s := range placeholders {
+		if !isPlaceholderValue(s) {
+			t.Errorf("expected isPlaceholderValue(%q) = true", s)
+		}
+	}
+
+	// Should NOT be detected as placeholder (real values).
+	realValues := []string{
+		"", // empty string handled separately by type-aware check
+		"sk-abc123",
+		"my-proxy.example.com",
+		"https://api.reviewweb.site/v1",
+		"gpt-4o-mini",
+		"bullet",
+		"hello world",
+		"ab", // too short for all-caps check
+	}
+	for _, s := range realValues {
+		if isPlaceholderValue(s) {
+			t.Errorf("expected isPlaceholderValue(%q) = false", s)
+		}
+	}
+}
+
+func TestStripEmptyOptionalArgs(t *testing.T) {
+	bt := &BridgeTool{
+		requiredSet: map[string]bool{"url": true},
+		inputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"url":      map[string]any{"type": "string"},
+				"api_key":  map[string]any{"type": "string"},
+				"timeout":  map[string]any{"type": "number"},
+				"debug":    map[string]any{"type": "boolean"},
+				"keywords": map[string]any{"type": "string"},
+			},
+		},
+	}
+
+	args := map[string]any{
+		"url":      "https://example.com",
+		"api_key":  "optional",    // placeholder → strip
+		"timeout":  nil,           // nil → strip
+		"debug":    true,          // real boolean → keep
+		"keywords": "",            // empty string for string-typed → keep
+	}
+
+	cleaned := bt.stripEmptyOptionalArgs(args)
+
+	if cleaned["url"] != "https://example.com" {
+		t.Error("required param 'url' should be preserved")
+	}
+	if _, ok := cleaned["api_key"]; ok {
+		t.Error("placeholder 'optional' should be stripped for api_key")
+	}
+	if _, ok := cleaned["timeout"]; ok {
+		t.Error("nil should be stripped for timeout")
+	}
+	if cleaned["debug"] != true {
+		t.Error("real boolean value should be preserved")
+	}
+	if v, ok := cleaned["keywords"]; !ok || v != "" {
+		t.Error("empty string should be kept for string-typed optional param 'keywords'")
+	}
+}
+
+func TestStripEmptyOptionalArgs_EmptyStringNonString(t *testing.T) {
+	bt := &BridgeTool{
+		requiredSet: map[string]bool{},
+		inputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"timeout": map[string]any{"type": "number"},
+				"count":   map[string]any{"type": "integer"},
+			},
+		},
+	}
+
+	args := map[string]any{
+		"timeout": "",
+		"count":   "",
+	}
+
+	cleaned := bt.stripEmptyOptionalArgs(args)
+
+	if _, ok := cleaned["timeout"]; ok {
+		t.Error("empty string should be stripped for number-typed param")
+	}
+	if _, ok := cleaned["count"]; ok {
+		t.Error("empty string should be stripped for integer-typed param")
+	}
+}
+
 func TestEnsureMCPPrefix(t *testing.T) {
 	tests := []struct {
 		name       string

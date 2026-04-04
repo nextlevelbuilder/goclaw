@@ -12,6 +12,7 @@ import (
 	"github.com/slack-go/slack/socketmode"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 func (c *Channel) handleEventsAPI(evt socketmode.Event) {
@@ -32,6 +33,8 @@ func (c *Channel) handleEventsAPI(evt socketmode.Event) {
 }
 
 func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
+	ctx := context.Background()
+	ctx = store.WithTenantID(ctx, c.TenantID())
 	// For message_changed: extract user/text from the nested Message field.
 	// Only process if the edit introduces a new @bot mention.
 	if ev.SubType == "message_changed" {
@@ -83,24 +86,22 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		peerKind = "direct"
 	}
 
-	// Resolve display name; strip "|" to prevent compound senderID corruption
-	displayName := strings.ReplaceAll(c.resolveDisplayName(senderID), "|", "_")
-	compoundSenderID := fmt.Sprintf("%s|%s", senderID, displayName)
+	displayName := c.resolveDisplayName(senderID)
 
 	// Policy check
 	if isDM {
-		if !c.checkDMPolicy(senderID, channelID) {
+		if !c.checkDMPolicy(ctx, senderID, channelID) {
 			return
 		}
 	} else {
-		if !c.checkGroupPolicy(senderID, channelID) {
+		if !c.checkGroupPolicy(ctx, senderID, channelID) {
 			return
 		}
 	}
 
 	// For DMs, apply global allowlist filter (allow_from contains user IDs).
 	// For groups, skip — group policy already handles channel/user filtering.
-	if isDM && !c.IsAllowed(compoundSenderID) {
+	if isDM && !c.IsAllowed(senderID) {
 		slog.Debug("slack message rejected by allowlist",
 			"user_id", senderID, "display_name", displayName)
 		return
@@ -163,7 +164,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 
 	// Determine local_key and thread context
 	localKey := channelID
-	if !isDM && threadTS != "" {
+	if threadTS != "" {
 		localKey = fmt.Sprintf("%s:thread:%s", channelID, threadTS)
 	}
 
@@ -190,13 +191,14 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 				Sender:    displayName,
 				SenderID:  senderID,
 				Body:      content,
+				Media:     mediaPaths,
 				Timestamp: time.Now(),
 				MessageID: ev.TimeStamp,
 			}, c.historyLimit)
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(context.Background(), c.Type(), c.Name(), senderID, senderID, displayName, "", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group", "user", "", "")
 			}
 
 			slog.Debug("slack group message recorded (no mention)",
@@ -235,6 +237,10 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 	if peerKind == "group" {
 		annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
 		if c.historyLimit > 0 {
+			// Collect media from pending history (files downloaded by earlier non-mentioned messages).
+			if histMediaPaths := c.groupHistory.CollectMedia(localKey); len(histMediaPaths) > 0 {
+				mediaPaths = append(mediaPaths, histMediaPaths...)
+			}
 			finalContent = c.groupHistory.BuildContext(localKey, annotated, c.historyLimit)
 		} else {
 			finalContent = annotated
@@ -245,6 +251,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"message_id":      ev.TimeStamp,
 		"user_id":         senderID,
 		"username":        displayName,
+		"display_name":    displayName,
 		"channel_id":      channelID,
 		"is_dm":           fmt.Sprintf("%t", isDM),
 		"local_key":       localKey,
@@ -256,7 +263,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 
 	// Message debounce: batch rapid messages per-thread
 	if c.debounceDelay > 0 {
-		if c.debounceMessage(localKey, compoundSenderID, channelID, finalContent, mediaPaths, metadata, peerKind) {
+		if c.debounceMessage(localKey, senderID, channelID, finalContent, mediaPaths, metadata, peerKind) {
 			// Record thread participation even when debounced
 			if peerKind == "group" && replyThreadTS != "" {
 				participKey := channelID + ":particip:" + replyThreadTS
@@ -266,7 +273,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		}
 	}
 
-	c.HandleMessage(compoundSenderID, channelID, finalContent, mediaPaths, metadata, peerKind)
+	c.HandleMessage(senderID, channelID, finalContent, mediaPaths, metadata, peerKind)
 
 	// Record thread participation for auto-reply cache
 	if peerKind == "group" {

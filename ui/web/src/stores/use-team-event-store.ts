@@ -1,7 +1,7 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 const MAX_EVENTS = 500;
-const PERSIST_KEY = "goclaw:recentEvents";
 const PERSIST_MAX = 20;
 
 /** A single captured WS event entry */
@@ -52,56 +52,52 @@ function extractChatId(payload: unknown): string | null {
   return null;
 }
 
-function loadPersistedEvents(): TeamEventEntry[] {
-  try {
-    const raw = localStorage.getItem(PERSIST_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as TeamEventEntry[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.slice(-PERSIST_MAX);
-  } catch {
-    return [];
-  }
-}
+// Counter seeded from persisted state after hydration
+let counter = 0;
 
-function persistEvents(events: TeamEventEntry[]) {
-  try {
-    const recent = events.slice(-PERSIST_MAX);
-    localStorage.setItem(PERSIST_KEY, JSON.stringify(recent));
-  } catch {
-    // storage full or unavailable — ignore
-  }
-}
+export const useTeamEventStore = create<TeamEventState>()(
+  persist(
+    (set) => ({
+      events: [],
+      paused: false,
 
-const initialEvents = loadPersistedEvents();
-let counter = initialEvents.length > 0 ? initialEvents[initialEvents.length - 1]!.id : 0;
+      addEvent: (event, payload) => {
+        set((s) => {
+          if (s.paused) return s;
+          const entry: TeamEventEntry = {
+            id: ++counter,
+            event,
+            payload,
+            timestamp: Date.now(),
+            teamId: extractTeamId(payload),
+            userId: extractUserId(payload),
+            chatId: extractChatId(payload),
+          };
+          const next = [...s.events, entry];
+          const trimmed = next.length > MAX_EVENTS ? next.slice(next.length - MAX_EVENTS) : next;
+          return { events: trimmed };
+        });
+      },
 
-export const useTeamEventStore = create<TeamEventState>((set) => ({
-  events: initialEvents,
-  paused: false,
+      clear: () => {
+        set({ events: [] });
+      },
 
-  addEvent: (event, payload) => {
-    set((s) => {
-      if (s.paused) return s;
-      const entry: TeamEventEntry = {
-        id: ++counter,
-        event,
-        payload,
-        timestamp: Date.now(),
-        teamId: extractTeamId(payload),
-        userId: extractUserId(payload),
-        chatId: extractChatId(payload),
-      };
-      const next = [...s.events, entry];
-      const trimmed = next.length > MAX_EVENTS ? next.slice(next.length - MAX_EVENTS) : next;
-      persistEvents(trimmed);
-      return { events: trimmed };
-    });
-  },
-
-  clear: () => {
-    localStorage.removeItem(PERSIST_KEY);
-    set({ events: [] });
-  },
-  setPaused: (paused) => set({ paused }),
-}));
+      setPaused: (paused) => set({ paused }),
+    }),
+    {
+      name: "goclaw:recentEvents", // keep existing localStorage key for backward compat
+      partialize: (state) => ({
+        // Only persist the most recent events — not transient paused flag
+        events: state.events.slice(-PERSIST_MAX),
+      }),
+      onRehydrateStorage: () => (state) => {
+        // Seed the counter from the highest persisted event id
+        if (state?.events && state.events.length > 0) {
+          const lastEvent = state.events[state.events.length - 1];
+          if (lastEvent) counter = lastEvent.id;
+        }
+      },
+    }
+  )
+);

@@ -19,6 +19,15 @@ if [ "$(id -u)" = "0" ] && [ -d "$RUNTIME_DIR" ]; then
   chown -R goclaw:goclaw "$RUNTIME_DIR/pip" "$RUNTIME_DIR/npm-global" "$RUNTIME_DIR/pip-cache" 2>/dev/null || true
 fi
 
+# Fix workspace directory ownership: handle dirs created by root in previous
+# container lifecycle or via manual docker exec.
+# Security: -type d = real directories only (not symlinks).
+# find default -P mode = never follow symlinks. -maxdepth 5 limits traversal.
+if [ "$(id -u)" = "0" ] && [ -d /app/workspace ]; then
+  find /app/workspace -maxdepth 5 -type d -not -user goclaw \
+    -exec chown goclaw:goclaw {} + 2>/dev/null || true
+fi
+
 # Python: allow agent to pip install to writable target dir
 export PYTHONPATH="$RUNTIME_DIR/pip:${PYTHONPATH:-}"
 export PIP_TARGET="$RUNTIME_DIR/pip"
@@ -70,6 +79,25 @@ if [ -x /app/pkg-helper ] && [ "$(id -u)" = "0" ]; then
     echo "ERROR: pkg-helper failed to start (PID $PKG_PID)"
     kill "$PKG_PID" 2>/dev/null || true
   fi
+fi
+
+# Copy Claude CLI credentials from root-owned read-only mount to goclaw-accessible location.
+# /app/.claude is a symlink → /app/data/.claude (writable volume, see Dockerfile).
+# Uses su-exec to copy as goclaw user because sandbox overlay's cap_add override
+# may remove CHOWN needed by install(1). umask 077 ensures file is created with 600.
+if [ -f /app/.claude-host/.credentials.json ]; then
+  (mkdir -p /app/data/.claude \
+    && if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+         su-exec goclaw sh -c 'umask 077 && cp /app/.claude-host/.credentials.json /app/data/.claude/.credentials.json'
+       else
+         ( umask 077 && cp /app/.claude-host/.credentials.json /app/data/.claude/.credentials.json )
+       fi \
+    && echo "Claude CLI credentials synced from host.") || echo "WARNING: Claude credentials copy failed (non-fatal)"
+fi
+
+# Warn if Claude credentials are mounted but CLI binary is missing (forgot --build).
+if [ -d /app/.claude-host ] && ! command -v claude >/dev/null 2>&1; then
+  echo "WARNING: Claude credentials mounted but claude CLI not installed. Rebuild with: --build"
 fi
 
 # Run command with privilege drop (su-exec in Docker, direct otherwise).

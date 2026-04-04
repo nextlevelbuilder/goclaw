@@ -2,13 +2,13 @@
 
 ## Overview
 
-Extended thinking allows LLM providers to "think out loud" before producing a final response. When enabled, the model generates internal reasoning tokens that improve response quality for complex tasks — at the cost of additional token usage and latency. GoClaw supports extended thinking across multiple providers with a unified `thinking_level` configuration.
+Extended thinking allows LLM providers to "think out loud" before producing a final response. When enabled, the model generates internal reasoning tokens that improve response quality for complex tasks at the cost of additional token usage and latency. GoClaw now supports both the legacy coarse `thinking_level` setting and a provider-first reasoning policy for capability-aware GPT-5/Codex control.
 
 ---
 
 ## 1. Configuration
 
-Thinking is controlled per-agent through the `thinking_level` setting.
+The reusable default now lives on the provider in `settings.reasoning_defaults`. Agents consume that default by inheriting it, or store a custom override in `other_config.reasoning`. `thinking_level` remains the backward-compatible coarse shim for older builds.
 
 | Level | Behavior |
 |-------|----------|
@@ -17,26 +17,74 @@ Thinking is controlled per-agent through the `thinking_level` setting.
 | `medium` | Moderate thinking — balanced reasoning |
 | `high` | Maximum thinking — deep reasoning for complex tasks |
 
-The setting can be configured:
-- **Per-agent**: In the agent's configuration (applies to all users of that agent)
-- **Per-user override**: Via `user_agent_overrides` table (reserved for future use)
+### Provider default
+
+```json
+{
+  "provider_type": "chatgpt_oauth",
+  "settings": {
+    "reasoning_defaults": {
+      "effort": "high",
+      "fallback": "provider_default"
+    }
+  }
+}
+```
+
+### Agent inherits provider default
+
+```json
+{
+  "other_config": {
+    "reasoning": {
+      "override_mode": "inherit"
+    }
+  }
+}
+```
+
+### Agent custom override
+
+```json
+{
+  "other_config": {
+    "thinking_level": "high",
+    "reasoning": {
+      "override_mode": "custom",
+      "effort": "xhigh",
+      "fallback": "downgrade"
+    }
+  }
+}
+```
+
+Rules:
+- Unset provider defaults and unset agent reasoning both resolve to `off`.
+- `settings.reasoning_defaults` is provider-owned and reusable across agents.
+- `reasoning.override_mode` accepts `inherit|custom`.
+- `thinking_level` still accepts `off|low|medium|high`.
+- `reasoning.effort` accepts `off|auto|none|minimal|low|medium|high|xhigh`.
+- `reasoning.fallback` accepts `downgrade|off|provider_default`.
+- Existing `reasoning` payloads without `override_mode` are treated as custom overrides for backward compatibility.
+- Read path resolves provider defaults first, then applies agent inherit/custom semantics, then falls back to legacy `thinking_level`.
+- Write path keeps a derived coarse `thinking_level` only for custom agent overrides so rollback to older GoClaw builds stays safe.
 
 ---
 
 ## 2. Provider Support
 
-Each provider maps the abstract `thinking_level` to its own implementation parameters.
+Each provider maps the normalized reasoning policy to its own implementation parameters.
 
 ```mermaid
 flowchart TD
-    CONFIG["Agent config:<br/>thinking_level = medium"] --> CHECK{"Provider supports<br/>thinking?"}
+    CONFIG["Provider defaults +<br/>agent inherit/custom"] --> CHECK{"Provider supports<br/>thinking?"}
     CHECK -->|No| SKIP["Send request<br/>without thinking"]
     CHECK -->|Yes| MAP{"Provider type?"}
 
     MAP -->|Anthropic| ANTH["Budget tokens: 10,000<br/>Header: anthropic-beta<br/>Strip temperature"]
-    MAP -->|OpenAI-compat| OAI["Map to reasoning_effort<br/>(low/medium/high)"]
+    MAP -->|OpenAI-compat| OAI["Capability-aware effort<br/>or provider default"]
     MAP -->|DashScope| DASH["enable_thinking: true<br/>Budget: 16,384 tokens<br/>⚠ Model-specific + tools limitation"]
-    MAP -->|Codex| CODEX["reasoning_tokens tracked<br/>via Responses API"]
+    MAP -->|Codex| CODEX["Capability-aware effort<br/>+ trace metadata"]
 
     ANTH --> SEND["Send to LLM"]
     OAI --> SEND
@@ -58,14 +106,25 @@ When thinking is enabled:
 - Strips `temperature` parameter (Anthropic requirement — cannot use temperature with thinking)
 - Auto-adjusts `max_tokens` to accommodate thinking budget (budget + 8,192 buffer)
 
-### OpenAI-Compatible (OpenAI, Groq, DeepSeek, etc.)
+### OpenAI-Compatible and Codex (GPT-5 / Codex families)
 
-Maps `thinking_level` directly to `reasoning_effort`:
-- `low` → `reasoning_effort: "low"`
-- `medium` → `reasoning_effort: "medium"`
-- `high` → `reasoning_effort: "high"`
+Known GPT-5/Codex models use a static capability registry. The runtime resolves:
+- requested effort
+- actual effective effort
+- fallback policy used
+- whether the model default was used
+- whether the source was the provider default or an agent override
 
-Reasoning content is returned in the `reasoning_content` field of the response delta during streaming.
+If the model is known:
+- supported efforts pass through unchanged
+- unsupported efforts are normalized via `downgrade`, `off`, or `provider_default`
+- `auto` means "use the model default effort"
+
+If the model is unknown:
+- explicit non-`auto` effort is passed through as requested
+- `auto` leaves provider-default reasoning untouched
+
+Reasoning content still streams in the provider-native format, and span metadata now records the source plus requested versus effective effort.
 
 ### DashScope (Alibaba Qwen)
 
@@ -86,11 +145,13 @@ Other models (e.g., `qwen3-plus`, `qwen3-turbo`) silently skip thinking injectio
 
 **Important limitation**: DashScope does not support streaming when tools are present. When an agent has tools enabled and thinking is active, the provider automatically falls back to non-streaming mode (single `Chat()` call) and synthesizes chunk callbacks to maintain the event flow.
 
-### Codex (Alibaba AI Reasoning)
+### Codex (ChatGPT OAuth Responses API)
 
-Codex natively supports extended reasoning through its Responses API. Thinking/reasoning tokens are streamed as discrete `reasoning` events with summary fragments.
+Codex natively supports extended reasoning through its Responses API. Thinking and reasoning tokens are streamed as discrete `reasoning` events with summary fragments.
 
 **Token tracking**: Reasoning token count is exposed in `response.completed` / `response.incomplete` events as `OutputTokensDetails.ReasoningTokens` and accessible via `ChatResponse.Usage.ThinkingTokens`.
+
+**Model metadata**: `/v1/providers/{id}/models` is now the backend source of truth for the ChatGPT OAuth model list and any known reasoning capabilities.
 
 ---
 
@@ -162,6 +223,22 @@ OpenAI-compatible providers handle thinking/reasoning content as metadata. The `
 | Anthropic | Temperature parameter stripped when thinking is enabled |
 | All | Thinking tokens count against the context window budget |
 | All | Thinking increases latency and cost proportional to the budget level |
+| GPT-5/Codex unknown models | GoClaw allows explicit effort passthrough but does not claim a capability contract |
+
+---
+
+## 6. Observability
+
+Each LLM span can now include a `metadata.reasoning` section with:
+- `source`
+- `requested_effort`
+- `effective_effort`
+- `fallback`
+- `reason`
+- `supported_levels`
+- `used_provider_default`
+
+This makes silent downgrades or provider-default decisions visible in traces instead of leaving them implicit.
 
 ---
 
@@ -174,6 +251,9 @@ OpenAI-compatible providers handle thinking/reasoning content as metadata. The `
 | `internal/providers/anthropic_stream.go` | Anthropic streaming: thinking_delta handling, raw block accumulation |
 | `internal/providers/anthropic_request.go` | Anthropic request: thinking block preservation for tool loops |
 | `internal/providers/openai.go` | OpenAI-compat: reasoning_effort mapping, reasoning_content streaming |
+| `internal/providers/reasoning_capability.go` | Static GPT-5/Codex capability registry |
+| `internal/providers/reasoning_resolution.go` | Requested-to-effective reasoning decision engine |
+| `internal/providers/reasoning_observation.go` | Trace metadata merge helpers for reasoning decisions |
 | `internal/providers/dashscope.go` | DashScope: model-specific thinking guard, budget mapping, tools+streaming fallback |
 | `internal/providers/codex.go` | Codex: reasoning event streaming, OutputTokensDetails.ReasoningTokens tracking |
 

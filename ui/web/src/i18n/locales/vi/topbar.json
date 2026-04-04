@@ -9,9 +9,26 @@
     "zh": "中文"
   },
   "logout": "Đăng xuất",
+  "logoutConfirm": "Bạn có chắc muốn đăng xuất?",
   "openMenu": "Mở menu",
   "pairingRequests": "Yêu cầu ghép nối",
   "pendingPairingRequest": "{{count}} yêu cầu ghép nối đang chờ",
   "pendingPairingRequests": "{{count}} yêu cầu ghép nối đang chờ",
+  "apiKeys": "API Keys",
+  "documents": "Tài liệu",
+  "about": {
+    "menuItem": "Giới thiệu",
+    "title": "Giới thiệu GoClaw",
+    "version": "Phiên bản",
+    "sourceCode": "Mã nguồn",
+    "license": "Giấy phép",
+    "documentation": "Tài liệu",
+    "reportBug": "Báo lỗi",
+    "upToDate": "Đã cập nhật",
+    "updateAvailable": "Có bản cập nhật: {{version}}",
+    "viewRelease": "Xem chi tiết →",
+    "releaseNotes": "Ghi chú phát hành"
+  },
+  "systemSettings": "Cài đặt hệ thống",
   "toggleTheme": "Chuyển đổi giao diện"
 }

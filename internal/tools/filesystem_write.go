@@ -13,14 +13,14 @@ import (
 
 // WriteFileTool writes content to a file, optionally through a sandbox container.
 type WriteFileTool struct {
-	workspace        string
-	restrict         bool
-	deniedPrefixes   []string // path prefixes to deny access to (e.g. .goclaw)
-	sandboxMgr       sandbox.Manager
-	contextFileIntc  *ContextFileInterceptor // nil = no virtual FS routing
-	memIntc          *MemoryInterceptor      // nil = no memory routing
-	permStore     store.ConfigPermissionStore // nil = no group write restriction
-	workspaceIntc *WorkspaceInterceptor      // nil = no team workspace validation
+	workspace       string
+	restrict        bool
+	deniedPrefixes  []string // path prefixes to deny access to (e.g. .goclaw)
+	sandboxMgr      sandbox.Manager
+	contextFileIntc *ContextFileInterceptor     // nil = no virtual FS routing
+	memIntc         *MemoryInterceptor          // nil = no memory routing
+	permStore       store.ConfigPermissionStore // nil = no group write restriction
+	workspaceIntc   *WorkspaceInterceptor       // nil = no team workspace validation
 }
 
 // DenyPaths adds path prefixes that write_file must reject.
@@ -83,7 +83,7 @@ func (t *WriteFileTool) Parameters() map[string]any {
 			},
 			"deliver": map[string]any{
 				"type":        "boolean",
-				"description": "Deliver this file to the user as an attachment. Defaults to true. Set to false for intermediate/temporary files (e.g. config, cache, temp scripts).",
+				"description": "Deliver this file to the user as an attachment. Defaults to true. Set to false ONLY for intermediate/temporary files the user will never see (e.g. config, cache, temp scripts). For any file the user requested or should receive, keep true (default).",
 			},
 		},
 		"required": []string{"path", "content"},
@@ -148,7 +148,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	// Sandbox routing (sandboxKey from ctx — thread-safe)
 	sandboxKey := ToolSandboxKeyFromCtx(ctx)
 	if t.sandboxMgr != nil && sandboxKey != "" {
-		return t.executeInSandbox(ctx, path, content, sandboxKey, deliver)
+		return t.executeInSandbox(ctx, path, content, sandboxKey, deliver, appendMode)
 	}
 
 	// Host execution — use per-user workspace from context if available
@@ -214,11 +214,15 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 	result.Deliverable = content
 	if deliver {
 		result.Media = []bus.MediaFile{{Path: resolved}}
+		// Track delivered path so message tool's self-send guard can detect duplicates.
+		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+			dm.Mark(resolved)
+		}
 	}
 	return result
 }
 
-func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, sandboxKey string, deliver bool) *Result {
+func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, sandboxKey string, deliver, appendMode bool) *Result {
 	bridge, err := t.getFsBridge(ctx, sandboxKey)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
@@ -230,11 +234,19 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 	}
 	containerPath := ResolveSandboxPath(path, containerCwd)
 
-	if err := bridge.WriteFile(ctx, containerPath, content); err != nil {
-		return ErrorResult(fmt.Sprintf("failed to write file: %v", err) + MaybeFsBridgeHint(err))
+	if err := bridge.WriteFile(ctx, containerPath, content, appendMode); err != nil {
+		verb := "write"
+		if appendMode {
+			verb = "append to"
+		}
+		return ErrorResult(fmt.Sprintf("failed to %s file: %v", verb, err) + MaybeFsBridgeHint(err))
 	}
 
-	msg := fmt.Sprintf("File written: %s (%d bytes)", path, len(content))
+	verb := "written"
+	if appendMode {
+		verb = "appended"
+	}
+	msg := fmt.Sprintf("File %s: %s (%d bytes)", verb, path, len(content))
 	if deliver {
 		msg += ". File will be automatically delivered to the user — do NOT send it again via message tool."
 	}
@@ -248,6 +260,9 @@ func (t *WriteFileTool) executeInSandbox(ctx context.Context, path, content, san
 		}
 		hostPath := filepath.Join(workspace, path)
 		result.Media = []bus.MediaFile{{Path: hostPath}}
+		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
+			dm.Mark(hostPath)
+		}
 	}
 	return result
 }

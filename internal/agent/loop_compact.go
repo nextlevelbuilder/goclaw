@@ -10,6 +10,33 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
+// compactionSummaryPrompt is the structured summarization instruction used by both
+// mid-loop compaction and background summarization. Matching OpenClaw TS compaction.ts
+// MERGE_SUMMARIES_INSTRUCTIONS + IDENTIFIER_PRESERVATION_INSTRUCTIONS.
+const compactionSummaryPrompt = `Summarize this conversation concisely for the AI agent to resume work.
+
+MUST PRESERVE:
+- Active tasks and their current status (in-progress, blocked, pending)
+- Pending subagent tasks (IDs, labels, statuses) — agent needs to know what is still running
+- Pending team task results awaiting delivery (task IDs, assignees, statuses)
+- Any "waiting for..." state — do NOT drop expectations of future results
+- Batch operation progress (e.g., "5/17 items completed")
+- The last thing the user requested and what was being done about it
+- Decisions made and their rationale
+- TODOs, open questions, and constraints
+- Any commitments or follow-ups promised
+
+IDENTIFIER PRESERVATION:
+Preserve all opaque identifiers exactly as written (no shortening or reconstruction),
+including UUIDs, hashes, IDs, tokens, API keys, hostnames, IPs, ports, URLs, and file names.
+
+PRIORITIZE recent context over older history. The agent needs to know
+what it was doing, not just what was discussed.
+
+Conversation to summarize:
+
+`
+
 // compactMessagesInPlace summarizes the first ~70% of messages into a condensed
 // summary, keeping the last ~30% intact. Operates purely on the local messages
 // slice — no session state touched, no locks needed.
@@ -63,7 +90,7 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 	resp, err := l.provider.Chat(sctx, providers.ChatRequest{
 		Messages: []providers.Message{{
 			Role:    "user",
-			Content: "Provide a concise summary of this conversation, preserving key findings, data, and context:\n\n" + sb.String(),
+			Content: compactionSummaryPrompt + sb.String(),
 		}},
 		Model:   l.model,
 		Options: map[string]any{"max_tokens": 1024, "temperature": 0.3},

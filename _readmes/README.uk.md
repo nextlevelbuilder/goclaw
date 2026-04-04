@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Додайте хоча б один GOCLAW_*_API_KEY до .env, потім:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Веб-панель за адресою http://localhost:3000
+# Веб-панель за адресою http://localhost:18790
 # Перевірка стану: curl http://localhost:18790/health
 ```
 

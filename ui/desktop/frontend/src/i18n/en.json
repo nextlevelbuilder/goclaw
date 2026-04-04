@@ -1,0 +1,27 @@
+{
+  "app": {
+    "name": "GoClaw",
+    "tagline": "AI Agent Gateway"
+  },
+  "sidebar": {
+    "agents": "Agents",
+    "teams": "Teams",
+    "newChat": "New Chat",
+    "settings": "Settings"
+  },
+  "chat": {
+    "placeholder": "Type a message...",
+    "send": "Send",
+    "stop": "Stop",
+    "thinking": "Thinking...",
+    "toolCalling": "Calling {tool}...",
+    "toolCompleted": "Completed",
+    "toolError": "Error"
+  },
+  "agent": {
+    "online": "Online",
+    "busy": "Busy",
+    "offline": "Offline",
+    "idle": "Idle"
+  }
+}

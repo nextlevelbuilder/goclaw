@@ -8,12 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	slackapi "github.com/slack-go/slack"
 	"github.com/slack-go/slack/socketmode"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -122,7 +124,7 @@ func New(cfg config.SlackConfig, msgBus *bus.MessageBus, pairingSvc store.Pairin
 		config:         cfg,
 		requireMention: requireMention,
 		pairingService: pairingSvc,
-		groupHistory:   channels.MakeHistory(channels.TypeSlack, pendingStore),
+		groupHistory:   channels.MakeHistory(channels.TypeSlack, pendingStore, base.TenantID()),
 		historyLimit:   historyLimit,
 		debounceDelay:  debounceDelay,
 		threadTTL:      threadTTL,
@@ -166,12 +168,14 @@ func (c *Channel) Start(ctx context.Context) error {
 	// Goroutine 1: Event loop
 	go func() {
 		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_event_loop")
 		c.eventLoop(smCtx)
 	}()
 
 	// Goroutine 2: Socket Mode connection with dead socket error classification
 	go func() {
 		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_socket_mode")
 		for {
 			if err := c.sm.RunContext(smCtx); err != nil {
 				if smCtx.Err() != nil {
@@ -191,6 +195,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	// Goroutine 3: Periodic sweep (every 2 minutes) for TTL-based map eviction
 	go func() {
 		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_sweep")
 		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -272,6 +277,9 @@ func (c *Channel) handleEvent(evt socketmode.Event) {
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
 	c.groupHistory.SetCompactionConfig(cfg)
 }
+
+// SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
 
 // Stop gracefully shuts down the Slack channel.
 func (c *Channel) Stop(_ context.Context) error {

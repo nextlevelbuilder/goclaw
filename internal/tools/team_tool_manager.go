@@ -40,3 +40,19 @@ type TeamToolManager struct {
 func NewTeamToolManager(teamStore store.TeamStore, agentStore store.AgentStore, msgBus *bus.MessageBus, dataDir string) *TeamToolManager {
 	return &TeamToolManager{teamStore: teamStore, agentStore: agentStore, msgBus: msgBus, dataDir: dataDir}
 }
+
+// ============================================================
+// TeamToolBackend exported wrappers
+// These thin wrappers satisfy the TeamToolBackend interface
+// while keeping the unexported originals for internal use
+// (WorkspaceInterceptor, PostTurnProcessor, etc.).
+// ============================================================
+
+func (m *TeamToolManager) Store() store.TeamStore                { return m.teamStore }
+func (m *TeamToolManager) DataDir() string                       { return m.dataDir }
+func (m *TeamToolManager) TryPublishInbound(msg bus.InboundMessage) bool {
+	if m.msgBus == nil {
+		return false
+	}
+	return m.msgBus.TryPublishInbound(msg)
+}

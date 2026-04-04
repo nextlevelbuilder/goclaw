@@ -13,6 +13,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -38,9 +42,9 @@ type DMPolicy string
 
 const (
 	DMPolicyPairing   DMPolicy = "pairing"   // Require pairing code
-	DMPolicyAllowlist DMPolicy = "allowlist"  // Only whitelisted senders
-	DMPolicyOpen      DMPolicy = "open"       // Accept all
-	DMPolicyDisabled  DMPolicy = "disabled"   // Reject all DMs
+	DMPolicyAllowlist DMPolicy = "allowlist" // Only whitelisted senders
+	DMPolicyOpen      DMPolicy = "open"      // Accept all
+	DMPolicyDisabled  DMPolicy = "disabled"  // Reject all DMs
 )
 
 // GroupPolicy controls how group messages are handled.
@@ -48,8 +52,8 @@ type GroupPolicy string
 
 const (
 	GroupPolicyOpen      GroupPolicy = "open"      // Accept all groups
-	GroupPolicyAllowlist GroupPolicy = "allowlist"  // Only whitelisted groups
-	GroupPolicyDisabled  GroupPolicy = "disabled"   // No group messages
+	GroupPolicyAllowlist GroupPolicy = "allowlist" // Only whitelisted groups
+	GroupPolicyDisabled  GroupPolicy = "disabled"  // No group messages
 )
 
 // Channel type constants used across channel packages and gateway wiring.
@@ -154,8 +158,11 @@ type BaseChannel struct {
 	channelType      string // platform type; defaults to name if unset
 	bus              *bus.MessageBus
 	running          bool
+	stateMu          sync.RWMutex
+	health           ChannelHealth
 	allowList        []string
-	agentID          string                 // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
+	agentID          string                  // for DB instances: routes to specific agent (empty = use resolveAgentRoute)
+	tenantID         uuid.UUID               // for DB instances: tenant scope (zero = master tenant fallback)
 	contactCollector *store.ContactCollector // optional: auto-collect contacts from channel messages
 }
 
@@ -164,6 +171,7 @@ func NewBaseChannel(name string, msgBus *bus.MessageBus, allowList []string) *Ba
 	return &BaseChannel{
 		name:      name,
 		bus:       msgBus,
+		health:    NewChannelHealthForType(name, ChannelHealthStateRegistered, "Configured", "", ChannelFailureKindUnknown, false),
 		allowList: allowList,
 	}
 }
@@ -191,6 +199,12 @@ func (c *BaseChannel) AgentID() string { return c.agentID }
 // SetAgentID sets the explicit agent ID for routing (used by InstanceLoader for DB instances).
 func (c *BaseChannel) SetAgentID(id string) { c.agentID = id }
 
+// TenantID returns the tenant UUID for this channel (zero = master tenant fallback).
+func (c *BaseChannel) TenantID() uuid.UUID { return c.tenantID }
+
+// SetTenantID sets the tenant scope (used by InstanceLoader for DB instances).
+func (c *BaseChannel) SetTenantID(id uuid.UUID) { c.tenantID = id }
+
 // SetContactCollector sets the contact collector for auto-collecting contacts from messages.
 func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contactCollector = cc }
 
@@ -198,10 +212,125 @@ func (c *BaseChannel) SetContactCollector(cc *store.ContactCollector) { c.contac
 func (c *BaseChannel) ContactCollector() *store.ContactCollector { return c.contactCollector }
 
 // IsRunning returns whether the channel is running.
-func (c *BaseChannel) IsRunning() bool { return c.running }
+func (c *BaseChannel) IsRunning() bool {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+	return c.running
+}
 
 // SetRunning updates the running state.
-func (c *BaseChannel) SetRunning(running bool) { c.running = running }
+func (c *BaseChannel) SetRunning(running bool) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	next := c.health
+	next.ChannelType = c.Type()
+	next.Running = running
+	switch {
+	case running && (next.State == "" ||
+		next.State == ChannelHealthStateRegistered ||
+		next.State == ChannelHealthStateStarting ||
+		next.State == ChannelHealthStateStopped):
+		next.State = ChannelHealthStateHealthy
+		if next.Summary == "" ||
+			next.Summary == "Configured" ||
+			next.Summary == "Starting" ||
+			next.Summary == "Stopped" {
+			next.Summary = "Connected"
+		}
+		next.Detail = ""
+		next.FailureKind = ChannelFailureKindUnknown
+		next.Retryable = false
+		next.CheckedAt = time.Now().UTC()
+	case !running && next.State == ChannelHealthStateHealthy:
+		next.State = ChannelHealthStateStopped
+		next.Summary = "Stopped"
+		next.Detail = ""
+		next.FailureKind = ChannelFailureKindUnknown
+		next.Retryable = false
+		next.CheckedAt = time.Now().UTC()
+	default:
+		c.running = running
+		c.health.Running = running
+		return
+	}
+
+	next = mergeChannelHealth(c.health, next)
+	next.Running = running
+	c.running = running
+	c.health = next
+}
+
+// HealthSnapshot returns the current runtime health snapshot for the channel.
+func (c *BaseChannel) HealthSnapshot() ChannelHealth {
+	c.stateMu.RLock()
+	defer c.stateMu.RUnlock()
+
+	snapshot := c.health
+	snapshot.ChannelType = c.Type()
+	snapshot.Enabled = true
+	snapshot.Running = c.running
+	return snapshot
+}
+
+// MarkRegistered records that the channel was configured and registered successfully.
+func (c *BaseChannel) MarkRegistered(summary string) {
+	if summary == "" {
+		summary = "Configured"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateRegistered, summary, "", ChannelFailureKindUnknown, false))
+}
+
+// MarkStarting records that the channel is in startup validation / connection setup.
+func (c *BaseChannel) MarkStarting(summary string) {
+	if summary == "" {
+		summary = "Starting"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateStarting, summary, "", ChannelFailureKindUnknown, true))
+}
+
+// MarkHealthy records a healthy connected state.
+func (c *BaseChannel) MarkHealthy(summary string) {
+	if summary == "" {
+		summary = "Connected"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateHealthy, summary, "", ChannelFailureKindUnknown, false))
+}
+
+// MarkDegraded records a non-fatal warning state.
+func (c *BaseChannel) MarkDegraded(summary, detail string, kind ChannelFailureKind, retryable bool) {
+	if summary == "" {
+		summary = "Running with warnings"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable))
+}
+
+// MarkFailed records a startup or runtime failure.
+func (c *BaseChannel) MarkFailed(summary, detail string, kind ChannelFailureKind, retryable bool) {
+	if summary == "" {
+		summary = "Channel failed"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateFailed, summary, detail, kind, retryable))
+}
+
+// MarkStopped records a cleanly stopped state.
+func (c *BaseChannel) MarkStopped(summary string) {
+	if summary == "" {
+		summary = "Stopped"
+	}
+	c.setHealth(NewChannelHealth(ChannelHealthStateStopped, summary, "", ChannelFailureKindUnknown, false))
+}
+
+func (c *BaseChannel) setHealth(snapshot ChannelHealth) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
+	snapshot.ChannelType = c.Type()
+	snapshot = mergeChannelHealth(c.health, snapshot)
+	snapshot.Running = snapshot.State == ChannelHealthStateHealthy || snapshot.State == ChannelHealthStateDegraded
+	c.running = snapshot.Running
+	c.health = snapshot
+}
 
 // Bus returns the message bus reference.
 func (c *BaseChannel) Bus() *bus.MessageBus { return c.bus }
@@ -303,8 +432,8 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		return
 	}
 
-	// Derive userID from senderID: strip "|username" suffix if present (Telegram format).
-	// For most channels, senderID == userID (platform user ID).
+	// Derive userID from senderID: strip "|username" suffix if present (legacy Slack compound format).
+	// All channels now pass plain senderID; kept for backward compat with stored compound IDs.
 	userID := senderID
 	if idx := strings.IndexByte(senderID, '|'); idx > 0 {
 		userID = senderID[:idx]
@@ -325,6 +454,7 @@ func (c *BaseChannel) HandleMessage(senderID, chatID, content string, media []st
 		PeerKind: peerKind,
 		UserID:   userID,
 		Metadata: metadata,
+		TenantID: c.tenantID,
 		AgentID:  c.agentID,
 	}
 

@@ -3,11 +3,14 @@ package channels
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // QuotaResult is returned by QuotaChecker.Check.
@@ -222,20 +225,23 @@ func (qc *QuotaChecker) Usage(ctx context.Context) QuotaUsageResult {
 	dayAgo := now.Add(-24 * time.Hour)
 	weekAgo := now.Add(-7 * 24 * time.Hour)
 
-	// Query per-user counts for the past week
-	rows, err := qc.db.QueryContext(ctx, `
+	// Query per-user counts for the past week (tenant-scoped)
+	tenantFilter, tenantArgs, nextIdx := tenantWhereClause(ctx, 4)
+	args := append([]any{hourAgo, dayAgo, weekAgo}, tenantArgs...)
+	rows, err := qc.db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT
 			user_id,
 			COUNT(*) FILTER (WHERE created_at >= $1) AS hour_count,
 			COUNT(*) FILTER (WHERE created_at >= $2) AS day_count,
 			COUNT(*) AS week_count
 		FROM traces
-		WHERE parent_trace_id IS NULL AND created_at >= $3
+		WHERE parent_trace_id IS NULL AND created_at >= $3%s
 		GROUP BY user_id
 		ORDER BY week_count DESC
-		LIMIT 50`,
-		hourAgo, dayAgo, weekAgo,
+		LIMIT 50`, tenantFilter),
+		args...,
 	)
+	_ = nextIdx
 	if err != nil {
 		slog.Warn("quota.usage: failed to query user counts", "error", err)
 		QueryTodaySummary(ctx, qc.db, &result)
@@ -272,7 +278,9 @@ func QueryTodaySummary(ctx context.Context, db *sql.DB, result *QuotaUsageResult
 	now := time.Now().UTC()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
-	err := db.QueryRowContext(ctx, `
+	tenantFilter, tenantArgs, _ := tenantWhereClause(ctx, 2)
+	args := append([]any{startOfDay}, tenantArgs...)
+	err := db.QueryRowContext(ctx, fmt.Sprintf(`
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(total_input_tokens), 0),
@@ -280,12 +288,23 @@ func QueryTodaySummary(ctx context.Context, db *sql.DB, result *QuotaUsageResult
 			COALESCE(SUM(total_cost), 0),
 			COUNT(DISTINCT user_id)
 		FROM traces
-		WHERE parent_trace_id IS NULL AND created_at >= $1`,
-		startOfDay,
+		WHERE parent_trace_id IS NULL AND created_at >= $1%s`, tenantFilter),
+		args...,
 	).Scan(&result.RequestsToday, &result.InputTokensToday, &result.OutputTokensToday, &result.CostToday, &result.UniqueUsersToday)
 	if err != nil {
 		slog.Warn("quota.usage: failed to query today summary", "error", err)
 	}
+}
+
+// tenantWhereClause returns a SQL fragment " AND tenant_id = $N" with the tenant UUID arg,
+// or empty string if the caller has cross-tenant access. startIdx is the next $N placeholder.
+func tenantWhereClause(ctx context.Context, startIdx int) (string, []any, int) {
+	tid := store.TenantIDFromContext(ctx)
+	if tid == uuid.Nil {
+		// Fail-closed: no tenant = filter to impossible value
+		return " AND tenant_id = '00000000-0000-0000-0000-000000000000'", nil, startIdx
+	}
+	return fmt.Sprintf(" AND tenant_id = $%d", startIdx), []any{tid}, startIdx + 1
 }
 
 // cleanupLoop periodically evicts stale cache entries.

@@ -8,7 +8,7 @@ import { TelegramGroupFields, type TelegramGroupConfigValues } from "./telegram-
 import { TelegramTopicOverrides, type TelegramTopicConfigValues } from "./telegram-topic-overrides";
 import type { GroupManagerGroupInfo } from "./hooks/use-channel-detail";
 
-interface GroupConfigWithTopics extends TelegramGroupConfigValues {
+export interface GroupConfigWithTopics extends TelegramGroupConfigValues {
   topics?: Record<string, TelegramTopicConfigValues>;
 }
 

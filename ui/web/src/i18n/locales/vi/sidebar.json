@@ -32,12 +32,14 @@
     "providers": "Provider",
     "config": "Cấu hình",
     "approvals": "Phê duyệt",
+    "importExport": "Import & Export",
     "nodes": "Nodes",
     "tts": "TTS",
     "activity": "Hoạt động",
     "cliCredentials": "Xác thực CLI",
-    "apiKeys": "Khóa API",
+    "apiKeys": "API Keys",
     "apiDocs": "Tài liệu API",
-    "packages": "Gói phần mềm"
+    "packages": "Gói phần mềm",
+    "tenants": "Tổ chức"
   }
 }

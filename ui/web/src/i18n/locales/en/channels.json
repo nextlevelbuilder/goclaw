@@ -20,13 +20,33 @@
   },
   "status": {
     "running": "Running",
-    "stopped": "Stopped"
+    "stopped": "Stopped",
+    "checking": "Checking",
+    "degraded": "Degraded",
+    "starting": "Starting",
+    "registered": "Configured",
+    "failed": "Failed"
   },
   "enabled": "Enabled",
   "disabled": "Disabled",
   "actions": {
     "reauthenticate": "Re-authenticate",
-    "authenticate": "Authenticate to start channel"
+    "authenticate": "Authenticate to start channel",
+    "reauthShort": "Re-auth",
+    "openCredentials": "Open credentials",
+    "openAdvanced": "Open advanced",
+    "inspect": "Inspect issue"
+  },
+  "list": {
+    "failureStreak": "{{count}} failures in a row",
+    "openChannelDetail": "Open channel detail for the latest diagnosis",
+    "nextStep": "Next step"
+  },
+  "failureKind": {
+    "auth": "Auth",
+    "config": "Config",
+    "network": "Network",
+    "unknown": "Attention"
   },
   "delete": {
     "title": "Delete Channel Instance",
@@ -74,6 +94,8 @@
   },
   "detail": {
     "agent": "Agent: {{name}}",
+    "lastChecked": "Last checked: {{value}}",
+    "checkedRelative": "Checked {{value}}",
     "advanced": "Advanced",
     "advancedTitle": "Advanced Settings",
     "policies": "Policies",
@@ -88,6 +110,10 @@
     "behaviorDesc": "Response behavior configuration",
     "accessControl": "Access Control",
     "accessControlDesc": "User access restrictions",
+    "reviewDiagnostics": "Review the latest diagnosis in this channel before changing settings.",
+    "whatHappened": "What happened",
+    "recommendedAction": "Recommended action",
+    "technicalDetail": "Technical detail",
     "tabs": {
       "general": "General",
       "config": "Config",
@@ -131,6 +157,16 @@
       "saveGroups": "Save Groups",
       "saving": "Saving..."
     },
+    "timeline": {
+      "title": "Timeline",
+      "firstFailed": "First failed",
+      "lastChecked": "Last checked",
+      "failures": "Failures",
+      "failureStreak": "{{count}} in a row",
+      "failureTotal": "{{count}} total",
+      "lastHealthy": "Last healthy",
+      "noData": "No recent channel checks recorded yet."
+    },
     "managers": {
       "description": "Manage which users have manager permissions in group chats.",
       "groups": "Groups",
@@ -171,43 +207,116 @@
   "fieldConfig": {
     "token": { "label": "Bot Token", "help": "From @BotFather" },
     "bot_token": { "label": "Bot Token" },
-    "app_token": { "label": "App-Level Token", "help": "App-Level Token with connections:write scope (required for Socket Mode)" },
-    "user_token": { "label": "User Token (Optional)", "help": "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity." },
+    "app_token": {
+      "label": "App-Level Token",
+      "help": "App-Level Token with connections:write scope (required for Socket Mode)"
+    },
+    "user_token": {
+      "label": "User Token (Optional)",
+      "help": "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity."
+    },
     "app_id": { "label": "App ID" },
     "app_secret": { "label": "App Secret" },
     "encrypt_key": { "label": "Encrypt Key", "help": "For webhook mode" },
-    "verification_token": { "label": "Verification Token", "help": "For webhook mode" },
+    "verification_token": {
+      "label": "Verification Token",
+      "help": "For webhook mode"
+    },
     "webhook_secret": { "label": "Webhook Secret" },
     "bridge_url": { "label": "Bridge URL" },
-    "api_server": { "label": "API Server URL", "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default." },
-    "proxy": { "label": "HTTP Proxy", "help": "Route bot traffic through an HTTP proxy" },
+    "api_server": {
+      "label": "API Server URL",
+      "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default."
+    },
+    "proxy": {
+      "label": "HTTP Proxy",
+      "help": "Route bot traffic through an HTTP proxy"
+    },
     "dm_policy": { "label": "DM Policy" },
     "group_policy": { "label": "Group Policy" },
-    "require_mention": { "label": "Require @mention in groups" },
-    "history_limit": { "label": "Group History Limit", "help": "Max pending group messages for context (0 = disabled)" },
-    "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },
-    "group_stream": { "label": "Group Streaming", "help": "Stream response progressively in groups" },
-    "draft_transport": { "label": "Draft Preview", "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)" },
-    "reasoning_stream": { "label": "Show Reasoning", "help": "Display AI thinking as a separate message before the answer (requires streaming)" },
+    "require_mention": {
+      "label": "Require @mention in groups",
+      "disabledHint": "Multi-bot mode always listens to all messages"
+    },
+    "mention_mode": {
+      "label": "Group Response Behavior",
+      "help": "How the bot decides when to respond in groups with multiple bots."
+    },
+    "history_limit": {
+      "label": "Group History Limit",
+      "help": "Max pending group messages for context (0 = disabled)"
+    },
+    "dm_stream": {
+      "label": "DM Streaming",
+      "help": "Stream response progressively in DMs"
+    },
+    "group_stream": {
+      "label": "Group Streaming",
+      "help": "Stream response progressively in groups"
+    },
+    "draft_transport": {
+      "label": "Draft Preview",
+      "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)"
+    },
+    "reasoning_stream": {
+      "label": "Show Reasoning",
+      "help": "Display AI thinking as a separate message before the answer (requires streaming)"
+    },
     "reaction_level": { "label": "Reaction Level" },
     "media_max_mb": { "label": "Max Media Size (MB)" },
     "link_preview": { "label": "Link Preview" },
     "allow_from": { "label": "Allowed Users" },
-    "block_reply": { "label": "Block Reply", "help": "Deliver intermediate text during tool iterations" },
+    "block_reply": {
+      "label": "Block Reply",
+      "help": "Deliver intermediate text during tool iterations"
+    },
     "domain": { "label": "Domain" },
-    "connection_mode": { "label": "Connection Mode", "help": "WebSocket needs no public IP — outbound connection only" },
-    "webhook_port": { "label": "Webhook Port", "help": "0 = share main gateway port (recommended)" },
-    "webhook_path": { "label": "Webhook Path", "help": "Path on main server for Lark events" },
+    "connection_mode": {
+      "label": "Connection Mode",
+      "help": "WebSocket needs no public IP — outbound connection only"
+    },
+    "webhook_port": {
+      "label": "Webhook Port",
+      "help": "0 = share main gateway port (recommended)"
+    },
+    "webhook_path": {
+      "label": "Webhook Path",
+      "help": "Path on main server for Lark events"
+    },
     "webhook_url": { "label": "Webhook URL" },
-    "topic_session_mode": { "label": "Topic Session Mode", "help": "Use thread root_id for session isolation" },
+    "topic_session_mode": {
+      "label": "Topic Session Mode",
+      "help": "Use thread root_id for session isolation"
+    },
     "render_mode": { "label": "Render Mode" },
-    "text_chunk_limit": { "label": "Text Chunk Limit", "help": "Max characters per message" },
-    "group_allow_from": { "label": "Group Allowed Users", "help": "Separate allowlist for group senders" },
-    "native_stream": { "label": "Native Streaming (Agents & AI Apps)", "help": "Use Slack's ChatStreamer API for native streaming. Falls back to edit-in-place if unavailable." },
-    "debounce_delay": { "label": "Debounce Delay (ms)", "help": "Milliseconds to wait before dispatching rapid messages. Set 0 to disable." },
-    "thread_ttl": { "label": "Thread Participation TTL (hours)", "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
-    "skills": { "label": "Skills Filter", "help": "Limit available skills for this group" },
-    "tools": { "label": "Tool Allowlist", "help": "Restrict which tools the agent can use in this group" },
+    "text_chunk_limit": {
+      "label": "Text Chunk Limit",
+      "help": "Max characters per message"
+    },
+    "group_allow_from": {
+      "label": "Group Allowed Users",
+      "help": "Separate allowlist for group senders"
+    },
+    "native_stream": {
+      "label": "Native Streaming (Agents & AI Apps)",
+      "help": "Use Slack's ChatStreamer API for native streaming. Falls back to edit-in-place if unavailable."
+    },
+    "debounce_delay": {
+      "label": "Debounce Delay (ms)",
+      "help": "Milliseconds to wait before dispatching rapid messages. Set 0 to disable."
+    },
+    "thread_ttl": {
+      "label": "Thread Participation TTL (hours)",
+      "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention."
+    },
+    "skills": {
+      "label": "Skills Filter",
+      "help": "Limit available skills for this group"
+    },
+    "tools": {
+      "label": "Tool Allowlist",
+      "help": "Restrict which tools the agent can use in this group"
+    },
     "system_prompt": { "label": "System Prompt" }
   },
   "fieldOptions": {
@@ -227,6 +336,10 @@
       "pairing": "Pairing (require approval)",
       "allowlist": "Allowlist only",
       "disabled": "Disabled"
+    },
+    "mention_mode": {
+      "strict": "Default (follow @mention setting)",
+      "yield": "Multi-bot (respond unless another bot is @mentioned)"
     },
     "reaction_level": {
       "off": "Off",
@@ -264,10 +377,22 @@
     "addTopicPlaceholder": "Topic thread ID",
     "addTopic": "Add Topic",
     "fieldConfig": {
-      "dm_stream": { "label": "DM Streaming", "help": "Stream response progressively in DMs" },
-      "group_stream": { "label": "Group Streaming", "help": "Stream response progressively in groups" },
-      "draft_transport": { "label": "Draft Preview", "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)" },
-      "reasoning_stream": { "label": "Show Reasoning", "help": "Display AI thinking as a separate message before the answer (requires streaming)" }
+      "dm_stream": {
+        "label": "DM Streaming",
+        "help": "Stream response progressively in DMs"
+      },
+      "group_stream": {
+        "label": "Group Streaming",
+        "help": "Stream response progressively in groups"
+      },
+      "draft_transport": {
+        "label": "Draft Preview",
+        "help": "Use stealth draft preview for answer stream in DMs — no notification per edit (requires DM Streaming)"
+      },
+      "reasoning_stream": {
+        "label": "Show Reasoning",
+        "help": "Display AI thinking as a separate message before the answer (requires streaming)"
+      }
     },
     "fields": {
       "groupPolicy": "Group Policy",
@@ -292,6 +417,16 @@
       "createLabel": "Create & Authenticate",
       "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
     }
+  },
+  "fallback": {
+    "authRequiredSummary": "Authentication required",
+    "authRequiredDetail": "Channel instance is enabled but requires sign-in before it can connect.",
+    "authRequiredHeadline": "Reconnect the channel session",
+    "authRequiredHint": "Authenticate this channel again to restore the current session.",
+    "missingCredentialsSummary": "Missing credentials",
+    "missingCredentialsDetail": "Channel instance is enabled but required credentials are incomplete.",
+    "missingCredentialsHeadline": "Complete required credentials",
+    "missingCredentialsHint": "Open credentials and fill the missing or invalid values for this channel."
   },
   "scopes": {
     "title": "Required API Permissions",

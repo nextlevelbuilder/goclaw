@@ -10,6 +10,7 @@ func DefaultSubagentConfig() SubagentConfig {
 		MaxSpawnDepth:       1,  // TS: maxSpawnDepth ?? 1
 		MaxChildrenPerAgent: 5,  // TS: maxChildrenPerAgent ?? 5
 		ArchiveAfterMinutes: 60, // TS: archiveAfterMinutes ?? 60
+		MaxRetries:          2,
 	}
 }
 

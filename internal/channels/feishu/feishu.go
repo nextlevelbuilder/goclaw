@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -86,7 +88,7 @@ func New(cfg config.FeishuConfig, msgBus *bus.MessageBus, pairingSvc store.Pairi
 		client:         client,
 		pairingService: pairingSvc,
 		groupAllowList: cfg.GroupAllowFrom,
-		groupHistory:   channels.MakeHistory(channels.TypeFeishu, pendingStore),
+		groupHistory:   channels.MakeHistory(channels.TypeFeishu, pendingStore, base.TenantID()),
 		historyLimit:   historyLimit,
 		stopCh:         make(chan struct{}),
 	}, nil
@@ -126,6 +128,9 @@ func (c *Channel) BlockReplyEnabled() *bool { return c.cfg.BlockReply }
 func (c *Channel) SetPendingCompaction(cfg *channels.CompactionConfig) {
 	c.groupHistory.SetCompactionConfig(cfg)
 }
+
+// SetPendingHistoryTenantID propagates tenant_id to the pending history for DB operations.
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTenantID(id) }
 
 // Stop shuts down the Feishu channel.
 func (c *Channel) Stop(_ context.Context) error {
@@ -255,7 +260,8 @@ func (c *Channel) WebhookHandler() (string, http.Handler) {
 	}
 
 	handler := NewWebhookHandler(c.cfg.VerificationToken, c.cfg.EncryptKey, func(event *MessageEvent) {
-		c.handleMessageEvent(context.Background(), event)
+		ctx := store.WithTenantID(context.Background(), c.TenantID())
+		c.handleMessageEvent(ctx, event)
 	})
 
 	return path, http.HandlerFunc(handler)
@@ -275,7 +281,8 @@ func (c *Channel) startWebhook(ctx context.Context) error {
 	slog.Info("feishu: starting Webhook server", "port", port, "path", path)
 
 	handler := NewWebhookHandler(c.cfg.VerificationToken, c.cfg.EncryptKey, func(event *MessageEvent) {
-		c.handleMessageEvent(context.Background(), event)
+		ctx := store.WithTenantID(context.Background(), c.TenantID())
+		c.handleMessageEvent(ctx, event)
 	})
 
 	mux := http.NewServeMux()
@@ -568,7 +575,7 @@ func (c *Channel) ListGroupMembers(ctx context.Context, chatID string) ([]channe
 		}
 		// Auto-sync member into contact store
 		if cc := c.ContactCollector(); cc != nil {
-			cc.EnsureContact(ctx, channels.TypeFeishu, c.Name(), m.MemberID, m.MemberID, m.Name, "", "group")
+			cc.EnsureContact(ctx, channels.TypeFeishu, c.Name(), m.MemberID, m.MemberID, m.Name, "", "group", "user", "", "")
 		}
 	}
 	return result, nil

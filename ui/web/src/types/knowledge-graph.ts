@@ -36,4 +36,14 @@ export interface KGStats {
   entity_count: number;
   relation_count: number;
   entity_types: Record<string, number>;
+  user_ids?: string[];
+}
+
+export interface KGDedupCandidate {
+  id: string;
+  entity_a: KGEntity;
+  entity_b: KGEntity;
+  similarity: number;
+  status: string;
+  created_at: number;
 }

@@ -11,6 +11,7 @@
     "costToday": "Cost Today",
     "agents": "Agents",
     "channels": "Channels",
+    "channelsAttention": "{{count}} need attention",
     "running": "running",
     "online": "online",
     "users": "{{count}} users",
@@ -26,12 +27,19 @@
   "systemHealth": {
     "title": "System Health",
     "uptime": "Uptime",
+    "version": "Version",
     "database": "Database",
     "providers": "Providers",
     "tools": "Tools",
     "sessions": "Sessions",
     "clients": "Clients",
     "channels": "Channels",
+    "needsAttention": "Needs attention",
+    "channelsNeedingAttention": "{{count}} channels",
+    "failedCount": "{{count}} failed",
+    "warningCountOne": "{{count}} warning",
+    "warningCountOther": "{{count}} warnings",
+    "moreAttention": "+{{count}} more",
     "active": "{{count}} active",
     "none": "none",
     "runtimes": "Runtimes"
@@ -76,5 +84,10 @@
       "week": "Week"
     },
     "noLimit": "no limit"
+  },
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Not configured",
+    "configure": "Configure in Providers →"
   }
 }

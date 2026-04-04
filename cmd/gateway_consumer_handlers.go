@@ -2,25 +2,23 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/internal/channels"
-	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
-	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // handleSubagentAnnounce processes subagent announce messages: bypass debounce,
@@ -29,21 +27,24 @@ import (
 func handleSubagentAnnounce(
 	ctx context.Context,
 	msg bus.InboundMessage,
-	cfg *config.Config,
-	sched *scheduler.Scheduler,
-	channelMgr *channels.Manager,
-	msgBus *bus.MessageBus,
-	getAnnounceMu func(string) *sync.Mutex,
+	deps *ConsumerDeps,
 ) bool {
 	if !(msg.Channel == tools.ChannelSystem && strings.HasPrefix(msg.SenderID, "subagent:")) {
 		return false
 	}
 
-	origChannel := msg.Metadata["origin_channel"]
-	origPeerKind := msg.Metadata["origin_peer_kind"]
-	origLocalKey := msg.Metadata["origin_local_key"]
-	origChannelType := resolveChannelType(channelMgr, origChannel)
-	parentAgent := msg.Metadata["parent_agent"]
+	// Inject tenant scope — same as processNormalMessage.
+	if msg.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, msg.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
+	}
+
+	origChannel := msg.Metadata[tools.MetaOriginChannel]
+	origPeerKind := msg.Metadata[tools.MetaOriginPeerKind]
+	origLocalKey := msg.Metadata[tools.MetaOriginLocalKey]
+	origChannelType := resolveChannelType(deps.ChannelMgr, origChannel)
+	parentAgent := msg.Metadata[tools.MetaParentAgent]
 	if parentAgent == "" {
 		parentAgent = "default"
 	}
@@ -57,25 +58,25 @@ func handleSubagentAnnounce(
 	}
 
 	// Use exact origin session key if available (WS uses non-standard format).
-	sessionKey := msg.Metadata["origin_session_key"]
+	sessionKey := msg.Metadata[tools.MetaOriginSessionKey]
 	if sessionKey == "" {
 		// Fallback: rebuild session key from origin metadata (works for Telegram, Discord, etc.)
-		sessionKey = sessions.BuildScopedSessionKey(parentAgent, origChannel, sessions.PeerKind(origPeerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+		sessionKey = sessions.BuildScopedSessionKey(parentAgent, origChannel, sessions.PeerKind(origPeerKind), msg.ChatID)
 		sessionKey = overrideSessionKeyFromLocalKey(sessionKey, origLocalKey, parentAgent, origChannel, msg.ChatID, origPeerKind)
 	}
 
 	slog.Info("subagent announce → scheduler (subagent lane)",
 		"subagent", msg.SenderID,
-		"label", msg.Metadata["subagent_label"],
+		"label", msg.Metadata[tools.MetaSubagentLabel],
 		"session", sessionKey,
 	)
 
 	// Extract parent trace context for announce linking
 	var parentTraceID, parentRootSpanID uuid.UUID
-	if tid := msg.Metadata["origin_trace_id"]; tid != "" {
+	if tid := msg.Metadata[tools.MetaOriginTraceID]; tid != "" {
 		parentTraceID, _ = uuid.Parse(tid)
 	}
-	if sid := msg.Metadata["origin_root_span_id"]; sid != "" {
+	if sid := msg.Metadata[tools.MetaOriginRootSpanID]; sid != "" {
 		parentRootSpanID, _ = uuid.Parse(sid)
 	}
 
@@ -85,88 +86,60 @@ func handleSubagentAnnounce(
 		announceUserID = fmt.Sprintf("group:%s:%s", origChannel, msg.ChatID)
 	}
 
-	// Build outbound metadata for topic/thread routing.
-	outMeta := buildAnnounceOutMeta(origLocalKey)
+	// Build announce entry from raw metadata (avoids double-formatting).
+	runtimeMs, _ := strconv.ParseInt(msg.Metadata[tools.MetaSubagentRuntime], 10, 64)
+	iterations, _ := strconv.Atoi(msg.Metadata[tools.MetaSubagentIterations])
+	inputToks, _ := strconv.ParseInt(msg.Metadata[tools.MetaSubagentInputToks], 10, 64)
+	outputToks, _ := strconv.ParseInt(msg.Metadata[tools.MetaSubagentOutputToks], 10, 64)
 
-	// Build request before goroutine to capture msg fields.
-	// WS channel has no outbound handler — media converted to markdown URLs
-	// and appended to the assistant response via ContentSuffix, which the
-	// agent loop applies BEFORE saving to session and emitting run.completed.
-	fwdMedia := msg.Media
-	contentSuffix := ""
-	if origChannel == "ws" && len(msg.Media) > 0 {
-		contentSuffix = mediaToMarkdownFromPaths(msg.Media, cfg)
-		fwdMedia = nil // WS: images delivered via ContentSuffix, not ForwardMedia
+	// Use raw result from metadata if available; fall back to formatted Content for backward compat.
+	rawResult := msg.Metadata[tools.MetaSubagentResult]
+	if rawResult == "" {
+		rawResult = msg.Content
 	}
 
-	announceReq := agent.RunRequest{
+	entry := subagentAnnounceEntry{
+		Label:        msg.Metadata[tools.MetaSubagentLabel],
+		Status:       msg.Metadata[tools.MetaSubagentStatus],
+		Content:      rawResult,
+		Media:        msg.Media,
+		InputTokens:  inputToks,
+		OutputTokens: outputToks,
+		Runtime:      time.Duration(runtimeMs) * time.Millisecond,
+		Iterations:   iterations,
+	}
+
+	queueKey := fmt.Sprintf("%s:%s", msg.TenantID, sessionKey)
+	routing := subagentAnnounceRouting{
+		QueueKey:         queueKey,
 		SessionKey:       sessionKey,
-		Message:          msg.Content,
-		ForwardMedia:     fwdMedia,
-		ContentSuffix:    contentSuffix,
-		Channel:          origChannel,
-		ChannelType:      origChannelType,
-		ChatID:           msg.ChatID,
-		PeerKind:         origPeerKind,
-		LocalKey:         origLocalKey,
+		TenantID:         msg.TenantID,
+		OrigChannel:      origChannel,
+		OrigChannelType:  origChannelType,
+		OrigChatID:       msg.ChatID,
+		OrigPeerKind:     origPeerKind,
+		OrigLocalKey:     origLocalKey,
 		UserID:           announceUserID,
-		RunID:            fmt.Sprintf("announce-%s", msg.SenderID),
-		RunKind:          "announce",
-		HideInput:        true, // don't persist raw system message in chat history
-		Stream:           false,
+		ParentAgent:      parentAgent,
 		ParentTraceID:    parentTraceID,
 		ParentRootSpanID: parentRootSpanID,
+		OutMeta:          buildAnnounceOutMeta(origLocalKey),
 	}
-	// Handle announce asynchronously with per-session serialization.
-	// The mutex ensures concurrent announces for the same session wait for
-	// each other, so each reads up-to-date session history.
-	go func(sessionKey, origCh, chatID, senderID, label string, meta map[string]string, req agent.RunRequest) {
-		mu := getAnnounceMu(sessionKey)
-		mu.Lock()
-		defer mu.Unlock()
 
-		outCh := sched.Schedule(ctx, scheduler.LaneSubagent, req)
-		outcome := <-outCh
-		if outcome.Err != nil {
-			if errors.Is(outcome.Err, context.Canceled) {
-				slog.Info("subagent announce: run cancelled", "subagent", senderID)
-				return
-			}
-			slog.Error("subagent announce: agent run failed", "error", outcome.Err)
-			msgBus.PublishOutbound(bus.OutboundMessage{
-				Channel:  origCh,
-				ChatID:   chatID,
-				Content:  formatAgentError(outcome.Err),
-				Metadata: meta,
-			})
-			return
-		}
+	// Enqueue into producer-consumer queue using tenant-scoped key from routing.
+	q, isProcessor := enqueueSubagentAnnounce(queueKey, entry)
+	if isProcessor {
+		deps.BgWg.Add(1)
+		go func() {
+			defer deps.BgWg.Done()
+			defer safego.Recover(nil, "component", "subagent_announce_loop", "session", sessionKey)
 
-		// Suppress empty/NO_REPLY (matching TS normalize-reply.ts / tokens.ts).
-		isSilent := outcome.Result.Content == "" || agent.IsSilentReply(outcome.Result.Content)
-		if isSilent && len(outcome.Result.Media) == 0 {
-			slog.Info("subagent announce: suppressed silent/empty reply",
-				"subagent", senderID,
-				"label", label,
-			)
-			return
-		}
+			// Fetch live roster for merged announce context.
+			roster := deps.SubagentMgr.RosterForParent(parentAgent)
 
-		// Deliver agent's reformulated response to origin channel.
-		announceContent := outcome.Result.Content
-		if isSilent {
-			announceContent = "" // suppress NO_REPLY text but still send media
-		}
-
-		outMsg := bus.OutboundMessage{
-			Channel:  origCh,
-			ChatID:   chatID,
-			Content:  announceContent,
-			Metadata: meta,
-		}
-		appendMediaToOutbound(&outMsg, outcome.Result.Media)
-		msgBus.PublishOutbound(outMsg)
-	}(sessionKey, origChannel, msg.ChatID, msg.SenderID, msg.Metadata["subagent_label"], outMeta, announceReq)
+			processSubagentAnnounceLoop(ctx, q, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
+		}()
+	}
 
 	return true
 }
@@ -177,30 +150,30 @@ func handleSubagentAnnounce(
 func handleTeammateMessage(
 	ctx context.Context,
 	msg bus.InboundMessage,
-	cfg *config.Config,
-	sched *scheduler.Scheduler,
-	channelMgr *channels.Manager,
-	teamStore store.TeamStore,
-	agentStore store.AgentStore,
-	msgBus *bus.MessageBus,
-	postTurn tools.PostTurnProcessor,
-	taskRunSessions *sync.Map,
+	deps *ConsumerDeps,
 ) bool {
 	if !(msg.Channel == tools.ChannelSystem && strings.HasPrefix(msg.SenderID, "teammate:")) {
 		return false
 	}
 
-	origChannel := msg.Metadata["origin_channel"]
-	origPeerKind := msg.Metadata["origin_peer_kind"]
-	origLocalKey := msg.Metadata["origin_local_key"]
-	origChatID := msg.Metadata["origin_chat_id"] // original chat (e.g. Telegram chat ID)
+	// Inject tenant scope — same as processNormalMessage.
+	if msg.TenantID != uuid.Nil {
+		ctx = store.WithTenantID(ctx, msg.TenantID)
+	} else {
+		ctx = store.WithTenantID(ctx, store.MasterTenantID)
+	}
+
+	origChannel := msg.Metadata[tools.MetaOriginChannel]
+	origPeerKind := msg.Metadata[tools.MetaOriginPeerKind]
+	origLocalKey := msg.Metadata[tools.MetaOriginLocalKey]
+	origChatID := msg.Metadata[tools.MetaOriginChatID] // original chat (e.g. Telegram chat ID)
 	if origChatID == "" {
 		origChatID = msg.ChatID // fallback to inbound ChatID (team UUID for old dispatches)
 	}
-	origChannelType := resolveChannelType(channelMgr, origChannel)
+	origChannelType := resolveChannelType(deps.ChannelMgr, origChannel)
 	targetAgent := msg.AgentID // dispatch sets AgentID to the target agent key
 	if targetAgent == "" {
-		targetAgent = cfg.ResolveDefaultAgentID()
+		targetAgent = deps.Cfg.ResolveDefaultAgentID()
 	}
 	if origPeerKind == "" {
 		origPeerKind = string(sessions.PeerDirect)
@@ -220,13 +193,13 @@ func handleTeammateMessage(
 	// Use isolated team session key so member execution doesn't share
 	// the user's direct chat session with this agent.
 	// Scoped per agent + team + chatID, matching workspace isolation.
-	sessionKey := sessions.BuildTeamSessionKey(targetAgent, msg.Metadata["team_id"], origChatID)
+	sessionKey := sessions.BuildTeamSessionKey(targetAgent, msg.Metadata[tools.MetaTeamID], origChatID)
 
 	slog.Info("teammate message → scheduler (team lane)",
 		"from", msg.SenderID,
 		"to", targetAgent,
 		"session", sessionKey,
-		"team_task_id", msg.Metadata["team_task_id"],
+		"team_task_id", msg.Metadata[tools.MetaTeamTaskID],
 	)
 
 	announceUserID := msg.UserID
@@ -238,17 +211,22 @@ func handleTeammateMessage(
 
 	// Link member agent trace back to lead's trace for unified tracing.
 	var linkedTraceID uuid.UUID
-	if tid := msg.Metadata["origin_trace_id"]; tid != "" {
+	if tid := msg.Metadata[tools.MetaOriginTraceID]; tid != "" {
 		linkedTraceID, _ = uuid.Parse(tid)
 	}
 
 	// Track task → session so the subscriber can cancel on task cancellation.
-	taskIDStr := msg.Metadata["team_task_id"]
+	taskIDStr := msg.Metadata[tools.MetaTeamTaskID]
 	if taskIDStr != "" {
-		taskRunSessions.Store(taskIDStr, sessionKey)
+		deps.TaskRunSessions.Store(taskIDStr, sessionKey)
 	}
 
-	outCh := sched.Schedule(ctx, scheduler.LaneTeam, agent.RunRequest{
+	// Inject action flags into context so team_tasks tool calls record what happened.
+	// The post-turn goroutine reads these flags to decide auto-complete vs skip.
+	taskActionFlags := &tools.TaskActionFlags{}
+	schedCtx := tools.WithTaskActionFlags(ctx, taskActionFlags)
+
+	outCh := deps.Sched.Schedule(schedCtx, scheduler.LaneTeam, agent.RunRequest{
 		SessionKey:      sessionKey,
 		Message:         msg.Content,
 		Channel:         origChannel,
@@ -257,149 +235,58 @@ func handleTeammateMessage(
 		PeerKind:        origPeerKind,
 		LocalKey:        origLocalKey,
 		UserID:          announceUserID,
-		RunID:           fmt.Sprintf("teammate-%s-%s", msg.Metadata["from_agent"], msg.Metadata["to_agent"]),
+		RunID:           fmt.Sprintf("teammate-%s-%s", msg.Metadata[tools.MetaFromAgent], msg.Metadata[tools.MetaToAgent]),
 		Stream:          false,
-		TeamTaskID:      msg.Metadata["team_task_id"],
-		TeamWorkspace:   msg.Metadata["team_workspace"],
+		TeamTaskID:      msg.Metadata[tools.MetaTeamTaskID],
+		TeamWorkspace:   msg.Metadata[tools.MetaTeamWorkspace],
+		LeaderAgentID:   msg.Metadata[tools.MetaLeaderAgentID],
 		WorkspaceChatID: origChatID,
-		TeamID:          msg.Metadata["team_id"],
+		TeamID:          msg.Metadata[tools.MetaTeamID],
 		LinkedTraceID:   linkedTraceID,
 	})
 
-	go func(origCh, origChatID, senderID, taskID string, meta, inMeta map[string]string) {
-		// Lock renewal heartbeat: extend task lock every 10 min to prevent
+	deps.BgWg.Add(1)
+	go func(origCh, origChatID, senderID, taskID string, outMeta, inMeta map[string]string) {
+		defer deps.BgWg.Done()
+		defer safego.Recover(nil, "component", "teammate_message", "task_id", taskID)
+
+		// Lock renewal heartbeat: extend task lock every 5 min to prevent
 		// the ticker from recovering long-running tasks as stale.
-		var lockStop chan struct{}
-		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
+		var lockStop func()
+		if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" && deps.TeamStore != nil {
 			teamTaskID, _ := uuid.Parse(taskIDStr)
-			teamID, _ := uuid.Parse(inMeta["team_id"])
-			if teamTaskID != uuid.Nil {
-				lockStop = make(chan struct{})
-				go func() {
-					ticker := time.NewTicker(10 * time.Minute)
-					defer ticker.Stop()
-					for {
-						select {
-						case <-ticker.C:
-							if err := teamStore.RenewTaskLock(ctx, teamTaskID, teamID); err != nil {
-								slog.Warn("teammate lock renewal failed", "task_id", teamTaskID, "error", err)
-								return
-							}
-							slog.Debug("teammate lock renewed", "task_id", teamTaskID)
-						case <-lockStop:
-							return
-						case <-ctx.Done():
-							return
-						}
-					}
-				}()
-			}
+			teamID, _ := uuid.Parse(inMeta[tools.MetaTeamID])
+			lockStop = startTaskLockRenewal(ctx, deps.TeamStore, teamTaskID, teamID)
 		}
 
 		outcome := <-outCh
 
 		// Clean up task → session tracking now that the agent has finished.
 		if taskID != "" {
-			taskRunSessions.Delete(taskID)
+			deps.TaskRunSessions.Delete(taskID)
 		}
 
 		// Stop lock renewal now that the agent has finished.
 		if lockStop != nil {
-			close(lockStop)
+			lockStop()
 		}
 
 		// Auto-complete/fail the associated team task (v2 only).
 		// Cache team lookup — reused later for announce routing.
 		var cachedTeam *store.TeamData
-		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" {
+		if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" {
 			teamTaskID, _ := uuid.Parse(taskIDStr)
-			teamID, _ := uuid.Parse(inMeta["team_id"])
-			if teamTaskID != uuid.Nil && teamStore != nil {
-				cachedTeam, _ = teamStore.GetTeam(ctx, teamID)
-				if cachedTeam != nil && isConsumerTeamV2(cachedTeam) {
-					// Check current task status — agent may have already updated it via tool.
-					currentTask, taskErr := teamStore.GetTask(ctx, teamTaskID)
-					alreadyTerminal := taskErr == nil && currentTask != nil &&
-						(currentTask.Status == store.TeamTaskStatusCompleted ||
-							currentTask.Status == store.TeamTaskStatusFailed ||
-							currentTask.Status == store.TeamTaskStatusCancelled)
-
-					if !alreadyTerminal {
-						toAgent := inMeta["to_agent"]
-						now := time.Now().UTC().Format("2006-01-02T15:04:05Z")
-						// Enrich event payload with task details for notifications.
-						taskSubject := ""
-						taskNumber := 0
-						taskChannel := inMeta["origin_channel"]
-						taskChatID := inMeta["origin_chat_id"]
-						if currentTask != nil {
-							taskSubject = currentTask.Subject
-							taskNumber = currentTask.TaskNumber
-							if currentTask.Channel != "" {
-								taskChannel = currentTask.Channel
-							}
-							if currentTask.ChatID != "" {
-								taskChatID = currentTask.ChatID
-							}
-						}
-						if outcome.Err != nil {
-							if err := teamStore.FailTask(ctx, teamTaskID, teamID, outcome.Err.Error()); err != nil {
-								slog.Warn("auto-complete: FailTask error", "task_id", teamTaskID, "error", err)
-							} else {
-								msgBus.Broadcast(bus.Event{
-									Name: protocol.EventTeamTaskFailed,
-									Payload: protocol.TeamTaskEventPayload{
-										TeamID:     teamID.String(),
-										TaskID:     teamTaskID.String(),
-										TaskNumber: taskNumber,
-										Subject:    taskSubject,
-										Status:     store.TeamTaskStatusFailed,
-										Reason:     outcome.Err.Error(),
-										Channel:    taskChannel,
-										ChatID:     taskChatID,
-										Timestamp:  now,
-										ActorType:  "agent",
-										ActorID:    toAgent,
-									},
-								})
-							}
-						} else {
-							result := outcome.Result.Content
-							if len(outcome.Result.Deliverables) > 0 {
-								result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
-							}
-							if len(result) > 100_000 {
-								result = result[:100_000] + "\n[truncated]"
-							}
-							if err := teamStore.CompleteTask(ctx, teamTaskID, teamID, result); err != nil {
-								slog.Warn("auto-complete: CompleteTask error", "task_id", teamTaskID, "error", err)
-							} else {
-								msgBus.Broadcast(bus.Event{
-									Name: protocol.EventTeamTaskCompleted,
-									Payload: protocol.TeamTaskEventPayload{
-										TeamID:        teamID.String(),
-										TaskID:        teamTaskID.String(),
-										TaskNumber:    taskNumber,
-										Subject:       taskSubject,
-										Status:        store.TeamTaskStatusCompleted,
-										OwnerAgentKey: toAgent,
-										Channel:       taskChannel,
-										ChatID:        taskChatID,
-										Timestamp:     now,
-										ActorType:     "agent",
-										ActorID:       toAgent,
-									},
-								})
-							}
-						}
-					}
-					// Always dispatch unblocked tasks after member turn ends,
-					// regardless of whether the task was already completed by the tool.
-					// This ensures dependent tasks start only after the member's run finishes.
-					if postTurn != nil {
-						postTurn.DispatchUnblockedTasks(ctx, teamID)
-					}
+			teamID, _ := uuid.Parse(inMeta[tools.MetaTeamID])
+			if teamTaskID != uuid.Nil {
+				meta := teammateTaskMeta{
+					TaskID:   teamTaskID,
+					TeamID:   teamID,
+					ToAgent:  inMeta[tools.MetaToAgent],
+					Channel:  inMeta[tools.MetaOriginChannel],
+					ChatID:   inMeta[tools.MetaOriginChatID],
+					PeerKind: inMeta[tools.MetaOriginPeerKind],
 				}
+				cachedTeam = resolveTeamTaskOutcome(ctx, deps, outcome, taskActionFlags, meta)
 			}
 		}
 
@@ -413,12 +300,42 @@ func handleTeammateMessage(
 				errMsg = errMsg[:500] + "..."
 			}
 			announceContent = fmt.Sprintf("[FAILED] %s", errMsg)
+		} else if outcome.Result == nil {
+			slog.Warn("teammate message: nil result without error", "from", senderID)
+			return
 		} else if (outcome.Result.Content == "" && len(outcome.Result.Media) == 0) || agent.IsSilentReply(outcome.Result.Content) {
 			slog.Info("teammate message: suppressed silent/empty reply", "from", senderID)
 			return
 		} else {
 			announceContent = outcome.Result.Content
 			announceMedia = outcome.Result.Media
+		}
+
+		// Append member comments & attachments so leader sees them in the announce.
+		if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" && deps.TeamStore != nil {
+			if taskUUID, err := uuid.Parse(taskIDStr); err == nil {
+				if comments, err := deps.TeamStore.ListRecentTaskComments(ctx, taskUUID, 5); err == nil && len(comments) > 0 {
+					var parts []string
+					for _, c := range comments {
+						author := c.AgentKey
+						if author == "" {
+							author = "system"
+						}
+						text := c.Content
+						if len([]rune(text)) > 500 {
+							text = string([]rune(text)[:500]) + "..."
+						}
+						parts = append(parts, fmt.Sprintf("- [%s]: %s", author, text))
+					}
+					announceContent += "\n\n[Member notes]\n" + strings.Join(parts, "\n")
+				}
+				if attachments, err := deps.TeamStore.ListTaskAttachments(ctx, taskUUID); err == nil && len(attachments) > 0 {
+					announceContent += "\n\n[Attached files in team workspace]"
+					for _, a := range attachments {
+						announceContent += "\n- " + filepath.Base(a.Path)
+					}
+				}
+			}
 		}
 
 		// Announce result (or failure) to lead agent via announce queue.
@@ -431,77 +348,56 @@ func handleTeammateMessage(
 		// Resolve lead agent.
 		leadAgent := ""
 		if cachedTeam != nil {
-			if leadAg, err := agentStore.GetByID(ctx, cachedTeam.LeadAgentID); err == nil {
+			if leadAg, err := deps.AgentStore.GetByID(ctx, cachedTeam.LeadAgentID); err == nil {
 				leadAgent = leadAg.AgentKey
 			}
-		} else if teamIDStr := inMeta["team_id"]; teamIDStr != "" {
+		} else if teamIDStr := inMeta[tools.MetaTeamID]; teamIDStr != "" {
 			if teamUUID, err := uuid.Parse(teamIDStr); err == nil {
-				if team, err := teamStore.GetTeam(ctx, teamUUID); err == nil {
-					if leadAg, err := agentStore.GetByID(ctx, team.LeadAgentID); err == nil {
+				if team, err := deps.TeamStore.GetTeam(ctx, teamUUID); err == nil {
+					if leadAg, err := deps.AgentStore.GetByID(ctx, team.LeadAgentID); err == nil {
 						leadAgent = leadAg.AgentKey
 					}
 				}
 			}
 		}
 		if leadAgent == "" {
-			leadAgent = inMeta["from_agent"]
+			leadAgent = inMeta[tools.MetaFromAgent]
 		}
 		if leadAgent == "" {
-			leadAgent = cfg.ResolveDefaultAgentID()
+			leadAgent = deps.Cfg.ResolveDefaultAgentID()
 		}
 
-		origPeerKind := inMeta["origin_peer_kind"]
+		origPeerKind := inMeta[tools.MetaOriginPeerKind]
 		if origPeerKind == "" {
 			origPeerKind = string(sessions.PeerDirect)
 		}
-		origLocalKey := inMeta["origin_local_key"]
+		origLocalKey := inMeta[tools.MetaOriginLocalKey]
 		// Use exact origin session key if available (WS uses non-standard format).
-		leadSessionKey := inMeta["origin_session_key"]
+		leadSessionKey := inMeta[tools.MetaOriginSessionKey]
 		if leadSessionKey == "" {
 			// Fallback: rebuild session key from origin metadata (works for Telegram, Discord, etc.)
-			leadSessionKey = sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
+			leadSessionKey = sessions.BuildScopedSessionKey(leadAgent, origCh, sessions.PeerKind(origPeerKind), origChatID)
 			leadSessionKey = overrideSessionKeyFromLocalKey(leadSessionKey, origLocalKey, leadAgent, origCh, origChatID, origPeerKind)
 		}
 
 		// Extract trace context for announce linking.
 		var parentTraceID, parentRootSpanID uuid.UUID
-		if tid := inMeta["origin_trace_id"]; tid != "" {
+		if tid := inMeta[tools.MetaOriginTraceID]; tid != "" {
 			parentTraceID, _ = uuid.Parse(tid)
 		}
-		if sid := inMeta["origin_root_span_id"]; sid != "" {
+		if sid := inMeta[tools.MetaOriginRootSpanID]; sid != "" {
 			parentRootSpanID, _ = uuid.Parse(sid)
 		}
 
-		// Enrich announce content with member comments on the task (if any).
-		if taskIDStr := inMeta["team_task_id"]; taskIDStr != "" && teamStore != nil {
-			if tid, err := uuid.Parse(taskIDStr); err == nil {
-				if comments, err := teamStore.ListTaskComments(ctx, tid); err == nil && len(comments) > 0 {
-					// Include last 5 comments, each truncated to 200 chars.
-					start := 0
-					if len(comments) > 5 {
-						start = len(comments) - 5
-					}
-					var commentLines []string
-					for _, c := range comments[start:] {
-						author := c.AgentKey
-						if author == "" && c.UserID != "" {
-							author = "user:" + c.UserID
-						}
-						body := c.Content
-						if len(body) > 200 {
-							body = body[:200] + "..."
-						}
-						commentLines = append(commentLines, fmt.Sprintf("- [%s]: %s", author, body))
-					}
-					announceContent += "\n\n--- Member comments ---\n" + strings.Join(commentLines, "\n")
-				}
-			}
+		// Cap announce content to prevent context blowup for the leader agent.
+		if len([]rune(announceContent)) > 50_000 {
+			announceContent = string([]rune(announceContent)[:50_000]) + "\n[truncated]"
 		}
 
 		// Enqueue result. If we become the processor, run the announce loop.
 		entry := announceEntry{
-			MemberAgent:       inMeta["to_agent"],
-			MemberDisplayName: inMeta["to_agent_display"],
+			MemberAgent:       inMeta[tools.MetaToAgent],
+			MemberDisplayName: inMeta[tools.MetaToAgentDisplay],
 			Content:           announceContent,
 			Media:             announceMedia,
 		}
@@ -519,15 +415,15 @@ func handleTeammateMessage(
 			OrigChatID:       origChatID,
 			OrigPeerKind:     origPeerKind,
 			OrigLocalKey:     origLocalKey,
-			OriginUserID:     inMeta["origin_user_id"],
-			TeamID:           inMeta["team_id"],
-			TeamWorkspace:    inMeta["team_workspace"],
-			OriginTraceID:    inMeta["origin_trace_id"],
+			OriginUserID:     inMeta[tools.MetaOriginUserID],
+			TeamID:           inMeta[tools.MetaTeamID],
+			TeamWorkspace:    inMeta[tools.MetaTeamWorkspace],
+			OriginTraceID:    inMeta[tools.MetaOriginTraceID],
 			ParentTraceID:    parentTraceID,
 			ParentRootSpanID: parentRootSpanID,
-			OutMeta:          meta,
+			OutMeta:          outMeta,
 		}
-		processAnnounceLoop(ctx, q, routing, sched, msgBus, teamStore, postTurn, cfg)
+		processAnnounceLoop(ctx, q, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
 	}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 
 	return true
@@ -537,31 +433,31 @@ func handleTeammateMessage(
 // Returns true if the message was handled (caller should continue).
 func handleResetCommand(
 	msg bus.InboundMessage,
-	cfg *config.Config,
-	sessStore store.SessionStore,
+	deps *ConsumerDeps,
 ) bool {
-	if msg.Metadata["command"] != "reset" {
+	if msg.Metadata[tools.MetaCommand] != "reset" {
 		return false
 	}
 
 	agentID := msg.AgentID
 	if agentID == "" {
-		agentID = resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 	peerKind := msg.PeerKind
 	if peerKind == "" {
 		peerKind = string(sessions.PeerDirect)
 	}
-	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
-	if msg.Metadata["is_forum"] == "true" && peerKind == string(sessions.PeerGroup) {
+	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID)
+	if msg.Metadata[tools.MetaIsForum] == "true" && peerKind == string(sessions.PeerGroup) {
 		var topicID int
-		fmt.Sscanf(msg.Metadata["message_thread_id"], "%d", &topicID)
+		fmt.Sscanf(msg.Metadata[tools.MetaMessageThreadID], "%d", &topicID)
 		if topicID > 0 {
 			sessionKey = sessions.BuildGroupTopicSessionKey(agentID, msg.Channel, msg.ChatID, topicID)
 		}
 	}
-	sessStore.Reset(sessionKey)
-	sessStore.Save(sessionKey)
+	ctx := store.WithTenantID(context.Background(), msg.TenantID)
+	deps.SessStore.Reset(ctx, sessionKey)
+	deps.SessStore.Save(ctx, sessionKey)
 	providers.ResetCLISession("", sessionKey)
 	providers.ResetCursorCLISession("", sessionKey)
 	slog.Info("inbound: /reset command", "session", sessionKey)
@@ -573,28 +469,25 @@ func handleResetCommand(
 // Returns true if the message was handled (caller should continue).
 func handleStopCommand(
 	msg bus.InboundMessage,
-	cfg *config.Config,
-	sched *scheduler.Scheduler,
-	sessStore store.SessionStore,
-	msgBus *bus.MessageBus,
+	deps *ConsumerDeps,
 ) bool {
-	cmd := msg.Metadata["command"]
+	cmd := msg.Metadata[tools.MetaCommand]
 	if cmd != "stop" && cmd != "stopall" {
 		return false
 	}
 
 	agentID := msg.AgentID
 	if agentID == "" {
-		agentID = resolveAgentRoute(cfg, msg.Channel, msg.ChatID, msg.PeerKind)
+		agentID = resolveAgentRoute(deps.Cfg, msg.Channel, msg.ChatID, msg.PeerKind)
 	}
 	peerKind := msg.PeerKind
 	if peerKind == "" {
 		peerKind = string(sessions.PeerDirect)
 	}
-	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID, cfg.Sessions.Scope, cfg.Sessions.DmScope, cfg.Sessions.MainKey)
-	if msg.Metadata["is_forum"] == "true" && peerKind == string(sessions.PeerGroup) {
+	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID)
+	if msg.Metadata[tools.MetaIsForum] == "true" && peerKind == string(sessions.PeerGroup) {
 		var topicID int
-		fmt.Sscanf(msg.Metadata["message_thread_id"], "%d", &topicID)
+		fmt.Sscanf(msg.Metadata[tools.MetaMessageThreadID], "%d", &topicID)
 		if topicID > 0 {
 			sessionKey = sessions.BuildGroupTopicSessionKey(agentID, msg.Channel, msg.ChatID, topicID)
 		}
@@ -609,14 +502,14 @@ func handleStopCommand(
 
 	// sessStore is referenced in the original code but not used in this branch beyond
 	// session key construction; kept as parameter for API consistency.
-	_ = sessStore
+	_ = deps.SessStore
 
 	var cancelled bool
 	if cmd == "stopall" {
-		cancelled = sched.CancelSession(sessionKey)
+		cancelled = deps.Sched.CancelSession(sessionKey)
 		slog.Info("inbound: /stopall command", "session", sessionKey, "cancelled", cancelled)
 	} else {
-		cancelled = sched.CancelOneSession(sessionKey)
+		cancelled = deps.Sched.CancelOneSession(sessionKey)
 		slog.Info("inbound: /stop command", "session", sessionKey, "cancelled", cancelled)
 	}
 
@@ -635,7 +528,7 @@ func handleStopCommand(
 			feedback = "No active task to stop."
 		}
 	}
-	msgBus.PublishOutbound(bus.OutboundMessage{
+	deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 		Channel:  msg.Channel,
 		ChatID:   msg.ChatID,
 		Content:  feedback,
@@ -666,7 +559,7 @@ func buildTaskBoardSnapshot(ctx context.Context, teamStore store.TeamStore, team
 	var active, completed int
 	var activeLines []string
 	for _, t := range allTasks {
-		tid, _ := t.Metadata["origin_trace_id"].(string)
+		tid, _ := t.Metadata[tools.TaskMetaOriginTrace].(string)
 		if tid != originTraceID {
 			continue
 		}

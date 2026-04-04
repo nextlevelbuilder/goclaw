@@ -112,8 +112,9 @@ flowchart TD
 | `internal/skills/` | SKILL.md loader (5-tier hierarchy) + BM25 search + hot-reload via fsnotify |
 | `internal/channels/` | Channel manager + adapters: Telegram (forum topics, STT, bot commands), Feishu/Lark (streaming cards, media), Zalo OA, Zalo Personal, Discord, WhatsApp, Slack |
 | `internal/mcp/` | MCP server bridge (stdio, SSE, streamable-HTTP transports) |
-| `internal/scheduler/` | Lane-based concurrency control (main, subagent, cron, team lanes) with per-session serialization |
+| `internal/scheduler/` | Lane-based concurrency control (main, subagent, cron, team lanes) with per-session serialization. Per-edition rate limits (`MaxSubagentConcurrent`, `MaxSubagentDepth`) with tenant-scoped concurrency |
 | `internal/memory/` | Memory system (pgvector hybrid search) |
+| `internal/subagent/` | Subagent lifecycle: spawn, roster, task persistence (subagent_tasks table), announce queue (producer-consumer), auto-retry, per-edition rate limiting |
 | `internal/permissions/` | RBAC policy engine (admin, operator, viewer roles) |
 | `internal/store/pg/pairing.go` | DM/device pairing service (8-character codes, database-backed) |
 | `internal/sandbox/` | Docker-based code execution sandbox |

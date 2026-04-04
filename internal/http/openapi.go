@@ -9,13 +9,11 @@ import (
 var openapiSpec []byte
 
 // DocsHandler serves the OpenAPI spec and Swagger UI.
-type DocsHandler struct {
-	token string
-}
+type DocsHandler struct{}
 
 // NewDocsHandler creates a handler for API documentation endpoints.
-func NewDocsHandler(token string) *DocsHandler {
-	return &DocsHandler{token: token}
+func NewDocsHandler() *DocsHandler {
+	return &DocsHandler{}
 }
 
 // RegisterRoutes registers documentation routes on the given mux.

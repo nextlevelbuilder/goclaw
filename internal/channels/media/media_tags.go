@@ -21,7 +21,11 @@ func BuildMediaTags(mediaList []MediaInfo) string {
 		var tag string
 		switch m.Type {
 		case TypeImage:
-			tag = "<media:image>"
+			if m.SourceURL != "" {
+				tag = fmt.Sprintf("<media:image url=%q>", m.SourceURL)
+			} else {
+				tag = "<media:image>"
+			}
 		case TypeVideo, TypeAnimation:
 			tag = "<media:video>"
 		case TypeAudio:

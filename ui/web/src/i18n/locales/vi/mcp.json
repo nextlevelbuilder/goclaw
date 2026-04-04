@@ -18,6 +18,7 @@
   },
   "viewTools": "Xem công cụ",
   "manageGrants": "Quản lý quyền",
+  "reconnect": "Kết nối lại",
   "delete": {
     "title": "Xóa MCP Server",
     "description": "Bạn có chắc muốn xóa \"{{name}}\"? Tất cả quyền liên quan cũng sẽ bị xóa.",
@@ -60,7 +61,9 @@
       "commandRequired": "Lệnh là bắt buộc cho giao thức stdio",
       "urlRequired": "URL là bắt buộc cho giao thức SSE/HTTP",
       "connectionFailed": "Kết nối thất bại"
-    }
+    },
+    "requireUserCredentials": "Yêu cầu Credentials riêng",
+    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials."
   },
   "grants": {
     "title": "Quyền agent - {{name}}",
@@ -96,6 +99,35 @@
     "deleted": "Đã xóa MCP server",
     "failedCreate": "Không thể tạo MCP server",
     "failedUpdate": "Không thể cập nhật MCP server",
-    "failedDelete": "Không thể xóa MCP server"
+    "failedDelete": "Không thể xóa MCP server",
+    "reconnected": "Đã reset kết nối MCP server",
+    "failedReconnect": "Không thể kết nối lại MCP server"
+  },
+  "userCredentials": {
+    "title": "Thông tin xác thực",
+    "description": "Đặt thông tin xác thực cá nhân của bạn cho máy chủ MCP này. Chỉ áp dụng cho tài khoản của bạn.",
+    "titleAdmin": "Thông tin xác thực",
+    "descriptionAdmin": "Đặt thông tin xác thực cho người dùng cụ thể trên máy chủ MCP này. Chúng ghi đè cài đặt mặc định của máy chủ chỉ cho người dùng được chọn.",
+    "selectUser": "Chọn người dùng",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Để trống để giữ nguyên",
+    "headers": "Headers",
+    "env": "Biến môi trường",
+    "headerPlaceholder": "KEY=VALUE, mỗi dòng một cặp",
+    "save": "Lưu",
+    "delete": "Xóa",
+    "deleteAll": "Xóa tất cả",
+    "cancel": "Hủy",
+    "saved": "Đã lưu thông tin xác thực",
+    "deleted": "Đã xóa thông tin xác thực",
+    "hasApiKey": "API Key đã đặt",
+    "hasHeaders": "Headers đã đặt",
+    "hasEnv": "Biến môi trường đã đặt",
+    "noCredentials": "Chưa có thông tin xác thực",
+    "addHeader": "Thêm Header",
+    "addEnv": "Thêm biến",
+    "saveFailed": "Lưu credentials thất bại",
+    "deleteFailed": "Xóa credentials thất bại",
+    "mergeHint": "Người dùng chat (Telegram, Discord...) cần được gộp vào tenant user qua trang Contacts trước khi có thể thiết lập credentials riêng."
   }
 }

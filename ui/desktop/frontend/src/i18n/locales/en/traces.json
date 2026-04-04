@@ -1,0 +1,63 @@
+{
+  "title": "Traces",
+  "description": "LLM call traces and performance data",
+  "filterPlaceholder": "Filter by agent ID...",
+  "filter": "Filter",
+  "allAgents": "All agents",
+  "allChannels": "All channels",
+  "emptyTitle": "No traces",
+  "emptyDescription": "No traces found. Traces are recorded when agents process requests.",
+  "columns": {
+    "name": "Name",
+    "status": "Status",
+    "duration": "Duration",
+    "tokens": "Tokens",
+    "spans": "Spans",
+    "time": "Time"
+  },
+  "unnamed": "Unnamed",
+  "stopRun": "Stop run",
+  "cached": "cached",
+  "detail": {
+    "title": "Trace Detail",
+    "copyTraceId": "Copy trace ID",
+    "notFound": "Trace not found.",
+    "name": "Name:",
+    "status": "Status:",
+    "duration": "Duration:",
+    "channel": "Channel:",
+    "tokens": "Tokens:",
+    "spans": "Spans:",
+    "started": "Started:",
+    "delegatedFrom": "Delegated from:",
+    "createdAt": "Created:",
+    "input": "Input",
+    "output": "Output",
+    "copy": "Copy",
+    "spansCount": "Spans ({{count}})",
+    "llmCalls": "LLM",
+    "toolCalls": "tool",
+    "export": "Export trace",
+    "stopRun": "Stop run"
+  },
+  "span": {
+    "model": "Model:",
+    "tokens": "Tokens:",
+    "createdAt": "Created:",
+    "input": "Input:",
+    "output": "Output:",
+    "copy": "Copy",
+    "startTime": "Start:",
+    "endTime": "End:",
+    "cacheRead": "read",
+    "cacheWrite": "write",
+    "thinking": "thinking",
+    "cached": "cached"
+  },
+  "toast": {
+    "failedLoad": "Failed to load traces",
+    "abortSent": "Run stopped",
+    "abortFailed": "Failed to stop run",
+    "abortNotFound": "Run already finished or not found"
+  }
+}

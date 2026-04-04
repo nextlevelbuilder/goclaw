@@ -269,21 +269,10 @@ export function useTeams() {
     [ws],
   );
 
-  const getKnownUsers = useCallback(
-    async (teamId: string): Promise<string[]> => {
-      const res = await ws.call<{ users: string[] }>(
-        Methods.TEAMS_KNOWN_USERS,
-        { teamId },
-      );
-      return res.users ?? [];
-    },
-    [ws],
-  );
-
   return {
     teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, getTeamScopes,
     getTaskDetail, getTaskLight, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
     createTask, deleteTask, deleteTasksBulk, assignTask,
-    addMember, removeMember, updateTeamSettings, getKnownUsers,
+    addMember, removeMember, updateTeamSettings,
   };
 }

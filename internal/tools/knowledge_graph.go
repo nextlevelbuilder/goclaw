@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -41,7 +42,7 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 			},
 			"entity_type": map[string]any{
 				"type":        "string",
-				"description": "Filter by entity type (person, project, task, event, concept, location, organization)",
+				"description": "Filter by entity type (person, organization, project, product, technology, task, event, document, concept, location)",
 			},
 			"entity_id": map[string]any{
 				"type":        "string",
@@ -49,7 +50,7 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 			},
 			"max_depth": map[string]any{
 				"type":        "number",
-				"description": "Maximum traversal depth (default 2, max 3)",
+				"description": "Maximum traversal depth (default 2, max 5)",
 			},
 		},
 		"required": []string{"query"},
@@ -75,12 +76,12 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	entityID, _ := args["entity_id"].(string)
 	maxDepth := 2
 	if md, ok := args["max_depth"].(float64); ok && md > 0 {
-		maxDepth = min(int(md), 3)
+		maxDepth = min(int(md), 5)
 	}
 
 	// Traversal mode: entity_id provided
 	if entityID != "" {
-		return t.executeTraversal(ctx, agentID.String(), userID, entityID, maxDepth)
+		return t.executeTraversal(ctx, agentID.String(), userID, entityID, maxDepth, query)
 	}
 
 	// List-all mode: query="*"
@@ -92,31 +93,75 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 	return t.executeSearch(ctx, agentID.String(), userID, query, args)
 }
 
-func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID, userID, entityID string, maxDepth int) *Result {
+func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID, userID, entityID string, maxDepth int, query string) *Result {
+	// Tier 1: outgoing deep traversal
 	results, err := t.kgStore.Traverse(ctx, agentID, userID, entityID, maxDepth)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("graph traversal failed: %v", err))
 	}
-	if len(results) == 0 {
-		return NewResult(fmt.Sprintf("No connected entities found from entity_id=%q within depth %d.", entityID, maxDepth))
+	if len(results) > 0 {
+		const maxTraversalResults = 20
+		totalResults := len(results)
+		if totalResults > maxTraversalResults {
+			results = results[:maxTraversalResults]
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Graph traversal from %q (max depth %d):\n\n", entityID, maxDepth))
+		for _, r := range results {
+			sb.WriteString(fmt.Sprintf("- [depth %d] %s (%s)", r.Depth, r.Entity.Name, r.Entity.EntityType))
+			if r.Via != "" {
+				if strings.HasPrefix(r.Via, "~") {
+					sb.WriteString(fmt.Sprintf(" ←[%s]—", r.Via[1:]))
+				} else {
+					sb.WriteString(fmt.Sprintf(" —[%s]→", r.Via))
+				}
+			}
+			if r.Entity.Description != "" {
+				sb.WriteString(fmt.Sprintf("\n  %s", r.Entity.Description))
+			}
+			if len(r.Path) > 0 {
+				sb.WriteString(fmt.Sprintf("\n  path: %s", strings.Join(r.Path, " → ")))
+			}
+			sb.WriteString("\n")
+		}
+		if totalResults > maxTraversalResults {
+			sb.WriteString(fmt.Sprintf("\n(+%d more entities reachable, use query to narrow or adjust max_depth)\n", totalResults-maxTraversalResults))
+		}
+		return NewResult(sb.String())
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Graph traversal from %q (max depth %d):\n\n", entityID, maxDepth))
-	for _, r := range results {
-		sb.WriteString(fmt.Sprintf("- [depth %d] %s (%s)", r.Depth, r.Entity.Name, r.Entity.EntityType))
-		if r.Via != "" {
-			sb.WriteString(fmt.Sprintf(" via %q", r.Via))
-		}
-		if r.Entity.Description != "" {
-			sb.WriteString(fmt.Sprintf("\n  %s", r.Entity.Description))
-		}
-		if len(r.Path) > 0 {
-			sb.WriteString(fmt.Sprintf("\n  path: %s", strings.Join(r.Path, " → ")))
-		}
-		sb.WriteString("\n")
+	// Tier 2: direct connections (bidirectional, 1-hop, cap 10)
+	relations, relErr := t.kgStore.ListRelations(ctx, agentID, userID, entityID)
+	if relErr != nil {
+		slog.Warn("kg.listRelations failed", "entity_id", entityID, "error", relErr)
 	}
-	return NewResult(sb.String())
+	if len(relations) > 0 {
+		const maxDirectConnections = 10
+		totalCount := len(relations)
+		if totalCount > maxDirectConnections {
+			relations = relations[:maxDirectConnections]
+		}
+		nameCache := make(map[string]string)
+		entityName := t.resolveEntityName(ctx, agentID, userID, entityID, nameCache)
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Direct connections of %q:\n\n", entityName))
+		for _, rel := range relations {
+			srcName := t.resolveEntityName(ctx, agentID, userID, rel.SourceEntityID, nameCache)
+			tgtName := t.resolveEntityName(ctx, agentID, userID, rel.TargetEntityID, nameCache)
+			sb.WriteString(fmt.Sprintf("  %s —[%s]→ %s\n", srcName, rel.RelationType, tgtName))
+		}
+		if totalCount > maxDirectConnections {
+			sb.WriteString(fmt.Sprintf("\n(%d more connections not shown)\n", totalCount-maxDirectConnections))
+		}
+		return NewResult(sb.String())
+	}
+
+	// Tier 3: fallback to search if query provided
+	if query != "" && query != "*" {
+		return t.executeSearch(ctx, agentID, userID, query, nil)
+	}
+
+	return NewResult(fmt.Sprintf("No connected entities found from entity_id=%q.", entityID))
 }
 
 func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, userID string) *Result {
@@ -179,14 +224,19 @@ func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, u
 			sb.WriteString(fmt.Sprintf("  %s\n", e.Description))
 		}
 
-		// Fetch relations to show connections with names
+		// Fetch relations to show connections with names (cap 5 per entity)
 		relations, err := t.kgStore.ListRelations(ctx, agentID, userID, e.ID)
 		if err == nil && len(relations) > 0 {
+			const maxRelationsPerEntity = 5
 			sb.WriteString("  Relations:\n")
-			for _, rel := range relations {
+			shown := min(len(relations), maxRelationsPerEntity)
+			for _, rel := range relations[:shown] {
 				srcName := t.resolveEntityName(ctx, agentID, userID, rel.SourceEntityID, entityNames)
 				tgtName := t.resolveEntityName(ctx, agentID, userID, rel.TargetEntityID, entityNames)
 				sb.WriteString(fmt.Sprintf("    %s —[%s]→ %s\n", srcName, rel.RelationType, tgtName))
+			}
+			if len(relations) > maxRelationsPerEntity {
+				sb.WriteString(fmt.Sprintf("    (+%d more, use entity_id=%q to see all)\n", len(relations)-maxRelationsPerEntity, e.ID))
 			}
 		}
 	}

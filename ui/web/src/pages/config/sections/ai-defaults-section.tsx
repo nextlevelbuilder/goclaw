@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InfoLabel } from "@/components/shared/info-label";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
+import { SubSection, Field } from "./ai-defaults-form-controls";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AgentsData = Record<string, any>;
@@ -180,6 +181,10 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
             <Field label={t("agents.memory.maxResults")} tip={t("agents.memory.maxResultsTip")} type="number" value={memory.max_results} onChange={(v) => updateNested("memory", { max_results: Number(v) })} placeholder="6" />
             <Field label={t("agents.memory.minScore")} tip={t("agents.memory.minScoreTip")} type="number" step="0.01" value={memory.min_score} onChange={(v) => updateNested("memory", { min_score: Number(v) })} placeholder="0.35" />
           </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label={t("agents.memory.maxChunkLen")} tip={t("agents.memory.maxChunkLenTip")} type="number" value={memory.max_chunk_len} onChange={(v) => updateNested("memory", { max_chunk_len: Number(v) })} placeholder="1000" />
+            <Field label={t("agents.memory.chunkOverlap")} tip={t("agents.memory.chunkOverlapTip")} type="number" value={memory.chunk_overlap} onChange={(v) => updateNested("memory", { chunk_overlap: Number(v) })} placeholder="200" />
+          </div>
         </SubSection>
 
         <SubSection
@@ -203,7 +208,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>{t("agents.pruning.mode")}</Label>
-              <Select value={pruning.mode ?? "off"} onValueChange={(v) => updateNested("contextPruning", { mode: v })}>
+              <Select value={pruning.mode ?? "auto"} onValueChange={(v) => updateNested("contextPruning", { mode: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Off</SelectItem>
@@ -259,66 +264,3 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
   );
 }
 
-/* --- Helper components --- */
-
-function SubSection({
-  title,
-  desc,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  desc: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-md border">
-      <button
-        type="button"
-        className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50"
-        onClick={onToggle}
-      >
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        <div>
-          <span className="font-medium">{title}</span>
-          <span className="ml-2 text-xs text-muted-foreground">{desc}</span>
-        </div>
-      </button>
-      {open && <div className="space-y-3 border-t px-4 py-3">{children}</div>}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  tip,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  step,
-}: {
-  label: string;
-  tip?: string;
-  value: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: string;
-  step?: string;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      {tip ? <InfoLabel tip={tip}>{label}</InfoLabel> : <Label>{label}</Label>}
-      <Input
-        type={type}
-        step={step}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-    </div>
-  );
-}
