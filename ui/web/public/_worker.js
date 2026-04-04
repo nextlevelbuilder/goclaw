@@ -28,7 +28,12 @@ export default {
       });
     }
 
-    // Serve static assets from Pages
-    return env.ASSETS.fetch(request);
+    // Serve static assets, SPA fallback for client-side routes
+    const assetResponse = await env.ASSETS.fetch(request);
+    if (assetResponse.status === 404) {
+      // SPA fallback: serve index.html for client-side routes
+      return env.ASSETS.fetch(new URL("/", request.url));
+    }
+    return assetResponse;
   },
 };

@@ -1,4 +1,8 @@
 name = "nta-goclaw"
 compatibility_date = "2025-01-01"
 main = "dist/_worker.js"
-assets = { directory = "dist", binding = "ASSETS" }
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "none"
