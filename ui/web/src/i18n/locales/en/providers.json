@@ -133,6 +133,20 @@
     "runOnServer": "Run on the server terminal:",
     "recheckButton": "Re-check"
   },
+  "cursorCli": {
+    "description": "Cursor CLI uses your local",
+    "descriptionSuffix": "binary. Sign in with browser login on the server — GoClaw does not store a Cursor API key.",
+    "checkingAuth": "Checking authentication...",
+    "authenticatedAs": "Authenticated as",
+    "switchAccount": "Switch account?",
+    "switchAccountInstructions": "Run on the server terminal:",
+    "switchAccountRecheck": "Then click",
+    "switchAccountRecheckSuffix": "to re-check.",
+    "notAuthenticated": "Not authenticated",
+    "runOnServer": "Run on the server terminal:",
+    "recheckButton": "Re-check",
+    "authCheckFailed": "Failed to check auth status"
+  },
   "detail": {
     "advanced": "Advanced",
     "identity": "Identity",
@@ -143,6 +157,8 @@
     "acpConfigDesc": "Agent subprocess settings",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Local CLI authentication",
+    "cursorCliConfig": "Cursor CLI",
+    "cursorCliConfigDesc": "Local Cursor agent authentication",
     "oauthConfig": "OAuth",
     "oauthConfigDesc": "ChatGPT OAuth authentication",
     "nameReadonly": "Provider identifier, cannot be changed",

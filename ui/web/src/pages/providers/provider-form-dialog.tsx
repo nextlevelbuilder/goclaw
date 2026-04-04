@@ -25,6 +25,7 @@ import { slugify, isValidSlug } from "@/lib/slug";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
+import { CursorCLISection } from "./provider-cursor-cli-section";
 import { ACPSection } from "./provider-acp-section";
 import { Loader2 } from "lucide-react";
 
@@ -55,9 +56,11 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const [acpWorkDir, setAcpWorkDir] = useState("");
 
   const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
+  const hasCursorCLI = existingProviders.some((p) => p.provider_type === "cursor_cli");
 
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
+  const isCursorCLI = providerType === "cursor_cli";
   const isACP = providerType === "acp";
 
   useEffect(() => {
@@ -127,6 +130,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
           <ProviderTypeSelect
             value={providerType}
             hasClaudeCLI={hasClaudeCLI}
+            hasCursorCLI={hasCursorCLI}
             alreadyAddedLabel={t("form.alreadyAdded")}
             providerTypeLabel={t("form.providerType")}
             onChange={(v) => {
@@ -185,6 +189,8 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
 
               {isCLI && <CLISection open={open} />}
 
+              {isCursorCLI && <CursorCLISection open={open} />}
+
               {isACP && (
                 <ACPSection
                   binary={acpBinary}
@@ -200,7 +206,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                 />
               )}
 
-              {!isCLI && !isACP && (
+              {!isCLI && !isCursorCLI && !isACP && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="apiBase">{t("form.apiBase")}</Label>
@@ -257,9 +263,10 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   );
 }
 
-function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
+function ProviderTypeSelect({ value, hasClaudeCLI, hasCursorCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
   value: string;
   hasClaudeCLI: boolean;
+  hasCursorCLI: boolean;
   alreadyAddedLabel: string;
   providerTypeLabel: string;
   onChange: (value: string) => void;
@@ -276,10 +283,13 @@ function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTy
             <SelectItem
               key={pt.value}
               value={pt.value}
-              disabled={pt.value === "claude_cli" && hasClaudeCLI}
+              disabled={(pt.value === "claude_cli" && hasClaudeCLI) || (pt.value === "cursor_cli" && hasCursorCLI)}
             >
               {pt.label}
               {pt.value === "claude_cli" && hasClaudeCLI && (
+                <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
+              )}
+              {pt.value === "cursor_cli" && hasCursorCLI && (
                 <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
               )}
             </SelectItem>

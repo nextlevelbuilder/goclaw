@@ -16,7 +16,7 @@ interface ProviderOverviewProps {
   onUpdate: (id: string, data: ProviderInput) => Promise<void>;
 }
 
-const NO_API_KEY_TYPES = new Set(["claude_cli", "acp", "chatgpt_oauth"]);
+const NO_API_KEY_TYPES = new Set(["claude_cli", "cursor_cli", "acp", "chatgpt_oauth"]);
 
 export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) {
   const { t } = useTranslation("providers");

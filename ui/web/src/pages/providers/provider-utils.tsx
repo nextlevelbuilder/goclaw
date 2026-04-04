@@ -9,6 +9,7 @@ const SPECIAL_VARIANTS: Record<string, BadgeVariant> = {
   anthropic_native: "default",
   chatgpt_oauth: "default",
   claude_cli: "outline",
+  cursor_cli: "outline",
   acp: "outline",
 };
 
@@ -30,7 +31,7 @@ export function ProviderApiKeyBadge({ provider }: { provider: ProviderData }) {
       </span>
     );
   }
-  if (provider.provider_type === "claude_cli") {
+  if (provider.provider_type === "claude_cli" || provider.provider_type === "cursor_cli") {
     return (
       <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
         <ShieldCheck className="h-3 w-3" />{t("card.authenticated")}

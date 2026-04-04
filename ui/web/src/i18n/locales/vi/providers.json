@@ -133,6 +133,20 @@
     "runOnServer": "Chạy trên terminal máy chủ:",
     "recheckButton": "Kiểm tra lại"
   },
+  "cursorCli": {
+    "description": "Cursor CLI dùng nhị phân",
+    "descriptionSuffix": "cục bộ. Đăng nhập trình duyệt trên máy chủ — GoClaw không lưu API key Cursor.",
+    "checkingAuth": "Đang kiểm tra xác thực...",
+    "authenticatedAs": "Đã xác thực là",
+    "switchAccount": "Chuyển tài khoản?",
+    "switchAccountInstructions": "Chạy trên terminal máy chủ:",
+    "switchAccountRecheck": "Sau đó nhấp",
+    "switchAccountRecheckSuffix": "để kiểm tra lại.",
+    "notAuthenticated": "Chưa xác thực",
+    "runOnServer": "Chạy trên terminal máy chủ:",
+    "recheckButton": "Kiểm tra lại",
+    "authCheckFailed": "Không thể kiểm tra trạng thái xác thực"
+  },
   "detail": {
     "advanced": "Nâng cao",
     "identity": "Danh tính",
@@ -143,6 +157,8 @@
     "acpConfigDesc": "Cài đặt tiến trình con agent",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "Xác thực CLI cục bộ",
+    "cursorCliConfig": "Cursor CLI",
+    "cursorCliConfigDesc": "Xác thực agent Cursor cục bộ",
     "oauthConfig": "OAuth",
     "oauthConfigDesc": "Xác thực OAuth ChatGPT",
     "nameReadonly": "Định danh provider, không thể thay đổi",

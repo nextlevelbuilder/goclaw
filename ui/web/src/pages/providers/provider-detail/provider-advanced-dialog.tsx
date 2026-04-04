@@ -20,6 +20,7 @@ import {
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { CLISection } from "../provider-cli-section";
+import { CursorCLISection } from "../provider-cursor-cli-section";
 import { OAuthSection } from "../provider-oauth-section";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
@@ -52,8 +53,9 @@ export function ProviderAdvancedDialog({
 
   const isACP = provider.provider_type === "acp";
   const isCLI = provider.provider_type === "claude_cli";
+  const isCursorCLI = provider.provider_type === "cursor_cli";
   const isOAuth = provider.provider_type === "chatgpt_oauth";
-  const isStandard = !isACP && !isCLI && !isOAuth;
+  const isStandard = !isACP && !isCLI && !isCursorCLI && !isOAuth;
 
   const typeInfo = PROVIDER_TYPES.find((pt) => pt.value === provider.provider_type);
 
@@ -236,6 +238,17 @@ export function ProviderAdvancedDialog({
                 description={t("detail.cliConfigDesc")}
               />
               <CLISection open={open} />
+            </>
+          )}
+
+          {/* Cursor CLI */}
+          {isCursorCLI && (
+            <>
+              <ConfigGroupHeader
+                title={t("detail.cursorCliConfig")}
+                description={t("detail.cursorCliConfigDesc")}
+              />
+              <CursorCLISection open={open} />
             </>
           )}
 
