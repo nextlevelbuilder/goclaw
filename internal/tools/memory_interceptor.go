@@ -219,15 +219,19 @@ func (m *MemoryInterceptor) ListFiles(ctx context.Context, path string) (string,
 
 	agentID := store.AgentIDFromContext(ctx)
 	if agentID == uuid.Nil {
+		slog.Warn("memory.list_files: agentID is nil, skipping DB lookup", "path", path, "ws", ws)
 		return "", false, nil
 	}
 
 	userID := store.MemoryUserID(ctx)
 	agentStr := agentID.String()
+	slog.Warn("memory.list_files: querying DB", "agentID", agentStr, "userID", userID, "sharedMemory", store.IsSharedMemory(ctx))
 	docs, err := m.memStore.ListDocuments(ctx, agentStr, userID)
 	if err != nil {
+		slog.Warn("memory.list_files: DB query failed", "agentID", agentStr, "userID", userID, "error", err)
 		return "", true, err
 	}
+	slog.Warn("memory.list_files: own docs", "count", len(docs), "agentID", agentStr, "userID", userID)
 
 	// Merge leader's documents for team members (fallback, deduplicate by path).
 	if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {

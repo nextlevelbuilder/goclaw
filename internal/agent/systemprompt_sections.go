@@ -108,27 +108,41 @@ func buildToolCallStyleSection() []string {
 
 // buildMemoryRecallSection generates the ## Memory Recall section for the system prompt.
 func buildMemoryRecallSection(hasMemoryGet, hasKG bool) []string {
-	lines := []string{"## Memory Recall", ""}
+	lines := []string{"## Memory Recall (MANDATORY)", ""}
 
-	if hasMemoryGet {
-		lines = append(lines,
-			"Before answering questions about prior work, decisions, people, preferences, or todos: "+
-				"call memory_search with a relevant query; then use memory_get to pull only the needed lines. "+
-				"If no relevant results found, say so naturally without mentioning tool names.")
-	} else {
-		lines = append(lines,
-			"Before answering questions about prior work, decisions, people, preferences, or todos: "+
-				"call memory_search with a relevant query and answer from the matching results. "+
-				"If no relevant results found, say so naturally without mentioning tool names.")
-	}
+	// Core mandatory rule — applies to ALL requests, not just questions about the past.
+	lines = append(lines,
+		"**MANDATORY FIRST STEP — before processing ANY user request or task:**",
+		"")
 
 	if hasKG {
 		lines = append(lines,
-			"Also run knowledge_graph_search when the question involves people, teams, projects, or connections — "+
-				"it finds multi-hop relationship paths that memory_search misses.")
+			"1. Run `knowledge_graph_search` with relevant keywords (people, projects, topics mentioned).",
+			"2. Run `memory_search` with a relevant query to recall prior context, decisions, and notes.")
+		if hasMemoryGet {
+			lines = append(lines,
+				"3. If memory_search returns relevant hits, use `memory_get` to pull the needed sections.")
+		}
+	} else {
+		lines = append(lines,
+			"1. Run `memory_search` with a relevant query to recall prior context, decisions, and notes.")
+		if hasMemoryGet {
+			lines = append(lines,
+				"2. If memory_search returns relevant hits, use `memory_get` to pull the needed sections.")
+		}
 	}
 
-	lines = append(lines, "")
+	lines = append(lines,
+		"",
+		"This is NOT optional. Even for simple requests — the user may have relevant history, preferences, "+
+			"or ongoing projects that affect how you should respond. Skipping recall leads to redundant questions, "+
+			"contradicting past decisions, or ignoring established context.",
+		"",
+		"**Only skip recall when:** the message is a greeting, acknowledgment, or clearly needs no context (e.g. \"ok\", \"thanks\").",
+		"",
+		"If no relevant results found, proceed naturally without mentioning tool names.",
+		"")
+
 	return lines
 }
 

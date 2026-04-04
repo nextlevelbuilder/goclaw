@@ -97,7 +97,7 @@ var coreToolSummaries = map[string]string{
 	"write_file":    "Create or overwrite files",
 	"list_files":    "List directory contents",
 	"exec":          "Run shell commands",
-	"memory_search": "Search indexed memory files (MEMORY.md + memory/*.md)",
+	"memory_search": "MANDATORY first step: search memory before handling any request",
 	"memory_get":    "Read specific sections of memory files",
 	"spawn":         "Spawn a self-clone subagent to handle a task in the background",
 	"web_search":    "Search the web",

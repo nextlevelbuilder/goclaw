@@ -21,12 +21,15 @@ func (s *SQLiteMemoryStore) GetDocument(ctx context.Context, agentID, userID, pa
 	var err error
 
 	if userID == "" {
+		// Shared memory mode: find by path regardless of user_id,
+		// preferring agent-level (NULL) over per-user documents.
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return "", tcErr
 		}
 		err = s.db.QueryRowContext(ctx,
-			"SELECT content FROM memory_documents WHERE agent_id = ? AND path = ? AND user_id IS NULL"+tc,
+			"SELECT content FROM memory_documents WHERE agent_id = ? AND path = ?"+tc+
+				" ORDER BY CASE WHEN user_id IS NULL THEN 0 ELSE 1 END LIMIT 1",
 			append([]any{aid, path}, tcArgs...)...).Scan(&content)
 	} else {
 		tc, tcArgs, tcErr := scopeClause(ctx)
@@ -70,12 +73,13 @@ func (s *SQLiteMemoryStore) DeleteDocument(ctx context.Context, agentID, userID,
 	var err error
 
 	if userID == "" {
+		// Shared memory mode: delete by path regardless of user_id.
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return tcErr
 		}
 		res, err = s.db.ExecContext(ctx,
-			"DELETE FROM memory_documents WHERE agent_id = ? AND path = ? AND user_id IS NULL"+tc,
+			"DELETE FROM memory_documents WHERE agent_id = ? AND path = ?"+tc,
 			append([]any{agentID, path}, tcArgs...)...)
 	} else {
 		tc, tcArgs, tcErr := scopeClause(ctx)
@@ -101,12 +105,18 @@ func (s *SQLiteMemoryStore) ListDocuments(ctx context.Context, agentID, userID s
 	var err error
 
 	if userID == "" {
+		// Shared memory mode: return all documents for this agent (any user_id),
+		// deduplicated by path — prefer agent-level (NULL user_id), then latest per-user.
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return nil, tcErr
 		}
 		rows, err = s.db.QueryContext(ctx,
-			"SELECT path, hash, user_id, updated_at FROM memory_documents WHERE agent_id = ? AND user_id IS NULL"+tc,
+			`SELECT path, hash, user_id, updated_at FROM (
+			   SELECT path, hash, user_id, updated_at,
+			     ROW_NUMBER() OVER (PARTITION BY path ORDER BY CASE WHEN user_id IS NULL THEN 0 ELSE 1 END, updated_at DESC) AS rn
+			   FROM memory_documents WHERE agent_id = ?`+tc+`
+			 ) WHERE rn = 1`,
 			append([]any{agentID}, tcArgs...)...)
 	} else {
 		tc, tcArgs, tcErr := scopeClause(ctx)
@@ -148,12 +158,15 @@ func (s *SQLiteMemoryStore) IndexDocument(ctx context.Context, agentID, userID, 
 	// Get document ID
 	var docID string
 	if userID == "" {
+		// Shared memory mode: find by path regardless of user_id,
+		// preferring agent-level (NULL) over per-user documents.
 		tc, tcArgs, tcErr := scopeClause(ctx)
 		if tcErr != nil {
 			return tcErr
 		}
 		err = s.db.QueryRowContext(ctx,
-			"SELECT id FROM memory_documents WHERE agent_id = ? AND path = ? AND user_id IS NULL"+tc,
+			"SELECT id FROM memory_documents WHERE agent_id = ? AND path = ?"+tc+
+				" ORDER BY CASE WHEN user_id IS NULL THEN 0 ELSE 1 END LIMIT 1",
 			append([]any{agentID, path}, tcArgs...)...).Scan(&docID)
 	} else {
 		tc, tcArgs, tcErr := scopeClause(ctx)
@@ -306,6 +319,8 @@ func (s *SQLiteMemoryStore) GetDocumentDetail(ctx context.Context, agentID, user
 	var args []any
 
 	if userID == "" {
+		// Shared memory mode: find by path regardless of user_id,
+		// preferring agent-level (NULL) over per-user documents.
 		tc, tcArgs, err := scopeClauseAlias(ctx, "d")
 		if err != nil {
 			return nil, err
@@ -314,8 +329,9 @@ func (s *SQLiteMemoryStore) GetDocumentDetail(ctx context.Context, agentID, user
 				COUNT(c.id) AS chunk_count
 			 FROM memory_documents d
 			 LEFT JOIN memory_chunks c ON c.document_id = d.id
-			 WHERE d.agent_id = ? AND d.path = ? AND d.user_id IS NULL` + tc + `
-			 GROUP BY d.id`
+			 WHERE d.agent_id = ? AND d.path = ?` + tc + `
+			 GROUP BY d.id
+			 ORDER BY CASE WHEN d.user_id IS NULL THEN 0 ELSE 1 END LIMIT 1`
 		args = append([]any{agentID, path}, tcArgs...)
 	} else {
 		tc, tcArgs, err := scopeClauseAlias(ctx, "d")
@@ -356,6 +372,7 @@ func (s *SQLiteMemoryStore) ListChunks(ctx context.Context, agentID, userID, pat
 	var args []any
 
 	if userID == "" {
+		// Shared memory mode: find chunks regardless of user_id.
 		tc, tcArgs, err := scopeClauseAlias(ctx, "d")
 		if err != nil {
 			return nil, err
@@ -363,7 +380,7 @@ func (s *SQLiteMemoryStore) ListChunks(ctx context.Context, agentID, userID, pat
 		q = `SELECT c.id, c.start_line, c.end_line, c.text
 			 FROM memory_chunks c
 			 JOIN memory_documents d ON c.document_id = d.id
-			 WHERE d.agent_id = ? AND d.path = ? AND d.user_id IS NULL` + tc + `
+			 WHERE d.agent_id = ? AND d.path = ?` + tc + `
 			 ORDER BY c.start_line`
 		args = append([]any{agentID, path}, tcArgs...)
 	} else {

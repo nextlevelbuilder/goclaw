@@ -34,7 +34,7 @@ func (t *MemorySearchTool) SetHasKG(has bool) {
 func (t *MemorySearchTool) Name() string { return "memory_search" }
 
 func (t *MemorySearchTool) Description() string {
-	return "Mandatory recall step: semantically search MEMORY.md + memory/*.md before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
+	return "MANDATORY first step before handling ANY request: semantically search MEMORY.md + memory/*.md to recall prior context, decisions, preferences, and ongoing work. Returns top snippets with path + lines. MUST be called before processing tasks — not just for questions about the past. If response has disabled=true, memory retrieval is unavailable. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
 }
 
 func (t *MemorySearchTool) Parameters() map[string]any {

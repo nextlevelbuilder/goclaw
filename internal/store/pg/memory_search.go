@@ -111,6 +111,7 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		args = append([]any{query, agentID, query, userID}, tcArgs...)
 		args = append(args, limit)
 	} else {
+		// Shared memory mode: search all chunks regardless of user_id.
 		// fixed params: $1=query, $2=agentID, $3=query
 		tc, tcArgs, _, err := scopeClause(ctx, 4)
 		if err != nil {
@@ -120,8 +121,7 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
 				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
-			AND user_id IS NULL%s
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)%s
 			ORDER BY score DESC LIMIT $%d`, tc, limitN)
 		args = append([]any{query, agentID, query}, tcArgs...)
 		args = append(args, limit)
@@ -180,6 +180,7 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 		args = append([]any{vecStr, agentID, userID}, tcArgs...)
 		args = append(args, vecStr, limit)
 	} else {
+		// Shared memory mode: search all chunks regardless of user_id.
 		// fixed params: $1=vec, $2=agentID
 		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
@@ -190,8 +191,7 @@ func (s *PGMemoryStore) vectorSearch(ctx context.Context, embedding []float32, a
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
 				1 - (embedding <=> $1::vector) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND embedding IS NOT NULL
-			AND user_id IS NULL%s
+			WHERE agent_id = $2 AND embedding IS NOT NULL%s
 			ORDER BY embedding <=> $%d::vector LIMIT $%d`, tc, orderN, limitN)
 		args = append([]any{vecStr, agentID}, tcArgs...)
 		args = append(args, vecStr, limit)

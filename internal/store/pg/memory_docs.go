@@ -66,7 +66,8 @@ func (s *PGMemoryStore) GetDocument(ctx context.Context, agentID, userID, path s
 			return "", tcErr
 		}
 		err = s.db.QueryRowContext(ctx,
-			"SELECT content FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL"+tc,
+			"SELECT content FROM memory_documents WHERE agent_id = $1 AND path = $2"+tc+
+				" ORDER BY user_id NULLS FIRST LIMIT 1",
 			append([]any{aid, path}, tcArgs...)...).Scan(&content)
 	} else {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
@@ -124,7 +125,7 @@ func (s *PGMemoryStore) DeleteDocument(ctx context.Context, agentID, userID, pat
 			return tcErr
 		}
 		res, err = s.db.ExecContext(ctx,
-			"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL"+tc,
+			"DELETE FROM memory_documents WHERE agent_id = $1 AND path = $2"+tc,
 			append([]any{aid, path}, tcArgs...)...)
 	} else {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
@@ -165,7 +166,9 @@ func (s *PGMemoryStore) ListDocuments(ctx context.Context, agentID, userID strin
 			return nil, tcErr
 		}
 		rows, err = s.db.QueryContext(ctx,
-			"SELECT path, hash, user_id, updated_at FROM memory_documents WHERE agent_id = $1 AND user_id IS NULL"+tc,
+			`SELECT DISTINCT ON (path) path, hash, user_id, updated_at
+			 FROM memory_documents WHERE agent_id = $1`+tc+
+				` ORDER BY path, user_id NULLS FIRST, updated_at DESC`,
 			append([]any{aid}, tcArgs...)...)
 	} else {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
@@ -229,7 +232,8 @@ func (s *PGMemoryStore) IndexDocument(ctx context.Context, agentID, userID, path
 			return tcErr
 		}
 		err = s.db.QueryRowContext(ctx,
-			"SELECT id FROM memory_documents WHERE agent_id = $1 AND path = $2 AND user_id IS NULL"+tc,
+			"SELECT id FROM memory_documents WHERE agent_id = $1 AND path = $2"+tc+
+				" ORDER BY user_id NULLS FIRST LIMIT 1",
 			append([]any{aid, path}, tcArgs...)...).Scan(&docID)
 	} else {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
