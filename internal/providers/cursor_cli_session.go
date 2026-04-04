@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -44,14 +45,24 @@ func (p *CursorCLIProvider) writeAgentsMD(workDir, systemPrompt string) {
 
 // buildArgs constructs CLI arguments for a Cursor agent invocation.
 func (p *CursorCLIProvider) buildArgs(model, workDir string, hasMCP bool, chatID, outputFormat string) []string {
+	mode := strings.ToLower(strings.TrimSpace(p.permMode))
+	if mode == "" {
+		mode = "force"
+	}
 	args := []string{
 		"--print",
 		"--output-format", outputFormat,
 		"--model", model,
-		"--force",           // bypass confirmation prompts (--yolo is alias)
-		"--trust",           // skip workspace prompts in headless mode
-		"--workspace", workDir,
 	}
+	// default / strict: omit --force (stricter tool policy; may be unsuitable for unattended --print)
+	if mode != "default" && mode != "strict" {
+		args = append(args, "--force") // bypass confirmation prompts (--yolo is alias)
+	}
+	args = append(args, "--trust") // skip workspace prompts in headless mode
+	if mode == "sandbox" {
+		args = append(args, "--sandbox", "enabled")
+	}
+	args = append(args, "--workspace", workDir)
 	if hasMCP {
 		args = append(args, "--approve-mcps")
 	}
@@ -59,6 +70,22 @@ func (p *CursorCLIProvider) buildArgs(model, workDir string, hasMCP bool, chatID
 		args = append(args, "--resume", chatID)
 	}
 	return args
+}
+
+type cursorCLISettingsJSON struct {
+	PermMode string `json:"perm_mode"`
+}
+
+// PermModeFromCursorCLISettings returns perm_mode from llm_providers.settings JSON (empty if unset).
+func PermModeFromCursorCLISettings(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s cursorCLISettingsJSON
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(s.PermMode)
 }
 
 // readCursorSessionID returns the persisted chat ID from workdir/.cursor_session_id.
@@ -82,8 +109,8 @@ func writeCursorSessionID(workDir, chatID string) {
 	}
 }
 
-// filterCursorEnv removes CURSOR* env vars to prevent nested session conflicts
-// before injecting a fresh CURSOR_API_KEY.
+// filterCursorEnv removes inherited CURSOR* env vars so the `agent` subprocess uses on-disk auth from `agent login`,
+// not a leaked key from the gateway process environment.
 func filterCursorEnv(environ []string) []string {
 	var filtered []string
 	for _, e := range environ {

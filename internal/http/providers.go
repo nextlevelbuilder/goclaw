@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
@@ -22,10 +23,10 @@ type ProvidersHandler struct {
 	secretStore     store.ConfigSecretsStore
 	token           string
 	providerReg     *providers.Registry
-	gatewayAddr     string                         // for injecting MCP bridge into Claude CLI providers
-	mcpLookup       providers.MCPServerLookup       // optional: resolves per-agent MCP servers
+	gatewayAddr     string                           // for injecting MCP bridge into Claude CLI providers
+	mcpLookup       providers.MCPServerLookup        // optional: resolves per-agent MCP servers
 	apiBaseFallback func(providerType string) string // optional: config/env fallback for api_base
-	cliMu           sync.Mutex                      // serializes Claude CLI provider create to prevent duplicates
+	cliMu           sync.Mutex                       // serializes Claude CLI provider create to prevent duplicates
 	msgBus          *bus.MessageBus
 }
 
@@ -92,6 +93,8 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Claude CLI auth status (global — not per-provider)
 	mux.HandleFunc("GET /v1/providers/claude-cli/auth-status", h.auth(h.handleClaudeCLIAuthStatus))
+	// Cursor CLI auth status (global — not per-provider)
+	mux.HandleFunc("GET /v1/providers/cursor-cli/auth-status", h.auth(h.handleCursorCLIAuthStatus))
 }
 
 func (h *ProvidersHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -130,6 +133,27 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			cliOpts = append(cliOpts, providers.WithClaudeCLIMCPConfigData(mcpData))
 		}
 		h.providerReg.Register(providers.NewClaudeCLIProvider(cliPath, cliOpts...))
+		return
+	}
+	if p.ProviderType == store.ProviderCursorCLI {
+		cliPath := p.APIBase
+		if cliPath == "" {
+			cliPath = "agent"
+		}
+		if cliPath != "agent" && !filepath.IsAbs(cliPath) {
+			slog.Warn("security.cursor_cli: invalid path from API, using default", "path", cliPath)
+			cliPath = "agent"
+		}
+		var cursorOpts []providers.CursorCLIOption
+		if pm := providers.PermModeFromCursorCLISettings(p.Settings); pm != "" {
+			cursorOpts = append(cursorOpts, providers.WithCursorCLIPermMode(pm))
+		}
+		if h.gatewayAddr != "" {
+			mcpData := providers.BuildCLIMCPConfigData(nil, h.gatewayAddr, h.token)
+			mcpData.AgentMCPLookup = h.mcpLookup
+			cursorOpts = append(cursorOpts, providers.WithCursorCLIMCPConfigData(mcpData))
+		}
+		h.providerReg.Register(providers.NewCursorCLIProvider(cliPath, cursorOpts...))
 		return
 	}
 	if p.APIKey == "" {
@@ -210,6 +234,22 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 			if ep.ProviderType == store.ProviderClaudeCLI {
 				writeJSON(w, http.StatusConflict, map[string]string{
 					"error": i18n.T(locale, i18n.MsgAlreadyExists, "Claude CLI provider", "only one is allowed per instance"),
+				})
+				return
+			}
+		}
+	}
+
+	// Only one Cursor CLI row per instance (registry name is fixed to cursor-cli).
+	if p.ProviderType == store.ProviderCursorCLI {
+		h.cliMu.Lock()
+		defer h.cliMu.Unlock()
+
+		existing, _ := h.store.ListProviders(r.Context())
+		for _, ep := range existing {
+			if ep.ProviderType == store.ProviderCursorCLI {
+				writeJSON(w, http.StatusConflict, map[string]string{
+					"error": i18n.T(locale, i18n.MsgAlreadyExists, "Cursor CLI provider", "only one is allowed per instance"),
 				})
 				return
 			}

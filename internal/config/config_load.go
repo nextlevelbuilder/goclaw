@@ -158,10 +158,11 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_CLAUDE_CLI_MODEL", &c.Providers.ClaudeCLI.Model)
 	envStr("GOCLAW_CLAUDE_CLI_WORK_DIR", &c.Providers.ClaudeCLI.BaseWorkDir)
 
-	// Cursor CLI provider (CURSOR_API_KEY loaded in registration)
+	// Cursor CLI provider
 	envStr("GOCLAW_CURSOR_CLI_PATH", &c.Providers.CursorCLI.CLIPath)
 	envStr("GOCLAW_CURSOR_CLI_MODEL", &c.Providers.CursorCLI.Model)
 	envStr("GOCLAW_CURSOR_CLI_WORK_DIR", &c.Providers.CursorCLI.BaseWorkDir)
+	envStr("GOCLAW_CURSOR_CLI_PERM_MODE", &c.Providers.CursorCLI.PermMode)
 
 	// Default provider/model: env is fallback only (applied when config has no value).
 	// The onboard wizard sets these in .env for initial bootstrap; once the user

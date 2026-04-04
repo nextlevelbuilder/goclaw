@@ -160,19 +160,18 @@ func registerProviders(registry *providers.Registry, cfg *config.Config) {
 		slog.Info("registered provider", "name", "claude-cli")
 	}
 
-	// Cursor CLI provider — API key auth, configurable agent binary path
-	if cfg.Providers.CursorCLI.APIKey != "" {
+	// Cursor CLI — browser auth on the server (`agent login`).
+	if cfg.Providers.CursorCLI.CLIPath != "" {
 		cliPath := cfg.Providers.CursorCLI.CLIPath
-		if cliPath == "" {
-			cliPath = "agent"
-		}
 		var opts []providers.CursorCLIOption
-		opts = append(opts, providers.WithCursorCLIAPIKey(cfg.Providers.CursorCLI.APIKey))
 		if cfg.Providers.CursorCLI.Model != "" {
 			opts = append(opts, providers.WithCursorCLIModel(cfg.Providers.CursorCLI.Model))
 		}
 		if cfg.Providers.CursorCLI.BaseWorkDir != "" {
 			opts = append(opts, providers.WithCursorCLIWorkDir(cfg.Providers.CursorCLI.BaseWorkDir))
+		}
+		if cfg.Providers.CursorCLI.PermMode != "" {
+			opts = append(opts, providers.WithCursorCLIPermMode(cfg.Providers.CursorCLI.PermMode))
 		}
 		gatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
 		mcpData := providers.BuildCLIMCPConfigData(cfg.Tools.McpServers, gatewayAddr, cfg.Gateway.Token)
@@ -299,16 +298,14 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				slog.Warn("security.cursor_cli: invalid path from DB, using default", "path", cliPath)
 				cliPath = "agent"
 			}
-			if p.APIKey == "" {
-				slog.Warn("cursor-cli: no API key in DB provider, skipping", "name", p.Name)
-				continue
-			}
 			if _, err := exec.LookPath(cliPath); err != nil {
 				slog.Warn("cursor-cli: binary not found, skipping", "path", cliPath, "error", err)
 				continue
 			}
 			var cursorOpts []providers.CursorCLIOption
-			cursorOpts = append(cursorOpts, providers.WithCursorCLIAPIKey(p.APIKey))
+			if pm := providers.PermModeFromCursorCLISettings(p.Settings); pm != "" {
+				cursorOpts = append(cursorOpts, providers.WithCursorCLIPermMode(pm))
+			}
 			if gatewayAddr != "" {
 				mcpData := providers.BuildCLIMCPConfigData(nil, gatewayAddr, gatewayToken)
 				mcpData.AgentMCPLookup = buildMCPServerLookup(mcpStore)

@@ -3,16 +3,16 @@ package providers
 import "sync"
 
 // CursorCLIProvider implements Provider by shelling out to the Cursor `agent` binary.
-// Auth via CURSOR_API_KEY env var injection per-call.
+// Authentication is via browser login (`agent login` on the server); credentials are not passed through GoClaw.
 // Sessions tracked via workdir/.cursor_session_id (server-assigned chat IDs).
 type CursorCLIProvider struct {
-	cliPath       string // path to agent binary (default: "agent")
-	defaultModel  string // default: "cursor-fast"
-	apiKey        string // injected as CURSOR_API_KEY per-call
-	baseWorkDir   string // base dir for per-session workspaces
+	cliPath       string         // path to agent binary (default: "agent")
+	defaultModel  string         // default: "composer-2"
+	baseWorkDir   string         // base dir for per-session workspaces
+	permMode      string         // see WithCursorCLIPermMode / buildArgs
 	mcpConfigData *MCPConfigData // per-session MCP config data
-	mu            sync.Mutex    // protects workdir creation
-	sessionMu     sync.Map   // key: string, value: *sync.Mutex — per-session lock
+	mu            sync.Mutex     // protects workdir creation
+	sessionMu     sync.Map       // key: string, value: *sync.Mutex — per-session lock
 }
 
 // CursorCLIOption configures the provider.
@@ -36,17 +36,20 @@ func WithCursorCLIWorkDir(dir string) CursorCLIOption {
 	}
 }
 
-// WithCursorCLIAPIKey sets the Cursor API key injected per-call.
-func WithCursorCLIAPIKey(key string) CursorCLIOption {
-	return func(p *CursorCLIProvider) {
-		p.apiKey = key
-	}
-}
-
 // WithCursorCLIMCPConfigData sets the per-session MCP config data.
 func WithCursorCLIMCPConfigData(data *MCPConfigData) CursorCLIOption {
 	return func(p *CursorCLIProvider) {
 		p.mcpConfigData = data
+	}
+}
+
+// WithCursorCLIPermMode sets how the Cursor `agent` subprocess handles permissions in --print mode.
+// Values: "force" (default) — --force and --trust; "default" — --trust only (no --force); "sandbox" — force + trust + --sandbox enabled.
+func WithCursorCLIPermMode(mode string) CursorCLIOption {
+	return func(p *CursorCLIProvider) {
+		if mode != "" {
+			p.permMode = mode
+		}
 	}
 }
 
@@ -57,8 +60,9 @@ func NewCursorCLIProvider(cliPath string, opts ...CursorCLIOption) *CursorCLIPro
 	}
 	p := &CursorCLIProvider{
 		cliPath:      cliPath,
-		defaultModel: "cursor-fast",
+		defaultModel: "composer-2",
 		baseWorkDir:  defaultCursorCLIWorkDir(),
+		permMode:     "force",
 		// sessionMu is zero-value ready (sync.Map)
 	}
 	for _, opt := range opts {

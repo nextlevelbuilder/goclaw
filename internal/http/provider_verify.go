@@ -77,6 +77,18 @@ func (h *ProvidersHandler) handleVerifyProvider(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// Cursor CLI: validate model ID locally
+	if p.ProviderType == store.ProviderCursorCLI {
+		for _, m := range cursorCLIModels() {
+			if m.ID == req.Model {
+				writeJSON(w, http.StatusOK, map[string]any{"valid": true})
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "Unknown model for Cursor CLI"})
+		return
+	}
+
 	if h.providerReg == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": "no provider registry available"})
 		return
@@ -136,6 +148,39 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 	}
 
 	status, err := providers.CheckClaudeAuthStatus(ctx, cliPath)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"logged_in": false,
+			"error":     err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"logged_in":         status.LoggedIn,
+		"email":             status.Email,
+		"subscription_type": status.SubscriptionType,
+	})
+}
+
+// handleCursorCLIAuthStatus checks whether the Cursor CLI is authenticated on the server.
+//
+//	GET /v1/providers/cursor-cli/auth-status
+func (h *ProvidersHandler) handleCursorCLIAuthStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	cliPath := "agent"
+	if existing, err := h.store.ListProviders(r.Context()); err == nil {
+		for _, p := range existing {
+			if p.ProviderType == store.ProviderCursorCLI && p.APIBase != "" {
+				cliPath = p.APIBase
+				break
+			}
+		}
+	}
+
+	status, err := providers.CheckCursorAuthStatus(ctx, cliPath)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"logged_in": false,

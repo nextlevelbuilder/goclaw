@@ -40,7 +40,7 @@ func (p *CursorCLIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
 	cmd.Dir = workDir
-	cmd.Env = append(filterCursorEnv(os.Environ()), "CURSOR_API_KEY="+p.apiKey)
+	cmd.Env = filterCursorEnv(os.Environ())
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -94,7 +94,7 @@ func (p *CursorCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
 	cmd.Dir = workDir
-	cmd.Env = append(filterCursorEnv(os.Environ()), "CURSOR_API_KEY="+p.apiKey)
+	cmd.Env = filterCursorEnv(os.Environ())
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf

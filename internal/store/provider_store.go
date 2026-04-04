@@ -31,7 +31,7 @@ const (
 	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
 	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
 	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
-	ProviderCursorCLI       = "cursor_cli"   // Cursor CLI via `agent` binary with API key auth
+	ProviderCursorCLI       = "cursor_cli"   // Cursor CLI via local `agent` binary (browser auth)
 )
 
 // ValidProviderTypes lists all accepted provider_type values.

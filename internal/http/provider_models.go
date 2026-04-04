@@ -51,6 +51,12 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Cursor CLI — curated model list for the dashboard (no remote /models API; see cursorCLIModels).
+	if p.ProviderType == store.ProviderCursorCLI {
+		writeJSON(w, http.StatusOK, map[string]any{"models": cursorCLIModels()})
+		return
+	}
+
 	if p.APIKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "API key")})
 		return
@@ -246,6 +252,43 @@ func claudeCLIModels() []ModelInfo {
 		{ID: "sonnet", Name: "Sonnet"},
 		{ID: "opus", Name: "Opus"},
 		{ID: "haiku", Name: "Haiku"},
+	}
+}
+
+// cursorCLIModels returns model IDs shown in the dashboard for Cursor CLI (`agent --model`).
+// Curated from Cursor’s model catalog; IDs are kebab-case slugs — adjust if `agent help` / release notes rename them.
+func cursorCLIModels() []ModelInfo {
+	return []ModelInfo{
+		// Cursor
+		{ID: "composer-2", Name: "Cursor Composer 2"},
+		{ID: "composer-1.5", Name: "Cursor Composer 1.5"},
+		{ID: "composer-1", Name: "Cursor Composer 1"},
+		// Anthropic
+		{ID: "claude-sonnet-4-6", Name: "Claude 4.6 Sonnet"},
+		{ID: "claude-sonnet-4-5", Name: "Claude 4.5 Sonnet"},
+		{ID: "claude-opus-4-6", Name: "Claude 4.6 Opus"},
+		{ID: "claude-opus-4-6-fast", Name: "Claude 4.6 Opus-fast"},
+		{ID: "claude-opus-4-5", Name: "Claude 4.5 Opus"},
+		{ID: "claude-haiku-4-5", Name: "Claude 4.5 Haiku"},
+		// OpenAI
+		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
+		{ID: "gpt-5.4", Name: "GPT-5.4"},
+		{ID: "gpt-5.4-mini", Name: "GPT-5.4-mini"},
+		{ID: "gpt-5.4-nano", Name: "GPT-5.4-nano"},
+		{ID: "gpt-5.2", Name: "GPT-5.2"},
+		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex"},
+		{ID: "gpt-5", Name: "GPT-5"},
+		{ID: "gpt-5-codex", Name: "GPT-5 Codex"},
+		{ID: "gpt-5-fast", Name: "GPT-5-fast"},
+		{ID: "gpt-5-mini", Name: "GPT-5-mini"},
+		// Google
+		{ID: "gemini-3.1-pro", Name: "Gemini 3.1 Pro"},
+		{ID: "gemini-3-pro", Name: "Gemini 3 Pro"},
+		{ID: "gemini-3-flash", Name: "Gemini 3 Flash"},
+		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash"},
+		// Other
+		{ID: "grok-4-20", Name: "Grok 4-20"},
+		{ID: "kimi-k2-5", Name: "Kimi K2-5"},
 	}
 }
 
