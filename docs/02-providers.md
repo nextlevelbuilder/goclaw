@@ -19,6 +19,7 @@ flowchart TD
     PI --> CODEX["Codex Provider<br/>OAuth-based Responses API"]
     PI --> ACP["ACP Provider<br/>JSON-RPC 2.0 subagents"]
     PI --> DASH["DashScope Provider<br/>OpenAI-compat wrapper"]
+    PI --> CURSOR["Cursor CLI Provider<br/>stdio subprocess"]
 
     ANTH --> ANTHROPIC["Claude API<br/>api.anthropic.com/v1"]
     OAI --> OPENAI["OpenAI API"]
@@ -32,6 +33,7 @@ flowchart TD
     CODEX --> CODEX_API["ChatGPT Responses API<br/>chatgpt.com/backend-api"]
     ACP --> AGENTS["Claude Code / Codex<br/>Gemini CLI agents"]
     DASH --> QWEN["Alibaba DashScope<br/>Qwen3 models"]
+    CURSOR --> CURSOR_CLI["agent (Cursor) binary<br/>stdio + MCP bridge"]
 ```
 
 Authentication and timeouts vary by provider type:
@@ -42,6 +44,7 @@ Authentication and timeouts vary by provider type:
 - **Codex**: OAuth access token (auto-refreshed via TokenSource)
 - **ACP**: JSON-RPC 2.0 over subprocess stdio
 - **DashScope**: `Authorization: Bearer` token (inherits from OpenAI-compatible)
+- **Cursor CLI**: stdio subprocess (browser auth via `agent login` on the server; no API key in GoClaw)
 
 All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second timeout.
 
@@ -60,6 +63,7 @@ All HTTP-based providers (Anthropic, OpenAI-compatible, Codex) use 300-second ti
 | **acp** | JSON-RPC 2.0 subagents | Binary + workspace dir | `claude` |
 | **dashscope** | OpenAI-compat wrapper | API key + custom models | `qwen3-max` |
 | **openai** (+ 10+ variants) | OpenAI-compatible | API key + endpoint URL | Model-specific |
+| **cursor_cli** | stdio subprocess + MCP | Binary path (default: `agent`), browser login | `composer-2` |
 
 ### OpenAI-Compatible Providers
 
@@ -589,20 +593,32 @@ CursorCLIProvider can be configured in `config.json`:
 {
   "providers": {
     "cursor_cli": {
-      "api_key": "your-cursor-api-key",         // optional; prefer CURSOR_API_KEY env
-      "model": "cursor-fast",                    // default model (cursor-fast, cursor-standard, etc.)
-      "base_work_dir": "/tmp/cursor-workspaces" // workspace directory base
+      "cli_path": "agent",                       // optional; default binary name or absolute path
+      "model": "composer-2",                     // default model
+      "base_work_dir": "/tmp/cursor-workspaces", // workspace directory base
+      "perm_mode": "force"                       // optional: "force" | "default" | "sandbox" (see Headless Flags)
     }
   }
 }
 ```
 
-Or via database `llm_providers` table with `provider_type = "cursor_cli"`.
+Or via database `llm_providers` table with `provider_type = "cursor_cli"`. Store `perm_mode` in `settings` JSON (same values as `config.json`).
+
+### Authentication
+
+Prefer **browser authentication** on the machine where GoClaw runs (same pattern as Cursor docs):
+
+1. Run `agent login` on the server (`agent help login`; set `NO_OPEN_BROWSER` to skip opening a browser).
+2. Check with `agent status` (output may be JSON or plain text). GoClaw exposes `GET /v1/providers/cursor-cli/auth-status`, which runs `agent status` and falls back to `agent about` if needed.
+
+GoClaw does not read or store Cursor API keys; subprocess env strips inherited `CURSOR*` variables so the CLI uses the on-disk session from `agent login`.
 
 Environment variables:
-- `CURSOR_API_KEY` — Cursor User API Key (injected per-call; overrides config)
+
+- `GOCLAW_CURSOR_CLI_PATH` — CLI binary path override
 - `GOCLAW_CURSOR_CLI_MODEL` — Default model override
 - `GOCLAW_CURSOR_CLI_WORK_DIR` — Base workspace directory override
+- `GOCLAW_CURSOR_CLI_PERM_MODE` — Permission mode override (`force`, `default`, `sandbox`)
 
 ### Session Management
 
@@ -621,11 +637,17 @@ Cursor CLI executes tools natively (filesystem, web, terminal). GoClaw forwards 
 The provider invokes `agent` with these critical flags:
 - `--print` — stream output to stdout
 - `--output-format stream-json` — use structured event format
-- `--force` — bypass confirmation prompts
+- `--force` — bypass confirmation prompts (omitted when `perm_mode` is `default` or `strict`)
 - `--trust` — skip workspace security dialogs
+- `--sandbox enabled` — added when `perm_mode` is `sandbox`
 - `--workspace <workdir>` — set working directory
 - `--approve-mcps` — auto-approve MCP server connections (if configured)
 - `--resume <chatId>` — resume existing conversation (if session ID found)
+
+`perm_mode` (config `providers.cursor_cli.perm_mode`, env `GOCLAW_CURSOR_CLI_PERM_MODE`, or DB `settings.perm_mode`) controls `--force` / `--sandbox`:
+- **`force`** (default) — `--force` + `--trust` for unattended headless runs
+- **`default`** — `--trust` only (stricter; same as `strict`)
+- **`sandbox`** — `--force` + `--trust` + `--sandbox enabled`
 
 ### Streaming
 
@@ -730,7 +752,7 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 | `internal/providers/cursor_cli_chat.go` | Chat/ChatStream implementation for Cursor CLI provider |
 | `internal/providers/cursor_cli_session.go` | Session management: workspace, system prompt, session ID persistence |
 | `internal/providers/cursor_cli_mcp.go` | MCP configuration for Cursor CLI provider |
-| `internal/providers/cursor_cli_auth.go` | API key validation for Cursor CLI |
+| `internal/providers/cursor_cli_auth.go` | Browser auth status via `agent status` / `agent about` |
 | `internal/providers/cursor_cli_parse.go` | Response parsing and chat ID extraction from stream-json |
 | `internal/providers/codex.go` | CodexProvider: OAuth-based ChatGPT Responses API |
 | `internal/providers/codex_build.go` | Codex request builder: message formatting, phase handling |
