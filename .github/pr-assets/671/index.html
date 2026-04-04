@@ -66,6 +66,10 @@
       <h3><span class="badge badge-fix">Fix 4</span> Pool discovery</h3>
       <p>Per-card "Pool available" badge replaces verbose info banner. One-click wizard to create pools from unpooled accounts.</p>
     </div>
+    <div class="fix-item">
+      <h3><span class="badge badge-fix">Fix 5</span> Provider selector</h3>
+      <p>Pool members hidden from agent provider dropdown. Only pool owners listed — routing handles members automatically.</p>
+    </div>
   </div>
 
   <div class="callout">
@@ -119,7 +123,22 @@
   </div>
 
   <div class="comparison">
-    <h2>4. Pool Setup Wizard</h2>
+    <h2>4. Agent Provider Selector — Pool Members Hidden</h2>
+    <p class="desc">Before: pool member (codex-secondary) shown as standalone option, no pool indicator. After: member hidden, pool owner shows "Pool" badge so users know it routes to multiple accounts.</p>
+    <div class="grid">
+      <div class="col">
+        <div class="col-header before">Before</div>
+        <img src="before-agent-provider-annotated.png" alt="Before: provider dropdown showing pool member as standalone option">
+      </div>
+      <div class="col">
+        <div class="col-header after">After</div>
+        <img src="after-agent-provider-annotated.png" alt="After: provider dropdown with pool member hidden">
+      </div>
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h2>5. Pool Setup Wizard</h2>
     <p class="desc">New one-click wizard dialog opened from any "Pool available" badge. Select owner, members, strategy — all in one step.</p>
     <div class="grid" style="grid-template-columns: 1fr;">
       <div class="col" style="max-width: 720px; margin: 0 auto;">
