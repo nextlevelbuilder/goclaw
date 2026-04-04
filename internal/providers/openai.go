@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -606,23 +605,18 @@ func clampedLimit(body map[string]any) any {
 
 const maxToolCallIDLen = 40
 
-var mistralToolIDNonAlnum = regexp.MustCompile(`[^a-zA-Z0-9]+`)
-
-func stripMistralToolIDAlnum(s string) string {
-	return mistralToolIDNonAlnum.ReplaceAllString(s, "")
-}
-
+// normalizeMistralToolCallID deterministically maps any tool call ID to a
+// 9-character alphanumeric string required by the Mistral API.
+// Uses SHA-256 of the full ID to avoid prefix-dependent collisions.
 func normalizeMistralToolCallID(id string) string {
-	s := stripMistralToolIDAlnum(id)
-	if len(s) < 9 {
-		sum := sha1.Sum([]byte(id))
-		s = stripMistralToolIDAlnum(s + hex.EncodeToString(sum[:]))
-	}
-	return s[:9]
+	h := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(h[:])[:9]
 }
 
+// wireToolCallID dispatches to Mistral-specific normalization (9-char alnum)
+// or the standard OpenAI truncation (40-char max) based on the provider.
 func (p *OpenAIProvider) wireToolCallID(id string) string {
-	if p.name == "mistral" {
+	if p.name == "mistral" || p.providerType == "mistral" {
 		return normalizeMistralToolCallID(id)
 	}
 	return truncateToolCallID(id)
