@@ -14,6 +14,7 @@ import type { AgentData } from "@/types/agent";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { useProviderVerify } from "@/pages/providers/hooks/use-provider-verify";
+import { getChatGPTOAuthPoolOwnership } from "@/pages/providers/provider-utils";
 import { useAgentPresets } from "./agent-presets";
 import { agentCreateSchema, type AgentCreateFormData } from "@/schemas/agent.schema";
 import { AgentIdentityAndModelFields } from "./agent-identity-and-model-fields";
@@ -55,7 +56,15 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const agentKey = watch("agentKey");
   const displayName = watch("displayName");
 
-  const enabledProviders = providers.filter((p) => p.enabled);
+  const poolOwnership = useMemo(() => getChatGPTOAuthPoolOwnership(providers), [providers]);
+  const enabledProviders = useMemo(
+    () => providers.filter((p) => p.enabled && !poolOwnership.ownerByMember.has(p.name)),
+    [providers, poolOwnership],
+  );
+  const poolOwnerNames = useMemo(
+    () => new Set(poolOwnership.membersByOwner.keys()),
+    [poolOwnership],
+  );
   const selectedProvider = useMemo(
     () => enabledProviders.find((p) => p.name === provider),
     [enabledProviders, provider],
@@ -129,6 +138,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
           <AgentIdentityAndModelFields
             form={form}
             enabledProviders={enabledProviders}
+            poolOwnerNames={poolOwnerNames}
             models={models}
             modelsLoading={modelsLoading}
             verifying={verifying}
