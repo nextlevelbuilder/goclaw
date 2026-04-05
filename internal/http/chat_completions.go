@@ -155,12 +155,14 @@ func (h *ChatCompletionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	runID := uuid.NewString()
-	// Include userID in session key for multi-tenant isolation
-	sessionSuffix := "http-" + runID[:8]
+	// Build stable session key per user — same user+agent always reuses the same session
+	var sessionKey string
 	if userID != "" {
-		sessionSuffix = "http-" + userID + "-" + runID[:8]
+		sessionKey = sessions.BuildSessionKey(agentID, "http", sessions.PeerDirect, userID)
+	} else {
+		// No user ID — fallback to random session (stateless)
+		sessionKey = sessions.SessionKey(agentID, "http-"+runID[:8])
 	}
-	sessionKey := sessions.SessionKey(agentID, sessionSuffix)
 
 	slog.Info("chat completions request", "agent", agentID, "stream", req.Stream, "user", userID)
 
