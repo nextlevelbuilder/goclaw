@@ -40,9 +40,15 @@ func New(cfg config.TeamsConfig, msgBus *bus.MessageBus) (*Channel, error) {
 		return nil, fmt.Errorf("teams bot_id and bot_password are required")
 	}
 
-	// Default bot type to SingleTenant
+	// Default and validate bot type
 	if cfg.BotType == "" {
 		cfg.BotType = "SingleTenant"
+	}
+	switch cfg.BotType {
+	case "SingleTenant", "MultiTenant":
+		// valid
+	default:
+		return nil, fmt.Errorf("teams bot_type must be 'SingleTenant' or 'MultiTenant', got %q", cfg.BotType)
 	}
 	if cfg.WebhookPath == "" {
 		cfg.WebhookPath = defaultWebhookPath

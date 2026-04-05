@@ -82,9 +82,6 @@ func (c *Channel) handleMessage(activity Activity) {
 		return
 	}
 
-	// Track serviceURL per conversation for replies (validated against SSRF)
-	c.storeServiceURL(activity.Conversation.ID, activity.ServiceURL)
-
 	// Determine peer kind from Activity's conversationType field.
 	// Teams provides: "personal", "groupChat", or "channel".
 	peerKind := "direct"
@@ -92,6 +89,16 @@ func (c *Channel) handleMessage(activity Activity) {
 	case "groupChat", "channel":
 		peerKind = "group"
 	}
+
+	// Enforce DM/Group policy before processing
+	if !c.CheckPolicy(peerKind, c.cfg.DMPolicy, c.cfg.GroupPolicy, activity.From.ID) {
+		slog.Debug("teams: message rejected by policy",
+			"peer_kind", peerKind, "sender", activity.From.ID)
+		return
+	}
+
+	// Store serviceURL only after policy check passes
+	c.storeServiceURL(activity.Conversation.ID, activity.ServiceURL)
 
 	// Build metadata
 	metadata := map[string]string{
