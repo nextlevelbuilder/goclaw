@@ -133,17 +133,34 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		}
 	}
 
-	if cfg.Channels.Teams.Enabled {
-		if cfg.Channels.Teams.BotID == "" {
-			recordMissingConfig(channels.TypeTeams, "Set channels.teams.bot_id in config.")
-		} else if t, err := teamschannel.New(cfg.Channels.Teams, msgBus); err != nil {
-			channelMgr.RecordFailure(channels.TypeTeams, "", err)
-			slog.Error("failed to initialize teams channel", "error", err)
-		} else {
-			channelMgr.RegisterChannel(channels.TypeTeams, t)
-			slog.Info("teams channel enabled (config)")
-		}
+}
+
+// registerTeamsChannel registers the Teams channel from config.
+// Teams is config-only (no DB instance factory yet), so it always loads from config
+// regardless of whether the instance loader is active.
+func registerTeamsChannel(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus) {
+	if !cfg.Channels.Teams.Enabled {
+		return
 	}
+	if cfg.Channels.Teams.BotID == "" {
+		channelMgr.RecordHealth(channels.TypeTeams, channels.NewChannelHealthForType(
+			channels.TypeTeams,
+			channels.ChannelHealthStateFailed,
+			"Missing credentials",
+			"Set channels.teams.bot_id in config.",
+			channels.ChannelFailureKindConfig,
+			false,
+		))
+		return
+	}
+	t, err := teamschannel.New(cfg.Channels.Teams, msgBus)
+	if err != nil {
+		channelMgr.RecordFailure(channels.TypeTeams, "", err)
+		slog.Error("failed to initialize teams channel", "error", err)
+		return
+	}
+	channelMgr.RegisterChannel(channels.TypeTeams, t)
+	slog.Info("teams channel enabled (config)")
 }
 
 // wireChannelRPCMethods registers WS RPC methods for channels, instances, agent links, and teams.
