@@ -23,7 +23,7 @@ internal/
 ├── bootstrap/                System prompt files (SOUL.md, IDENTITY.md) + seeding + per-user seed
 ├── bus/                      Event bus system
 ├── cache/                    Caching layer
-├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp
+├── channels/                 Channel manager: Telegram, Feishu/Lark, Zalo, Discord, WhatsApp, Teams
 ├── config/                   Config loading (JSON5) + env var overlay
 ├── crypto/                   AES-256-GCM encryption for API keys
 ├── cron/                     Cron scheduling (at/every/cron expr)
