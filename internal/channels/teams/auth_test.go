@@ -55,6 +55,28 @@ func TestNewTokenValidator(t *testing.T) {
 	}
 }
 
+func TestIsAllowedJWKSURI(t *testing.T) {
+	tests := []struct {
+		uri  string
+		want bool
+	}{
+		{"https://login.botframework.com/keys", true},
+		{"https://login.microsoftonline.com/keys", true},
+		{"https://sub.login.botframework.com/keys", true},
+		{"https://evil.com/keys", false},
+		{"http://login.botframework.com/keys", false}, // not HTTPS
+		{"https://login.botframework.com.evil.com", false},
+		{"https://169.254.169.254/metadata", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		got := isAllowedJWKSURI(tt.uri)
+		if got != tt.want {
+			t.Errorf("isAllowedJWKSURI(%q) = %v, want %v", tt.uri, got, tt.want)
+		}
+	}
+}
+
 func TestNewTokenValidator_EmptyTenant(t *testing.T) {
 	v := newTokenValidator("bot-id", "")
 	if v.tenantID != "" {

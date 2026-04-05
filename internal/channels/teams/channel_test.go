@@ -12,7 +12,7 @@ func TestNew_ValidSingleTenant(t *testing.T) {
 		BotID:       "test-bot-id",
 		BotPassword: "test-secret",
 		BotType:     "SingleTenant",
-		TenantID:    "test-tenant-id",
+		TenantID:    "00000000-0000-0000-0000-000000000001",
 	}
 	ch, err := New(cfg, bus.New())
 	if err != nil {
@@ -31,7 +31,7 @@ func TestNew_ValidMultiTenant(t *testing.T) {
 		BotID:       "test-bot-id",
 		BotPassword: "test-secret",
 		BotType:     "MultiTenant",
-		TenantID:    "should-be-ignored",
+		TenantID:    "00000000-0000-0000-0000-000000000002",
 	}
 	ch, err := New(cfg, bus.New())
 	if err != nil {
@@ -51,7 +51,7 @@ func TestNew_DefaultBotType(t *testing.T) {
 	cfg := config.TeamsConfig{
 		BotID:       "test-bot-id",
 		BotPassword: "test-secret",
-		TenantID:    "test-tenant",
+		TenantID:    "00000000-0000-0000-0000-000000000003",
 	}
 	ch, err := New(cfg, bus.New())
 	if err != nil {
@@ -95,16 +95,18 @@ func TestIsValidServiceURL(t *testing.T) {
 		url  string
 		want bool
 	}{
-		{"https://smba.trafficmanager.net/teams/", true},  // real Teams serviceURL
-		{"https://smba.trafficmanager.net", true},          // apex trafficmanager
+		{"https://smba.trafficmanager.net/teams/", true},       // real Teams serviceURL
+		{"https://smba.trafficmanager.net", true},               // apex smba
 		{"https://botframework.com/api", true},
 		{"https://us.api.botframework.com", true},
 		{"https://emea.api.botframework.com", true},
 		{"https://teams.microsoft.com/webhook", true},
 		{"https://us.teams.microsoft.com/api", true},
-		{"http://us.api.botframework.com", false},  // not HTTPS
+		{"http://us.api.botframework.com", false},               // not HTTPS
 		{"https://evil.com", false},
 		{"https://botframework.com.evil.com", false},
+		{"https://attacker.trafficmanager.net/steal", false},    // MEDIUM-1: non-smba trafficmanager rejected
+		{"https://evil.trafficmanager.net", false},              // any other TM subdomain rejected
 		{"", false},
 		{"not-a-url", false},
 	}
@@ -121,7 +123,7 @@ func TestWebhookHandler_ReturnsPath(t *testing.T) {
 		BotID:       "id",
 		BotPassword: "secret",
 		BotType:     "SingleTenant",
-		TenantID:    "tid",
+		TenantID:    "00000000-0000-0000-0000-000000000004",
 		WebhookPath: "/custom/teams",
 	}
 	ch, err := New(cfg, bus.New())

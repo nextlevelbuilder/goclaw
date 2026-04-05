@@ -7,11 +7,18 @@ import (
 	"strings"
 )
 
+const maxWebhookBodySize = 1 << 20 // 1MB — Bot Framework activities are typically <10KB
+
 // handleWebhook processes incoming Bot Framework webhook requests.
 // Bot Framework expects a quick 200 OK — agent processing is async via bus.
 func (c *Channel) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if !c.IsRunning() {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 
@@ -29,7 +36,8 @@ func (c *Channel) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse Activity from body
+	// Parse Activity from body (size-limited to prevent DoS)
+	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodySize)
 	var activity Activity
 	if err := json.NewDecoder(r.Body).Decode(&activity); err != nil {
 		slog.Warn("teams: invalid activity JSON", "error", err)
@@ -53,6 +61,16 @@ func (c *Channel) handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 // handleMessage processes an incoming message activity.
 func (c *Channel) handleMessage(activity Activity) {
+	// Validate required fields
+	if activity.From.ID == "" {
+		slog.Warn("teams: message with empty sender ID", "activity_id", activity.ID)
+		return
+	}
+	if activity.Conversation.ID == "" {
+		slog.Warn("teams: message with empty conversation ID", "activity_id", activity.ID)
+		return
+	}
+
 	text := strings.TrimSpace(activity.Text)
 	if text == "" {
 		return
@@ -110,7 +128,7 @@ func (c *Channel) handleConversationUpdate(activity Activity) {
 		slog.Info("teams: member removed", "id", m.ID, "name", m.Name, "conversation", activity.Conversation.ID)
 	}
 	// Track serviceURL for future replies (validated against SSRF)
-	if activity.ServiceURL != "" {
+	if activity.ServiceURL != "" && activity.Conversation.ID != "" {
 		c.storeServiceURL(activity.Conversation.ID, activity.ServiceURL)
 	}
 }

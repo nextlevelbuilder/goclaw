@@ -127,7 +127,7 @@ func mustCreateChannel(t *testing.T) *Channel {
 		BotID:       "test-bot",
 		BotPassword: "test-secret",
 		BotType:     "SingleTenant",
-		TenantID:    "test-tenant",
+		TenantID:    "00000000-0000-0000-0000-000000000001",
 	}
 	ch, err := New(cfg, bus.New())
 	if err != nil {

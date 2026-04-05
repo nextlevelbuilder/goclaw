@@ -127,7 +127,12 @@ func (c *botClient) ensureToken(ctx context.Context) (string, error) {
 	}
 
 	c.token = tokenResp.AccessToken
-	c.tokenExpiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn)*time.Second - tokenRefreshMargin)
+	// Floor expiry at 30s to prevent tight retry loop if ExpiresIn is 0 or tiny
+	expiryDuration := time.Duration(tokenResp.ExpiresIn)*time.Second - tokenRefreshMargin
+	if expiryDuration < 30*time.Second {
+		expiryDuration = 30 * time.Second
+	}
+	c.tokenExpiry = time.Now().Add(expiryDuration)
 
 	slog.Debug("teams: acquired Azure AD token", "expires_in", tokenResp.ExpiresIn)
 	return c.token, nil

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -18,8 +19,8 @@ const defaultWebhookPath = "/webhooks/teams"
 
 // Compile-time interface assertions.
 var (
-	_ channels.Channel          = (*Channel)(nil)
-	_ channels.WebhookChannel   = (*Channel)(nil)
+	_ channels.Channel           = (*Channel)(nil)
+	_ channels.WebhookChannel    = (*Channel)(nil)
 	_ channels.BlockReplyChannel = (*Channel)(nil)
 )
 
@@ -47,10 +48,15 @@ func New(cfg config.TeamsConfig, msgBus *bus.MessageBus) (*Channel, error) {
 		cfg.WebhookPath = defaultWebhookPath
 	}
 
-	// SingleTenant requires tenant_id
+	// SingleTenant requires tenant_id (must be a valid UUID)
 	tenantID := cfg.TenantID
 	if cfg.BotType == "SingleTenant" && tenantID == "" {
 		return nil, fmt.Errorf("teams tenant_id is required for SingleTenant bot")
+	}
+	if tenantID != "" {
+		if _, err := uuid.Parse(tenantID); err != nil {
+			return nil, fmt.Errorf("teams tenant_id must be a valid UUID: %w", err)
+		}
 	}
 	// MultiTenant: don't enforce tenant_id in JWT validation or token acquisition
 	if cfg.BotType == "MultiTenant" {
@@ -58,7 +64,7 @@ func New(cfg config.TeamsConfig, msgBus *bus.MessageBus) (*Channel, error) {
 	}
 
 	base := channels.NewBaseChannel(channels.TypeTeams, msgBus, cfg.AllowFrom)
-	base.ValidatePolicy(cfg.DMPolicy, "")
+	base.ValidatePolicy(cfg.DMPolicy, cfg.GroupPolicy)
 
 	ch := &Channel{
 		BaseChannel: base,
@@ -138,7 +144,8 @@ func (c *Channel) storeServiceURL(conversationID, serviceURL string) {
 }
 
 // isValidServiceURL checks that a serviceURL is HTTPS and from a known Bot Framework domain.
-// Real Teams serviceURLs include: smba.trafficmanager.net, *.botframework.com, *.teams.microsoft.com
+// Real Teams serviceURLs: smba.trafficmanager.net, *.botframework.com, *.teams.microsoft.com.
+// Only smba.trafficmanager.net is allowed (not all *.trafficmanager.net) to prevent token exfiltration.
 func isValidServiceURL(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" {
@@ -148,11 +155,11 @@ func isValidServiceURL(rawURL string) bool {
 	allowedSuffixes := []string{
 		".botframework.com",
 		".teams.microsoft.com",
-		".trafficmanager.net",
 	}
 	allowedExact := []string{
 		"botframework.com",
 		"teams.microsoft.com",
+		"smba.trafficmanager.net",
 	}
 	for _, s := range allowedSuffixes {
 		if strings.HasSuffix(host, s) {

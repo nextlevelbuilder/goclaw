@@ -163,6 +163,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "bot_type", label: "Bot Type", type: "select", options: [{ value: "SingleTenant", label: "Single Tenant" }, { value: "MultiTenant", label: "Multi Tenant" }], defaultValue: "SingleTenant", help: "Must match Azure Bot Service configuration" },
     { key: "webhook_path", label: "Webhook Path", type: "text", defaultValue: "/webhooks/teams", help: "Set Azure Bot Service messaging endpoint to: https://your-goclaw-domain{this-path}" },
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "open" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "open", help: "Control access for group chats and channels" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Teams user IDs (29:xxx format). Empty = allow all." },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
