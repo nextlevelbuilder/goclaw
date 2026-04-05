@@ -52,23 +52,40 @@ export function WorkspaceSharingSection({ value, onChange }: WorkspaceSharingSec
           </div>
           <div>
             <h3 className="text-sm font-semibold">{t(`${s}.memoryGroupLabel`)}</h3>
-            <p className="text-xs text-muted-foreground">{t(`${s}.shareMemoryTip`)}</p>
+            <p className="text-xs text-muted-foreground">{t(`${s}.memoryGroupDescription`)}</p>
           </div>
         </div>
 
-        <div className={`rounded-lg border p-3 sm:p-4 ${value.share_memory ? "border-orange-400/60 bg-orange-50/30 dark:border-orange-500/30 dark:bg-orange-950/10" : ""}`}>
-          <div className="flex items-center justify-between">
-            <InfoLabel tip={t(`${s}.shareMemoryTip`)}>{t(`${s}.shareMemory`)}</InfoLabel>
-            <Switch
-              checked={value.share_memory ?? false}
-              onCheckedChange={(v) => onChange({ ...value, share_memory: v })}
-            />
+        <div className="space-y-2">
+          <div className={`rounded-lg border p-3 sm:p-4 ${value.share_memory ? "border-orange-400/60 bg-orange-50/30 dark:border-orange-500/30 dark:bg-orange-950/10" : ""}`}>
+            <div className="flex items-center justify-between">
+              <InfoLabel tip={t(`${s}.shareMemoryTip`)}>{t(`${s}.shareMemory`)}</InfoLabel>
+              <Switch
+                checked={value.share_memory ?? false}
+                onCheckedChange={(v) => onChange({ ...value, share_memory: v })}
+              />
+            </div>
+            {value.share_memory && (
+              <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                {t(`${s}.shareMemoryNote`)}
+              </p>
+            )}
           </div>
-          {value.share_memory && (
-            <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
-              {t(`${s}.shareMemoryNote`)}
-            </p>
-          )}
+
+          <div className={`rounded-lg border p-3 sm:p-4 ${value.share_knowledge_graph ? "border-orange-400/60 bg-orange-50/30 dark:border-orange-500/30 dark:bg-orange-950/10" : ""}`}>
+            <div className="flex items-center justify-between">
+              <InfoLabel tip={t(`${s}.shareKGTip`)}>{t(`${s}.shareKG`)}</InfoLabel>
+              <Switch
+                checked={value.share_knowledge_graph ?? false}
+                onCheckedChange={(v) => onChange({ ...value, share_knowledge_graph: v })}
+              />
+            </div>
+            {value.share_knowledge_graph && (
+              <p className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                {t(`${s}.shareKGNote`)}
+              </p>
+            )}
+          </div>
         </div>
       </section>
 

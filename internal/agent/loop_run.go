@@ -118,6 +118,25 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 
 	runStart := time.Now().UTC()
 
+	// Safety net: ensure root traces are ALWAYS finalized, even on panic or goroutine leak.
+	// Normal-path finalization sets traceFinalized=true; this defer only acts if it wasn't.
+	var traceFinalized bool
+	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+		defer func() {
+			if traceFinalized {
+				return
+			}
+			slog.Warn("tracing: safety-net finalizing orphan trace",
+				"trace_id", traceID, "agent", l.id, "session", req.SessionKey)
+			safeCtx := context.WithoutCancel(ctx)
+			if agentSpanID != uuid.Nil {
+				l.emitAgentSpanEnd(safeCtx, agentSpanID, runStart, nil, context.Canceled)
+			}
+			l.traceCollector.FinishTrace(safeCtx, traceID, store.TraceStatusError,
+				"trace finalized by safety net (likely panic or goroutine leak)", "")
+		}()
+	}
+
 	// Emit running agent span immediately so it's visible in the trace UI.
 	if agentSpanID != uuid.Nil {
 		var agentSpanOpts []spanOption
@@ -183,6 +202,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		// Use background context when the run context is cancelled (/stop command)
 		// so the DB update still succeeds.
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+			traceFinalized = true
 			traceCtx := ctx
 			traceStatus := store.TraceStatusError
 			if ctx.Err() != nil {
@@ -214,6 +234,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		Payload: completedPayload,
 	})
 	if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+		traceFinalized = true
 		if result != nil {
 			l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
 		} else {
