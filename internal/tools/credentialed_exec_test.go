@@ -40,6 +40,11 @@ func TestExtractUnquotedSegments(t *testing.T) {
 		{"escaped quote in double", `gh "say \"hello\""`, "gh "},
 		{"empty single quotes", "gh ''", "gh "},
 		{"unquoted metachar", "gh api foo | jq", "gh api foo | jq"},
+		// Backslash escape outside quotes: \" should NOT start double-quoting
+		{"escaped dquote outside", `gh api \"foo | bar\"`, `gh api \"foo | bar\"`},
+		{"escaped squote outside", `gh api \'foo | bar\'`, `gh api \'foo | bar\'`},
+		{"double backslash", `gh api \\arg`, `gh api \\arg`},
+		{"backslash at end", `gh api foo\`, `gh api foo\`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,6 +73,11 @@ func TestDetectUnquotedShellOperators(t *testing.T) {
 		{"unquoted semicolon", "echo a; echo b", 1},
 		{"mixed: quoted safe + unquoted unsafe", "gh --jq '.[0] | .x' | cat", 1},
 		{"redirect after quotes", "gh api foo --jq '.x' > out.json", 1},
+		// Escaped quotes outside quotes: operators after \" must still be detected
+		// (backslash prevents " from starting a quoted section)
+		{"escaped dquote then pipe", `gh \"arg\" | env`, 1},
+		{"escaped dquote with content pipe", `gh api \"foo | bar\"`, 1},
+		{"escaped squote then pipe", `gh api \'foo | bar\'`, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

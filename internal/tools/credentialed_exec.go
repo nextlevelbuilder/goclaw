@@ -55,7 +55,10 @@ func detectUnquotedShellOperators(command string) []string {
 
 // extractUnquotedSegments returns a string containing only the characters
 // from command that are outside of single-quoted and double-quoted segments.
-// Escaped quotes within double quotes (\" ) are handled.
+// Backslash escaping is handled both inside double quotes (\") and outside
+// quotes (\' \" \\) to match go-shellwords parsing behavior — without this,
+// \" outside quotes would incorrectly enter double-quote mode and hide
+// subsequent shell operators from detection.
 func extractUnquotedSegments(command string) string {
 	var buf strings.Builder
 	buf.Grow(len(command))
@@ -77,6 +80,16 @@ func extractUnquotedSegments(command string) string {
 			}
 		default:
 			switch ch {
+			case '\\':
+				// Backslash outside quotes escapes the next character, preventing
+				// it from being treated as a quote delimiter. Both the backslash
+				// and the escaped character are emitted as unquoted content so
+				// that operator detection still sees them (e.g. \; remains visible).
+				buf.WriteByte(ch)
+				if i+1 < len(command) {
+					i++
+					buf.WriteByte(command[i])
+				}
 			case '\'':
 				inSingle = true
 			case '"':
