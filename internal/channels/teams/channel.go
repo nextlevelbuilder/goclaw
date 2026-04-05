@@ -138,12 +138,31 @@ func (c *Channel) storeServiceURL(conversationID, serviceURL string) {
 }
 
 // isValidServiceURL checks that a serviceURL is HTTPS and from a known Bot Framework domain.
+// Real Teams serviceURLs include: smba.trafficmanager.net, *.botframework.com, *.teams.microsoft.com
 func isValidServiceURL(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	return strings.HasSuffix(host, ".botframework.com") ||
-		strings.HasSuffix(host, ".teams.microsoft.com")
+	allowedSuffixes := []string{
+		".botframework.com",
+		".teams.microsoft.com",
+		".trafficmanager.net",
+	}
+	allowedExact := []string{
+		"botframework.com",
+		"teams.microsoft.com",
+	}
+	for _, s := range allowedSuffixes {
+		if strings.HasSuffix(host, s) {
+			return true
+		}
+	}
+	for _, s := range allowedExact {
+		if host == s {
+			return true
+		}
+	}
+	return false
 }
