@@ -129,19 +129,21 @@ func (v *tokenValidator) refreshKeysIfStale() error {
 }
 
 // forceRefreshKeys fetches OpenID metadata and JWKS keys.
+// HTTP calls happen outside the mutex to avoid blocking all concurrent JWT validations.
 // Uses a cooldown to prevent thundering herd when multiple goroutines
 // encounter an unknown kid simultaneously.
 func (v *tokenValidator) forceRefreshKeys() error {
+	// Check cooldown under lock
 	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	// Cooldown: skip if another goroutine already refreshed recently
 	if time.Since(v.lastFetch) < keyRefreshCooldown {
+		v.mu.Unlock()
 		return nil
 	}
+	jwksURI := v.jwksURI
+	v.mu.Unlock()
 
-	// Fetch OpenID metadata to get JWKS URI
-	if v.jwksURI == "" {
+	// Fetch OpenID metadata outside lock (only if JWKS URI not yet known)
+	if jwksURI == "" {
 		oidc, err := fetchJSON[openIDConfig](openIDMetadataURL)
 		if err != nil {
 			return fmt.Errorf("openid metadata: %w", err)
@@ -149,11 +151,11 @@ func (v *tokenValidator) forceRefreshKeys() error {
 		if !isAllowedJWKSURI(oidc.JWKSURI) {
 			return fmt.Errorf("untrusted jwks_uri: %s", oidc.JWKSURI)
 		}
-		v.jwksURI = oidc.JWKSURI
+		jwksURI = oidc.JWKSURI
 	}
 
-	// Fetch JWKS keys
-	jwks, err := fetchJSON[jwksResponse](v.jwksURI)
+	// Fetch JWKS keys outside lock
+	jwks, err := fetchJSON[jwksResponse](jwksURI)
 	if err != nil {
 		return fmt.Errorf("jwks fetch: %w", err)
 	}
@@ -171,8 +173,13 @@ func (v *tokenValidator) forceRefreshKeys() error {
 		keys[k.Kid] = pub
 	}
 
+	// Swap keys atomically under lock
+	v.mu.Lock()
 	v.keys = keys
+	v.jwksURI = jwksURI
 	v.lastFetch = time.Now()
+	v.mu.Unlock()
+
 	slog.Debug("teams: refreshed JWKS keys", "count", len(keys))
 	return nil
 }
@@ -209,7 +216,12 @@ func parseRSAPublicKey(nB64, eB64 string) (*rsa.PublicKey, error) {
 // Response body is limited to maxFetchBodySize to prevent memory exhaustion.
 func fetchJSON[T any](url string) (T, error) {
 	var zero T
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse // don't follow redirects
+		},
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		return zero, err
