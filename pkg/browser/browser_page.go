@@ -19,12 +19,35 @@ func (m *Manager) Snapshot(ctx context.Context, targetID string, opts SnapshotOp
 		return nil, err
 	}
 
-	result, err := proto.AccessibilityGetFullAXTree{}.Call(page)
+	// Single-frame snapshot (specific frame or default main frame)
+	if opts.FrameID != "" {
+		nodes, err := page.GetAXTreeForFrame(opts.FrameID)
+		if err != nil {
+			return nil, fmt.Errorf("get AX tree for frame %s: %w", opts.FrameID, err)
+		}
+		snap := FormatSnapshot(nodes, opts)
+		info, _ := page.Info()
+		snap.TargetID = targetID
+		if info != nil {
+			snap.URL = info.URL
+			snap.Title = info.Title
+		}
+		m.refs.Store(targetID, snap.Refs)
+		return snap, nil
+	}
+
+	// Multi-frame snapshot: main frame + all child frames
+	if opts.IncludeFrames {
+		return m.snapshotWithFrames(page, targetID, opts)
+	}
+
+	// Default: main frame only
+	nodes, err := page.GetAXTree()
 	if err != nil {
 		return nil, fmt.Errorf("get AX tree: %w", err)
 	}
 
-	snap := FormatSnapshot(result.Nodes, opts)
+	snap := FormatSnapshot(nodes, opts)
 	info, _ := page.Info()
 	snap.TargetID = targetID
 	if info != nil {
@@ -36,6 +59,94 @@ func (m *Manager) Snapshot(ctx context.Context, targetID string, opts SnapshotOp
 	m.refs.Store(targetID, snap.Refs)
 
 	return snap, nil
+}
+
+// snapshotWithFrames collects AX trees from main frame + child iframes.
+func (m *Manager) snapshotWithFrames(page Page, targetID string, opts SnapshotOptions) (*SnapshotResult, error) {
+	frames, err := page.GetFrameTree()
+	if err != nil {
+		// Fallback to main-only if frame tree unavailable
+		nodes, err2 := page.GetAXTree()
+		if err2 != nil {
+			return nil, fmt.Errorf("get AX tree: %w", err2)
+		}
+		snap := FormatSnapshot(nodes, opts)
+		m.refs.Store(targetID, snap.Refs)
+		return snap, nil
+	}
+
+	if len(frames) == 0 {
+		nodes, err := page.GetAXTree()
+		if err != nil {
+			return nil, fmt.Errorf("get AX tree: %w", err)
+		}
+		snap := FormatSnapshot(nodes, opts)
+		m.refs.Store(targetID, snap.Refs)
+		return snap, nil
+	}
+
+	// Collect nodes from each frame
+	var allFrames []frameNodes
+	mainFrameID := frames[0].FrameID
+
+	// Main frame first (use default GetAXTree for reliability)
+	mainNodes, err := page.GetAXTree()
+	if err != nil {
+		return nil, fmt.Errorf("get main AX tree: %w", err)
+	}
+	allFrames = append(allFrames, frameNodes{
+		FrameID: mainFrameID,
+		URL:     frames[0].URL,
+		Nodes:   mainNodes,
+	})
+
+	// Child frames
+	for _, fr := range frames[1:] {
+		// For cross-origin iframes, use the OOPIF target ID which GetAXTreeForFrame
+		// will resolve by attaching to the iframe's CDP target.
+		queryID := fr.FrameID
+		if fr.OOPIFTarget != "" {
+			queryID = fr.OOPIFTarget
+		}
+		childNodes, err := page.GetAXTreeForFrame(queryID)
+		if err != nil {
+			// Skip inaccessible frames (cross-origin restrictions, etc.)
+			continue
+		}
+		if len(childNodes) == 0 {
+			continue
+		}
+		allFrames = append(allFrames, frameNodes{
+			FrameID: fr.FrameID,
+			URL:     fr.URL,
+			Nodes:   childNodes,
+		})
+	}
+
+	snap := FormatMultiFrameSnapshot(allFrames, opts)
+	info, _ := page.Info()
+	snap.TargetID = targetID
+	if info != nil {
+		snap.URL = info.URL
+		snap.Title = info.Title
+	}
+
+	m.refs.Store(targetID, snap.Refs)
+	return snap, nil
+}
+
+// ListFrames returns the frame hierarchy for a page.
+func (m *Manager) ListFrames(ctx context.Context, targetID string) ([]FrameInfo, error) {
+	tenantID := tenantIDFromCtx(ctx)
+	m.mu.Lock()
+	page, err := m.getPageForTenant(targetID, tenantID)
+	m.mu.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return page.GetFrameTree()
 }
 
 // Screenshot captures a page screenshot as PNG bytes.
@@ -75,14 +186,4 @@ func (m *Manager) Navigate(ctx context.Context, targetID, url string) error {
 		return fmt.Errorf("wait stable after navigate: %w", err)
 	}
 	return nil
-}
-
-// Close shuts down the browser if running.
-func (m *Manager) Close() error {
-	return m.Stop(context.Background())
-}
-
-// Refs returns the RefStore for external use (e.g. actions).
-func (m *Manager) Refs() *RefStore {
-	return m.refs
 }

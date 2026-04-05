@@ -26,6 +26,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -52,7 +53,9 @@ type Server struct {
 	pairingService store.PairingStore
 	apiKeyStore    store.APIKeyStore  // for API key auth lookup
 	agentStore     store.AgentStore   // for context injection in tools_invoke
-	msgBus         *bus.MessageBus    // for MCP bridge media delivery
+	msgBus           *bus.MessageBus        // for MCP bridge media delivery
+	builtinToolStore store.BuiltinToolStore // for injecting tool settings into MCP bridge context
+	bridgeTraceReg   *mcpbridge.BridgeTraceRegistry // for passing trace context from agent loop to bridge
 
 	upgrader    websocket.Upgrader
 	rateLimiter *RateLimiter
@@ -185,7 +188,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 		if s.cfg.Gateway.Token != "" {
 			bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
 			handler := tokenAuthMiddleware(s.cfg.Gateway.Token,
-				bridgeContextMiddleware(s.cfg.Gateway.Token, bridgeHandler))
+				bridgeContextMiddleware(s.cfg.Gateway.Token, s.agentStore, s.builtinToolStore, s.bridgeTraceReg, bridgeHandler))
 			mux.Handle("/mcp/bridge", handler)
 		} else {
 			slog.Warn("security.mcp_bridge_disabled: no gateway token configured, MCP bridge is disabled")
@@ -212,7 +215,12 @@ func (s *Server) BuildMux() *http.ServeMux {
 // access agent/user scope and resolve workspace-relative paths.
 // When a gateway token is configured, the context headers must be accompanied by
 // a valid X-Bridge-Sig HMAC to prevent forgery.
-func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handler {
+// agentStore is used to lookup the agent key from agent UUID for session key rebuilding.
+// bts (optional) loads builtin tool settings so media tools (read_image, etc.)
+// can resolve their provider chains when called via the bridge.
+// traceReg (optional) looks up trace context from the agent loop so bridge tool
+// calls appear as child spans of the LLM call in the trace tree.
+func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, bts store.BuiltinToolStore, traceReg *mcpbridge.BridgeTraceRegistry, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		agentIDStr := r.Header.Get("X-Agent-ID")
@@ -233,8 +241,9 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 
 			// Verify HMAC signature over all context fields.
 			tenantIDStr := r.Header.Get("X-Tenant-ID")
+			sessionKey := r.Header.Get("X-Session-Key")
 			sig := r.Header.Get("X-Bridge-Sig")
-			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig)
+			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, sessionKey)
 			if !ok {
 				slog.Warn("security.mcp_bridge: invalid bridge context signature",
 					"agent_id", agentIDStr, "user_id", userID)
@@ -242,21 +251,41 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 				return
 			}
 
-			if agentIDStr != "" {
-				if id, err := uuid.Parse(agentIDStr); err == nil {
-					ctx = store.WithAgentID(ctx, id)
-				}
-			}
-			if userID != "" {
-				ctx = store.WithUserID(ctx, userID)
-			}
-			// Only inject tenant_id when HMAC actually covers it (level 1).
-			// Fallback levels (pre-tenantID sessions) must not trust unsigned tenant headers.
+			// Inject tenant_id first — needed by agentStore.GetByID which is tenant-scoped.
 			if tenantVerified && tenantIDStr != "" {
 				if tid, err := uuid.Parse(tenantIDStr); err == nil {
 					ctx = store.WithTenantID(ctx, tid)
 				}
 			}
+			if agentIDStr != "" {
+				if id, err := uuid.Parse(agentIDStr); err == nil {
+					ctx = store.WithAgentID(ctx, id)
+
+					// Lookup agent from DB to inject key + per-agent config flags.
+					if agentStore != nil {
+						if ag, err := agentStore.GetByID(ctx, id); err == nil && ag != nil {
+							ctx = store.WithAgentKey(ctx, ag.AgentKey)
+							if ag.ParseBrowserUseProxy() {
+								ctx = tools.WithBrowserUseProxy(ctx, true)
+							}
+						}
+					}
+				}
+			}
+			// Inject session key from HMAC-verified header.
+			if sessionKey != "" {
+				ctx = tools.WithToolSessionKey(ctx, sessionKey)
+			}
+			if userID != "" {
+				ctx = store.WithUserID(ctx, userID)
+			}
+		}
+
+		// Inject agent key so session tools can build session key prefixes.
+		// X-Agent-Key is not HMAC-signed (agent UUID already is), but only
+		// injected when HMAC-verified context is present.
+		if agentKey := r.Header.Get("X-Agent-Key"); agentKey != "" && (agentIDStr != "" || userID != "") {
+			ctx = tools.WithToolAgentKey(ctx, agentKey)
 		}
 
 		// Inject channel routing context for tools like message, cron, etc.
@@ -273,6 +302,38 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 		// Only when agent context is present (HMAC-protected) to prevent unauthenticated path injection.
 		if workspace != "" && (agentIDStr != "" || userID != "") {
 			ctx = tools.WithToolWorkspace(ctx, workspace)
+		}
+
+		// Inject builtin tool settings so media tools (read_image, tts, etc.)
+		// can resolve their provider chains via ResolveMediaProviderChain.
+		if bts != nil {
+			if allTools, err := bts.List(ctx); err == nil {
+				settings := make(tools.BuiltinToolSettings, len(allTools))
+				for _, t := range allTools {
+					if len(t.Settings) > 0 && string(t.Settings) != "{}" {
+						settings[t.Name] = []byte(t.Settings)
+					}
+				}
+				if len(settings) > 0 {
+					ctx = tools.WithBuiltinToolSettings(ctx, settings)
+				}
+			}
+		}
+
+		// Inject trace context from agent loop so bridge tool spans appear in the trace tree.
+		if traceReg != nil && agentIDStr != "" {
+			if agentUUID, err := uuid.Parse(agentIDStr); err == nil {
+				traceKey := mcpbridge.BridgeTraceKey(agentUUID, channel, peerKind, chatID)
+				if tc, ok := traceReg.Lookup(traceKey); ok {
+					ctx = tracing.WithTraceID(ctx, tc.TraceID)
+					ctx = tracing.WithParentSpanID(ctx, tc.ParentSpanID)
+					ctx = tracing.WithCollector(ctx, tc.Collector)
+					ctx = mcpbridge.WithBridgeAgentID(ctx, tc.AgentID)
+					if tc.TenantID != uuid.Nil {
+						ctx = store.WithTenantID(ctx, tc.TenantID)
+					}
+				}
+			}
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -500,11 +561,27 @@ func (s *Server) SetDocsHandler(h *httpapi.DocsHandler) { s.handlers = append(s.
 // SetEditionHandler sets the edition info handler.
 func (s *Server) SetEditionHandler(h *httpapi.EditionHandler) { s.handlers = append(s.handlers, h) }
 
+// SetBrowserLiveHandler sets the browser live view handler.
+func (s *Server) SetBrowserLiveHandler(h *httpapi.BrowserLiveHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
+// SetBrowserProxiesHandler sets the browser proxy pool management handler.
+func (s *Server) SetBrowserProxiesHandler(h *httpapi.BrowserProxiesHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetAgentStore sets the agent store for context injection in tools_invoke.
 func (s *Server) SetAgentStore(as store.AgentStore) { s.agentStore = as }
 
 // SetMessageBus sets the message bus for MCP bridge media delivery.
 func (s *Server) SetMessageBus(mb *bus.MessageBus) { s.msgBus = mb }
+
+// SetBuiltinToolStore sets the store for loading builtin tool settings into MCP bridge context.
+func (s *Server) SetBuiltinToolStore(bts store.BuiltinToolStore) { s.builtinToolStore = bts }
+
+// SetBridgeTraceRegistry sets the trace registry for passing trace context to bridge tool handlers.
+func (s *Server) SetBridgeTraceRegistry(r *mcpbridge.BridgeTraceRegistry) { s.bridgeTraceReg = r }
 
 // SetVersion sets the server version for health responses.
 func (s *Server) SetVersion(v string) { s.version = v }

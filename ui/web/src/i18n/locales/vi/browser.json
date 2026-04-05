@@ -1,0 +1,18 @@
+{
+  "title": "Trình duyệt",
+  "description": "Giám sát và điều khiển phiên duyệt web",
+  "running": "Đang chạy",
+  "stopped": "Đã dừng",
+  "visible": "Hiển thị",
+  "start": "Khởi động",
+  "stop": "Dừng",
+  "view": "Xem",
+  "openInNewTab": "Mở tab mới",
+  "notRunning": "Trình duyệt chưa chạy",
+  "notRunningDescription": "Khởi động trình duyệt để bắt đầu tự động hóa",
+  "noTabs": "Không có tab nào",
+  "noTabsDescription": "Yêu cầu agent mở URL, các tab sẽ hiển thị tại đây",
+  "noTabsForAgent": "Agent này chưa có tab nào",
+  "openTabs": "Tab đang mở",
+  "allAgents": "Tất cả"
+}

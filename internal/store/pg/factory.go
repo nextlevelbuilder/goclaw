@@ -51,6 +51,11 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		BuiltinToolTenantCfgs: NewPGBuiltinToolTenantConfigStore(db),
 		SkillTenantCfgs:       NewPGSkillTenantConfigStore(db),
 		SystemConfigs:         NewPGSystemConfigStore(db),
+		BrowserProxies:          NewBrowserProxyStore(db),
+		BrowserProxyAssignments: NewBrowserProxyAssignmentStore(db),
+		BrowserExtensions:       NewBrowserExtensionStore(db),
+		ScreencastSessions:      NewScreencastSessionStore(db),
+		BrowserAudit:            NewBrowserAuditStore(db),
 		SubagentTasks:         NewPGSubagentTaskStore(db),
 	}, nil
 }

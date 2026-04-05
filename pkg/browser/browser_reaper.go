@@ -23,7 +23,7 @@ func (m *Manager) reapIdlePages() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.browser == nil {
+	if !m.engine.IsConnected() {
 		return
 	}
 
@@ -39,6 +39,8 @@ func (m *Manager) reapIdlePages() {
 			continue
 		}
 
+		// Stop any active screencast before closing the page
+		_ = page.StopScreencast()
 		if err := page.Close(); err != nil {
 			m.logger.Warn("reaper: failed to close idle page", "targetId", targetID, "error", err)
 			continue
@@ -47,7 +49,10 @@ func (m *Manager) reapIdlePages() {
 		delete(m.pages, targetID)
 		delete(m.console, targetID)
 		delete(m.pageTenants, targetID)
+		delete(m.pageAgents, targetID)
+		delete(m.pageSessionKeys, targetID)
 		delete(m.pageLastUsed, targetID)
+		delete(m.pageProfiles, targetID)
 		m.refs.Remove(targetID)
 		m.logger.Info("reaper: closed idle page", "targetId", targetID, "idle", now.Sub(lastUsed).Round(time.Second))
 	}

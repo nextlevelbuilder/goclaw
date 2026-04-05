@@ -13,7 +13,7 @@ import type {
 } from "@/types/agent";
 import {
   ChatGPTOAuthRoutingSection, ThinkingSection, WorkspaceSharingSection, CompactionSection,
-  ContextPruningSection, SandboxSection,
+  ContextPruningSection, SandboxSection, BrowserProxySection,
 } from "./config-sections";
 import { WorkspaceSection } from "./general-sections";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
@@ -73,6 +73,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     const routing = normalizeChatGPTOAuthRouting(a.other_config);
     const draftRouting = buildDraftRouting(routing);
     return {
+      browserUseProxy: otherObj.browser_use_proxy === true,
       reasoningMode,
       thinkingLevel: SIMPLE_REASONING_LEVELS.has(reasoningEffort)
         ? reasoningEffort
@@ -98,6 +99,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
 
   const init = deriveState(agent);
   const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(init.wsSharing);
+  const [browserUseProxy, setBrowserUseProxy] = useState(init.browserUseProxy);
   const [reasoningMode, setReasoningMode] = useState<ReasoningOverrideMode>(init.reasoningMode);
   const [thinkingLevel, setThinkingLevel] = useState(init.thinkingLevel);
   const [reasoningEffort, setReasoningEffort] = useState(init.reasoningEffort);
@@ -115,6 +117,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
     if (!open) return;
     refreshProviders();
     const s = deriveState(agent);
+    setBrowserUseProxy(s.browserUseProxy);
     setReasoningMode(s.reasoningMode);
     setThinkingLevel(s.thinkingLevel);
     setReasoningEffort(s.reasoningEffort);
@@ -172,6 +175,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
       delete otherBase.thinking_level;
       delete otherBase.reasoning;
       delete otherBase.workspace_sharing;
+      delete otherBase.browser_use_proxy;
       const capabilityResolutionPending = !currentProvider || providersLoading || providerModelsLoading;
       if (reasoningMode === "inherit") {
         otherBase.reasoning = {
@@ -191,6 +195,9 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         };
         if (reasoningFallback !== "downgrade") reasoningConfig.fallback = reasoningFallback;
         otherBase.reasoning = reasoningConfig;
+      }
+      if (browserUseProxy) {
+        otherBase.browser_use_proxy = true;
       }
       if (
         wsSharing.shared_dm || wsSharing.shared_group ||
@@ -229,6 +236,9 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
 
           {/* Workspace Sharing */}
           <WorkspaceSharingSection value={wsSharing} onChange={setWsSharing} />
+
+          {/* Browser Proxy */}
+          <BrowserProxySection value={browserUseProxy} onChange={setBrowserUseProxy} />
 
           {/* Thinking */}
           <ThinkingSection

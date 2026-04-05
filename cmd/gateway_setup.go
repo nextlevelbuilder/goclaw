@@ -91,12 +91,66 @@ func setupToolRegistry(
 	// Browser automation tool
 	if cfg.Tools.Browser.Enabled {
 		var opts []browser.Option
-		if cfg.Tools.Browser.RemoteURL != "" {
+
+		// Resolve mode: explicit field > inferred from legacy fields > default "host"
+		mode := cfg.Tools.Browser.Mode
+		if mode == "" {
+			switch {
+			case cfg.Tools.Browser.RemoteURL != "":
+				mode = "remote"
+			case cfg.Tools.Browser.ImagePreset == "stealth" || cfg.Tools.Browser.ImagePreset == "custom":
+				mode = "docker"
+			default:
+				mode = "host"
+			}
+		}
+
+		switch mode {
+		case "remote":
 			opts = append(opts, browser.WithRemoteURL(cfg.Tools.Browser.RemoteURL))
-			slog.Info("browser tool enabled", "remote", cfg.Tools.Browser.RemoteURL)
-		} else {
+			slog.Info("browser tool enabled", "mode", "remote", "remote", cfg.Tools.Browser.RemoteURL)
+		case "docker":
+			containerImage := cfg.Tools.Browser.ContainerImage
+			if containerImage == "" {
+				switch cfg.Tools.Browser.ImagePreset {
+				case "stealth":
+					containerImage = browser.StealthContainerImage
+				default:
+					containerImage = browser.DefaultContainerImage
+				}
+			}
+			poolSize := cfg.Tools.Browser.ContainerPool
+			if poolSize <= 0 {
+				poolSize = 10
+			}
+			var copts []browser.ContainerOpt
+			if cfg.Tools.Browser.ContainerMemory > 0 {
+				copts = append(copts, browser.WithContainerMemory(cfg.Tools.Browser.ContainerMemory))
+			}
+			if cfg.Tools.Browser.ContainerCPU > 0 {
+				copts = append(copts, browser.WithContainerCPU(cfg.Tools.Browser.ContainerCPU))
+			}
+			if cfg.Tools.Browser.ContainerNetwork != "" {
+				copts = append(copts, browser.WithContainerNetwork(cfg.Tools.Browser.ContainerNetwork))
+			}
+			poolEngine := browser.NewContainerPoolEngine(containerImage, poolSize, slog.Default(), copts...)
+			opts = append(opts, browser.WithEngine(poolEngine))
+			if cfg.Tools.Browser.ProxyURL != "" {
+				opts = append(opts, browser.WithProxy(cfg.Tools.Browser.ProxyURL))
+			}
+			slog.Info("browser tool enabled", "mode", "docker", "image", containerImage, "pool", poolSize, "preset", cfg.Tools.Browser.ImagePreset)
+		case "k8s":
+			// Kubernetes engine setup — namespace and image are required
+			slog.Info("browser tool enabled", "mode", "k8s", "namespace", cfg.Tools.Browser.K8sNamespace, "image", cfg.Tools.Browser.K8sImage)
+		default: // "host"
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
-			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+			if cfg.Tools.Browser.BinaryPath != "" {
+				opts = append(opts, browser.WithBinaryPath(cfg.Tools.Browser.BinaryPath))
+			}
+			if cfg.Tools.Browser.ProxyURL != "" {
+				opts = append(opts, browser.WithProxy(cfg.Tools.Browser.ProxyURL))
+			}
+			slog.Info("browser tool enabled", "mode", "host", "headless", cfg.Tools.Browser.Headless)
 		}
 		if cfg.Tools.Browser.ActionTimeoutMs > 0 {
 			opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
@@ -110,8 +164,18 @@ func setupToolRegistry(
 		if cfg.Tools.Browser.MaxPages > 0 {
 			opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
 		}
+		if cfg.Tools.Browser.ViewportWidth > 0 && cfg.Tools.Browser.ViewportHeight > 0 {
+			opts = append(opts, browser.WithViewport(cfg.Tools.Browser.ViewportWidth, cfg.Tools.Browser.ViewportHeight))
+		}
+		opts = append(opts, browser.WithWorkspace(workspace))
 		browserMgr = browser.New(opts...)
-		toolsReg.Register(browser.NewBrowserTool(browserMgr))
+		// StorageManager for profile directory management
+		profilesWorkspace := workspace
+		if cfg.Tools.Browser.ProfilesDir != "" {
+			profilesWorkspace = cfg.Tools.Browser.ProfilesDir
+		}
+		storageMgr := browser.NewStorageManager(profilesWorkspace, nil)
+		toolsReg.Register(browser.NewBrowserTool(browserMgr, storageMgr, nil, nil, nil))
 	}
 
 	// Web tools (web_search + web_fetch)
@@ -571,5 +635,87 @@ func setupSkillsSystem(
 	}
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
+}
+
+// buildBrowserManager creates a new browser.Manager from the given config.
+// Returns nil if browser is disabled. Used for initial setup and config hot-reload.
+func buildBrowserManager(cfg *config.Config, workspace string) *browser.Manager {
+	if !cfg.Tools.Browser.Enabled {
+		return nil
+	}
+
+	var opts []browser.Option
+
+	// Resolve mode: explicit field > inferred from legacy fields > default "host"
+	mode := cfg.Tools.Browser.Mode
+	if mode == "" {
+		switch {
+		case cfg.Tools.Browser.RemoteURL != "":
+			mode = "remote"
+		default:
+			mode = "host"
+		}
+	}
+
+	switch mode {
+	case "remote":
+		opts = append(opts, browser.WithRemoteURL(cfg.Tools.Browser.RemoteURL))
+	case "docker":
+		containerImage := cfg.Tools.Browser.ContainerImage
+		if containerImage == "" {
+			switch cfg.Tools.Browser.ImagePreset {
+			case "stealth":
+				containerImage = browser.StealthContainerImage
+			default:
+				containerImage = browser.DefaultContainerImage
+			}
+		}
+		poolSize := cfg.Tools.Browser.ContainerPool
+		if poolSize <= 0 {
+			poolSize = 10
+		}
+		var copts []browser.ContainerOpt
+		if cfg.Tools.Browser.ContainerMemory > 0 {
+			copts = append(copts, browser.WithContainerMemory(cfg.Tools.Browser.ContainerMemory))
+		}
+		if cfg.Tools.Browser.ContainerCPU > 0 {
+			copts = append(copts, browser.WithContainerCPU(cfg.Tools.Browser.ContainerCPU))
+		}
+		if cfg.Tools.Browser.ContainerNetwork != "" {
+			copts = append(copts, browser.WithContainerNetwork(cfg.Tools.Browser.ContainerNetwork))
+		}
+		poolEngine := browser.NewContainerPoolEngine(containerImage, poolSize, slog.Default(), copts...)
+		opts = append(opts, browser.WithEngine(poolEngine))
+		if cfg.Tools.Browser.ProxyURL != "" {
+			opts = append(opts, browser.WithProxy(cfg.Tools.Browser.ProxyURL))
+		}
+	case "k8s":
+		// Kubernetes engine setup — namespace and image are required
+	default: // "host"
+		opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
+		if cfg.Tools.Browser.BinaryPath != "" {
+			opts = append(opts, browser.WithBinaryPath(cfg.Tools.Browser.BinaryPath))
+		}
+		if cfg.Tools.Browser.ProxyURL != "" {
+			opts = append(opts, browser.WithProxy(cfg.Tools.Browser.ProxyURL))
+		}
+	}
+
+	if cfg.Tools.Browser.ActionTimeoutMs > 0 {
+		opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
+	}
+	if cfg.Tools.Browser.IdleTimeoutMs > 0 {
+		opts = append(opts, browser.WithIdleTimeout(time.Duration(cfg.Tools.Browser.IdleTimeoutMs)*time.Millisecond))
+	} else if cfg.Tools.Browser.IdleTimeoutMs < 0 {
+		opts = append(opts, browser.WithIdleTimeout(0))
+	}
+	if cfg.Tools.Browser.MaxPages > 0 {
+		opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
+	}
+	if cfg.Tools.Browser.ViewportWidth > 0 && cfg.Tools.Browser.ViewportHeight > 0 {
+		opts = append(opts, browser.WithViewport(cfg.Tools.Browser.ViewportWidth, cfg.Tools.Browser.ViewportHeight))
+	}
+	opts = append(opts, browser.WithWorkspace(workspace))
+	return browser.New(opts...)
 }
 

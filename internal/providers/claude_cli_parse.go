@@ -139,6 +139,14 @@ func parseSingleJSONResult(line []byte) *ChatResponse {
 
 // extractStreamContent extracts text and thinking from a stream message.
 func extractStreamContent(msg *cliStreamMsg) (text, thinking string) {
+	text, thinking, _ = extractStreamContentWithTools(msg)
+	return
+}
+
+// extractStreamContentWithTools extracts text, thinking, and tool call/result chunks
+// from a CLI stream message. Tool chunks are emitted for tracing — CLI executes tools
+// itself via MCP, but GoClaw needs visibility for the trace timeline.
+func extractStreamContentWithTools(msg *cliStreamMsg) (text, thinking string, toolChunks []StreamChunk) {
 	var textBuf, thinkBuf strings.Builder
 	for _, block := range msg.Content {
 		switch block.Type {
@@ -146,7 +154,25 @@ func extractStreamContent(msg *cliStreamMsg) (text, thinking string) {
 			textBuf.WriteString(block.Text)
 		case "thinking":
 			thinkBuf.WriteString(block.Thinking)
+		case "tool_use":
+			if block.ToolName != "" {
+				toolChunks = append(toolChunks, StreamChunk{
+					ToolCallID: block.ToolID,
+					ToolName:   block.ToolName,
+					ToolInput:  block.ToolInput,
+				})
+			}
+		case "tool_result":
+			// tool_result content can be a string or array of {type,text} objects.
+			// Extract the text content for tracing output preview.
+			if block.ToolID != "" {
+				tc := StreamChunk{ToolCallID: block.ToolID}
+				if block.Text != "" {
+					tc.ToolResult = block.Text
+				}
+				toolChunks = append(toolChunks, tc)
+			}
 		}
 	}
-	return textBuf.String(), thinkBuf.String()
+	return textBuf.String(), thinkBuf.String(), toolChunks
 }

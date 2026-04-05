@@ -1,11 +1,58 @@
-// Barrel re-exports for backward compatibility.
-// Import directly from sub-modules for new code.
-export { ROUTES } from "./routes";
 export {
-  TIMEZONE_OPTIONS,
   getAllIanaTimezones,
   isValidIanaTimezone,
 } from "./timezone-utils";
+
+export const ROUTES = {
+  LOGIN: "/login",
+  OVERVIEW: "/overview",
+  CHAT: "/chat",
+  CHAT_PATTERN: "/chat/:sessionKey?",
+  AGENTS: "/agents",
+  AGENT_DETAIL: "/agents/:id",
+  AGENT_CODEX_POOL: "/agents/:id/codex-pool",
+  IMPORT_EXPORT: "/import-export",
+  SESSIONS: "/sessions",
+  SESSION_DETAIL: "/sessions/:key",
+  SKILLS: "/skills",
+  SKILL_DETAIL: "/skills/:id",
+  CRON: "/cron",
+  CRON_DETAIL: "/cron/:id",
+  CONFIG: "/config/:section?",
+  TRACES: "/traces",
+  TRACE_DETAIL: "/traces/:id",
+  EVENTS: "/events",
+  USAGE: "/usage",
+  CHANNELS: "/channels",
+  CHANNEL_DETAIL: "/channels/:id",
+  CONTACTS: "/contacts",
+  APPROVALS: "/approvals",
+  NODES: "/nodes",
+  LOGS: "/logs",
+  PROVIDERS: "/providers",
+  PROVIDER_DETAIL: "/providers/:id",
+  TEAMS: "/teams",
+  TEAM_DETAIL: "/teams/:id",
+  BUILTIN_TOOLS: "/builtin-tools",
+  CLI_CREDENTIALS: "/cli-credentials",
+  MCP: "/mcp",
+  TTS: "/tts",
+  STORAGE: "/storage",
+  PENDING_MESSAGES: "/pending-messages",
+  MEMORY: "/memory",
+  KNOWLEDGE_GRAPH: "/knowledge-graph",
+  PROXY_POOL: "/proxy-pool",
+  BROWSER: "/browser",
+  BROWSER_DETAIL: "/browser/:targetId",
+  BROWSER_SHARE: "/browser/live/:token",
+  ACTIVITY: "/activity",
+  API_KEYS: "/api-keys",
+  PACKAGES: "/packages",
+  TENANTS: "/admin/tenants",
+  TENANT_DETAIL: "/admin/tenants/:id",
+  SETUP: "/setup",
+  SELECT_TENANT: "/select-tenant",
+} as const;
 
 export const LOCAL_STORAGE_KEYS = {
   TOKEN: "goclaw:token",
@@ -28,3 +75,43 @@ export const LANGUAGE_LABELS: Record<Language, string> = {
   vi: "Tiếng Việt",
   zh: "中文",
 };
+
+/** "auto" = browser's local timezone. */
+export const TIMEZONE_OPTIONS = [
+  { value: "auto", label: "Auto (Local)" },
+  { value: "UTC", label: "UTC" },
+  { value: "America/New_York", label: "New York (ET)" },
+  { value: "America/Chicago", label: "Chicago (CT)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (PT)" },
+  { value: "Europe/London", label: "London (GMT/BST)" },
+  { value: "Europe/Paris", label: "Paris (CET)" },
+  { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+  { value: "Asia/Shanghai", label: "Shanghai (CST)" },
+  { value: "Asia/Ho_Chi_Minh", label: "Ho Chi Minh (ICT)" },
+  { value: "Asia/Singapore", label: "Singapore (SGT)" },
+  { value: "Australia/Sydney", label: "Sydney (AEST)" },
+] as const;
+
+/** IANA timezones for server-side scheduling (cron, heartbeat). */
+export const IANA_TIMEZONES = [
+  { value: "UTC", label: "UTC" },
+  { value: "Asia/Ho_Chi_Minh", label: "Asia/Ho_Chi_Minh (UTC+7)" },
+  { value: "Asia/Bangkok", label: "Asia/Bangkok (UTC+7)" },
+  { value: "Asia/Shanghai", label: "Asia/Shanghai (UTC+8)" },
+  { value: "Asia/Tokyo", label: "Asia/Tokyo (UTC+9)" },
+  { value: "Asia/Seoul", label: "Asia/Seoul (UTC+9)" },
+  { value: "Asia/Singapore", label: "Asia/Singapore (UTC+8)" },
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (UTC+5:30)" },
+  { value: "Asia/Dubai", label: "Asia/Dubai (UTC+4)" },
+  { value: "Europe/London", label: "Europe/London (UTC+0)" },
+  { value: "Europe/Paris", label: "Europe/Paris (UTC+1)" },
+  { value: "Europe/Berlin", label: "Europe/Berlin (UTC+1)" },
+  { value: "Europe/Moscow", label: "Europe/Moscow (UTC+3)" },
+  { value: "America/New_York", label: "America/New_York (UTC-5)" },
+  { value: "America/Chicago", label: "America/Chicago (UTC-6)" },
+  { value: "America/Denver", label: "America/Denver (UTC-7)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (UTC-8)" },
+  { value: "America/Sao_Paulo", label: "America/Sao_Paulo (UTC-3)" },
+  { value: "Australia/Sydney", label: "Australia/Sydney (UTC+11)" },
+  { value: "Pacific/Auckland", label: "Pacific/Auckland (UTC+13)" },
+] as const;

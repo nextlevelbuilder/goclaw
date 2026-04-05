@@ -139,6 +139,15 @@
       "save": "Lưu",
       "saving": "Đang lưu..."
     },
+    "browserSettings": {
+      "title": "Cài đặt trình duyệt",
+      "description": "Cấu hình công cụ tự động hóa trình duyệt.",
+      "publicUrl": "URL công khai",
+      "publicUrlHint": "URL gốc cho link chia sẻ live view (VD: https://goclaw.example.com). Khi đặt, link chia sẻ sẽ chứa đầy đủ URL.",
+      "cancel": "Hủy",
+      "save": "Lưu",
+      "saving": "Đang lưu..."
+    },
     "extractorChain": {
       "title": "Web Fetch — Chuỗi bộ trích xuất",
       "description": "Danh sách bộ trích xuất nội dung theo thứ tự. Mỗi URL được thử từ trên xuống cho đến khi một bộ trả về nội dung chất lượng.",

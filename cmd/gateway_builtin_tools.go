@@ -75,7 +75,7 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 		// browser
 		{Name: "browser", DisplayName: "Browser", Description: "Automate browser interactions: navigate pages, click elements, fill forms, take screenshots", Category: "browser", Enabled: true,
 			Requires: []string{"browser"},
-			Metadata: json.RawMessage(`{"config_hint":"Config → Tools → Browser"}`),
+			Settings: json.RawMessage(`{"public_url":""}`),
 		},
 
 		// sessions
@@ -223,6 +223,33 @@ func backfillWebFetchSettings(ctx context.Context, bts store.BuiltinToolStore) {
 		return
 	}
 	slog.Info("builtin_tools: backfilled web_fetch extractor chain settings")
+}
+
+// backfillBrowserSettings seeds the browser public_url from config/env into DB settings
+// if the DB row has no settings yet. This bridges the config→DB migration.
+func backfillBrowserSettings(ctx context.Context, bts store.BuiltinToolStore, publicURL string) {
+	if publicURL == "" {
+		return // nothing to backfill
+	}
+	t, err := bts.Get(ctx, "browser")
+	if err != nil || t == nil {
+		return
+	}
+	// If settings already exist and contain a public_url, don't overwrite.
+	if len(t.Settings) > 0 && string(t.Settings) != "{}" && string(t.Settings) != "null" {
+		var existing map[string]any
+		if json.Unmarshal(t.Settings, &existing) == nil {
+			if v, _ := existing["public_url"].(string); v != "" {
+				return // DB already has public_url
+			}
+		}
+	}
+	settings, _ := json.Marshal(map[string]string{"public_url": publicURL})
+	if err := bts.Update(ctx, "browser", map[string]any{"settings": json.RawMessage(settings)}); err != nil {
+		slog.Warn("builtin_tools: failed to backfill browser settings", "error", err)
+		return
+	}
+	slog.Info("builtin_tools: backfilled browser public_url from config", "public_url", publicURL)
 }
 
 // applyBuiltinToolDisables unregisters disabled builtin tools from the registry.

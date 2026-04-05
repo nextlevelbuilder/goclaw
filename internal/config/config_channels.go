@@ -409,12 +409,41 @@ type WebFetchPolicyConfig struct {
 
 // BrowserToolConfig controls the browser automation tool.
 type BrowserToolConfig struct {
-	Enabled         bool   `json:"enabled"`                    // enable the browser tool (default false)
-	Headless        bool   `json:"headless,omitempty"`         // run Chrome in headless mode (ignored when RemoteURL is set)
-	RemoteURL       string `json:"remote_url,omitempty"`       // CDP endpoint for remote Chrome sidecar, e.g. "ws://chrome:9222"
-	ActionTimeoutMs int    `json:"action_timeout_ms,omitempty"` // per-action timeout in ms (default 30000)
-	IdleTimeoutMs   int    `json:"idle_timeout_ms,omitempty"`   // idle page auto-close in ms (default 600000, 0=disabled)
-	MaxPages        int    `json:"max_pages,omitempty"`         // max open pages per tenant (default 5)
+	Enabled          bool    `json:"enabled"`                        // enable the browser tool (default false)
+	Mode             string  `json:"mode,omitempty"`                 // "host" (default), "docker", "remote", "k8s"
+	Headless         bool    `json:"headless"`                       // run Chrome in headless mode (ignored when RemoteURL is set)
+	RemoteURL        string  `json:"remote_url,omitempty"`           // CDP endpoint for remote Chrome sidecar, e.g. "ws://chrome:9222"
+	ActionTimeoutMs  int     `json:"action_timeout_ms,omitempty"`    // per-action timeout in ms (default 30000)
+	IdleTimeoutMs    int     `json:"idle_timeout_ms,omitempty"`      // idle page auto-close in ms (default 1800000=30min, 0=disabled)
+	MaxPages         int     `json:"max_pages,omitempty"`            // max open pages per tenant (default 5)
+	ProfilesDir      string  `json:"profiles_dir,omitempty"`         // custom dir for Chrome profile storage (default: workspace/browser/profiles/)
+	BinaryPath       string  `json:"binary_path,omitempty"`          // custom browser binary path
+	ProxyURL         string  `json:"proxy_url,omitempty"`            // default proxy URL for all sessions
+	ViewportWidth    int     `json:"viewport_width,omitempty"`       // default viewport width (default 1280)
+	ViewportHeight   int     `json:"viewport_height,omitempty"`      // default viewport height (default 720)
+	AuditEnabled     bool    `json:"audit_enabled"`                  // enable browser action audit logging
+	ImagePreset      string  `json:"image_preset,omitempty"`         // "basic" (default, headless-shell), "stealth" (goclaw/chromium anti-bot), "custom" (user container_image)
+	ContainerImage   string  `json:"container_image,omitempty"`      // Docker image for container engine (e.g. "chromedp/headless-shell:latest")
+	ContainerNetwork string  `json:"container_network,omitempty"`    // Docker network name
+	ContainerMemory  int     `json:"container_memory_mb,omitempty"`  // Memory limit per container (MB)
+	ContainerCPU     float64 `json:"container_cpu,omitempty"`        // CPU cores per container
+	ContainerPool    int     `json:"container_pool,omitempty"`       // Pre-warmed container pool size
+	K8sConnection       string            `json:"k8s_connection,omitempty"`          // "in-cluster" (default) or "manual"
+	K8sAPIServer        string            `json:"k8s_api_server,omitempty"`         // API server URL (manual mode)
+	K8sCACert           string            `json:"k8s_ca_cert,omitempty"`            // CA certificate (manual mode, PEM)
+	K8sSAToken          string            `json:"k8s_sa_token,omitempty"`           // ServiceAccount token (manual mode)
+	K8sContext          string            `json:"k8s_context,omitempty"`            // kubeconfig context (manual mode)
+	K8sNamespace        string            `json:"k8s_namespace,omitempty"`          // Kubernetes namespace for browser pods
+	K8sImage            string            `json:"k8s_image,omitempty"`              // Container image for K8s pods
+	K8sMemory           string            `json:"k8s_memory,omitempty"`             // Memory request/limit per pod (e.g. "512Mi")
+	K8sCPU              string            `json:"k8s_cpu,omitempty"`                // CPU request/limit per pod (e.g. "500m")
+	K8sPool             int               `json:"k8s_pool,omitempty"`               // Pre-warmed pod pool size
+	K8sNodeSelector     map[string]string `json:"k8s_node_selector,omitempty"`      // Node selector for pod scheduling
+	K8sTolerations      []string          `json:"k8s_tolerations,omitempty"`         // Toleration keys for pod scheduling
+	K8sPodTimeoutHours  int               `json:"k8s_pod_timeout_hours,omitempty"`  // Default pod expiry in hours (default 2)
+	K8sHeartbeatMin     int               `json:"k8s_heartbeat_min,omitempty"`      // Heartbeat interval in minutes (default 5)
+	K8sOrphanTimeoutMin int               `json:"k8s_orphan_timeout_min,omitempty"` // Kill orphan pods after N minutes without heartbeat (default 15)
+	PublicURL           string            `json:"public_url,omitempty"`             // Public base URL for shareable live view links (e.g. "https://goclaw.example.com"). When set, liveview.create returns full URLs instead of relative paths
 }
 
 // ToolPolicySpec defines a tool policy at any level (global, per-agent, per-provider).

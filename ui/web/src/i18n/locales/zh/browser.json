@@ -1,0 +1,18 @@
+{
+  "title": "浏览器",
+  "description": "监控和操作浏览器会话",
+  "running": "运行中",
+  "stopped": "已停止",
+  "visible": "可见",
+  "start": "启动",
+  "stop": "停止",
+  "view": "查看",
+  "openInNewTab": "在新标签页打开",
+  "notRunning": "浏览器未运行",
+  "notRunningDescription": "启动浏览器引擎以开始自动化",
+  "noTabs": "没有打开的标签页",
+  "noTabsDescription": "让 Agent 打开 URL，标签页将显示在这里",
+  "noTabsForAgent": "该 Agent 还没有标签页",
+  "openTabs": "打开的标签页",
+  "allAgents": "全部"
+}

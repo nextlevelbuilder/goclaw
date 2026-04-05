@@ -14,10 +14,12 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -30,6 +32,23 @@ type indexedResult struct {
 	result       *tools.Result
 	argsJSON     string
 	spanStart    time.Time
+}
+
+// cliToolSpan tracks an in-flight tool span from CLI provider streaming.
+// CLI executes tools externally via MCP — GoClaw only observes tool_use/tool_result
+// events for tracing purposes.
+type cliToolSpan struct {
+	spanID uuid.UUID
+	start  time.Time
+	name   string
+}
+
+// truncateForEvent trims tool result text for event payloads.
+func truncateForEvent(s string) string {
+	if len(s) > 500 {
+		return s[:500] + "..."
+	}
+	return s
 }
 
 func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, err error) {
@@ -252,6 +271,7 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 				providers.OptTemperature: config.DefaultTemperature,
 				providers.OptSessionKey:  req.SessionKey,
 				providers.OptAgentID:     l.agentUUID.String(),
+				providers.OptAgentKey:    l.id,
 				providers.OptUserID:      req.UserID,
 				providers.OptChannel:     req.Channel,
 				providers.OptChatID:      req.ChatID,
@@ -292,7 +312,23 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		llmSpanStart := time.Now().UTC()
 		llmSpanID := l.emitLLMSpanStart(callCtx, llmSpanStart, rs.iteration, messages, withModel(model), withProvider(provider.Name()))
 
+		// Register trace context for MCP bridge so tool calls from CLI providers
+		// appear as child spans of this LLM span in the trace tree.
+		if l.bridgeTraceReg != nil && l.traceCollector != nil && llmSpanID != uuid.Nil {
+			traceKey := mcpbridge.BridgeTraceKey(l.agentUUID, req.Channel, req.PeerKind, req.ChatID)
+			l.bridgeTraceReg.Register(traceKey, mcpbridge.BridgeTraceCtx{
+				TraceID:      tracing.TraceIDFromContext(callCtx),
+				ParentSpanID: llmSpanID,
+				AgentID:      l.agentUUID,
+				TenantID:     l.tenantID,
+				Collector:    l.traceCollector,
+			})
+			defer l.bridgeTraceReg.Unregister(traceKey)
+		}
+
 		if req.Stream {
+			// Track in-flight tool spans from CLI provider (tools executed externally via MCP).
+			cliToolSpans := make(map[string]cliToolSpan) // toolCallID → span
 			resp, err = provider.ChatStream(callCtx, chatReq, func(chunk providers.StreamChunk) {
 				if chunk.Thinking != "" {
 					emitRun(AgentEvent{
@@ -309,6 +345,33 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 						RunID:   req.RunID,
 						Payload: map[string]string{"content": chunk.Content},
 					})
+				}
+				// CLI tool_use → emit trace span start + tool.call event
+				if chunk.ToolName != "" && chunk.ToolCallID != "" {
+					inputJSON, _ := json.Marshal(chunk.ToolInput)
+					now := time.Now().UTC()
+					spanID := l.emitToolSpanStart(callCtx, now, chunk.ToolName, chunk.ToolCallID, string(inputJSON))
+					cliToolSpans[chunk.ToolCallID] = cliToolSpan{spanID: spanID, start: now, name: chunk.ToolName}
+					emitRun(AgentEvent{
+						Type:    protocol.AgentEventToolCall,
+						AgentID: l.id,
+						RunID:   req.RunID,
+						Payload: map[string]any{"tool": chunk.ToolName, "id": chunk.ToolCallID, "args": chunk.ToolInput},
+					})
+				}
+				// CLI tool_result → emit trace span end + tool.result event
+				if chunk.ToolResult != "" && chunk.ToolCallID != "" {
+					if span, ok := cliToolSpans[chunk.ToolCallID]; ok {
+						result := &tools.Result{ForLLM: chunk.ToolResult, IsError: chunk.ToolIsError}
+						l.emitToolSpanEnd(callCtx, span.spanID, span.start, result)
+						delete(cliToolSpans, chunk.ToolCallID)
+						emitRun(AgentEvent{
+							Type:    protocol.AgentEventToolResult,
+							AgentID: l.id,
+							RunID:   req.RunID,
+							Payload: map[string]any{"tool": span.name, "id": chunk.ToolCallID, "result": truncateForEvent(chunk.ToolResult)},
+						})
+					}
 				}
 			})
 		} else {

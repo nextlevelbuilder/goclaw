@@ -7,12 +7,16 @@ import (
 	"mime"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
 
 // BridgeToolNames is the subset of GoClaw tools exposed via the MCP bridge.
@@ -60,10 +64,12 @@ func NewBridgeServer(reg *tools.Registry, version string, msgBus *bus.MessageBus
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Register each safe tool from the GoClaw registry
+	// Register ALL bridge tools regardless of enabled/disabled state.
+	// This ensures tools enabled at runtime (e.g. read_image via UI) are
+	// discoverable by CLI agents. Execution checks enabled state at call time.
 	var registered int
 	for name := range BridgeToolNames {
-		t, ok := reg.Get(name)
+		t, ok := reg.GetAny(name)
 		if !ok {
 			continue
 		}
@@ -97,12 +103,24 @@ func convertToMCPTool(t tools.Tool) mcpgo.Tool {
 func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBus) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		args := req.GetArguments()
+		start := time.Now().UTC()
+
+		slog.Info("mcp.bridge: tool call", "tool", toolName, "args_keys", mapKeys(args))
+
+		// Emit running tool span if trace context is available (injected by bridge middleware).
+		spanID := emitBridgeToolSpanStart(ctx, start, toolName, args)
 
 		result := reg.Execute(ctx, toolName, args)
 
+		// Finalize the tool span with results.
+		emitBridgeToolSpanEnd(ctx, spanID, start, toolName, result)
+
 		if result.IsError {
+			slog.Warn("mcp.bridge: tool error", "tool", toolName, "error", truncateStr(result.ForLLM, 200))
 			return mcpgo.NewToolResultError(result.ForLLM), nil
 		}
+
+		slog.Info("mcp.bridge: tool result", "tool", toolName, "result_len", len(result.ForLLM))
 
 		// Forward media files to the outbound bus so they reach the user as attachments.
 		// This is necessary because Claude CLI processes tool results internally —
@@ -111,6 +129,104 @@ func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBu
 
 		return mcpgo.NewToolResultText(result.ForLLM), nil
 	}
+}
+
+// emitBridgeToolSpanStart emits a "running" tool span for a bridge tool call.
+// Returns uuid.Nil if tracing is not available in context.
+func emitBridgeToolSpanStart(ctx context.Context, start time.Time, toolName string, args map[string]any) uuid.UUID {
+	collector := tracing.CollectorFromContext(ctx)
+	traceID := tracing.TraceIDFromContext(ctx)
+	if collector == nil || traceID == uuid.Nil {
+		return uuid.Nil
+	}
+
+	inputJSON, _ := json.Marshal(args)
+	previewLimit := 40_000
+	if collector.Verbose() {
+		previewLimit = 200_000
+	}
+
+	spanID := store.GenNewID()
+	span := store.SpanData{
+		ID:           spanID,
+		TraceID:      traceID,
+		SpanType:     store.SpanTypeToolCall,
+		Name:         toolName,
+		StartTime:    start,
+		ToolName:     toolName,
+		InputPreview: tracing.TruncateJSON(string(inputJSON), previewLimit),
+		Status:       store.SpanStatusRunning,
+		Level:        store.SpanLevelDefault,
+		CreatedAt:    start,
+	}
+	if parentID := tracing.ParentSpanIDFromContext(ctx); parentID != uuid.Nil {
+		span.ParentSpanID = &parentID
+	}
+	if agentID := bridgeAgentIDFromContext(ctx); agentID != uuid.Nil {
+		span.AgentID = &agentID
+	}
+	span.TenantID = store.TenantIDFromContext(ctx)
+	if span.TenantID == uuid.Nil {
+		span.TenantID = store.MasterTenantID
+	}
+
+	collector.EmitSpan(span)
+	return spanID
+}
+
+// emitBridgeToolSpanEnd finalizes a running bridge tool span with results.
+func emitBridgeToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time.Time, toolName string, result *tools.Result) {
+	if spanID == uuid.Nil {
+		return
+	}
+	collector := tracing.CollectorFromContext(ctx)
+	traceID := tracing.TraceIDFromContext(ctx)
+	if collector == nil || traceID == uuid.Nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	previewLimit := 40_000
+	if collector.Verbose() {
+		previewLimit = 200_000
+	}
+
+	updates := map[string]any{
+		"end_time":       now,
+		"duration_ms":    int(now.Sub(start).Milliseconds()),
+		"status":         store.SpanStatusCompleted,
+		"output_preview": tracing.TruncateMid(result.ForLLM, previewLimit),
+	}
+	if result.IsError {
+		updates["status"] = store.SpanStatusError
+		updates["error"] = truncateStr(result.ForLLM, 200)
+	}
+	// Record token usage from tools that make internal LLM calls (e.g. read_image).
+	if result.Usage != nil {
+		updates["input_tokens"] = result.Usage.PromptTokens
+		updates["output_tokens"] = result.Usage.CompletionTokens
+		updates["provider"] = result.Provider
+		updates["model"] = result.Model
+	}
+
+	collector.EmitSpanUpdate(spanID, traceID, updates)
+}
+
+// mapKeys returns the keys of a map for logging (avoids logging full args).
+func mapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// truncateStr truncates a string to maxLen for logging.
+func truncateStr(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
 }
 
 // forwardMediaToOutbound publishes media files from a tool result to the outbound bus.

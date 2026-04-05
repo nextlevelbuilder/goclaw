@@ -618,3 +618,21 @@ func SandboxConfigFromCtx(ctx context.Context) *sandbox.Config {
 	}
 	return nil
 }
+
+// --- Per-agent browser use_proxy flag ---
+
+const ctxBrowserUseProxy toolContextKey = "tool_browser_use_proxy"
+
+func WithBrowserUseProxy(ctx context.Context, use bool) context.Context {
+	return context.WithValue(ctx, ctxBrowserUseProxy, use)
+}
+
+func BrowserUseProxyFromCtx(ctx context.Context) bool {
+	if v, ok := ctx.Value(ctxBrowserUseProxy).(bool); ok {
+		return v
+	}
+	if rc := store.RunContextFromCtx(ctx); rc != nil {
+		return rc.BrowserUseProxy
+	}
+	return false
+}

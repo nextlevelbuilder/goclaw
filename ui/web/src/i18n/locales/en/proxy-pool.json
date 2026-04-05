@@ -1,0 +1,48 @@
+{
+  "title": "Proxy Pool",
+  "description": "Manage browser proxy pool for geo-rotation and stealth.",
+  "addProxy": "Add Proxy",
+  "healthCheck": "Health Check",
+  "healthCheckAll": "Check All",
+  "noProxies": "No proxies configured",
+  "noProxiesDescription": "Add proxies to enable geo-rotation and IP diversity for browser automation.",
+  "columns": {
+    "name": "Name",
+    "url": "URL",
+    "geo": "Geo",
+    "enabled": "Enabled",
+    "health": "Health",
+    "lastCheck": "Last Check",
+    "actions": "Actions"
+  },
+  "health": {
+    "healthy": "Healthy",
+    "unhealthy": "Unhealthy",
+    "unknown": "Unknown"
+  },
+  "toggle": {
+    "enable": "Enable proxy",
+    "disable": "Disable proxy"
+  },
+  "addDialog": {
+    "title": "Add Proxy",
+    "name": "Name",
+    "namePlaceholder": "e.g. US Proxy 1",
+    "url": "Proxy URL",
+    "urlPlaceholder": "socks5://host:port or http://host:port",
+    "username": "Username",
+    "usernamePlaceholder": "Optional",
+    "password": "Password",
+    "passwordPlaceholder": "Optional",
+    "geo": "Geo (Country)",
+    "geoPlaceholder": "e.g. US, VN, JP",
+    "cancel": "Cancel",
+    "add": "Add"
+  },
+  "deleteConfirm": "Delete proxy \"{{name}}\"?",
+  "healthCheckSuccess": "Health check completed",
+  "addSuccess": "Proxy added",
+  "deleteSuccess": "Proxy deleted",
+  "enableSuccess": "Proxy enabled",
+  "disableSuccess": "Proxy disabled"
+}

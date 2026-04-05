@@ -673,6 +673,11 @@
       "textWeight": "文本权重",
       "textWeightTip": "混合搜索中关键词相似度的权重。"
     },
+    "browserProxy": {
+      "title": "浏览器代理",
+      "description": "当Agent使用浏览器时，自动从代理池分配代理。代理选择对Agent透明——Agent不知道使用了哪个代理。",
+      "label": "使用代理池"
+    },
     "thinking": {
       "title": "扩展思考",
       "description": "允许模型在响应前进行推理。更高级别使用更多令牌，但在复杂任务上产生更好的结果。",

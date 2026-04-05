@@ -12,6 +12,18 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
+// sanitizeMediaPath converts a /v1/files/ serve URL back to an absolute filesystem
+// path and strips query parameters (?ft=...) that may leak into session history.
+func sanitizeMediaPath(p string) string {
+	if idx := strings.IndexByte(p, '?'); idx > 0 {
+		p = p[:idx]
+	}
+	if strings.HasPrefix(p, "/v1/files/") {
+		p = "/" + strings.TrimPrefix(p, "/v1/files/")
+	}
+	return p
+}
+
 // --- Context helpers for media images ---
 
 const ctxMediaImages toolContextKey = "tool_media_images"
@@ -154,11 +166,23 @@ func (t *ReadImageTool) callProvider(ctx context.Context, cp credentialProvider,
 		return nil, nil, fmt.Errorf("vision provider error: %w", err)
 	}
 
-	return []byte(resp.Content), resp.Usage, nil
+	content := resp.Content
+	// Gemini 2.5 thinking models may return content in Thinking field with empty Content.
+	if content == "" && resp.Thinking != "" {
+		content = resp.Thinking
+	}
+	if content == "" {
+		return nil, nil, fmt.Errorf("vision provider returned empty response (provider=%s, model=%s)", providerName, model)
+	}
+
+	return []byte(content), resp.Usage, nil
 }
 
 // loadImageFromPath reads an image file from the workspace and returns it as ImageContent.
 func (t *ReadImageTool) loadImageFromPath(ctx context.Context, path string) ([]providers.ImageContent, error) {
+	// Sanitize /v1/files/ serve URLs and query params that may leak from session history.
+	path = sanitizeMediaPath(path)
+
 	// Infer MIME type from extension
 	ext := strings.ToLower(filepath.Ext(path))
 	mimeTypes := map[string]string{

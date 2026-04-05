@@ -7,42 +7,25 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
-
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/proto"
 )
 
 // reconnectLocked re-establishes the CDP connection to a remote Chrome.
 // Must be called with m.mu held. Only works when remoteURL is set.
 func (m *Manager) reconnectLocked() error {
-	m.closeTenantContextsLocked()
-	m.browser = nil
-	m.pages = make(map[string]*rod.Page)
-	m.console = make(map[string][]ConsoleMessage)
-	m.pageTenants = make(map[string]string)
-	m.pageLastUsed = make(map[string]time.Time)
-	m.refs = NewRefStore()
+	m.closeTenantEnginesLocked()
+	m.resetMapsLocked()
 
-	controlURL, err := resolveRemoteCDP(m.remoteURL)
-	if err != nil {
-		return err
-	}
-
-	b := rod.New().ControlURL(controlURL)
-	if err := b.Connect(); err != nil {
-		return err
-	}
-	m.browser = b
-	return nil
+	// Re-create engine and launch with remote URL
+	m.engine = NewChromeEngine(m.logger)
+	return m.engine.Launch(LaunchOpts{RemoteURL: m.remoteURL})
 }
 
 // getPage looks up a page by targetID. If targetID is empty, returns the first available page.
 // Must be called with m.mu held. If the connection is dead and remoteURL is set,
 // it attempts one automatic reconnect.
-func (m *Manager) getPage(targetID string) (*rod.Page, error) {
-	if m.browser == nil {
+func (m *Manager) getPage(targetID string) (Page, error) {
+	if !m.engine.IsConnected() {
 		return nil, fmt.Errorf("browser not running")
 	}
 
@@ -53,8 +36,8 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 		}
 	}
 
-	// Refresh page list from browser
-	pages, err := m.browser.Pages()
+	// Refresh page list from engine
+	pages, err := m.engine.Pages()
 	if err != nil {
 		// Connection dead — try auto-reconnect for remote Chrome
 		if m.remoteURL != "" {
@@ -62,7 +45,7 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 				return nil, fmt.Errorf("list pages: %w (reconnect also failed: %v)", err, reconnErr)
 			}
 			m.logger.Info("auto-reconnected to remote Chrome")
-			pages, err = m.browser.Pages()
+			pages, err = m.engine.Pages()
 			if err != nil {
 				return nil, fmt.Errorf("list pages after reconnect: %w", err)
 			}
@@ -73,8 +56,7 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 
 	// Update cache
 	for _, p := range pages {
-		tid := string(p.TargetID)
-		m.pages[tid] = p
+		m.pages[p.TargetID()] = p
 	}
 
 	if targetID != "" {
@@ -94,7 +76,7 @@ func (m *Manager) getPage(targetID string) (*rod.Page, error) {
 // getPageForTenant wraps getPage with tenant ownership validation.
 // If tenantID is set and the page belongs to a different tenant, access is denied.
 // Must be called with m.mu held.
-func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error) {
+func (m *Manager) getPageForTenant(targetID, tenantID string) (Page, error) {
 	page, err := m.getPage(targetID)
 	if err != nil {
 		return nil, err
@@ -103,7 +85,7 @@ func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error)
 	if tenantID == "" || tenantID == MasterTenantID {
 		resolvedTID := targetID
 		if targetID == "" {
-			resolvedTID = string(page.TargetID)
+			resolvedTID = page.TargetID()
 		}
 		m.touchPageLocked(resolvedTID)
 		return page, nil
@@ -111,7 +93,7 @@ func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error)
 	// Check ownership: page must belong to this tenant
 	resolvedTID := targetID
 	if targetID == "" {
-		resolvedTID = string(page.TargetID)
+		resolvedTID = page.TargetID()
 	}
 	if owner, ok := m.pageTenants[resolvedTID]; ok && owner != tenantID {
 		return nil, fmt.Errorf("tab not found: %s", targetID)
@@ -120,42 +102,8 @@ func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error)
 	return page, nil
 }
 
-// setupConsoleListener attaches a console message listener to a page via Rod's EachEvent.
-func (m *Manager) setupConsoleListener(page *rod.Page, targetID string) {
-	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
-		var text strings.Builder
-		for _, arg := range e.Args {
-			s := arg.Value.String()
-			if s != "" && s != "null" {
-				text.WriteString(s + " ")
-			}
-		}
-
-		level := "log"
-		switch e.Type {
-		case proto.RuntimeConsoleAPICalledTypeWarning:
-			level = "warn"
-		case proto.RuntimeConsoleAPICalledTypeError:
-			level = "error"
-		case proto.RuntimeConsoleAPICalledTypeInfo:
-			level = "info"
-		}
-
-		m.mu.Lock()
-		msgs := m.console[targetID]
-		if len(msgs) >= 500 {
-			msgs = msgs[1:]
-		}
-		m.console[targetID] = append(msgs, ConsoleMessage{
-			Level: level,
-			Text:  text.String(),
-		})
-		m.mu.Unlock()
-	})()
-}
-
-// resolveElement converts a RoleRef to a Rod Element via backendNodeID.
-func (m *Manager) resolveElement(page *rod.Page, targetID, ref string) (*rod.Element, error) {
+// resolveElement converts a RoleRef to an Element via backendNodeID using the Page interface.
+func (m *Manager) resolveElement(page Page, targetID, ref string) (Element, error) {
 	roleRef, ok := m.refs.Resolve(targetID, ref)
 	if !ok {
 		return nil, fmt.Errorf("unknown ref %q — take a new snapshot first", ref)
@@ -165,22 +113,16 @@ func (m *Manager) resolveElement(page *rod.Page, targetID, ref string) (*rod.Ele
 		return nil, fmt.Errorf("no backendNodeID for ref %q", ref)
 	}
 
-	backendID := proto.DOMBackendNodeID(roleRef.BackendNodeID)
-	resolved, err := proto.DOMResolveNode{BackendNodeID: backendID}.Call(page)
+	el, err := page.ResolveBackendNode(roleRef.BackendNodeID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve DOM node for %q (backendNodeID=%d): %w", ref, roleRef.BackendNodeID, err)
-	}
-
-	el, err := page.ElementFromObject(resolved.Object)
-	if err != nil {
-		return nil, fmt.Errorf("get element from object for %q: %w", ref, err)
 	}
 
 	return el, nil
 }
 
 // getPageAndResolve is a helper that locks, gets page with tenant check, and resolves an element.
-func (m *Manager) getPageAndResolve(ctx context.Context, targetID, ref string) (*rod.Page, *rod.Element, error) {
+func (m *Manager) getPageAndResolve(ctx context.Context, targetID, ref string) (Page, Element, error) {
 	tenantID := tenantIDFromCtx(ctx)
 	m.mu.Lock()
 	page, err := m.getPageForTenant(targetID, tenantID)
@@ -190,7 +132,7 @@ func (m *Manager) getPageAndResolve(ctx context.Context, targetID, ref string) (
 	}
 
 	// Ensure DOM is enabled for node resolution
-	_ = proto.DOMEnable{}.Call(page)
+	_ = page.EnableDOM()
 
 	el, err := m.resolveElement(page, targetID, NormalizeRef(ref))
 	if err != nil {
@@ -198,11 +140,6 @@ func (m *Manager) getPageAndResolve(ctx context.Context, targetID, ref string) (
 	}
 
 	return page, el, nil
-}
-
-// waitStable waits for page to become stable (no network/DOM activity).
-func waitStable(page *rod.Page) {
-	_ = page.WaitStable(300 * time.Millisecond)
 }
 
 // resolveRemoteCDP queries a Chrome endpoint's /json/version to get the CDP

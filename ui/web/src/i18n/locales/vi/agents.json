@@ -673,6 +673,11 @@
       "textWeight": "Trọng số văn bản",
       "textWeightTip": "Trọng số từ khóa trong tìm kiếm hỗn hợp."
     },
+    "browserProxy": {
+      "title": "Proxy trình duyệt",
+      "description": "Tự động gán proxy từ pool khi agent sử dụng trình duyệt. Proxy được chọn minh bạch — agent không biết proxy nào đang dùng.",
+      "label": "Sử dụng Proxy Pool"
+    },
     "thinking": {
       "title": "Suy nghĩ mở rộng",
       "description": "Cho phép model suy luận trước khi phản hồi. Cấp độ cao hơn dùng nhiều token hơn nhưng cho kết quả tốt hơn với tác vụ phức tạp.",

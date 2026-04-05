@@ -17,6 +17,9 @@ import { useChatSend } from "./hooks/use-chat-send";
 import { isOwnSession, parseSessionKey } from "@/lib/session-key";
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard";
 import { TaskPanel } from "@/components/chat/task-panel";
+import { BrowserPanel } from "@/components/chat/browser-panel";
+import { useBrowserViewStore } from "@/stores/use-browser-view-store";
+import { useBrowserStatus } from "@/pages/browser/hooks/use-browser-status";
 
 export function ChatPage() {
   const { t } = useTranslation("chat");
@@ -153,6 +156,25 @@ export function ChatPage() {
   useVirtualKeyboard();
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
+  const browserView = useBrowserViewStore();
+
+  // Poll browser tabs filtered by current session — detects browser activity
+  // even when tool events are not emitted (e.g. claude-cli provider via MCP bridge).
+  // Only poll when we have a session key to avoid fetching unfiltered tabs.
+  const { tabs: browserTabs } = useBrowserStatus(sessionKey ? { sessionKey } : { sessionKey: "__none__" });
+
+  // Auto-open browser panel when a tab appears for this session (polling fallback).
+  const prevBrowserTabCountRef = useRef(0);
+  useEffect(() => {
+    if (!sessionKey) return;
+    const prev = prevBrowserTabCountRef.current;
+    const curr = browserTabs.length;
+    if (prev === 0 && curr > 0 && !browserView.targetId && browserTabs[0]) {
+      const tab = browserTabs[0];
+      browserView.openBrowserView(tab.targetId, tab.title, tab.url);
+    }
+    prevBrowserTabCountRef.current = curr;
+  }, [browserTabs, sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-open task panel when first task appears, auto-close when all done.
   const prevTaskCountRef = useRef(0);
@@ -163,6 +185,47 @@ export function ChatPage() {
     if (curr === 0 && prev > 0) setTaskPanelOpen(false);
     prevTaskCountRef.current = curr;
   }, [teamTasks.length]);
+
+  // Close browser panel when switching sessions (targetId belongs to the old session)
+  const prevSessionKeyRef = useRef(sessionKey);
+  useEffect(() => {
+    if (prevSessionKeyRef.current !== sessionKey) {
+      if (browserView.targetId) {
+        browserView.closeBrowserView();
+      }
+      prevBrowserTabCountRef.current = 0;
+    }
+    prevSessionKeyRef.current = sessionKey;
+  }, [sessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-open browser panel from toolStream (real-time tool call detection).
+  // This is session-scoped: toolStream only contains tools from the current session.
+  useEffect(() => {
+    if (!toolStream?.length) return;
+    const browserTool = toolStream.find(
+      (t) => t.name === "browser" && t.phase === "completed",
+    );
+    if (!browserTool) return;
+    let targetId: string | null = null;
+    if (browserTool.result) {
+      try {
+        const parsed = JSON.parse(browserTool.result);
+        targetId = parsed.targetId ?? parsed.targetID ?? null;
+      } catch { /* not JSON */ }
+      if (!targetId) {
+        const match = browserTool.result.match(/targetId["\s:]+["']?([A-F0-9]{32})/i);
+        if (match?.[1]) targetId = match[1];
+      }
+    }
+    if (!targetId) {
+      const arg = browserTool.arguments?.targetId ?? browserTool.arguments?.targetID;
+      if (typeof arg === "string" && arg) targetId = arg;
+    }
+    if (targetId && targetId !== browserView.targetId) {
+      const url = browserTool.arguments?.targetUrl ?? browserTool.arguments?.url;
+      browserView.openBrowserView(targetId, undefined, typeof url === "string" ? url : undefined);
+    }
+  }, [toolStream]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSessionSelectMobile = useCallback(
     (key: string) => {
@@ -234,7 +297,22 @@ export function ChatPage() {
         )}
 
         <div className="shrink-0">
-          <ChatTopBar agentId={agentId} isRunning={isRunning} isBusy={isBusy} activity={activity} teamTasks={teamTasks} onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)} taskPanelOpen={taskPanelOpen} />
+          <ChatTopBar
+            agentId={agentId}
+            isRunning={isRunning}
+            isBusy={isBusy}
+            activity={activity}
+            teamTasks={teamTasks}
+            onToggleTaskPanel={() => setTaskPanelOpen((v) => !v)}
+            taskPanelOpen={taskPanelOpen}
+            browserActive={!!browserView.targetId}
+            browserVisible={browserView.panelVisible}
+            onToggleBrowser={() => {
+              if (browserView.targetId) {
+                browserView.togglePanel();
+              }
+            }}
+          />
         </div>
 
         {sendError && (
@@ -279,6 +357,18 @@ export function ChatPage() {
         </DropZone>
       </div>
 
+      {/* Browser panel — right side, resizable */}
+      {browserView.targetId && browserView.panelVisible && (
+        <BrowserPanel
+          targetId={browserView.targetId}
+          tabTitle={browserView.tabTitle}
+          tabUrl={browserView.tabUrl}
+          tabs={browserTabs}
+          onClose={browserView.hidePanel}
+          onSwitchTab={(tid, title, url) => browserView.openBrowserView(tid, title, url)}
+        />
+      )}
+
       {/* Mobile overlay backdrop — must render before TaskPanel so panel sits above */}
       {isMobile && taskPanelOpen && (
         <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setTaskPanelOpen(false)} />
@@ -286,6 +376,7 @@ export function ChatPage() {
 
       {/* Task panel — toggleable sidebar on the right */}
       <TaskPanel tasks={teamTasks} open={taskPanelOpen} onClose={() => setTaskPanelOpen(false)} />
+
     </div>
   );
 }

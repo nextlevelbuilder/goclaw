@@ -24,6 +24,8 @@
     "mcpServers": "Máy chủ MCP",
     "memory": "Bộ nhớ",
     "knowledgeGraph": "Knowledge Graph",
+    "browser": "Trình duyệt",
+    "proxyPool": "Proxy Pool",
     "traces": "Theo dõi",
     "realtimeEvents": "Sự kiện thời gian thực",
     "usage": "Sử dụng",

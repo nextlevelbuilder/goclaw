@@ -28,8 +28,9 @@ func axValue(v *proto.AccessibilityAXValue) string {
 
 // axNodeTree is an internal tree node built from flat AX nodes.
 type axNodeTree struct {
-	node     *proto.AccessibilityAXNode
-	depth    int
+	node    *proto.AccessibilityAXNode
+	depth   int
+	frameID string // which frame this node belongs to
 }
 
 // buildAXTree converts flat CDP AX nodes into a tree structure.
@@ -243,12 +244,18 @@ func FormatSnapshot(nodes []*proto.AccessibilityAXNode, opts SnapshotOptions) *S
 
 			backendNodeID := int(tn.node.BackendDOMNodeID)
 
-			refs[ref] = RoleRef{
+			rr := RoleRef{
 				Role:          role,
 				Name:          name,
 				Nth:           nth,
 				BackendNodeID: backendNodeID,
 			}
+			if tn.frameID != "" {
+				rr.FrameID = tn.frameID
+			} else if fid := string(tn.node.FrameID); fid != "" {
+				rr.FrameID = fid
+			}
+			refs[ref] = rr
 
 			line += fmt.Sprintf(" [ref=%s]", ref)
 			if nth > 0 {
@@ -355,4 +362,148 @@ func getIndentLevel(line string) int {
 		}
 	}
 	return spaces / 2
+}
+
+// frameNodes groups AX nodes by frame with a URL label.
+type frameNodes struct {
+	FrameID string
+	URL     string
+	Nodes   []*proto.AccessibilityAXNode
+}
+
+// FormatMultiFrameSnapshot merges main frame + child frame AX trees into one snapshot.
+// Each child frame section is separated by a "--- iframe: <url> ---" line.
+func FormatMultiFrameSnapshot(frames []frameNodes, opts SnapshotOptions) *SnapshotResult {
+	if opts.MaxChars == 0 {
+		opts.MaxChars = 8000
+	}
+	if opts.Limit == 0 {
+		opts.Limit = 500
+	}
+
+	refs := make(map[string]RoleRef)
+	tracker := newRoleNameTracker()
+	refCounter := 0
+	nextRef := func() string {
+		refCounter++
+		return fmt.Sprintf("e%d", refCounter)
+	}
+
+	var allLines []string
+	interactiveCount := 0
+	totalNodes := 0
+
+	for i, fr := range frames {
+		if totalNodes >= opts.Limit {
+			break
+		}
+
+		remaining := opts.Limit - totalNodes
+		treeNodes := buildAXTree(fr.Nodes, remaining)
+		totalNodes += len(treeNodes)
+
+		// Add separator for child frames (skip for first/main frame)
+		if i > 0 && len(treeNodes) > 0 {
+			allLines = append(allLines, fmt.Sprintf("--- iframe: %s ---", fr.URL))
+		}
+
+		for _, tn := range treeNodes {
+			role := strings.ToLower(axValue(tn.node.Role))
+			name := axValue(tn.node.Name)
+			value := axValue(tn.node.Value)
+			description := axValue(tn.node.Description)
+
+			if role == "" || role == "none" || role == "unknown" {
+				if name == "" {
+					continue
+				}
+			}
+			if role == "statictext" || role == "inlinetextbox" {
+				continue
+			}
+			if opts.MaxDepth > 0 && tn.depth > opts.MaxDepth {
+				continue
+			}
+
+			isInteractive := IsInteractive(role)
+			isContent := IsContent(role)
+			isStruct := IsStructural(role)
+
+			if opts.Interactive && !isInteractive {
+				continue
+			}
+			if opts.Compact && isStruct && name == "" {
+				continue
+			}
+
+			indent := strings.Repeat("  ", tn.depth)
+			line := indent + "- " + role
+
+			if name != "" {
+				line += fmt.Sprintf(" %q", name)
+			}
+
+			shouldHaveRef := isInteractive || (isContent && name != "")
+			if shouldHaveRef {
+				ref := nextRef()
+				nth := tracker.getNextIndex(role, name)
+				tracker.trackRef(role, name, ref)
+
+				rr := RoleRef{
+					Role:          role,
+					Name:          name,
+					Nth:           nth,
+					BackendNodeID: int(tn.node.BackendDOMNodeID),
+					FrameID:       fr.FrameID,
+				}
+				refs[ref] = rr
+
+				line += fmt.Sprintf(" [ref=%s]", ref)
+				if nth > 0 {
+					line += fmt.Sprintf(" [nth=%d]", nth)
+				}
+				if isInteractive {
+					interactiveCount++
+				}
+			}
+
+			if value != "" {
+				line += fmt.Sprintf(": %q", value)
+			}
+			if description != "" {
+				line += fmt.Sprintf(" (%s)", description)
+			}
+
+			allLines = append(allLines, line)
+		}
+	}
+
+	removeNthFromNonDuplicates(refs, tracker)
+
+	snapshot := strings.Join(allLines, "\n")
+	if len(allLines) == 0 {
+		snapshot = "(empty page)"
+	}
+
+	if opts.Compact && len(allLines) > 0 {
+		snapshot = compactTree(snapshot)
+	}
+
+	truncated := false
+	if opts.MaxChars > 0 && len(snapshot) > opts.MaxChars {
+		snapshot = snapshot[:opts.MaxChars] + "\n[...TRUNCATED]"
+		truncated = true
+	}
+
+	return &SnapshotResult{
+		Snapshot:  snapshot,
+		Refs:      refs,
+		Truncated: truncated,
+		Stats: SnapshotStats{
+			Lines:       len(allLines),
+			Chars:       len(snapshot),
+			Refs:        len(refs),
+			Interactive: interactiveCount,
+		},
+	}
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Bot, Users, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Loader2, Bot, Users, PanelRightOpen, PanelRightClose, Monitor } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import type { RunActivity, ActiveTeamTask } from "@/types/chat";
@@ -13,6 +13,9 @@ interface ChatTopBarProps {
   teamTasks: ActiveTeamTask[];
   onToggleTaskPanel?: () => void;
   taskPanelOpen?: boolean;
+  browserActive?: boolean;
+  browserVisible?: boolean;
+  onToggleBrowser?: () => void;
 }
 
 const phaseLabels: Record<RunActivity["phase"], string> = {
@@ -24,7 +27,7 @@ const phaseLabels: Record<RunActivity["phase"], string> = {
   leader_processing: "Processing team results…",
 };
 
-export function ChatTopBar({ agentId, isRunning, isBusy, activity, teamTasks, onToggleTaskPanel, taskPanelOpen }: ChatTopBarProps) {
+export function ChatTopBar({ agentId, isRunning, isBusy, activity, teamTasks, onToggleTaskPanel, taskPanelOpen, browserActive, browserVisible, onToggleBrowser }: ChatTopBarProps) {
   const http = useHttp();
   const connected = useAuthStore((s) => s.connected);
   const [agent, setAgent] = useState<{ name: string; emoji?: string } | null>(null);
@@ -80,6 +83,21 @@ export function ChatTopBar({ agentId, isRunning, isBusy, activity, teamTasks, on
           </button>
         ) : (
           <span className="text-xs text-muted-foreground/50">Ready</span>
+        )}
+
+        {/* Browser panel toggle */}
+        {browserActive && (
+          <button
+            type="button"
+            onClick={onToggleBrowser}
+            className="relative rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            title={browserVisible ? "Hide browser" : "Show browser"}
+          >
+            <Monitor className="h-4 w-4" />
+            {browserVisible && (
+              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-green-500" />
+            )}
+          </button>
         )}
 
         {/* Task panel toggle — visible when there are (or recently were) team tasks */}

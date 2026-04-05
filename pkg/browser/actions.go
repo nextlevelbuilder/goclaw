@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/proto"
 )
@@ -39,23 +38,29 @@ func (m *Manager) Type(ctx context.Context, targetID, ref, text string, opts Typ
 		return err
 	}
 
-	// Focus the element first
+	// Focus the element first (click may fail on non-interactive elements, that's OK)
 	_ = el.Click(proto.InputMouseButtonLeft, 1)
 	time.Sleep(50 * time.Millisecond)
 
 	if opts.Slowly {
 		// Type character by character with delay
 		for _, ch := range text {
-			el.MustInput(string(ch))
+			if err := el.Input(string(ch)); err != nil {
+				return fmt.Errorf("type input: %w", err)
+			}
 			time.Sleep(50 * time.Millisecond)
 		}
 	} else {
-		el.MustInput(text)
+		if err := el.Input(text); err != nil {
+			return fmt.Errorf("type input: %w", err)
+		}
 	}
 
 	if opts.Submit {
 		time.Sleep(50 * time.Millisecond)
-		_ = page.Keyboard.Press(input.Enter)
+		if err := page.KeyboardPress(input.Enter); err != nil {
+			return fmt.Errorf("press Enter: %w", err)
+		}
 	}
 
 	return nil
@@ -72,7 +77,7 @@ func (m *Manager) Press(ctx context.Context, targetID, key string) error {
 	}
 
 	k := mapKey(key)
-	return page.Keyboard.Press(k)
+	return page.KeyboardPress(k)
 }
 
 // Hover hovers over an element by ref.
@@ -105,46 +110,41 @@ func (m *Manager) Wait(ctx context.Context, targetID string, opts WaitOpts) erro
 		}
 	}
 
-	// Wait for text to appear
+	// Wait for text to appear (JS polling — engine-agnostic)
 	if opts.Text != "" {
-		return rod.Try(func() {
-			page.Timeout(30 * time.Second).MustElementR("*", opts.Text)
+		return pollCondition(ctx, 30*time.Second, 200*time.Millisecond, func() (bool, error) {
+			result, err := page.Eval(fmt.Sprintf(`document.body && document.body.innerText.includes(%q)`, opts.Text))
+			if err != nil {
+				return false, nil // page not ready
+			}
+			return result.Value.Bool(), nil
 		})
 	}
 
-	// Wait for text to disappear
+	// Wait for text to disappear (JS polling — engine-agnostic)
 	if opts.TextGone != "" {
-		timeout := time.After(30 * time.Second)
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-timeout:
-				return fmt.Errorf("timeout waiting for text %q to disappear", opts.TextGone)
-			case <-ticker.C:
-				has, _, _ := page.Has("*")
-				if !has {
-					return nil
-				}
-				el, err := page.ElementR("*", opts.TextGone)
-				if err != nil || el == nil {
-					return nil
-				}
-			case <-ctx.Done():
-				return ctx.Err()
+		return pollCondition(ctx, 30*time.Second, 500*time.Millisecond, func() (bool, error) {
+			result, err := page.Eval(fmt.Sprintf(`!document.body || !document.body.innerText.includes(%q)`, opts.TextGone))
+			if err != nil {
+				return false, nil
 			}
-		}
+			return result.Value.Bool(), nil
+		})
 	}
 
-	// Wait for URL
+	// Wait for URL change
 	if opts.URL != "" {
-		wait := page.WaitNavigation(proto.PageLifecycleEventNameLoad)
-		wait()
-		return nil
+		return pollCondition(ctx, 30*time.Second, 200*time.Millisecond, func() (bool, error) {
+			result, err := page.Eval(`window.location.href`)
+			if err != nil {
+				return false, nil
+			}
+			return result.Value.Str() == opts.URL, nil
+		})
 	}
 
 	// Default: wait for page to stabilize
-	waitStable(page)
+	_ = page.WaitStable(300 * time.Millisecond)
 	return nil
 }
 
@@ -164,6 +164,30 @@ func (m *Manager) Evaluate(ctx context.Context, targetID, js string) (string, er
 	}
 
 	return result.Value.String(), nil
+}
+
+// pollCondition polls fn every interval until it returns true, timeout expires, or ctx is cancelled.
+func pollCondition(ctx context.Context, timeout, interval time.Duration, fn func() (bool, error)) error {
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			return fmt.Errorf("timeout waiting for condition")
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			ok, err := fn()
+			if err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+		}
+	}
 }
 
 // mapKey converts a key name string to a Rod keyboard key.

@@ -1,0 +1,48 @@
+{
+  "title": "Proxy Pool",
+  "description": "Quản lý proxy pool cho trình duyệt tự động.",
+  "addProxy": "Thêm Proxy",
+  "healthCheck": "Kiểm tra",
+  "healthCheckAll": "Kiểm tra tất cả",
+  "noProxies": "Chưa có proxy",
+  "noProxiesDescription": "Thêm proxy để hỗ trợ xoay vòng IP và geo-rotation cho trình duyệt.",
+  "columns": {
+    "name": "Tên",
+    "url": "URL",
+    "geo": "Geo",
+    "enabled": "Bật/Tắt",
+    "health": "Trạng thái",
+    "lastCheck": "Lần kiểm tra",
+    "actions": "Thao tác"
+  },
+  "health": {
+    "healthy": "Khỏe mạnh",
+    "unhealthy": "Lỗi",
+    "unknown": "Chưa rõ"
+  },
+  "toggle": {
+    "enable": "Bật proxy",
+    "disable": "Tắt proxy"
+  },
+  "addDialog": {
+    "title": "Thêm Proxy",
+    "name": "Tên",
+    "namePlaceholder": "VD: US Proxy 1",
+    "url": "URL Proxy",
+    "urlPlaceholder": "socks5://host:port hoặc http://host:port",
+    "username": "Tên đăng nhập",
+    "usernamePlaceholder": "Tùy chọn",
+    "password": "Mật khẩu",
+    "passwordPlaceholder": "Tùy chọn",
+    "geo": "Geo (Quốc gia)",
+    "geoPlaceholder": "VD: US, VN, JP",
+    "cancel": "Hủy",
+    "add": "Thêm"
+  },
+  "deleteConfirm": "Xóa proxy \"{{name}}\"?",
+  "healthCheckSuccess": "Đã kiểm tra xong",
+  "addSuccess": "Đã thêm proxy",
+  "deleteSuccess": "Đã xóa proxy",
+  "enableSuccess": "Đã bật proxy",
+  "disableSuccess": "Đã tắt proxy"
+}

@@ -139,6 +139,15 @@
       "save": "Save",
       "saving": "Saving..."
     },
+    "browserSettings": {
+      "title": "Browser Settings",
+      "description": "Configure the browser automation tool.",
+      "publicUrl": "Public URL",
+      "publicUrlHint": "Base URL for shareable live view links (e.g. https://goclaw.example.com). When set, live view share links include the full URL.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
+    },
     "extractorChain": {
       "title": "Web Fetch — Extractor Chain",
       "description": "Ordered list of content extractors. Each URL is tried top-to-bottom until one returns quality content.",

@@ -673,6 +673,11 @@
       "textWeight": "Text Weight",
       "textWeightTip": "Weight for keyword similarity in hybrid search."
     },
+    "browserProxy": {
+      "title": "Browser Proxy",
+      "description": "Auto-assign a proxy from the pool when this agent uses the browser. The proxy is selected transparently — the agent does not see which proxy is used.",
+      "label": "Use Proxy Pool"
+    },
     "thinking": {
       "title": "Extended Thinking",
       "description": "Allow the model to reason before responding. Higher levels use more tokens but produce better results on complex tasks.",

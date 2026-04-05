@@ -53,6 +53,15 @@
       "saving": "保存中...",
       "title": "知识图谱设置"
     },
+    "browserSettings": {
+      "title": "浏览器设置",
+      "description": "配置浏览器自动化工具。",
+      "publicUrl": "公开 URL",
+      "publicUrlHint": "可分享实时预览链接的基础 URL（例如 https://goclaw.example.com）。设置后，实时预览分享链接将包含完整 URL。",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中..."
+    },
     "extractorChain": {
       "title": "Web Fetch — 提取器链",
       "description": "有序内容提取器列表。每个 URL 从上到下依次尝试，直到某个提取器返回高质量内容。",

@@ -16,6 +16,10 @@ const OptDisableTools = "disable_tools"
 // OptAgentID passes the agent UUID string for per-session MCP config.
 const OptAgentID = "agent_id"
 
+// OptAgentKey passes the agent string key (e.g. "steward") for MCP bridge context.
+// Used by session tools to build session key prefixes.
+const OptAgentKey = "agent_key"
+
 // OptUserID passes the user ID string for per-session MCP config.
 const OptUserID = "user_id"
 
@@ -46,6 +50,8 @@ type ClaudeCLIProvider struct {
 	permMode           string // permission mode (default: "bypassPermissions")
 	hooksSettingsPath  string // generated settings.json with security hooks (empty = no hooks)
 	hooksCleanup       func() // cleanup function for hooks temp files
+	hooksWorkspace     string // saved for re-creating hooks if temp files are cleaned by OS
+	hooksRestrict      bool   // saved for re-creating hooks if temp files are cleaned by OS
 	mu                 sync.Mutex // protects workdir creation
 	sessionMu          sync.Map   // key: string, value: *sync.Mutex — per-session lock
 	mcpConfigDirs      sync.Map   // key: string (dir path), value: struct{} — tracks per-session MCP config dirs for cleanup
@@ -101,6 +107,8 @@ func WithClaudeCLISecurityHooks(workspace string, restrictToWorkspace bool) Clau
 		}
 		p.hooksSettingsPath = settingsPath
 		p.hooksCleanup = cleanup
+		p.hooksWorkspace = workspace
+		p.hooksRestrict = restrictToWorkspace
 	}
 }
 
@@ -139,6 +147,28 @@ func (p *ClaudeCLIProvider) Close() error {
 		p.hooksCleanup()
 	}
 	return nil
+}
+
+// ensureHooksSettings checks that the security hooks settings file still exists
+// on disk. macOS periodically purges /var/folders/.../T/ temp files, which deletes
+// the file while the gateway keeps running for days. If missing, recreate from
+// the saved workspace/restrict params so CLI calls don't fail.
+func (p *ClaudeCLIProvider) ensureHooksSettings() string {
+	if p.hooksSettingsPath == "" {
+		return ""
+	}
+	if _, err := os.Stat(p.hooksSettingsPath); err == nil {
+		return p.hooksSettingsPath
+	}
+	slog.Info("claude-cli: recreating hooks settings (temp file was removed by OS)")
+	settingsPath, cleanup, err := BuildCLIHooksConfig(p.hooksWorkspace, p.hooksRestrict)
+	if err != nil {
+		slog.Warn("claude-cli: failed to recreate security hooks", "error", err)
+		return ""
+	}
+	p.hooksSettingsPath = settingsPath
+	p.hooksCleanup = cleanup
+	return settingsPath
 }
 
 // lockSession acquires a per-session mutex to prevent concurrent CLI calls on the same session.

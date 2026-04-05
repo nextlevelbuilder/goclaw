@@ -24,6 +24,8 @@
     "mcpServers": "MCP Servers",
     "memory": "Memory",
     "knowledgeGraph": "Knowledge Graph",
+    "browser": "Browser",
+    "proxyPool": "Proxy Pool",
     "traces": "Traces",
     "realtimeEvents": "Realtime Events",
     "usage": "Usage",

@@ -19,6 +19,21 @@ import (
 // maxImageBytes is the safety limit for reading image files (10MB).
 const maxImageBytes = 10 * 1024 * 1024
 
+// sanitizeMediaPath converts a /v1/files/ serve URL back to an absolute filesystem
+// path and strips query parameters (?ft=...) that may leak into session history
+// when ContentSuffix markdown is stored alongside MediaRefs.
+func sanitizeMediaPath(p string) string {
+	// Strip query string first (e.g. "?ft=token.expiry").
+	if idx := strings.IndexByte(p, '?'); idx > 0 {
+		p = p[:idx]
+	}
+	// Convert serve URL prefix to absolute path: "/v1/files/Users/..." → "/Users/..."
+	if strings.HasPrefix(p, "/v1/files/") {
+		p = "/" + strings.TrimPrefix(p, "/v1/files/")
+	}
+	return p
+}
+
 // loadImages reads local image files and returns base64-encoded ImageContent slices.
 // Non-image files and files that fail to read are skipped with a warning log.
 func loadImages(files []bus.MediaFile) []providers.ImageContent {
@@ -28,21 +43,22 @@ func loadImages(files []bus.MediaFile) []providers.ImageContent {
 
 	var images []providers.ImageContent
 	for _, f := range files {
+		p := sanitizeMediaPath(f.Path)
 		mime := f.MimeType
 		if mime == "" {
-			mime = inferImageMime(f.Path)
+			mime = inferImageMime(p)
 		}
 		if !strings.HasPrefix(mime, "image/") {
 			continue
 		}
 
-		data, err := os.ReadFile(f.Path)
+		data, err := os.ReadFile(p)
 		if err != nil {
-			slog.Warn("vision: failed to read image file", "path", f.Path, "error", err)
+			slog.Warn("vision: failed to read image file", "path", p, "error", err)
 			continue
 		}
 		if len(data) > maxImageBytes {
-			slog.Warn("vision: image file too large, skipping", "path", f.Path, "size", len(data))
+			slog.Warn("vision: image file too large, skipping", "path", p, "size", len(data))
 			continue
 		}
 

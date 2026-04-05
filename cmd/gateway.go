@@ -40,6 +40,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tasks"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/pkg/browser"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -132,6 +133,29 @@ func runGateway() {
 	}
 	if snapshotWorker != nil {
 		defer snapshotWorker.Stop()
+	}
+
+	// Wire browser managers (proxy, extension, audit) now that PG stores are available.
+	if browserMgr != nil {
+		if bt, ok := toolsReg.Get("browser"); ok {
+			if browserTool, ok := bt.(*browser.BrowserTool); ok {
+				encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+				if pgStores.BrowserProxies != nil {
+					pm := browser.NewProxyManager(pgStores.BrowserProxies, encKey, nil)
+					if pgStores.BrowserProxyAssignments != nil {
+						pm.SetAssignmentStore(pgStores.BrowserProxyAssignments)
+					}
+					browserTool.SetProxyManager(pm)
+					browserMgr.SetProxyManager(pm, store.MasterTenantID.String())
+				}
+				if pgStores.BrowserExtensions != nil {
+					browserTool.SetExtensionManager(browser.NewExtensionManager(pgStores.BrowserExtensions, nil))
+				}
+				if pgStores.BrowserAudit != nil && cfg.Tools.Browser.AuditEnabled {
+					browserTool.SetAuditLogger(browser.NewAuditLogger(pgStores.BrowserAudit, nil))
+				}
+			}
+		}
 	}
 
 	// Redis cache: compiled via build tags. Build with 'go build -tags redis' to enable.
@@ -331,6 +355,9 @@ func runGateway() {
 	server.SetPolicyEngine(permPE)
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
+	server.SetBuiltinToolStore(pgStores.BuiltinTools)
+	bridgeTraceReg := mcpbridge.NewBridgeTraceRegistry()
+	server.SetBridgeTraceRegistry(bridgeTraceReg)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
 	// contextFileInterceptor is created inside wireExtras.
@@ -346,7 +373,7 @@ func runGateway() {
 	var mcpPool *mcpbridge.Pool
 	var mediaStore *media.Store
 	var postTurn tools.PostTurnProcessor
-	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient)
+	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, bridgeTraceReg)
 	if mcpPool != nil {
 		defer mcpPool.Stop()
 	}
@@ -500,11 +527,38 @@ func runGateway() {
 		server.SetMediaServeHandler(httpapi.NewMediaServeHandler(mediaStore))
 	}
 
+	// Browser live view handler
+	var browserLiveH *httpapi.BrowserLiveHandler
+	if browserMgr != nil && pgStores.ScreencastSessions != nil {
+		browserLiveH = httpapi.NewBrowserLiveHandler(pgStores.ScreencastSessions, browserMgr, nil)
+		server.SetBrowserLiveHandler(browserLiveH)
+		// Wire sessions store + public URL into browser tool for liveview.create token generation
+		if bt, ok := toolsReg.Get("browser"); ok {
+			if browserTool, ok := bt.(*browser.BrowserTool); ok {
+				browserTool.SetScreencastSessions(pgStores.ScreencastSessions)
+				if u := cfg.Tools.Browser.PublicURL; u != "" {
+					browserTool.SetPublicURL(u)
+				}
+			}
+		}
+	}
+
+	// Browser proxy pool management handler
+	if pgStores.BrowserProxies != nil {
+		encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		httpProxyMgr := browser.NewProxyManager(pgStores.BrowserProxies, encKey, nil)
+		if pgStores.BrowserProxyAssignments != nil {
+			httpProxyMgr.SetAssignmentStore(pgStores.BrowserProxyAssignments)
+		}
+		server.SetBrowserProxiesHandler(httpapi.NewBrowserProxiesHandler(httpProxyMgr, nil))
+	}
+
 	// Seed + apply builtin tool disables
 	if pgStores.BuiltinTools != nil {
 		seedBuiltinTools(context.Background(), pgStores.BuiltinTools)
 		migrateBuiltinToolSettings(context.Background(), pgStores.BuiltinTools)
 		backfillWebFetchSettings(context.Background(), pgStores.BuiltinTools)
+		backfillBrowserSettings(context.Background(), pgStores.BuiltinTools, cfg.Tools.Browser.PublicURL)
 		applyBuiltinToolDisables(context.Background(), pgStores.BuiltinTools, toolsReg)
 	}
 
@@ -1069,6 +1123,65 @@ func runGateway() {
 		}
 		ttsTool.UpdateManager(newMgr)
 		slog.Info("tts config reloaded", "provider", newMgr.PrimaryProvider(), "auto", string(newMgr.AutoMode()))
+	})
+
+	// Reload browser manager on config changes via pub/sub.
+	// Only rebuilds when the browser config section actually changed.
+	var lastBrowserCfgJSON []byte // tracks serialized browser config for change detection
+	if cfg.Tools.Browser.Enabled {
+		lastBrowserCfgJSON, _ = json.Marshal(cfg.Tools.Browser)
+	}
+	msgBus.Subscribe("browser-config-reload", func(evt bus.Event) {
+		if evt.Name != bus.TopicConfigChanged {
+			return
+		}
+		updatedCfg, ok := evt.Payload.(*config.Config)
+		if !ok {
+			return
+		}
+
+		// Skip reload if browser config hasn't changed
+		newCfgJSON, _ := json.Marshal(updatedCfg.Tools.Browser)
+		if string(newCfgJSON) == string(lastBrowserCfgJSON) {
+			return
+		}
+		lastBrowserCfgJSON = newCfgJSON
+
+		bt, hasBT := toolsReg.Get("browser")
+		if !hasBT {
+			return
+		}
+		browserTool, ok := bt.(*browser.BrowserTool)
+		if !ok {
+			return
+		}
+		oldMgr := browserTool.Manager()
+
+		// Build new manager from updated config (reuses setupToolRegistry logic)
+		newMgr := buildBrowserManager(updatedCfg, workspace)
+		if newMgr == nil {
+			// Browser disabled — stop old manager
+			if oldMgr != nil {
+				oldMgr.Close()
+			}
+			slog.Info("browser disabled via config reload")
+			return
+		}
+
+		// Stop old manager (cleans up containers, Chrome processes, etc.)
+		if oldMgr != nil {
+			oldMgr.Close()
+		}
+
+		// Swap manager in BrowserTool + BrowserLiveHandler
+		browserTool.SetManager(newMgr)
+		if browserLiveH != nil {
+			browserLiveH.SetManager(newMgr)
+		}
+		// Update the outer browserMgr reference for defer Close()
+		browserMgr = newMgr
+
+		slog.Info("browser config reloaded", "mode", updatedCfg.Tools.Browser.Mode)
 	})
 
 	// Log orphaned providers on agent deletion. Auto-delete is unsafe because

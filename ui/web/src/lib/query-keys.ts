@@ -87,6 +87,9 @@ export const queryKeys = {
     detail: (tenantId: string) => ["tenants", tenantId] as const,
     users: (tenantId: string) => ["tenants", tenantId, "users"] as const,
   },
+  proxyPool: {
+    all: ["proxyPool"] as const,
+  },
   kg: {
     all: ["kg"] as const,
     list: (params: Record<string, unknown>) => ["kg", params] as const,

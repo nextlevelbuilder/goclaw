@@ -1,0 +1,48 @@
+{
+  "title": "代理池",
+  "description": "管理浏览器代理池，支持地理轮换和隐身。",
+  "addProxy": "添加代理",
+  "healthCheck": "健康检查",
+  "healthCheckAll": "检查全部",
+  "noProxies": "暂无代理",
+  "noProxiesDescription": "添加代理以支持浏览器自动化的IP轮换和地理多样性。",
+  "columns": {
+    "name": "名称",
+    "url": "URL",
+    "geo": "地区",
+    "enabled": "启用",
+    "health": "健康",
+    "lastCheck": "最后检查",
+    "actions": "操作"
+  },
+  "health": {
+    "healthy": "健康",
+    "unhealthy": "不健康",
+    "unknown": "未知"
+  },
+  "toggle": {
+    "enable": "启用代理",
+    "disable": "禁用代理"
+  },
+  "addDialog": {
+    "title": "添加代理",
+    "name": "名称",
+    "namePlaceholder": "例如 US Proxy 1",
+    "url": "代理URL",
+    "urlPlaceholder": "socks5://host:port 或 http://host:port",
+    "username": "用户名",
+    "usernamePlaceholder": "可选",
+    "password": "密码",
+    "passwordPlaceholder": "可选",
+    "geo": "地区（国家）",
+    "geoPlaceholder": "例如 US, VN, JP",
+    "cancel": "取消",
+    "add": "添加"
+  },
+  "deleteConfirm": "删除代理 \"{{name}}\"？",
+  "healthCheckSuccess": "健康检查完成",
+  "addSuccess": "代理已添加",
+  "deleteSuccess": "代理已删除",
+  "enableSuccess": "代理已启用",
+  "disableSuccess": "代理已禁用"
+}

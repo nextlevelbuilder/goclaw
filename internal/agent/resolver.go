@@ -92,6 +92,9 @@ type ResolverDeps struct {
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
 
+	// Bridge trace registry for CLI tool span attribution
+	BridgeTraceReg *mcpbridge.BridgeTraceRegistry
+
 	// Tenant store for workspace path resolution
 	TenantStore store.TenantStore
 
@@ -406,6 +409,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),
 			WorkspaceSharing:       ag.ParseWorkspaceSharing(),
 			ShellDenyGroups:        ag.ParseShellDenyGroups(),
+			BrowserUseProxy:       ag.ParseBrowserUseProxy(),
 			ConfigPermStore:        deps.ConfigPermStore,
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,
@@ -414,12 +418,14 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			BudgetMonthlyCents:     derefInt(ag.BudgetMonthlyCents),
 			TracingStore:           deps.TracingStore,
 			MemoryStore:            deps.MemoryStore,
+			BridgeTraceReg:         deps.BridgeTraceReg,
 			MCPStore:               deps.MCPStore,
 			MCPPool:                deps.MCPPool,
 			MCPUserCredSrvs:        mcpUserCredSrvs,
 		})
 
-		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)
+		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider,
+			"browserUseProxy", ag.ParseBrowserUseProxy(), "otherConfigLen", len(ag.OtherConfig))
 		return loop, nil
 	}
 }

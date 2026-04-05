@@ -280,6 +280,15 @@ func (c *Config) applyEnvOverrides() {
 	if c.Tools.Browser.RemoteURL != "" {
 		c.Tools.Browser.Enabled = true
 	}
+	envStr("GOCLAW_BROWSER_PUBLIC_URL", &c.Tools.Browser.PublicURL)
+
+	// Validate browser public URL has protocol
+	if u := c.Tools.Browser.PublicURL; u != "" {
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			c.Tools.Browser.PublicURL = "https://" + u
+		}
+		c.Tools.Browser.PublicURL = strings.TrimRight(c.Tools.Browser.PublicURL, "/")
+	}
 }
 
 

@@ -559,6 +559,21 @@ func (a *AgentData) ParseShellDenyGroups() map[string]bool {
 	return cfg.ShellDenyGroups
 }
 
+// ParseBrowserUseProxy extracts browser_use_proxy from other_config JSONB.
+// Returns false if not configured (proxy disabled by default).
+func (a *AgentData) ParseBrowserUseProxy() bool {
+	if len(a.OtherConfig) == 0 {
+		return false
+	}
+	var cfg struct {
+		BrowserUseProxy bool `json:"browser_use_proxy"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
+		return false
+	}
+	return cfg.BrowserUseProxy
+}
+
 // AgentShareData represents an agent share grant.
 type AgentShareData struct {
 	BaseModel

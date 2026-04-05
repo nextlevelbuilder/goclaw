@@ -114,10 +114,27 @@ func (r *Registry) resolve(name string) (Tool, bool) {
 }
 
 // Get returns a tool by name (checks real tools first, then aliases).
+// Disabled tools are excluded — use GetAny to include them.
 func (r *Registry) Get(name string) (Tool, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.resolve(name)
+}
+
+// GetAny returns a tool by name regardless of disabled state.
+// Used by the MCP bridge to register tool schemas for tools that may be
+// enabled later at runtime (e.g. read_image).
+func (r *Registry) GetAny(name string) (Tool, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if t, ok := r.tools[name]; ok {
+		return t, true
+	}
+	if canonical, ok := r.aliases[name]; ok {
+		t, ok := r.tools[canonical]
+		return t, ok
+	}
+	return nil, false
 }
 
 // Unregister removes a tool from the registry by name.

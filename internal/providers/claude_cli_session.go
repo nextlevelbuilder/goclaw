@@ -65,8 +65,8 @@ func (p *ClaudeCLIProvider) buildArgs(model, workDir, mcpConfigPath string, cliS
 		args = append(args, "--disallowedTools", "Bash,Edit,Read,Write,Glob,Grep,WebFetch,WebSearch,TodoRead,TodoWrite,NotebookRead,NotebookEdit")
 	}
 
-	if p.hooksSettingsPath != "" {
-		args = append(args, "--settings", p.hooksSettingsPath)
+	if settingsPath := p.ensureHooksSettings(); settingsPath != "" {
+		args = append(args, "--settings", settingsPath)
 	}
 
 	return args
@@ -161,6 +161,7 @@ func extractBoolOpt(opts map[string]any, key string) bool {
 func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 	return BridgeContext{
 		AgentID:   extractStringOpt(opts, OptAgentID),
+		AgentKey:  extractStringOpt(opts, OptAgentKey),
 		UserID:    extractStringOpt(opts, OptUserID),
 		Channel:   extractStringOpt(opts, OptChannel),
 		ChatID:    extractStringOpt(opts, OptChatID),

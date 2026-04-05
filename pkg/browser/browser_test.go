@@ -198,12 +198,16 @@ func TestManagerOptions(t *testing.T) {
 	m := New(
 		WithHeadless(true),
 		WithRemoteURL("ws://chrome:9222"),
+		WithWorkspace("/tmp/test-workspace"),
 	)
 	if !m.headless {
 		t.Error("WithHeadless(true) not applied")
 	}
 	if m.remoteURL != "ws://chrome:9222" {
 		t.Errorf("WithRemoteURL not applied: %q", m.remoteURL)
+	}
+	if m.workspace != "/tmp/test-workspace" {
+		t.Errorf("WithWorkspace not applied: %q", m.workspace)
 	}
 }
 
@@ -220,5 +224,73 @@ func TestManagerStatusWhenStopped(t *testing.T) {
 	status := m.Status()
 	if status.Running {
 		t.Error("Status.Running should be false when browser is nil")
+	}
+}
+
+// --- Engine interface compliance ---
+
+func TestChromeEngineImplementsEngine(t *testing.T) {
+	var _ Engine = (*ChromeEngine)(nil)
+}
+
+// --- StorageManager ---
+
+func TestStorageManager_ListProfiles_NoDir(t *testing.T) {
+	sm := NewStorageManager("/tmp/nonexistent-goclaw-test", nil)
+	profiles, err := sm.ListProfiles("default")
+	if err != nil {
+		t.Fatalf("ListProfiles on nonexistent dir should not error: %v", err)
+	}
+	if len(profiles) != 0 {
+		t.Errorf("expected 0 profiles, got %d", len(profiles))
+	}
+}
+
+func TestStorageManager_InvalidProfileName(t *testing.T) {
+	sm := NewStorageManager("/tmp/test", nil)
+	_, err := sm.ResolveProfileDir("default", "../escape")
+	if err == nil {
+		t.Fatal("expected error for path traversal profile name")
+	}
+}
+
+func TestStorageManager_ValidProfileName(t *testing.T) {
+	sm := NewStorageManager("/tmp/test", nil)
+	dir, err := sm.ResolveProfileDir("default", "my-profile_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dir != "/tmp/test/browser/profiles/default/my-profile_1" {
+		t.Errorf("unexpected dir: %s", dir)
+	}
+}
+
+func TestStorageManager_DeleteProfile_NotFound(t *testing.T) {
+	sm := NewStorageManager("/tmp/nonexistent-goclaw-test", nil)
+	err := sm.DeleteProfile("default", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent profile")
+	}
+}
+
+// --- Extended action handler tests ---
+
+func TestBrowserTool_NewSignature(t *testing.T) {
+	m := New()
+	sm := NewStorageManager("/tmp/test", nil)
+	tool := NewBrowserTool(m, sm, nil, nil, nil)
+	if tool.Name() != "browser" {
+		t.Errorf("expected 'browser', got %q", tool.Name())
+	}
+	if tool.storage == nil {
+		t.Error("storage should not be nil")
+	}
+}
+
+func TestBrowserTool_NilStorage(t *testing.T) {
+	m := New()
+	tool := NewBrowserTool(m, nil, nil, nil, nil)
+	if tool.storage != nil {
+		t.Error("storage should be nil")
 	}
 }

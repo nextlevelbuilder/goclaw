@@ -2,9 +2,11 @@ package browser
 
 // TabInfo describes an open browser tab.
 type TabInfo struct {
-	TargetID string `json:"targetId"`
-	URL      string `json:"url"`
-	Title    string `json:"title"`
+	TargetID   string `json:"targetId"`
+	URL        string `json:"url"`
+	Title      string `json:"title"`
+	AgentKey   string `json:"agentKey,omitempty"`
+	SessionKey string `json:"sessionKey,omitempty"`
 }
 
 // RoleRef maps a snapshot ref (e.g. "e5") to an accessible element.
@@ -13,6 +15,19 @@ type RoleRef struct {
 	Name          string `json:"name,omitempty"`
 	Nth           int    `json:"nth,omitempty"`
 	BackendNodeID int    `json:"backendNodeId,omitempty"`
+	FrameID       string `json:"frameId,omitempty"` // empty = main frame
+}
+
+// FrameInfo describes an iframe in the page frame tree.
+type FrameInfo struct {
+	FrameID      string `json:"frameId"`
+	ParentID     string `json:"parentId,omitempty"`
+	URL          string `json:"url"`
+	Name         string `json:"name,omitempty"`
+	Origin       string `json:"securityOrigin"`
+	Depth        int    `json:"depth"`
+	CrossOrigin  bool   `json:"crossOrigin,omitempty"`  // true = OOPIF (separate CDP target)
+	OOPIFTarget  string `json:"oopifTarget,omitempty"`  // target ID for cross-origin iframes
 }
 
 // SnapshotResult is the output of a page snapshot.
@@ -36,11 +51,13 @@ type SnapshotStats struct {
 
 // SnapshotOptions controls snapshot generation.
 type SnapshotOptions struct {
-	Interactive bool // only include interactive elements
-	MaxDepth    int  // 0 = unlimited
-	Compact     bool // remove unnamed structural elements
-	MaxChars    int  // truncate output (default 8000)
-	Limit       int  // max AX nodes to process (default 500)
+	Interactive   bool   // only include interactive elements
+	MaxDepth      int    // 0 = unlimited
+	Compact       bool   // remove unnamed structural elements
+	MaxChars      int    // truncate output (default 8000)
+	Limit         int    // max AX nodes to process (default 500)
+	IncludeFrames bool   // include child iframes in snapshot
+	FrameID       string // snapshot a specific frame only
 }
 
 // DefaultSnapshotOptions returns sensible defaults.
@@ -93,7 +110,10 @@ type ConsoleMessage struct {
 
 // StatusInfo describes the current browser state.
 type StatusInfo struct {
-	Running bool   `json:"running"`
-	Tabs    int    `json:"tabs"`
-	URL     string `json:"url,omitempty"` // current tab URL
+	Running    bool   `json:"running"`
+	Tabs       int    `json:"tabs"`
+	URL        string `json:"url,omitempty"`        // current tab URL
+	Engine     string `json:"engine,omitempty"`      // engine name (chrome, container, lightpanda)
+	Headless   *bool  `json:"headless,omitempty"`   // headless mode flag (nil when not running)
+	ProfileDir string `json:"profileDir,omitempty"` // active Chrome profile directory
 }

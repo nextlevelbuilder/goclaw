@@ -32,6 +32,8 @@
     "sessions": "Session",
     "skills": "Skill",
     "storage": "存储",
+    "browser": "浏览器",
+    "proxyPool": "代理池",
     "traces": "追踪",
     "tts": "TTS",
     "usage": "用量",

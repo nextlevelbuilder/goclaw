@@ -1,0 +1,18 @@
+{
+  "title": "Browser",
+  "description": "Monitor and control browser sessions",
+  "running": "Running",
+  "stopped": "Stopped",
+  "visible": "Visible",
+  "start": "Start",
+  "stop": "Stop",
+  "view": "View",
+  "openInNewTab": "Open in new tab",
+  "notRunning": "Browser not running",
+  "notRunningDescription": "Start the browser engine to begin automation",
+  "noTabs": "No open tabs",
+  "noTabsDescription": "Ask an agent to open a URL, or tabs will appear here",
+  "noTabsForAgent": "No tabs for this agent yet",
+  "openTabs": "Open Tabs",
+  "allAgents": "All"
+}

@@ -90,6 +90,15 @@ const KnowledgeGraphPage = lazyWithRetry(() =>
 const ContactsPage = lazyWithRetry(() =>
   import("@/pages/contacts/contacts-page").then((m) => ({ default: m.ContactsPage })),
 );
+const ProxyPoolPage = lazyWithRetry(() =>
+  import("@/pages/proxy-pool/proxy-pool-page").then((m) => ({ default: m.ProxyPoolPage })),
+);
+const BrowserPage = lazyWithRetry(() =>
+  import("@/pages/browser/browser-page").then((m) => ({ default: m.BrowserPage })),
+);
+const BrowserSharePage = lazyWithRetry(() =>
+  import("@/pages/browser/browser-share-page").then((m) => ({ default: m.BrowserSharePage })),
+);
 const ActivityPage = lazyWithRetry(() =>
   import("@/pages/activity/activity-page").then((m) => ({ default: m.ActivityPage })),
 );
@@ -126,6 +135,9 @@ export function AppRoutes() {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+
+        {/* Public browser live view — token-based auth, no login required */}
+        <Route path={ROUTES.BROWSER_SHARE} element={<BrowserSharePage />} />
 
         {/* Tenant selector — accessible when authenticated but tenant not yet selected */}
         <Route path={ROUTES.SELECT_TENANT} element={<TenantSelectorPage />} />
@@ -190,6 +202,9 @@ export function AppRoutes() {
           <Route path={ROUTES.USAGE} element={<Navigate to={ROUTES.OVERVIEW} replace />} />
           <Route path={ROUTES.ACTIVITY} element={<ActivityPage />} />
           <Route path={ROUTES.CONTACTS} element={<ContactsPage />} />
+          <Route path={ROUTES.PROXY_POOL} element={<ProxyPoolPage />} />
+          <Route path={ROUTES.BROWSER} element={<BrowserPage key="list" />} />
+          <Route path={ROUTES.BROWSER_DETAIL} element={<BrowserPage key="detail" />} />
           <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />

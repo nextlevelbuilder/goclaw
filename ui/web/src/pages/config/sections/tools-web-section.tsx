@@ -69,13 +69,12 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
   const ddg = web.duckduckgo ?? {};
   const brave = web.brave ?? {};
   const webFetch = draft.web_fetch ?? {};
-  const browser = draft.browser ?? {};
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{t("tools.webSearch")}</CardTitle>
-        <CardDescription>{t("tools.webFetch")}</CardDescription>
+        <CardDescription>{t("tools.webFetchDesc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Web Search */}
@@ -186,29 +185,6 @@ export function ToolsWebSection({ data, onSave, saving }: Props) {
               className="min-h-[80px] font-mono text-xs"
               placeholder={"ifconfig.co\nipinfo.io\n*.whatismyip.com"}
             />
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Browser */}
-        <div>
-          <h4 className="mb-3 text-sm font-medium">{t("tools.browser")}</h4>
-          <div className="flex gap-6">
-            <div className="flex items-center gap-2">
-              <Label>{t("tools.browserEnabled")}</Label>
-              <Switch
-                checked={browser.enabled !== false}
-                onCheckedChange={(v) => updateNested("browser", { enabled: v })}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label>{t("tools.browserHeadless")}</Label>
-              <Switch
-                checked={browser.headless !== false}
-                onCheckedChange={(v) => updateNested("browser", { headless: v })}
-              />
-            </div>
           </div>
         </div>
 
