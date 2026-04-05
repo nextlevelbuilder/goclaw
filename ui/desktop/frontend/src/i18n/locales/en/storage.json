@@ -1,0 +1,25 @@
+{
+  "title": "Storage",
+  "description": "Workspace file browser",
+  "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "Storage size is cached for 60 minutes",
+  "unsupportedFile": "This file type is not supported for preview",
+  "download": "Download",
+  "delete": {
+    "fileTitle": "Delete file",
+    "folderTitle": "Delete folder",
+    "description": "Are you sure you want to delete {{name}}?",
+    "folderWarning": " All contents will be removed recursively.",
+    "undone": " This action cannot be undone.",
+    "deleting": "Deleting...",
+    "confirmLabel": "Delete"
+  },
+  "upload": {
+    "title": "Upload to Storage",
+    "description": "Upload files to the data directory"
+  },
+  "toast": {
+    "deleted": "File deleted",
+    "deleteFailed": "Failed to delete file"
+  }
+}

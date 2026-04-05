@@ -1,19 +1,16 @@
 package tools
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/base64"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	mediapkg "github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -22,10 +19,13 @@ var videoGenProviderPriority = []string{"gemini", "minimax", "openrouter"}
 
 // videoGenModelDefaults maps provider names to default video generation models.
 var videoGenModelDefaults = map[string]string{
-	"gemini":     "veo-3.0-generate-preview",
+	"gemini":     "veo-3.1-lite-generate-preview",
 	"minimax":    "MiniMax-Hailuo-2.3",
-	"openrouter": "google/veo-3.0-generate-preview",
+	"openrouter": "google/veo-3.1-lite-generate-preview",
 }
+
+// maxImageToVideoBytes is the maximum image file size for image-to-video (20 MB).
+const maxImageToVideoBytes = 20 * 1024 * 1024
 
 // CreateVideoTool generates videos using a video generation API.
 // Uses Gemini Veo via predictLongRunning API (async with polling).
@@ -40,7 +40,7 @@ func NewCreateVideoTool(registry *providers.Registry) *CreateVideoTool {
 func (t *CreateVideoTool) Name() string { return "create_video" }
 
 func (t *CreateVideoTool) Description() string {
-	return "Generate a video from a text description using a video generation model. Returns a MEDIA: path to the generated video file."
+	return "Generate a video from a text description or image using a video generation model. Returns a MEDIA: path to the generated video file."
 }
 
 func (t *CreateVideoTool) Parameters() map[string]any {
@@ -59,6 +59,14 @@ func (t *CreateVideoTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Aspect ratio: '16:9' (default) or '9:16'.",
 			},
+			"filename_hint": map[string]any{
+				"type":        "string",
+				"description": "Short descriptive filename (no extension). Example: 'cat-playing-piano', 'product-demo'.",
+			},
+			"image_path": map[string]any{
+				"type":        "string",
+				"description": "Path to a workspace image to use as starting frame for video generation. Omit for text-to-video. Not all providers support this.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -69,6 +77,7 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 	if prompt == "" {
 		return ErrorResult("prompt is required")
 	}
+	filenameHint, _ := args["filename_hint"].(string)
 
 	// Parse and enforce duration. Veo supports 4, 6, or 8 seconds.
 	duration := 8
@@ -95,10 +104,51 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 		}
 	}
 
+	// Parse optional image_path for image-to-video generation.
+	var imageBase64, imageMime string
+	if imagePath, _ := args["image_path"].(string); imagePath != "" {
+		workspace := ToolWorkspaceFromCtx(ctx)
+		resolved, err := resolvePath(imagePath, workspace, workspace != "")
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("invalid image_path: %v", err))
+		}
+		fi, err := os.Stat(resolved)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("image file not found: %v", err))
+		}
+		if fi.IsDir() {
+			return ErrorResult("image_path is a directory, not a file")
+		}
+		if fi.Size() == 0 {
+			return ErrorResult("image file is empty")
+		}
+		if fi.Size() > maxImageToVideoBytes {
+			return ErrorResult(fmt.Sprintf("image file too large (%d bytes); max %d bytes", fi.Size(), maxImageToVideoBytes))
+		}
+		mime := mediapkg.DetectMIMEType(resolved)
+		switch mime {
+		case "image/png", "image/jpeg", "image/webp", "image/gif":
+			// supported
+		default:
+			return ErrorResult(fmt.Sprintf("unsupported image type %q; use PNG, JPEG, WebP, or GIF", mime))
+		}
+		raw, err := os.ReadFile(resolved)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("failed to read image: %v", err))
+		}
+		imageBase64 = base64.StdEncoding.EncodeToString(raw)
+		imageMime = mime
+		// Veo 3.1 API constraint: image-to-video requires duration=8.
+		duration = 8
+		slog.Info("create_video: image-to-video mode", "image", resolved, "mime", mime, "size", fi.Size())
+	}
+
 	chain := ResolveMediaProviderChain(ctx, "create_video", "", "",
 		videoGenProviderPriority, videoGenModelDefaults, t.registry)
 
-	// Inject prompt, duration, and aspect_ratio into each chain entry's params.
+	// Inject universal params into each chain entry's params.
+	// Provider-specific params (resolution, generate_audio, person_generation) come
+	// from chain config and are already in chain[i].Params.
 	for i := range chain {
 		if chain[i].Params == nil {
 			chain[i].Params = make(map[string]any)
@@ -106,6 +156,11 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["duration"] = duration
 		chain[i].Params["aspect_ratio"] = aspectRatio
+		// Inject image data — each callProvider decides whether to use it.
+		if imageBase64 != "" {
+			chain[i].Params["image_base64"] = imageBase64
+			chain[i].Params["image_mime"] = imageMime
+		}
 	}
 
 	chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)
@@ -122,7 +177,7 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 	if err := os.MkdirAll(dateDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create output directory: %v", err))
 	}
-	videoPath := filepath.Join(dateDir, fmt.Sprintf("goclaw_gen_%d.mp4", time.Now().UnixNano()))
+	videoPath := filepath.Join(dateDir, mediaFileName(ctx, "video", filenameHint, "mp4"))
 	if err := os.WriteFile(videoPath, chainResult.Data, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save generated video: %v", err))
 	}
@@ -135,7 +190,7 @@ func (t *CreateVideoTool) Execute(ctx context.Context, args map[string]any) *Res
 		slog.Info("create_video: file saved", "path", videoPath, "size", fi.Size(), "data_len", len(chainResult.Data))
 	}
 
-	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s", videoPath)}
+	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", videoPath, filepath.Base(videoPath))}
 	result.Media = []bus.MediaFile{{Path: videoPath, MimeType: "video/mp4"}}
 	result.Deliverable = fmt.Sprintf("[Generated video: %s]\nPrompt: %s", filepath.Base(videoPath), prompt)
 	result.Provider = chainResult.Provider
@@ -164,254 +219,7 @@ func (t *CreateVideoTool) callProvider(ctx context.Context, cp credentialProvide
 	case "minimax":
 		return callMinimaxVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, params)
 	default:
-		return t.callChatVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio)
+		return t.callChatVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio, params)
 	}
 }
 
-// callGeminiVideoGen uses the Gemini predictLongRunning API for Veo video generation.
-// Flow: POST predictLongRunning → poll operation → download video from URI.
-func (t *CreateVideoTool) callGeminiVideoGen(ctx context.Context, apiKey, apiBase, model, prompt string, duration int, aspectRatio string, params map[string]any) ([]byte, *providers.Usage, error) {
-	nativeBase := strings.TrimRight(apiBase, "/")
-	nativeBase = strings.TrimSuffix(nativeBase, "/openai")
-
-	// 1. Start long-running video generation.
-	predictURL := fmt.Sprintf("%s/models/%s:predictLongRunning", nativeBase, model)
-
-	body := map[string]any{
-		"instances": []map[string]any{
-			{"prompt": prompt},
-		},
-		"parameters": map[string]any{
-			"aspectRatio":      aspectRatio,
-			"durationSeconds":  duration,
-			"personGeneration": GetParamString(params, "person_generation", "allow_all"),
-		},
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", predictURL, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-goog-api-key", apiKey)
-
-	client := &http.Client{} // timeout governed by chain context
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, nil, fmt.Errorf("http request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateBytes(respBody, 500))
-	}
-
-	var opResp struct {
-		Name string `json:"name"`
-		Done bool   `json:"done"`
-	}
-	if err := json.Unmarshal(respBody, &opResp); err != nil {
-		return nil, nil, fmt.Errorf("parse operation response: %w", err)
-	}
-	if opResp.Name == "" {
-		return nil, nil, fmt.Errorf("no operation name in response: %s", truncateBytes(respBody, 300))
-	}
-
-	slog.Info("create_video: operation started", "operation", opResp.Name)
-
-	// 2. Poll operation until done (max ~6 minutes, poll every 10s).
-	pollURL := fmt.Sprintf("%s/%s", nativeBase, opResp.Name)
-	const maxPolls = 40
-	const pollInterval = 10 * time.Second
-
-	var doneBody []byte
-	for i := range maxPolls {
-		select {
-		case <-ctx.Done():
-			return nil, nil, ctx.Err()
-		case <-time.After(pollInterval):
-		}
-
-		pollReq, err := http.NewRequestWithContext(ctx, "GET", pollURL, nil)
-		if err != nil {
-			return nil, nil, fmt.Errorf("create poll request: %w", err)
-		}
-		pollReq.Header.Set("x-goog-api-key", apiKey)
-
-		pollResp, err := client.Do(pollReq)
-		if err != nil {
-			slog.Warn("create_video: poll error, retrying", "error", err, "attempt", i+1)
-			continue
-		}
-
-		pollBody, _ := io.ReadAll(pollResp.Body)
-		pollResp.Body.Close()
-
-		if pollResp.StatusCode != http.StatusOK {
-			return nil, nil, fmt.Errorf("poll API error %d: %s", pollResp.StatusCode, truncateBytes(pollBody, 500))
-		}
-
-		var pollOp struct {
-			Done  bool            `json:"done"`
-			Error json.RawMessage `json:"error"`
-		}
-		if err := json.Unmarshal(pollBody, &pollOp); err != nil {
-			return nil, nil, fmt.Errorf("parse poll response: %w", err)
-		}
-
-		if pollOp.Error != nil && string(pollOp.Error) != "null" {
-			return nil, nil, fmt.Errorf("video generation error: %s", truncateBytes(pollOp.Error, 500))
-		}
-
-		if pollOp.Done {
-			doneBody = pollBody
-			break
-		}
-
-		slog.Info("create_video: polling", "attempt", i+1, "done", pollOp.Done)
-	}
-
-	if doneBody == nil {
-		return nil, nil, fmt.Errorf("video generation timed out after %d polls", maxPolls)
-	}
-
-	// 3. Extract video URI and download.
-	var result struct {
-		Response struct {
-			GenerateVideoResponse struct {
-				GeneratedSamples []struct {
-					Video struct {
-						URI      string `json:"uri"`
-						MimeType string `json:"mimeType"`
-					} `json:"video"`
-				} `json:"generatedSamples"`
-			} `json:"generateVideoResponse"`
-		} `json:"response"`
-	}
-	if err := json.Unmarshal(doneBody, &result); err != nil {
-		return nil, nil, fmt.Errorf("parse final response: %w", err)
-	}
-
-	samples := result.Response.GenerateVideoResponse.GeneratedSamples
-	if len(samples) == 0 || samples[0].Video.URI == "" {
-		return nil, nil, fmt.Errorf("no video in response: %s", truncateBytes(doneBody, 300))
-	}
-
-	videoURI := samples[0].Video.URI
-	slog.Info("create_video: downloading video", "uri", videoURI)
-
-	dlReq, err := http.NewRequestWithContext(ctx, "GET", videoURI, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create download request: %w", err)
-	}
-	dlReq.Header.Set("x-goog-api-key", apiKey)
-
-	dlClient := &http.Client{} // timeout governed by chain context
-	dlResp, err := dlClient.Do(dlReq)
-	if err != nil {
-		return nil, nil, fmt.Errorf("download video: %w", err)
-	}
-	defer dlResp.Body.Close()
-
-	if dlResp.StatusCode != http.StatusOK {
-		dlBody, _ := io.ReadAll(dlResp.Body)
-		return nil, nil, fmt.Errorf("download error %d: %s", dlResp.StatusCode, truncateBytes(dlBody, 300))
-	}
-
-	videoBytes, err := limitedReadAll(dlResp.Body, maxMediaDownloadBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read video data: %w", err)
-	}
-
-	return videoBytes, nil, nil
-}
-
-// callChatVideoGen tries OpenAI-compatible chat completions with video modality.
-func (t *CreateVideoTool) callChatVideoGen(ctx context.Context, apiKey, apiBase, model, prompt string, duration int, aspectRatio string) ([]byte, *providers.Usage, error) {
-	body := map[string]any{
-		"model": model,
-		"messages": []map[string]any{
-			{"role": "user", "content": prompt},
-		},
-		"modalities":   []string{"video", "text"},
-		"duration":     duration,
-		"aspect_ratio": aspectRatio,
-	}
-
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("marshal request: %w", err)
-	}
-
-	url := strings.TrimRight(apiBase, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{} // timeout governed by chain context
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, nil, fmt.Errorf("http request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("API error %d: %s", resp.StatusCode, truncateBytes(respBody, 500))
-	}
-
-	// Try to extract video from multipart content or data URL.
-	var chatResp struct {
-		Choices []struct {
-			Message struct {
-				Content any `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage *struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, nil, fmt.Errorf("parse response: %w", err)
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return nil, nil, fmt.Errorf("no choices in response")
-	}
-
-	// Look for video data URL in multipart content.
-	if parts, ok := chatResp.Choices[0].Message.Content.([]any); ok {
-		for _, part := range parts {
-			if m, ok := part.(map[string]any); ok {
-				if m["type"] == "video_url" || m["type"] == "image_url" {
-					if vidURL, ok := m["video_url"].(map[string]any); ok {
-						if urlStr, ok := vidURL["url"].(string); ok {
-							if videoBytes, err := decodeDataURL(urlStr); err == nil {
-								return videoBytes, convertUsage(chatResp.Usage), nil
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return nil, nil, fmt.Errorf("no video data found in response")
-}

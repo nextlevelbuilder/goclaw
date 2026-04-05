@@ -23,7 +23,7 @@ interface StepModelProps {
 
 export function StepModel({ provider, onComplete, onBack, initialModel }: StepModelProps) {
   const { t } = useTranslation("setup");
-  const { models, loading: modelsLoading } = useProviderModels(provider.id, provider.provider_type);
+  const { models, loading: modelsLoading } = useProviderModels(provider.id);
   const { verify, verifying, result: verifyResult, reset: resetVerify } = useProviderVerify();
 
   const [model, setModel] = useState(initialModel ?? "");

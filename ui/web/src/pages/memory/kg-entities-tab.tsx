@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Network, Trash2, Search, GitFork, Sparkles, RefreshCw, LayoutGrid, Share2 } from "lucide-react";
+import { Network, Trash2, Search, GitFork, Sparkles, RefreshCw, LayoutGrid, Share2, Merge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useKnowledgeGraph, useKGStats, useKGGraph } from "./hooks/use-knowledge-graph";
 import { KGEntityDetailDialog } from "./kg-entity-detail-dialog";
 import { KGExtractDialog } from "./kg-extract-dialog";
+import { KGDedupDialog } from "./kg-dedup-dialog";
 import { KGGraphView } from "./kg-graph-view";
 import type { KGEntity } from "@/types/knowledge-graph";
 
@@ -29,6 +30,7 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   const [deleteTarget, setDeleteTarget] = useState<KGEntity | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [extractOpen, setExtractOpen] = useState(false);
+  const [dedupOpen, setDedupOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("table");
 
   const { entities, loading, fetching, refresh, deleteEntity, getEntityWithRelations, extractFromText } = useKnowledgeGraph({
@@ -115,6 +117,9 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         <Button variant="outline" size="sm" onClick={() => refresh()} disabled={fetching} className="gap-1 h-8 px-2.5">
           <RefreshCw className={"h-3.5 w-3.5" + (fetching ? " animate-spin" : "")} />
         </Button>
+        <Button variant="outline" size="sm" onClick={() => setDedupOpen(true)} className="gap-1 h-8 px-2.5">
+          <Merge className="h-3.5 w-3.5" /> {t("kg.dedup.button")}
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setExtractOpen(true)} className="gap-1 h-8 px-2.5">
           <Sparkles className="h-3.5 w-3.5" /> {t("kg.extract")}
         </Button>
@@ -199,6 +204,14 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
         agentId={agentId}
         entity={viewEntity}
         getEntityWithRelations={getEntityWithRelations}
+      />
+
+      {/* Dedup dialog */}
+      <KGDedupDialog
+        open={dedupOpen}
+        onOpenChange={setDedupOpen}
+        agentId={agentId}
+        userId={userId}
       />
 
       {/* Extract dialog */}

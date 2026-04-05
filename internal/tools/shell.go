@@ -113,6 +113,11 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return ErrorResult("command is required")
 	}
 
+	// Reject NUL bytes — they cause silent shell truncation enabling injection.
+	if strings.ContainsRune(command, '\x00') {
+		return ErrorResult("command contains invalid NUL byte")
+	}
+
 	// Resolve deny patterns: per-agent overrides from context, fallback to all defaults.
 	denyOverrides := store.ShellDenyGroupsFromContext(ctx)
 	groupPatterns := ResolveDenyPatterns(denyOverrides)
@@ -285,7 +290,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 		result = "(command completed with no output)"
 	}
 
-	return SilentResult(result)
+	return SilentResult(capExecOutput(result, execMaxOutputChars))
 }
 
 // executeInSandbox routes a command through a Docker sandbox container.
@@ -334,7 +339,7 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 		output = "(command completed with no output)"
 	}
 
-	return SilentResult(output)
+	return SilentResult(capExecOutput(output, execMaxOutputChars))
 }
 
 // limitedBuffer caps output to prevent OOM from runaway commands.

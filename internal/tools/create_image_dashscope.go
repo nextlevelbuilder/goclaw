@@ -71,6 +71,10 @@ func aspectRatioToDashScopeSize(params map[string]any) string {
 		return "1280*720"
 	case "9:16":
 		return "720*1280"
+	case "4:3":
+		return "1024*768"
+	case "3:4":
+		return "768*1024"
 	default:
 		return "1024*1024"
 	}

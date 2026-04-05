@@ -31,6 +31,10 @@ const OptPeerKind = "peer_kind"
 // OptWorkspace passes the agent workspace path so MCP bridge tools can resolve file paths.
 const OptWorkspace = "workspace"
 
+// OptTenantID passes the tenant UUID string for per-session MCP config.
+// Required for memory indexing and tenant-scoped queries via bridge tools.
+const OptTenantID = "tenant_id"
+
 // ClaudeCLIProvider implements Provider by shelling out to the `claude` CLI binary.
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.

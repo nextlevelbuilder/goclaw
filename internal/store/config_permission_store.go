@@ -10,6 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// Config type constants for agent_config_permissions.config_type column.
+const (
+	ConfigTypeFileWriter = "file_writer" // Group file write access
+	ConfigTypeHeartbeat  = "heartbeat"   // Heartbeat config access
+)
+
 // ConfigPermission represents an allow/deny rule for agent configuration.
 type ConfigPermission struct {
 	ID         uuid.UUID       `json:"id"`
@@ -59,7 +65,7 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 		return nil // system context (cron, subagent)
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
-	allowed, err := permStore.CheckPermission(ctx, agentID, userID, "file_writer", numericID)
+	allowed, err := permStore.CheckPermission(ctx, agentID, userID, ConfigTypeFileWriter, numericID)
 	if err != nil {
 		return nil // fail-open
 	}

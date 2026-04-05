@@ -24,7 +24,6 @@ interface SummoningModalProps {
 const SUMMONING_FILES = [
   { name: "SOUL.md", required: true },
   { name: "IDENTITY.md", required: true },
-  { name: "USER_PREDEFINED.md", required: false },
 ];
 
 export function SummoningModal({

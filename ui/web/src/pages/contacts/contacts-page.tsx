@@ -33,7 +33,7 @@ export function ContactsPage() {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [channelType, setChannelType] = useState("");
-  const [peerKind, setPeerKind] = useState("");
+  const [contactType, setContactType] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -44,7 +44,7 @@ export function ContactsPage() {
   const { contacts, total, loading, fetching, refresh } = useContacts({
     search: appliedSearch || undefined,
     channelType: channelType || undefined,
-    peerKind: peerKind || undefined,
+    contactType: contactType || undefined,
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
@@ -57,7 +57,7 @@ export function ContactsPage() {
   // Clear selection on page/filter change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [page, pageSize, appliedSearch, channelType, peerKind]);
+  }, [page, pageSize, appliedSearch, channelType, contactType]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,8 +70,8 @@ export function ContactsPage() {
     setPage(1);
   };
 
-  const handlePeerKindChange = (val: string) => {
-    setPeerKind(val === "all" ? "" : val);
+  const handleContactTypeChange = (val: string) => {
+    setContactType(val === "all" ? "" : val);
     setPage(1);
   };
 
@@ -149,14 +149,15 @@ export function ContactsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={peerKind || "all"} onValueChange={handlePeerKindChange}>
+        <Select value={contactType || "all"} onValueChange={handleContactTypeChange}>
           <SelectTrigger className="w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("filters.allTypes")}</SelectItem>
-            <SelectItem value="direct">{t("filters.direct")}</SelectItem>
-            <SelectItem value="group">{t("filters.group")}</SelectItem>
+            <SelectItem value="user">{t("types.user")}</SelectItem>
+            <SelectItem value="group">{t("types.group")}</SelectItem>
+            <SelectItem value="topic">{t("types.topic", "Topic")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -187,8 +188,8 @@ export function ContactsPage() {
         ) : contacts.length === 0 ? (
           <EmptyState
             icon={Contact}
-            title={appliedSearch || channelType || peerKind ? t("noMatchTitle") : t("emptyTitle")}
-            description={appliedSearch || channelType || peerKind ? t("noMatchDescription") : t("emptyDescription")}
+            title={appliedSearch || channelType || contactType ? t("noMatchTitle") : t("emptyTitle")}
+            description={appliedSearch || channelType || contactType ? t("noMatchDescription") : t("emptyDescription")}
           />
         ) : (
           <div className="rounded-md border overflow-x-auto">
@@ -244,16 +245,17 @@ export function ContactsPage() {
                         : <span className="text-muted-foreground">—</span>
                       }
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-xs">{c.sender_id}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs">
+                      {c.sender_id}
+                      {c.thread_id && <span className="text-muted-foreground">:topic:{c.thread_id}</span>}
+                    </td>
                     <td className="px-3 py-2.5">
                       <Badge variant="outline" className="text-[11px]">{c.channel_type}</Badge>
                     </td>
                     <td className="px-3 py-2.5">
-                      {c.peer_kind && (
-                        <Badge variant={c.peer_kind === "direct" ? "default" : "secondary"} className="text-[11px]">
-                          {c.peer_kind === "direct" ? t("filters.direct") : t("filters.group")}
-                        </Badge>
-                      )}
+                      <Badge variant={c.contact_type === "user" ? "default" : c.contact_type === "topic" ? "outline" : "secondary"} className="text-[11px]">
+                        {c.contact_type === "user" ? t("types.user") : c.contact_type === "topic" ? t("types.topic", "Topic") : t("types.group")}
+                      </Badge>
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground text-xs">
                       {formatDate(c.last_seen_at)}

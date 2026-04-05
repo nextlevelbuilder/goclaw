@@ -41,9 +41,6 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 	userID := fmt.Sprintf("%d", user.ID)
 	senderID := userID
-	if user.Username != "" {
-		senderID = fmt.Sprintf("%s|%s", userID, user.Username)
-	}
 
 	isGroup := message.Chat.Type == "group" || message.Chat.Type == "supergroup"
 
@@ -226,15 +223,59 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	}
 
 	// Compute sender label for group context (used in history + current message annotation)
-	senderLabel := user.FirstName
+	displayName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+	senderLabel := displayName
 	if user.Username != "" {
-		senderLabel = "@" + user.Username
+		if displayName != "" {
+			senderLabel = "@" + user.Username + " (" + displayName + ")"
+		} else {
+			senderLabel = "@" + user.Username
+		}
 	}
 
 	// --- Group mention gating (matching TS mentionGate logic) ---
 	// Also check implicit mention via reply-to-bot
-	if isGroup && topicCfg.effectiveRequireMention(c.requireMention) {
+	//
+	// mention_mode controls multi-bot behavior in groups:
+	//   "strict" (default): only respond when explicitly @mentioned (require_mention=true)
+	//   "yield": respond to all messages UNLESS another bot/user is @mentioned (and not us)
+	//            — enables "shared group" where all bots listen, but yield when someone is called by name
+	mentionMode := topicCfg.effectiveMentionMode(c.mentionMode)
+	if isGroup && (topicCfg.effectiveRequireMention(c.requireMention) || mentionMode == "yield") {
 		botUsername := c.bot.Username()
+
+		// In yield mode, skip messages from other bots to prevent infinite loops.
+		// Bot A responds → Bot B sees it as "no specific mention" → responds → loop.
+		// Only skip when our bot is NOT explicitly mentioned — allow cross-bot @commands.
+		if mentionMode == "yield" && user.IsBot && user.Username != botUsername && !c.detectMention(message, botUsername) {
+			// Respect pairing guard — don't record history in unpaired groups.
+			if topicCfg.groupPolicy == "pairing" && c.pairingService != nil {
+				if _, cached := c.approvedGroups.Load(chatIDStr); !cached {
+					groupSenderID := fmt.Sprintf("group:%d", chatID)
+					paired, pairErr := c.pairingService.IsPaired(ctx, groupSenderID, c.Name())
+					if pairErr != nil {
+						slog.Warn("security.pairing_check_failed, assuming paired (fail-open)",
+							"group_sender", groupSenderID, "channel", c.Name(), "error", pairErr)
+						paired = true
+					}
+					if paired {
+						c.approvedGroups.Store(chatIDStr, true)
+					} else {
+						return
+					}
+				}
+			}
+			c.groupHistory.Record(localKey, channels.HistoryEntry{
+				Sender:    senderLabel,
+				SenderID:  senderID,
+				Body:      content,
+				MediaRefs: extractMediaRefs(message),
+				Timestamp: time.Unix(int64(message.Date), 0),
+				MessageID: fmt.Sprintf("%d", message.MessageID),
+			}, c.historyLimit)
+			return
+		}
+
 		wasMentioned := c.detectMention(message, botUsername)
 
 		// Reply to bot's message counts as implicit mention
@@ -242,10 +283,20 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			wasMentioned = true
 		}
 
+		// Yield mode: skip only if another bot/user is explicitly mentioned (not us).
+		// If nobody is mentioned → respond. If we are mentioned → respond.
+		if mentionMode == "yield" && !wasMentioned {
+			// In yield mode, respond unless someone else was specifically called out
+			if !c.hasOtherMention(message, botUsername) {
+				wasMentioned = true // treat as mentioned — no specific target, all bots respond
+			}
+		}
+
 		slog.Debug("telegram group mention gate",
 			"chat_id", chatID,
 			"bot_username", botUsername,
 			"require_mention", c.requireMention,
+			"mention_mode", mentionMode,
 			"was_mentioned", wasMentioned,
 			"text_preview", channels.Truncate(content, 60),
 		)
@@ -274,6 +325,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 				Sender:    senderLabel,
 				SenderID:  senderID,
 				Body:      content,
+				MediaRefs: extractMediaRefs(message),
 				Timestamp: time.Unix(int64(message.Date), 0),
 				MessageID: fmt.Sprintf("%d", message.MessageID),
 			}, c.historyLimit)
@@ -281,7 +333,14 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
 				contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-				cc.EnsureContact(ctx, c.Type(), c.Name(), userID, userID, contactName, user.Username, "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, "group", "user", "", "")
+				// Also collect group chat itself as a contact (for group permission / merge).
+				cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group", "", "")
+				// Collect forum topic as a distinct delivery target (including General).
+				if isForum && messageThreadID > 0 {
+					threadStr := fmt.Sprintf("%d", messageThreadID)
+					cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "topic", threadStr, "topic")
+				}
 			}
 
 			slog.Debug("telegram group message recorded (no mention)",
@@ -419,6 +478,24 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 	if isGroup {
 		annotated := fmt.Sprintf("[From: %s]\n%s", senderLabel, content)
 		if c.historyLimit > 0 {
+			// Resolve deferred media from history entries (lazy download).
+			if histRefs := c.groupHistory.CollectMediaRefs(localKey); len(histRefs) > 0 {
+				histMedia, histErrors := c.resolveMediaRefs(ctx, histRefs)
+				for _, m := range histMedia {
+					mediaFiles = append(mediaFiles, bus.MediaFile{
+						Path:     m.FilePath,
+						MimeType: m.ContentType,
+					})
+				}
+				if len(histMedia) > 0 {
+					histTags := buildMediaTags(histMedia)
+					annotated = "[Media from recent group messages — only analyze if user asks about them]\n" + histTags + "\n[/Media]\n\n" + annotated
+				}
+				for _, e := range histErrors {
+					slog.Warn("telegram: history media download failed",
+						"type", e.Type, "reason", e.Reason)
+				}
+			}
 			finalContent = c.groupHistory.BuildContext(localKey, annotated, c.historyLimit)
 		} else {
 			finalContent = annotated
@@ -515,7 +592,17 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, user.FirstName, user.Username, peerKind)
+		contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, userID, contactName, user.Username, peerKind, "user", "", "")
+		// Also collect group chat itself as a contact (for group permission / merge).
+		if isGroup {
+			cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "group", "", "")
+			// Collect forum topic as a distinct delivery target (including General).
+			if isForum && messageThreadID > 0 {
+				threadStr := fmt.Sprintf("%d", messageThreadID)
+				cc.EnsureContact(ctx, c.Type(), c.Name(), chatIDStr, "", message.Chat.Title, "", "group", "topic", threadStr, "topic")
+			}
+		}
 	}
 
 	c.Bus().PublishInbound(bus.InboundMessage{
@@ -529,6 +616,7 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		AgentID:      targetAgentID,
 		HistoryLimit: c.historyLimit,
 		ToolAllow:    topicCfg.tools,
+		TenantID:     c.TenantID(),
 		Metadata:     metadata,
 	})
 
@@ -537,4 +625,3 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		c.groupHistory.Clear(localKey)
 	}
 }
-

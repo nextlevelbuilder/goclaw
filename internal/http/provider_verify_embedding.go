@@ -26,7 +26,8 @@ func (h *ProvidersHandler) handleVerifyEmbedding(w http.ResponseWriter, r *http.
 	}
 
 	var req struct {
-		Model string `json:"model"`
+		Model      string `json:"model"`
+		Dimensions int    `json:"dimensions"` // optional: truncate output to N dims
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&req); err != nil && err.Error() != "EOF" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
@@ -45,12 +46,13 @@ func (h *ProvidersHandler) handleVerifyEmbedding(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parse embedding settings once for model/apiBase/dimensions resolution.
+	es := store.ParseEmbeddingSettings(p.Settings)
+
 	// Resolve model: request body → settings.embedding.model → default
 	model := req.Model
-	if model == "" {
-		if es := store.ParseEmbeddingSettings(p.Settings); es != nil && es.Model != "" {
-			model = es.Model
-		}
+	if model == "" && es != nil && es.Model != "" {
+		model = es.Model
 	}
 	if model == "" {
 		model = "text-embedding-3-small"
@@ -58,11 +60,21 @@ func (h *ProvidersHandler) handleVerifyEmbedding(w http.ResponseWriter, r *http.
 
 	// Resolve API base: settings.embedding.api_base → provider api_base → resolved base
 	apiBase := h.resolveAPIBase(p)
-	if es := store.ParseEmbeddingSettings(p.Settings); es != nil && es.APIBase != "" {
+	if es != nil && es.APIBase != "" {
 		apiBase = es.APIBase
 	}
 
 	ep := memory.NewOpenAIEmbeddingProvider(p.Name, p.APIKey, apiBase, model)
+
+	// Apply dimension truncation: request body → provider settings → none.
+	// Clamp to reasonable range to avoid sending absurd values upstream.
+	truncDims := req.Dimensions
+	if truncDims <= 0 && es != nil && es.Dimensions > 0 {
+		truncDims = es.Dimensions
+	}
+	if truncDims > 0 && truncDims <= 8192 {
+		ep.WithDimensions(truncDims)
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -77,7 +89,11 @@ func (h *ProvidersHandler) handleVerifyEmbedding(w http.ResponseWriter, r *http.
 	if len(vectors) > 0 && len(vectors[0]) > 0 {
 		dims = len(vectors[0])
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"valid": true, "dimensions": dims})
+	result := map[string]any{"valid": true, "dimensions": dims}
+	if dims > 0 && dims != 1536 {
+		result["dimension_mismatch"] = true
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 // handleEmbeddingStatus returns the current embedding system configuration.

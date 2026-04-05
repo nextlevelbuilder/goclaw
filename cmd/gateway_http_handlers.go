@@ -5,7 +5,6 @@ import (
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -26,14 +25,17 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		if providerReg != nil {
 			summoner = httpapi.NewAgentSummoner(stores.Agents, providerReg, msgBus)
 		}
-		agentsH = httpapi.NewAgentsHandler(stores.Agents, defaultWorkspace, msgBus, summoner, isOwner)
+		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
+		agentsH.SetImportStores(stores.Memory, stores.KnowledgeGraph)
+		agentsH.SetDataDir(dataDir)
 	}
 
 	if stores != nil && stores.Skills != nil {
-		if pgSkills, ok := stores.Skills.(*pg.PGSkillStore); ok {
-			dirs := pgSkills.Dirs()
+		if manageStore, ok := stores.Skills.(store.SkillManageStore); ok {
+			dirs := manageStore.Dirs()
 			if len(dirs) > 0 {
-				skillsH = httpapi.NewSkillsHandler(pgSkills, dirs[0], dataDir, bundledSkillsDir, msgBus)
+				skillsH = httpapi.NewSkillsHandler(manageStore, dirs[0], dataDir, bundledSkillsDir, msgBus, stores.SkillTenantCfgs, stores.Tenants)
+				skillsH.SetDB(stores.DB)
 			}
 		}
 	}
@@ -44,6 +46,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 
 	if stores != nil && stores.MCP != nil {
 		mcpH = httpapi.NewMCPHandler(stores.MCP, msgBus, mcpToolLister)
+		mcpH.SetDB(stores.DB)
 	}
 	var mcpUserCredsH *httpapi.MCPUserCredentialsHandler
 	if stores != nil && stores.MCP != nil {
@@ -63,6 +66,12 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		if stores.MCP != nil {
 			providersH.SetMCPServerLookup(buildMCPServerLookup(stores.MCP))
 		}
+		if stores.Tracing != nil {
+			providersH.SetTracingStore(stores.Tracing)
+		}
+		if stores.Agents != nil {
+			providersH.SetAgentStore(stores.Agents)
+		}
 	}
 
 	var teamEventsH *httpapi.TeamEventsHandler
@@ -72,7 +81,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 	}
 
 	if stores != nil && stores.BuiltinTools != nil {
-		builtinToolsH = httpapi.NewBuiltinToolsHandler(stores.BuiltinTools, stores.BuiltinToolTenantCfgs, msgBus)
+		builtinToolsH = httpapi.NewBuiltinToolsHandler(stores.BuiltinTools, stores.BuiltinToolTenantCfgs, stores.Tenants, msgBus)
 	}
 
 	if stores != nil && stores.PendingMessages != nil {

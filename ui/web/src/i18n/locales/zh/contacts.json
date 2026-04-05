@@ -45,6 +45,10 @@
     "unmergeError": "取消合并失败",
     "comingSoon": "此功能正在开发中，尚不可用。"
   },
+  "types": {
+    "user": "用户",
+    "group": "群组"
+  },
   "filters": {
     "allChannels": "所有Channel",
     "allTypes": "所有类型",

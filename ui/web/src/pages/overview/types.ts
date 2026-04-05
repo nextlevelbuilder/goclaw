@@ -1,3 +1,5 @@
+import type { ChannelRuntimeStatus } from "@/types/channel";
+
 export interface ClientInfo {
   id: string;
   remoteAddr: string;
@@ -18,6 +20,7 @@ export interface HealthPayload {
   latestVersion?: string;
   updateAvailable?: boolean;
   updateUrl?: string;
+  releaseNotes?: string;
 }
 
 export interface AgentInfo {
@@ -33,10 +36,7 @@ export interface StatusPayload {
   clients?: number;
 }
 
-export interface ChannelStatusEntry {
-  enabled: boolean;
-  running: boolean;
-}
+export type ChannelStatusEntry = ChannelRuntimeStatus;
 
 export interface ChannelStatusPayload {
   channels: Record<string, ChannelStatusEntry>;

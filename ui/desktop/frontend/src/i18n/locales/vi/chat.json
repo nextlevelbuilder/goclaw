@@ -1,0 +1,25 @@
+{
+  "empty": {
+    "description": "Gửi tin nhắn để bắt đầu trò chuyện với agent.",
+    "title": "Bắt đầu cuộc trò chuyện"
+  },
+  "forwardedFrom": "Chuyển tiếp từ",
+  "media": {
+    "animation": "Hoạt ảnh",
+    "attached": "đính kèm",
+    "audio": "Âm thanh",
+    "document": "Tài liệu",
+    "image": "Hình ảnh",
+    "video": "Video",
+    "voice": "Tin nhắn thoại"
+  },
+  "deleteChat": "Xóa cuộc trò chuyện",
+  "deleteChatConfirm": "Thao tác này sẽ xóa vĩnh viễn cuộc trò chuyện và tất cả tin nhắn.",
+  "newChat": "Trò chuyện mới",
+  "openSessions": "Mở phiên",
+  "readOnly": "Chỉ đọc — phiên này thuộc về người dùng khác",
+  "replyingTo": "Đang trả lời",
+  "error": {
+    "notConnected": "Chưa kết nối. Vui lòng chờ kết nối được thiết lập."
+  }
+}

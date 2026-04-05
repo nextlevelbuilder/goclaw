@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, Paperclip, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 export interface AttachedFile {
   file: File;
@@ -61,7 +60,6 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
     if (!selected) return;
     const newFiles: AttachedFile[] = Array.from(selected).map((f) => ({ file: f }));
     onFilesChange([...files, ...newFiles]);
-    // Reset input so the same file can be re-selected
     e.target.value = "";
   }, [files, onFilesChange]);
 
@@ -69,14 +67,16 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
     onFilesChange(files.filter((_, i) => i !== index));
   }, [files, onFilesChange]);
 
+  const hasContent = value.trim().length > 0 || files.length > 0;
+
   return (
     <div
-      className="mx-3 mb-3 rounded-xl border bg-background/95 backdrop-blur-sm shadow-sm safe-bottom"
+      className="mx-3 mb-3 safe-bottom"
       style={{ paddingBottom: `calc(env(safe-area-inset-bottom) + var(--keyboard-height, 0px))` }}
     >
       {/* Attached files preview */}
       {files.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+        <div className="flex flex-wrap gap-1.5 mb-2">
           {files.map((af, i) => (
             <span
               key={i}
@@ -95,27 +95,28 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
         </div>
       )}
 
-      <div className="flex items-end gap-2 p-4 pt-3">
-        {/* File attach button */}
-        <Button
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* Input container — attach + textarea + send/stop inside one rounded box */}
+      <div className="flex items-end rounded-xl border bg-background/95 backdrop-blur-sm shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
+        {/* Attach button inside input */}
+        <button
           type="button"
-          variant="ghost"
-          size="icon-lg"
           onClick={handleFileSelect}
           disabled={disabled || isBusy}
           title={t("attachFile")}
-          className="text-muted-foreground hover:text-foreground"
+          className="shrink-0 p-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 cursor-pointer"
         >
           <Paperclip className="h-4 w-4" />
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          onChange={handleFileChange}
-          className="hidden"
-        />
+        </button>
 
+        {/* Textarea — no border, transparent bg */}
         <textarea
           ref={textareaRef}
           value={value}
@@ -125,37 +126,43 @@ export function ChatInput({ onSend, onAbort, isBusy, disabled, files, onFilesCha
           placeholder={t("sendMessage")}
           disabled={disabled}
           rows={1}
-          className="flex-1 resize-none rounded-lg border bg-background px-4 py-2.5 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+          className="flex-1 resize-none bg-transparent py-3 px-0 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
         />
-        {isBusy ? (
-          <div className="flex gap-1">
-            <Button
-              size="icon-lg"
+
+        {/* Send / Stop buttons */}
+        <div className="shrink-0 p-2 flex items-center gap-1">
+          {isBusy ? (
+            <>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!value.trim() || disabled}
+                title={t("sendFollowUp")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onAbort}
+                title={t("stopGeneration")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              >
+                <Square className="h-3.5 w-3.5" />
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
               onClick={handleSend}
-              disabled={!value.trim() || disabled}
-              title={t("sendFollowUp")}
+              disabled={!hasContent || disabled}
+              title={t("sendMessageTitle")}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Send className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="destructive"
-              size="icon-lg"
-              onClick={onAbort}
-              title={t("stopGeneration")}
-            >
-              <Square className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <Button
-            size="icon-lg"
-            onClick={handleSend}
-            disabled={(!value.trim() && files.length === 0) || disabled}
-            title={t("sendMessageTitle")}
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        )}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

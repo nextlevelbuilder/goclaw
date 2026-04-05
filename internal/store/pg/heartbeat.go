@@ -274,37 +274,24 @@ func (s *PGHeartbeatStore) ListLogs(ctx context.Context, agentID uuid.UUID, limi
 	return logs, total, nil
 }
 
-// ListDeliveryTargets returns distinct (channel, chatID, title, kind) pairs from sessions for an agent.
-// Uses idx_sessions_agent (btree on agent_id) for fast lookup.
-// Session key format: agent:{key}:{channel}:{kind}:{chatId}
-func (s *PGHeartbeatStore) ListDeliveryTargets(ctx context.Context, agentID uuid.UUID) ([]store.DeliveryTarget, error) {
+// ListDeliveryTargets returns known delivery targets (channel, chatID, title, kind) from channel_contacts.
+// Queries contacts with contact_type IN ('group','topic') for the given tenant.
+// For topic contacts, chatID is built as senderID + ":topic:" + threadID.
+func (s *PGHeartbeatStore) ListDeliveryTargets(ctx context.Context, tenantID uuid.UUID) ([]store.DeliveryTarget, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT ON (s.channel, chat_id)
-		    s.channel,
-		    split_part(s.session_key, ':', 5) AS chat_id,
-		    COALESCE(
-		        s.metadata->>'chat_title',
-		        cc.display_name,
-		        CASE WHEN cc.username != '' THEN '@' || cc.username ELSE '' END,
-		        ''
-		    ) AS title,
-		    CASE
-		        WHEN s.session_key LIKE '%:group:%' THEN 'group'
-		        WHEN s.session_key LIKE '%:direct:%' THEN 'dm'
-		        ELSE 'other'
-		    END AS kind
-		 FROM sessions s
-		 LEFT JOIN channel_contacts cc
-		    ON cc.sender_id = split_part(s.session_key, ':', 5)
-		   AND cc.channel_type = s.channel
-		 WHERE s.agent_id = $1
-		   AND s.channel IS NOT NULL AND s.channel != ''
-		   AND s.session_key NOT LIKE '%:heartbeat%'
-		   AND s.session_key NOT LIKE '%:cron%'
-		   AND s.session_key NOT LIKE '%:subagent%'
-		   AND s.session_key NOT LIKE '%:team:%'
-		 ORDER BY s.channel, chat_id, title`,
-		agentID,
+		`SELECT cc.sender_id,
+		        cc.thread_id,
+		        cc.thread_type,
+		        cc.channel_instance AS channel,
+		        COALESCE(cc.display_name, cc.sender_id) AS title,
+		        CASE WHEN cc.contact_type = 'topic' THEN 'topic'
+		             WHEN cc.peer_kind = 'group' THEN 'group'
+		             ELSE 'dm' END AS kind
+		 FROM channel_contacts cc
+		 WHERE cc.tenant_id = $1
+		   AND cc.contact_type IN ('group', 'topic')
+		 ORDER BY cc.channel_instance, cc.display_name`,
+		tenantID,
 	)
 	if err != nil {
 		return nil, err
@@ -314,15 +301,29 @@ func (s *PGHeartbeatStore) ListDeliveryTargets(ctx context.Context, agentID uuid
 	var targets []store.DeliveryTarget
 	seen := make(map[string]bool)
 	for rows.Next() {
-		var t store.DeliveryTarget
-		if err := rows.Scan(&t.Channel, &t.ChatID, &t.Title, &t.Kind); err != nil {
+		var senderID, title, kind string
+		var threadID, threadType, channel *string
+		if err := rows.Scan(&senderID, &threadID, &threadType, &channel, &title, &kind); err != nil {
 			return nil, err
 		}
-		// Deduplicate by channel+chatID (sessions can have multiple rows for same target).
-		key := t.Channel + ":" + t.ChatID
-		if t.ChatID != "" && !seen[key] {
+		if channel == nil {
+			continue
+		}
+		chatID := senderID
+		displayTitle := title
+		if threadID != nil && *threadID != "" {
+			chatID = senderID + ":topic:" + *threadID
+			displayTitle = title + " > topic:" + *threadID
+		}
+		key := *channel + ":" + chatID
+		if !seen[key] {
 			seen[key] = true
-			targets = append(targets, t)
+			targets = append(targets, store.DeliveryTarget{
+				Channel: *channel,
+				ChatID:  chatID,
+				Title:   displayTitle,
+				Kind:    kind,
+			})
 		}
 	}
 	if err := rows.Err(); err != nil {

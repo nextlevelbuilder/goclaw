@@ -193,13 +193,16 @@ export function TeamCreateDialog({ open, onOpenChange, onCreate }: TeamCreateDia
                 ))}
               </div>
             )}
+            {lead && members.length === 0 && memberOptions.length > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">{t("create.needMembers")}</p>
+            )}
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
             {t("create.cancel")}
           </Button>
-          <Button onClick={handleCreate} disabled={!name.trim() || !leadOptions.some((o) => o.value === lead) || loading} className="gap-1">
+          <Button onClick={handleCreate} disabled={!name.trim() || !leadOptions.some((o) => o.value === lead) || members.length === 0 || loading} className="gap-1">
             {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {loading ? t("create.creating") : t("create.create")}
           </Button>

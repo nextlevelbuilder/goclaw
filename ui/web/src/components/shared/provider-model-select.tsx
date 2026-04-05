@@ -97,7 +97,7 @@ export function ProviderModelSelect({
     [enabledProviders, provider],
   );
   const selectedProviderId = selectedProvider?.id;
-  const { models, loading: modelsLoading } = useProviderModels(selectedProviderId, selectedProvider?.provider_type);
+  const { models, loading: modelsLoading } = useProviderModels(selectedProviderId);
   const { verify, verifying, result: verifyResult, reset: resetVerify } = useProviderVerify();
 
   const hasSavedValues = savedProvider !== undefined && savedModel !== undefined;

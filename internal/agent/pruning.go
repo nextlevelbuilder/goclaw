@@ -11,10 +11,10 @@ import (
 // Context pruning defaults matching TS DEFAULT_CONTEXT_PRUNING_SETTINGS.
 const (
 	defaultKeepLastAssistants   = 3
-	defaultSoftTrimRatio        = 0.3
+	defaultSoftTrimRatio        = 0.25
 	defaultHardClearRatio       = 0.5
 	defaultMinPrunableToolChars = 50000
-	defaultSoftTrimMaxChars     = 4000
+	defaultSoftTrimMaxChars     = 3000
 	defaultSoftTrimHeadChars    = 1500
 	defaultSoftTrimTailChars    = 1500
 	defaultHardClearPlaceholder = "[Old tool result content cleared]"
@@ -99,7 +99,8 @@ func resolvePruningSettings(cfg *config.ContextPruningConfig) *effectivePruningS
 // Only tool results older than keepLastAssistants are eligible for pruning.
 // Returns a new slice if any changes were made, otherwise the original.
 func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg *config.ContextPruningConfig) []providers.Message {
-	if cfg == nil || cfg.Mode != "cache-ttl" {
+	// Pruning runs by default for all providers. Only skip when explicitly disabled.
+	if cfg != nil && cfg.Mode == "off" {
 		return msgs
 	}
 	if contextWindowTokens <= 0 || len(msgs) == 0 {
@@ -147,8 +148,42 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		return msgs
 	}
 
-	// Pass 1: Soft trim long tool results.
+	// Pass 0: Per-result context guard — force-trim any single tool result
+	// exceeding 30% of the context window. Catches outlier outputs even
+	// when overall context ratio is low.
+	maxSingleResultChars := charWindow * 3 / 10
 	var result []providers.Message
+	for _, idx := range prunableIndexes {
+		msgChars := estimateMessageChars(msgs[idx])
+		if msgChars > maxSingleResultChars {
+			if result == nil {
+				result = make([]providers.Message, len(msgs))
+				copy(result, msgs)
+			}
+			msg := msgs[idx]
+			head := takeHead(msg.Content, maxSingleResultChars*7/10)
+			tail := takeTail(msg.Content, maxSingleResultChars*3/10)
+			trimmed := fmt.Sprintf("%s\n\n⚠️ [... middle content omitted ...]\n\n%s\n\n[Single tool result trimmed: %d chars exceeded per-result limit of %d chars.]",
+				head, tail, msgChars, maxSingleResultChars)
+			result[idx] = providers.Message{
+				Role:       msg.Role,
+				Content:    trimmed,
+				ToolCallID: msg.ToolCallID,
+			}
+			totalChars += len(trimmed) - msgChars
+		}
+	}
+	if result != nil {
+		msgs = result
+		result = nil
+		// Re-check ratio after per-result guard.
+		ratio = float64(totalChars) / float64(charWindow)
+		if ratio < settings.softTrimRatio {
+			return msgs
+		}
+	}
+
+	// Pass 1: Soft trim long tool results.
 	for i := range prunableIndexes {
 		idx := prunableIndexes[i]
 		msg := msgs[idx]
@@ -164,10 +199,19 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 			copy(result, msgs)
 		}
 
-		head := takeHead(msg.Content, settings.softTrimHeadChars)
-		tail := takeTail(msg.Content, settings.softTrimTailChars)
+		// Tail-aware split: if tail has important content (errors, summaries),
+		// use dynamic 70/30 split. Otherwise use configured head/tail sizes.
+		headChars := settings.softTrimHeadChars
+		tailChars := settings.softTrimTailChars
+		if hasImportantTail(msg.Content) {
+			totalBudget := headChars + tailChars
+			headChars = totalBudget * 7 / 10
+			tailChars = totalBudget - headChars
+		}
+		head := takeHead(msg.Content, headChars)
+		tail := takeTail(msg.Content, tailChars)
 		trimmed := fmt.Sprintf("%s\n...\n%s\n\n[Tool result trimmed: kept first %d chars and last %d chars of %d chars.]",
-			head, tail, settings.softTrimHeadChars, settings.softTrimTailChars, msgChars)
+			head, tail, headChars, tailChars, msgChars)
 
 		result[idx] = providers.Message{
 			Role:       msg.Role,
@@ -247,6 +291,17 @@ func findAssistantCutoff(msgs []providers.Message, keepLast int) int {
 // estimateMessageChars returns the character count of a message's content.
 func estimateMessageChars(m providers.Message) int {
 	return utf8.RuneCountInString(m.Content)
+}
+
+// hasImportantTail checks if the last ~500 chars of content contain error/summary keywords.
+func hasImportantTail(content string) bool {
+	runes := []rune(content)
+	checkLen := 500
+	if checkLen > len(runes) {
+		checkLen = len(runes)
+	}
+	tail := string(runes[len(runes)-checkLen:])
+	return importantTailRe.MatchString(tail)
 }
 
 // takeHead returns the first n runes of s.

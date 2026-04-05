@@ -26,10 +26,16 @@ services:
       - GOCLAW_SANDBOX_CPUS=1.0
       - GOCLAW_SANDBOX_TIMEOUT_SEC=300
       - GOCLAW_SANDBOX_NETWORK=false
-    # Override base cap_drop to allow Docker socket access
+    # Override base cap_drop to allow Docker socket access.
+    # Re-include base caps (SETUID/SETGID/CHOWN) lost when overriding cap_add.
+    # WARNING: SETUID/SETGID with security_opt cleared (no no-new-privileges)
+    # increases attack surface. Only use in trusted environments.
     cap_drop: []
     cap_add:
       - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+      - CHOWN
     security_opt: []
     group_add:
       - ${DOCKER_GID:-999}

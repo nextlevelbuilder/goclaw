@@ -25,17 +25,30 @@ type TextChunk struct {
 	EndLine   int
 }
 
-// ChunkText splits text into chunks at paragraph boundaries.
+// ChunkText splits text into chunks at paragraph boundaries with optional overlap.
 // Each chunk includes its starting line number in the source file.
-func ChunkText(text string, maxChunkLen int) []TextChunk {
+// When overlap > 0, trailing lines from the previous chunk are prepended to the next chunk
+// so that context at chunk boundaries is preserved for semantic search.
+func ChunkText(text string, maxChunkLen, overlap int) []TextChunk {
 	if maxChunkLen <= 0 {
 		maxChunkLen = 1000
+	}
+	if overlap < 0 {
+		overlap = 0
+	}
+	// Clamp overlap to half the chunk size to prevent infinite loop
+	if overlap >= maxChunkLen/2 {
+		overlap = maxChunkLen / 2
 	}
 
 	lines := strings.Split(text, "\n")
 	var chunks []TextChunk
 	var current strings.Builder
 	startLine := 1
+
+	// overlapLines holds trailing lines from the previous chunk to prepend to the next.
+	var overlapLines []string
+	overlapStartLine := 0
 
 	flush := func(endLine int) {
 		content := strings.TrimSpace(current.String())
@@ -46,8 +59,40 @@ func ChunkText(text string, maxChunkLen int) []TextChunk {
 				EndLine:   endLine,
 			})
 		}
+
+		// Compute overlap lines to carry into the next chunk.
+		overlapLines = nil
+		overlapStartLine = 0
+		if overlap > 0 && endLine > 0 {
+			charCount := 0
+			for j := endLine - 1; j >= startLine-1 && j >= 0; j-- {
+				lineLen := len(lines[j])
+				if charCount+lineLen > overlap {
+					break
+				}
+				charCount += lineLen + 1 // +1 for newline
+				overlapLines = append(overlapLines, lines[j])
+				overlapStartLine = j + 1 // 1-based
+			}
+			// Reverse to restore original order
+			for left, right := 0, len(overlapLines)-1; left < right; left, right = left+1, right-1 {
+				overlapLines[left], overlapLines[right] = overlapLines[right], overlapLines[left]
+			}
+		}
+
 		current.Reset()
-		startLine = endLine + 1
+		// Seed next chunk with overlap content
+		if len(overlapLines) > 0 {
+			startLine = overlapStartLine
+			for k, ol := range overlapLines {
+				if k > 0 {
+					current.WriteString("\n")
+				}
+				current.WriteString(ol)
+			}
+		} else {
+			startLine = endLine + 1
+		}
 	}
 
 	for i, line := range lines {

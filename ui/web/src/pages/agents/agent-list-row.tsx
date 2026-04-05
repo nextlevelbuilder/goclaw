@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
+import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
 
 interface AgentListRowProps {
   agent: AgentData;
@@ -13,15 +14,13 @@ interface AgentListRowProps {
   onDelete?: () => void;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }: AgentListRowProps) {
   const { t } = useTranslation("agents");
-  const displayName = agent.display_name
-    || (UUID_RE.test(agent.agent_key) ? t("card.unnamedAgent") : agent.agent_key);
+  const displayName = agentDisplayName(agent, t("card.unnamedAgent"));
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
   const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
   const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
 
   return (
     <button
@@ -78,6 +77,11 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
               {t("card.evolvingTooltip")}
             </TooltipContent>
           </Tooltip>
+        )}
+        {hasOAuthRouting && (
+          <Badge variant="outline" className="text-[11px]">
+            {t("chatgptOAuthRouting.badge")}
+          </Badge>
         )}
       </div>
 

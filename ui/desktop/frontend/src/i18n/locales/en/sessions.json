@@ -1,0 +1,45 @@
+{
+  "title": "Sessions",
+  "description": "Browse conversation sessions",
+  "searchPlaceholder": "Search sessions...",
+  "emptyTitle": "No sessions yet",
+  "emptyDescription": "Sessions will appear here once you start chatting.",
+  "noMatchTitle": "No matching sessions",
+  "noMatchDescription": "Try a different search term.",
+  "columns": {
+    "session": "Session",
+    "agent": "Agent",
+    "context": "Context",
+    "messages": "Messages",
+    "updated": "Updated"
+  },
+  "contextBar": {
+    "compacted": "Compacted {{count}} time(s)"
+  },
+  "detail": {
+    "reset": "Reset",
+    "delete": "Delete",
+    "deleteTitle": "Delete Session",
+    "deleteDescription": "This will permanently delete all messages in this session.",
+    "resetTitle": "Reset Session",
+    "resetDescription": "This will clear all messages but keep the session.",
+    "confirmDelete": "Delete",
+    "confirmReset": "Reset",
+    "noMessages": "No messages in this session",
+    "summary": "Summary",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "showDetails": "show details",
+    "hide": "hide",
+    "systemMessage": "System Message",
+    "messages": "messages"
+  },
+  "toast": {
+    "deleted": "Session deleted",
+    "deleteFailed": "Failed to delete session",
+    "reset": "Session reset",
+    "resetFailed": "Failed to reset session",
+    "updated": "Session updated",
+    "updateFailed": "Failed to update session"
+  }
+}

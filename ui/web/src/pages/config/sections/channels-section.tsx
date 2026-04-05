@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { MultiUserPicker } from "@/components/shared/multi-user-picker";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type ChannelsData = Record<string, any>;
@@ -177,11 +178,11 @@ export function ChannelsSection({ data, onSave, saving }: Props) {
                     {chData.allow_from !== undefined && (
                       <div className="grid gap-1.5">
                         <Label>{t("channels.allowFrom")}</Label>
-                        <Input
-                          value={(chData.allow_from ?? []).join(", ")}
-                          onChange={(e) =>
+                        <MultiUserPicker
+                          value={chData.allow_from ?? []}
+                          onChange={(v) =>
                             updateChannel(ch, {
-                              allow_from: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean),
+                              allow_from: v.length > 0 ? v : undefined,
                             })
                           }
                           placeholder={t("channels.allowFromPlaceholder")}

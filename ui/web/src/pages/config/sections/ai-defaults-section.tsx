@@ -180,6 +180,10 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
             <Field label={t("agents.memory.maxResults")} tip={t("agents.memory.maxResultsTip")} type="number" value={memory.max_results} onChange={(v) => updateNested("memory", { max_results: Number(v) })} placeholder="6" />
             <Field label={t("agents.memory.minScore")} tip={t("agents.memory.minScoreTip")} type="number" step="0.01" value={memory.min_score} onChange={(v) => updateNested("memory", { min_score: Number(v) })} placeholder="0.35" />
           </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label={t("agents.memory.maxChunkLen")} tip={t("agents.memory.maxChunkLenTip")} type="number" value={memory.max_chunk_len} onChange={(v) => updateNested("memory", { max_chunk_len: Number(v) })} placeholder="1000" />
+            <Field label={t("agents.memory.chunkOverlap")} tip={t("agents.memory.chunkOverlapTip")} type="number" value={memory.chunk_overlap} onChange={(v) => updateNested("memory", { chunk_overlap: Number(v) })} placeholder="200" />
+          </div>
         </SubSection>
 
         <SubSection
@@ -203,7 +207,7 @@ export function AiDefaultsSection({ data, onSave, saving }: Props) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <Label>{t("agents.pruning.mode")}</Label>
-              <Select value={pruning.mode ?? "off"} onValueChange={(v) => updateNested("contextPruning", { mode: v })}>
+              <Select value={pruning.mode ?? "auto"} onValueChange={(v) => updateNested("contextPruning", { mode: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Off</SelectItem>

@@ -1,0 +1,25 @@
+{
+  "title": "Lưu trữ",
+  "description": "Trình duyệt tệp workspace",
+  "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "Dung lượng lưu trữ được cache trong 60 phút",
+  "unsupportedFile": "Loại tệp này chưa được hỗ trợ xem trước",
+  "download": "Tải về",
+  "delete": {
+    "fileTitle": "Xóa tệp",
+    "folderTitle": "Xóa thư mục",
+    "description": "Bạn có chắc muốn xóa {{name}}?",
+    "folderWarning": " Tất cả nội dung sẽ bị xóa đệ quy.",
+    "undone": " Hành động này không thể hoàn tác.",
+    "deleting": "Đang xóa...",
+    "confirmLabel": "Xóa"
+  },
+  "upload": {
+    "title": "Tải lên Lưu trữ",
+    "description": "Tải tệp lên thư mục dữ liệu"
+  },
+  "toast": {
+    "deleted": "Đã xóa file",
+    "deleteFailed": "Không thể xóa file"
+  }
+}

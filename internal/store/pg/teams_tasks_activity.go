@@ -132,7 +132,7 @@ func (s *PGTeamStore) RecordTaskEvent(ctx context.Context, event *store.TeamTask
 func (s *PGTeamStore) ListTaskEvents(ctx context.Context, taskID uuid.UUID) ([]store.TeamTaskEventData, error) {
 	tid := tenantIDForInsert(ctx)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, task_id, event_type, actor_type, actor_id, data, created_at
+		`SELECT id, task_id, event_type, actor_type, actor_id, COALESCE(data, '{}'), created_at
 		 FROM team_task_events
 		 WHERE task_id = $1 AND tenant_id = $2
 		 ORDER BY created_at ASC`, taskID, tid)
@@ -160,7 +160,7 @@ func (s *PGTeamStore) ListTeamEvents(ctx context.Context, teamID uuid.UUID, limi
 	}
 	tid := tenantIDForInsert(ctx)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT e.id, e.task_id, e.event_type, e.actor_type, e.actor_id, e.data, e.created_at
+		`SELECT e.id, e.task_id, e.event_type, e.actor_type, e.actor_id, COALESCE(e.data, '{}'), e.created_at
 		 FROM team_task_events e
 		 JOIN team_tasks t ON t.id = e.task_id
 		 WHERE t.team_id = $1 AND t.tenant_id = $4

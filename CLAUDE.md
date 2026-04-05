@@ -6,7 +6,9 @@ PostgreSQL multi-tenant AI agent gateway with WebSocket RPC + HTTP API.
 
 **Backend:** Go 1.26, Cobra CLI, gorilla/websocket, pgx/v5 (database/sql, no ORM), golang-migrate, go-rod/rod, telego (Telegram)
 **Web UI:** React 19, Vite 6, TypeScript, Tailwind CSS 4, Radix UI, Zustand, React Router 7. Located in `ui/web/`. **Use `pnpm` (not npm).**
-**Database:** PostgreSQL 18 with pgvector. Raw SQL with `$1, $2` positional params. Nullable columns: `*string`, `*time.Time`, etc.
+**Desktop UI:** React 19, Vite 6, TypeScript, Tailwind CSS 4, Zustand, Framer Motion. Located in `ui/desktop/frontend/`. **Use `pnpm`.**
+**Desktop App:** Wails v2 (`//go:build sqliteonly`). Located in `ui/desktop/`. Embeds gateway + React frontend in single binary.
+**Database:** PostgreSQL 18 with pgvector (standard). SQLite via `modernc.org/sqlite` (desktop/lite). Raw SQL with `$1, $2` (PG) or `?` (SQLite) positional params. Nullable columns: `*string`, `*time.Time`, etc.
 
 ## Project Structure
 
@@ -55,7 +57,7 @@ ui/web/                       React SPA (pnpm, Vite, Tailwind, Radix UI)
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
 - **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys
-- **Agent loop:** `RunRequest` → think→act→observe → `RunResult`. Events: `run.started`, `run.completed`, `chunk`, `tool.call`, `tool.result`. Auto-summarization at >75% context
+- **Agent loop:** `RunRequest` → think→act→observe → `RunResult`. Events: `run.started`, `run.completed`, `chunk`, `tool.call`, `tool.result`. Auto-summarization at >85% context (token-based only)
 - **Context propagation:** `store.WithAgentType(ctx)`, `store.WithUserID(ctx)`, `store.WithAgentID(ctx)`, `store.WithLocale(ctx)`
 - **WebSocket protocol (v3):** Frame types `req`/`res`/`event`. First request must be `connect`
 - **Config:** JSON5 at `GOCLAW_CONFIG` env. Secrets in `.env.local` or env vars, never in config.json
@@ -71,7 +73,31 @@ go build -o goclaw . && ./goclaw onboard && source .env.local && ./goclaw
 go test -v ./tests/integration/     # Integration tests
 
 cd ui/web && pnpm install && pnpm dev   # Web dashboard (dev)
+
+# Desktop (Wails + SQLite)
+cd ui/desktop && wails dev -tags sqliteonly  # Dev mode with hot reload (direct)
+make desktop-dev                             # Same as above via Makefile
+make desktop-build VERSION=0.1.0             # Build .app (macOS) or .exe (Windows)
+make desktop-dmg VERSION=0.1.0               # Create .dmg installer (macOS only)
 ```
+
+## Desktop Edition (Lite)
+
+- **Build tag:** `//go:build sqliteonly` — desktop binary includes only SQLite, no PostgreSQL
+- **Edition system:** `internal/edition/edition.go` — `Lite` preset auto-selected for SQLite backend. Check `edition.Current()` for feature limits
+- **Entry point:** `ui/desktop/main.go` + `ui/desktop/app.go` — Wails bindings, embedded gateway
+- **Secrets:** OS keyring (`go-keyring`) with file fallback at `~/.goclaw/secrets/`
+- **Data dir:** `~/.goclaw/data/` (SQLite DB, configs)
+- **Workspace:** `~/.goclaw/workspace/` (agent files, team workspace)
+- **Port:** 18790 (localhost only), configurable via `GOCLAW_PORT`
+- **WS params:** All WS method params use **camelCase** (`teamId`, `taskId`, `sessionKey`) — match Go struct `json:"..."` tags
+- **Version:** `cmd.Version` set via `-ldflags` at build time. Frontend calls `wails.getVersion()`
+- **Auto-update:** `internal/updater/updater.go` checks GitHub Releases for `lite-v*` tags. Frontend `UpdateBanner` shows notification
+- **Releases:** Tag `lite-v*` triggers `.github/workflows/release-desktop.yaml` → builds macOS (arm64+amd64) + Windows → GitHub Release
+- **Install scripts:** `scripts/install-lite.sh` (macOS), `scripts/install-lite.ps1` (Windows PowerShell)
+- **Lite limits:** 5 agents, 1 team, 5 members, 50 sessions. No channels, heartbeat, file storage UI, skill self-manage, KG, RBAC, multi-tenant
+- **Tool gating:** `TeamActionPolicy` in `internal/tools/team_action_policy.go` — lite blocks comment/review/approve/reject/attach/ask_user. `skill_manage`/`publish_skill` not registered in lite
+- **File serving:** 2-layer path isolation in `internal/http/files.go` — workspace boundary (all editions) + tenant scope (standard only with RBAC)
 
 ## Post-Implementation Checklist
 
@@ -79,7 +105,8 @@ After implementing or modifying Go code, run these checks:
 
 ```bash
 go fix ./...                        # Apply Go version upgrades (run before commit)
-go build ./...                      # Compile check
+go build ./...                      # Compile check (PG build)
+go build -tags sqliteonly ./...     # Compile check (Desktop/SQLite build)
 go vet ./...                        # Static analysis
 go test -race ./tests/integration/  # Integration tests with race detector
 ```

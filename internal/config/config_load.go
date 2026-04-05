@@ -71,7 +71,6 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			cfg.applyEnvOverrides()
-			cfg.applyContextPruningDefaults()
 			return cfg, nil
 		}
 		return nil, fmt.Errorf("read config: %w", err)
@@ -82,7 +81,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg.applyEnvOverrides()
-	cfg.applyContextPruningDefaults()
 	return cfg, nil
 }
 
@@ -186,6 +184,8 @@ func (c *Config) applyEnvOverrides() {
 	// Database
 	envStr("GOCLAW_POSTGRES_DSN", &c.Database.PostgresDSN)
 	envStr("GOCLAW_REDIS_DSN", &c.Database.RedisDSN)
+	envStr("GOCLAW_STORAGE_BACKEND", &c.Database.StorageBackend)
+	envStr("GOCLAW_SQLITE_PATH", &c.Database.SQLitePath)
 
 	// Deprecation warning for GOCLAW_MODE (removed — PostgreSQL is always active)
 	if v := os.Getenv("GOCLAW_MODE"); v != "" {
@@ -206,12 +206,23 @@ func (c *Config) applyEnvOverrides() {
 	// Owner IDs from env (comma-separated, whitespace-trimmed)
 	if v := os.Getenv("GOCLAW_OWNER_IDS"); v != "" {
 		var ids []string
-		for _, id := range strings.Split(v, ",") {
+		for id := range strings.SplitSeq(v, ",") {
 			if trimmed := strings.TrimSpace(id); trimmed != "" {
 				ids = append(ids, trimmed)
 			}
 		}
 		c.Gateway.OwnerIDs = ids
+	}
+
+	// Allowed origins from env (comma-separated, whitespace-trimmed)
+	if v := os.Getenv("GOCLAW_ALLOWED_ORIGINS"); v != "" {
+		var origins []string
+		for origin := range strings.SplitSeq(v, ",") {
+			if trimmed := strings.TrimSpace(origin); trimmed != "" {
+				origins = append(origins, trimmed)
+			}
+		}
+		c.Gateway.AllowedOrigins = origins
 	}
 
 	// Tailscale (tsnet)
@@ -271,29 +282,6 @@ func (c *Config) applyEnvOverrides() {
 	}
 }
 
-// applyContextPruningDefaults auto-enables context pruning when the Anthropic
-// provider is configured, matching TS applyContextPruningDefaults() in
-// src/config/defaults.ts.
-//
-// Go port does not have OAuth vs API-key distinction — we always treat it as
-// API-key mode.
-func (c *Config) applyContextPruningDefaults() {
-	// Only apply when Anthropic is configured.
-	if c.Providers.Anthropic.APIKey == "" {
-		return
-	}
-
-	defaults := &c.Agents.Defaults
-
-	// Auto-enable context pruning if mode not explicitly set.
-	if defaults.ContextPruning == nil {
-		defaults.ContextPruning = &ContextPruningConfig{
-			Mode: "cache-ttl",
-		}
-	} else if defaults.ContextPruning.Mode == "" {
-		defaults.ContextPruning.Mode = "cache-ttl"
-	}
-}
 
 // Save writes the config to a JSON file.
 func Save(path string, cfg *Config) error {
@@ -417,7 +405,6 @@ func (c *Config) ResolveDisplayName(agentID string) string {
 // Call this after modifying config to restore runtime secrets from env vars.
 func (c *Config) ApplyEnvOverrides() {
 	c.applyEnvOverrides()
-	c.applyContextPruningDefaults()
 }
 
 // ExpandHome replaces leading ~ with the user home directory.

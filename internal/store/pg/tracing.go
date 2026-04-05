@@ -547,3 +547,20 @@ func (s *PGTracingStore) GetCostSummary(ctx context.Context, opts store.CostSumm
 	}
 	return result, nil
 }
+
+// DeleteTracesOlderThan deletes traces and their spans older than cutoff.
+// Spans are deleted first (FK), then traces. Returns total traces deleted.
+func (s *PGTracingStore) DeleteTracesOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	// Delete spans belonging to old traces.
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM spans WHERE trace_id IN (SELECT id FROM traces WHERE created_at < $1)`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("delete old spans: %w", err)
+	}
+
+	res, err := s.db.ExecContext(ctx, `DELETE FROM traces WHERE created_at < $1`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("delete old traces: %w", err)
+	}
+	return res.RowsAffected()
+}

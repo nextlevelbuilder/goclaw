@@ -57,7 +57,7 @@ export function MemberList({ members, onRemove }: MemberListProps) {
             {member.role}
           </Badge>
           <div className="flex justify-center">
-            {member.role !== "lead" && onRemove && (
+            {member.role !== "lead" && onRemove && members.filter((m) => m.role !== "lead").length > 1 && (
               <button
                 type="button"
                 onClick={() => onRemove(member.agent_id)}

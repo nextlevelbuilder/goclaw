@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { KeyRound, Loader2 } from "lucide-react";
 import {
@@ -14,11 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { KeyValueEditor } from "@/components/shared/key-value-editor";
-import { Combobox } from "@/components/ui/combobox";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 import { toast } from "@/stores/use-toast-store";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useTenants } from "@/hooks/use-tenants";
-import { useTenantUsersList } from "@/pages/contacts/hooks/use-tenant-users-list";
 import i18next from "i18next";
 import type { MCPServerData, MCPUserCredentialStatus, MCPUserCredentialInput } from "./hooks/use-mcp";
 
@@ -51,7 +50,6 @@ export function MCPUserCredentialsDialog({
   const role = useAuthStore((s) => s.role);
   const currentUserId = useAuthStore((s) => s.userId);
   const { currentTenant } = useTenants();
-  const { users } = useTenantUsersList();
 
   const canManageUsers =
     role === "admin" || role === "owner" ||
@@ -69,14 +67,6 @@ export function MCPUserCredentialsDialog({
   const [headers, setHeaders] = useState<Record<string, string>>({});
   const [env, setEnv] = useState<Record<string, string>>({});
 
-  const userOptions = useMemo(
-    () =>
-      users.map((u) => ({
-        value: u.user_id,
-        label: u.display_name || u.user_id,
-      })),
-    [users],
-  );
 
   // Reset selected user when dialog opens
   useEffect(() => {
@@ -152,12 +142,12 @@ export function MCPUserCredentialsDialog({
             {canManageUsers && (
               <div className="flex flex-col gap-1.5">
                 <Label>{t("userCredentials.selectUser")}</Label>
-                <Combobox
+                <UserPickerCombobox
                   value={selectedUserId}
-                  onChange={(val) => setSelectedUserId(val)}
-                  options={userOptions}
+                  onChange={setSelectedUserId}
                   placeholder={t("userCredentials.selectUser")}
-                />
+                  source="tenant_user"
+                  />
               </div>
             )}
 

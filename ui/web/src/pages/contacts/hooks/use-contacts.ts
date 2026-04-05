@@ -10,6 +10,7 @@ export interface ContactFilters {
   search?: string;
   channelType?: string;
   peerKind?: string;
+  contactType?: string;
   limit?: number;
   offset?: number;
 }
@@ -27,6 +28,7 @@ export function useContacts(filters: ContactFilters = {}) {
       if (filters.search) params.search = filters.search;
       if (filters.channelType) params.channel_type = filters.channelType;
       if (filters.peerKind) params.peer_kind = filters.peerKind;
+      if (filters.contactType) params.contact_type = filters.contactType;
       if (filters.limit) params.limit = String(filters.limit);
       if (filters.offset !== undefined) params.offset = String(filters.offset);
 

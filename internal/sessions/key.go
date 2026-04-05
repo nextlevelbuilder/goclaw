@@ -2,7 +2,13 @@
 //
 // Session keys follow the TS OpenClaw canonical format:
 //
-//	agent:{agentId}:{rest}
+//	agent:{agentKey}:{rest}
+//
+// IMPORTANT: {agentKey} is the human-readable agent key (e.g. "default", "my-agent"),
+// NOT the agent's UUID. All Build*SessionKey functions expect agentKey, not UUID.
+// This is critical for cache invalidation — the agent router cache uses agentKey
+// as the lookup key, and InvalidateAgent() matches by agentKey suffix.
+// Tenant isolation is handled separately via context (tenant_id in DB, prefix in cache).
 //
 // Where {rest} depends on the session type:
 //

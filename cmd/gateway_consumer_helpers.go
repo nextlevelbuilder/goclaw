@@ -11,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // resolveAgentRoute determines which agent should handle a message
@@ -98,9 +99,9 @@ func buildAnnounceOutMeta(localKey string) map[string]string {
 	}
 	meta := map[string]string{"local_key": localKey}
 	if idx := strings.Index(localKey, ":topic:"); idx > 0 {
-		meta["message_thread_id"] = localKey[idx+7:]
+		meta[tools.MetaMessageThreadID] = localKey[idx+7:]
 	} else if idx := strings.Index(localKey, ":thread:"); idx > 0 {
-		meta["message_thread_id"] = localKey[idx+8:]
+		meta[tools.MetaMessageThreadID] = localKey[idx+8:]
 	}
 	return meta
 }
@@ -126,7 +127,13 @@ func mediaToMarkdown(media []agent.MediaResult, cfg *config.Config) string {
 		}
 		// Store clean path only — no auth tokens in persisted session messages.
 		// Frontend adds auth (Bearer header or ?ft= signed token) at render time.
-		fileURL := "/v1/files/" + urlPath
+		// Guard: if path is already a /v1/ URL (e.g. from mutated media), don't double-prefix.
+		var fileURL string
+		if strings.HasPrefix(urlPath, "v1/files/") || strings.HasPrefix(urlPath, "v1/media/") {
+			fileURL = "/" + strings.SplitN(urlPath, "?", 2)[0] // strip any existing query params
+		} else {
+			fileURL = "/v1/files/" + urlPath
+		}
 		if strings.HasPrefix(mr.ContentType, "image/") {
 			parts = append(parts, fmt.Sprintf("![image](%s)", fileURL))
 		} else {

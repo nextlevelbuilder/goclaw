@@ -154,10 +154,10 @@ GoClaw determines the tenant from the credentials used to connect:
 | Credential | Tenant Resolution | Use Case |
 |------------|-------------------|----------|
 | **Gateway token** + owner user ID | All tenants (cross-tenant) | System administration |
-| **Gateway token** + non-owner user ID | User's tenant membership | Dashboard users |
+| **Gateway token** + non-owner user ID | Master tenant by default, or a membership-validated `X-GoClaw-Tenant-Id` / `tenant_id` hint | Dashboard users |
 | **API key** (tenant-bound) | Auto from key's `tenant_id` | Normal SaaS integration |
-| **API key** (system-level) + `X-GoClaw-Tenant-Id` | Header value (UUID or slug) | Cross-tenant admin tools |
-| **Browser pairing** | Paired tenant | Dashboard operators |
+| **API key** (system-level) + `X-GoClaw-Tenant-Id` | Header value (UUID or slug), while keeping the key's original role | Cross-tenant tools |
+| **Browser pairing** | Master tenant by default, or a membership-validated tenant hint | Dashboard operators |
 | **No credentials** | Master tenant | Dev/single-user mode |
 
 **Owner IDs:** Configured via `GOCLAW_OWNER_IDS` env var (comma-separated). Only owners get cross-tenant access with the gateway token. Default: `system`.

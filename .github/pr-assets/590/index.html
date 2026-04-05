@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PR #590 — OpenAI Tool Call Compatibility Before / After</title>
+    <style>
+      :root {
+        --font-body: "DM Sans", "Segoe UI", sans-serif;
+        --font-mono: "Fira Code", "SFMono-Regular", monospace;
+        --bg: #f0f4f8;
+        --surface: #ffffff;
+        --surface2: #e8eef4;
+        --surface-elevated: #f7fbff;
+        --border: rgba(30, 60, 100, 0.12);
+        --border-bright: rgba(30, 60, 100, 0.24);
+        --text: #16202d;
+        --text-dim: #5a7090;
+        --text-bright: #0c1622;
+        --accent: #1a5fa8;
+        --accent-dim: rgba(26, 95, 168, 0.1);
+        --green: #157347;
+        --green-dim: rgba(21, 115, 71, 0.1);
+        --red: #b42318;
+        --red-dim: rgba(180, 35, 24, 0.1);
+        --amber: #b7791f;
+        --amber-dim: rgba(183, 121, 31, 0.1);
+        --teal: #0f766e;
+        --teal-dim: rgba(15, 118, 110, 0.1);
+        --shadow: 0 18px 54px rgba(15, 23, 42, 0.1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #0d1421;
+          --surface: #111d2e;
+          --surface2: #162438;
+          --surface-elevated: #1b2b42;
+          --border: rgba(100, 160, 220, 0.14);
+          --border-bright: rgba(100, 160, 220, 0.28);
+          --text: #d9e5f2;
+          --text-dim: #8ea3bb;
+          --text-bright: #f4f8fc;
+          --accent: #6eb4ff;
+          --accent-dim: rgba(110, 180, 255, 0.12);
+          --green: #4ade80;
+          --green-dim: rgba(74, 222, 128, 0.12);
+          --red: #ff8a8a;
+          --red-dim: rgba(255, 138, 138, 0.12);
+          --amber: #f6c453;
+          --amber-dim: rgba(246, 196, 83, 0.12);
+          --teal: #67e8f9;
+          --teal-dim: rgba(103, 232, 249, 0.12);
+          --shadow: 0 20px 64px rgba(2, 8, 23, 0.42);
+        }
+      }
+
+      [data-theme="dark"] {
+        --bg: #0d1421;
+        --surface: #111d2e;
+        --surface2: #162438;
+        --surface-elevated: #1b2b42;
+        --border: rgba(100, 160, 220, 0.14);
+        --border-bright: rgba(100, 160, 220, 0.28);
+        --text: #d9e5f2;
+        --text-dim: #8ea3bb;
+        --text-bright: #f4f8fc;
+        --accent: #6eb4ff;
+        --accent-dim: rgba(110, 180, 255, 0.12);
+        --green: #4ade80;
+        --green-dim: rgba(74, 222, 128, 0.12);
+        --red: #ff8a8a;
+        --red-dim: rgba(255, 138, 138, 0.12);
+        --amber: #f6c453;
+        --amber-dim: rgba(246, 196, 83, 0.12);
+        --teal: #67e8f9;
+        --teal-dim: rgba(103, 232, 249, 0.12);
+        --shadow: 0 20px 64px rgba(2, 8, 23, 0.42);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: var(--font-body);
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, var(--accent-dim) 0%, transparent 26%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 24%),
+          var(--bg);
+        background-image:
+          radial-gradient(circle, var(--border) 1px, transparent 1px),
+          radial-gradient(circle at top left, var(--accent-dim) 0%, transparent 26%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 24%);
+        background-size: 24px 24px, auto, auto;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .theme-toggle {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 300;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-dim);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        transition: background 0.15s, color 0.15s;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      }
+
+      .theme-toggle:hover {
+        background: var(--surface2);
+        color: var(--text);
+      }
+
+      .wrap {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 190px 1fr;
+        gap: 0 36px;
+      }
+
+      .toc {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        padding: 14px 0;
+        max-height: calc(100dvh - 48px);
+        overflow-y: auto;
+      }
+
+      .toc-title {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        padding-bottom: 10px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .toc a {
+        display: block;
+        padding: 6px 8px;
+        margin-bottom: 2px;
+        border-left: 2px solid transparent;
+        border-radius: 6px;
+        text-decoration: none;
+        color: var(--text-dim);
+        font-size: 12px;
+      }
+
+      .toc a:hover,
+      .toc a.active {
+        color: var(--text);
+        background: var(--surface);
+        border-left-color: var(--accent);
+      }
+
+      .main {
+        min-width: 0;
+      }
+
+      .hero,
+      .section,
+      .comparison-card {
+        border: 1px solid var(--border);
+        background: linear-gradient(180deg, var(--surface), var(--surface-elevated));
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 28px;
+        border-radius: 28px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border-bright);
+        background: var(--accent-dim);
+        color: var(--accent);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero h1 {
+        margin: 16px 0 12px;
+        font-size: clamp(34px, 5vw, 58px);
+        line-height: 0.98;
+        letter-spacing: -0.05em;
+        color: var(--text-bright);
+      }
+
+      .hero p {
+        max-width: 980px;
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.7;
+        color: var(--text-dim);
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 22px;
+      }
+
+      .hero-stat {
+        padding: 15px 16px;
+        border-radius: 18px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+      }
+
+      .hero-stat__label {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+      }
+
+      .hero-stat__value {
+        margin-top: 8px;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .section {
+        margin-top: 24px;
+        border-radius: 24px;
+        padding: 24px;
+      }
+
+      .section-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 10px;
+        color: var(--text-dim);
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .section-label::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px var(--accent-dim);
+      }
+
+      .section h2 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: -0.04em;
+      }
+
+      .section-intro {
+        margin: 10px 0 0;
+        font-size: 15px;
+        line-height: 1.7;
+        color: var(--text-dim);
+      }
+
+      .callout-grid,
+      .validation-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .callout,
+      .validation-card {
+        border-radius: 18px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        background: var(--surface2);
+      }
+
+      .callout strong,
+      .validation-card strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+
+      .callout p,
+      .validation-card p,
+      .validation-card ul {
+        margin: 0;
+        color: var(--text-dim);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .comparison-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .comparison-card {
+        border-radius: 22px;
+        overflow: hidden;
+      }
+
+      .comparison-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .comparison-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .comparison-title h3 {
+        margin: 0;
+        font-size: 19px;
+        letter-spacing: -0.03em;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .tag.before {
+        color: var(--red);
+        background: var(--red-dim);
+        border: 1px solid rgba(180, 35, 24, 0.18);
+      }
+
+      .tag.after {
+        color: var(--green);
+        background: var(--green-dim);
+        border: 1px solid rgba(21, 115, 71, 0.18);
+      }
+
+      .comparison-body {
+        padding: 18px;
+      }
+
+      .comparison-body p {
+        margin: 0 0 12px;
+        color: var(--text-dim);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .status-line {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 14px;
+        border-radius: 14px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .status-line.bad {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+
+      .status-line.good {
+        background: var(--green-dim);
+        color: var(--green);
+      }
+
+      pre {
+        margin: 0;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: #0b1320;
+        color: #d9e5f2;
+        overflow-x: auto;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      [data-theme="light"] pre,
+      :root pre {
+        background: #102033;
+      }
+
+      .bullet-list {
+        margin: 14px 0 0;
+        padding-left: 18px;
+        color: var(--text-dim);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .bullet-list li + li {
+        margin-top: 8px;
+      }
+
+      .validation-list {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .footer-note {
+        margin-top: 20px;
+        font-size: 13px;
+        color: var(--text-dim);
+      }
+
+      @media (max-width: 1000px) {
+        body {
+          padding: 16px;
+        }
+
+        .wrap {
+          grid-template-columns: 1fr;
+        }
+
+        .toc {
+          position: sticky;
+          top: 0;
+          z-index: 200;
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          max-height: none;
+          padding: 10px 0 12px;
+          margin: 0 -16px 12px;
+          padding-left: 16px;
+          padding-right: 16px;
+          background: var(--bg);
+          border-bottom: 1px solid var(--border);
+        }
+
+        .toc-title {
+          display: none;
+        }
+
+        .toc a {
+          white-space: nowrap;
+          border-left: none;
+          border-bottom: 2px solid transparent;
+        }
+
+        .hero-grid,
+        .callout-grid,
+        .validation-grid,
+        .comparison-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <button class="theme-toggle" id="themeToggle" title="Toggle theme" aria-label="Toggle light/dark theme"></button>
+    <div class="wrap">
+      <nav class="toc" id="toc">
+        <div class="toc-title">Contents</div>
+        <a href="#overview">Overview</a>
+        <a href="#tool-id-fix">Tool ID shortening</a>
+        <a href="#model-gating-fix">Model gating</a>
+        <a href="#validation">Validation</a>
+      </nav>
+
+      <main class="main">
+        <section class="hero" id="overview">
+          <div class="eyebrow">PR #590 • reviewer artifact</div>
+          <h1>OpenAI compatibility fix, shown as behavior not prose.</h1>
+          <p>
+            This PR has no product UI. The reviewer surface is wire behavior:
+            how long tool-call IDs are serialized and how prefixed OpenAI-compatible
+            model IDs are classified. The visuals below show the exact before/after
+            deltas that matter for issue #532.
+          </p>
+          <div class="hero-grid">
+            <div class="hero-stat">
+              <div class="hero-stat__label">Primary bug</div>
+              <div class="hero-stat__value">Legacy or replayed tool IDs could alias after a 40-char prefix cut.</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat__label">Secondary bug</div>
+              <div class="hero-stat__value">Prefixed models like <code>openai/o3-mini</code> bypassed capability gates.</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat__label">Fix shape</div>
+              <div class="hero-stat__value">Hash long IDs at the serializer boundary and normalize model family once.</div>
+            </div>
+            <div class="hero-stat">
+              <div class="hero-stat__label">Scope</div>
+              <div class="hero-stat__value">Covers main loop, resumed history, memory flush, and subagent replay through one path.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="tool-id-fix">
+          <div class="section-label">01 • Tool ID shortening</div>
+          <h2>Before: prefix cut preserved length, not uniqueness.</h2>
+          <p class="section-intro">
+            The original defensive fallback capped IDs by slicing the first 40 characters.
+            That stops the HTTP 400, but it still lets two distinct long IDs collapse into
+            the same wire value if they only diverge after character 40.
+          </p>
+
+          <div class="callout-grid">
+            <div class="callout">
+              <strong>Why this was still a blocker</strong>
+              <p>Fresh live tool calls were already hashed upstream, but resumed history and replay paths still depended on the serializer. That meant the bug could survive in exactly the sessions reviewers care about: legacy, resumed, or replayed state.</p>
+            </div>
+            <div class="callout">
+              <strong>Why the serializer fix is the right layer</strong>
+              <p>Every OpenAI-compatible request path uses the same request builder. Fixing the boundary closes the main loop and the side loops together instead of patching each caller independently.</p>
+            </div>
+          </div>
+
+          <div class="comparison-grid">
+            <article class="comparison-card" id="before-tool-id-card">
+              <div class="comparison-head">
+                <div class="comparison-title">
+                  <span class="tag before">Before</span>
+                  <h3>Shared-prefix IDs collide after truncation</h3>
+                </div>
+              </div>
+              <div class="comparison-body">
+                <div class="status-line bad">Collision risk remains on replay</div>
+                <p>
+                  Two distinct IDs from a replayed or deduped session can become the same
+                  outbound value. The request is shorter, but the assistant tool calls and
+                  tool results are no longer uniquely identifiable.
+                </p>
+                <pre>{
+  "tool_calls": [
+    { "id": "call_0123456789abcdef0123456789abcdef012" },
+    { "id": "call_0123456789abcdef0123456789abcdef012" }
+  ],
+  "messages": [
+    { "role": "tool", "tool_call_id": "call_0123456789abcdef0123456789abcdef012" },
+    { "role": "tool", "tool_call_id": "call_0123456789abcdef0123456789abcdef012" }
+  ]
+}</pre>
+                <ul class="bullet-list">
+                  <li>Distinct legacy IDs differ only after byte 40.</li>
+                  <li>Prefix slicing makes both values identical on the wire.</li>
+                  <li>Parallel tool results can no longer be correlated safely.</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="comparison-card" id="after-tool-id-card">
+              <div class="comparison-head">
+                <div class="comparison-title">
+                  <span class="tag after">After</span>
+                  <h3>Long IDs shorten to stable hashed values</h3>
+                </div>
+              </div>
+              <div class="comparison-body">
+                <div class="status-line good">40-char cap without aliasing</div>
+                <p>
+                  IDs longer than 40 characters are now re-encoded as deterministic
+                  <code>call_</code>-prefixed hashes. The same original ID always maps
+                  to the same shortened value, and different long IDs stay different.
+                </p>
+                <pre>{
+  "tool_calls": [
+    { "id": "call_6625d2d3e5ec2c6c86f70fd9a7064cc77a1" },
+    { "id": "call_60b8d9101dbdde451723a0888a84317d14f" }
+  ],
+  "messages": [
+    { "role": "tool", "tool_call_id": "call_6625d2d3e5ec2c6c86f70fd9a7064cc77a1" },
+    { "role": "tool", "tool_call_id": "call_60b8d9101dbdde451723a0888a84317d14f" }
+  ]
+}</pre>
+                <ul class="bullet-list">
+                  <li>Still meets the 40-character API limit.</li>
+                  <li>Preserves assistant/tool-result correlation because the same helper is used for both fields.</li>
+                  <li>Protects replay and legacy sessions, not just newly generated tool calls.</li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="model-gating-fix">
+          <div class="section-label">02 • Model capability gating</div>
+          <h2>Before: prefixed model IDs skipped the intended reasoning-model rules.</h2>
+          <p class="section-intro">
+            The request builder already supports provider-prefixed IDs such as
+            <code>openai/o3-mini</code>. The bug was that capability checks ran on the
+            full string, so prefixed reasoning models could keep <code>temperature</code>
+            and use the wrong token field.
+          </p>
+
+          <div class="comparison-grid">
+            <article class="comparison-card" id="before-gating-card">
+              <div class="comparison-head">
+                <div class="comparison-title">
+                  <span class="tag before">Before</span>
+                  <h3>Prefixed reasoning models look like unknown families</h3>
+                </div>
+              </div>
+              <div class="comparison-body">
+                <div class="status-line bad">Wrong request shape for <code>openai/o3-mini</code></div>
+                <p>
+                  Because the gate looked at the full model string, the builder missed
+                  both the reasoning-model token routing and the temperature skip.
+                </p>
+                <pre>{
+  "model": "openai/o3-mini",
+  "max_tokens": 123,
+  "temperature": 0.7
+}</pre>
+                <ul class="bullet-list">
+                  <li>Contradicted the “model-level, not provider-specific” finding.</li>
+                  <li>Left OpenRouter-style OpenAI IDs outside the intended guardrail.</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="comparison-card" id="after-gating-card">
+              <div class="comparison-head">
+                <div class="comparison-title">
+                  <span class="tag after">After</span>
+                  <h3>Capability checks use normalized model family</h3>
+                </div>
+              </div>
+              <div class="comparison-body">
+                <div class="status-line good">Same rules for bare and prefixed IDs</div>
+                <p>
+                  The builder now strips transport prefixes once, then applies the same
+                  capability logic to both bare and prefixed model IDs.
+                </p>
+                <pre>{
+  "model": "openai/o3-mini",
+  "max_completion_tokens": 123
+}</pre>
+                <ul class="bullet-list">
+                  <li><code>openai/o3-mini</code> now follows the same route as <code>o3-mini</code>.</li>
+                  <li><code>openai/gpt-5.4</code> still keeps <code>temperature</code>, matching the flagship-model rule.</li>
+                  <li>Azure and non-Azure paths are validated as model-based, not URL-based.</li>
+                </ul>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="validation">
+          <div class="section-label">03 • Validation</div>
+          <h2>Tests and reviewer-facing outcomes</h2>
+          <p class="section-intro">
+            The changes above were verified with focused provider and agent tests, plus
+            a full-suite spot check to expose unrelated red tests explicitly rather than
+            hide them under a green subset.
+          </p>
+
+          <div class="validation-grid">
+            <div class="validation-card">
+              <strong>Passed</strong>
+              <ul class="validation-list">
+                <li><code>go test ./internal/providers ./internal/agent</code></li>
+                <li><code>go test ./internal/providers -run 'TestTruncateToolCallID|TestBuildRequestBody' -count=1</code></li>
+                <li><code>go test ./internal/agent -run '^TestUniquifyToolCallIDs$' -count=1</code></li>
+              </ul>
+            </div>
+            <div class="validation-card">
+              <strong>Known unrelated failure</strong>
+              <p>
+                <code>go test ./...</code> still fails in <code>pkg/browser</code> at
+                <code>TestResolveRemoteCDP_DefaultPort</code> with
+                <code>/json/version returned HTTP 404</code>. This pre-exists the provider
+                changes and is unrelated to the OpenAI compatibility patch.
+              </p>
+            </div>
+          </div>
+
+          <p class="footer-note">
+            Review note: these visuals intentionally show behavior and request-shape
+            diffs rather than product UI, because this PR does not alter application screens.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      (function() {
+        const toggle = document.getElementById("themeToggle");
+        const saved = localStorage.getItem("theme");
+        const initial = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", initial);
+        toggle.textContent = initial === "dark" ? "\u2600" : "\u263E";
+        toggle.addEventListener("click", function() {
+          const current = document.documentElement.getAttribute("data-theme") || "light";
+          const next = current === "light" ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", next);
+          localStorage.setItem("theme", next);
+          toggle.textContent = next === "dark" ? "\u2600" : "\u263E";
+        });
+
+        const toc = document.getElementById("toc");
+        const links = toc.querySelectorAll("a");
+        const sections = [];
+        links.forEach((link) => {
+          const id = link.getAttribute("href").slice(1);
+          const el = document.getElementById(id);
+          if (el) sections.push({ link, el });
+        });
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              links.forEach((link) => link.classList.remove("active"));
+              const match = sections.find((section) => section.el === entry.target);
+              if (match) match.link.classList.add("active");
+            });
+          },
+          { rootMargin: "-10% 0px -70% 0px" },
+        );
+
+        sections.forEach((section) => observer.observe(section.el));
+
+        links.forEach((link) => {
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            const id = link.getAttribute("href").slice(1);
+            const el = document.getElementById(id);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+              history.replaceState(null, "", "#" + id);
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

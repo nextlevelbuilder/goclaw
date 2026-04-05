@@ -55,6 +55,7 @@
   "statCards": {
     "agents": "Agent",
     "channels": "Channel",
+    "channelsAttention": "{{count}} cần chú ý",
     "inOut": "Vào / Ra",
     "online": "Trực tuyến",
     "requestsToday": "Request hôm nay",
@@ -66,6 +67,12 @@
   "systemHealth": {
     "active": "hoạt động",
     "channels": "Channel",
+    "needsAttention": "Cần chú ý",
+    "channelsNeedingAttention": "{{count}} channel",
+    "failedCount": "{{count}} thất bại",
+    "warningCountOne": "{{count}} cảnh báo",
+    "warningCountOther": "{{count}} cảnh báo",
+    "moreAttention": "+{{count}} nữa",
     "clients": "Máy khách",
     "database": "Cơ sở dữ liệu",
     "none": "không có",

@@ -33,7 +33,8 @@
     "gatewayToken": "Gateway Token",
     "tokenPlaceholder": "Bearer token",
     "userId": "User ID",
-    "userIdPlaceholder": "your-user-id"
+    "userIdPlaceholder": "your-user-id",
+    "userIdHint": "Dùng \"system\" để có toàn quyền hệ thống"
   },
   "noAccessHint": "Yêu cầu quản trị viên thêm bạn vào tenant, hoặc đăng nhập bằng tài khoản khác.",
   "logout": "Đăng xuất"

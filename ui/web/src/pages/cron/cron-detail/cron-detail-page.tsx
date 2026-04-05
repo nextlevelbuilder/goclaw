@@ -2,11 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import type { CronJob, CronRunLogEntry } from "../hooks/use-cron";
+import type { CronJob, CronJobPatch, CronRunLogEntry } from "../hooks/use-cron";
 import { CronHeader } from "./cron-header";
 import { CronOverviewTab } from "./cron-overview-tab";
 import { CronRunHistoryTab } from "./cron-run-history-tab";
-import { CronAdvancedDialog } from "./cron-advanced-dialog";
 
 interface CronDetailPageProps {
   job: CronJob;
@@ -14,7 +13,7 @@ interface CronDetailPageProps {
   onRun: (id: string) => Promise<void>;
   onToggle: (id: string, enabled: boolean) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  onUpdate?: (id: string, params: Record<string, unknown>) => Promise<void>;
+  onUpdate?: (id: string, params: CronJobPatch) => Promise<void>;
   getRunLog: (id: string, limit?: number, offset?: number) => Promise<{ entries: CronRunLogEntry[]; total: number }>;
   onRefresh: () => void;
 }
@@ -31,7 +30,6 @@ export function CronDetailPage({
 }: CronDetailPageProps) {
   const { t } = useTranslation("cron");
   const [activeTab, setActiveTab] = useState("overview");
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmToggle, setConfirmToggle] = useState(false);
   const [running, setRunning] = useState(false);
@@ -64,7 +62,6 @@ export function CronDetailPage({
         isRunning={isRunning}
         onBack={onBack}
         onRun={handleRun}
-        onAdvanced={() => setAdvancedOpen(true)}
         onToggle={() => setConfirmToggle(true)}
         onDelete={() => setConfirmDelete(true)}
       />
@@ -87,14 +84,6 @@ export function CronDetailPage({
           </Tabs>
         </div>
       </div>
-
-      <CronAdvancedDialog
-        key={job.id}
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        job={job}
-        onUpdate={onUpdate}
-      />
 
       <ConfirmDialog
         open={confirmDelete}

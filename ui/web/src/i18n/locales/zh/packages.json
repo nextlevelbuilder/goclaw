@@ -1,10 +1,14 @@
 {
   "title": "运行时与软件包",
-  "description": "管理系统运行时和已安装的软件包",
+  "description": "管理当前 GoClaw 运行时容器内的运行时和已安装软件包",
   "runtimes": {
     "title": "运行时",
+    "scopeTitle": "容器范围内的运行时状态",
+    "scopeDesc": "这些检查在当前活动的 GoClaw 运行时容器内执行。宿主机已安装的运行时、shell profile 变更以及由 nvm 管理的二进制文件都不会在这里被使用。",
+    "minimalImageHint": "已发布的 latest 镜像是最小化变体，因此缺少 Python 或 Node 运行时在该镜像中可能是正常现象。请改用 python、node 或 full 镜像变体，或使用 ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true 重新构建，或者直接在此容器中手动安装运行时。",
     "available": "可用",
-    "missing": "缺失"
+    "missing": "缺失",
+    "missingInContainer": "容器内缺失"
   },
   "system": {
     "title": "系统软件包",

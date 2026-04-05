@@ -37,7 +37,7 @@ func (m *APIKeysMethods) handleList(ctx context.Context, client *gateway.Client,
 	locale := store.LocaleFromContext(ctx)
 	// Non-admin callers only see their own keys.
 	ownerID := ""
-	if client.Role() != permissions.RoleAdmin {
+	if !permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
 		ownerID = client.UserID()
 	}
 	keys, err := m.apiKeys.List(ctx, ownerID)
@@ -88,7 +88,7 @@ func (m *APIKeysMethods) handleCreate(ctx context.Context, client *gateway.Clien
 
 	// Non-admin callers always bind the key to their own user_id.
 	ownerID := params.OwnerID
-	if client.Role() != permissions.RoleAdmin {
+	if !permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
 		ownerID = client.UserID()
 	}
 
@@ -184,7 +184,7 @@ func (m *APIKeysMethods) handleRevoke(ctx context.Context, client *gateway.Clien
 
 	// Non-admin callers can only revoke their own keys.
 	ownerID := ""
-	if client.Role() != permissions.RoleAdmin {
+	if !permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
 		ownerID = client.UserID()
 	}
 

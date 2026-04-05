@@ -1,15 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GitFork } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useKGTraversal } from "./hooks/use-knowledge-graph";
+import { KGGraphView } from "./kg-graph-view";
 import type { KGEntity, KGRelation } from "@/types/knowledge-graph";
 
 interface KGEntityDetailDialogProps {
@@ -45,14 +47,44 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
     }
   }, [open, entity, loadRelations]);
 
-  const handleTraverse = () => {
+  const handleTraverse = useCallback(() => {
     if (!entity) return;
-    traverse(entity.id, entity.user_id, 2);
-  };
+    traverse(entity.id, entity.user_id, 3);
+  }, [entity, traverse]);
+
+  // Auto-traverse on open
+  useEffect(() => {
+    if (open && entity && traversalResults.length === 0 && !traversing) {
+      traverse(entity.id, entity.user_id, 3);
+    }
+  }, [open, entity]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build graph data from traversal results
+  const graphData = useMemo(() => {
+    if (!entity || traversalResults.length === 0) return null;
+    const entities = [entity, ...traversalResults.map((r) => r.entity)];
+    const graphRelations: KGRelation[] = traversalResults
+      .filter((r) => r.path.length >= 2 && r.via && r.path[r.path.length - 2])
+      .map((r, i) => {
+        const parentId = r.path[r.path.length - 2]!;
+        const isReverse = r.via.startsWith("~");
+        const relType = isReverse ? r.via.slice(1) : r.via;
+        return {
+          id: `trav-${i}`,
+          agent_id: entity.agent_id,
+          source_entity_id: isReverse ? r.entity.id : parentId,
+          relation_type: relType,
+          target_entity_id: isReverse ? parentId : r.entity.id,
+          confidence: r.entity.confidence,
+          created_at: 0,
+        };
+      });
+    return { entities, relations: graphRelations };
+  }, [entity, traversalResults]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !traversing && onOpenChange(v)}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent aria-describedby={undefined} className="max-h-[90vh] w-[95vw] flex flex-col sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span>{entity?.name}</span>
@@ -97,7 +129,7 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
             </div>
           )}
 
-          {/* Relations */}
+          {/* Relations tabs */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium">{t("kg.entity.relations")}</h4>
@@ -106,65 +138,123 @@ export function KGEntityDetailDialog({ open, onOpenChange, agentId, entity, getE
                 {traversing ? t("kg.entity.traversing") : t("kg.entity.traverse")}
               </Button>
             </div>
-            {loadingRels ? (
-              <p className="text-xs text-muted-foreground">{t("kg.entity.loading")}</p>
-            ) : relations.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("kg.entity.noRelations")}</p>
-            ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[400px] text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.direction")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.relation")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.target")}</th>
-                      <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.confidence")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {relations.map((rel) => (
-                      <tr key={rel.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="px-3 py-2">
-                          {rel.source_entity_id === entity?.id
-                            ? t("kg.entity.direction.outgoing")
-                            : t("kg.entity.direction.incoming")}
-                        </td>
-                        <td className="px-3 py-2 font-mono">{rel.relation_type}</td>
-                        <td className="px-3 py-2 font-mono text-muted-foreground">
-                          {rel.source_entity_id === entity?.id ? rel.target_entity_id.slice(0, 8) : rel.source_entity_id.slice(0, 8)}
-                        </td>
-                        <td className="px-3 py-2">{Math.round(rel.confidence * 100)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
 
-          {/* Traversal results */}
-          {traversalResults.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium mb-2">
-                {t("kg.entity.traversalResults", { count: traversalResults.length })}
-              </h4>
-              <div className="space-y-1">
-                {traversalResults.map((tr, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs rounded border p-2">
-                    <Badge variant="outline" className="text-[10px]">depth {tr.depth}</Badge>
-                    {tr.via && <span className="font-mono text-muted-foreground">—[{tr.via}]→</span>}
-                    <span className="font-medium">{tr.entity.name}</span>
-                    <Badge variant="secondary" className="text-[10px]">{tr.entity.entity_type}</Badge>
-                    {tr.entity.description && (
-                      <span className="text-muted-foreground truncate max-w-[200px]">{tr.entity.description}</span>
-                    )}
+            <Tabs defaultValue="table">
+              <TabsList className="mb-2">
+                <TabsTrigger value="table">{t("kg.entity.tabs.table")}</TabsTrigger>
+                <TabsTrigger value="graph">{t("kg.entity.tabs.graph")}</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="table" className="space-y-3">
+                {loadingRels ? (
+                  <p className="text-xs text-muted-foreground">{t("kg.entity.loading")}</p>
+                ) : relations.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">{t("kg.entity.noRelations")}</p>
+                ) : (
+                  <RelationsTable relations={relations} entityId={entity?.id} t={t} />
+                )}
+
+                {/* Traversal results */}
+                {traversalResults.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">
+                      {t("kg.entity.traversalResults", { count: traversalResults.length })}
+                    </h4>
+                    <div className="space-y-1">
+                      {traversalResults.map((tr, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs rounded border p-2">
+                          <Badge variant="outline" className="text-[10px]">depth {tr.depth}</Badge>
+                          {tr.via && (
+                            tr.via.startsWith("~")
+                              ? <span className="font-mono text-muted-foreground">←[{tr.via.slice(1)}]—</span>
+                              : <span className="font-mono text-muted-foreground">—[{tr.via}]→</span>
+                          )}
+                          <span className="font-medium">{tr.entity.name}</span>
+                          <Badge variant="secondary" className="text-[10px]">{tr.entity.entity_type}</Badge>
+                          {tr.entity.description && (
+                            <span className="text-muted-foreground truncate max-w-[200px]">{tr.entity.description}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                )}
+              </TabsContent>
+
+              <TabsContent value="graph">
+                {traversing ? (
+                  <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground">
+                    {t("kg.entity.traversing")}...
+                  </div>
+                ) : graphData ? (
+                  <div className="h-[400px]">
+                    <KGGraphView entities={graphData.entities} relations={graphData.relations} />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-[400px] text-sm text-muted-foreground">
+                    {t("kg.entity.noRelations")}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+/** Memoized relations table — prevents re-render when dialog parent updates */
+const RelationsTable = React.memo(function RelationsTable({
+  relations,
+  entityId,
+  t,
+}: {
+  relations: KGRelation[];
+  entityId: string | undefined;
+  t: (key: string) => string;
+}) {
+  const INITIAL_LIMIT = 50;
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? relations : relations.slice(0, INITIAL_LIMIT);
+  const hasMore = relations.length > INITIAL_LIMIT;
+
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <table className="w-full min-w-[400px] text-xs">
+        <thead>
+          <tr className="border-b bg-muted/50">
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.direction")}</th>
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.relation")}</th>
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.target")}</th>
+            <th className="px-3 py-2 text-left font-medium">{t("kg.entity.columns.confidence")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((rel) => (
+            <tr key={rel.id} className="border-b last:border-0 hover:bg-muted/30">
+              <td className="px-3 py-2">
+                {rel.source_entity_id === entityId
+                  ? t("kg.entity.direction.outgoing")
+                  : t("kg.entity.direction.incoming")}
+              </td>
+              <td className="px-3 py-2 font-mono">{rel.relation_type}</td>
+              <td className="px-3 py-2 font-mono text-muted-foreground">
+                {rel.source_entity_id === entityId ? rel.target_entity_id.slice(0, 8) : rel.source_entity_id.slice(0, 8)}
+              </td>
+              <td className="px-3 py-2">{Math.round(rel.confidence * 100)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hasMore && !showAll && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full py-1.5 text-xs text-muted-foreground hover:text-foreground border-t"
+        >
+          {t("kg.entity.showAll")} ({relations.length})
+        </button>
+      )}
+    </div>
+  );
+});

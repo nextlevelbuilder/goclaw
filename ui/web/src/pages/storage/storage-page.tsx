@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Info, RefreshCw, Upload } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { toast } from "@/stores/use-toast-store";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -148,6 +149,24 @@ export function StoragePage() {
     if (!v) handleRefresh();
   }, [handleRefresh]);
 
+  const handleMove = useCallback(async (fromPath: string, toFolder: string) => {
+    const fileName = fromPath.split("/").pop() ?? fromPath;
+    const newPath = toFolder ? `${toFolder}/${fileName}` : fileName;
+    if (fromPath === newPath) return; // no-op: same location
+    try {
+      await http.put(`/v1/storage/move?from=${encodeURIComponent(fromPath)}&to=${encodeURIComponent(newPath)}`);
+      // Clear stale selection if the moved item was active.
+      if (activePath === fromPath || activePath?.startsWith(fromPath + "/")) {
+        setActivePath(null);
+        setFileContent(null);
+      }
+      listFiles({ silent: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Move failed";
+      toast.error(msg);
+    }
+  }, [http, listFiles, activePath]);
+
   const deleteName = deleteTarget?.path.split("/").pop() ?? "";
 
   // Size description with cache tooltip
@@ -200,6 +219,7 @@ export function StoragePage() {
           fileContent={fileContent}
           onDelete={handleDeleteRequest}
           onLoadMore={handleLoadMore}
+          onMove={handleMove}
           onDownload={handleDownload}
           fetchBlob={handleFetchBlob}
           showSize

@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROVIDER_TYPES } from "@/constants/providers";
+import { PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { CLISection } from "@/pages/providers/provider-cli-section";
 import { OAuthSection } from "@/pages/providers/provider-oauth-section";
@@ -29,12 +29,13 @@ interface StepProviderProps {
 export function StepProvider({ onComplete, existingProvider }: StepProviderProps) {
   const { t } = useTranslation("setup");
   const http = useHttp();
-  const { createProvider, updateProvider } = useProviders();
+  const { providers, createProvider, updateProvider } = useProviders();
 
   const isEditing = !!existingProvider;
 
   const [providerType, setProviderType] = useState(existingProvider?.provider_type ?? "openrouter");
   const [name, setName] = useState(existingProvider?.name ?? "openrouter");
+  const [oauthDisplayName, setOauthDisplayName] = useState(existingProvider?.display_name ?? "");
   const [apiKey, setApiKey] = useState("");
   const [apiBase, setApiBase] = useState(
     existingProvider?.api_base ?? "https://openrouter.ai/api/v1",
@@ -50,7 +51,11 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const handleTypeChange = (value: string) => {
     setProviderType(value);
     const preset = PROVIDER_TYPES.find((t) => t.value === value);
-    setName(value === "chatgpt_oauth" ? "openai-codex" : slugify(value));
+    setName(value === "chatgpt_oauth"
+      ? (providerType === "chatgpt_oauth"
+        ? name
+        : suggestUniqueProviderAlias(providers, { excludeName: existingProvider?.name }))
+      : slugify(value));
     setApiBase(preset?.apiBase || "");
     setApiKey("");
     setError("");
@@ -67,8 +72,17 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
     setLoading(true);
     setError("");
     try {
-      const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
-      const provider = res.providers?.find((p) => p.provider_type === "chatgpt_oauth" && p.name === "openai-codex");
+      // Retry up to 3 times with 1 s delay — backend may not have committed
+      // the provider yet when the OAuth polling detects success.
+      let provider: ProviderData | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
+        provider = res.providers?.find(
+          (p) => p.provider_type === "chatgpt_oauth" && p.name === name.trim(),
+        );
+        if (provider) break;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 1000));
+      }
       if (!provider) {
         setError(t("provider.errors.oauthProviderNotFound"));
         return;
@@ -146,22 +160,39 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
             </div>
             <div className="space-y-2">
               <Label className="inline-flex items-center gap-1.5">
-                {t("provider.name")}
-                <InfoTip text={t("provider.nameHint")} />
+                {isOAuth ? t("provider.oauthAlias") : t("provider.name")}
+                <InfoTip text={isOAuth ? t("provider.oauthAliasHint") : t("provider.nameHint")} />
               </Label>
               <Input
                 value={name}
                 onChange={(e) => setName(slugify(e.target.value))}
-                disabled={isOAuth}
+                placeholder={isOAuth ? t("provider.oauthAliasPlaceholder") : undefined}
               />
             </div>
           </div>
 
           {isOAuth ? (
-            <OAuthSection
-              onSuccess={handleOAuthSuccess}
-              authenticatedActionLabel={t("model.continue")}
-            />
+            <>
+              <div className="space-y-2">
+                <Label className="inline-flex items-center gap-1.5">
+                  {t("provider.displayName")}
+                  <InfoTip text={t("provider.displayNameHint")} />
+                </Label>
+                <Input
+                  value={oauthDisplayName}
+                  onChange={(e) => setOauthDisplayName(e.target.value)}
+                  placeholder={t("provider.displayNamePlaceholder")}
+                />
+              </div>
+
+              <OAuthSection
+                providerName={name}
+                displayName={oauthDisplayName}
+                apiBase={apiBase}
+                onSuccess={handleOAuthSuccess}
+                authenticatedActionLabel={t("model.continue")}
+              />
+            </>
           ) : isCLI ? (
             <CLISection open={true} />
           ) : (

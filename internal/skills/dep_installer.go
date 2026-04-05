@@ -119,26 +119,34 @@ func InstallDeps(ctx context.Context, manifest *SkillManifest, missing []string)
 		result.System = successful
 	}
 
+	// Pip packages: install one by one for partial-success resilience.
 	if len(pipPkgs) > 0 {
 		slog.Info("skills: installing pip packages", "pkgs", pipPkgs)
-		args := append([]string{"install", "--no-cache-dir", "--break-system-packages"}, pipPkgs...)
-		cmd := exec.CommandContext(ctx, "pip3", args...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("pip: %s (%v)", strings.TrimSpace(string(out)), err))
-		} else {
-			result.Pip = pipPkgs
+		var successful []string
+		for _, pkg := range pipPkgs {
+			cmd := exec.CommandContext(ctx, "pip3", "install", "--no-cache-dir", "--break-system-packages", pkg)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("pip %s: %s (%v)", pkg, strings.TrimSpace(string(out)), err))
+			} else {
+				successful = append(successful, pkg)
+			}
 		}
+		result.Pip = successful
 	}
 
+	// Npm packages: install one by one for partial-success resilience.
 	if len(npmPkgs) > 0 {
 		slog.Info("skills: installing npm packages", "pkgs", npmPkgs)
-		args := append([]string{"install", "-g"}, npmPkgs...)
-		cmd := exec.CommandContext(ctx, "npm", args...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("npm: %s (%v)", strings.TrimSpace(string(out)), err))
-		} else {
-			result.Npm = npmPkgs
+		var successful []string
+		for _, pkg := range npmPkgs {
+			cmd := exec.CommandContext(ctx, "npm", "install", "-g", pkg)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("npm %s: %s (%v)", pkg, strings.TrimSpace(string(out)), err))
+			} else {
+				successful = append(successful, pkg)
+			}
 		}
+		result.Npm = successful
 	}
 
 	cleanCaches(ctx)

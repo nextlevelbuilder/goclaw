@@ -111,10 +111,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Añade al menos una GOCLAW_*_API_KEY al .env, luego:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Panel web en http://localhost:3000
+# Panel web en http://localhost:18790
 # Verificación de estado: curl http://localhost:18790/health
 ```
 

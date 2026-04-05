@@ -113,6 +113,24 @@
       "observations": "观察",
       "relations": "关系"
     },
+    "dedup": {
+      "button": "去重",
+      "title": "重复实体",
+      "description": "查看并合并基于嵌入相似度可能重复的实体。",
+      "noCandidates": "未找到重复候选项。",
+      "similar": "相似",
+      "merge": "合并",
+      "dismiss": "忽略",
+      "merged": "实体合并成功。",
+      "mergeFailed": "合并实体失败。",
+      "dismissed": "候选项已忽略。",
+      "dismissFailed": "忽略候选项失败。",
+      "scan": "全面扫描",
+      "scanning": "扫描中...",
+      "scanComplete": "扫描完成。",
+      "scanFailed": "扫描失败。",
+      "count": "{{count}} 个候选项"
+    },
     "deleteEntity": {
       "title": "删除实体",
       "description": "删除「{{name}}」？这将同时移除所有关联关系。",
@@ -125,10 +143,15 @@
       "source": "来源：",
       "properties": "属性：",
       "relations": "关系",
-      "traverse": "遍历（2 跳）",
+      "traverse": "遍历（3 跳）",
+      "tabs": {
+        "table": "表格",
+        "graph": "图谱"
+      },
       "traversing": "遍历中...",
       "loading": "加载中...",
       "noRelations": "未找到关系。",
+      "showAll": "显示全部",
       "traversalResults": "遍历结果（{{count}}）",
       "direction": {
         "outgoing": "→ 出向",
@@ -157,7 +180,10 @@
       "loading": "正在加载图谱...",
       "empty": "没有可视化的实体",
       "nodes": "{{count}} 个节点",
-      "edges": "{{count}} 条边"
+      "edges": "{{count}} 条边",
+      "selected": "已选择: {{name}}",
+      "limitNote": "显示前 {{limit}}/{{total}} 个实体",
+      "limitHint": "为确保性能，图谱限制显示 {{limit}} 个实体。请使用表格视图浏览全部 {{total}} 个实体。"
     }
   },
   "toast": {
@@ -185,6 +211,7 @@
     "docIndexFailed": "索引文档失败",
     "allIndexed": "所有文档已索引",
     "allIndexFailed": "索引所有文档失败",
-    "searchFailed": "搜索失败"
+    "searchFailed": "搜索失败",
+    "docLoadFailed": "加载文档失败"
   }
 }

@@ -53,6 +53,16 @@ type GraphStats struct {
 	EntityTypes   map[string]int `json:"entity_types"`
 }
 
+// DedupCandidate represents a pair of entities that may be duplicates.
+type DedupCandidate struct {
+	ID         string  `json:"id"`
+	EntityA    Entity  `json:"entity_a"`
+	EntityB    Entity  `json:"entity_b"`
+	Similarity float64 `json:"similarity"`
+	Status     string  `json:"status"`
+	CreatedAt  int64   `json:"created_at"`
+}
+
 // KnowledgeGraphStore manages entity-relationship graphs.
 type KnowledgeGraphStore interface {
 	UpsertEntity(ctx context.Context, entity *Entity) error
@@ -69,8 +79,24 @@ type KnowledgeGraphStore interface {
 
 	Traverse(ctx context.Context, agentID, userID, startEntityID string, maxDepth int) ([]TraversalResult, error)
 
-	IngestExtraction(ctx context.Context, agentID, userID string, entities []Entity, relations []Relation) error
+	// IngestExtraction upserts entities and relations from an LLM extraction.
+	// Returns the DB UUIDs of all upserted entities for downstream processing (e.g. dedup).
+	IngestExtraction(ctx context.Context, agentID, userID string, entities []Entity, relations []Relation) ([]string, error)
 	PruneByConfidence(ctx context.Context, agentID, userID string, minConfidence float64) (int, error)
+
+	// DedupAfterExtraction checks newly upserted entities for duplicates.
+	// Auto-merges at high similarity (>0.98 + name match), flags medium (>0.90) as candidates.
+	DedupAfterExtraction(ctx context.Context, agentID, userID string, newEntityIDs []string) (merged int, flagged int, err error)
+	// ScanDuplicates scans ALL entities with embeddings for duplicates (self-join).
+	// Flags candidates above threshold. Used for on-demand bulk scanning of existing data.
+	ScanDuplicates(ctx context.Context, agentID, userID string, threshold float64, limit int) (int, error)
+	// ListDedupCandidates returns pending dedup candidates for review.
+	ListDedupCandidates(ctx context.Context, agentID, userID string, limit int) ([]DedupCandidate, error)
+	// MergeEntities merges sourceID into targetID: re-points relations, deletes source.
+	MergeEntities(ctx context.Context, agentID, userID, targetID, sourceID string) error
+	// DismissCandidate marks a dedup candidate as dismissed (not a duplicate).
+	// Scoped by agentID + tenant to prevent cross-agent dismissal.
+	DismissCandidate(ctx context.Context, agentID, candidateID string) error
 
 	Stats(ctx context.Context, agentID, userID string) (*GraphStats, error)
 

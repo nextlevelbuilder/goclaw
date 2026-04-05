@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { ProviderData, ProviderInput } from "./hooks/use-providers";
 import { slugify, isValidSlug } from "@/lib/slug";
-import { PROVIDER_TYPES } from "@/constants/providers";
+import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
@@ -121,7 +121,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
       <DialogContent className="flex max-h-[85vh] flex-col">
         <DialogHeader>
           <DialogTitle>{t("form.createTitle")}</DialogTitle>
-          <DialogDescription>{t("form.configure")}</DialogDescription>
+          <DialogDescription>{isOAuth ? t("form.configureOauth") : t("form.configure")}</DialogDescription>
         </DialogHeader>
         <div className="-mx-4 min-h-0 overflow-y-auto px-4 py-4 sm:-mx-6 sm:px-6 space-y-4">
           <ProviderTypeSelect
@@ -134,11 +134,12 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
               const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
               setApiBase(preset?.apiBase || "");
               if (v === "chatgpt_oauth") {
-                setName("openai-codex");
-                setDisplayName("ChatGPT (OAuth)");
-              } else {
-                if (name === "openai-codex") setName("");
+                if (!name || providerType !== "chatgpt_oauth") {
+                  setName(suggestUniqueProviderAlias(existingProviders));
+                }
                 if (displayName === "ChatGPT (OAuth)") setDisplayName("");
+              } else {
+                if (name === DEFAULT_CODEX_OAUTH_ALIAS) setName("");
               }
             }}
           />
@@ -147,15 +148,33 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
             <>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>{t("form.nameFixed")}</Label>
-                  <Input value="openai-codex" disabled className="text-base md:text-sm" />
+                  <Label htmlFor="oauth-name">{t("form.oauthAlias")}</Label>
+                  <Input
+                    id="oauth-name"
+                    value={name}
+                    onChange={(e) => setName(slugify(e.target.value))}
+                    placeholder={t("form.oauthAliasPlaceholder")}
+                    className="text-base md:text-sm"
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>{t("form.displayName")}</Label>
-                  <Input value="ChatGPT (OAuth)" disabled className="text-base md:text-sm" />
+                  <Label htmlFor="oauth-display-name">{t("form.displayName")}</Label>
+                  <Input
+                    id="oauth-display-name"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder={t("form.oauthDisplayNamePlaceholder")}
+                    className="text-base md:text-sm"
+                  />
                 </div>
               </div>
-              <OAuthSection onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }} />
+              <OAuthSection
+                providerName={name}
+                displayName={displayName}
+                apiBase={apiBase}
+                authenticatedActionLabel={t("form.close")}
+                onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }}
+              />
             </>
           ) : (
             <>

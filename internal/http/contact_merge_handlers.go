@@ -50,6 +50,7 @@ func (h *ChannelInstancesHandler) handleMergeContacts(w http.ResponseWriter, r *
 	}
 
 	var targetID uuid.UUID
+	var targetUserID string // tenant_user.user_id string for context file migration
 
 	if hasTU {
 		// Link to existing tenant_user — verify same tenant.
@@ -63,6 +64,7 @@ func (h *ChannelInstancesHandler) handleMergeContacts(w http.ResponseWriter, r *
 			return
 		}
 		targetID = tu.ID
+		targetUserID = tu.UserID
 	} else {
 		// Create new tenant_user.
 		userID := body.CreateUser.UserID
@@ -82,6 +84,7 @@ func (h *ChannelInstancesHandler) handleMergeContacts(w http.ResponseWriter, r *
 			return
 		}
 		targetID = tu.ID
+		targetUserID = tu.UserID
 	}
 
 	if err := h.contactStore.MergeContacts(r.Context(), body.ContactIDs, targetID); err != nil {
@@ -89,6 +92,9 @@ func (h *ChannelInstancesHandler) handleMergeContacts(w http.ResponseWriter, r *
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToUpdate, "contacts", err.Error())})
 		return
 	}
+
+	// Migrate user_context_files from old sender_ids to new tenant_user_id.
+	h.migrateContextFilesOnMerge(r.Context(), body.ContactIDs, targetUserID)
 
 	emitAudit(h.msgBus, r, "contacts.merged", "tenant_user", targetID.String())
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -180,6 +186,30 @@ func (h *ChannelInstancesHandler) handleListTenantUsers(w http.ResponseWriter, r
 		users = []store.TenantUserData{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+}
+
+// migrateContextFilesOnMerge moves user_context_files from old sender_ids to the new tenant_user_id.
+// Best-effort: log errors but don't fail the merge.
+func (h *ChannelInstancesHandler) migrateContextFilesOnMerge(ctx context.Context, contactIDs []uuid.UUID, newUserID string) {
+	// Batch-fetch sender_ids from merged contacts in one query.
+	oldUserIDs, err := h.contactStore.GetSenderIDsByContactIDs(ctx, contactIDs)
+	if err != nil {
+		slog.Warn("contacts.merge.get_sender_ids", "error", err)
+		return
+	}
+	// Filter out the target user_id itself (no self-migration needed).
+	filtered := oldUserIDs[:0]
+	for _, id := range oldUserIDs {
+		if id != newUserID {
+			filtered = append(filtered, id)
+		}
+	}
+	if len(filtered) == 0 {
+		return
+	}
+	if err := h.agentStore.MigrateUserDataOnMerge(ctx, filtered, newUserID); err != nil {
+		slog.Warn("contacts.merge.migrate_context_files", "error", err, "old_ids", filtered, "new_id", newUserID)
+	}
 }
 
 // deriveUserIDFromContacts returns the first contact's username or sender_id as fallback user_id.

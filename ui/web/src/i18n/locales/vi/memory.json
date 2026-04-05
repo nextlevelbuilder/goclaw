@@ -113,6 +113,24 @@
       "observations": "Quan sát",
       "relations": "Quan hệ"
     },
+    "dedup": {
+      "button": "Gộp trùng",
+      "title": "Thực thể trùng lặp",
+      "description": "Xem và gộp các thực thể có thể trùng lặp dựa trên độ tương đồng embedding.",
+      "noCandidates": "Không tìm thấy ứng viên trùng lặp.",
+      "similar": "tương đồng",
+      "merge": "Gộp",
+      "dismiss": "Bỏ qua",
+      "merged": "Đã gộp thực thể thành công.",
+      "mergeFailed": "Gộp thực thể thất bại.",
+      "dismissed": "Đã bỏ qua ứng viên.",
+      "dismissFailed": "Bỏ qua ứng viên thất bại.",
+      "scan": "Quét tất cả",
+      "scanning": "Đang quét...",
+      "scanComplete": "Quét hoàn tất.",
+      "scanFailed": "Quét thất bại.",
+      "count": "{{count}} ứng viên"
+    },
     "deleteEntity": {
       "title": "Xóa thực thể",
       "description": "Xóa \"{{name}}\"? Tất cả quan hệ liên quan cũng sẽ bị xóa.",
@@ -125,10 +143,15 @@
       "source": "Nguồn:",
       "properties": "Thuộc tính:",
       "relations": "Quan hệ",
-      "traverse": "Duyệt (2 bước)",
+      "traverse": "Duyệt (3 bước)",
+      "tabs": {
+        "table": "Bảng",
+        "graph": "Đồ thị"
+      },
       "traversing": "Đang duyệt...",
       "loading": "Đang tải...",
       "noRelations": "Không tìm thấy quan hệ.",
+      "showAll": "Hiện tất cả",
       "traversalResults": "Kết quả duyệt ({{count}})",
       "direction": {
         "outgoing": "→ đi ra",
@@ -157,7 +180,10 @@
       "loading": "Đang tải đồ thị...",
       "empty": "Không có thực thể nào để hiển thị",
       "nodes": "{{count}} nút",
-      "edges": "{{count}} cạnh"
+      "edges": "{{count}} cạnh",
+      "selected": "Đã chọn: {{name}}",
+      "limitNote": "Hiển thị {{limit}}/{{total}} thực thể",
+      "limitHint": "Đồ thị giới hạn {{limit}} thực thể để đảm bảo hiệu năng. Dùng chế độ bảng để xem tất cả {{total}} thực thể."
     }
   },
   "toast": {
@@ -185,6 +211,7 @@
     "docIndexFailed": "Không thể lập chỉ mục tài liệu",
     "allIndexed": "Đã lập chỉ mục tất cả tài liệu",
     "allIndexFailed": "Không thể lập chỉ mục tất cả",
-    "searchFailed": "Tìm kiếm thất bại"
+    "searchFailed": "Tìm kiếm thất bại",
+    "docLoadFailed": "Không thể tải tài liệu"
   }
 }

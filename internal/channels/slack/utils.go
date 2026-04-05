@@ -34,7 +34,7 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		ctx := store.WithTenantID(context.Background(), c.TenantID())
-		cc.EnsureContact(ctx, c.Type(), c.Name(), userID, userID, metadata["username"], "", peerKind)
+		cc.EnsureContact(ctx, c.Type(), c.Name(), userID, userID, metadata["username"], "", peerKind, "user", "", "")
 	}
 
 	c.Bus().PublishInbound(bus.InboundMessage{
@@ -45,6 +45,7 @@ func (c *Channel) HandleMessage(senderID, chatID, content string, mediaPaths []s
 		Media:    mediaFiles,
 		PeerKind: peerKind,
 		UserID:   userID,
+		TenantID: c.TenantID(),
 		Metadata: metadata,
 		AgentID:  c.AgentID(),
 	})

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -95,6 +97,18 @@ func setupToolRegistry(
 		} else {
 			opts = append(opts, browser.WithHeadless(cfg.Tools.Browser.Headless))
 			slog.Info("browser tool enabled", "headless", cfg.Tools.Browser.Headless)
+		}
+		if cfg.Tools.Browser.ActionTimeoutMs > 0 {
+			opts = append(opts, browser.WithActionTimeout(time.Duration(cfg.Tools.Browser.ActionTimeoutMs)*time.Millisecond))
+		}
+		if cfg.Tools.Browser.IdleTimeoutMs > 0 {
+			opts = append(opts, browser.WithIdleTimeout(time.Duration(cfg.Tools.Browser.IdleTimeoutMs)*time.Millisecond))
+		} else if cfg.Tools.Browser.IdleTimeoutMs < 0 {
+			// Explicitly disable idle reaper with negative value
+			opts = append(opts, browser.WithIdleTimeout(0))
+		}
+		if cfg.Tools.Browser.MaxPages > 0 {
+			opts = append(opts, browser.WithMaxPages(cfg.Tools.Browser.MaxPages))
 		}
 		browserMgr = browser.New(opts...)
 		toolsReg.Register(browser.NewBrowserTool(browserMgr))
@@ -209,6 +223,9 @@ func setupToolRegistry(
 				filepath.Join(workspace, "memory.db-shm"),
 				filepath.Join(workspace, "config.json"),
 				filepath.Join(workspace, "delegate"),
+				filepath.Join(dataDir, "goclaw.db"),
+				filepath.Join(dataDir, "goclaw.db-wal"),
+				filepath.Join(dataDir, "goclaw.db-shm"),
 			)
 			if cfgPath := os.Getenv("GOCLAW_CONFIG"); cfgPath != "" {
 				et.DenyPaths(cfgPath)
@@ -223,12 +240,14 @@ func setupToolRegistry(
 	// deny paths add defense-in-depth.
 	internalDenyPaths := []string{
 		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
+		"goclaw.db", "goclaw.db-wal", "goclaw.db-shm",
 		"memory/", ".media/", ".uploads/", "delegate/",
 	}
 	// read_file: allow .media/ access (uploaded documents accessed via AllowPaths
 	// for backward compat; new uploads go to per-user .uploads/ within workspace).
 	readFileDenyPaths := []string{
 		"config.json", "memory.db", "memory.db-wal", "memory.db-shm",
+		"goclaw.db", "goclaw.db-wal", "goclaw.db-shm",
 		"memory/", "delegate/",
 	}
 	if rf, ok := toolsReg.Get("read_file"); ok {
@@ -255,39 +274,17 @@ func setupToolRegistry(
 	return
 }
 
-// setupStoresAndTracing creates PG stores, tracing collector, snapshot worker, and wires cron config.
-// Exits the process on unrecoverable errors (missing DSN, schema mismatch, store creation failure).
-func setupStoresAndTracing(
+// wireTracingAndCron sets up tracing collector, snapshot worker, and cron config
+// on an already-created store set. Shared between PG and SQLite build variants.
+func wireTracingAndCron(
 	cfg *config.Config,
-	dataDir string,
+	stores *store.Stores,
 	msgBus *bus.MessageBus,
-) (*store.Stores, *tracing.Collector, *tracing.SnapshotWorker) {
-	// --- Store creation (Postgres) ---
-	if cfg.Database.PostgresDSN == "" {
-		slog.Error("GOCLAW_POSTGRES_DSN is required. Set it in your environment or .env.local file.")
-		os.Exit(1)
-	}
-
+	dataDir string,
+) (*tracing.Collector, *tracing.SnapshotWorker) {
 	var traceCollector *tracing.Collector
-
-	// Schema compatibility check: ensure DB schema matches this binary.
-	if err := checkSchemaOrAutoUpgrade(cfg.Database.PostgresDSN); err != nil {
-		slog.Error("schema compatibility check failed", "error", err)
-		os.Exit(1)
-	}
-
-	storeCfg := store.StoreConfig{
-		PostgresDSN:      cfg.Database.PostgresDSN,
-		EncryptionKey:    os.Getenv("GOCLAW_ENCRYPTION_KEY"),
-		SkillsStorageDir: filepath.Join(dataDir, "skills-store"),
-	}
-	pgStores, pgErr := pg.NewPGStores(storeCfg)
-	if pgErr != nil {
-		slog.Error("failed to create PG stores", "error", pgErr)
-		os.Exit(1)
-	}
-	if pgStores.Tracing != nil {
-		traceCollector = tracing.NewCollector(pgStores.Tracing)
+	if stores.Tracing != nil {
+		traceCollector = tracing.NewCollector(stores.Tracing)
 		traceCollector.OnFlush = func(traceIDs []uuid.UUID) {
 			ids := make([]string, len(traceIDs))
 			for i, id := range traceIDs {
@@ -304,8 +301,8 @@ func setupStoresAndTracing(
 
 	// Start snapshot worker for hourly usage aggregation
 	var snapshotWorker *tracing.SnapshotWorker
-	if pgStores.Snapshots != nil {
-		snapshotWorker = tracing.NewSnapshotWorker(pgStores.DB, pgStores.Snapshots)
+	if stores.Snapshots != nil {
+		snapshotWorker = tracing.NewSnapshotWorker(stores.DB, stores.Snapshots)
 		snapshotWorker.Start()
 
 		// Backfill historical data in background
@@ -321,24 +318,25 @@ func setupStoresAndTracing(
 
 	// Wire cron config from config.json
 	cronRetryCfg := cfg.Cron.ToRetryConfig()
-	// Apply retry config via type assertion on the concrete cron store.
-	pgStores.Cron.SetOnJob(nil) // ensure initialized; actual handler set below
-	_ = cronRetryCfg            // config available; pg cron store reads it internally
-	if cfg.Cron.DefaultTimezone != "" {
-		pgStores.Cron.SetDefaultTimezone(cfg.Cron.DefaultTimezone)
+	if stores.Cron != nil {
+		stores.Cron.SetOnJob(nil) // ensure initialized; actual handler set below
+		_ = cronRetryCfg          // config available; cron store reads it internally
+		if cfg.Cron.DefaultTimezone != "" {
+			stores.Cron.SetDefaultTimezone(cfg.Cron.DefaultTimezone)
+		}
 	}
 
 	// Load secrets from config_secrets table before env overrides.
 	// Precedence: config.json → DB secrets → env vars (highest).
-	if pgStores.ConfigSecrets != nil {
-		if secrets, err := pgStores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
+	if stores.ConfigSecrets != nil {
+		if secrets, err := stores.ConfigSecrets.GetAll(context.Background()); err == nil && len(secrets) > 0 {
 			cfg.ApplyDBSecrets(secrets)
 			cfg.ApplyEnvOverrides()
 			slog.Info("config secrets loaded from DB", "count", len(secrets))
 		}
 	}
 
-	return pgStores, traceCollector, snapshotWorker
+	return traceCollector, snapshotWorker
 }
 
 // setupMemoryEmbeddings wires embedding provider to PGMemoryStore and triggers backfill.
@@ -514,8 +512,8 @@ func setupSkillsSystem(
 				}
 			}
 			if bundledSkillsDir != "" {
-				if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
-					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], pgSkills)
+				if seederStore, ok := pgStores.Skills.(skills.SystemSkillStore); ok {
+					seeder := skills.NewSeeder(bundledSkillsDir, storeDirs[0], seederStore)
 					seeded, skipped, seededSkills, err := seeder.Seed(context.Background())
 					if err != nil {
 						slog.Warn("system skills seed failed", "error", err)
@@ -534,14 +532,15 @@ func setupSkillsSystem(
 		}
 	}
 
-	// Publish skill tool — lets agents register created skills in the database
-	if pgStores.Skills != nil {
-		if pgSkills, ok := pgStores.Skills.(*pg.PGSkillStore); ok {
+	// Publish skill tool — lets agents register created skills in the database.
+	// Disabled in lite edition: agents should not self-manage skills on desktop.
+	if pgStores.Skills != nil && edition.Current().TeamFullMode {
+		if manageStore, ok := pgStores.Skills.(store.SkillManageStore); ok {
 			storeDirs := pgStores.Skills.Dirs()
 			if len(storeDirs) > 0 {
-				toolsReg.Register(tools.NewPublishSkillTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
+				toolsReg.Register(tools.NewPublishSkillTool(manageStore, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("publish_skill tool registered")
-				toolsReg.Register(tools.NewSkillManageTool(pgSkills, storeDirs[0], dataDir, skillsLoader))
+				toolsReg.Register(tools.NewSkillManageTool(manageStore, storeDirs[0], dataDir, skillsLoader))
 				slog.Info("skill_manage tool registered")
 			}
 		}

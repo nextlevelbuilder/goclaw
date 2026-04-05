@@ -11,10 +11,11 @@ const (
 	MethodAgentIdentityGet = "agent.identity.get"
 
 	// Chat
-	MethodChatSend    = "chat.send"
-	MethodChatHistory = "chat.history"
-	MethodChatAbort   = "chat.abort"
-	MethodChatInject  = "chat.inject"
+	MethodChatSend          = "chat.send"
+	MethodChatHistory       = "chat.history"
+	MethodChatAbort         = "chat.abort"
+	MethodChatInject        = "chat.inject"
+	MethodChatSessionStatus = "chat.session.status"
 
 	// Agents management
 	MethodAgentsList     = "agents.list"
@@ -136,7 +137,8 @@ const (
 	MethodTeamsTaskCreate    = "teams.tasks.create"
 	MethodTeamsTaskDelete     = "teams.tasks.delete"
 	MethodTeamsTaskDeleteBulk = "teams.tasks.delete-bulk"
-	MethodTeamsTaskAssign     = "teams.tasks.assign"
+	MethodTeamsTaskAssign            = "teams.tasks.assign"
+	MethodTeamsTaskActiveBySession   = "teams.tasks.active-by-session"
 	MethodTeamsMembersAdd    = "teams.members.add"
 	MethodTeamsMembersRemove = "teams.members.remove"
 	MethodTeamsUpdate        = "teams.update"

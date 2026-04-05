@@ -12,6 +12,8 @@ export interface SecureCLIBinary {
   created_by: string;
   created_at: string;
   updated_at: string;
+  /** Env variable names only (no values); from API for edit form */
+  env_keys?: string[];
 }
 
 export interface CLIPresetEnvVar {

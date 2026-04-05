@@ -33,6 +33,7 @@ func NewPGSessionStore(db *sql.DB) *PGSessionStore {
 		cache: make(map[string]*store.SessionData),
 	}
 	s.migrateLegacyWSKeys()
+	s.migrateUUIDSessionKeys()
 	return s
 }
 
@@ -41,7 +42,7 @@ func NewPGSessionStore(db *sql.DB) *PGSessionStore {
 // The last hyphen-delimited segment is the base36 timestamp used as convId.
 // Idempotent — no-op if no legacy keys exist.
 func (s *PGSessionStore) migrateLegacyWSKeys() {
-	res, err := s.db.Exec(`
+	res, err := s.db.ExecContext(context.Background(), `
 		UPDATE sessions
 		SET session_key = regexp_replace(
 			session_key,
@@ -56,6 +57,43 @@ func (s *PGSessionStore) migrateLegacyWSKeys() {
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
 		slog.Info("sessions.migrate_legacy_ws_keys", "migrated", n)
+	}
+}
+
+// migrateUUIDSessionKeys fixes legacy heartbeat/cron session keys that used the agent's
+// UUID instead of agentKey. The old format "agent:{UUID}:heartbeat" or "agent:{UUID}:cron:..."
+// is replaced with "agent:{agentKey}:..." by JOINing with the agents table.
+// Idempotent — no-op if no UUID-based keys exist.
+func (s *PGSessionStore) migrateUUIDSessionKeys() {
+	// UUID pattern: 8-4-4-4-12 hex chars. Matches session keys where the agent segment is a UUID.
+	// Rewrites to use agents.agent_key instead.
+	// Build the target key and skip rows where the target already exists (avoids unique constraint violation
+	// when both UUID-keyed and agentKey-keyed sessions coexist for the same agent).
+	res, err := s.db.ExecContext(context.Background(), `
+		UPDATE sessions s
+		SET session_key = 'agent:' || a.agent_key || ':' || split_part(s.session_key, ':', 3)
+			|| CASE WHEN array_length(string_to_array(s.session_key, ':'), 1) > 3
+				THEN ':' || (SELECT string_agg(part, ':') FROM unnest((string_to_array(s.session_key, ':'))[4:]) AS part)
+				ELSE '' END
+		FROM agents a
+		WHERE s.session_key ~ '^agent:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:'
+		  AND a.id = (split_part(s.session_key, ':', 2))::uuid
+		  AND a.deleted_at IS NULL
+		  AND NOT EXISTS (
+		    SELECT 1 FROM sessions s2
+		    WHERE s2.tenant_id = s.tenant_id
+		      AND s2.session_key = 'agent:' || a.agent_key || ':' || split_part(s.session_key, ':', 3)
+		        || CASE WHEN array_length(string_to_array(s.session_key, ':'), 1) > 3
+		            THEN ':' || (SELECT string_agg(p, ':') FROM unnest((string_to_array(s.session_key, ':'))[4:]) AS p)
+		            ELSE '' END
+		  )
+	`)
+	if err != nil {
+		slog.Warn("sessions.migrate_uuid_keys", "error", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("sessions.migrate_uuid_keys", "migrated", n)
 	}
 }
 
@@ -103,7 +141,7 @@ func (s *PGSessionStore) GetOrCreate(ctx context.Context, key string) *store.Ses
 	s.cache[sessionCacheKey(ctx, key)] = data
 
 	msgsJSON, _ := json.Marshal([]providers.Message{})
-	s.db.Exec(
+	s.db.ExecContext(ctx,
 		`INSERT INTO sessions (id, session_key, messages, created_at, updated_at, team_id, tenant_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (tenant_id, session_key) DO NOTHING`,
 		uuid.Must(uuid.NewV7()), key, msgsJSON, now, now, teamID, tenantIDForInsert(ctx),

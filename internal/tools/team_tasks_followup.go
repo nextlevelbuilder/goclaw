@@ -10,12 +10,7 @@ import (
 )
 
 func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any) *Result {
-	team, agentID, err := t.manager.resolveTeam(ctx)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-
-	taskID, err := resolveTaskID(ctx, args)
+	team, agentID, taskID, err := t.resolveTeamAndTask(ctx, args)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -26,7 +21,7 @@ func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any)
 	}
 
 	// Verify ownership.
-	task, err := t.manager.teamStore.GetTask(ctx, taskID)
+	task, err := t.manager.Store().GetTask(ctx, taskID)
 	if err != nil {
 		return ErrorResult("task not found: " + err.Error())
 	}
@@ -38,8 +33,8 @@ func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any)
 	}
 
 	// Resolve delay and max from team settings.
-	delayMinutes := t.manager.followupDelayMinutes(team)
-	maxReminders := t.manager.followupMaxReminders(team)
+	delayMinutes := t.manager.FollowupDelayMinutes(team)
+	maxReminders := t.manager.FollowupMaxReminders(team)
 
 	// Resolve channel: prefer task's channel, fallback to context channel.
 	channel := task.Channel
@@ -54,7 +49,7 @@ func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any)
 	}
 
 	followupAt := time.Now().Add(time.Duration(delayMinutes) * time.Minute)
-	if err := t.manager.teamStore.SetTaskFollowup(ctx, taskID, team.ID, followupAt, maxReminders, followupMessage, channel, chatID); err != nil {
+	if err := t.manager.Store().SetTaskFollowup(ctx, taskID, team.ID, followupAt, maxReminders, followupMessage, channel, chatID); err != nil {
 		return ErrorResult("failed to set follow-up: " + err.Error())
 	}
 
@@ -66,18 +61,13 @@ func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any)
 }
 
 func (t *TeamTasksTool) executeClearAskUser(ctx context.Context, args map[string]any) *Result {
-	team, agentID, err := t.manager.resolveTeam(ctx)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-
-	taskID, err := resolveTaskID(ctx, args)
+	team, agentID, taskID, err := t.resolveTeamAndTask(ctx, args)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
 	// Verify task belongs to team.
-	task, err := t.manager.teamStore.GetTask(ctx, taskID)
+	task, err := t.manager.Store().GetTask(ctx, taskID)
 	if err != nil {
 		return ErrorResult("task not found: " + err.Error())
 	}
@@ -89,7 +79,7 @@ func (t *TeamTasksTool) executeClearAskUser(ctx context.Context, args map[string
 		return ErrorResult("only the task owner or team lead can clear follow-up reminders")
 	}
 
-	if err := t.manager.teamStore.ClearTaskFollowup(ctx, taskID); err != nil {
+	if err := t.manager.Store().ClearTaskFollowup(ctx, taskID); err != nil {
 		return ErrorResult("failed to clear follow-up: " + err.Error())
 	}
 
@@ -97,20 +87,15 @@ func (t *TeamTasksTool) executeClearAskUser(ctx context.Context, args map[string
 }
 
 func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *Result {
-	team, agentID, err := t.manager.resolveTeam(ctx)
+	team, agentID, taskID, err := t.resolveTeamAndTask(ctx, args)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
-	if err := t.manager.requireLead(ctx, team, agentID); err != nil {
+	if err := t.manager.RequireLead(ctx, team, agentID); err != nil {
 		return ErrorResult(err.Error())
 	}
 
-	taskID, err := resolveTaskID(ctx, args)
-	if err != nil {
-		return ErrorResult(err.Error())
-	}
-
-	task, err := t.manager.teamStore.GetTask(ctx, taskID)
+	task, err := t.manager.Store().GetTask(ctx, taskID)
 	if err != nil {
 		return ErrorResult("task not found: " + err.Error())
 	}
@@ -132,32 +117,26 @@ func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *
 	}
 
 	// Reset status to pending first (AssignTask only transitions from pending).
-	if err := t.manager.teamStore.ResetTaskStatus(ctx, taskID, team.ID); err != nil {
+	if err := t.manager.Store().ResetTaskStatus(ctx, taskID, team.ID); err != nil {
 		return ErrorResult("failed to reset task: " + err.Error())
 	}
 	// Assign (pending → in_progress + lock).
-	if err := t.manager.teamStore.AssignTask(ctx, taskID, *task.OwnerAgentID, team.ID); err != nil {
+	if err := t.manager.Store().AssignTask(ctx, taskID, *task.OwnerAgentID, team.ID); err != nil {
 		return ErrorResult("failed to retry task: " + err.Error())
 	}
 
-	t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, protocol.TeamTaskEventPayload{
-		TeamID:        team.ID.String(),
-		TaskID:        taskID.String(),
-		TaskNumber:    task.TaskNumber,
-		Subject:       task.Subject,
-		Status:        store.TeamTaskStatusInProgress,
-		OwnerAgentKey: t.manager.agentKeyFromID(ctx, *task.OwnerAgentID),
-		UserID:        store.UserIDFromContext(ctx),
-		Channel:       ToolChannelFromCtx(ctx),
-		ChatID:        ToolChatIDFromCtx(ctx),
-		Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		ActorType:     "agent",
-		ActorID:       t.manager.agentKeyFromID(ctx, agentID),
-	})
+	t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, BuildTaskEventPayload(
+		team.ID.String(), taskID.String(),
+		store.TeamTaskStatusInProgress,
+		"agent", t.manager.AgentKeyFromID(ctx, agentID),
+		WithTaskInfo(task.TaskNumber, task.Subject),
+		WithOwnerAgentKey(t.manager.AgentKeyFromID(ctx, *task.OwnerAgentID)),
+		WithContextInfo(ctx),
+	))
 
 	// Dispatch immediately (retry is an explicit action, not during a turn).
-	t.manager.dispatchTaskToAgent(ctx, task, team, *task.OwnerAgentID)
+	t.manager.DispatchTaskToAgent(ctx, task, team, *task.OwnerAgentID)
 
-	assignee := t.manager.agentKeyFromID(ctx, *task.OwnerAgentID)
+	assignee := t.manager.AgentKeyFromID(ctx, *task.OwnerAgentID)
 	return NewResult(fmt.Sprintf("Task #%d \"%s\" (id: %s) retried and dispatched to %s. The assignee will receive the task with your recent comments.", task.TaskNumber, task.Subject, taskID, assignee))
 }

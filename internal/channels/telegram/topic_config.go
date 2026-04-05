@@ -13,6 +13,7 @@ import (
 type resolvedTopicConfig struct {
 	groupPolicy    string
 	requireMention *bool
+	mentionMode    string // "strict" (default) or "yield"
 	allowFrom      []string
 	enabled        *bool
 	skills         []string // nil = inherit, non-nil = override (empty = no skills)
@@ -27,6 +28,7 @@ func resolveTopicConfig(cfg config.TelegramConfig, chatIDStr string, topicID int
 	result := resolvedTopicConfig{
 		groupPolicy:    cfg.GroupPolicy,
 		requireMention: cfg.RequireMention,
+		mentionMode:    cfg.MentionMode,
 		allowFrom:      cfg.AllowFrom,
 	}
 
@@ -65,6 +67,9 @@ func mergeGroupInto(dst *resolvedTopicConfig, src *config.TelegramGroupConfig) {
 	if src.RequireMention != nil {
 		dst.requireMention = src.RequireMention
 	}
+	if src.MentionMode != "" {
+		dst.mentionMode = src.MentionMode
+	}
 	if len(src.AllowFrom) > 0 {
 		dst.allowFrom = src.AllowFrom
 	}
@@ -90,6 +95,9 @@ func mergeTopicInto(dst *resolvedTopicConfig, src *config.TelegramTopicConfig, g
 	}
 	if src.RequireMention != nil {
 		dst.requireMention = src.RequireMention
+	}
+	if src.MentionMode != "" {
+		dst.mentionMode = src.MentionMode
 	}
 	if len(src.AllowFrom) > 0 {
 		dst.allowFrom = src.AllowFrom
@@ -120,6 +128,15 @@ func mergeTopicInto(dst *resolvedTopicConfig, src *config.TelegramTopicConfig, g
 // nil = enabled (default), false = disabled.
 func (r *resolvedTopicConfig) isEnabled() bool {
 	return r.enabled == nil || *r.enabled
+}
+
+// effectiveMentionMode returns the resolved mention_mode value.
+// Falls back to the channel default if not overridden at group/topic level.
+func (r *resolvedTopicConfig) effectiveMentionMode(defaultVal string) string {
+	if r.mentionMode != "" {
+		return r.mentionMode
+	}
+	return defaultVal
 }
 
 // effectiveRequireMention returns the resolved require_mention value.

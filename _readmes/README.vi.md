@@ -111,10 +111,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Thêm ít nhất một GOCLAW_*_API_KEY vào .env, sau đó:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Web Dashboard tại http://localhost:3000
+# Web Dashboard tại http://localhost:18790
 # Kiểm tra trạng thái: curl http://localhost:18790/health
 ```
 

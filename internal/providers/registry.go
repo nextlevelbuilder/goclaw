@@ -20,15 +20,34 @@ type Registry struct {
 	providers     map[string]Provider
 	mu            sync.RWMutex
 	tenantFromCtx func(context.Context) uuid.UUID // injected to avoid circular import with store
+
+	// roundRobinCounters stores shared round-robin state keyed by "tenantID/providerName"
+	// so that ChatGPTOAuthRouter instances (created per-request) share rotation state.
+	roundRobinMu       sync.Mutex
+	roundRobinCounters map[string]int
 }
 
 // NewRegistry creates a provider registry.
 // tenantFromCtx extracts tenant UUID from context (pass store.TenantIDFromContext).
 func NewRegistry(tenantFromCtx func(context.Context) uuid.UUID) *Registry {
 	return &Registry{
-		providers:     make(map[string]Provider),
-		tenantFromCtx: tenantFromCtx,
+		providers:          make(map[string]Provider),
+		tenantFromCtx:      tenantFromCtx,
+		roundRobinCounters: make(map[string]int),
 	}
+}
+
+// RoundRobinNext returns the current round-robin index for the given key and
+// optionally advances it. Used by ChatGPTOAuthRouter to persist rotation state
+// across per-request router instances.
+func (r *Registry) RoundRobinNext(key string, poolSize int, advance bool) int {
+	r.roundRobinMu.Lock()
+	defer r.roundRobinMu.Unlock()
+	idx := r.roundRobinCounters[key] % poolSize
+	if advance {
+		r.roundRobinCounters[key] = (idx + 1) % poolSize
+	}
+	return idx
 }
 
 // compoundKey returns "tenantID/name" for registry lookup.
@@ -139,8 +158,8 @@ func (r *Registry) ListForTenant(tenantID uuid.UUID) []string {
 	// Add tenant-specific providers first
 	if tenantID != MasterTenantID {
 		for key := range r.providers {
-			if strings.HasPrefix(key, tenantPrefix) {
-				name := strings.TrimPrefix(key, tenantPrefix)
+			if after, ok := strings.CutPrefix(key, tenantPrefix); ok {
+				name := after
 				if !seen[name] {
 					seen[name] = true
 					names = append(names, name)
@@ -151,8 +170,8 @@ func (r *Registry) ListForTenant(tenantID uuid.UUID) []string {
 
 	// Add master tenant providers (not already overridden)
 	for key := range r.providers {
-		if strings.HasPrefix(key, masterPrefix) {
-			name := strings.TrimPrefix(key, masterPrefix)
+		if after, ok := strings.CutPrefix(key, masterPrefix); ok {
+			name := after
 			if !seen[name] {
 				seen[name] = true
 				names = append(names, name)

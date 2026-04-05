@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -15,12 +16,14 @@ import (
 // Default memory flush prompts matching TS memory-flush.ts.
 const (
 	DefaultMemoryFlushPrompt = "Pre-compaction memory flush. " +
-		"Store durable memories now (use memory/YYYY-MM-DD.md; create memory/ if needed). " +
-		"IMPORTANT: If the file already exists, APPEND new content only and do not overwrite existing entries. " +
+		"Append durable memories to memory/YYYY-MM-DD.md (create memory/ if needed). " +
+		"If the file already exists, APPEND only — do not overwrite existing entries. " +
 		"If nothing to store, reply with NO_REPLY."
 
 	DefaultMemoryFlushSystemPrompt = "Pre-compaction memory flush turn. " +
 		"The session is near auto-compaction; capture durable memories to disk. " +
+		"Append to memory/YYYY-MM-DD.md only. " +
+		"If the file already exists, append — do not overwrite. " +
 		"You may reply, but usually NO_REPLY is correct."
 )
 
@@ -100,16 +103,22 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 
 	var messages []providers.Message
 
+	// Replace YYYY-MM-DD placeholder with today's date in flush prompts.
+	today := time.Now().Format("2006-01-02")
+	flushPrompt := strings.ReplaceAll(settings.Prompt, "YYYY-MM-DD", today)
+	flushSystemPrompt := strings.ReplaceAll(settings.SystemPrompt, "YYYY-MM-DD", today)
+
 	// System prompt: combine agent's normal system prompt context with flush system prompt
 	systemPrompt := BuildSystemPrompt(SystemPromptConfig{
-		AgentID:   l.id,
-		Model:     l.model,
-		Workspace: l.workspace,
-		Mode:      PromptMinimal,
-		ToolNames: l.filteredToolNames(),
-		HasMemory: l.hasMemory,
+		AgentID:      l.id,
+		Model:        l.model,
+		Workspace:    l.workspace,
+		Mode:         PromptMinimal,
+		ToolNames:    l.filteredToolNames(),
+		HasMemory:    l.hasMemory,
+		ProviderType: providerTypeOf(l.provider),
 	})
-	systemPrompt += "\n\n" + settings.SystemPrompt
+	systemPrompt += "\n\n" + flushSystemPrompt
 
 	messages = append(messages, providers.Message{
 		Role:    "system",
@@ -136,10 +145,10 @@ func (l *Loop) runMemoryFlush(ctx context.Context, sessionKey string, settings *
 	sanitized, _ := sanitizeHistory(recentHistory)
 	messages = append(messages, sanitized...)
 
-	// Flush prompt
+	// Flush prompt (with YYYY-MM-DD replaced by today's date)
 	messages = append(messages, providers.Message{
 		Role:    "user",
-		Content: settings.Prompt,
+		Content: flushPrompt,
 	})
 
 	// Build tool list — only file tools needed for memory flush

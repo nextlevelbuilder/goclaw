@@ -5,6 +5,7 @@ interface VerifyResult {
   valid: boolean;
   error?: string;
   dimensions?: number;
+  dimension_mismatch?: boolean; // true when output dims != 1536
 }
 
 export function useProviderVerify() {
@@ -44,13 +45,16 @@ export function useProviderVerify() {
   const [embResult, setEmbResult] = useState<VerifyResult | null>(null);
 
   const verifyEmbedding = useCallback(
-    async (providerId: string, model?: string) => {
+    async (providerId: string, model?: string, dimensions?: number) => {
       setEmbVerifying(true);
       setEmbResult(null);
       try {
+        const body: Record<string, unknown> = {};
+        if (model) body.model = model;
+        if (dimensions && dimensions > 0) body.dimensions = dimensions;
         const res = await http.post<VerifyResult>(
           `/v1/providers/${providerId}/verify-embedding`,
-          model ? { model } : {},
+          body,
         );
         setEmbResult(res);
         return res;

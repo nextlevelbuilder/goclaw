@@ -115,7 +115,7 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 				"type":        "function",
 				"name":        t.Function.Name,
 				"description": t.Function.Description,
-				"parameters":  t.Function.Parameters,
+				"parameters":  NormalizeSchema("codex", t.Function.Parameters),
 			})
 		}
 		body["tools"] = tools

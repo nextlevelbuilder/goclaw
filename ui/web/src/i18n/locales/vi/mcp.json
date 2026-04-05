@@ -18,6 +18,7 @@
   },
   "viewTools": "Xem công cụ",
   "manageGrants": "Quản lý quyền",
+  "reconnect": "Kết nối lại",
   "delete": {
     "title": "Xóa MCP Server",
     "description": "Bạn có chắc muốn xóa \"{{name}}\"? Tất cả quyền liên quan cũng sẽ bị xóa.",
@@ -98,7 +99,9 @@
     "deleted": "Đã xóa MCP server",
     "failedCreate": "Không thể tạo MCP server",
     "failedUpdate": "Không thể cập nhật MCP server",
-    "failedDelete": "Không thể xóa MCP server"
+    "failedDelete": "Không thể xóa MCP server",
+    "reconnected": "Đã reset kết nối MCP server",
+    "failedReconnect": "Không thể kết nối lại MCP server"
   },
   "userCredentials": {
     "title": "Thông tin xác thực",

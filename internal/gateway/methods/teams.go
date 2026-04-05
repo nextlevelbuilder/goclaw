@@ -47,6 +47,7 @@ func (m *TeamsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsGet, m.handleGet)
 	router.Register(protocol.MethodTeamsDelete, m.handleDelete)
 	router.Register(protocol.MethodTeamsTaskList, m.handleTaskList)
+	router.Register(protocol.MethodTeamsTaskActiveBySession, m.handleTaskActiveBySession)
 	router.Register(protocol.MethodTeamsTaskApprove, m.handleTaskApprove)
 	router.Register(protocol.MethodTeamsTaskReject, m.handleTaskReject)
 	router.Register(protocol.MethodTeamsMembersAdd, m.handleAddMember)
@@ -122,6 +123,10 @@ func (m *TeamsMethods) handleCreate(ctx context.Context, client *gateway.Client,
 	}
 	if params.Lead == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "lead")))
+		return
+	}
+	if len(params.Members) == 0 {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "at least 1 member is required"))
 		return
 	}
 

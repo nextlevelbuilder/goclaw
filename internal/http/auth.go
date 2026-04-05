@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // extractBearerToken extracts a bearer token from the Authorization header.
@@ -122,16 +124,11 @@ func isHTTPOwnerID(userID string, ownerIDs []string) bool {
 	if len(ownerIDs) == 0 {
 		return userID == "system"
 	}
-	for _, id := range ownerIDs {
-		if id == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ownerIDs, userID)
 }
 
 // InitTenantStore sets the tenant cache for HTTP auth with TTL and pubsub invalidation.
-// Allows gateway token requests to scope to a specific tenant via X-GoClaw-Tenant-Id header.
+// Tenant scoping is used by owner/system-key callers and for membership validation.
 func InitTenantStore(ts store.TenantStore, mb *bus.MessageBus) {
 	pkgTenantCache = newTenantCache(ts, 5*time.Minute)
 	if mb != nil {
@@ -159,6 +156,7 @@ type authResult struct {
 	Authenticated bool
 	KeyData       *store.APIKeyData // non-nil when authenticated via API key
 	TenantID      uuid.UUID         // resolved tenant; always concrete after resolution
+	TenantSlug    string            // resolved tenant slug for filesystem paths
 }
 
 // resolveAuth determines the caller's role from the request.
@@ -170,9 +168,9 @@ func resolveAuth(r *http.Request) authResult {
 // resolveAuthWithBearer is like resolveAuth but accepts a pre-extracted bearer token.
 // Useful for handlers that also accept tokens from query params.
 func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
-	// Gateway token → admin
-	// Only owner IDs get cross-tenant access; others are tenant-scoped.
-	// If no owner IDs configured, all gateway token users get cross-tenant (backward compat).
+	// Gateway token → admin.
+	// Only configured owner IDs get unrestricted tenant scoping; other callers may
+	// only narrow to tenants where the supplied user already has membership.
 	if pkgGatewayToken != "" && tokenMatch(bearer, pkgGatewayToken) {
 		userID := extractUserID(r)
 		isOwner := isHTTPOwnerID(userID, pkgOwnerIDs)
@@ -182,30 +180,35 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 		}
 		res := authResult{Role: role, Authenticated: true}
 		tenantVal := r.Header.Get("X-GoClaw-Tenant-Id")
-		if pkgTenantCache != nil && tenantVal != "" {
-			// Resolve tenant from header (works for both owner and non-owner)
-			if tid, err := uuid.Parse(tenantVal); err == nil {
-				if t, err := pkgTenantCache.GetTenant(r.Context(), tid); err == nil && t != nil {
-					res.TenantID = t.ID
-				}
-			} else if t, err := pkgTenantCache.GetTenantBySlug(r.Context(), tenantVal); err == nil && t != nil {
-				res.TenantID = t.ID
+		if isOwner {
+			res.TenantID = resolveScopedTenant(r.Context(), tenantVal)
+		} else {
+			tenantID, allowed := resolveTenantHint(r.Context(), tenantVal, userID)
+			if !allowed {
+				return authResult{}
 			}
+			res.TenantID = tenantID
 		}
 		if res.TenantID == uuid.Nil {
 			res.TenantID = store.MasterTenantID
 		}
+		res.TenantSlug = resolveTenantSlug(r.Context(), res.TenantID)
 		return res
 	}
 	// API key → role from scopes
 	if keyData, role := ResolveAPIKey(r.Context(), bearer); role != "" {
 		res := authResult{Role: role, Authenticated: true, KeyData: keyData}
 		if keyData.TenantID == uuid.Nil {
-			// API key with no tenant → owner scope, default to master
-			res.Role = permissions.RoleOwner
-			res.TenantID = store.MasterTenantID
+			// System-level API keys keep their scope-derived role. They may
+			// optionally scope a request to a tenant, but they do not become owner.
+			res.TenantID = resolveScopedTenant(r.Context(), r.Header.Get("X-GoClaw-Tenant-Id"))
+			if res.TenantID == uuid.Nil {
+				res.TenantID = store.MasterTenantID
+			}
+			res.TenantSlug = resolveTenantSlug(r.Context(), res.TenantID)
 		} else {
 			res.TenantID = keyData.TenantID
+			res.TenantSlug = resolveTenantSlug(r.Context(), keyData.TenantID)
 		}
 		return res
 	}
@@ -213,7 +216,16 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 	if senderID := r.Header.Get("X-GoClaw-Sender-Id"); senderID != "" && pkgPairingStore != nil {
 		paired, err := pkgPairingStore.IsPaired(r.Context(), senderID, "browser")
 		if err == nil && paired {
-			return authResult{Role: permissions.RoleOperator, Authenticated: true, TenantID: store.MasterTenantID}
+			tenantID, allowed := resolveTenantHint(r.Context(), r.Header.Get("X-GoClaw-Tenant-Id"), extractUserID(r))
+			if !allowed {
+				return authResult{}
+			}
+			return authResult{
+				Role:          permissions.RoleOperator,
+				Authenticated: true,
+				TenantID:      tenantID,
+				TenantSlug:    resolveTenantSlug(r.Context(), tenantID),
+			}
 		}
 		if err != nil {
 			slog.Warn("security.http_pairing_check_failed", "sender_id", senderID, "error", err)
@@ -226,6 +238,66 @@ func resolveAuthWithBearer(r *http.Request, bearer string) authResult {
 		return authResult{Role: permissions.RoleAdmin, Authenticated: true, TenantID: store.MasterTenantID}
 	}
 	return authResult{}
+}
+
+func resolveScopedTenant(ctx context.Context, tenantVal string) uuid.UUID {
+	if tenantVal == "" || pkgTenantCache == nil {
+		return uuid.Nil
+	}
+	if tid, err := uuid.Parse(tenantVal); err == nil {
+		if t, err := pkgTenantCache.GetTenant(ctx, tid); err == nil && t != nil {
+			return t.ID
+		}
+	} else if t, err := pkgTenantCache.GetTenantBySlug(ctx, tenantVal); err == nil && t != nil {
+		return t.ID
+	}
+	slog.Debug("security.http_tenant_scope_unresolved", "tenant", tenantVal)
+	return uuid.Nil
+}
+
+func resolveTenantSlug(ctx context.Context, tenantID uuid.UUID) string {
+	if tenantID == uuid.Nil || pkgTenantCache == nil {
+		return ""
+	}
+	if tenant, err := pkgTenantCache.GetTenant(ctx, tenantID); err == nil && tenant != nil {
+		return tenant.Slug
+	}
+	return ""
+}
+
+func resolveTenantHint(ctx context.Context, hint, userID string) (uuid.UUID, bool) {
+	if hint == "" || pkgTenantCache == nil {
+		return store.MasterTenantID, true
+	}
+	tid := resolveScopedTenant(ctx, hint)
+	if tid == uuid.Nil {
+		return store.MasterTenantID, true
+	}
+	if userID == "" {
+		slog.Warn("security.http_tenant_hint_denied_anonymous", "hint", hint, "tenant_id", tid)
+		return uuid.Nil, false
+	}
+	role, err := pkgTenantCache.store.GetUserRole(ctx, tid, userID)
+	if err != nil {
+		slog.Warn("security.http_tenant_access_revoked",
+			"hint", hint,
+			"user", userID,
+			"tenant_id", tid,
+			"error", err,
+			"code", protocol.ErrTenantAccessRevoked,
+		)
+		return uuid.Nil, false
+	}
+	if role == "" {
+		slog.Warn("security.http_tenant_no_membership",
+			"hint", hint,
+			"user", userID,
+			"tenant_id", tid,
+			"code", protocol.ErrTenantAccessRevoked,
+		)
+		return uuid.Nil, false
+	}
+	return tid, true
 }
 
 // httpMinRole returns the minimum role required for an HTTP endpoint based on HTTP method.
@@ -262,6 +334,9 @@ func enrichContext(ctx context.Context, r *http.Request, auth authResult) contex
 		tenantID = store.MasterTenantID
 	}
 	ctx = store.WithTenantID(ctx, tenantID)
+	if auth.TenantSlug != "" {
+		ctx = store.WithTenantSlug(ctx, auth.TenantSlug)
+	}
 	slog.Debug("security.http_auth_resolved",
 		"path", r.URL.Path,
 		"role", string(auth.Role),
@@ -292,7 +367,7 @@ func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFu
 
 		if !permissions.HasMinRole(auth.Role, required) {
 			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path),
+				"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path+" requires "+string(required)+" role"),
 			})
 			return
 		}
@@ -323,7 +398,7 @@ func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseW
 
 	if !permissions.HasMinRole(auth.Role, required) {
 		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path),
+			"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path+" requires "+string(required)+" role"),
 		})
 		return r, false
 	}

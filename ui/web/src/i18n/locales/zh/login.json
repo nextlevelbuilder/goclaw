@@ -33,7 +33,8 @@
     "gatewayToken": "Gateway Token",
     "tokenPlaceholder": "Bearer token",
     "userId": "用户 ID",
-    "userIdPlaceholder": "您的用户 ID"
+    "userIdPlaceholder": "您的用户 ID",
+    "userIdHint": "使用 \"system\" 获取完整系统权限"
   },
   "noAccessHint": "请联系管理员将您添加到租户，或使用其他账号登录。",
   "logout": "退出登录"

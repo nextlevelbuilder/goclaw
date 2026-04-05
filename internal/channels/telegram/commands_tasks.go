@@ -196,9 +196,17 @@ func (c *Channel) handleTaskDetail(ctx context.Context, chatID int64, text strin
 // handleCallbackQuery handles inline keyboard button presses.
 func (c *Channel) handleCallbackQuery(ctx context.Context, query *telego.CallbackQuery) {
 	// Always answer to dismiss the loading indicator.
+	// Inject tenant scope (callback queries bypass handleBotCommand).
+	ctx = store.WithTenantID(ctx, c.TenantID())
+
 	c.bot.AnswerCallbackQuery(ctx, &telego.AnswerCallbackQueryParams{
 		CallbackQueryID: query.ID,
 	})
+
+	if strings.HasPrefix(query.Data, "sa:") {
+		c.handleSubagentCallback(ctx, query)
+		return
+	}
 
 	if !strings.HasPrefix(query.Data, "td:") {
 		return

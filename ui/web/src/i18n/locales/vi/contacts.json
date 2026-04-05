@@ -45,6 +45,10 @@
     "unmergeError": "Không thể tách liên hệ",
     "comingSoon": "Tính năng này đang được phát triển và chưa khả dụng."
   },
+  "types": {
+    "user": "Người dùng",
+    "group": "Nhóm"
+  },
   "filters": {
     "allChannels": "Tất cả Channel",
     "allTypes": "Tất cả loại",

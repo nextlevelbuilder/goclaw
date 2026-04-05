@@ -8,9 +8,11 @@ import rehypeHighlight from "rehype-highlight";
 const remarkPlugins = [remarkGfm];
 const rehypePlugins = [rehypeHighlight];
 import { useClipboard } from "@/hooks/use-clipboard";
-import { toFileUrl } from "@/lib/file-helpers";
+import { toFileUrl, toDownloadUrl } from "@/lib/file-helpers";
+import { useMediaUrl } from "@/hooks/use-media-url";
 import { Check, Copy, Download, FileText } from "lucide-react";
 import { ImageLightbox } from "./image-lightbox";
+import { useChatImageGallery } from "@/components/chat/chat-image-gallery-context";
 import {
   Dialog,
   DialogContent,
@@ -31,7 +33,7 @@ function CodeBlock({
   const lang = className?.replace("language-", "") ?? "";
 
   return (
-    <div className="not-prose group relative my-6 overflow-hidden rounded-lg border border-border/60">
+    <div className="not-prose group relative my-3 overflow-hidden rounded-lg border border-border/60">
       <div className="flex items-center justify-between border-b border-border/40 bg-muted/70 px-3 py-1.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
         <span>{lang || "code"}</span>
         <button
@@ -43,7 +45,7 @@ function CodeBlock({
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-muted/30 p-4 text-[13px] leading-relaxed text-foreground whitespace-pre">
+      <pre className="overflow-x-auto bg-muted/30 p-3 text-[13px] leading-normal text-foreground whitespace-pre">
         <code className={className} style={{ fontFamily: "'JetBrains Mono', 'Fira Code', ui-monospace, monospace", wordWrap: "normal", overflowWrap: "normal" }}>{children}</code>
       </pre>
     </div>
@@ -85,9 +87,54 @@ function fileNameFromHref(href: string): string {
   return segments[segments.length - 1] ?? "file";
 }
 
+/** Extracted from useMemo components so useMediaUrl hook is valid. */
+function CachedMarkdownImg({ src, alt, openLightbox, ...props }: {
+  src?: string; alt?: string;
+  openLightbox: (src: string, alt: string) => void;
+  [key: string]: unknown;
+}) {
+  const resolvedSrc = isFileLink(src) ? toFileUrl(src!) : src;
+  const cachedSrc = useMediaUrl(resolvedSrc);
+  const displayName = alt || fileNameFromHref(src ?? "");
+  return (
+    <span className="group/img relative inline-block overflow-hidden rounded-lg border shadow-sm">
+      <img
+        src={cachedSrc}
+        alt={alt ?? "image"}
+        className="block max-w-sm cursor-pointer hover:opacity-90 transition-opacity"
+        loading="lazy"
+        onClick={(e: React.MouseEvent) => {
+          e.preventDefault();
+          if (resolvedSrc) openLightbox(resolvedSrc, alt ?? "image");
+        }}
+        {...props}
+      />
+      {resolvedSrc && (
+        <a
+          href={toDownloadUrl(resolvedSrc)}
+          download={displayName}
+          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          className="absolute top-2 right-2 flex items-center justify-center rounded-lg bg-white/90 dark:bg-neutral-800/90 p-1.5 text-neutral-700 dark:text-neutral-200 shadow-md ring-1 ring-black/10 dark:ring-white/10 opacity-0 transition-opacity group-hover/img:opacity-100 hover:bg-white dark:hover:bg-neutral-700 cursor-pointer"
+          title="Download"
+        >
+          <Download className="h-4.5 w-4.5" />
+        </a>
+      )}
+    </span>
+  );
+}
+
 export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+  const gallery = useChatImageGallery();
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
-  const openLightbox = useCallback((src: string, alt: string) => setLightbox({ src, alt }), []);
+  // Use conversation-wide gallery if available (has images), else fall back to local lightbox
+  const openLightbox = useCallback((src: string, alt: string) => {
+    if (gallery.allImages.length > 0) {
+      gallery.openImage(src);
+    } else {
+      setLightbox({ src, alt });
+    }
+  }, [gallery]);
   const [filePreview, setFilePreview] = useState<{ name: string; href: string; content: string; mediaType?: "image" | "audio" | "video" } | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
 
@@ -154,7 +201,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
               {children}
             </button>
             <a
-              href={resolvedHref}
+              href={toDownloadUrl(resolvedHref)}
               download={name}
               className="inline-flex items-center px-1 py-0.5 text-muted-foreground hover:bg-muted cursor-pointer rounded-r border-l"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -171,34 +218,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
       );
     },
     img({ src, alt, ...props }: any) {
-      const resolvedSrc = isFileLink(src) ? toFileUrl(src!) : src;
-      const displayName = alt || fileNameFromHref(src ?? "");
-      return (
-        <span className="group/img relative inline-block overflow-hidden rounded-lg border shadow-sm">
-          <img
-            src={resolvedSrc}
-            alt={alt ?? "image"}
-            className="block max-w-sm cursor-pointer hover:opacity-90 transition-opacity"
-            loading="lazy"
-            onClick={(e: React.MouseEvent) => {
-              e.preventDefault();
-              if (resolvedSrc) openLightbox(resolvedSrc, alt ?? "image");
-            }}
-            {...props}
-          />
-          {resolvedSrc && (
-            <a
-              href={resolvedSrc}
-              download={displayName}
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              className="absolute top-2 right-2 flex items-center justify-center rounded-lg bg-white/90 dark:bg-neutral-800/90 p-1.5 text-neutral-700 dark:text-neutral-200 shadow-md ring-1 ring-black/10 dark:ring-white/10 opacity-0 transition-opacity group-hover/img:opacity-100 hover:bg-white dark:hover:bg-neutral-700 cursor-pointer"
-              title="Download"
-            >
-              <Download className="h-4.5 w-4.5" />
-            </a>
-          )}
-        </span>
-      );
+      return <CachedMarkdownImg src={src} alt={alt} openLightbox={openLightbox} {...props} />;
     },
     table({ children, ...props }) {
       return (
@@ -262,7 +282,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
             <DialogHeader className="flex-row items-center gap-2 pr-10">
               <DialogTitle className="truncate text-base flex-1">{filePreview.name}</DialogTitle>
               <a
-                href={filePreview.href}
+                href={toDownloadUrl(filePreview.href)}
                 download={filePreview.name}
                 className="flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
               >

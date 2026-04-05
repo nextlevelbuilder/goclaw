@@ -1,0 +1,14 @@
+# Optional overlay: install Claude CLI and sync credentials from host into container.
+# Mounts host ~/.claude as read-only; entrypoint copies credentials to the data volume.
+# Adds ENABLE_CLAUDE_CLI build arg to install nodejs + @anthropic-ai/claude-code.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.claude-cli.yml up -d --build
+
+services:
+  goclaw:
+    build:
+      args:
+        ENABLE_CLAUDE_CLI: "true"
+    volumes:
+      - ${HOME}/.claude:/app/.claude-host:ro

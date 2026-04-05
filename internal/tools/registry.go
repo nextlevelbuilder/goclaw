@@ -17,6 +17,7 @@ import (
 type Registry struct {
 	tools       map[string]Tool
 	aliases     map[string]string // alias name → canonical tool name
+	disabled    map[string]bool   // tools disabled via admin UI (kept in registry, excluded from List)
 	mu          sync.RWMutex
 	rateLimiter *ToolRateLimiter // nil = no rate limiting
 	scrubbing   bool             // scrub credentials from output (default true)
@@ -30,6 +31,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		tools:     make(map[string]Tool),
 		aliases:   make(map[string]string),
+		disabled:  make(map[string]bool),
 		scrubbing: true, // enabled by default
 	}
 }
@@ -93,11 +95,18 @@ func (r *Registry) Aliases() map[string]string {
 }
 
 // resolve looks up a tool by name, checking real tools first, then aliases.
+// Disabled tools are excluded.
 func (r *Registry) resolve(name string) (Tool, bool) {
 	if t, ok := r.tools[name]; ok {
+		if r.disabled[name] {
+			return nil, false
+		}
 		return t, true
 	}
 	if canonical, ok := r.aliases[name]; ok {
+		if r.disabled[canonical] {
+			return nil, false
+		}
 		t, ok := r.tools[canonical]
 		return t, ok
 	}
@@ -218,10 +227,16 @@ func (r *Registry) ProviderDefs() []providers.ToolDefinition {
 	defer r.mu.RUnlock()
 
 	defs := make([]providers.ToolDefinition, 0, len(r.tools)+len(r.aliases))
-	for _, tool := range r.tools {
+	for name, tool := range r.tools {
+		if r.disabled[name] {
+			continue
+		}
 		defs = append(defs, ToProviderDef(tool))
 	}
 	for alias, canonical := range r.aliases {
+		if r.disabled[canonical] {
+			continue
+		}
 		tool, ok := r.tools[canonical]
 		if !ok {
 			continue
@@ -244,9 +259,26 @@ func (r *Registry) List() []string {
 	defer r.mu.RUnlock()
 	names := make([]string, 0, len(r.tools))
 	for name := range r.tools {
-		names = append(names, name)
+		if !r.disabled[name] {
+			names = append(names, name)
+		}
 	}
 	return names
+}
+
+// Disable marks a tool as disabled (excluded from List and policy evaluation)
+// without removing it from the registry. Can be re-enabled later.
+func (r *Registry) Disable(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.disabled[name] = true
+}
+
+// Enable re-enables a previously disabled tool.
+func (r *Registry) Enable(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.disabled, name)
 }
 
 // Count returns the number of registered tools.
@@ -265,10 +297,12 @@ func (r *Registry) Clone() *Registry {
 	clone := &Registry{
 		tools:       make(map[string]Tool, len(r.tools)),
 		aliases:     make(map[string]string, len(r.aliases)),
+		disabled:    make(map[string]bool, len(r.disabled)),
 		rateLimiter: r.rateLimiter,
 		scrubbing:   r.scrubbing,
 	}
 	maps.Copy(clone.tools, r.tools)
 	maps.Copy(clone.aliases, r.aliases)
+	maps.Copy(clone.disabled, r.disabled)
 	return clone
 }

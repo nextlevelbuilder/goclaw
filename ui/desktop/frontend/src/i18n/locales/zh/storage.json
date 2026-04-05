@@ -1,0 +1,25 @@
+{
+  "title": "存储",
+  "description": "工作区文件浏览器",
+  "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "存储大小缓存60分钟",
+  "unsupportedFile": "此文件类型不支持预览",
+  "download": "下载",
+  "delete": {
+    "fileTitle": "删除文件",
+    "folderTitle": "删除文件夹",
+    "description": "确定要删除 {{name}} 吗？",
+    "folderWarning": " 所有内容将被递归删除。",
+    "undone": " 此操作不可撤销。",
+    "deleting": "删除中...",
+    "confirmLabel": "删除"
+  },
+  "upload": {
+    "title": "上传到存储",
+    "description": "上传文件到数据目录"
+  },
+  "toast": {
+    "deleted": "文件已删除",
+    "deleteFailed": "删除文件失败"
+  }
+}

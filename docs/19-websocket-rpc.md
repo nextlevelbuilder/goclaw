@@ -127,6 +127,13 @@ Inject a message into the session transcript without triggering the agent.
 **Request:** `{sessionKey, message, label}`
 **Response:** `{ok: true, messageId: "..."}`
 
+### `chat.session.status`
+
+Check if a session has a running agent invocation.
+
+**Request:** `{sessionKey}`
+**Response:** `{running: true, runId: "..."}`
+
 ---
 
 ## 3. Agents
@@ -202,6 +209,15 @@ Delete an agent (admin only).
 | `agents.files.set` | Save file content |
 
 **Request:** `{agentId, name?, content?}`
+
+### Agent Links
+
+| Method | Description |
+|--------|-------------|
+| `agents.links.list` | List agent links |
+| `agents.links.create` | Create agent link |
+| `agents.links.update` | Update agent link |
+| `agents.links.delete` | Delete agent link |
 
 ---
 
@@ -295,6 +311,7 @@ Get JSON schema for config form generation.
 |--------|-------------|
 | `channels.list` | List enabled channels |
 | `channels.status` | Get channel connection status |
+| `channels.toggle` | Toggle channel enabled/disabled |
 
 ### Channel Instances
 
@@ -357,6 +374,8 @@ sequenceDiagram
 |--------|-------------|
 | `teams.tasks.list` | List team tasks (filterable) |
 | `teams.tasks.get` | Get task with comments/events |
+| `teams.tasks.get-light` | Get task without comments/events (lightweight) |
+| `teams.tasks.active-by-session` | Get active task for a session |
 | `teams.tasks.create` | Create task |
 | `teams.tasks.approve` | Approve task |
 | `teams.tasks.reject` | Reject task |
@@ -365,6 +384,7 @@ sequenceDiagram
 | `teams.tasks.events` | List task events |
 | `teams.tasks.assign` | Assign to member |
 | `teams.tasks.delete` | Delete task |
+| `teams.tasks.delete-bulk` | Bulk delete tasks |
 
 ### Team Context
 
@@ -403,18 +423,7 @@ sequenceDiagram
 
 ---
 
-## 12. Delegations
-
-| Method | Description |
-|--------|-------------|
-| `delegations.list` | List delegation history (filterable) |
-| `delegations.get` | Get delegation record |
-
-**Filters:** `source_agent_id`, `target_agent_id`, `team_id`, `user_id`, `status`
-
----
-
-## 13. Usage & Quotas
+## 12. Usage & Quotas
 
 | Method | Description |
 |--------|-------------|
@@ -424,7 +433,7 @@ sequenceDiagram
 
 ---
 
-## 14. API Keys
+## 13. API Keys
 
 Admin-only methods.
 
@@ -438,7 +447,7 @@ See [20 — API Keys & Auth](20-api-keys-auth.md) for the full authentication mo
 
 ---
 
-## 15. Messaging
+## 14. Messaging
 
 ### `send`
 
@@ -449,7 +458,7 @@ Route an outbound message to a channel.
 
 ---
 
-## 16. Logs
+## 15. Logs
 
 ### `logs.tail`
 
@@ -462,7 +471,56 @@ Log entries are delivered as events while tailing is active.
 
 ---
 
-## 17. Permission Matrix
+## 16. Tenants
+
+Multi-tenant management (admin only).
+
+| Method | Description |
+|--------|-------------|
+| `tenants.list` | List tenants |
+| `tenants.get` | Get tenant details |
+| `tenants.create` | Create tenant |
+| `tenants.update` | Update tenant |
+| `tenants.users.list` | List tenant users |
+| `tenants.users.add` | Add user to tenant |
+| `tenants.users.remove` | Remove user from tenant |
+| `tenants.mine` | Get current user's tenant |
+
+---
+
+## 17. TTS (Text-to-Speech)
+
+| Method | Description |
+|--------|-------------|
+| `tts.status` | Get TTS status and current provider |
+| `tts.enable` | Enable TTS |
+| `tts.disable` | Disable TTS |
+| `tts.convert` | Convert text to speech audio |
+| `tts.setProvider` | Set TTS provider |
+| `tts.providers` | List available TTS providers |
+
+---
+
+## 18. Browser Automation
+
+| Method | Description |
+|--------|-------------|
+| `browser.act` | Execute browser action (click, type, navigate) |
+| `browser.snapshot` | Get accessibility snapshot of current page |
+| `browser.screenshot` | Take screenshot of current page |
+
+---
+
+## 19. Zalo Personal
+
+| Method | Description |
+|--------|-------------|
+| `zalo.personal.qr.start` | Start Zalo QR code authentication |
+| `zalo.personal.contacts` | List Zalo personal contacts |
+
+---
+
+## 20. Permission Matrix
 
 Methods are gated by role. The role is determined at `connect` time from the token type and scopes.
 
@@ -474,7 +532,7 @@ Methods are gated by role. The role is determined at `connect` time from the tok
 
 ### Admin-Only Methods
 
-`config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `channels.toggle`, `device.pair.approve`, `device.pair.deny`, `device.pair.revoke`, `teams.*`, `api_keys.*`
+`config.apply`, `config.patch`, `agents.create`, `agents.update`, `agents.delete`, `channels.toggle`, `device.pair.approve`, `device.pair.deny`, `device.pair.revoke`, `teams.*`, `api_keys.*`, `tenants.*`
 
 ### Write Methods (Operator+)
 
@@ -486,7 +544,7 @@ All other methods: list, get, preview, status, history, etc.
 
 ---
 
-## 18. Events
+## 21. Events
 
 The server pushes events to connected clients via event frames. Key event types:
 
@@ -532,7 +590,8 @@ The server pushes events to connected clients via event frames. Key event types:
 | `internal/gateway/methods/teams_tasks.go` | Team task management |
 | `internal/gateway/methods/teams_workspace.go` | Team workspace |
 | `internal/gateway/methods/exec_approval.go` | Exec approval flow |
-| `internal/gateway/methods/delegations.go` | Delegation history |
+| `internal/gateway/methods/agent_links.go` | Agent links management |
+| `internal/gateway/methods/tenants.go` | Tenant management |
 | `internal/gateway/methods/usage.go` | Usage records |
 | `internal/gateway/methods/quota_methods.go` | Quota consumption |
 | `internal/gateway/methods/api_keys.go` | API key management |

@@ -18,7 +18,9 @@ import { useChannels } from "@/pages/channels/hooks/use-channels";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useUiStore } from "@/stores/use-ui-store";
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
-import { IANA_TIMEZONES } from "@/lib/constants";
+import { Combobox } from "@/components/ui/combobox";
+import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { toast } from "@/stores/use-toast-store";
 import type { HeartbeatConfig, DeliveryTarget } from "@/pages/agents/hooks/use-agent-heartbeat";
 
 interface HeartbeatConfigDialogProps {
@@ -127,6 +129,10 @@ export function HeartbeatConfigDialog({
   };
 
   const handleSave = async () => {
+    if (timezone && !isValidIanaTimezone(timezone)) {
+      toast.error(t("heartbeat.invalidTimezone", "Invalid timezone"));
+      return;
+    }
     try {
       const clampedMin = Math.max(5, intervalMin);
       await update({
@@ -222,7 +228,7 @@ export function HeartbeatConfigDialog({
                 {t("heartbeat.sectionDelivery")}
               </h4>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
               <div className="space-y-1">
                 <Label className="text-xs">{t("heartbeat.channel")}</Label>
                 {channelNames.length > 0 ? (
@@ -326,17 +332,13 @@ export function HeartbeatConfigDialog({
               </div>
               <div className="space-y-1 flex-1 min-w-[160px]">
                 <Label className="text-xs">{t("heartbeat.timezone")}</Label>
-                <Select value={timezone || "__auto__"} onValueChange={(v) => setTimezone(v === "__auto__" ? "" : v)}>
-                  <SelectTrigger className="text-base md:text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__auto__">{defaultTz}</SelectItem>
-                    {IANA_TIMEZONES.map((tz) => (
-                      <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  value={timezone || "__auto__"}
+                  onChange={(v) => setTimezone(v === "__auto__" ? "" : v)}
+                  options={[{ value: "__auto__", label: defaultTz }, ...getAllIanaTimezones()]}
+                  placeholder={t("heartbeat.timezone")}
+                  className="text-base md:text-sm"
+                />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">{t("heartbeat.scheduleHint")}</p>

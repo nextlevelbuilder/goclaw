@@ -1,6 +1,9 @@
-import { Key, Link2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CircleSlash2, Key, Link2, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PROVIDER_TYPES } from "@/constants/providers";
+import type { EffectiveChatGPTOAuthRoutingStrategy } from "@/types/agent";
+import { getChatGPTOAuthProviderRouting } from "@/types/provider";
+import type { ChatGPTOAuthAvailability } from "./hooks/use-chatgpt-oauth-provider-statuses";
 import type { ProviderData } from "./hooks/use-providers";
 
 type BadgeVariant = "default" | "secondary" | "outline";
@@ -20,13 +23,103 @@ export const PROVIDER_TYPE_BADGE: Record<string, { label: string; variant: Badge
   ]),
 );
 
+export interface ChatGPTOAuthPoolOwnership {
+  membersByOwner: Map<string, string[]>;
+  ownerByMember: Map<string, string>;
+  strategyByOwner: Map<string, EffectiveChatGPTOAuthRoutingStrategy>;
+}
+
+export function getChatGPTOAuthPoolOwnership(
+  providers: ProviderData[],
+): ChatGPTOAuthPoolOwnership {
+  const membersByOwner = new Map<string, string[]>();
+  const ownerByMember = new Map<string, string>();
+  const strategyByOwner = new Map<string, EffectiveChatGPTOAuthRoutingStrategy>();
+
+  for (const provider of providers) {
+    if (provider.provider_type !== "chatgpt_oauth") continue;
+    const routing = getChatGPTOAuthProviderRouting(provider.settings);
+    if (!routing) continue;
+    strategyByOwner.set(provider.name, routing.strategy);
+    if (routing.extraProviderNames.length === 0) continue;
+    membersByOwner.set(provider.name, routing.extraProviderNames);
+    for (const memberName of routing.extraProviderNames) {
+      if (!ownerByMember.has(memberName)) {
+        ownerByMember.set(memberName, provider.name);
+      }
+    }
+  }
+
+  return {
+    membersByOwner,
+    ownerByMember,
+    strategyByOwner,
+  };
+}
+
+function providerHierarchyOrder(
+  provider: ProviderData,
+  indexByName: Map<string, number>,
+  ownership: ChatGPTOAuthPoolOwnership,
+): [number, number] {
+  const index = indexByName.get(provider.name) ?? 0;
+  if (provider.provider_type !== "chatgpt_oauth") {
+    return [index * 3, index];
+  }
+
+  const ownerName = ownership.ownerByMember.get(provider.name);
+  if (ownerName) {
+    const ownerIndex = indexByName.get(ownerName) ?? index;
+    return [ownerIndex * 3 + 1, index];
+  }
+
+  if (ownership.membersByOwner.has(provider.name)) {
+    return [index * 3, index];
+  }
+
+  return [index * 3 + 2, index];
+}
+
+export function sortProvidersForPoolHierarchy(
+  providers: ProviderData[],
+  ownership: ChatGPTOAuthPoolOwnership,
+): ProviderData[] {
+  const indexByName = new Map(providers.map((provider, index) => [provider.name, index]));
+  return [...providers].sort((left, right) => {
+    const [leftGroup, leftIndex] = providerHierarchyOrder(left, indexByName, ownership);
+    const [rightGroup, rightIndex] = providerHierarchyOrder(right, indexByName, ownership);
+    if (leftGroup !== rightGroup) return leftGroup - rightGroup;
+    return leftIndex - rightIndex;
+  });
+}
+
 /** Shared API key status indicator. */
-export function ProviderApiKeyBadge({ provider }: { provider: ProviderData }) {
+export function ProviderApiKeyBadge({
+  provider,
+  oauthAvailability,
+}: {
+  provider: ProviderData;
+  oauthAvailability?: ChatGPTOAuthAvailability;
+}) {
   const { t } = useTranslation("providers");
   if (provider.provider_type === "chatgpt_oauth") {
+    if (oauthAvailability === "needs_sign_in") {
+      return (
+        <span className="flex items-center gap-1 text-[11px] text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="h-3 w-3" />{t("card.signInNeeded")}
+        </span>
+      );
+    }
+    if (oauthAvailability === "disabled") {
+      return (
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <CircleSlash2 className="h-3 w-3" />{t("card.disabled")}
+        </span>
+      );
+    }
     return (
       <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-        <Link2 className="h-3 w-3" />{t("card.oauthLinked")}
+        <Link2 className="h-3 w-3" />{t("card.connected")}
       </span>
     );
   }

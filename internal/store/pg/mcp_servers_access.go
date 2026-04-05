@@ -37,7 +37,7 @@ func (s *PGMCPServerStore) GrantToAgent(ctx context.Context, g *store.MCPAgentGr
 }
 
 func (s *PGMCPServerStore) RevokeFromAgent(ctx context.Context, serverID, agentID uuid.UUID) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (s *PGMCPServerStore) RevokeFromAgent(ctx context.Context, serverID, agentI
 }
 
 func (s *PGMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid.UUID) ([]store.MCPAgentGrant, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,7 @@ func (s *PGMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid.UUI
 }
 
 func (s *PGMCPServerStore) ListServerGrants(ctx context.Context, serverID uuid.UUID) ([]store.MCPAgentGrant, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (s *PGMCPServerStore) ListServerGrants(ctx context.Context, serverID uuid.U
 // --- Counts ---
 
 func (s *PGMCPServerStore) CountAgentGrantsByServer(ctx context.Context) (map[uuid.UUID]int, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 1)
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (s *PGMCPServerStore) GrantToUser(ctx context.Context, g *store.MCPUserGran
 }
 
 func (s *PGMCPServerStore) RevokeFromUser(ctx context.Context, serverID uuid.UUID, userID string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (s *PGMCPServerStore) RevokeFromUser(ctx context.Context, serverID uuid.UUI
 // --- Resolution ---
 
 func (s *PGMCPServerStore) ListAccessible(ctx context.Context, agentID uuid.UUID, userID string) ([]store.MCPAccessInfo, error) {
-	tClause, tArgs, err := tenantClauseNAlias(ctx, 3, "ms")
+	tClause, tArgs, _, err := scopeClauseAlias(ctx, 3, "ms")
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (s *PGMCPServerStore) CreateRequest(ctx context.Context, req *store.MCPAcce
 }
 
 func (s *PGMCPServerStore) ListPendingRequests(ctx context.Context) ([]store.MCPAccessRequest, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 1)
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func (s *PGMCPServerStore) ReviewRequest(ctx context.Context, requestID uuid.UUI
 	var req store.MCPAccessRequest
 	var agentID *uuid.UUID
 	var userID *string
-	tClause, tArgs, err2 := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err2 := scopeClause(ctx, 2)
 	if err2 != nil {
 		return err2
 	}

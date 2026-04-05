@@ -4,18 +4,15 @@ import { Plus, Trash2, Loader2, RefreshCw, Users, ChevronDown, ChevronRight } fr
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Combobox } from "@/components/ui/combobox";
 import { EmptyState } from "@/components/shared/empty-state";
-import { useContactPicker } from "@/hooks/use-contact-picker";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 import type { GroupManagerGroupInfo, GroupManagerData } from "../hooks/use-channel-detail";
-import type { ChannelContact } from "@/types/contact";
 
 interface ChannelManagersTabProps {
   listManagerGroups: () => Promise<GroupManagerGroupInfo[]>;
   listManagers: (groupId: string) => Promise<GroupManagerData[]>;
   addManager: (groupId: string, userId: string, displayName?: string, username?: string) => Promise<void>;
   removeManager: (groupId: string, userId: string) => Promise<void>;
-  listContacts: (search: string, channelType?: string) => Promise<ChannelContact[]>;
 }
 
 /** Strips the "group:<channel>:" prefix for display, e.g. "group:telegram:-100123" → "-100123" */
@@ -29,22 +26,15 @@ function shortGroupId(id: string): string {
 interface InlineAddFormProps {
   groupId?: string;
   showGroupField?: boolean;
-  listContacts: (search: string) => Promise<ChannelContact[]>;
   onAdd: (groupId: string, userId: string, displayName: string, username: string) => Promise<void>;
 }
 
-function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineAddFormProps) {
+function InlineAddForm({ groupId, showGroupField, onAdd }: InlineAddFormProps) {
   const { t } = useTranslation("channels");
   const [formGroupId, setFormGroupId] = useState("");
   const [userId, setUserId] = useState("");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
-  const { options: contactOptions, searchContacts, getContact, clearOptions } = useContactPicker(listContacts);
-
-  const handleUserIdChange = (val: string) => {
-    setUserId(val);
-    searchContacts(val);
-  };
 
   const handleSubmit = async () => {
     const gid = groupId || formGroupId.trim();
@@ -56,13 +46,8 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
     setAdding(true);
     setError("");
     try {
-      // Auto-fill display name and username from selected contact
-      const contact = getContact(uid);
-      const displayName = contact?.display_name ?? "";
-      const username = contact?.username ?? "";
-      await onAdd(gid, uid, displayName, username);
+      await onAdd(gid, uid, "", "");
       setUserId("");
-      clearOptions();
       if (!groupId) setFormGroupId("");
     } catch (err) {
       setError(err instanceof Error ? err.message : t("detail.managers.addForm.errors.failedAdd"));
@@ -88,10 +73,9 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
           </div>
           <div className="grid gap-1.5 flex-1 min-w-[180px]">
             <Label className="text-xs">{t("detail.managers.addForm.userId")}</Label>
-            <Combobox
+            <UserPickerCombobox
               value={userId}
-              onChange={handleUserIdChange}
-              options={contactOptions}
+              onChange={setUserId}
               placeholder={t("detail.managers.addForm.userIdPlaceholder")}
             />
           </div>
@@ -114,10 +98,9 @@ function InlineAddForm({ groupId, showGroupField, listContacts, onAdd }: InlineA
     <div className="flex items-end gap-2">
       <div className="grid gap-1 flex-1 min-w-[140px]">
         <Label className="text-xs text-muted-foreground">{t("detail.managers.addForm.userId")}</Label>
-        <Combobox
+        <UserPickerCombobox
           value={userId}
-          onChange={handleUserIdChange}
-          options={contactOptions}
+          onChange={setUserId}
           placeholder={t("detail.managers.addForm.userIdPlaceholder")}
           className="h-8"
         />
@@ -143,7 +126,6 @@ export function ChannelManagersTab({
   listManagers,
   addManager,
   removeManager,
-  listContacts,
 }: ChannelManagersTabProps) {
   const { t } = useTranslation("channels");
   const [groups, setGroups] = useState<GroupManagerGroupInfo[]>([]);
@@ -318,7 +300,6 @@ export function ChannelManagersTab({
 
                       <InlineAddForm
                         groupId={g.group_id}
-                        listContacts={listContacts}
                         onAdd={handleAddManager}
                       />
                     </div>
@@ -333,7 +314,6 @@ export function ChannelManagersTab({
       {/* Add to new group */}
       <InlineAddForm
         showGroupField
-        listContacts={listContacts}
         onAdd={handleAddManager}
       />
     </div>

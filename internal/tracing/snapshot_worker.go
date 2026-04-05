@@ -191,13 +191,13 @@ func queryTraceAggregates(ctx context.Context, db *sql.DB, from, to time.Time) (
 			agent_id,
 			COALESCE(channel, '') as channel,
 			COUNT(*) as request_count,
-			COUNT(*) FILTER (WHERE status = 'error') as error_count,
+			SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count,
 			COUNT(DISTINCT user_id) as unique_users,
 			COALESCE(SUM(total_input_tokens), 0) as input_tokens,
 			COALESCE(SUM(total_output_tokens), 0) as output_tokens,
 			COALESCE(SUM(total_cost), 0) as total_cost,
 			COALESCE(SUM(tool_call_count), 0) as tool_call_count,
-			COALESCE(AVG(duration_ms), 0)::INTEGER as avg_duration_ms
+			CAST(COALESCE(AVG(duration_ms), 0) AS INTEGER) as avg_duration_ms
 		FROM traces
 		WHERE start_time >= $1 AND start_time < $2
 		  AND parent_trace_id IS NULL
@@ -249,9 +249,9 @@ func querySpanAggregates(ctx context.Context, db *sql.DB, from, to time.Time) ([
 			COALESCE(SUM(s.input_tokens), 0) as span_input_tokens,
 			COALESCE(SUM(s.output_tokens), 0) as span_output_tokens,
 			COALESCE(SUM(s.total_cost), 0) as span_cost,
-			COALESCE(SUM((s.metadata->>'cache_read_tokens')::BIGINT), 0) as cache_read_tokens,
-			COALESCE(SUM((s.metadata->>'cache_creation_tokens')::BIGINT), 0) as cache_create_tokens,
-			COALESCE(SUM((s.metadata->>'thinking_tokens')::BIGINT), 0) as thinking_tokens
+			COALESCE(SUM(CAST(s.metadata->>'cache_read_tokens' AS INTEGER)), 0) as cache_read_tokens,
+			COALESCE(SUM(CAST(s.metadata->>'cache_creation_tokens' AS INTEGER)), 0) as cache_create_tokens,
+			COALESCE(SUM(CAST(s.metadata->>'thinking_tokens' AS INTEGER)), 0) as thinking_tokens
 		FROM traces t
 		JOIN spans s ON s.trace_id = t.id AND s.span_type = 'llm_call'
 		WHERE t.start_time >= $1 AND t.start_time < $2

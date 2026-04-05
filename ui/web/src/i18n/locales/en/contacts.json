@@ -45,6 +45,10 @@
     "unmergeError": "Failed to unmerge contacts",
     "comingSoon": "This feature is under development and not yet available."
   },
+  "types": {
+    "user": "User",
+    "group": "Group"
+  },
   "filters": {
     "allChannels": "All Channels",
     "allTypes": "All Types",

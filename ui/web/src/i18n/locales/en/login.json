@@ -13,6 +13,7 @@
   "token": {
     "userId": "User ID",
     "userIdPlaceholder": "your-user-id",
+    "userIdHint": "Use \"system\" for full system access",
     "gatewayToken": "Gateway Token",
     "tokenPlaceholder": "Bearer token",
     "connect": "Connect",

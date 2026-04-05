@@ -45,6 +45,39 @@ func (m *ChatMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodChatHistory, m.handleHistory)
 	router.Register(protocol.MethodChatAbort, m.handleAbort)
 	router.Register(protocol.MethodChatInject, m.handleInject)
+	router.Register(protocol.MethodChatSessionStatus, m.handleSessionStatus)
+}
+
+// handleSessionStatus returns the running state and activity for a session.
+// Used by the frontend to restore UI state after switching between sessions.
+func (m *ChatMethods) handleSessionStatus(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	var params struct {
+		SessionKey string `json:"sessionKey"`
+	}
+	if err := json.Unmarshal(req.Params, &params); err != nil || params.SessionKey == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "sessionKey required"))
+		return
+	}
+
+	isRunning := m.agents.IsSessionBusy(params.SessionKey)
+	var runId string
+	if rid, ok := m.agents.SessionRunID(params.SessionKey); ok {
+		runId = rid
+	}
+	var activity map[string]any
+	if status := m.agents.GetActivity(params.SessionKey); status != nil {
+		activity = map[string]any{
+			"phase":     status.Phase,
+			"tool":      status.Tool,
+			"iteration": status.Iteration,
+		}
+	}
+
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"isRunning": isRunning,
+		"runId":     runId,
+		"activity":  activity,
+	}))
 }
 
 // chatMediaItem represents a media file attached to a chat message.
@@ -214,8 +247,12 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		})
 
 		if err != nil {
-			// Don't send error if context was cancelled (abort)
+			// Send cancelled response so the frontend's chat.send promise resolves
+			// instead of hanging until the 600s timeout.
 			if runCtx.Err() != nil {
+				client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+					"cancelled": true,
+				}))
 				return
 			}
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, err.Error()))
@@ -282,8 +319,12 @@ func (m *ChatMethods) handleHistory(ctx context.Context, client *gateway.Client,
 	history := m.sessions.GetHistory(ctx, sessionKey)
 
 	// Sign file URLs before delivery — sessions store clean paths.
+	secret := httpapi.FileSigningKey()
 	for i := range history {
-		history[i].Content = httpapi.SignFileURLs(history[i].Content, httpapi.FileSigningKey())
+		history[i].Content = httpapi.SignFileURLs(history[i].Content, secret)
+		for j := range history[i].MediaRefs {
+			history[i].MediaRefs[j].Path = httpapi.SignMediaPath(history[i].MediaRefs[j].Path, secret)
+		}
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

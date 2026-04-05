@@ -19,6 +19,9 @@ export interface ChannelContact {
   username?: string;
   avatar_url?: string;
   peer_kind?: string;
+  contact_type: string; // "user", "group", or "topic"
+  thread_id?: string;
+  thread_type?: string;
   merged_id?: string;
   first_seen_at: string;
   last_seen_at: string;

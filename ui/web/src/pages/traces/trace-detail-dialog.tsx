@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight, ChevronDown, Copy, Check, Download, CircleCheck, CircleX, Loader, CircleMinus } from "lucide-react";
+import { ChevronRight, ChevronDown, Copy, Check, Download, CircleCheck, CircleX, Loader, CircleMinus, Square } from "lucide-react";
 import { useClipboard } from "@/hooks/use-clipboard";
 import { useHttp } from "@/hooks/use-ws";
 import { useWsEvent } from "@/hooks/use-ws-event";
@@ -53,9 +53,10 @@ interface TraceDetailDialogProps {
   onClose: () => void;
   getTrace: (id: string) => Promise<{ trace: TraceData; spans: SpanData[] } | null>;
   onNavigateTrace?: (traceId: string) => void;
+  onAbortRun?: (trace: TraceData, e: React.MouseEvent) => void;
 }
 
-export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace }: TraceDetailDialogProps) {
+export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace, onAbortRun }: TraceDetailDialogProps) {
   const { t } = useTranslation("traces");
   const tz = useUiStore((s) => s.timezone);
   const http = useHttp();
@@ -123,7 +124,7 @@ export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace 
     useCallback(
       (payload: unknown) => {
         const event = payload as AgentEventPayload;
-        if (event?.type === "run.completed" || event?.type === "run.failed") {
+        if (event?.type === "run.completed" || event?.type === "run.failed" || event?.type === "run.cancelled") {
           fetchTrace();
         }
       },
@@ -160,6 +161,16 @@ export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace 
               )}
               {t("detail.export")}
             </button>
+            {trace && (trace.status === "running") && onAbortRun && (
+              <button
+                type="button"
+                onClick={(e) => onAbortRun(trace, e)}
+                className="flex cursor-pointer items-center gap-1 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground transition-colors hover:bg-destructive/90"
+              >
+                <Square className="h-3.5 w-3.5" />
+                {t("detail.stopRun")}
+              </button>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -372,6 +383,42 @@ function SpanTreeNode({ node, depth }: { node: SpanNode; depth: number }) {
                     (<span className="text-orange-400">{formatTokens(span.metadata!.thinking_tokens!)} {t("span.thinking")}</span>)
                   </span>
                 )}
+              </div>
+            )}
+            {span.metadata?.reasoning && (
+              <div className="text-xs text-muted-foreground">
+                <span>{t("span.reasoning")}</span>{" "}
+                {span.metadata.reasoning.requested_effort ? (
+                  <span>
+                    {t("span.requested")} {span.metadata.reasoning.requested_effort}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.source ? (
+                  <span className="ml-2">
+                    {t("span.source")} {t(`span.sourceValue.${span.metadata.reasoning.source}`)}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.effective_effort ? (
+                  <span className="ml-2">
+                    {t("span.effective")} {span.metadata.reasoning.effective_effort}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.fallback ? (
+                  <span className="ml-2">
+                    {t("span.fallback")} {span.metadata.reasoning.fallback}
+                  </span>
+                ) : null}
+                {span.metadata.reasoning.used_provider_default ? (
+                  <span className="ml-2">{t("span.modelDefault")}</span>
+                ) : null}
+                {span.metadata.reasoning.reason ? (
+                  <div className="mt-1">{span.metadata.reasoning.reason}</div>
+                ) : null}
+                {span.metadata.reasoning.supported_levels?.length ? (
+                  <div className="mt-1">
+                    {t("span.supportedLevels")} {span.metadata.reasoning.supported_levels.join(", ")}
+                  </div>
+                ) : null}
               </div>
             )}
             {span.input_preview && (

@@ -21,5 +21,9 @@
   "replyingTo": "回复",
   "error": {
     "notConnected": "未连接。请等待连接建立。"
+  },
+  "selectAgent": {
+    "title": "选择Agent",
+    "description": "选择Agent开始对话"
   }
 }

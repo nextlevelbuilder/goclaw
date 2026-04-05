@@ -15,8 +15,12 @@ import (
 )
 
 // callMinimaxVideoGen calls the MiniMax video generation API (async with task polling).
+// Image-to-video is not supported by MiniMax — image data is ignored.
 // Flow: POST /video_generation → poll /query/video_generation → download from file retrieve.
 func callMinimaxVideoGen(ctx context.Context, apiKey, apiBase, model string, params map[string]any) ([]byte, *providers.Usage, error) {
+	if GetParamString(params, "image_base64", "") != "" {
+		slog.Warn("create_video: image-to-video not supported by MiniMax, falling back to text-to-video")
+	}
 	prompt := GetParamString(params, "prompt", "")
 	duration := GetParamInt(params, "duration", 6)
 	resolution := GetParamString(params, "resolution", "720P")

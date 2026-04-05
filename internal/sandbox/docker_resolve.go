@@ -53,6 +53,21 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 	}
 
 	targetDir := filepath.Clean(localPath)
+
+	// Resolve symlinks so mount matching uses the canonical path.
+	// If the resolved path doesn't match any known mount, the mount-matching
+	// loop below will fall through to the "no matching mount" warning.
+	if resolved, err := filepath.EvalSymlinks(localPath); err == nil {
+		resolvedClean := filepath.Clean(resolved)
+		if resolvedClean != targetDir {
+			slog.Info("sandbox.resolve: symlink resolved",
+				"path", localPath,
+				"resolved", resolvedClean,
+			)
+		}
+		targetDir = resolvedClean
+	}
+
 	var bestDest string
 	var bestSource string
 	var bestRel string
@@ -109,9 +124,9 @@ func detectContainerID() string {
 	// Strategy 1: Parse /proc/self/mountinfo for docker container ID.
 	// Lines contain paths like /docker/containers/<id>/...
 	if data, err := os.ReadFile("/proc/self/mountinfo"); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			if idx := strings.Index(line, "/docker/containers/"); idx != -1 {
-				rest := line[idx+len("/docker/containers/"):]
+		for line := range strings.SplitSeq(string(data), "\n") {
+			if _, after, ok := strings.Cut(line, "/docker/containers/"); ok {
+				rest := after
 				if slashIdx := strings.IndexByte(rest, '/'); slashIdx > 0 {
 					id := rest[:slashIdx]
 					if len(id) >= 12 { // Docker IDs are 64 hex chars, short form 12

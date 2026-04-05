@@ -64,12 +64,13 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 
 	// Collect contact for DM messages.
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "direct")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "direct", "user", "", "")
 	}
 
 	metadata := map[string]string{
-		"message_id": msg.Data.MsgID,
-		"platform":   channels.TypeZaloPersonal,
+		"message_id":   msg.Data.MsgID,
+		"platform":     channels.TypeZaloPersonal,
+		"display_name": senderName,
 	}
 	c.HandleMessage(senderID, threadID, content, media, metadata, "direct")
 }
@@ -110,7 +111,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group", "user", "", "")
 			}
 
 			slog.Debug("zalo_personal group message recorded (no mention)",
@@ -143,13 +144,14 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 
 	// Collect contact for group-mentioned messages.
 	if cc := c.ContactCollector(); cc != nil {
-		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group")
+		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, senderName, "", "group", "user", "", "")
 	}
 
 	metadata := map[string]string{
-		"message_id": msg.Data.MsgID,
-		"platform":   channels.TypeZaloPersonal,
-		"group_id":   threadID,
+		"message_id":   msg.Data.MsgID,
+		"platform":     channels.TypeZaloPersonal,
+		"group_id":     threadID,
+		"display_name": senderName,
 	}
 	c.HandleMessage(senderID, threadID, finalContent, allMedia, metadata, "group")
 

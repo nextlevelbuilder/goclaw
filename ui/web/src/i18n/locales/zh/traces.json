@@ -28,7 +28,8 @@
     "title": "追踪详情",
     "tokens": "令牌：",
     "toolCalls": "工具",
-    "export": "导出追踪"
+    "export": "导出追踪",
+    "stopRun": "停止运行"
   },
   "emptyDescription": "暂无追踪记录。当Agent处理请求时将自动记录追踪。",
   "emptyTitle": "暂无追踪",
@@ -45,13 +46,38 @@
     "endTime": "结束：",
     "input": "输入：",
     "model": "模型：",
+    "reasoning": "Reasoning：",
+    "source": "source",
+    "requested": "请求",
+    "effective": "实际",
+    "fallback": "fallback",
+    "modelDefault": "模型默认",
+    "supportedLevels": "支持：",
+    "sourceValue": {
+      "provider_default": "provider default",
+      "reasoning": "agent advanced",
+      "thinking_level": "legacy thinking level",
+      "unset": "unset"
+    },
     "output": "输出：",
     "thinking": "思考",
     "tokens": "令牌："
   },
   "title": "追踪",
   "toast": {
-    "failedLoad": "加载追踪失败"
+    "failedLoad": "加载追踪失败",
+    "abortSent": "已停止运行",
+    "abortFailed": "停止运行失败",
+    "abortNotFound": "运行已完成或未找到"
   },
-  "unnamed": "未命名"
+  "source": {
+    "direct": "私聊",
+    "group": "群组",
+    "cron": "定时",
+    "team": "团队",
+    "ws": "网页",
+    "unknown": "其他"
+  },
+  "unnamed": "未命名",
+  "stopRun": "停止运行"
 }

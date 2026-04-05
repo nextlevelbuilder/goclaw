@@ -72,10 +72,7 @@ func (s *PGMemoryStore) writeEmbeddingCache(ctx context.Context, entries []embed
 	// Process in batches of 100 to avoid exceeding max query params
 	const batchSize = 100
 	for start := 0; start < len(entries); start += batchSize {
-		end := start + batchSize
-		if end > len(entries) {
-			end = len(entries)
-		}
+		end := min(start+batchSize, len(entries))
 		batch := entries[start:end]
 
 		var sb strings.Builder

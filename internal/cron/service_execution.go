@@ -80,8 +80,8 @@ func (cs *Service) RunJob(jobID string, force bool) (bool, string, error) {
 		break
 	}
 
-	// Record run log
-	cs.recordRun(jobID, err, result)
+	// Record run log (already holding cs.mu via defer above)
+	cs.recordRunLocked(jobID, err, result)
 
 	if err != nil {
 		return true, "", err
@@ -111,7 +111,11 @@ func (cs *Service) GetRunLog(jobID string, limit int) []RunLogEntry {
 func (cs *Service) recordRun(jobID string, err error, resultText string) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
+	cs.recordRunLocked(jobID, err, resultText)
+}
 
+// recordRunLocked appends a run log entry. Must be called with cs.mu held.
+func (cs *Service) recordRunLocked(jobID string, err error, resultText string) {
 	entry := RunLogEntry{
 		Ts:    nowMS(),
 		JobID: jobID,
@@ -251,6 +255,9 @@ func (cs *Service) executeJobByID(jobID string) {
 		}
 		break
 	}
+
+	// Record run log (already holding cs.mu via defer above)
+	cs.recordRunLocked(jobID, err, result)
 
 	cs.saveUnsafe()
 }

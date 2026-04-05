@@ -10,20 +10,14 @@
 package tools
 
 import (
-	"cmp"
 	"context"
-	"fmt"
-	"log/slog"
-	"slices"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
 
 // SubagentConfig configures the subagent system.
@@ -32,6 +26,7 @@ type SubagentConfig struct {
 	MaxSpawnDepth       int    // max nesting depth (default 3)
 	MaxChildrenPerAgent int    // max children per parent (default 8)
 	ArchiveAfterMinutes int    // auto-archive completed tasks (default 30)
+	MaxRetries          int    // max LLM call retries on error (default 2)
 	Model               string // model override for subagents (empty = inherit)
 }
 
@@ -53,6 +48,8 @@ type SubagentTask struct {
 	Result          string `json:"result,omitempty"`
 	Depth           int    `json:"depth"`
 	Model           string `json:"model,omitempty"`           // model override for this subagent
+	TotalInputTokens  int64 `json:"totalInputTokens,omitempty"`
+	TotalOutputTokens int64 `json:"totalOutputTokens,omitempty"`
 	OriginChannel    string `json:"originChannel,omitempty"`
 	OriginChatID     string `json:"originChatId,omitempty"`
 	OriginPeerKind   string `json:"originPeerKind,omitempty"`  // "direct" or "group" (for session key building)
@@ -67,6 +64,7 @@ type SubagentTask struct {
 	OriginRootSpanID uuid.UUID `json:"-"` // parent agent's root span ID
 	cancelFunc       context.CancelFunc `json:"-"` // per-task context cancel
 	spawnConfig      SubagentConfig `json:"-"` // resolved config at spawn time (per-agent override merged)
+	dbID             uuid.UUID `json:"-"` // persistent DB UUID (zero if not persisted)
 }
 
 // SubagentManager manages the lifecycle of spawned subagents.
@@ -81,7 +79,8 @@ type SubagentManager struct {
 
 	// createTools builds a tool registry for subagents (without spawn/subagent tools).
 	createTools   func() *Registry
-	announceQueue *AnnounceQueue // optional: batches announces with debounce
+	announceQueue *AnnounceQueue          // optional: batches announces with debounce
+	taskStore     store.SubagentTaskStore // optional: persists tasks to DB (fire-and-forget)
 }
 
 // NewSubagentManager creates a new subagent manager.
@@ -110,6 +109,11 @@ func (sm *SubagentManager) SetAnnounceQueue(q *AnnounceQueue) {
 	sm.announceQueue = q
 }
 
+// SetTaskStore sets the persistent store for subagent tasks (write-through, fire-and-forget).
+func (sm *SubagentManager) SetTaskStore(s store.SubagentTaskStore) {
+	sm.taskStore = s
+}
+
 // effectiveConfig returns the per-agent context override merged with defaults,
 // or falls back to sm.config when no override is present.
 func (sm *SubagentManager) effectiveConfig(ctx context.Context) SubagentConfig {
@@ -130,66 +134,13 @@ func (sm *SubagentManager) effectiveConfig(ctx context.Context) SubagentConfig {
 	if override.ArchiveAfterMinutes > 0 {
 		cfg.ArchiveAfterMinutes = override.ArchiveAfterMinutes
 	}
+	if override.MaxRetries > 0 {
+		cfg.MaxRetries = override.MaxRetries
+	}
 	if override.Model != "" {
 		cfg.Model = override.Model
 	}
 	return cfg
-}
-
-// SubagentRosterEntry summarizes one subagent task for the roster.
-type SubagentRosterEntry struct {
-	Label  string
-	Status string // "running", "completed", "failed", "cancelled"
-}
-
-// SubagentRoster holds the full roster of subagent tasks for a parent,
-// including per-agent config limits for deterministic LLM context.
-type SubagentRoster struct {
-	Entries     []SubagentRosterEntry
-	Total       int // total tasks for this parent
-	MaxPerAgent int // from spawnConfig.MaxChildrenPerAgent
-}
-
-// RosterForParent returns the full roster of tasks for a parent.
-// Sorted: completed/failed/cancelled first, then running (deterministic output).
-func (sm *SubagentManager) RosterForParent(parentID string) SubagentRoster {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-
-	var entries []SubagentRosterEntry
-	maxPerAgent := 0
-	for _, t := range sm.tasks {
-		if t.ParentID != parentID {
-			continue
-		}
-		entries = append(entries, SubagentRosterEntry{
-			Label:  t.Label,
-			Status: t.Status,
-		})
-		if maxPerAgent == 0 {
-			maxPerAgent = t.spawnConfig.MaxChildrenPerAgent
-		}
-	}
-
-	// Sort: non-running first (completed/failed/cancelled), then running.
-	// Within same group, sort alphabetically by label for determinism.
-	slices.SortFunc(entries, func(a, b SubagentRosterEntry) int {
-		aRunning := a.Status == TaskStatusRunning
-		bRunning := b.Status == TaskStatusRunning
-		if aRunning != bRunning {
-			if aRunning {
-				return 1 // running goes last
-			}
-			return -1
-		}
-		return cmp.Compare(a.Label, b.Label)
-	})
-
-	return SubagentRoster{
-		Entries:     entries,
-		Total:       len(entries),
-		MaxPerAgent: maxPerAgent,
-	}
 }
 
 // SubagentDenyAlways is the list of tools always denied to subagents.
@@ -202,6 +153,7 @@ var SubagentDenyAlways = []string{
 	"memory_search",
 	"memory_get",
 	"sessions_send",
+	"team_tasks", // subagents must not use team orchestration
 }
 
 // SubagentDenyLeaf is the additional deny list for subagents at max depth.
@@ -210,143 +162,4 @@ var SubagentDenyLeaf = []string{
 	"sessions_history",
 	"sessions_spawn",
 	"spawn",
-}
-
-// Spawn creates a new subagent task that runs asynchronously.
-// Returns immediately with a status message. The subagent runs in a goroutine.
-// modelOverride optionally overrides the LLM model for this subagent (matching TS sessions-spawn-tool.ts).
-func (sm *SubagentManager) Spawn(
-	ctx context.Context,
-	parentID string,
-	depth int,
-	task, label, modelOverride string,
-	channel, chatID, peerKind string,
-	callback AsyncCallback,
-) (string, error) {
-	cfg := sm.effectiveConfig(ctx)
-	sm.mu.Lock()
-
-	// Check depth limit
-	if depth >= cfg.MaxSpawnDepth {
-		sm.mu.Unlock()
-		return "", fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
-	}
-
-	// Check concurrent limit
-	running := 0
-	for _, t := range sm.tasks {
-		if t.Status == TaskStatusRunning {
-			running++
-		}
-	}
-	if running >= cfg.MaxConcurrent {
-		sm.mu.Unlock()
-		return "", fmt.Errorf("max concurrent subagents reached (%d/%d)", running, cfg.MaxConcurrent)
-	}
-
-	// Check per-parent children limit
-	childCount := 0
-	for _, t := range sm.tasks {
-		if t.ParentID == parentID {
-			childCount++
-		}
-	}
-	if childCount >= cfg.MaxChildrenPerAgent {
-		sm.mu.Unlock()
-		return "", fmt.Errorf("max children per agent reached (%d/%d)", childCount, cfg.MaxChildrenPerAgent)
-	}
-
-	id := generateSubagentID()
-	if label == "" {
-		label = truncate(task, 50)
-	}
-
-	subTask := &SubagentTask{
-		ID:               id,
-		ParentID:         parentID,
-		Task:             task,
-		Label:            label,
-		Status:           "running",
-		Depth:            depth + 1,
-		Model:            modelOverride,
-		OriginChannel:    channel,
-		OriginChatID:     chatID,
-		OriginPeerKind:   peerKind,
-		OriginLocalKey:    ToolLocalKeyFromCtx(ctx),
-		OriginUserID:      store.UserIDFromContext(ctx),
-		OriginSessionKey:  ToolSessionKeyFromCtx(ctx),
-		OriginTenantID:    store.TenantIDFromContext(ctx),
-		OriginTraceID:     tracing.TraceIDFromContext(ctx),
-		OriginRootSpanID:  tracing.ParentSpanIDFromContext(ctx),
-		CreatedAt:         time.Now().UnixMilli(),
-		spawnConfig:       cfg,
-	}
-	// Detach from parent's cancellation chain so subagent survives after parent run completes.
-	// WithoutCancel preserves all context values (agent ID, workspace, trace info, etc.)
-	// but parent Done() no longer propagates. Manual cancel via taskCancel() still works.
-	detached := context.WithoutCancel(ctx)
-	taskCtx, taskCancel := context.WithCancel(detached)
-	subTask.cancelFunc = taskCancel
-
-	sm.tasks[id] = subTask
-	sm.mu.Unlock()
-
-	slog.Info("subagent spawned", "id", id, "parent", parentID, "depth", subTask.Depth, "label", label)
-
-	go sm.runTask(taskCtx, subTask, callback)
-
-	return fmt.Sprintf("Spawned subagent '%s' (id=%s, depth=%d) for task: %s",
-		label, id, subTask.Depth, truncate(task, 100)), nil
-}
-
-// RunSync executes a subagent task synchronously, blocking until completion.
-func (sm *SubagentManager) RunSync(
-	ctx context.Context,
-	parentID string,
-	depth int,
-	task, label string,
-	channel, chatID string,
-) (string, int, error) {
-	cfg := sm.effectiveConfig(ctx)
-
-	sm.mu.Lock()
-
-	if depth >= cfg.MaxSpawnDepth {
-		sm.mu.Unlock()
-		return "", 0, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
-	}
-
-	id := generateSubagentID()
-	if label == "" {
-		label = truncate(task, 50)
-	}
-
-	subTask := &SubagentTask{
-		ID:               id,
-		ParentID:         parentID,
-		Task:             task,
-		Label:            label,
-		Status:           "running",
-		Depth:            depth + 1,
-		OriginChannel:    channel,
-		OriginChatID:     chatID,
-		OriginLocalKey:   ToolLocalKeyFromCtx(ctx),
-		OriginUserID:     store.UserIDFromContext(ctx),
-		OriginTraceID:    tracing.TraceIDFromContext(ctx),
-		OriginRootSpanID: tracing.ParentSpanIDFromContext(ctx),
-		CreatedAt:        time.Now().UnixMilli(),
-		spawnConfig:      cfg,
-	}
-	sm.tasks[id] = subTask
-	sm.mu.Unlock()
-
-	slog.Info("subagent sync started", "id", id, "parent", parentID, "depth", subTask.Depth, "label", label)
-
-	iterations := sm.executeTask(ctx, subTask)
-
-	if subTask.Status == TaskStatusFailed {
-		return subTask.Result, iterations, fmt.Errorf("subagent failed: %s", subTask.Result)
-	}
-
-	return subTask.Result, iterations, nil
 }

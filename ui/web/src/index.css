@@ -173,6 +173,16 @@
   .landscape-compact { padding-block: 0.25rem; }
 }
 
+/* Wobble animation for active tool calls — gentler than spin */
+@keyframes wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-12deg); }
+  75% { transform: rotate(12deg); }
+}
+.animate-wobble {
+  animation: wobble 1s ease-in-out infinite;
+}
+
 /* highlight.js: transparent bg, container handles it */
 .hljs { background: transparent !important; }
 

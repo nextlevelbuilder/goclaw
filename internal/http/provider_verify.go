@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -138,11 +139,14 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 		}
 	}
 
+	inDocker := config.InDocker()
+
 	status, err := providers.CheckClaudeAuthStatus(ctx, cliPath)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"logged_in": false,
 			"error":     err.Error(),
+			"in_docker": inDocker,
 		})
 		return
 	}
@@ -151,6 +155,7 @@ func (h *ProvidersHandler) handleClaudeCLIAuthStatus(w http.ResponseWriter, r *h
 		"logged_in":         status.LoggedIn,
 		"email":             status.Email,
 		"subscription_type": status.SubscriptionType,
+		"in_docker":         inDocker,
 	})
 }
 
@@ -161,6 +166,8 @@ func isNonChatModel(model string) bool {
 		"veo-", "google/veo-",
 		"dall-e-", "imagen-", "google/imagen-",
 		"gemini-2.5-flash-image", "google/gemini-2.5-flash-image",
+		"grok-imagine", // xAI video generation (grok-imagine-video)
+		"grok-2-image", // xAI image generation
 	}
 	m := strings.ToLower(model)
 	for _, prefix := range nonChatPrefixes {
@@ -204,14 +211,24 @@ func friendlyVerifyError(err error) string {
 		}
 	}
 
-	// Fallback: strip "HTTP NNN: provider: " prefix for cleaner display
-	if idx := strings.LastIndex(msg, ": "); idx >= 0 && idx < len(msg)-2 {
+	// Fallback: strip "HTTP NNN: provider: " prefix for cleaner display.
+	// Use the FIRST ": " after "HTTP NNN" to avoid splitting inside JSON values.
+	if idx := strings.Index(msg, ": "); idx >= 0 && idx < len(msg)-2 {
 		suffix := msg[idx+2:]
-		// If the remainder still looks like JSON, just say "invalid model"
+		// Skip one more ": " to strip "provider: " prefix (e.g. "xai: {...}")
+		if idx2 := strings.Index(suffix, ": "); idx2 >= 0 && idx2 < 30 {
+			suffix = suffix[idx2+2:]
+		}
+		// If the remainder looks like JSON, say "invalid model"
 		if strings.HasPrefix(suffix, "{") {
 			return "Model not recognized by provider"
 		}
-		return suffix
+		// Strip leaked JSON quotes/braces from partial extraction
+		suffix = strings.TrimRight(suffix, "{}[]")
+		suffix = strings.Trim(suffix, `"`)
+		if suffix != "" {
+			return suffix
+		}
 	}
 
 	return msg

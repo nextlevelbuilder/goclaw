@@ -4,7 +4,7 @@ import { useHttp } from "@/hooks/use-ws";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import i18n from "@/i18n";
-import type { KGEntity, KGRelation, KGStats, KGTraversalResult } from "@/types/knowledge-graph";
+import type { KGEntity, KGRelation, KGStats, KGTraversalResult, KGDedupCandidate } from "@/types/knowledge-graph";
 
 export interface KGFilters {
   agentId: string;
@@ -141,7 +141,7 @@ export function useKGGraph(agentId: string, userId?: string) {
     queryKey: queryKeys.kg.graph(agentId, userId),
     queryFn: async () => {
       if (!agentId) return { entities: [], relations: [] };
-      const params: Record<string, string> = { limit: "200" };
+      const params: Record<string, string> = { limit: "50" };
       if (userId) params.user_id = userId;
       return http.get<KGGraphData>(`/v1/agents/${agentId}/kg/graph`, params);
     },
@@ -154,6 +154,90 @@ export function useKGGraph(agentId: string, userId?: string) {
     relations: data?.relations ?? [],
     loading: isLoading,
     fetching: isFetching,
+  };
+}
+
+export function useKGDedup(agentId: string, userId?: string) {
+  const http = useHttp();
+  const queryClient = useQueryClient();
+
+  const queryKey = queryKeys.kg.dedup(agentId, userId);
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      if (!agentId) return [];
+      const params: Record<string, string> = { limit: "50" };
+      if (userId) params.user_id = userId;
+      return (await http.get<KGDedupCandidate[]>(`/v1/agents/${agentId}/kg/dedup`, params)) ?? [];
+    },
+    enabled: !!agentId,
+    placeholderData: (prev) => prev,
+  });
+
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: queryKeys.kg.all });
+  }, [queryClient, queryKey]);
+
+  const merge = useCallback(
+    async (targetId: string, sourceId: string) => {
+      try {
+        await http.post(`/v1/agents/${agentId}/kg/merge`, {
+          target_id: targetId,
+          source_id: sourceId,
+          user_id: userId || "",
+        });
+        await invalidate();
+        toast.success(i18n.t("memory:kg.dedup.merged"));
+      } catch (err) {
+        toast.error(i18n.t("memory:kg.dedup.mergeFailed"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http, agentId, userId, invalidate],
+  );
+
+  const dismiss = useCallback(
+    async (candidateId: string) => {
+      try {
+        await http.post(`/v1/agents/${agentId}/kg/dedup/dismiss`, { candidate_id: candidateId });
+        await invalidate();
+        toast.success(i18n.t("memory:kg.dedup.dismissed"));
+      } catch (err) {
+        toast.error(i18n.t("memory:kg.dedup.dismissFailed"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http, agentId, invalidate],
+  );
+
+  const scan = useCallback(
+    async () => {
+      try {
+        const res = await http.post<{ candidates_found: number }>(
+          `/v1/agents/${agentId}/kg/dedup/scan`,
+          { user_id: userId || "", threshold: 0.90, limit: 100 },
+        );
+        await invalidate();
+        toast.success(i18n.t("memory:kg.dedup.scanComplete"), `${res.candidates_found} candidates`);
+        return res.candidates_found;
+      } catch (err) {
+        toast.error(i18n.t("memory:kg.dedup.scanFailed"), err instanceof Error ? err.message : "");
+        throw err;
+      }
+    },
+    [http, agentId, userId, invalidate],
+  );
+
+  return {
+    candidates: data ?? [],
+    loading: isLoading,
+    fetching: isFetching,
+    refresh: invalidate,
+    scan,
+    merge,
+    dismiss,
   };
 }
 

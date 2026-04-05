@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isSecret } from "@/lib/secret";
 
 type ProviderEntry = {
   api_key?: string;
@@ -27,10 +28,6 @@ const KNOWN_PROVIDERS = [
   { key: "perplexity", label: "Perplexity", envKey: "GOCLAW_PERPLEXITY_API_KEY" },
   { key: "ollama_cloud", label: "Ollama Cloud", envKey: "GOCLAW_OLLAMA_CLOUD_API_KEY" },
 ];
-
-function isSecret(val: unknown): boolean {
-  return typeof val === "string" && val.includes("***");
-}
 
 interface Props {
   data: ProvidersData | undefined;

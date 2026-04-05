@@ -19,6 +19,7 @@ type MediaInfo struct {
 	Type        string // TypeImage, TypeVideo, TypeAudio, TypeVoice, TypeDocument, TypeAnimation
 	FilePath    string // local file path after download
 	FileID      string // platform-specific file ID (optional)
+	SourceURL   string // original remote URL, if the channel provides one
 	ContentType string // MIME type (e.g. "image/jpeg", "audio/ogg")
 	FileName    string // original filename
 	FileSize    int64

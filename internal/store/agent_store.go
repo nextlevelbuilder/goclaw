@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // sanitizeToolCallPrefix strips characters not in [a-z0-9_{}] from the prefix.
@@ -32,9 +33,9 @@ const (
 
 // Agent status constants.
 const (
-	AgentStatusActive      = "active"
-	AgentStatusInactive    = "inactive"
-	AgentStatusSummoning   = "summoning"
+	AgentStatusActive       = "active"
+	AgentStatusInactive     = "inactive"
+	AgentStatusSummoning    = "summoning"
 	AgentStatusSummonFailed = "summon_failed"
 )
 
@@ -43,18 +44,18 @@ type AgentData struct {
 	BaseModel
 	TenantID            uuid.UUID `json:"tenant_id"`
 	AgentKey            string    `json:"agent_key"`
-	DisplayName         string `json:"display_name,omitempty"`
-	Frontmatter         string `json:"frontmatter,omitempty"` // short expertise summary (NOT other_config.description which is the summoning prompt)
-	OwnerID             string `json:"owner_id"`
-	Provider            string `json:"provider"`
-	Model               string `json:"model"`
-	ContextWindow       int    `json:"context_window"`
-	MaxToolIterations   int    `json:"max_tool_iterations"`
-	Workspace           string `json:"workspace"`
-	RestrictToWorkspace bool   `json:"restrict_to_workspace"`
-	AgentType           string `json:"agent_type"` // "open" or "predefined"
-	IsDefault           bool   `json:"is_default"`
-	Status              string `json:"status"`
+	DisplayName         string    `json:"display_name,omitempty"`
+	Frontmatter         string    `json:"frontmatter,omitempty"` // short expertise summary (NOT other_config.description which is the summoning prompt)
+	OwnerID             string    `json:"owner_id"`
+	Provider            string    `json:"provider"`
+	Model               string    `json:"model"`
+	ContextWindow       int       `json:"context_window"`
+	MaxToolIterations   int       `json:"max_tool_iterations"`
+	Workspace           string    `json:"workspace"`
+	RestrictToWorkspace bool      `json:"restrict_to_workspace"`
+	AgentType           string    `json:"agent_type"` // "open" or "predefined"
+	IsDefault           bool      `json:"is_default"`
+	Status              string    `json:"status"`
 
 	// Budget: optional monthly spending limit in cents (nil = unlimited)
 	BudgetMonthlyCents *int `json:"budget_monthly_cents,omitempty"`
@@ -155,19 +156,71 @@ func (a *AgentData) ParseMemoryConfig() *config.MemoryConfig {
 	return &c
 }
 
-// ParseThinkingLevel extracts thinking_level from other_config JSONB.
-// Returns "" if not configured (meaning "off").
+// ParseThinkingLevel extracts the normalized reasoning effort from other_config JSONB.
+// Missing config defaults to "off" to match the dashboard and docs.
 func (a *AgentData) ParseThinkingLevel() string {
+	return a.ParseReasoningConfig().Effort
+}
+
+// ParseReasoningConfig extracts additive advanced reasoning settings from other_config.
+// Legacy thinking_level remains a backward-compatible fallback source.
+func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
+	cfg := AgentReasoningConfig{
+		OverrideMode: ReasoningOverrideInherit,
+		Effort:       "off",
+		Fallback:     ReasoningFallbackDowngrade,
+		Source:       ReasoningSourceUnset,
+	}
 	if len(a.OtherConfig) == 0 {
-		return ""
+		return cfg
 	}
-	var cfg struct {
-		ThinkingLevel string `json:"thinking_level"`
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &raw) != nil {
+		return cfg
 	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
-		return ""
+
+	var reasoning struct {
+		OverrideMode string `json:"override_mode"`
+		Effort       string `json:"effort"`
+		Fallback     string `json:"fallback"`
 	}
-	return cfg.ThinkingLevel
+	explicitInherit := false
+	if data, ok := raw["reasoning"]; ok && len(data) > 0 && json.Unmarshal(data, &reasoning) == nil {
+		if reasoning.OverrideMode == ReasoningOverrideInherit {
+			explicitInherit = true
+			cfg.OverrideMode = ReasoningOverrideInherit
+			cfg.Source = ReasoningSourceUnset
+			cfg.Effort = "off"
+			cfg.Fallback = ReasoningFallbackDowngrade
+		} else {
+			cfg.OverrideMode = ReasoningOverrideCustom
+			cfg.Source = ReasoningSourceAdvanced
+			if effort := normalizeReasoningEffort(reasoning.Effort); effort != "" {
+				cfg.Effort = effort
+			}
+			cfg.Fallback = normalizeReasoningFallback(reasoning.Fallback)
+		}
+	}
+
+	if !explicitInherit {
+		if data, ok := raw["thinking_level"]; ok && len(data) > 0 {
+			var legacy string
+			if json.Unmarshal(data, &legacy) == nil {
+				if effort := normalizeReasoningEffort(legacy); effort != "" {
+					if cfg.Source == ReasoningSourceUnset {
+						cfg.OverrideMode = ReasoningOverrideCustom
+						cfg.Source = ReasoningSourceLegacy
+						cfg.Effort = effort
+					} else if cfg.Effort == "off" {
+						cfg.Effort = effort
+					}
+				}
+			}
+		}
+	}
+
+	return cfg
 }
 
 // ParseMaxTokens extracts max_tokens from other_config JSONB.
@@ -235,15 +288,102 @@ func (a *AgentData) ParseSkillNudgeInterval() int {
 	return *cfg.SkillNudgeInterval
 }
 
+// normalizeReasoningEffort delegates to providers.NormalizeReasoningEffort (DRY).
+func normalizeReasoningEffort(value string) string {
+	return providers.NormalizeReasoningEffort(value)
+}
+
+// normalizeReasoningFallback delegates to providers.NormalizeReasoningFallback (DRY).
+func normalizeReasoningFallback(value string) string {
+	return providers.NormalizeReasoningFallback(value)
+}
+
 // WorkspaceSharingConfig controls per-user workspace isolation.
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.
 type WorkspaceSharingConfig struct {
-	SharedDM    bool     `json:"shared_dm"`
-	SharedGroup bool     `json:"shared_group"`
-	SharedUsers []string `json:"shared_users,omitempty"`
-	ShareMemory         bool `json:"share_memory"`
-	ShareKnowledgeGraph bool `json:"share_knowledge_graph"`
+	SharedDM            bool     `json:"shared_dm"`
+	SharedGroup         bool     `json:"shared_group"`
+	SharedUsers         []string `json:"shared_users,omitempty"`
+	ShareMemory         bool     `json:"share_memory"`
+	ShareKnowledgeGraph bool     `json:"share_knowledge_graph"`
+}
+
+const (
+	ReasoningSourceUnset             = "unset"
+	ReasoningSourceLegacy            = "thinking_level"
+	ReasoningSourceAdvanced          = "reasoning"
+	ReasoningSourceProviderDefault   = "provider_default"
+	// Reasoning fallback constants — canonical definitions in providers package.
+	ReasoningFallbackDowngrade       = providers.ReasoningFallbackDowngrade
+	ReasoningFallbackDisable         = providers.ReasoningFallbackDisable
+	ReasoningFallbackProviderDefault = providers.ReasoningFallbackProviderDefault
+	ReasoningOverrideInherit         = "inherit"
+	ReasoningOverrideCustom          = "custom"
+)
+
+type AgentReasoningConfig struct {
+	OverrideMode string `json:"override_mode,omitempty"`
+	Effort       string `json:"effort,omitempty"`
+	Fallback     string `json:"fallback,omitempty"`
+	Source       string `json:"-"`
+}
+
+// ResolveEffectiveReasoningConfig applies provider-owned defaults unless the agent
+// has an explicit custom reasoning override.
+func ResolveEffectiveReasoningConfig(
+	providerDefaults *ProviderReasoningConfig,
+	agentConfig AgentReasoningConfig,
+) AgentReasoningConfig {
+	if agentConfig.OverrideMode == "" {
+		agentConfig.OverrideMode = ReasoningOverrideInherit
+	}
+	if agentConfig.Fallback == "" {
+		agentConfig.Fallback = ReasoningFallbackDowngrade
+	}
+	if agentConfig.Effort == "" {
+		agentConfig.Effort = "off"
+	}
+
+	if agentConfig.OverrideMode == ReasoningOverrideCustom {
+		return agentConfig
+	}
+
+	if providerDefaults == nil {
+		return AgentReasoningConfig{
+			OverrideMode: ReasoningOverrideInherit,
+			Effort:       "off",
+			Fallback:     ReasoningFallbackDowngrade,
+			Source:       ReasoningSourceUnset,
+		}
+	}
+
+	return AgentReasoningConfig{
+		OverrideMode: ReasoningOverrideInherit,
+		Effort:       providerDefaults.Effort,
+		Fallback:     providerDefaults.Fallback,
+		Source:       ReasoningSourceProviderDefault,
+	}
+}
+
+const (
+	ChatGPTOAuthStrategyManual       = "manual" // legacy alias
+	ChatGPTOAuthStrategyPrimaryFirst = "primary_first"
+	ChatGPTOAuthStrategyRoundRobin   = "round_robin"
+	ChatGPTOAuthStrategyPriority     = "priority_order"
+)
+
+const (
+	ChatGPTOAuthOverrideInherit = "inherit"
+	ChatGPTOAuthOverrideCustom  = "custom"
+)
+
+// ChatGPTOAuthRoutingConfig controls optional multi-account selection for agents
+// whose primary provider is a ChatGPT OAuth-backed provider.
+type ChatGPTOAuthRoutingConfig struct {
+	OverrideMode       string   `json:"override_mode,omitempty"`
+	Strategy           string   `json:"strategy,omitempty"`
+	ExtraProviderNames []string `json:"extra_provider_names,omitempty"`
 }
 
 // ParseWorkspaceSharing extracts workspace_sharing from other_config JSONB.
@@ -262,6 +402,146 @@ func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
 		return nil
 	}
 	return cfg.WS
+}
+
+// ParseChatGPTOAuthRouting extracts chatgpt_oauth_routing from other_config JSONB.
+// Returns nil when no routing is configured.
+func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var cfg struct {
+		Routing *ChatGPTOAuthRoutingConfig `json:"chatgpt_oauth_routing"`
+	}
+	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.Routing == nil {
+		return nil
+	}
+	explicitOverrideMode := strings.TrimSpace(cfg.Routing.OverrideMode) != ""
+	explicitStrategy := strings.TrimSpace(cfg.Routing.Strategy) != ""
+	explicitExtras := cfg.Routing.ExtraProviderNames != nil
+	routing := normalizeChatGPTOAuthRoutingConfig(cfg.Routing)
+	if routing == nil {
+		if !explicitOverrideMode && !explicitStrategy && !explicitExtras {
+			return nil
+		}
+		overrideMode := ChatGPTOAuthOverrideCustom
+		if explicitOverrideMode {
+			overrideMode = normalizeChatGPTOAuthOverrideMode(cfg.Routing.OverrideMode)
+		}
+		return &ChatGPTOAuthRoutingConfig{
+			OverrideMode:       overrideMode,
+			Strategy:           normalizeChatGPTOAuthStrategy(cfg.Routing.Strategy),
+			ExtraProviderNames: normalizeProviderNames(cfg.Routing.ExtraProviderNames),
+		}
+	}
+	if explicitOverrideMode {
+		return routing
+	}
+	if explicitStrategy || explicitExtras {
+		routing.OverrideMode = ChatGPTOAuthOverrideCustom
+		return routing
+	}
+	routing.OverrideMode = ""
+	if routing.Strategy == ChatGPTOAuthStrategyPrimaryFirst && len(routing.ExtraProviderNames) == 0 {
+		return nil
+	}
+	return routing
+}
+
+func normalizeChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	if cfg == nil {
+		return nil
+	}
+	routing := &ChatGPTOAuthRoutingConfig{
+		OverrideMode:       normalizeChatGPTOAuthOverrideMode(cfg.OverrideMode),
+		Strategy:           normalizeChatGPTOAuthStrategy(cfg.Strategy),
+		ExtraProviderNames: normalizeProviderNames(cfg.ExtraProviderNames),
+	}
+	if routing.OverrideMode == "" && routing.Strategy == ChatGPTOAuthStrategyPrimaryFirst && len(routing.ExtraProviderNames) == 0 {
+		return nil
+	}
+	return routing
+}
+
+func normalizeChatGPTOAuthOverrideMode(value string) string {
+	switch value {
+	case ChatGPTOAuthOverrideInherit:
+		return ChatGPTOAuthOverrideInherit
+	case "", ChatGPTOAuthOverrideCustom:
+		return ChatGPTOAuthOverrideCustom
+	default:
+		return ChatGPTOAuthOverrideCustom
+	}
+}
+
+func normalizeChatGPTOAuthStrategy(value string) string {
+	switch value {
+	case "", ChatGPTOAuthStrategyManual, ChatGPTOAuthStrategyPrimaryFirst:
+		return ChatGPTOAuthStrategyPrimaryFirst
+	case ChatGPTOAuthStrategyRoundRobin, ChatGPTOAuthStrategyPriority:
+		return value
+	default:
+		return ChatGPTOAuthStrategyPrimaryFirst
+	}
+}
+
+func CloneChatGPTOAuthRoutingConfig(cfg *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := *cfg
+	clone.ExtraProviderNames = append([]string(nil), cfg.ExtraProviderNames...)
+	return &clone
+}
+
+func ResolveEffectiveChatGPTOAuthRouting(defaults, agentRouting *ChatGPTOAuthRoutingConfig) *ChatGPTOAuthRoutingConfig {
+	normalizedDefaults := normalizeChatGPTOAuthRoutingConfig(defaults)
+	normalizedAgent := normalizeChatGPTOAuthRoutingConfig(agentRouting)
+	if normalizedAgent == nil {
+		return CloneChatGPTOAuthRoutingConfig(normalizedDefaults)
+	}
+	if normalizedAgent.OverrideMode == ChatGPTOAuthOverrideInherit {
+		return CloneChatGPTOAuthRoutingConfig(normalizedDefaults)
+	}
+	effective := CloneChatGPTOAuthRoutingConfig(normalizedAgent)
+	if effective == nil {
+		return nil
+	}
+	effective.OverrideMode = ""
+	if normalizedDefaults != nil && len(normalizedDefaults.ExtraProviderNames) > 0 {
+		if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
+			len(normalizedAgent.ExtraProviderNames) == 0 {
+			effective.ExtraProviderNames = nil
+		} else {
+			effective.ExtraProviderNames = append([]string(nil), normalizedDefaults.ExtraProviderNames...)
+		}
+	}
+	if effective.Strategy == ChatGPTOAuthStrategyPrimaryFirst &&
+		len(effective.ExtraProviderNames) == 0 &&
+		normalizedAgent.OverrideMode != ChatGPTOAuthOverrideCustom {
+		return nil
+	}
+	return effective
+}
+
+func normalizeProviderNames(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ParseShellDenyGroups extracts shell_deny_groups from other_config JSONB.
@@ -311,8 +591,8 @@ type UserAgentOverrideData struct {
 	Model    string    `json:"model,omitempty"`
 }
 
-// AgentStore manages agents and access control.
-type AgentStore interface {
+// AgentCRUDStore manages core agent CRUD operations.
+type AgentCRUDStore interface {
 	Create(ctx context.Context, agent *AgentData) error
 	GetByKey(ctx context.Context, agentKey string) (*AgentData, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*AgentData, error)
@@ -323,35 +603,51 @@ type AgentStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	List(ctx context.Context, ownerID string) ([]AgentData, error)
 	GetDefault(ctx context.Context) (*AgentData, error) // agent with is_default=true, or first available
+}
 
-	// Access control
+// AgentAccessStore manages agent sharing and access control.
+type AgentAccessStore interface {
 	ShareAgent(ctx context.Context, agentID uuid.UUID, userID, role, grantedBy string) error
 	RevokeShare(ctx context.Context, agentID uuid.UUID, userID string) error
 	ListShares(ctx context.Context, agentID uuid.UUID) ([]AgentShareData, error)
 	CanAccess(ctx context.Context, agentID uuid.UUID, userID string) (bool, string, error) // (allowed, role, err)
 	ListAccessible(ctx context.Context, userID string) ([]AgentData, error)
+}
 
-	// Agent-level context files
+// AgentContextStore manages agent-level and per-user context files and overrides.
+type AgentContextStore interface {
 	GetAgentContextFiles(ctx context.Context, agentID uuid.UUID) ([]AgentContextFileData, error)
 	SetAgentContextFile(ctx context.Context, agentID uuid.UUID, fileName, content string) error
-
-	// Propagate agent-level file content to all existing user instances that have this file.
-	// Returns count of updated user rows.
 	PropagateContextFile(ctx context.Context, agentID uuid.UUID, fileName string) (int, error)
-
-	// Per-user context files + overrides
 	GetUserContextFiles(ctx context.Context, agentID uuid.UUID, userID string) ([]UserContextFileData, error)
+	// ListUserContextFilesByName returns all per-user copies of fileName across all users of agentID.
+	// Used for bulk targeted updates (e.g. updating Name: in IDENTITY.md on agent rename).
+	ListUserContextFilesByName(ctx context.Context, agentID uuid.UUID, fileName string) ([]UserContextFileData, error)
 	SetUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName, content string) error
 	DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error
+	// MigrateUserDataOnMerge moves per-user data from oldUserIDs to newUserID when contacts are merged.
+	// Covers: user_context_files, user_agent_overrides, user_agent_profiles, memory_documents/chunks.
+	// On conflict, keeps the newest by updated_at. Best-effort per table.
+	MigrateUserDataOnMerge(ctx context.Context, oldUserIDs []string, newUserID string) error
 	GetUserOverride(ctx context.Context, agentID uuid.UUID, userID string) (*UserAgentOverrideData, error)
 	SetUserOverride(ctx context.Context, override *UserAgentOverrideData) error
+}
 
-	// User-agent profiles + instances
+// AgentProfileStore manages user-agent profiles and instances.
+type AgentProfileStore interface {
 	GetOrCreateUserProfile(ctx context.Context, agentID uuid.UUID, userID, workspace, channel string) (isNew bool, effectiveWorkspace string, err error)
 	EnsureUserProfile(ctx context.Context, agentID uuid.UUID, userID string) error
 	ListUserInstances(ctx context.Context, agentID uuid.UUID) ([]UserInstanceData, error)
 	UpdateUserProfileMetadata(ctx context.Context, agentID uuid.UUID, userID string, metadata map[string]string) error
+}
 
+// AgentStore composes all agent sub-interfaces for backward compatibility.
+// New code should depend on the specific sub-interface it needs.
+type AgentStore interface {
+	AgentCRUDStore
+	AgentAccessStore
+	AgentContextStore
+	AgentProfileStore
 }
 
 // UserInstanceData represents a user instance for a predefined agent.
@@ -362,4 +658,3 @@ type UserInstanceData struct {
 	FileCount   int               `json:"file_count"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
-

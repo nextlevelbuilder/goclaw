@@ -7,8 +7,16 @@ import (
 	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
+
+// UserCredServers returns servers requiring per-user credentials.
+// These are stored during LoadForAgent("") and used by the agent loop
+// for per-request tool resolution via pool.AcquireUser().
+func (m *Manager) UserCredServers() []store.MCPAccessInfo {
+	return m.userCredServers
+}
 
 // ToolNames returns all registered MCP tool names.
 func (m *Manager) ToolNames() []string {

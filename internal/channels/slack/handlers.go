@@ -193,13 +193,14 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 				Sender:    displayName,
 				SenderID:  senderID,
 				Body:      content,
+				Media:     mediaPaths,
 				Timestamp: time.Now(),
 				MessageID: ev.TimeStamp,
 			}, c.historyLimit)
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
-				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group")
+				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, "", "group", "user", "", "")
 			}
 
 			slog.Debug("slack group message recorded (no mention)",
@@ -238,6 +239,10 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 	if peerKind == "group" {
 		annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
 		if c.historyLimit > 0 {
+			// Collect media from pending history (files downloaded by earlier non-mentioned messages).
+			if histMediaPaths := c.groupHistory.CollectMedia(localKey); len(histMediaPaths) > 0 {
+				mediaPaths = append(mediaPaths, histMediaPaths...)
+			}
 			finalContent = c.groupHistory.BuildContext(localKey, annotated, c.historyLimit)
 		} else {
 			finalContent = annotated
@@ -248,6 +253,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"message_id":      ev.TimeStamp,
 		"user_id":         senderID,
 		"username":        displayName,
+		"display_name":    displayName,
 		"channel_id":      channelID,
 		"is_dm":           fmt.Sprintf("%t", isDM),
 		"local_key":       localKey,

@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -24,8 +25,29 @@ import (
 // Bootstrap typically completes in 2-3 conversation turns.
 const bootstrapAutoCleanupTurns = 3
 
-// EnsureUserFilesFunc seeds per-user context files on first chat.
-// Returns the effective workspace path (from user_agent_profiles) for caching.
+// userSetup tracks per-user initialization state within a Loop instance.
+// Consolidates workspace resolution and context file seeding into one struct
+// to prevent desync between the two concerns.
+type userSetup struct {
+	workspace         string                  // effective workspace from user_agent_profiles (expanded, absolute)
+	seeded            bool                    // whether SeedUserFiles has been called this instance
+	fallbackBootstrap []bootstrap.ContextFile // in-memory fallback when DB seed fails (e.g. SQLITE_BUSY)
+}
+
+// EnsureUserProfileFunc creates/resolves a user's profile and workspace.
+// Returns the effective workspace path from user_agent_profiles.
+// Does NOT seed context files — that's SeedUserFilesFunc's responsibility.
+type EnsureUserProfileFunc func(ctx context.Context, agentID uuid.UUID, userID, workspace, channel string) (effectiveWorkspace string, isNew bool, err error)
+
+// SeedUserFilesFunc seeds per-user context files (BOOTSTRAP.md, USER.md, etc.).
+// Called once per user per Loop instance, independent of workspace.
+// isNew indicates whether the profile was just created (seed all) or already existed
+// (only seed if user has zero files — avoids re-seeding after BOOTSTRAP.md cleanup).
+type SeedUserFilesFunc func(ctx context.Context, agentID uuid.UUID, userID, agentType string, isNew bool) error
+
+// EnsureUserFilesFunc is the legacy combined callback (profile + seed + workspace).
+// Deprecated: use EnsureUserProfileFunc + SeedUserFilesFunc separately.
+// Kept for backward compatibility with existing callers during migration.
 type EnsureUserFilesFunc func(ctx context.Context, agentID uuid.UUID, userID, agentType, workspace, channel string) (effectiveWorkspace string, err error)
 
 // ContextFileLoaderFunc loads context files dynamically per-request.
@@ -35,32 +57,37 @@ type ContextFileLoaderFunc func(ctx context.Context, agentID uuid.UUID, userID, 
 // Called automatically so the system doesn't rely on the LLM to delete it.
 type BootstrapCleanupFunc func(ctx context.Context, agentID uuid.UUID, userID string) error
 
+// CacheInvalidateFunc invalidates the context file cache for a user after seeding.
+// SeedUserFiles writes via raw agentStore (bypassing ContextFileInterceptor cache),
+// so this callback ensures LoadContextFiles sees the newly seeded files.
+type CacheInvalidateFunc func(agentID uuid.UUID, userID string)
+
 // Loop is the agent execution loop for one agent instance.
 // Think → Act → Observe cycle with tool execution.
 type Loop struct {
-	id            string
-	agentUUID     uuid.UUID // set for context propagation
-	tenantID      uuid.UUID // agent's owning tenant
-	agentType     string    // "open" or "predefined"
-	provider      providers.Provider
-	model         string
-	contextWindow int
-	maxTokens     int // max output tokens per LLM call (0 = default 8192)
-	maxIterations int
-	maxToolCalls  int
+	id               string
+	agentUUID        uuid.UUID // set for context propagation
+	tenantID         uuid.UUID // agent's owning tenant
+	agentType        string    // "open" or "predefined"
+	provider         providers.Provider
+	model            string
+	contextWindow    int
+	maxTokens        int // max output tokens per LLM call (0 = default 8192)
+	maxIterations    int
+	maxToolCalls     int
 	workspace        string
 	dataDir          string // global workspace root for team workspace resolution
 	workspaceSharing *store.WorkspaceSharingConfig
 
 	// Per-agent overrides from DB (nil = use global defaults)
-	restrictToWs  *bool
-	subagentsCfg  *config.SubagentsConfig
-	memoryCfg     *config.MemoryConfig
-	sandboxCfg    *sandbox.Config
+	restrictToWs *bool
+	subagentsCfg *config.SubagentsConfig
+	memoryCfg    *config.MemoryConfig
+	sandboxCfg   *sandbox.Config
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
 	sessions        store.SessionStore
-	tools           *tools.Registry
+	tools           tools.ToolExecutor
 	toolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
 	agentToolPolicy *config.ToolPolicySpec // per-agent tool policy from DB (nil = no restrictions)
 	activeRuns      atomic.Int32           // number of currently executing runs
@@ -75,11 +102,20 @@ type Loop struct {
 	hasMemory      bool
 	contextFiles   []bootstrap.ContextFile
 
-	// Per-user file seeding + dynamic context loading
-	ensureUserFiles   EnsureUserFilesFunc
+	// Per-user profile + file seeding + dynamic context loading
+	ensureUserProfile EnsureUserProfileFunc // create/resolve user profile + workspace
+	seedUserFiles     SeedUserFilesFunc     // seed context files (BOOTSTRAP.md, USER.md)
+	ensureUserFiles   EnsureUserFilesFunc   // legacy combined callback (fallback)
 	contextFileLoader ContextFileLoaderFunc
 	bootstrapCleanup  BootstrapCleanupFunc
-	userWorkspaces    sync.Map // userID → string (expanded workspace path from user_agent_profiles)
+	cacheInvalidate   CacheInvalidateFunc // invalidate context file cache after seeding
+	userSetups        sync.Map            // userID → *userSetup (workspace + seeding state, per Loop instance)
+
+	// Per-user MCP tools: servers requiring user credentials get connected per-request.
+	mcpStore        store.MCPServerStore  // for credential lookup
+	mcpPool         *mcpbridge.Pool       // user-keyed connection pool
+	mcpUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
+	mcpUserTools    sync.Map              // userID → []tools.Tool (cached per-user tools)
 
 	// Compaction config (memory flush settings)
 	compactionCfg *config.CompactionConfig
@@ -112,8 +148,8 @@ type Loop struct {
 	// Per-tenant disabled tools (tool name → true means excluded from LLM)
 	disabledTools map[string]bool
 
-	// Thinking level for extended thinking support
-	thinkingLevel string
+	// Requested reasoning config parsed from agent other_config.
+	reasoningConfig store.AgentReasoningConfig
 
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
@@ -140,7 +176,7 @@ type Loop struct {
 
 	// Budget enforcement: monthly spending limit in cents (0 = unlimited)
 	budgetMonthlyCents int
-	tracingStore store.TracingStore
+	tracingStore       store.TracingStore
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	memStore store.MemoryStore
@@ -148,7 +184,7 @@ type Loop struct {
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
 type AgentEvent struct {
-	Type    string `json:"type"` // "run.started", "run.completed", "run.failed", "chunk", "tool.call", "tool.result"
+	Type    string `json:"type"` // "run.started", "run.completed", "run.failed", "run.cancelled", "chunk", "tool.call", "tool.result"
 	AgentID string `json:"agentId"`
 	RunID   string `json:"runId"`
 	RunKind string `json:"runKind,omitempty"` // "delegation", "announce" — omitted for user-initiated runs
@@ -160,10 +196,11 @@ type AgentEvent struct {
 	TeamTaskID    string `json:"teamTaskId,omitempty"`
 	ParentAgentID string `json:"parentAgentId,omitempty"`
 
-	// Routing context (helps WS clients filter by user/channel)
-	UserID  string `json:"userId,omitempty"`
-	Channel string `json:"channel,omitempty"`
-	ChatID  string `json:"chatId,omitempty"`
+	// Routing context (helps WS clients filter by user/channel/session)
+	UserID     string `json:"userId,omitempty"`
+	Channel    string `json:"channel,omitempty"`
+	ChatID     string `json:"chatId,omitempty"`
+	SessionKey string `json:"sessionKey,omitempty"`
 
 	// TenantID scopes this event to a specific tenant for filtering (not serialized).
 	TenantID uuid.UUID `json:"-"`
@@ -171,13 +208,13 @@ type AgentEvent struct {
 
 // LoopConfig configures a new Loop.
 type LoopConfig struct {
-	ID              string
-	Provider        providers.Provider
-	Model           string
-	ContextWindow   int
-	MaxTokens       int // max output tokens per LLM call (0 = default 8192)
-	MaxIterations   int
-	MaxToolCalls    int
+	ID               string
+	Provider         providers.Provider
+	Model            string
+	ContextWindow    int
+	MaxTokens        int // max output tokens per LLM call (0 = default 8192)
+	MaxIterations    int
+	MaxToolCalls     int
 	Workspace        string
 	DataDir          string // global workspace root for team workspace resolution
 	WorkspaceSharing *store.WorkspaceSharingConfig
@@ -221,10 +258,13 @@ type LoopConfig struct {
 	TenantID  uuid.UUID // agent's owning tenant — injected into execution context
 	AgentType string    // "open" or "predefined"
 
-	// Per-user file seeding + dynamic context loading
-	EnsureUserFiles   EnsureUserFilesFunc
+	// Per-user profile + file seeding + dynamic context loading
+	EnsureUserProfile EnsureUserProfileFunc // preferred: separate profile + workspace
+	SeedUserFiles     SeedUserFilesFunc     // preferred: separate context file seeding
+	EnsureUserFiles   EnsureUserFilesFunc   // legacy: combined (used when above are nil)
 	ContextFileLoader ContextFileLoaderFunc
 	BootstrapCleanup  BootstrapCleanupFunc
+	CacheInvalidate   CacheInvalidateFunc // invalidate context file cache after seeding
 
 	// Tracing collector (nil = no tracing)
 	TraceCollector *tracing.Collector
@@ -240,8 +280,8 @@ type LoopConfig struct {
 	// Per-tenant disabled tools (tool name → true means excluded)
 	DisabledTools map[string]bool
 
-	// Thinking level: "off", "low", "medium", "high" (from agent other_config)
-	ThinkingLevel string
+	// Requested reasoning config parsed from agent other_config.
+	ReasoningConfig store.AgentReasoningConfig
 
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
@@ -267,10 +307,15 @@ type LoopConfig struct {
 
 	// Budget enforcement
 	BudgetMonthlyCents int
-	TracingStore store.TracingStore
+	TracingStore       store.TracingStore
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	MemoryStore store.MemoryStore
+
+	// Per-user MCP tools (servers requiring per-user credentials)
+	MCPStore        store.MCPServerStore  // for credential lookup
+	MCPPool         *mcpbridge.Pool       // user-keyed connection pool
+	MCPUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -335,9 +380,12 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillAllowList:         cfg.SkillAllowList,
 		hasMemory:              cfg.HasMemory,
 		contextFiles:           cfg.ContextFiles,
+		ensureUserProfile:      cfg.EnsureUserProfile,
+		seedUserFiles:          cfg.SeedUserFiles,
 		ensureUserFiles:        cfg.EnsureUserFiles,
 		contextFileLoader:      cfg.ContextFileLoader,
 		bootstrapCleanup:       cfg.BootstrapCleanup,
+		cacheInvalidate:        cfg.CacheInvalidate,
 		compactionCfg:          cfg.CompactionCfg,
 		contextPruningCfg:      cfg.ContextPruningCfg,
 		sandboxEnabled:         cfg.SandboxEnabled,
@@ -350,7 +398,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		maxMessageChars:        cfg.MaxMessageChars,
 		builtinToolSettings:    cfg.BuiltinToolSettings,
 		disabledTools:          cfg.DisabledTools,
-		thinkingLevel:          cfg.ThinkingLevel,
+		reasoningConfig:        cfg.ReasoningConfig,
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,
@@ -362,36 +410,41 @@ func NewLoop(cfg LoopConfig) *Loop {
 		budgetMonthlyCents:     cfg.BudgetMonthlyCents,
 		tracingStore:           cfg.TracingStore,
 		memStore:               cfg.MemoryStore,
+		mcpStore:               cfg.MCPStore,
+		mcpPool:                cfg.MCPPool,
+		mcpUserCredSrvs:        cfg.MCPUserCredSrvs,
 	}
 }
 
 // RunRequest is the input for processing a message through the agent.
 type RunRequest struct {
-	SessionKey        string          // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
-	Message           string          // user message
-	Media             []bus.MediaFile // local media files with MIME types
-	ForwardMedia      []bus.MediaFile // media files to forward to output (from delegation results)
-	Channel           string          // source channel instance name (e.g. "my-telegram-bot")
-	ChannelType       string          // platform type (e.g. "zalo_personal", "telegram") — for system prompt context
-	ChatID            string          // source chat ID
-	PeerKind          string          // "direct" or "group" (for session key building and tool context)
-	RunID             string          // unique run identifier
-	UserID            string          // external user ID (TEXT, free-form) for multi-tenant scoping
-	SenderID          string          // original individual sender ID (preserved in group chats for permission checks)
-	Stream            bool            // whether to stream response chunks
-	ExtraSystemPrompt string          // optional: injected into system prompt (skills, subagent context, etc.)
-	SkillFilter       []string        // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
-	HistoryLimit      int             // max user turns to keep in context (0=unlimited, from channel config)
-	ToolAllow         []string        // per-group tool allow list (nil = no restriction, supports "group:xxx")
-	LocalKey          string          // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
-	ParentTraceID     uuid.UUID       // if set, reuse parent trace instead of creating new (announce runs)
-	ParentRootSpanID  uuid.UUID       // if set, nest announce agent span under this parent span
-	LinkedTraceID     uuid.UUID       // if set, create new trace with parent_trace_id pointing to this (team task runs)
-	TraceName         string          // override trace name (default: "chat <agentID>")
-	TraceTags         []string        // additional tags for the trace (e.g. "cron")
-	MaxIterations     int             // per-request override (0 = use agent default, must be lower)
-	ModelOverride     string          // per-request model override (heartbeat uses cheaper model)
-	LightContext      bool            // skip loading context files (only inject ExtraSystemPrompt)
+	SessionKey        string             // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
+	Message           string             // user message
+	Media             []bus.MediaFile    // local media files with MIME types
+	ForwardMedia      []bus.MediaFile    // media files to forward to output (from delegation results)
+	Channel           string             // source channel instance name (e.g. "my-telegram-bot")
+	ChannelType       string             // platform type (e.g. "zalo_personal", "telegram") — for system prompt context
+	ChatTitle         string             // group chat display name (e.g. Telegram group title)
+	ChatID            string             // source chat ID
+	PeerKind          string             // "direct" or "group" (for session key building and tool context)
+	RunID             string             // unique run identifier
+	UserID            string             // external user ID (TEXT, free-form) for multi-tenant scoping
+	SenderID          string             // original individual sender ID (preserved in group chats for permission checks)
+	Stream            bool               // whether to stream response chunks
+	ExtraSystemPrompt string             // optional: injected into system prompt (skills, subagent context, etc.)
+	SkillFilter       []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
+	HistoryLimit      int                // max user turns to keep in context (0=unlimited, from channel config)
+	ToolAllow         []string           // per-group tool allow list (nil = no restriction, supports "group:xxx")
+	LocalKey          string             // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
+	ParentTraceID     uuid.UUID          // if set, reuse parent trace instead of creating new (announce runs)
+	ParentRootSpanID  uuid.UUID          // if set, nest announce agent span under this parent span
+	LinkedTraceID     uuid.UUID          // if set, create new trace with parent_trace_id pointing to this (team task runs)
+	TraceName         string             // override trace name (default: "chat <agentID>")
+	TraceTags         []string           // additional tags for the trace (e.g. "cron")
+	MaxIterations     int                // per-request override (0 = use agent default, must be lower)
+	ModelOverride     string             // per-request model override (heartbeat uses cheaper model)
+	ProviderOverride  providers.Provider // per-request provider override (heartbeat uses different provider)
+	LightContext      bool               // skip loading context files (only inject ExtraSystemPrompt)
 
 	// Run classification
 	RunKind       string // "delegation", "announce" — empty for user-initiated runs
@@ -408,6 +461,7 @@ type RunRequest struct {
 	TeamID        string // team ID (if delegation is team-scoped)
 	TeamTaskID    string // team task ID (if delegation has an associated task)
 	ParentAgentID string // parent agent key that initiated the delegation
+	LeaderAgentID string // leader agent UUID for member memory read fallback
 
 	// Workspace scope propagation (set by delegation, read by workspace tools)
 	WorkspaceChannel string
@@ -427,12 +481,64 @@ type RunResult struct {
 	Deliverables   []string         `json:"deliverables,omitempty"`   // actual content from tool outputs (for team task results)
 	BlockReplies   int              `json:"blockReplies,omitempty"`   // number of block.reply events emitted
 	LastBlockReply string           `json:"lastBlockReply,omitempty"` // last block reply content (for dedup)
+	LoopKilled     bool             `json:"loopKilled,omitempty"`     // true when run was terminated by loop detector
 }
 
 // MediaResult represents a media file produced by a tool during the agent run.
 type MediaResult struct {
 	Path        string `json:"path"`                   // local file path
 	ContentType string `json:"content_type,omitempty"` // MIME type
-	Size        int64  `json:"size,omitempty"`          // file size in bytes
+	Size        int64  `json:"size,omitempty"`         // file size in bytes
 	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
+}
+
+// runState encapsulates all mutable state for a single runLoop execution.
+// Grouping these fields enables extracting loop sub-operations into methods
+// on *runState without passing 20+ individual variables.
+type runState struct {
+	// Loop control
+	loopDetector   toolLoopState
+	totalUsage     providers.Usage
+	iteration      int
+	totalToolCalls int
+
+	// Output accumulators
+	finalContent   string
+	finalThinking  string
+	asyncToolCalls []string // async spawn tool names for fallback
+	mediaResults   []MediaResult
+	deliverables   []string // tool output content for team task results
+	pendingMsgs    []providers.Message
+
+	// Event state
+	blockReplies   int
+	lastBlockReply string
+
+	// Crash safety
+	checkpointFlushedMsgs int
+
+	// Mid-loop compaction and overhead calibration
+	midLoopCompacted   bool
+	overheadTokens     int // non-history token overhead (system prompt + tools + context files)
+	overheadCalibrated bool
+
+	// Bootstrap detection
+	bootstrapWriteDetected bool
+
+	// Team task orphan detection
+	teamTaskCreates int
+	teamTaskSpawns  int
+
+	// Skill evolution nudge state
+	skillNudge70Sent    bool
+	skillNudge90Sent    bool
+	skillPostscriptSent bool
+
+	// Loop detector kill flag — set when any detector triggers critical level.
+	// Propagated to RunResult.LoopKilled so the consumer can auto-fail team tasks.
+	loopKilled bool
+
+	// Truncation retry counter — caps consecutive truncation/parse-error retries
+	// to prevent burning through all iterations when max_tokens is too low.
+	truncationRetries int
 }

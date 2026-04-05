@@ -24,9 +24,9 @@ export function EventDetailDialog({ entry, onClose }: EventDetailDialogProps) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] flex flex-col sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] w-[95vw] flex flex-col sm:max-w-4xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 pr-8">
             <Badge variant="secondary" className="font-mono text-xs">
               {entry.event}
             </Badge>
@@ -36,25 +36,28 @@ export function EventDetailDialog({ entry, onClose }: EventDetailDialogProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="relative min-h-0 flex-1 -mx-4 px-4 sm:-mx-6 sm:px-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute top-2 right-2 z-10 h-7 gap-1 text-xs"
-            onClick={() => copy(json)}
-          >
-            {copied ? (
-              <Check className="h-3 w-3 text-green-500" />
-            ) : (
-              <Copy className="h-3 w-3" />
-            )}
-            {copied ? t("detail.copied") : t("detail.copy")}
-          </Button>
-          <pre className="max-h-full overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm leading-relaxed">
-            <code>
-              <JsonHighlight json={json} />
-            </code>
-          </pre>
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto -mx-4 px-4 sm:-mx-6 sm:px-6">
+          <div className="relative min-w-0 rounded-md bg-muted p-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="sticky top-0 right-0 z-10 ml-auto flex h-7 gap-1 bg-background/80 text-xs backdrop-blur-sm"
+              onClick={() => copy(json)}
+            >
+              {copied ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : (
+                <Copy className="h-3 w-3" />
+              )}
+              {copied ? t("detail.copied") : t("detail.copy")}
+            </Button>
+            <pre className="min-w-0 overflow-x-auto whitespace-pre-wrap break-words pt-2 text-sm leading-relaxed">
+              <code>
+                <JsonHighlight json={json} />
+              </code>
+            </pre>
+          </div>
         </div>
 
         <DialogFooter showCloseButton />

@@ -24,7 +24,7 @@ export class WsClient {
   private connectGeneration = 0;
 
   /** Server-assigned role from connect response. */
-  role: "admin" | "operator" | "viewer" | "" = "";
+  role: "owner" | "admin" | "operator" | "viewer" | "" = "";
 
   /** Tenant fields from connect response. */
   tenantId = "";
@@ -235,7 +235,7 @@ export class WsClient {
       }
 
       this.authenticated = true;
-      this.role = (res?.role as "admin" | "operator" | "viewer") ?? "";
+      this.role = (res?.role as "owner" | "admin" | "operator" | "viewer") ?? "";
       this.tenantId = res?.tenant_id ?? "";
       this.tenantName = res?.tenant_name ?? "";
       this.tenantSlug = res?.tenant_slug ?? "";
@@ -282,7 +282,10 @@ export class WsClient {
       pending.resolve(frame.payload);
     } else {
       const err = frame.error as ErrorShape;
-      if (err.code === "UNAUTHORIZED" || err.code === "TENANT_ACCESS_REVOKED") {
+      // Only force logout on tenant revocation (session-level invalidation).
+      // UNAUTHORIZED from a method call means "insufficient permission for this action",
+      // not "session expired" — let the caller handle it via the rejected promise.
+      if (err.code === "TENANT_ACCESS_REVOKED") {
         this.onAuthFailure?.();
       }
       pending.reject(

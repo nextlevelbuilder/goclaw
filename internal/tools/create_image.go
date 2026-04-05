@@ -30,7 +30,7 @@ var imageGenProviderPriority = []string{"openrouter", "gemini", "openai", "minim
 // imageGenModelDefaults maps provider names to default image generation models.
 var imageGenModelDefaults = map[string]string{
 	"openrouter": "google/gemini-2.5-flash-image",
-	"openai":     "dall-e-3",
+	"openai":     "gpt-image-1.5",
 	"gemini":     "gemini-2.5-flash-image",
 	"minimax":    "image-01",
 	"dashscope":  "wan2.6-image",
@@ -63,6 +63,10 @@ func (t *CreateImageTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Aspect ratio: '1:1' (default), '3:4', '4:3', '9:16', '16:9'.",
 			},
+			"filename_hint": map[string]any{
+				"type":        "string",
+				"description": "Short descriptive filename (no extension). Example: 'sunset-beach', 'company-logo'.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -77,6 +81,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	if aspectRatio == "" {
 		aspectRatio = "1:1"
 	}
+	filenameHint, _ := args["filename_hint"].(string)
 
 	chain := ResolveMediaProviderChain(ctx, "create_image", "", "",
 		imageGenProviderPriority, imageGenModelDefaults, t.registry)
@@ -104,7 +109,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 	if err := os.MkdirAll(dateDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create output directory: %v", err))
 	}
-	imagePath := filepath.Join(dateDir, fmt.Sprintf("goclaw_gen_%d.png", time.Now().UnixNano()))
+	imagePath := filepath.Join(dateDir, mediaFileName(ctx, "image", filenameHint, "png"))
 	if err := os.WriteFile(imagePath, chainResult.Data, 0644); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to save generated image: %v", err))
 	}
@@ -117,7 +122,7 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		slog.Info("create_image: file saved", "path", imagePath, "size", fi.Size(), "data_len", len(chainResult.Data))
 	}
 
-	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s", imagePath)}
+	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", imagePath, filepath.Base(imagePath))}
 	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png"}}
 	result.Deliverable = fmt.Sprintf("[Generated image: %s]\nPrompt: %s", filepath.Base(imagePath), prompt)
 	result.Provider = chainResult.Provider

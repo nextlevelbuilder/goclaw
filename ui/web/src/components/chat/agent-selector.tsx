@@ -33,10 +33,6 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
       .then((res) => {
         const active = (res.agents ?? []).filter((a) => a.status === "active");
         setAgents(active);
-        if (active.length > 0 && !active.some((a) => a.agent_key === value)) {
-          const defaultAgent = active.find((a) => a.is_default) ?? active[0]!;
-          onChange(defaultAgent.agent_key);
-        }
       })
       .catch(() => {});
   }, [http, connected]);

@@ -54,7 +54,7 @@ func (s *PGPendingMessageStore) AppendBatch(ctx context.Context, msgs []store.Pe
 }
 
 func (s *PGPendingMessageStore) ListByKey(ctx context.Context, channelName, historyKey string) ([]store.PendingMessage, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (s *PGPendingMessageStore) ListByKey(ctx context.Context, channelName, hist
 }
 
 func (s *PGPendingMessageStore) DeleteByKey(ctx context.Context, channelName, historyKey string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func (s *PGPendingMessageStore) DeleteStale(ctx context.Context, olderThan time.
 }
 
 func (s *PGPendingMessageStore) ListGroups(ctx context.Context) ([]store.PendingMessageGroup, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 1)
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (s *PGPendingMessageStore) ListGroups(ctx context.Context) ([]store.Pending
 }
 
 func (s *PGPendingMessageStore) CountAll(ctx context.Context) (int64, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 1)
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -221,7 +221,7 @@ func (s *PGPendingMessageStore) CountAll(ctx context.Context) (int64, error) {
 }
 
 func (s *PGPendingMessageStore) CountByKey(ctx context.Context, channelName, historyKey string) (int, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return 0, err
 	}

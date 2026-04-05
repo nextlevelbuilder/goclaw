@@ -55,6 +55,7 @@
   "statCards": {
     "agents": "Agent",
     "channels": "Channel",
+    "channelsAttention": "{{count}} 个需关注",
     "inOut": "输入 / 输出",
     "online": "在线",
     "requestsToday": "今日请求",
@@ -66,6 +67,12 @@
   "systemHealth": {
     "active": "活跃",
     "channels": "Channel",
+    "needsAttention": "需要关注",
+    "channelsNeedingAttention": "{{count}} 个 Channel",
+    "failedCount": "{{count}} 个失败",
+    "warningCountOne": "{{count}} 个警告",
+    "warningCountOther": "{{count}} 个警告",
+    "moreAttention": "另有 +{{count}} 个",
     "clients": "客户端",
     "database": "数据库",
     "none": "无",

@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Plus, RefreshCw, Users, Trash2, Calendar, Hash, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,6 +24,7 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableSkeleton } from "@/components/shared/loading-skeleton";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useTenantDetail } from "./hooks/use-tenant-detail";
@@ -183,9 +183,14 @@ export function TenantDetailPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label htmlFor="add-user-id">{t("userId")}</Label>
-              <Input id="add-user-id" value={userId} onChange={(e) => setUserId(e.target.value)}
-                placeholder="user-id" className="text-base md:text-sm" />
+              <Label>{t("userId")}</Label>
+              <UserPickerCombobox
+                value={userId}
+                onChange={setUserId}
+                placeholder="user-id"
+                source="tenant_user"
+                allowCustom={true}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>{t("selectRole")}</Label>

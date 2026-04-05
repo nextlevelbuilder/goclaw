@@ -133,10 +133,9 @@ source .env.local && ./goclaw
 chmod +x prepare-env.sh && ./prepare-env.sh
 
 # Adj meg legalább egy GOCLAW_*_API_KEY értéket a .env fájlban, majd:
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  -f docker-compose.selfservice.yml up -d
+make up
 
-# Webes irányítópult: http://localhost:3000
+# Webes irányítópult: http://localhost:18790
 # Állapotfelmérés: curl http://localhost:18790/health
 ```
 

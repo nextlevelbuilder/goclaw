@@ -2,11 +2,13 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -16,24 +18,32 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 const maxSkillUploadSize = 20 << 20 // 20 MB
 
+var (
+	aggregateInstallDeps = skills.AggregateMissingDeps
+	installManagedDeps   = skills.InstallDeps
+)
+
 // SkillsHandler handles skill management HTTP endpoints.
 type SkillsHandler struct {
-	skills     *pg.PGSkillStore
-	baseDir    string // filesystem base for skill content (skills-store/) — master tenant
-	dataDir    string // parent data dir for tenant-scoped skill paths
-	bundledDir string // original bundled skills dir (fallback for broken managed copies)
-	msgBus     *bus.MessageBus
+	skills         store.SkillManageStore
+	baseDir        string // filesystem base for skill content (skills-store/) — master tenant
+	dataDir        string // parent data dir for tenant-scoped skill paths
+	bundledDir     string // original bundled skills dir (fallback for broken managed copies)
+	msgBus         *bus.MessageBus
+	tenantCfgStore store.SkillTenantConfigStore
+	tenantStore    store.TenantStore
+	db             *sql.DB // for export/import direct queries
+	uploadLocks    sync.Map // per-slug mutex; bounded by validated slug set, entries are tiny (*sync.Mutex)
 }
 
 // NewSkillsHandler creates a handler for skill management endpoints.
-func NewSkillsHandler(skills *pg.PGSkillStore, baseDir, dataDir, bundledDir string, msgBus *bus.MessageBus) *SkillsHandler {
-	return &SkillsHandler{skills: skills, baseDir: baseDir, dataDir: dataDir, bundledDir: bundledDir, msgBus: msgBus}
+func NewSkillsHandler(skills store.SkillManageStore, baseDir, dataDir, bundledDir string, msgBus *bus.MessageBus, tenantCfgStore store.SkillTenantConfigStore, tenantStore store.TenantStore) *SkillsHandler {
+	return &SkillsHandler{skills: skills, baseDir: baseDir, dataDir: dataDir, bundledDir: bundledDir, msgBus: msgBus, tenantCfgStore: tenantCfgStore, tenantStore: tenantStore}
 }
 
 // tenantSkillsDir returns the skills-store directory scoped to the requesting tenant.
@@ -42,6 +52,11 @@ func (h *SkillsHandler) tenantSkillsDir(r *http.Request) string {
 	tid := store.TenantIDFromContext(r.Context())
 	slug := store.TenantSlugFromContext(r.Context())
 	return config.TenantSkillsStoreDir(h.dataDir, tid, slug)
+}
+
+func (h *SkillsHandler) skillUploadLock(scopeKey string) *sync.Mutex {
+	actual, _ := h.uploadLocks.LoadOrStore(scopeKey, &sync.Mutex{})
+	return actual.(*sync.Mutex)
 }
 
 // emitCacheInvalidate broadcasts a cache invalidation event if msgBus is set.
@@ -57,19 +72,22 @@ func (h *SkillsHandler) emitCacheInvalidate(kind, key string) {
 
 // RegisterRoutes registers all skill management routes on the given mux.
 func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
+	// Skill reads (viewer+)
 	mux.HandleFunc("GET /v1/skills", h.authMiddleware(h.handleList))
-	mux.HandleFunc("POST /v1/skills/upload", h.authMiddleware(h.handleUpload))
 	mux.HandleFunc("GET /v1/skills/{id}", h.authMiddleware(h.handleGet))
-	mux.HandleFunc("PUT /v1/skills/{id}", h.authMiddleware(h.handleUpdate))
-	mux.HandleFunc("DELETE /v1/skills/{id}", h.authMiddleware(h.handleDelete))
-	mux.HandleFunc("POST /v1/skills/{id}/grants/agent", h.authMiddleware(h.handleGrantAgent))
-	mux.HandleFunc("DELETE /v1/skills/{id}/grants/agent/{agentID}", h.authMiddleware(h.handleRevokeAgent))
-	mux.HandleFunc("POST /v1/skills/{id}/grants/user", h.authMiddleware(h.handleGrantUser))
-	mux.HandleFunc("DELETE /v1/skills/{id}/grants/user/{userID}", h.authMiddleware(h.handleRevokeUser))
 	mux.HandleFunc("GET /v1/agents/{agentID}/skills", h.authMiddleware(h.handleListAgentSkills))
 	mux.HandleFunc("GET /v1/skills/{id}/versions", h.authMiddleware(h.handleListVersions))
 	mux.HandleFunc("GET /v1/skills/{id}/files/{path...}", h.authMiddleware(h.handleReadFile))
 	mux.HandleFunc("GET /v1/skills/{id}/files", h.authMiddleware(h.handleListFiles))
+	// Skill writes (admin+)
+	mux.HandleFunc("POST /v1/skills/upload", h.adminMiddleware(h.handleUpload))
+	mux.HandleFunc("PUT /v1/skills/{id}", h.adminMiddleware(h.handleUpdate))
+	mux.HandleFunc("DELETE /v1/skills/{id}", h.adminMiddleware(h.handleDelete))
+	// Skill grants (admin+)
+	mux.HandleFunc("POST /v1/skills/{id}/grants/agent", h.adminMiddleware(h.handleGrantAgent))
+	mux.HandleFunc("DELETE /v1/skills/{id}/grants/agent/{agentID}", h.adminMiddleware(h.handleRevokeAgent))
+	mux.HandleFunc("POST /v1/skills/{id}/grants/user", h.adminMiddleware(h.handleGrantUser))
+	mux.HandleFunc("DELETE /v1/skills/{id}/grants/user/{userID}", h.adminMiddleware(h.handleRevokeUser))
 	// System-level operations: admin + master tenant only.
 	// These execute shell commands (pip/npm install) and affect the entire server.
 	mux.HandleFunc("POST /v1/skills/rescan-deps", h.adminMiddleware(h.handleRescanDeps))
@@ -77,6 +95,13 @@ func (h *SkillsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/skills/install-dep", h.adminMiddleware(h.handleInstallDep))
 	mux.HandleFunc("GET /v1/skills/runtimes", h.adminMiddleware(h.handleRuntimes))
 	mux.HandleFunc("POST /v1/skills/{id}/toggle", h.adminMiddleware(h.handleToggle))
+	// Per-tenant overrides (admin+)
+	mux.HandleFunc("PUT /v1/skills/{id}/tenant-config", h.adminMiddleware(h.handleSetTenantConfig))
+	mux.HandleFunc("DELETE /v1/skills/{id}/tenant-config", h.adminMiddleware(h.handleDeleteTenantConfig))
+	// Export / Import (admin+)
+	mux.HandleFunc("GET /v1/skills/export/preview", h.adminMiddleware(h.handleSkillsExportPreview))
+	mux.HandleFunc("GET /v1/skills/export", h.adminMiddleware(h.handleSkillsExport))
+	mux.HandleFunc("POST /v1/skills/import", h.adminMiddleware(h.handleSkillsImport))
 }
 
 func (h *SkillsHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -109,8 +134,35 @@ func (h *SkillsHandler) requireMasterTenant(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *SkillsHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	skills := h.skills.ListSkills(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"skills": skills})
+	skillList := h.skills.ListSkills(r.Context())
+
+	// Merge per-tenant overrides into response when tenant-scoped
+	tid := store.TenantIDFromContext(r.Context())
+	if tid != uuid.Nil && h.tenantCfgStore != nil {
+		overrides, err := h.tenantCfgStore.ListAll(r.Context(), tid)
+		if err != nil {
+			slog.Warn("skill tenant config list failed", "tenant", tid, "error", err)
+		}
+		if err == nil && len(overrides) > 0 {
+			type skillWithTenant struct {
+				store.SkillInfo
+				TenantEnabled *bool `json:"tenant_enabled"`
+			}
+			enriched := make([]skillWithTenant, len(skillList))
+			for i, sk := range skillList {
+				enriched[i] = skillWithTenant{SkillInfo: sk}
+				if skID, err := uuid.Parse(sk.ID); err == nil {
+					if enabled, ok := overrides[skID]; ok {
+						enriched[i].TenantEnabled = &enabled
+					}
+				}
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"skills": enriched})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"skills": skillList})
 }
 
 func (h *SkillsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -203,13 +255,17 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 	if !h.requireMasterTenant(w, r) {
 		return
 	}
-	dirs := h.skills.ListSystemSkillDirs()
+	// Use explicit master tenant context for system skill operations,
+	// consistent with rescanAndUpdate() pattern.
+	masterCtx := store.WithTenantID(r.Context(), store.MasterTenantID)
+
+	dirs := h.skills.ListSystemSkillDirs(masterCtx)
 	if len(dirs) == 0 {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "no system skills"})
 		return
 	}
 
-	manifest, missing := skills.AggregateMissingDeps(dirs)
+	manifest, missing := aggregateInstallDeps(dirs)
 	if len(missing) == 0 {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "all deps satisfied"})
 		return
@@ -222,25 +278,24 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 		})
 	}
 
-	result, err := skills.InstallDeps(r.Context(), manifest, missing)
+	result, err := installManagedDeps(masterCtx, manifest, missing)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	// Re-check all system skills and update status after install
-	allSkills := h.skills.ListAllSkills(r.Context())
+	// Re-check all system skills, persist missing deps, and update status.
+	allSkills := h.skills.ListAllSkills(masterCtx)
+	statusChanged := false
 	for _, sk := range allSkills {
 		if !sk.IsSystem {
 			continue
 		}
-		dir, exists := dirs[sk.Slug]
-		if !exists {
+		if _, exists := dirs[sk.Slug]; !exists {
 			continue
 		}
 		m := h.scanWithFallback(sk)
 		if m == nil || m.IsEmpty() {
-			_ = dir // dir was used for direct scan; fallback uses sk.BaseDir
 			continue
 		}
 		ok, miss := skills.CheckSkillDeps(m)
@@ -248,10 +303,20 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			continue
 		}
-		if ok && sk.Status == "archived" {
-			_ = h.skills.UpdateSkill(r.Context(), id, map[string]any{"status": "active"})
-			h.skills.BumpVersion()
+
+		// Persist actual missing deps to DB so reload reflects reality.
+		_ = h.skills.StoreMissingDeps(masterCtx, id, miss)
+
+		// Update status in both directions.
+		switch {
+		case ok && sk.Status == "archived":
+			_ = h.skills.UpdateSkill(masterCtx, id, map[string]any{"status": "active"})
+			statusChanged = true
+		case !ok && sk.Status != "archived":
+			_ = h.skills.UpdateSkill(masterCtx, id, map[string]any{"status": "archived"})
+			statusChanged = true
 		}
+
 		status := "active"
 		if !ok {
 			status = "archived"
@@ -266,6 +331,9 @@ func (h *SkillsHandler) handleInstallDeps(w http.ResponseWriter, r *http.Request
 				},
 			})
 		}
+	}
+	if statusChanged {
+		h.skills.BumpVersion()
 	}
 
 	if h.msgBus != nil {
@@ -342,7 +410,7 @@ func (h *SkillsHandler) rescanAndUpdate() (updated int, results []depResult) {
 		if manifest == nil || manifest.IsEmpty() {
 			// No deps needed — if archived, recover to active and clear stale deps.
 			if sk.Status == "archived" {
-				_ = h.skills.StoreMissingDeps(id, nil)
+				_ = h.skills.StoreMissingDeps(masterCtx, id, nil)
 				_ = h.skills.UpdateSkill(masterCtx, id, map[string]any{"status": "active"})
 				results = append(results, depResult{Slug: sk.Slug, Status: "active"})
 				updated++
@@ -354,7 +422,7 @@ func (h *SkillsHandler) rescanAndUpdate() (updated int, results []depResult) {
 		}
 
 		ok, missing := skills.CheckSkillDeps(manifest)
-		_ = h.skills.StoreMissingDeps(id, missing)
+		_ = h.skills.StoreMissingDeps(masterCtx, id, missing)
 
 		switch {
 		case ok && sk.Status == "archived":
@@ -471,7 +539,7 @@ func (h *SkillsHandler) handleToggle(w http.ResponseWriter, r *http.Request) {
 			manifest := h.scanWithFallback(sk)
 			if manifest != nil && !manifest.IsEmpty() {
 				depOk, missing := skills.CheckSkillDeps(manifest)
-				_ = h.skills.StoreMissingDeps(id, missing)
+				_ = h.skills.StoreMissingDeps(r.Context(), id, missing)
 				if depOk {
 					newStatus = "active"
 				} else {
@@ -487,4 +555,70 @@ func (h *SkillsHandler) handleToggle(w http.ResponseWriter, r *http.Request) {
 	h.skills.BumpVersion()
 	emitAudit(h.msgBus, r, "skill.toggled", "skill", idStr)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "enabled": body.Enabled, "status": newStatus})
+}
+
+// handleSetTenantConfig sets a per-tenant override for a skill.
+func (h *SkillsHandler) handleSetTenantConfig(w http.ResponseWriter, r *http.Request) {
+	if h.tenantCfgStore == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "tenant config not available"})
+		return
+	}
+	if !requireTenantAdmin(w, r, h.tenantStore) {
+		return
+	}
+	locale := store.LocaleFromContext(r.Context())
+	tid := store.TenantIDFromContext(r.Context())
+
+	idStr := r.PathValue("id")
+	skillID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
+		return
+	}
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+		return
+	}
+
+	if err := h.tenantCfgStore.Set(r.Context(), tid, skillID, body.Enabled); err != nil {
+		slog.Warn("set tenant skill config failed", "skill", idStr, "tenant", tid, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "skill tenant config")})
+		return
+	}
+
+	emitAudit(h.msgBus, r, "skill.tenant_config.set", "skill", idStr)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// handleDeleteTenantConfig removes a per-tenant override for a skill (reverts to default).
+func (h *SkillsHandler) handleDeleteTenantConfig(w http.ResponseWriter, r *http.Request) {
+	if h.tenantCfgStore == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "tenant config not available"})
+		return
+	}
+	if !requireTenantAdmin(w, r, h.tenantStore) {
+		return
+	}
+	locale := store.LocaleFromContext(r.Context())
+	tid := store.TenantIDFromContext(r.Context())
+
+	idStr := r.PathValue("id")
+	skillID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "skill")})
+		return
+	}
+
+	if err := h.tenantCfgStore.Delete(r.Context(), tid, skillID); err != nil {
+		slog.Warn("delete tenant skill config failed", "skill", idStr, "tenant", tid, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "skill tenant config")})
+		return
+	}
+
+	emitAudit(h.msgBus, r, "skill.tenant_config.deleted", "skill", idStr)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

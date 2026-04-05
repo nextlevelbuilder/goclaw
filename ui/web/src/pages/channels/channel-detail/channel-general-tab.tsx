@@ -17,7 +17,10 @@ import type { ChannelInstanceData } from "@/types/channel";
 import type { AgentData } from "@/types/agent";
 import { channelTypeLabels } from "../channels-status-view";
 
-const ESSENTIAL_CONFIG_KEYS = ["dm_policy", "group_policy", "require_mention"];
+const ESSENTIAL_CONFIG_KEYS: Record<string, string[]> = {
+  _default: ["dm_policy", "group_policy", "require_mention"],
+  telegram: ["dm_policy", "group_policy", "mention_mode", "require_mention"],
+};
 
 interface ChannelGeneralTabProps {
   instance: ChannelInstanceData;
@@ -34,10 +37,11 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
 
   // Essential config fields (policies)
   const allConfigFields = configSchema[instance.channel_type] ?? [];
-  const essentialFields = allConfigFields.filter((f) => ESSENTIAL_CONFIG_KEYS.includes(f.key));
+  const essentialKeys = ESSENTIAL_CONFIG_KEYS[instance.channel_type] ?? ESSENTIAL_CONFIG_KEYS._default ?? [];
+  const essentialFields = allConfigFields.filter((f) => essentialKeys.includes(f.key));
   const existingConfig = (instance.config ?? {}) as Record<string, unknown>;
   const initialPolicyValues = Object.fromEntries(
-    ESSENTIAL_CONFIG_KEYS
+    essentialKeys
       .filter((k) => existingConfig[k] !== undefined)
       .map((k) => [k, existingConfig[k]]),
   );
@@ -133,6 +137,7 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
             values={policyValues}
             onChange={handlePolicyChange}
             idPrefix="cd-pol"
+            contextValues={policyValues}
           />
         </section>
       )}

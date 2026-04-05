@@ -15,7 +15,16 @@
     "spans": "Khoảng",
     "time": "Thời gian"
   },
+  "source": {
+    "direct": "Trực tiếp",
+    "group": "Nhóm",
+    "cron": "Cron",
+    "team": "Team",
+    "ws": "Web",
+    "unknown": "Khác"
+  },
   "unnamed": "Không tên",
+  "stopRun": "Dừng chạy",
   "cached": "đã cache",
   "detail": {
     "title": "Chi tiết theo dõi",
@@ -36,11 +45,25 @@
     "spansCount": "Khoảng ({{count}})",
     "llmCalls": "LLM",
     "toolCalls": "công cụ",
-    "export": "Xuất trace"
+    "export": "Xuất trace",
+    "stopRun": "Dừng chạy"
   },
   "span": {
     "model": "Model:",
     "tokens": "Token:",
+    "reasoning": "Reasoning:",
+    "source": "source",
+    "requested": "yêu cầu",
+    "effective": "thực tế",
+    "fallback": "fallback",
+    "modelDefault": "mặc định model",
+    "supportedLevels": "hỗ trợ:",
+    "sourceValue": {
+      "provider_default": "provider default",
+      "reasoning": "agent advanced",
+      "thinking_level": "legacy thinking level",
+      "unset": "unset"
+    },
     "createdAt": "Tạo lúc:",
     "input": "Đầu vào:",
     "output": "Đầu ra:",
@@ -53,6 +76,9 @@
     "cached": "đã cache"
   },
   "toast": {
-    "failedLoad": "Không thể tải dữ liệu theo dõi"
+    "failedLoad": "Không thể tải dữ liệu theo dõi",
+    "abortSent": "Đã dừng chạy",
+    "abortFailed": "Không thể dừng chạy",
+    "abortNotFound": "Lệnh đã hoàn tất hoặc không tìm thấy"
   }
 }

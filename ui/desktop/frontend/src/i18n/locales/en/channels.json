@@ -1,0 +1,157 @@
+{
+  "title": "Channels",
+  "description": "Connect messaging apps to your agents",
+  "addChannel": "Add Channel",
+  "atLimit": "Lite edition: max 1 Telegram + 1 Discord.",
+  "emptyTitle": "No channels",
+  "emptyDesc": "Connect Telegram or Discord to chat with your agents from messaging apps.",
+  "status": {
+    "running": "Running",
+    "stopped": "Stopped",
+    "disabled": "Disabled",
+    "degraded": "Degraded",
+    "starting": "Starting",
+    "registered": "Configured",
+    "failed": "Failed"
+  },
+  "channelTypes": {
+    "telegram": "Telegram",
+    "discord": "Discord"
+  },
+  "form": {
+    "createTitle": "Add Channel",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "My Telegram Bot",
+    "channelType": "Channel Type",
+    "selectType": "Select type",
+    "agent": "Agent",
+    "selectAgent": "Select agent",
+    "enabled": "Enabled",
+    "credentials": "Credentials",
+    "credentialsHint": "(leave blank to keep current)",
+    "configuration": "Configuration",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "saving": "Saving...",
+    "errors": {
+      "agentRequired": "Agent is required",
+      "typeRequired": "Channel type is required",
+      "tokenRequired": "Bot token is required"
+    }
+  },
+  "detail": {
+    "back": "Back",
+    "lastChecked": "Last checked: {{value}}",
+    "tabs": {
+      "general": "General",
+      "credentials": "Credentials",
+      "managers": "Managers",
+      "advanced": "Advanced"
+    },
+    "general": {
+      "identity": "Identity",
+      "name": "Name",
+      "nameHint": "Read-only slug identifier",
+      "channelType": "Channel Type",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "Enter display name",
+      "agent": "Agent",
+      "selectAgent": "Select agent",
+      "enabled": "Enabled",
+      "saveChanges": "Save Changes",
+      "saving": "Saving..."
+    },
+    "policies": "Policies",
+    "credentials": {
+      "hint": "Leave fields blank to keep current values. Credentials are encrypted at rest.",
+      "updateCredentials": "Update Credentials",
+      "saving": "Saving...",
+      "saved": "Credentials updated"
+    },
+    "managers": {
+      "description": "Assign users as managers for channel groups. Managers can moderate conversations.",
+      "groups": "Groups",
+      "noManagerGroups": "No manager groups yet",
+      "noManagerGroupsHint": "Groups appear here when users interact with the bot in group chats.",
+      "loadingManagers": "Loading managers...",
+      "noManagers": "No managers in this group",
+      "managersCount": "{{count}} manager",
+      "managersCountPlural": "{{count}} managers",
+      "columns": {
+        "userId": "User ID",
+        "name": "Name",
+        "username": "Username"
+      },
+      "addForm": {
+        "title": "Add Manager",
+        "hint": "Enter group and user details to add a manager",
+        "groupId": "Group ID",
+        "groupIdPlaceholder": "e.g. group:telegram:-100123456",
+        "userId": "User ID",
+        "userIdPlaceholder": "Search or enter user ID",
+        "addManager": "Add Manager",
+        "add": "Add",
+        "errors": {
+          "groupUserRequired": "Group ID and User ID are required",
+          "failedAdd": "Failed to add manager"
+        }
+      }
+    },
+    "advanced": "Advanced",
+    "advancedTitle": "Advanced Settings",
+    "network": "Network",
+    "networkDesc": "API server and proxy configuration",
+    "limits": "Limits",
+    "limitsDesc": "Message and media limits",
+    "streaming": "Streaming",
+    "streamingDesc": "Progressive response delivery",
+    "behavior": "Behavior",
+    "behaviorDesc": "Reactions, previews, and reply mode",
+    "accessControl": "Access Control",
+    "accessControlDesc": "User allowlist restrictions",
+    "saveConfig": "Save",
+    "noAdvanced": "No advanced settings available for this channel type."
+  },
+  "pairing": {
+    "title": "Paired Devices",
+    "pending": "Pending Requests ({{count}})",
+    "paired": "Paired Devices ({{count}})",
+    "empty": "No paired devices",
+    "emptyDesc": "Devices appear here when users message your bot and need approval.",
+    "sender": "Sender: ",
+    "chat": "Chat: ",
+    "code": "Code",
+    "approve": "Approve",
+    "deny": "Deny",
+    "revoke": "Revoke",
+    "confirmApprove": {
+      "title": "Approve Pairing",
+      "description": "Approve {{channel}}:{{senderId}} (code: {{code}})? This device will be able to interact with agents.",
+      "confirmLabel": "Approve"
+    },
+    "confirmDeny": {
+      "title": "Deny Pairing",
+      "description": "Deny {{channel}}:{{senderId}} (code: {{code}})? The request will be removed.",
+      "confirmLabel": "Deny"
+    },
+    "confirmRevoke": {
+      "title": "Revoke Device",
+      "description": "Revoke {{channel}}:{{senderId}}? The device will need to re-pair.",
+      "confirmLabel": "Revoke"
+    }
+  },
+  "toast": {
+    "created": "Channel created",
+    "updated": "Channel updated",
+    "deleted": "Channel deleted",
+    "failedCreate": "Failed to create channel",
+    "failedUpdate": "Failed to update channel",
+    "failedDelete": "Failed to delete channel"
+  },
+  "delete": {
+    "title": "Delete Channel",
+    "description": "Delete {{name}}? This cannot be undone.",
+    "confirmLabel": "Delete"
+  }
+}

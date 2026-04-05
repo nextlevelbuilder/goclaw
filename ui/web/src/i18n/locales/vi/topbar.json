@@ -26,7 +26,8 @@
     "reportBug": "Báo lỗi",
     "upToDate": "Đã cập nhật",
     "updateAvailable": "Có bản cập nhật: {{version}}",
-    "viewRelease": "Xem chi tiết →"
+    "viewRelease": "Xem chi tiết →",
+    "releaseNotes": "Ghi chú phát hành"
   },
   "systemSettings": "Cài đặt hệ thống",
   "toggleTheme": "Chuyển đổi giao diện"

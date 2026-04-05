@@ -1,0 +1,62 @@
+{
+  "cached": "已缓存",
+  "columns": {
+    "duration": "耗时",
+    "name": "名称",
+    "spans": "跨度",
+    "status": "状态",
+    "time": "时间",
+    "tokens": "令牌"
+  },
+  "description": "LLM 调用追踪和性能数据",
+  "detail": {
+    "channel": "Channel：",
+    "copy": "复制",
+    "copyTraceId": "复制追踪 ID",
+    "createdAt": "创建时间：",
+    "delegatedFrom": "委托来自：",
+    "duration": "耗时：",
+    "input": "输入",
+    "llmCalls": "LLM 调用",
+    "name": "名称：",
+    "notFound": "未找到追踪。",
+    "output": "输出",
+    "spans": "跨度：",
+    "spansCount": "跨度（{{count}}）",
+    "started": "开始时间：",
+    "status": "状态：",
+    "title": "追踪详情",
+    "tokens": "令牌：",
+    "toolCalls": "工具",
+    "export": "导出追踪",
+    "stopRun": "停止运行"
+  },
+  "emptyDescription": "暂无追踪记录。当Agent处理请求时将自动记录追踪。",
+  "emptyTitle": "暂无追踪",
+  "allAgents": "所有Agent",
+  "allChannels": "所有渠道",
+  "filter": "筛选",
+  "filterPlaceholder": "按Agent ID 筛选...",
+  "span": {
+    "cacheRead": "读取",
+    "cacheWrite": "写入",
+    "cached": "已缓存",
+    "copy": "复制",
+    "startTime": "开始：",
+    "endTime": "结束：",
+    "input": "输入：",
+    "model": "模型：",
+    "output": "输出：",
+    "thinking": "思考",
+    "tokens": "令牌："
+  },
+  "title": "追踪",
+  "toast": {
+    "failedLoad": "加载追踪失败",
+    "abortSent": "已停止运行",
+    "abortFailed": "停止运行失败",
+    "abortNotFound": "运行已完成或未找到"
+  },
+  "unnamed": "未命名",
+  "stopRun": "停止运行"
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,13 +44,14 @@ func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messag
 			slog.Debug("feishu image too large", "size", len(data), "max", maxBytes)
 			return nil
 		}
-		path, err := saveMediaToTemp(data, "img", ".png")
+		ct, ext := detectImageFormat(data)
+		path, err := saveMediaToTemp(data, "img", ext)
 		if err != nil {
 			slog.Debug("feishu save image failed", "error", err)
 			return nil
 		}
 		results = append(results, media.MediaInfo{
-			Type: media.TypeImage, FilePath: path, ContentType: "image/png",
+			Type: media.TypeImage, FilePath: path, ContentType: ct,
 		})
 
 	case "file":
@@ -134,12 +136,13 @@ func (c *Channel) resolveMediaFromMessage(ctx context.Context, messageID, messag
 		if int64(len(data)) > maxBytes {
 			return nil
 		}
-		path, err := saveMediaToTemp(data, "sticker", ".png")
+		ct, ext := detectImageFormat(data)
+		path, err := saveMediaToTemp(data, "sticker", ext)
 		if err != nil {
 			return nil
 		}
 		results = append(results, media.MediaInfo{
-			Type: media.TypeImage, FilePath: path, ContentType: "image/png",
+			Type: media.TypeImage, FilePath: path, ContentType: ct,
 		})
 	}
 
@@ -162,13 +165,14 @@ func (c *Channel) resolvePostImages(ctx context.Context, messageID string, image
 			slog.Debug("feishu post image too large", "size", len(data), "max", maxBytes)
 			continue
 		}
-		path, err := saveMediaToTemp(data, "img", ".png")
+		ct, ext := detectImageFormat(data)
+		path, err := saveMediaToTemp(data, "img", ext)
 		if err != nil {
 			slog.Debug("feishu save post image failed", "error", err)
 			continue
 		}
 		results = append(results, media.MediaInfo{
-			Type: media.TypeImage, FilePath: path, ContentType: "image/png",
+			Type: media.TypeImage, FilePath: path, ContentType: ct,
 		})
 	}
 	return results
@@ -185,6 +189,26 @@ func saveMediaToTemp(data []byte, prefix, ext string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// detectImageFormat sniffs the actual image format from raw bytes using
+// http.DetectContentType and returns the correct MIME type and file extension.
+// Prevents MIME mismatch when Lark serves images in formats other than PNG
+// (e.g. WebP, JPEG) — which would cause LLM provider API errors.
+func detectImageFormat(data []byte) (contentType, ext string) {
+	ct := http.DetectContentType(data)
+	switch {
+	case strings.HasPrefix(ct, "image/jpeg"):
+		return "image/jpeg", ".jpg"
+	case strings.HasPrefix(ct, "image/png"):
+		return "image/png", ".png"
+	case strings.HasPrefix(ct, "image/gif"):
+		return "image/gif", ".gif"
+	case strings.HasPrefix(ct, "image/webp"):
+		return "image/webp", ".webp"
+	default:
+		return "image/png", ".png"
+	}
 }
 
 // extractJSONField is a simple helper to extract a string field from JSON content.

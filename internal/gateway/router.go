@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,8 +24,8 @@ type MethodHandler func(ctx context.Context, client *Client, req *protocol.Reque
 type MethodRouter struct {
 	handlers    map[string]MethodHandler
 	server      *Server
-	tenantStore store.TenantStore       // optional, for enriching connect response
-	permCache   *cache.PermissionCache  // optional, for caching tenant membership checks
+	tenantStore store.TenantStore      // optional, for enriching connect response
+	permCache   *cache.PermissionCache // optional, for caching tenant membership checks
 }
 
 func NewMethodRouter(server *Server) *MethodRouter {
@@ -70,7 +71,7 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 				client.SendResponse(protocol.NewErrorResponse(
 					req.ID,
 					protocol.ErrUnauthorized,
-					i18n.T(locale, i18n.MsgPermissionDenied, req.Method),
+					i18n.T(locale, i18n.MsgPermissionDenied, req.Method+" requires "+string(permissions.MethodRole(req.Method))+" role"),
 				))
 				return
 			}
@@ -82,6 +83,9 @@ func (r *MethodRouter) Handle(ctx context.Context, client *Client, req *protocol
 	ctx = store.WithLocale(ctx, i18n.Normalize(client.locale))
 	if client.TenantID() != uuid.Nil {
 		ctx = store.WithTenantID(ctx, client.TenantID())
+	}
+	if slug := client.TenantSlug(); slug != "" {
+		ctx = store.WithTenantSlug(ctx, slug)
 	}
 
 	slog.Debug("handling method", "method", req.Method, "client", client.id, "req_id", req.ID)
@@ -105,9 +109,9 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		UserID      string `json:"user_id"`
 		SenderID    string `json:"sender_id"`    // browser pairing: stored sender ID for reconnect
 		Locale      string `json:"locale"`       // user's preferred locale (en, vi, zh)
-		TenantHint string `json:"tenant_hint"`      // optional tenant slug for browser pairing multi-tenant
-		TenantID   string `json:"tenant_id"`        // cross-tenant admin: narrow scope to specific tenant (UUID or slug)
-		TenantScope string `json:"tenant_scope"`    // deprecated: alias for tenant_id (backward compat)
+		TenantHint  string `json:"tenant_hint"`  // optional tenant slug for browser pairing multi-tenant
+		TenantID    string `json:"tenant_id"`    // cross-tenant admin: narrow scope to specific tenant (UUID or slug)
+		TenantScope string `json:"tenant_scope"` // deprecated: alias for tenant_id (backward compat)
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -141,7 +145,10 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			// Non-owner with gateway token: resolve tenant via hint or membership
 			hint := params.TenantID
 			if hint == "" {
-				hint = params.TenantScope
+				hint = params.TenantHint
+			}
+			if hint == "" {
+				hint = params.TenantScope // deprecated
 			}
 			tid, errCode := r.resolveTenantHint(ctx, hint, params.UserID)
 			if errCode != "" {
@@ -177,8 +184,8 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				client.userID = params.UserID
 			}
 			if keyData.TenantID == uuid.Nil {
-				// API key with no tenant → owner scope
-				client.role = permissions.RoleOwner
+				// System-level API keys keep their scope-derived role and may
+				// optionally narrow to a tenant without gaining owner privileges.
 				apiKeyScope := params.TenantID
 				if apiKeyScope == "" {
 					apiKeyScope = params.TenantScope // backward compat
@@ -320,12 +327,7 @@ func isOwnerID(userID string, ownerIDs []string) bool {
 	if len(ownerIDs) == 0 {
 		return userID == "system"
 	}
-	for _, id := range ownerIDs {
-		if id == userID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ownerIDs, userID)
 }
 
 // resolveTenantHint resolves a tenant slug/UUID hint to a UUID with membership validation.
@@ -462,6 +464,7 @@ func (r *MethodRouter) handleHealth(ctx context.Context, client *Client, req *pr
 			resp["latestVersion"] = info.LatestVersion
 			resp["updateAvailable"] = info.UpdateAvailable
 			resp["updateUrl"] = info.UpdateURL
+			resp["releaseNotes"] = info.ReleaseNotes
 		}
 	}
 	client.SendResponse(protocol.NewOKResponse(req.ID, resp))

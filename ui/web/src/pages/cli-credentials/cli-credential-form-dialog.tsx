@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -11,7 +11,14 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Plus, X } from "lucide-react";
+import { useHttp } from "@/hooks/use-ws";
 import type { SecureCLIBinary, CLICredentialInput, CLIPreset } from "./hooks/use-cli-credentials";
+
+interface ManualEnvEntry {
+  key: string;
+  value: string;
+}
 
 interface Props {
   open: boolean;
@@ -26,6 +33,7 @@ const NONE_PRESET = "__none__";
 export function CliCredentialFormDialog({ open, onOpenChange, credential, presets, onSubmit }: Props) {
   const { t } = useTranslation("cli-credentials");
   const { t: tc } = useTranslation("common");
+  const http = useHttp();
 
   const [selectedPreset, setSelectedPreset] = useState(NONE_PRESET);
   const [binaryName, setBinaryName] = useState("");
@@ -38,18 +46,21 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const [agentId, setAgentId] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
+  const [manualEnvEntries, setManualEnvEntries] = useState<ManualEnvEntry[]>([]);
+  /** Snapshot when dialog opens (edit) — detect clearing all env rows */
+  const [initialEnvKeys, setInitialEnvKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const isEdit = !!credential;
-  // Build typed entry list to avoid noUncheckedIndexedAccess issues
   const presetEntries: Array<[string, CLIPreset]> = Object.entries(presets).filter(
     (e): e is [string, CLIPreset] => e[1] !== undefined,
   );
 
-  // Current preset definition (for env var fields)
   const activePreset: CLIPreset | null =
     selectedPreset !== NONE_PRESET ? (presets[selectedPreset] ?? null) : null;
+
+  const isManualMode = selectedPreset === NONE_PRESET;
 
   useEffect(() => {
     if (!open) return;
@@ -65,7 +76,37 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
     setEnabled(credential?.enabled ?? true);
     setEnvValues({});
     setError("");
-  }, [open, credential]);
+
+    if (!credential) {
+      setInitialEnvKeys([]);
+      setManualEnvEntries([]);
+      return;
+    }
+
+    const applyEnvKeys = (keys: string[]) => {
+      setInitialEnvKeys(keys);
+      setManualEnvEntries(keys.length > 0 ? keys.map((k) => ({ key: k, value: "" })) : []);
+    };
+
+    if (credential.env_keys !== undefined) {
+      applyEnvKeys(credential.env_keys ?? []);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const full = await http.get<SecureCLIBinary>(`/v1/cli-credentials/${credential.id}`);
+        if (cancelled) return;
+        applyEnvKeys(full.env_keys ?? []);
+      } catch {
+        if (!cancelled) applyEnvKeys([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, credential, http]);
 
   const applyPreset = (key: string) => {
     setSelectedPreset(key);
@@ -79,10 +120,41 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
     setTimeout(p.timeout);
     setTips(p.tips);
     setEnvValues({});
+    setManualEnvEntries([]);
   };
+
+  const addManualEnvEntry = useCallback(() => {
+    setManualEnvEntries((prev) => [...prev, { key: "", value: "" }]);
+  }, []);
+
+  const removeManualEnvEntry = useCallback((index: number) => {
+    setManualEnvEntries((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const updateManualEnvEntry = useCallback((index: number, field: "key" | "value", val: string) => {
+    setManualEnvEntries((prev) =>
+      prev.map((entry, i) => (i === index ? { ...entry, [field]: val } : entry)),
+    );
+  }, []);
 
   const splitCommaList = (v: string): string[] =>
     v.split(",").map((s) => s.trim()).filter(Boolean);
+
+  const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+  const buildEnvPayload = (): Record<string, string> | null => {
+    if (!isManualMode) return envValues;
+    const env: Record<string, string> = {};
+    for (const entry of manualEnvEntries) {
+      const k = entry.key.trim();
+      if (k && !ENV_KEY_PATTERN.test(k)) {
+        setError(t("form.invalidEnvKey", { key: k }));
+        return null;
+      }
+      if (k) env[k] = entry.value;
+    }
+    return env;
+  };
 
   const handleSubmit = async () => {
     if (!binaryName.trim()) {
@@ -104,7 +176,13 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
         enabled,
       };
       if (selectedPreset !== NONE_PRESET) payload.preset = selectedPreset;
-      if (Object.keys(envValues).length > 0) payload.env = envValues;
+      const env = buildEnvPayload();
+      if (!env) return;
+      if (Object.keys(env).length > 0) {
+        payload.env = env;
+      } else if (isEdit && isManualMode && initialEnvKeys.length > 0) {
+        payload.env = {};
+      }
       await onSubmit(payload);
       onOpenChange(false);
     } catch (err) {
@@ -174,6 +252,53 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
                   {ev.desc && (
                     <p className="text-xs text-muted-foreground">{ev.desc}</p>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Manual env var entries (no preset selected) */}
+          {isManualMode && (
+            <div className="grid gap-3 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">{t("form.envVars")}</p>
+                <Button type="button" variant="outline" size="sm" onClick={addManualEnvEntry}>
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  {t("form.addEnvVar")}
+                </Button>
+              </div>
+              {manualEnvEntries.length === 0 && (
+                <p className="text-xs text-muted-foreground">{t("form.noEnvVarsHint")}</p>
+              )}
+              {manualEnvEntries.map((entry, idx) => (
+                <div key={idx} className="flex items-start gap-2">
+                  <div className="grid flex-1 gap-1.5">
+                    <Input
+                      placeholder={t("form.envKeyPlaceholder")}
+                      value={entry.key}
+                      onChange={(e) => updateManualEnvEntry(idx, "key", e.target.value)}
+                      className="text-base md:text-sm font-mono"
+                    />
+                  </div>
+                  <div className="grid flex-1 gap-1.5">
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      placeholder={t("form.envValuePlaceholder")}
+                      value={entry.value}
+                      onChange={(e) => updateManualEnvEntry(idx, "value", e.target.value)}
+                      className="text-base md:text-sm"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="mt-0.5 h-8 w-8 shrink-0"
+                    onClick={() => removeManualEnvEntry(idx)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </div>

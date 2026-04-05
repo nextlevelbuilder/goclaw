@@ -68,11 +68,18 @@ func (m *Manager) ListTabs(ctx context.Context) ([]TabInfo, error) {
 
 // OpenTab opens a new tab with the given URL.
 // Pages are created within the tenant's incognito browser context for isolation.
+// If the tenant already has maxPages open, the oldest idle page is closed first.
 func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	tenantID := tenantIDFromCtx(ctx)
+
+	// Enforce max pages per tenant
+	if m.maxPages > 0 {
+		m.evictOldestIfOverLimitLocked(tenantID)
+	}
+
 	b, err := m.tenantBrowserLocked(tenantID)
 	if err != nil {
 		return nil, err
@@ -89,6 +96,7 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 	info, _ := page.Info()
 	tid := string(page.TargetID)
 	m.pages[tid] = page
+	m.touchPageLocked(tid)
 	if tenantID != "" {
 		m.pageTenants[tid] = tenantID
 	}
@@ -102,6 +110,60 @@ func (m *Manager) OpenTab(ctx context.Context, url string) (*TabInfo, error) {
 		tab.Title = info.Title
 	}
 	return tab, nil
+}
+
+// evictOldestIfOverLimitLocked closes the oldest idle page for a tenant if at or over maxPages.
+// Must be called with mu held.
+func (m *Manager) evictOldestIfOverLimitLocked(tenantID string) {
+	isMaster := tenantID == "" || tenantID == MasterTenantID
+
+	// Collect targetIDs belonging to this tenant
+	var owned []string
+	for tid := range m.pages {
+		if isMaster {
+			// Master tenant owns pages not in pageTenants
+			if _, hasOwner := m.pageTenants[tid]; !hasOwner {
+				owned = append(owned, tid)
+			}
+		} else {
+			if m.pageTenants[tid] == tenantID {
+				owned = append(owned, tid)
+			}
+		}
+	}
+
+	if len(owned) < m.maxPages {
+		return
+	}
+
+	// Find the oldest page by lastUsed
+	var oldestID string
+	var oldestTime time.Time
+	for _, tid := range owned {
+		lu, ok := m.pageLastUsed[tid]
+		if !ok {
+			oldestID = tid
+			break
+		}
+		if oldestID == "" || lu.Before(oldestTime) {
+			oldestID = tid
+			oldestTime = lu
+		}
+	}
+
+	if oldestID == "" {
+		return
+	}
+
+	if page, ok := m.pages[oldestID]; ok {
+		_ = page.Close()
+	}
+	delete(m.pages, oldestID)
+	delete(m.console, oldestID)
+	delete(m.pageTenants, oldestID)
+	delete(m.pageLastUsed, oldestID)
+	m.refs.Remove(oldestID)
+	m.logger.Info("evicted oldest page (max pages reached)", "targetId", oldestID, "tenant", tenantID)
 }
 
 // FocusTab activates a tab.
@@ -133,6 +195,8 @@ func (m *Manager) CloseTab(ctx context.Context, targetID string) error {
 	delete(m.pages, targetID)
 	delete(m.console, targetID)
 	delete(m.pageTenants, targetID)
+	delete(m.pageLastUsed, targetID)
+	m.refs.Remove(targetID)
 	return page.Close()
 }
 

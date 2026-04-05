@@ -113,6 +113,24 @@
       "observations": "Observations",
       "relations": "Relations"
     },
+    "dedup": {
+      "button": "Dedup",
+      "title": "Duplicate Entities",
+      "description": "Review and merge entities that may be duplicates based on embedding similarity.",
+      "noCandidates": "No duplicate candidates found.",
+      "similar": "similar",
+      "merge": "Merge",
+      "dismiss": "Dismiss",
+      "merged": "Entities merged successfully.",
+      "mergeFailed": "Failed to merge entities.",
+      "dismissed": "Candidate dismissed.",
+      "dismissFailed": "Failed to dismiss candidate.",
+      "scan": "Scan All",
+      "scanning": "Scanning...",
+      "scanComplete": "Scan complete.",
+      "scanFailed": "Scan failed.",
+      "count": "{{count}} candidate(s)"
+    },
     "deleteEntity": {
       "title": "Delete Entity",
       "description": "Delete \"{{name}}\"? This will also delete all associated relations.",
@@ -125,10 +143,15 @@
       "source": "Source:",
       "properties": "Properties:",
       "relations": "Relations",
-      "traverse": "Traverse (2-hop)",
+      "traverse": "Traverse (3-hop)",
+      "tabs": {
+        "table": "Table",
+        "graph": "Graph"
+      },
       "traversing": "Traversing...",
       "loading": "Loading...",
       "noRelations": "No relations found.",
+      "showAll": "Show all",
       "traversalResults": "Traversal Results ({{count}})",
       "direction": {
         "outgoing": "→ outgoing",
@@ -157,7 +180,10 @@
       "loading": "Loading graph...",
       "empty": "No entities to visualize",
       "nodes": "{{count}} nodes",
-      "edges": "{{count}} edges"
+      "edges": "{{count}} edges",
+      "selected": "Selected: {{name}}",
+      "limitNote": "Showing top {{limit}} of {{total}} entities",
+      "limitHint": "Graph is limited to {{limit}} entities for performance. Use the table view to browse all {{total}} entities."
     }
   },
   "toast": {
@@ -185,6 +211,7 @@
     "docIndexFailed": "Failed to index document",
     "allIndexed": "All documents indexed",
     "allIndexFailed": "Failed to index all",
-    "searchFailed": "Search failed"
+    "searchFailed": "Search failed",
+    "docLoadFailed": "Failed to load document"
   }
 }

@@ -1,0 +1,45 @@
+{
+  "title": "Session",
+  "description": "Duyệt các session",
+  "searchPlaceholder": "Tìm kiếm session...",
+  "emptyTitle": "Chưa có session nào",
+  "emptyDescription": "Các session sẽ xuất hiện ở đây khi bạn bắt đầu trò chuyện.",
+  "noMatchTitle": "Không tìm thấy session phù hợp",
+  "noMatchDescription": "Thử từ khóa tìm kiếm khác.",
+  "columns": {
+    "session": "Session",
+    "agent": "Agent",
+    "context": "Ngữ cảnh",
+    "messages": "Tin nhắn",
+    "updated": "Cập nhật"
+  },
+  "contextBar": {
+    "compacted": "Đã nén {{count}} lần"
+  },
+  "detail": {
+    "reset": "Đặt lại",
+    "delete": "Xóa",
+    "deleteTitle": "Xóa session",
+    "deleteDescription": "Thao tác này sẽ xóa vĩnh viễn tất cả tin nhắn trong session này.",
+    "resetTitle": "Đặt lại phiên",
+    "resetDescription": "Thao tác này sẽ xóa tất cả tin nhắn nhưng giữ lại phiên.",
+    "confirmDelete": "Xóa",
+    "confirmReset": "Đặt lại",
+    "noMessages": "Không có tin nhắn trong session này",
+    "summary": "Tóm tắt",
+    "showMore": "Xem thêm",
+    "showLess": "Thu gọn",
+    "showDetails": "xem chi tiết",
+    "hide": "ẩn",
+    "systemMessage": "Tin nhắn hệ thống",
+    "messages": "tin nhắn"
+  },
+  "toast": {
+    "deleted": "Đã xóa session",
+    "deleteFailed": "Không thể xóa session",
+    "reset": "Đã đặt lại session",
+    "resetFailed": "Không thể đặt lại session",
+    "updated": "Đã cập nhật session",
+    "updateFailed": "Không thể cập nhật session"
+  }
+}

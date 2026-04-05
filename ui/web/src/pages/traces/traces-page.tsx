@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, GitFork, RefreshCw } from "lucide-react";
+import { Activity, GitFork, RefreshCw, Square, Bot, User, Users, Clock, Network, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -22,6 +22,39 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useUiStore } from "@/stores/use-ui-store";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useChannelInstances } from "@/pages/channels/hooks/use-channel-instances";
+import { useWs } from "@/hooks/use-ws";
+import { Methods } from "@/api/protocol";
+import { toast } from "@/stores/use-toast-store";
+
+/** Parse session_key to extract source type: Direct, Group, Cron, Team, WS */
+function parseSourceType(sessionKey: string): { type: string; topic?: string } {
+  if (!sessionKey) return { type: "unknown" };
+  if (sessionKey.includes(":cron:")) return { type: "cron" };
+  if (sessionKey.includes(":team:")) return { type: "team" };
+  const topicMatch = sessionKey.match(/:topic:(\d+)/);
+  if (topicMatch) return { type: "group", topic: topicMatch[1] };
+  if (sessionKey.includes(":group:")) return { type: "group" };
+  if (sessionKey.includes(":ws:")) return { type: "ws" };
+  if (sessionKey.includes(":direct:")) return { type: "direct" };
+  return { type: "unknown" };
+}
+
+/** Parse user_id into a human-readable display label */
+function parseUserDisplay(userId: string): string {
+  if (!userId) return "";
+  if (userId === "system") return "System";
+  if (userId.startsWith("group:")) return "Group";
+  if (/^\d+$/.test(userId)) return `#${userId}`;
+  return `@${userId}`;
+}
+
+const SOURCE_ICONS: Record<string, typeof Bot> = {
+  cron: Clock,
+  team: Network,
+  group: Users,
+  direct: User,
+  ws: Globe,
+};
 
 export function TracesPage() {
   const { t } = useTranslation("traces");
@@ -33,8 +66,17 @@ export function TracesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
+  const ws = useWs();
   const { agents } = useAgents();
   const { instances: channels } = useChannelInstances();
+
+  const agentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of agents) map.set(a.id, a.display_name || a.agent_key || a.id);
+    return map;
+  }, [agents]);
+
+  const [abortingRunId, setAbortingRunId] = useState<string | null>(null);
 
   const { traces, total, loading, fetching, refresh, getTrace } = useTraces({
     agentId: agentFilter,
@@ -42,10 +84,36 @@ export function TracesPage() {
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
+
   const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && traces.length === 0);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const handleAbortRun = useCallback(
+    async (trace: TraceData, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!ws.isConnected || abortingRunId) return;
+      setAbortingRunId(trace.run_id);
+      try {
+        const res = await ws.call(Methods.CHAT_ABORT, {
+          sessionKey: trace.session_key,
+          runId: trace.run_id,
+        }) as { aborted?: boolean };
+        if (res?.aborted) {
+          toast.success(t("toast.abortSent"));
+          refresh();
+        } else {
+          toast.info(t("toast.abortNotFound"));
+        }
+      } catch {
+        toast.error(t("toast.abortFailed"));
+      } finally {
+        setAbortingRunId(null);
+      }
+    },
+    [ws, t, refresh, abortingRunId],
+  );
 
   return (
     <div className="p-4 sm:p-6 pb-10">
@@ -116,45 +184,79 @@ export function TracesPage() {
                 </tr>
               </thead>
               <tbody>
-                {traces.map((trace: TraceData) => (
-                  <tr
-                    key={trace.id}
-                    className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
-                    onClick={() => setSelectedTraceId(trace.id)}
-                  >
-                    <td className="max-w-[200px] truncate px-4 py-3 font-medium">
-                      {trace.parent_trace_id && (
-                        <GitFork className="mr-1.5 inline-block h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                      {trace.name || t("unnamed")}
-                      {trace.channel && (
-                        <Badge variant="outline" className="ml-2 text-xs">
-                          {trace.channel}
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={trace.status} />
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatDuration(trace.duration_ms || computeDurationMs(trace.start_time, trace.end_time))}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      <div>{formatTokens(trace.total_input_tokens)} / {formatTokens(trace.total_output_tokens)}</div>
-                      {(trace.metadata?.total_cache_read_tokens ?? 0) > 0 && (
-                        <div className="text-xs text-green-400">
-                          {formatTokens(trace.metadata!.total_cache_read_tokens!)} {t("cached")}
+                {traces.map((trace: TraceData) => {
+                  const source = parseSourceType(trace.session_key);
+                  const userLabel = parseUserDisplay(trace.user_id);
+                  const agentName = trace.agent_id ? agentMap.get(trace.agent_id) : undefined;
+                  const SourceIcon = SOURCE_ICONS[source.type] || Bot;
+
+                  return (
+                    <tr
+                      key={trace.id}
+                      className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
+                      onClick={() => setSelectedTraceId(trace.id)}
+                    >
+                      <td className="max-w-[360px] px-4 py-2.5">
+                        <div className="flex items-center gap-1.5 text-sm font-medium">
+                          {trace.parent_trace_id && (
+                            <GitFork className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          )}
+                          <span className="truncate">{agentName || trace.name || t("unnamed")}</span>
+                          <span className="shrink-0 text-muted-foreground">·</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{userLabel}</span>
+                          <Badge variant="outline" className="shrink-0 gap-0.5 text-[10px] px-1.5 py-0">
+                            <SourceIcon className="h-2.5 w-2.5" />
+                            {t(`source.${source.type}`)}
+                            {source.topic && ` #${source.topic}`}
+                          </Badge>
+                          {trace.channel && (
+                            <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
+                              {trace.channel}
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {trace.span_count}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatDate(trace.start_time, tz)}
-                    </td>
-                  </tr>
-                ))}
+                        {trace.input_preview && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {trace.input_preview}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <StatusBadge status={trace.status} />
+                          {(trace.status === "running") && (
+                            <Button
+                              variant="destructive"
+                              size="icon-xs"
+                              onClick={(e) => handleAbortRun(trace, e)}
+                              disabled={abortingRunId === trace.run_id}
+                              title={t("stopRun")}
+                            >
+                              <Square className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {formatDuration(trace.duration_ms || computeDurationMs(trace.start_time, trace.end_time))}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        <div>{formatTokens(trace.total_input_tokens)} / {formatTokens(trace.total_output_tokens)}</div>
+                        {(trace.metadata?.total_cache_read_tokens ?? 0) > 0 && (
+                          <div className="text-xs text-green-400">
+                            {formatTokens(trace.metadata!.total_cache_read_tokens!)} {t("cached")}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {trace.span_count}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {formatDate(trace.start_time, tz)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             <Pagination
@@ -175,6 +277,7 @@ export function TracesPage() {
           onClose={() => setSelectedTraceId(null)}
           getTrace={getTrace}
           onNavigateTrace={setSelectedTraceId}
+          onAbortRun={handleAbortRun}
         />
       )}
     </div>

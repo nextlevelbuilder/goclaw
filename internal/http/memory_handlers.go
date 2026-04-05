@@ -149,6 +149,9 @@ func (h *MemoryHandler) handleIndexAll(w http.ResponseWriter, r *http.Request) {
 		UserID string `json:"user_id"`
 	}
 	json.NewDecoder(r.Body).Decode(&body)
+	if body.UserID == "" {
+		body.UserID = extractUserID(r)
+	}
 
 	if err := h.store.IndexAll(r.Context(), agentID, body.UserID); err != nil {
 		slog.Warn("memory.index_all failed", "error", err)

@@ -1,28 +1,21 @@
 package agent
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-// sanitizePathSegment makes a userID safe for use as a directory name.
-// Replaces colons, spaces, and other unsafe chars with underscores.
-func sanitizePathSegment(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
-}
 
 // scanWebToolResult checks web_fetch/web_search tool results for prompt injection patterns.
 // If detected, prepends a warning (doesn't block — may be false positive).
@@ -71,10 +64,82 @@ func (l *Loop) shouldShareKnowledgeGraph() bool {
 	return l.workspaceSharing != nil && l.workspaceSharing.ShareKnowledgeGraph
 }
 
-// InvalidateUserWorkspace clears the cached workspace for a user,
-// forcing the next request to re-read from user_agent_profiles.
+// getOrCreateUserSetup returns the cached userSetup for a user, creating it on first call.
+// On first call: seeds context files (non-team) and resolves workspace from user profile.
+// On subsequent calls: returns cached setup immediately (no DB calls).
+func (l *Loop) getOrCreateUserSetup(ctx context.Context, userID, channel string, isTeamSession bool) *userSetup {
+	if userID == "" {
+		return &userSetup{workspace: l.workspace}
+	}
+
+	// Fast path: already initialized
+	if val, ok := l.userSetups.Load(userID); ok {
+		return val.(*userSetup)
+	}
+
+	// Slow path: first request for this user in this Loop instance.
+	setup := &userSetup{}
+
+	if !isTeamSession {
+		if l.ensureUserProfile != nil && l.seedUserFiles != nil {
+			// Preferred path: separate callbacks for profile + seed.
+			// Step 1: Create/resolve profile → get isNew + workspace
+			ws, isNew, err := l.ensureUserProfile(ctx, l.agentUUID, userID, l.workspace, channel)
+			if err != nil {
+				slog.Warn("failed to ensure user profile", "error", err)
+			} else if ws != "" {
+				setup.workspace = expandWorkspace(ws)
+			}
+			// Step 2: Seed context files (must run before buildMessages reads them).
+			// Passes isNew so SeedUserFiles knows whether to skip existing files.
+			if err := l.seedUserFiles(ctx, l.agentUUID, userID, l.agentType, isNew); err != nil {
+				slog.Warn("failed to seed user context files", "error", err)
+				// Seeding failed (e.g. SQLITE_BUSY after retries). Inject
+				// embedded bootstrap templates in-memory so the first turn
+				// still gets onboarding. DB seed will retry next session.
+				setup.fallbackBootstrap = bootstrap.EmbeddedUserFiles(l.agentType)
+			} else if l.cacheInvalidate != nil {
+				// SeedUserFiles writes via raw agentStore, bypassing the
+				// ContextFileInterceptor cache. Invalidate so LoadContextFiles
+				// sees newly seeded BOOTSTRAP.md/USER.md on the first turn.
+				l.cacheInvalidate(l.agentUUID, userID)
+			}
+			setup.seeded = true
+		} else if l.ensureUserFiles != nil {
+			// Legacy fallback: combined callback handles both profile + seed
+			ws, err := l.ensureUserFiles(ctx, l.agentUUID, userID, l.agentType, l.workspace, channel)
+			if err != nil {
+				slog.Warn("failed to ensure user context files", "error", err)
+			} else if ws != "" {
+				setup.workspace = expandWorkspace(ws)
+			}
+			setup.seeded = true
+		}
+	}
+
+	// Fallback: use agent's default workspace if profile didn't provide one
+	if setup.workspace == "" && l.workspace != "" {
+		setup.workspace = expandWorkspace(l.workspace)
+	}
+
+	// Store atomically — if another goroutine raced, use their result
+	actual, _ := l.userSetups.LoadOrStore(userID, setup)
+	return actual.(*userSetup)
+}
+
+// expandWorkspace expands ~ and converts to absolute path.
+func expandWorkspace(ws string) string {
+	ws = config.ExpandHome(ws)
+	if !filepath.IsAbs(ws) {
+		ws, _ = filepath.Abs(ws)
+	}
+	return ws
+}
+
+// InvalidateUserWorkspace clears the cached setup for a user,
+// forcing the next request to re-resolve workspace and re-seed if needed.
 func (l *Loop) InvalidateUserWorkspace(userID string) {
-	l.userWorkspaces.Delete(userID)
+	l.userSetups.Delete(userID)
 }
 
 // Provider returns the LLM provider for this agent loop.
@@ -90,8 +155,11 @@ func (l *Loop) ProviderName() string {
 }
 
 // uniquifyToolCallIDs ensures all tool call IDs are globally unique across the
-// transcript by appending a short run-ID prefix and iteration index.
+// transcript by hashing the original ID with run-ID, iteration, and index.
 // Returns a new slice (does not mutate the input).
+//
+// IDs are capped at 40 characters to comply with the OpenAI/Azure API limit
+// on tool_calls[].id and tool_call_id fields (undocumented, returns HTTP 400).
 //
 // Some OpenAI-compatible APIs (OpenRouter, vLLM, DeepSeek) return duplicate IDs
 // within a single response or reuse IDs from earlier turns, causing HTTP 400.
@@ -100,18 +168,14 @@ func uniquifyToolCallIDs(calls []providers.ToolCall, runID string, iteration int
 	if len(calls) == 0 {
 		return calls
 	}
-	short := runID
-	if len(short) > 8 {
-		short = short[:8]
-	}
 	out := make([]providers.ToolCall, len(calls))
 	copy(out, calls)
 	for i := range out {
-		if out[i].ID == "" {
-			out[i].ID = fmt.Sprintf("call_%s_%d_%d", short, iteration, i)
-		} else {
-			out[i].ID = fmt.Sprintf("%s_%s_%d_%d", out[i].ID, short, iteration, i)
-		}
+		// Hash all discriminating components into a fixed-length ID:
+		// "call_" (5 chars) + hex(sha256(id:runID:iter:idx))[:35] = 40 chars exactly.
+		raw := fmt.Sprintf("%s:%s:%d:%d", out[i].ID, runID, iteration, i)
+		h := sha256.Sum256([]byte(raw))
+		out[i].ID = "call_" + hex.EncodeToString(h[:])[:35]
 	}
 	return out
 }

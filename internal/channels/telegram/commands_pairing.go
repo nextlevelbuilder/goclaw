@@ -84,7 +84,13 @@ func (c *Channel) sendGroupPairingReply(ctx context.Context, chatID int64, chatI
 	if messageThreadID > 0 {
 		msg.MessageThreadID = messageThreadID
 	}
-	if _, err := c.bot.SendMessage(ctx, msg); err != nil {
+	_, err = c.bot.SendMessage(ctx, msg)
+	// Retry without thread ID if topic is hidden/deleted (forum group with General topic removed).
+	if err != nil && messageThreadID > 0 && strings.Contains(err.Error(), "thread not found") {
+		msg.MessageThreadID = 0
+		_, err = c.bot.SendMessage(ctx, msg)
+	}
+	if err != nil {
 		slog.Warn("failed to send group pairing reply", "chat_id", chatIDStr, "error", err)
 	} else {
 		c.pairingReplySent.Store(chatIDStr, time.Now())
@@ -152,8 +158,11 @@ func DefaultMenuCommands() []telego.BotCommand {
 		{Command: "stopall", Description: "Stop all running tasks"},
 		{Command: "reset", Description: "Reset conversation history"},
 		{Command: "status", Description: "Show bot status"},
+		{Command: "reactions", Description: "Show reaction emoji legend"},
 		{Command: "tasks", Description: "List team tasks"},
 		{Command: "task_detail", Description: "View task detail by ID"},
+		{Command: "subagents", Description: "List subagent tasks"},
+		{Command: "subagent", Description: "View subagent task detail by ID"},
 		{Command: "writers", Description: "List file writers for this group"},
 		{Command: "addwriter", Description: "Add a file writer (reply to their message)"},
 		{Command: "removewriter", Description: "Remove a file writer (reply to their message)"},

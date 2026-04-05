@@ -22,6 +22,7 @@ func (m *Manager) reconnectLocked() error {
 	m.pages = make(map[string]*rod.Page)
 	m.console = make(map[string][]ConsoleMessage)
 	m.pageTenants = make(map[string]string)
+	m.pageLastUsed = make(map[string]time.Time)
 	m.refs = NewRefStore()
 
 	controlURL, err := resolveRemoteCDP(m.remoteURL)
@@ -100,6 +101,11 @@ func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error)
 	}
 	// If no tenant context or master tenant, allow access to all pages
 	if tenantID == "" || tenantID == MasterTenantID {
+		resolvedTID := targetID
+		if targetID == "" {
+			resolvedTID = string(page.TargetID)
+		}
+		m.touchPageLocked(resolvedTID)
 		return page, nil
 	}
 	// Check ownership: page must belong to this tenant
@@ -110,6 +116,7 @@ func (m *Manager) getPageForTenant(targetID, tenantID string) (*rod.Page, error)
 	if owner, ok := m.pageTenants[resolvedTID]; ok && owner != tenantID {
 		return nil, fmt.Errorf("tab not found: %s", targetID)
 	}
+	m.touchPageLocked(resolvedTID)
 	return page, nil
 }
 

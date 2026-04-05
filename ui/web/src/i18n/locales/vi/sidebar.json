@@ -32,6 +32,7 @@
     "providers": "Provider",
     "config": "Cấu hình",
     "approvals": "Phê duyệt",
+    "importExport": "Import & Export",
     "nodes": "Nodes",
     "tts": "TTS",
     "activity": "Hoạt động",

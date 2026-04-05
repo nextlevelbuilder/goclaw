@@ -27,6 +27,7 @@ type permRow struct {
 	Scope      string
 	ConfigType string
 	Permission string
+	UserID     string // individual user ID or "*" (group wildcard)
 }
 
 // fwCacheEntry holds cached file_writer ConfigPermission rows for a scope.
@@ -76,18 +77,18 @@ func (s *PGConfigPermissionStore) CheckPermission(ctx context.Context, agentID u
 	s.mu.RLock()
 	if entry, ok := s.cache[cacheKey]; ok && time.Since(entry.fetched) < permCacheTTL {
 		s.mu.RUnlock()
-		return evalPermRows(entry.rows, scope, configType), nil
+		return evalPermRows(entry.rows, scope, configType, userID), nil
 	}
 	s.mu.RUnlock()
 
 	// Fetch from DB.
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return false, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT scope, config_type, permission FROM agent_config_permissions
-		 WHERE agent_id = $1 AND user_id = $2`+tClause,
+		`SELECT scope, config_type, permission, user_id FROM agent_config_permissions
+		 WHERE agent_id = $1 AND (user_id = $2 OR user_id = '*')`+tClause,
 		append([]any{agentID, userID}, tArgs...)...,
 	)
 	if err != nil {
@@ -98,7 +99,7 @@ func (s *PGConfigPermissionStore) CheckPermission(ctx context.Context, agentID u
 	var permRows []permRow
 	for rows.Next() {
 		var r permRow
-		if err := rows.Scan(&r.Scope, &r.ConfigType, &r.Permission); err != nil {
+		if err := rows.Scan(&r.Scope, &r.ConfigType, &r.Permission, &r.UserID); err != nil {
 			return false, err
 		}
 		permRows = append(permRows, r)
@@ -112,27 +113,53 @@ func (s *PGConfigPermissionStore) CheckPermission(ctx context.Context, agentID u
 	s.cache[cacheKey] = permCacheEntry{rows: permRows, fetched: time.Now()}
 	s.mu.Unlock()
 
-	return evalPermRows(permRows, scope, configType), nil
+	return evalPermRows(permRows, scope, configType, userID), nil
 }
 
 // evalPermRows evaluates cached permission rows against scope and configType.
-func evalPermRows(rows []permRow, scope, configType string) bool {
-	var hasDeny, hasAllow bool
+// Priority-based evaluation: individual permissions override group wildcards (user_id="*").
+//
+//  1. Individual DENY  → REJECT (highest priority)
+//  2. Individual ALLOW → ACCEPT
+//  3. Group (*) DENY   → REJECT
+//  4. Group (*) ALLOW  → ACCEPT
+//  5. No match         → REJECT (default)
+func evalPermRows(rows []permRow, scope, configType, targetUserID string) bool {
+	var individualDeny, individualAllow bool
+	var groupDeny, groupAllow bool
+
 	for _, r := range rows {
 		if !matchWildcard(r.Scope, scope) || !matchWildcard(r.ConfigType, configType) {
 			continue
 		}
-		switch r.Permission {
-		case "deny":
-			hasDeny = true
-		case "allow":
-			hasAllow = true
+		if r.UserID == targetUserID {
+			switch r.Permission {
+			case "deny":
+				individualDeny = true
+			case "allow":
+				individualAllow = true
+			}
+		} else if r.UserID == "*" {
+			switch r.Permission {
+			case "deny":
+				groupDeny = true
+			case "allow":
+				groupAllow = true
+			}
 		}
 	}
-	if hasDeny {
+
+	// Individual takes priority over group
+	if individualDeny {
 		return false
 	}
-	return hasAllow
+	if individualAllow {
+		return true
+	}
+	if groupDeny {
+		return false
+	}
+	return groupAllow
 }
 
 // matchWildcard performs simple wildcard matching for scope/config_type.
@@ -171,7 +198,7 @@ func (s *PGConfigPermissionStore) Grant(ctx context.Context, perm *store.ConfigP
 }
 
 func (s *PGConfigPermissionStore) Revoke(ctx context.Context, agentID uuid.UUID, scope, configType, userID string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 5)
+	tClause, tArgs, _, err := scopeClause(ctx, 5)
 	if err != nil {
 		return err
 	}
@@ -186,7 +213,7 @@ func (s *PGConfigPermissionStore) Revoke(ctx context.Context, agentID uuid.UUID,
 }
 
 func (s *PGConfigPermissionStore) List(ctx context.Context, agentID uuid.UUID, configType, scope string) ([]store.ConfigPermission, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 0) // paramN unused; we append manually
+	tClause, tArgs, _, err := scopeClause(ctx, 0) // paramN unused; we append manually
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +260,7 @@ func (s *PGConfigPermissionStore) ListFileWriters(ctx context.Context, agentID u
 	}
 	s.fwMu.RUnlock()
 
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return nil, err
 	}

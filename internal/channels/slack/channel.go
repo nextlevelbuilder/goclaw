@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/safego"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -167,12 +168,14 @@ func (c *Channel) Start(ctx context.Context) error {
 	// Goroutine 1: Event loop
 	go func() {
 		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_event_loop")
 		c.eventLoop(smCtx)
 	}()
 
 	// Goroutine 2: Socket Mode connection with dead socket error classification
 	go func() {
 		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_socket_mode")
 		for {
 			if err := c.sm.RunContext(smCtx); err != nil {
 				if smCtx.Err() != nil {
@@ -192,6 +195,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	// Goroutine 3: Periodic sweep (every 2 minutes) for TTL-based map eviction
 	go func() {
 		defer c.wg.Done()
+		defer safego.Recover(nil, "component", "slack_sweep")
 		ticker := time.NewTicker(2 * time.Minute)
 		defer ticker.Stop()
 		for {

@@ -10,16 +10,22 @@ import (
 	"strings"
 )
 
+type CodexRoutingDefaults struct {
+	Strategy           string
+	ExtraProviderNames []string
+}
+
 // CodexProvider implements Provider for the OpenAI Responses API,
 // used with ChatGPT subscription via OAuth (Codex flow).
 // Wire format: POST /codex/responses on chatgpt.com backend.
 type CodexProvider struct {
-	name         string
-	apiBase      string // e.g. "https://api.openai.com/v1" or "https://chatgpt.com/backend-api"
-	defaultModel string
-	client       *http.Client
-	retryConfig  RetryConfig
-	tokenSource  TokenSource
+	name            string
+	apiBase         string // e.g. "https://api.openai.com/v1" or "https://chatgpt.com/backend-api"
+	defaultModel    string
+	client          *http.Client
+	retryConfig     RetryConfig
+	tokenSource     TokenSource
+	routingDefaults *CodexRoutingDefaults
 }
 
 // NewCodexProvider creates a provider for the OpenAI Responses API with OAuth token.
@@ -46,6 +52,28 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
+func (p *CodexProvider) WithRoutingDefaults(strategy string, extraProviderNames []string) *CodexProvider {
+	p.routingDefaults = &CodexRoutingDefaults{
+		Strategy:           strategy,
+		ExtraProviderNames: append([]string(nil), extraProviderNames...),
+	}
+	return p
+}
+func (p *CodexProvider) RoutingDefaults() *CodexRoutingDefaults {
+	if p.routingDefaults == nil {
+		return nil
+	}
+	return &CodexRoutingDefaults{
+		Strategy:           p.routingDefaults.Strategy,
+		ExtraProviderNames: append([]string(nil), p.routingDefaults.ExtraProviderNames...),
+	}
+}
+func (p *CodexProvider) RouteEligibility(ctx context.Context) RouteEligibility {
+	if aware, ok := p.tokenSource.(RouteEligibilityAware); ok {
+		return aware.RouteEligibility(ctx)
+	}
+	return RouteEligibility{Class: RouteEligibilityHealthy}
+}
 
 func (p *CodexProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	// Codex Responses API requires stream=true; delegate to ChatStream with no chunk handler.
@@ -65,6 +93,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 
 	result := &ChatResponse{FinishReason: "stop"}
 	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
+	streamState := newCodexMessageStreamState()
 
 	scanner := bufio.NewScanner(respBody)
 	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
@@ -84,7 +113,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 			continue
 		}
 
-		p.processSSEEvent(&event, result, toolCalls, onChunk)
+		p.processSSEEvent(&event, result, toolCalls, streamState, onChunk)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -97,15 +126,21 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 			continue
 		}
 		args := make(map[string]any)
-		_ = json.Unmarshal([]byte(acc.rawArgs), &args)
+		var parseErr string
+		if err := json.Unmarshal([]byte(acc.rawArgs), &args); err != nil && acc.rawArgs != "" {
+			parseErr = fmt.Sprintf("malformed JSON (%d chars): %v", len(acc.rawArgs), err)
+		}
 		result.ToolCalls = append(result.ToolCalls, ToolCall{
-			ID:        acc.callID,
-			Name:      acc.name,
-			Arguments: args,
+			ID:         acc.callID,
+			Name:       acc.name,
+			Arguments:  args,
+			ParseError: parseErr,
 		})
 	}
 
-	if len(result.ToolCalls) > 0 {
+	// Only override finish_reason when response wasn't truncated.
+	// Preserve "length" so agent loop can detect truncation and retry.
+	if len(result.ToolCalls) > 0 && result.FinishReason != "length" {
 		result.FinishReason = "tool_calls"
 	}
 
@@ -117,14 +152,22 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 }
 
 // processSSEEvent handles a single SSE event during streaming.
-func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatResponse, toolCalls map[string]*codexToolCallAcc, onChunk func(StreamChunk)) {
+func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatResponse, toolCalls map[string]*codexToolCallAcc, streamState *codexMessageStreamState, onChunk func(StreamChunk)) {
 	switch event.Type {
+	case "response.output_item.added":
+		if event.Item != nil {
+			streamState.registerMessageItem(event.ItemID, event.OutputIndex, event.Item)
+		}
+
 	case "response.output_text.delta":
-		if event.Delta != "" {
-			result.Content += event.Delta
-			if onChunk != nil {
-				onChunk(StreamChunk{Content: event.Delta})
-			}
+		streamState.recordTextDelta(event.ItemID, event.OutputIndex, event.ContentIndex, event.Delta, result, onChunk)
+
+	case "response.output_text.done":
+		streamState.recordFinalText(event.ItemID, event.OutputIndex, event.ContentIndex, event.Text, result, onChunk)
+
+	case "response.content_part.done":
+		if event.Part != nil && event.Part.Type == "output_text" {
+			streamState.recordFinalText(event.ItemID, event.OutputIndex, event.ContentIndex, event.Part.Text, result, onChunk)
 		}
 
 	case "response.function_call_arguments.delta":
@@ -141,9 +184,9 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 		if event.Item != nil {
 			switch event.Item.Type {
 			case "message":
-				if event.Item.Phase != "" {
-					result.Phase = event.Item.Phase
-				}
+				streamState.registerMessageItem(event.ItemID, event.OutputIndex, event.Item)
+				streamState.flushMessage(codexEventItemKey(event.ItemID, event.Item), result, onChunk)
+				streamState.updateResultPhase(result)
 			case "function_call":
 				acc := toolCalls[event.Item.ID]
 				if acc == nil {
@@ -169,6 +212,11 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 
 	case "response.completed", "response.incomplete", "response.failed":
 		if event.Response != nil {
+			if result.Content == "" {
+				streamState.ingestCompletedResponse(event.Response)
+				streamState.flushCompletedResponse(result, onChunk)
+				streamState.updateResultPhase(result)
+			}
 			if event.Response.Usage != nil {
 				u := event.Response.Usage
 				result.Usage = &Usage{

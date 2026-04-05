@@ -159,6 +159,37 @@ func (sm *SubagentManager) Steer(
 	return fmt.Sprintf("Steered subagent %q → new task spawned. %s", taskID, msg), nil
 }
 
+// WaitForChildren blocks until all running tasks for parentID complete or timeout.
+func (sm *SubagentManager) WaitForChildren(ctx context.Context, parentID string, timeoutSec int) ([]*SubagentTask, error) {
+	if timeoutSec <= 0 {
+		timeoutSec = 300
+	}
+	deadline := time.After(time.Duration(timeoutSec) * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return sm.ListTasks(parentID), ctx.Err()
+		case <-deadline:
+			return sm.ListTasks(parentID), fmt.Errorf("timeout after %ds waiting for children", timeoutSec)
+		case <-ticker.C:
+			tasks := sm.ListTasks(parentID)
+			allDone := true
+			for _, t := range tasks {
+				if t.Status == TaskStatusRunning {
+					allDone = false
+					break
+				}
+			}
+			if allDone {
+				return tasks, nil
+			}
+		}
+	}
+}
+
 func generateSubagentID() string {
 	b := make([]byte, 8)
 	rand.Read(b)

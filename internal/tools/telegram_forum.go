@@ -28,6 +28,8 @@ func NewCreateForumTopicTool(provider ForumTopicCreatorProvider) *CreateForumTop
 
 func (t *CreateForumTopicTool) Name() string { return "create_forum_topic" }
 
+func (t *CreateForumTopicTool) RequiredChannelTypes() []string { return []string{"telegram"} }
+
 func (t *CreateForumTopicTool) Description() string {
 	return "Create a new forum topic in a Telegram supergroup. " +
 		"Returns the topic's message_thread_id which can be used for routing messages to the topic."

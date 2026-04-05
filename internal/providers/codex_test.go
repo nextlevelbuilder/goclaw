@@ -345,6 +345,355 @@ func TestCodexProviderChatStream(t *testing.T) {
 	}
 }
 
+func TestCodexProviderChatFallsBackToOutputTextDone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+			Type: "response.output_text.done",
+			Text: "<file name=\"SOUL.md\">hello</file>",
+		}))
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+			Type: "response.completed",
+			Response: &codexAPIResponse{
+				ID: "resp-done", Status: "completed",
+				Usage: &codexUsage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9},
+			},
+		}))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, server.URL, "gpt-4o")
+	p.retryConfig.Attempts = 1
+
+	result, err := p.Chat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Generate a file"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+
+	if result.Content != "<file name=\"SOUL.md\">hello</file>" {
+		t.Errorf("Content = %q, want fallback output_text.done content", result.Content)
+	}
+}
+
+func TestCodexProviderChatFallsBackToOutputItemMessageContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+			Type: "response.output_item.done",
+			Item: &codexItem{
+				Type:  "message",
+				Role:  "assistant",
+				Phase: "final_answer",
+				Content: []codexContent{
+					{Type: "output_text", Text: "<file name=\"IDENTITY.md\">world</file>"},
+				},
+			},
+		}))
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+			Type: "response.completed",
+			Response: &codexAPIResponse{
+				ID: "resp-item", Status: "completed",
+				Usage: &codexUsage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9},
+			},
+		}))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, server.URL, "gpt-4o")
+	p.retryConfig.Attempts = 1
+
+	result, err := p.Chat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Generate a file"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+
+	if result.Content != "<file name=\"IDENTITY.md\">world</file>" {
+		t.Errorf("Content = %q, want fallback output_item.done content", result.Content)
+	}
+	if result.Phase != "final_answer" {
+		t.Errorf("Phase = %q, want final_answer", result.Phase)
+	}
+}
+
+func TestCodexProviderChatIgnoresCommentaryAndKeepsFinalAnswer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []codexSSEEvent{
+			{
+				Type:        "response.output_item.added",
+				OutputIndex: 0,
+				Item: &codexItem{
+					ID:    "msg_commentary",
+					Type:  "message",
+					Phase: "commentary",
+				},
+			},
+			{
+				Type:         "response.output_text.delta",
+				ItemID:       "msg_commentary",
+				OutputIndex:  0,
+				ContentIndex: 0,
+				Delta:        "Planning out the answer...",
+			},
+			{
+				Type:        "response.output_item.done",
+				OutputIndex: 0,
+				Item: &codexItem{
+					ID:    "msg_commentary",
+					Type:  "message",
+					Phase: "commentary",
+				},
+			},
+			{
+				Type:        "response.output_item.added",
+				OutputIndex: 1,
+				Item: &codexItem{
+					ID:    "msg_final",
+					Type:  "message",
+					Phase: "final_answer",
+				},
+			},
+			{
+				Type:         "response.output_text.delta",
+				ItemID:       "msg_final",
+				OutputIndex:  1,
+				ContentIndex: 0,
+				Delta:        "<file name=\"SOUL.md\">hello</file>",
+			},
+			{
+				Type:        "response.output_item.done",
+				OutputIndex: 1,
+				Item: &codexItem{
+					ID:    "msg_final",
+					Type:  "message",
+					Phase: "final_answer",
+				},
+			},
+			{
+				Type: "response.completed",
+				Response: &codexAPIResponse{
+					ID: "resp-commentary", Status: "completed",
+					Usage: &codexUsage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9},
+				},
+			},
+		}
+
+		for _, event := range events {
+			fmt.Fprintf(w, "data: %s\n\n", mustJSON(event))
+			flusher.Flush()
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, server.URL, "gpt-4o")
+	p.retryConfig.Attempts = 1
+
+	var chunks []string
+	result, err := p.ChatStream(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Generate files"}},
+	}, func(chunk StreamChunk) {
+		if chunk.Content != "" {
+			chunks = append(chunks, chunk.Content)
+		}
+	})
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+
+	if result.Content != "<file name=\"SOUL.md\">hello</file>" {
+		t.Errorf("Content = %q, want final_answer only", result.Content)
+	}
+	if len(chunks) != 1 || chunks[0] != "<file name=\"SOUL.md\">hello</file>" {
+		t.Errorf("chunks = %v, want only final_answer chunk", chunks)
+	}
+	if result.Phase != "final_answer" {
+		t.Errorf("Phase = %q, want final_answer", result.Phase)
+	}
+}
+
+func TestCodexProviderChatConcatenatesMultipleOutputTextDoneParts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []codexSSEEvent{
+			{
+				Type:        "response.output_item.added",
+				OutputIndex: 0,
+				Item: &codexItem{
+					ID:    "msg_final",
+					Type:  "message",
+					Phase: "final_answer",
+				},
+			},
+			{
+				Type:         "response.output_text.done",
+				ItemID:       "msg_final",
+				OutputIndex:  0,
+				ContentIndex: 1,
+				Text:         "hello</file>",
+			},
+			{
+				Type:         "response.output_text.done",
+				ItemID:       "msg_final",
+				OutputIndex:  0,
+				ContentIndex: 0,
+				Text:         "<file name=\"SOUL.md\">",
+			},
+			{
+				Type: "response.completed",
+				Response: &codexAPIResponse{
+					ID: "resp-multipart", Status: "completed",
+					Usage: &codexUsage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9},
+				},
+			},
+		}
+
+		for _, event := range events {
+			fmt.Fprintf(w, "data: %s\n\n", mustJSON(event))
+			flusher.Flush()
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, server.URL, "gpt-4o")
+	p.retryConfig.Attempts = 1
+
+	result, err := p.Chat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Generate a file"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+
+	if result.Content != "<file name=\"SOUL.md\">hello</file>" {
+		t.Errorf("Content = %q, want concatenated output_text.done parts", result.Content)
+	}
+}
+
+func TestCodexProviderChatFallsBackToContentPartDone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		events := []codexSSEEvent{
+			{
+				Type:        "response.output_item.added",
+				OutputIndex: 0,
+				Item: &codexItem{
+					ID:    "msg_final",
+					Type:  "message",
+					Phase: "final_answer",
+				},
+			},
+			{
+				Type:         "response.content_part.done",
+				ItemID:       "msg_final",
+				OutputIndex:  0,
+				ContentIndex: 0,
+				Part: &codexContentPart{
+					Type: "output_text",
+					Text: "<frontmatter>summary</frontmatter>",
+				},
+			},
+			{
+				Type: "response.completed",
+				Response: &codexAPIResponse{
+					ID: "resp-content-part", Status: "completed",
+					Usage: &codexUsage{InputTokens: 5, OutputTokens: 4, TotalTokens: 9},
+				},
+			},
+		}
+
+		for _, event := range events {
+			fmt.Fprintf(w, "data: %s\n\n", mustJSON(event))
+			flusher.Flush()
+		}
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, server.URL, "gpt-4o")
+	p.retryConfig.Attempts = 1
+
+	result, err := p.Chat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Generate a summary"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+
+	if result.Content != "<frontmatter>summary</frontmatter>" {
+		t.Errorf("Content = %q, want content_part.done fallback content", result.Content)
+	}
+}
+
+func TestCodexProviderChatFallsBackToCompletedResponseOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", mustJSON(codexSSEEvent{
+			Type: "response.completed",
+			Response: &codexAPIResponse{
+				ID:     "resp-completed",
+				Status: "completed",
+				Output: []codexItem{
+					{
+						ID:    "msg_commentary",
+						Type:  "message",
+						Role:  "assistant",
+						Phase: "commentary",
+						Content: []codexContent{
+							{Type: "output_text", Text: "Draft commentary"},
+						},
+					},
+					{
+						ID:    "msg_final",
+						Type:  "message",
+						Role:  "assistant",
+						Phase: "final_answer",
+						Content: []codexContent{
+							{Type: "output_text", Text: "<frontmatter>summary</frontmatter>"},
+						},
+					},
+				},
+				Usage: &codexUsage{InputTokens: 6, OutputTokens: 3, TotalTokens: 9},
+			},
+		}))
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	p := NewCodexProvider("test", &staticTokenSource{token: "test"}, server.URL, "gpt-4o")
+	p.retryConfig.Attempts = 1
+
+	result, err := p.Chat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "Generate a summary"}},
+	})
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+
+	if result.Content != "<frontmatter>summary</frontmatter>" {
+		t.Errorf("Content = %q, want fallback response.completed output content", result.Content)
+	}
+	if result.Phase != "final_answer" {
+		t.Errorf("Phase = %q, want final_answer", result.Phase)
+	}
+}
+
 func TestCodexProviderChatStreamToolCalls(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

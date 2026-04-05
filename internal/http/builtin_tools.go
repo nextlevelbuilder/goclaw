@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -18,25 +19,31 @@ import (
 type BuiltinToolsHandler struct {
 	store          store.BuiltinToolStore
 	tenantCfgStore store.BuiltinToolTenantConfigStore
+	tenantStore    store.TenantStore
 	msgBus         *bus.MessageBus
 }
 
 // NewBuiltinToolsHandler creates a handler for built-in tool management endpoints.
-func NewBuiltinToolsHandler(s store.BuiltinToolStore, tenantCfgs store.BuiltinToolTenantConfigStore, msgBus *bus.MessageBus) *BuiltinToolsHandler {
-	return &BuiltinToolsHandler{store: s, tenantCfgStore: tenantCfgs, msgBus: msgBus}
+func NewBuiltinToolsHandler(s store.BuiltinToolStore, tenantCfgs store.BuiltinToolTenantConfigStore, tenantStore store.TenantStore, msgBus *bus.MessageBus) *BuiltinToolsHandler {
+	return &BuiltinToolsHandler{store: s, tenantCfgStore: tenantCfgs, tenantStore: tenantStore, msgBus: msgBus}
 }
 
 // RegisterRoutes registers all built-in tool routes on the given mux.
 func (h *BuiltinToolsHandler) RegisterRoutes(mux *http.ServeMux) {
+	// Builtin tools (reads: viewer+, writes: admin+)
 	mux.HandleFunc("GET /v1/tools/builtin", h.auth(h.handleList))
 	mux.HandleFunc("GET /v1/tools/builtin/{name}", h.auth(h.handleGet))
-	mux.HandleFunc("PUT /v1/tools/builtin/{name}", h.auth(h.handleUpdate))
-	mux.HandleFunc("PUT /v1/tools/builtin/{name}/tenant-config", h.auth(h.handleSetTenantConfig))
-	mux.HandleFunc("DELETE /v1/tools/builtin/{name}/tenant-config", h.auth(h.handleDeleteTenantConfig))
+	mux.HandleFunc("PUT /v1/tools/builtin/{name}", h.adminAuth(h.handleUpdate))
+	mux.HandleFunc("PUT /v1/tools/builtin/{name}/tenant-config", h.adminAuth(h.handleSetTenantConfig))
+	mux.HandleFunc("DELETE /v1/tools/builtin/{name}/tenant-config", h.adminAuth(h.handleDeleteTenantConfig))
 }
 
 func (h *BuiltinToolsHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth("", next)
+}
+
+func (h *BuiltinToolsHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 func (h *BuiltinToolsHandler) emitCacheInvalidate(key string) {
@@ -144,17 +151,16 @@ func (h *BuiltinToolsHandler) handleSetTenantConfig(w http.ResponseWriter, r *ht
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "tenant config not available"})
 		return
 	}
-	name := r.PathValue("name")
-	tid := store.TenantIDFromContext(r.Context())
-	if tid == uuid.Nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant context required"})
+	if !requireTenantAdmin(w, r, h.tenantStore) {
 		return
 	}
+	name := r.PathValue("name")
+	tid := store.TenantIDFromContext(r.Context())
 
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
@@ -165,6 +171,7 @@ func (h *BuiltinToolsHandler) handleSetTenantConfig(w http.ResponseWriter, r *ht
 		return
 	}
 
+	emitAudit(h.msgBus, r, "builtin_tool.tenant_config.set", "builtin_tool", name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
@@ -174,17 +181,17 @@ func (h *BuiltinToolsHandler) handleDeleteTenantConfig(w http.ResponseWriter, r 
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "tenant config not available"})
 		return
 	}
-	name := r.PathValue("name")
-	tid := store.TenantIDFromContext(r.Context())
-	if tid == uuid.Nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tenant context required"})
+	if !requireTenantAdmin(w, r, h.tenantStore) {
 		return
 	}
+	name := r.PathValue("name")
+	tid := store.TenantIDFromContext(r.Context())
 
 	if err := h.tenantCfgStore.Delete(r.Context(), tid, name); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
+	emitAudit(h.msgBus, r, "builtin_tool.tenant_config.deleted", "builtin_tool", name)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

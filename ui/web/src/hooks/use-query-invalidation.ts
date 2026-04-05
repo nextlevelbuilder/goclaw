@@ -21,7 +21,7 @@ export function useWsQueryInvalidation() {
       if (event.type === "run.started") {
         queryClient.invalidateQueries({ queryKey: queryKeys.traces.all });
       }
-      if (event.type === "run.completed" || event.type === "run.failed") {
+      if (event.type === "run.completed" || event.type === "run.failed" || event.type === "run.cancelled") {
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all });
         queryClient.invalidateQueries({ queryKey: queryKeys.traces.all });
         queryClient.invalidateQueries({ queryKey: queryKeys.usage.all });

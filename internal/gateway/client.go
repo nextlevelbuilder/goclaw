@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,14 +27,14 @@ type Client struct {
 	connectedAt time.Time // when the client connected
 	remoteAddr  string    // peer IP (extracted from proxy headers or RemoteAddr)
 
-	locale string // user's preferred locale (e.g. "en", "vi", "zh")
+	locale string              // user's preferred locale (e.g. "en", "vi", "zh")
 	scopes []permissions.Scope // API key scopes (empty = role-based auth, no scope restriction)
 
 	// Browser pairing state
-	pairingCode     string // 8-char code if pending approval
-	pairingPending  bool   // true while waiting for admin approval
-	pairedSenderID  string // senderID used for browser pairing auth (for revocation lookup)
-	pairedChannel   string // channel used for pairing auth (e.g., "browser")
+	pairingCode    string // 8-char code if pending approval
+	pairingPending bool   // true while waiting for admin approval
+	pairedSenderID string // senderID used for browser pairing auth (for revocation lookup)
+	pairedChannel  string // channel used for pairing auth (e.g., "browser")
 
 	// Team access cache for event filtering (lazily populated).
 	teamIDs map[string]bool
@@ -212,17 +213,15 @@ func (c *Client) RemoteAddr() string { return c.remoteAddr }
 // TenantID returns the resolved tenant UUID (uuid.Nil means cross-tenant).
 func (c *Client) TenantID() uuid.UUID { return c.tenantID }
 
+// TenantSlug returns the resolved tenant URL slug (set during connect).
+func (c *Client) TenantSlug() string { return c.tenantSlug }
+
 // IsOwner returns true if the client has the owner role (tenant management + full access).
 func (c *Client) IsOwner() bool { return c.role == permissions.RoleOwner }
 
 // HasScope reports whether the client has the given scope.
 func (c *Client) HasScope(scope permissions.Scope) bool {
-	for _, s := range c.scopes {
-		if s == scope {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.scopes, scope)
 }
 
 // hasTeamAccess checks if the client has access to a team (for event filtering).

@@ -370,7 +370,7 @@ func (s *PGTeamStore) GrantTeamAccess(ctx context.Context, teamID uuid.UUID, use
 }
 
 func (s *PGTeamStore) RevokeTeamAccess(ctx context.Context, teamID uuid.UUID, userID string) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
@@ -381,7 +381,7 @@ func (s *PGTeamStore) RevokeTeamAccess(ctx context.Context, teamID uuid.UUID, us
 }
 
 func (s *PGTeamStore) ListTeamGrants(ctx context.Context, teamID uuid.UUID) ([]store.TeamUserGrant, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -447,7 +447,7 @@ func (s *PGTeamStore) ListUserTeams(ctx context.Context, userID string) ([]store
 }
 
 func (s *PGTeamStore) HasTeamAccess(ctx context.Context, teamID uuid.UUID, userID string) (bool, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 3)
+	tClause, tArgs, _, err := scopeClause(ctx, 3)
 	if err != nil {
 		return false, err
 	}

@@ -16,20 +16,19 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
 // SkillManageTool provides agent-driven skill lifecycle management.
 // Complements publish_skill (directory-based) with a content-string interface
 // so agents can create/patch/delete skills without pre-writing files to disk.
 type SkillManageTool struct {
-	skills  *pg.PGSkillStore
+	skills  store.SkillManageStore
 	base    string         // skills-store/ base directory (master tenant)
 	dataDir string         // parent data dir for tenant-scoped skill paths
 	loader  *skills.Loader // cache invalidation
 }
 
-func NewSkillManageTool(skills *pg.PGSkillStore, baseDir, dataDir string, loader *skills.Loader) *SkillManageTool {
+func NewSkillManageTool(skills store.SkillManageStore, baseDir, dataDir string, loader *skills.Loader) *SkillManageTool {
 	return &SkillManageTool{skills: skills, base: baseDir, dataDir: dataDir, loader: loader}
 }
 
@@ -134,7 +133,7 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 	}
 
 	// Version + destination (tenant-scoped)
-	version := t.skills.GetNextVersion(slug)
+	version := t.skills.GetNextVersion(ctx, slug)
 	destDir := filepath.Join(t.tenantSkillsDir(ctx), slug, fmt.Sprintf("%d", version))
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return ErrorResult(fmt.Sprintf("failed to create skill directory: %v", err))
@@ -159,7 +158,7 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 		userID = "system"
 	}
 	desc := description
-	id, err := t.skills.CreateSkillManaged(ctx, pg.SkillCreateParams{
+	id, err := t.skills.CreateSkillManaged(ctx, store.SkillCreateParams{
 		Name:        name,
 		Slug:        slug,
 		Description: &desc,
@@ -198,7 +197,7 @@ func (t *SkillManageTool) executeCreate(ctx context.Context, args map[string]any
 	if manifest != nil && !manifest.IsEmpty() {
 		ok, missing := skills.CheckSkillDeps(manifest)
 		if !ok {
-			_ = t.skills.StoreMissingDeps(id, missing)
+			_ = t.skills.StoreMissingDeps(ctx, id, missing)
 			depsWarning = skills.FormatMissing(missing)
 		}
 	}

@@ -180,6 +180,7 @@ func isAdminMethod(method string) bool {
 		protocol.MethodAPIKeysList,
 		protocol.MethodAPIKeysCreate,
 		protocol.MethodAPIKeysRevoke,
+		protocol.MethodSkillsUpdate,
 	}
 	return slices.Contains(adminMethods, method)
 }
@@ -195,7 +196,6 @@ func isWriteMethod(method string) bool {
 		protocol.MethodCronUpdate,
 		protocol.MethodCronDelete,
 		protocol.MethodCronToggle,
-		protocol.MethodSkillsUpdate,
 		"pairing.",
 		"device.pair.",
 		"approvals.",

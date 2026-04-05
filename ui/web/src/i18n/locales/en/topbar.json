@@ -23,7 +23,8 @@
     "reportBug": "Report a Bug",
     "upToDate": "Up to date",
     "updateAvailable": "Update available: {{version}}",
-    "viewRelease": "View release notes →"
+    "viewRelease": "View release notes →",
+    "releaseNotes": "Release Notes"
   },
   "languages": {
     "en": "English",

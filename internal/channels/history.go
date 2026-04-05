@@ -32,12 +32,22 @@ const (
 	compactSweepInterval = 10 * time.Minute // periodic compaction sweep for post-restart safety
 )
 
+// MediaRef is a lightweight reference to platform media for deferred download.
+// Stored in RAM only (not persisted to DB) — used by channels that defer media
+// download until the bot is actually mentioned (e.g. Telegram).
+type MediaRef struct {
+	Type     string // "image", "video", "audio", "voice", "document", "animation"
+	FileID   string // platform-specific file ID for lazy download
+	FileSize int64  // file size in bytes (0 if unknown) — used to skip large files
+}
+
 // HistoryEntry represents a single tracked group message.
 type HistoryEntry struct {
 	Sender    string
 	SenderID  string
 	Body      string
-	Media     []string // temp file paths for images/attachments (RAM-only, not persisted to DB)
+	Media     []string   // temp file paths for images/attachments (RAM-only, not persisted to DB)
+	MediaRefs []MediaRef // deferred media refs for lazy download (RAM-only, not persisted)
 	Timestamp time.Time
 	MessageID string
 }
@@ -334,6 +344,22 @@ func (ph *PendingHistory) CollectMedia(historyKey string) []string {
 		entries[i].Media = nil // prevent double-cleanup
 	}
 	return paths
+}
+
+// CollectMediaRefs returns all deferred media references from pending entries
+// and removes them from the entries to prevent double-processing.
+// Used by channels that defer media download until the bot is mentioned.
+func (ph *PendingHistory) CollectMediaRefs(historyKey string) []MediaRef {
+	ph.mu.Lock()
+	defer ph.mu.Unlock()
+
+	entries := ph.entries[historyKey]
+	var refs []MediaRef
+	for i := range entries {
+		refs = append(refs, entries[i].MediaRefs...)
+		entries[i].MediaRefs = nil // prevent double-processing
+	}
+	return refs
 }
 
 // cleanupMedia removes temp files from history entries. Best-effort, logs warnings.

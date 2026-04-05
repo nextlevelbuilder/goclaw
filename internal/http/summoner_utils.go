@@ -26,7 +26,7 @@ func extractIdentityName(content string) string {
 		return ""
 	}
 
-	for _, rawLine := range strings.Split(content, "\n") {
+	for rawLine := range strings.SplitSeq(content, "\n") {
 		line := strings.TrimSpace(rawLine)
 		switch {
 		case strings.HasPrefix(line, "- **Name:**"):

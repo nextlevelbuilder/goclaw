@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Plug, Plus, RefreshCw, Pencil, Trash2, Users, Wrench, KeyRound } from "lucide-react";
+import { Plug, Plus, RefreshCw, RotateCcw, Pencil, Trash2, Users, Wrench, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -27,8 +27,8 @@ const transportBadge: Record<string, string> = {
 export function MCPPage() {
   const { t } = useTranslation("mcp");
   const { t: tc } = useTranslation("common");
-  const { servers, loading, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials } = useMCP();
-  const spinning = useMinLoading(loading);
+  const { servers, loading, fetching, refresh, createServer, updateServer, deleteServer, grantAgent, revokeAgent, listAgentGrants, testConnection, reconnectServer, listServerTools, getUserCredentials, setUserCredentials, deleteUserCredentials } = useMCP();
+  const spinning = useMinLoading(fetching);
   const showSkeleton = useDeferredLoading(loading && servers.length === 0);
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -38,6 +38,7 @@ export function MCPPage() {
   const [deleteTarget, setDeleteTarget] = useState<MCPServerData | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [credentialsServer, setCredentialsServer] = useState<MCPServerData | null>(null);
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
 
   const filtered = servers.filter(
     (s) =>
@@ -163,6 +164,18 @@ export function MCPPage() {
                     <td className="px-4 py-3 text-muted-foreground">{srv.created_by || "-"}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={reconnectingId === srv.id}
+                          onClick={async () => {
+                            setReconnectingId(srv.id);
+                            try { await reconnectServer(srv.id); } finally { setReconnectingId(null); }
+                          }}
+                          title={t("reconnect")}
+                        >
+                          <RotateCcw className={"h-3.5 w-3.5" + (reconnectingId === srv.id ? " animate-spin" : "")} />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"

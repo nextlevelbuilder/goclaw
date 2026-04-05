@@ -1,7 +1,8 @@
 # PostgreSQL overlay — pgvector for multi-tenant storage.
 #
-# Usage (with Web Dashboard):
-#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build
+# Usage (web dashboard built-in by default):
+#   make up
+#   # or: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
 #
 # Required env vars (set in .env or shell):
 #   GOCLAW_OPENROUTER_API_KEY (or another provider key)

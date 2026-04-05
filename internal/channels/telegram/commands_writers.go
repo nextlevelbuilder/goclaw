@@ -44,15 +44,25 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 	groupID := fmt.Sprintf("group:%s:%s", c.Name(), chatIDStr)
 	senderNumericID := strings.SplitN(senderID, "|", 2)[0]
 
-	// Check if sender is an existing writer (only writers can manage the list)
-	isWriter, err := c.configPermStore.CheckPermission(ctx, agentID, groupID, "file_writer", senderNumericID)
-	if err != nil {
-		slog.Warn("writer check failed", "error", err, "sender", senderNumericID)
-		send("Failed to check permissions. Please try again.")
-		return
-	}
-	if !isWriter {
-		send("Only existing file writers can manage the writer list.")
+	// Fetch existing writers (cached 60s) for both permission check and remove guard.
+	// Bootstrap exception: if no writers exist yet, the first /addwriter caller
+	// is allowed to bootstrap the allowlist.
+	existingWriters, _ := c.configPermStore.ListFileWriters(ctx, agentID, groupID)
+
+	if len(existingWriters) > 0 {
+		isWriter := false
+		for _, w := range existingWriters {
+			if w.UserID == senderNumericID {
+				isWriter = true
+				break
+			}
+		}
+		if !isWriter {
+			send("Only existing file writers can manage the writer list.")
+			return
+		}
+	} else if action == "remove" {
+		send("No file writers configured yet. Use /addwriter to add the first one.")
 		return
 	}
 
@@ -79,7 +89,7 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 		if err := c.configPermStore.Grant(ctx, &store.ConfigPermission{
 			AgentID:    agentID,
 			Scope:      groupID,
-			ConfigType: "file_writer",
+			ConfigType: store.ConfigTypeFileWriter,
 			UserID:     targetID,
 			Permission: "allow",
 			Metadata:   meta,
@@ -91,13 +101,12 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 		send(fmt.Sprintf("Added %s as a file writer.", targetName))
 
 	case "remove":
-		// Prevent removing the last writer
-		writers, _ := c.configPermStore.List(ctx, agentID, "file_writer", groupID)
-		if len(writers) <= 1 {
+		// Prevent removing the last writer (reuse cached existingWriters)
+		if len(existingWriters) <= 1 {
 			send("Cannot remove the last file writer.")
 			return
 		}
-		if err := c.configPermStore.Revoke(ctx, agentID, groupID, "file_writer", targetID); err != nil {
+		if err := c.configPermStore.Revoke(ctx, agentID, groupID, store.ConfigTypeFileWriter, targetID); err != nil {
 			slog.Warn("remove writer failed", "error", err, "target", targetID)
 			send("Failed to remove writer. Please try again.")
 			return
@@ -135,7 +144,7 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 
 	groupID := fmt.Sprintf("group:%s:%s", c.Name(), chatIDStr)
 
-	writers, err := c.configPermStore.List(ctx, agentID, "file_writer", groupID)
+	writers, err := c.configPermStore.List(ctx, agentID, store.ConfigTypeFileWriter, groupID)
 	if err != nil {
 		slog.Warn("list writers failed", "error", err)
 		send("Failed to list writers. Please try again.")
@@ -143,7 +152,7 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 	}
 
 	if len(writers) == 0 {
-		send("No file writers configured for this group. The first person to interact with the bot will be added automatically.")
+		send("No file writers configured for this group. Use /addwriter to add one.")
 		return
 	}
 

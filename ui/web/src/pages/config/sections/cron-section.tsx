@@ -3,10 +3,11 @@ import { Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Combobox } from "@/components/ui/combobox";
 import { InfoLabel } from "@/components/shared/info-label";
-import { IANA_TIMEZONES } from "@/lib/constants";
+import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { toast } from "@/stores/use-toast-store";
 
 interface CronData {
   max_retries?: number;
@@ -49,20 +50,15 @@ export function CronSection({ data, onSave, saving }: Props) {
       <CardContent className="space-y-4">
         <div className="grid gap-1.5">
           <InfoLabel tip={t("cron.defaultTimezoneTip")}>{t("cron.defaultTimezone")}</InfoLabel>
-          <Select
+          <Combobox
             value={draft.default_timezone || "__system__"}
-            onValueChange={(v) => update({ default_timezone: v === "__system__" ? "" : v })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={t("cron.defaultTimezonePlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__system__">{t("cron.defaultTimezonePlaceholder")}</SelectItem>
-              {IANA_TIMEZONES.map((tz) => (
-                <SelectItem key={tz.value} value={tz.value}>{tz.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(v) => update({ default_timezone: v === "__system__" ? "" : v })}
+            options={[
+              { value: "__system__", label: t("cron.defaultTimezonePlaceholder") },
+              ...getAllIanaTimezones(),
+            ]}
+            placeholder={t("cron.defaultTimezonePlaceholder")}
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -96,7 +92,13 @@ export function CronSection({ data, onSave, saving }: Props) {
 
         {dirty && (
           <div className="flex justify-end pt-2">
-            <Button size="sm" onClick={() => onSave(draft)} disabled={saving} className="gap-1.5">
+            <Button size="sm" onClick={() => {
+              if (draft.default_timezone && !isValidIanaTimezone(draft.default_timezone)) {
+                toast.error(t("cron.invalidTimezone", "Invalid timezone"));
+                return;
+              }
+              onSave(draft);
+            }} disabled={saving} className="gap-1.5">
               <Save className="h-3.5 w-3.5" /> {saving ? t("saving") : t("save")}
             </Button>
           </div>

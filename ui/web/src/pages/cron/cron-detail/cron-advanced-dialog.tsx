@@ -1,37 +1,53 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Save, Settings, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfigGroupHeader } from "@/components/shared/config-group-header";
-import { IANA_TIMEZONES } from "@/lib/constants";
-import type { CronJob } from "../hooks/use-cron";
+import { Combobox } from "@/components/ui/combobox";
+import { getAllIanaTimezones, isValidIanaTimezone } from "@/lib/constants";
+import { toast } from "@/stores/use-toast-store";
+import { useChannels } from "@/pages/channels/hooks/use-channels";
+import { useWs } from "@/hooks/use-ws";
+import { Methods } from "@/api/protocol";
+import type { CronJob, CronJobPatch } from "../hooks/use-cron";
+
+interface DeliveryTarget {
+  channel: string;
+  chatId: string;
+  title?: string;
+  kind: string;
+}
 
 interface CronAdvancedDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   job: CronJob;
-  onUpdate?: (id: string, params: Record<string, unknown>) => Promise<void>;
+  onUpdate?: (id: string, params: CronJobPatch) => Promise<void>;
 }
 
 function deriveState(job: CronJob) {
   return {
     timezone: job.schedule.tz ?? "UTC",
-    deliver: job.payload?.deliver ?? false,
-    channel: job.payload?.channel ?? "",
-    to: job.payload?.to ?? "",
-    wakeHeartbeat: Boolean((job as unknown as Record<string, unknown>).wakeHeartbeat),
+    deliver: job.deliver ?? false,
+    channel: job.deliverChannel ?? "",
+    to: job.deliverTo ?? "",
+    wakeHeartbeat: job.wakeHeartbeat ?? false,
     deleteAfterRun: job.deleteAfterRun ?? false,
+    stateless: job.stateless ?? false,
   };
 }
 
 export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAdvancedDialogProps) {
   const { t } = useTranslation("cron");
   const { t: tc } = useTranslation("common");
+  const ws = useWs();
+  const { channels: availableChannels } = useChannels();
+  const channelNames = Object.keys(availableChannels);
 
   const init = deriveState(job);
   const [timezone, setTimezone] = useState(init.timezone);
@@ -40,7 +56,19 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
   const [to, setTo] = useState(init.to);
   const [wakeHeartbeat, setWakeHeartbeat] = useState(init.wakeHeartbeat);
   const [deleteAfterRun, setDeleteAfterRun] = useState(init.deleteAfterRun);
+  const [stateless, setStateless] = useState(init.stateless);
   const [saving, setSaving] = useState(false);
+  const [targets, setTargets] = useState<DeliveryTarget[]>([]);
+
+  const fetchTargets = useCallback(async () => {
+    if (!job.agentId || !ws.isConnected) return;
+    try {
+      const res = await ws.call<{ targets: DeliveryTarget[] }>(
+        Methods.HEARTBEAT_TARGETS, { agentId: job.agentId },
+      );
+      setTargets(res.targets ?? []);
+    } catch { /* ignore — fallback to Input */ }
+  }, [ws, job.agentId]);
 
   // Re-sync when dialog opens
   useEffect(() => {
@@ -52,6 +80,8 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
     setTo(s.to);
     setWakeHeartbeat(s.wakeHeartbeat);
     setDeleteAfterRun(s.deleteAfterRun);
+    setStateless(s.stateless);
+    fetchTargets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -60,18 +90,23 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
       onOpenChange(false);
       return;
     }
+    if (timezone && timezone !== "UTC" && !isValidIanaTimezone(timezone)) {
+      toast.error(t("detail.invalidTimezone", "Invalid timezone"));
+      return;
+    }
     setSaving(true);
     try {
       await onUpdate(job.id, {
         schedule: {
           ...job.schedule,
-          tz: timezone !== "UTC" ? timezone : undefined,
+          tz: timezone !== "UTC" ? timezone : "",
         },
         deliver,
-        channel: deliver ? channel.trim() || undefined : undefined,
-        to: deliver ? to.trim() || undefined : undefined,
+        deliverChannel: deliver ? channel.trim() || undefined : undefined,
+        deliverTo: deliver ? to.trim() || undefined : undefined,
         wakeHeartbeat,
         deleteAfterRun,
+        stateless,
       });
       onOpenChange(false);
     } catch { // toast shown by hook
@@ -100,18 +135,13 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
           />
           <div className="space-y-2">
             <Label htmlFor="adv-timezone">{t("detail.timezone")}</Label>
-            <Select value={timezone} onValueChange={setTimezone}>
-              <SelectTrigger id="adv-timezone" className="text-base md:text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {IANA_TIMEZONES.map((tz) => (
-                  <SelectItem key={tz.value} value={tz.value}>
-                    {tz.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              value={timezone}
+              onChange={setTimezone}
+              options={getAllIanaTimezones()}
+              placeholder={t("detail.timezone")}
+              className="text-base md:text-sm"
+            />
             <p className="text-xs text-muted-foreground">{t("detail.timezoneDesc")}</p>
           </div>
 
@@ -127,28 +157,77 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
             </div>
 
             {deliver && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="adv-channel">{t("detail.channelLabel")}</Label>
-                  <Input
-                    id="adv-channel"
-                    value={channel}
-                    onChange={(e) => setChannel(e.target.value)}
-                    placeholder={t("detail.channelPlaceholder")}
-                    className="text-base md:text-sm"
-                  />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
+                <div className="space-y-2 min-w-0">
+                  <Label>{t("detail.channelLabel")}</Label>
+                  {channelNames.length > 0 ? (
+                    <Select
+                      value={channel || "__none__"}
+                      onValueChange={(v) => { setChannel(v === "__none__" ? "" : v); setTo(""); }}
+                    >
+                      <SelectTrigger className="text-base md:text-sm">
+                        <SelectValue placeholder={t("detail.channelPlaceholder")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">{t("detail.channelPlaceholder")}</SelectItem>
+                        {channelNames.map((ch) => (
+                          <SelectItem key={ch} value={ch}>{ch}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={channel}
+                      onChange={(e) => setChannel(e.target.value)}
+                      placeholder={t("detail.channelPlaceholder")}
+                      className="text-base md:text-sm"
+                    />
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="adv-to">{t("detail.toLabel")}</Label>
-                  <Input
-                    id="adv-to"
-                    value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    placeholder={t("detail.toPlaceholder")}
-                    className="text-base md:text-sm"
-                  />
+                <div className="space-y-2 min-w-0">
+                  <Label>{t("detail.toLabel")}</Label>
+                  {(() => {
+                    if (!channel) {
+                      return (
+                        <Input
+                          placeholder={t("detail.channelPlaceholder")}
+                          disabled
+                          className="text-base md:text-sm"
+                        />
+                      );
+                    }
+                    const filtered = targets.filter((tgt) => tgt.channel === channel);
+                    if (filtered.length > 0) {
+                      return (
+                        <Select
+                          value={to || "__none__"}
+                          onValueChange={(v) => setTo(v === "__none__" ? "" : v)}
+                        >
+                          <SelectTrigger className="text-base md:text-sm">
+                            <SelectValue placeholder={t("detail.toPlaceholder")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">{t("detail.toPlaceholder")}</SelectItem>
+                            {filtered.map((tgt) => (
+                              <SelectItem key={tgt.chatId} value={tgt.chatId} title={tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}>
+                                <span className="truncate">{tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      );
+                    }
+                    return (
+                      <Input
+                        value={to}
+                        onChange={(e) => setTo(e.target.value)}
+                        placeholder={t("detail.toPlaceholder")}
+                        className="text-base md:text-sm"
+                      />
+                    );
+                  })()}
                 </div>
-              </>
+              </div>
             )}
 
             <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
@@ -171,6 +250,14 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
               <p className="text-xs text-muted-foreground">{t("detail.deleteAfterRunDesc")}</p>
             </div>
             <Switch checked={deleteAfterRun} onCheckedChange={setDeleteAfterRun} />
+          </div>
+
+          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium">{t("stateless")}</p>
+              <p className="text-xs text-muted-foreground">{t("statelessHelp")}</p>
+            </div>
+            <Switch checked={stateless} onCheckedChange={setStateless} />
           </div>
 
         </div>

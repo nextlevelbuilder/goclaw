@@ -50,5 +50,6 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		BuiltinToolTenantCfgs: NewPGBuiltinToolTenantConfigStore(db),
 		SkillTenantCfgs:       NewPGSkillTenantConfigStore(db),
 		SystemConfigs:         NewPGSystemConfigStore(db),
+		SubagentTasks:         NewPGSubagentTaskStore(db),
 	}, nil
 }

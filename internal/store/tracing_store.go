@@ -124,6 +124,18 @@ type CostSummaryRow struct {
 	TraceCount        int        `json:"trace_count"`
 }
 
+// CodexPoolSpan holds the fields from a single LLM span for Codex pool activity analysis.
+type CodexPoolSpan struct {
+	SpanID     uuid.UUID
+	TraceID    uuid.UUID
+	StartedAt  time.Time
+	DurationMS int
+	Status     string
+	Provider   string
+	Model      string
+	Metadata   json.RawMessage
+}
+
 // TracingStore manages LLM traces and spans.
 type TracingStore interface {
 	CreateTrace(ctx context.Context, trace *TraceData) error
@@ -144,4 +156,20 @@ type TracingStore interface {
 	// Cost aggregation
 	GetMonthlyAgentCost(ctx context.Context, agentID uuid.UUID, year int, month time.Month) (float64, error)
 	GetCostSummary(ctx context.Context, opts CostSummaryOpts) ([]CostSummaryRow, error)
+
+	// Maintenance
+	DeleteTracesOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+
+	// ListCodexPoolSpans returns recent LLM call spans for agents using Codex OAuth pool providers.
+	ListCodexPoolSpans(ctx context.Context, agentID, tenantID uuid.UUID, poolProviders []string, limit int) ([]CodexPoolSpan, error)
+
+	// ListCodexPoolSpansByProviders returns recent LLM call spans across all agents
+	// that used any of the given pool providers. Used for provider-scoped activity monitoring.
+	ListCodexPoolSpansByProviders(ctx context.Context, tenantID uuid.UUID, poolProviders []string, limit int) ([]CodexPoolProviderSpan, error)
+}
+
+// CodexPoolProviderSpan extends CodexPoolSpan with the agent ID for provider-scoped aggregation.
+type CodexPoolProviderSpan struct {
+	CodexPoolSpan
+	AgentID uuid.UUID
 }

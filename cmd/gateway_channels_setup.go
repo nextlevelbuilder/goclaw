@@ -28,9 +28,26 @@ import (
 
 // registerConfigChannels registers config-based channels as fallback when no DB instances are loaded.
 func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus, pgStores *store.Stores, instanceLoader *channels.InstanceLoader) {
-	if cfg.Channels.Telegram.Enabled && cfg.Channels.Telegram.Token != "" && instanceLoader == nil {
-		tg, err := telegram.New(cfg.Channels.Telegram, msgBus, pgStores.Pairing, nil, nil, nil, nil)
-		if err != nil {
+	if instanceLoader != nil {
+		return
+	}
+
+	recordMissingConfig := func(name, detail string) {
+		channelMgr.RecordHealth(name, channels.NewChannelHealthForType(
+			name,
+			channels.ChannelHealthStateFailed,
+			"Missing credentials",
+			detail,
+			channels.ChannelFailureKindConfig,
+			false,
+		))
+	}
+
+	if cfg.Channels.Telegram.Enabled {
+		if cfg.Channels.Telegram.Token == "" {
+			recordMissingConfig(channels.TypeTelegram, "Set channels.telegram.token in config.")
+		} else if tg, err := telegram.New(cfg.Channels.Telegram, msgBus, pgStores.Pairing); err != nil {
+			channelMgr.RecordFailure(channels.TypeTelegram, "", err)
 			slog.Error("failed to initialize telegram channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeTelegram, tg)
@@ -38,9 +55,11 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		}
 	}
 
-	if cfg.Channels.Discord.Enabled && cfg.Channels.Discord.Token != "" && instanceLoader == nil {
-		dc, err := discord.New(cfg.Channels.Discord, msgBus, nil, nil, nil, nil)
-		if err != nil {
+	if cfg.Channels.Discord.Enabled {
+		if cfg.Channels.Discord.Token == "" {
+			recordMissingConfig(channels.TypeDiscord, "Set channels.discord.token in config.")
+		} else if dc, err := discord.New(cfg.Channels.Discord, msgBus, nil, nil, nil, nil); err != nil {
+			channelMgr.RecordFailure(channels.TypeDiscord, "", err)
 			slog.Error("failed to initialize discord channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeDiscord, dc)
@@ -48,9 +67,11 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		}
 	}
 
-	if cfg.Channels.WhatsApp.Enabled && cfg.Channels.WhatsApp.BridgeURL != "" && instanceLoader == nil {
-		wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, nil)
-		if err != nil {
+	if cfg.Channels.WhatsApp.Enabled {
+		if cfg.Channels.WhatsApp.BridgeURL == "" {
+			recordMissingConfig(channels.TypeWhatsApp, "Set channels.whatsapp.bridge_url in config.")
+		} else if wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, nil); err != nil {
+			channelMgr.RecordFailure(channels.TypeWhatsApp, "", err)
 			slog.Error("failed to initialize whatsapp channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeWhatsApp, wa)
@@ -58,9 +79,11 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		}
 	}
 
-	if cfg.Channels.Zalo.Enabled && cfg.Channels.Zalo.Token != "" && instanceLoader == nil {
-		z, err := zalo.New(cfg.Channels.Zalo, msgBus, pgStores.Pairing)
-		if err != nil {
+	if cfg.Channels.Zalo.Enabled {
+		if cfg.Channels.Zalo.Token == "" {
+			recordMissingConfig(channels.TypeZaloOA, "Set channels.zalo.token in config.")
+		} else if z, err := zalo.New(cfg.Channels.Zalo, msgBus, pgStores.Pairing); err != nil {
+			channelMgr.RecordFailure(channels.TypeZaloOA, "", err)
 			slog.Error("failed to initialize zalo channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeZaloOA, z)
@@ -68,9 +91,10 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		}
 	}
 
-	if cfg.Channels.ZaloPersonal.Enabled && instanceLoader == nil {
+	if cfg.Channels.ZaloPersonal.Enabled {
 		zp, err := zalopersonal.New(cfg.Channels.ZaloPersonal, msgBus, pgStores.Pairing, nil)
 		if err != nil {
+			channelMgr.RecordFailure(channels.TypeZaloPersonal, "", err)
 			slog.Error("failed to initialize zca channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeZaloPersonal, zp)
@@ -78,19 +102,29 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		}
 	}
 
-	if cfg.Channels.Slack.Enabled && cfg.Channels.Slack.BotToken != "" && cfg.Channels.Slack.AppToken != "" && instanceLoader == nil {
-		sl, err := slackchannel.New(cfg.Channels.Slack, msgBus, nil, nil)
-		if err != nil {
-			slog.Error("failed to initialize slack channel", "error", err)
-		} else {
-			channelMgr.RegisterChannel(channels.TypeSlack, sl)
-			slog.Info("slack channel enabled (config)")
+	if cfg.Channels.Slack.Enabled {
+		switch {
+		case cfg.Channels.Slack.BotToken == "":
+			recordMissingConfig(channels.TypeSlack, "Set channels.slack.bot_token in config.")
+		case cfg.Channels.Slack.AppToken == "":
+			recordMissingConfig(channels.TypeSlack, "Set channels.slack.app_token in config.")
+		default:
+			sl, err := slackchannel.New(cfg.Channels.Slack, msgBus, nil, nil)
+			if err != nil {
+				channelMgr.RecordFailure(channels.TypeSlack, "", err)
+				slog.Error("failed to initialize slack channel", "error", err)
+			} else {
+				channelMgr.RegisterChannel(channels.TypeSlack, sl)
+				slog.Info("slack channel enabled (config)")
+			}
 		}
 	}
 
-	if cfg.Channels.Feishu.Enabled && cfg.Channels.Feishu.AppID != "" && instanceLoader == nil {
-		f, err := feishu.New(cfg.Channels.Feishu, msgBus, pgStores.Pairing, nil)
-		if err != nil {
+	if cfg.Channels.Feishu.Enabled {
+		if cfg.Channels.Feishu.AppID == "" {
+			recordMissingConfig(channels.TypeFeishu, "Set channels.feishu.app_id in config.")
+		} else if f, err := feishu.New(cfg.Channels.Feishu, msgBus, pgStores.Pairing, nil); err != nil {
+			channelMgr.RecordFailure(channels.TypeFeishu, "", err)
 			slog.Error("failed to initialize feishu channel", "error", err)
 		} else {
 			channelMgr.RegisterChannel(channels.TypeFeishu, f)

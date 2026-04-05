@@ -5,6 +5,9 @@ export const queryKeys = {
   providers: {
     all: ["providers"] as const,
     models: (providerId: string) => ["providers", providerId, "models"] as const,
+    chatgptOAuthStatuses: (providerKeys: string[]) => ["providers", "chatgpt-oauth-statuses", ...providerKeys] as const,
+    chatgptOAuthQuotas: (providerNames: string[]) => ["providers", "chatgpt-oauth-quotas", ...providerNames] as const,
+    codexPoolActivity: (providerId: string, limit: number) => ["providers", providerId, "codex-pool-activity", limit] as const,
   },
   agents: {
     all: ["agents"] as const,
@@ -12,6 +15,7 @@ export const queryKeys = {
     files: (agentKey: string) => ["agents", agentKey, "files"] as const,
     links: (agentId: string) => ["agents", agentId, "links"] as const,
     instances: (agentId: string) => ["agents", agentId, "instances"] as const,
+    codexPoolActivity: (agentId: string, limit: number) => ["agents", agentId, "codex-pool-activity", limit] as const,
   },
   sessions: {
     all: ["sessions"] as const,
@@ -74,6 +78,10 @@ export const queryKeys = {
   tenantUsers: {
     all: ["tenantUsers"] as const,
   },
+  users: {
+    all: ["users"] as const,
+    search: (params: Record<string, unknown>) => ["users", "search", params] as const,
+  },
   tenants: {
     all: ["tenants"] as const,
     detail: (tenantId: string) => ["tenants", tenantId] as const,
@@ -84,5 +92,6 @@ export const queryKeys = {
     list: (params: Record<string, unknown>) => ["kg", params] as const,
     stats: (agentId: string, userId?: string) => ["kg", "stats", agentId, userId] as const,
     graph: (agentId: string, userId?: string) => ["kg", "graph", agentId, userId] as const,
+    dedup: (agentId: string, userId?: string) => ["kg", "dedup", agentId, userId] as const,
   },
 };

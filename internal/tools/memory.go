@@ -34,7 +34,7 @@ func (t *MemorySearchTool) SetHasKG(has bool) {
 func (t *MemorySearchTool) Name() string { return "memory_search" }
 
 func (t *MemorySearchTool) Description() string {
-	return "Mandatory recall step: semantically search MEMORY.md + memory/*.md before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy."
+	return "Mandatory recall step: semantically search MEMORY.md + memory/*.md before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
 }
 
 func (t *MemorySearchTool) Parameters() map[string]any {
@@ -98,9 +98,18 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 			searchOpts.MinScore = mc.MinScore
 		}
 	}
-	results, err := t.memStore.Search(ctx, query, agentID.String(), userID, searchOpts)
+	agentStr := agentID.String()
+	results, err := t.memStore.Search(ctx, query, agentStr, userID, searchOpts)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("memory search failed: %v", err))
+	}
+	// Fallback: also search leader's memory for team members and merge results.
+	if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {
+		leaderResults, lerr := t.memStore.Search(ctx, query, leaderID, userID, searchOpts)
+		if lerr != nil && userID != "" {
+			leaderResults, _ = t.memStore.Search(ctx, query, leaderID, "", searchOpts)
+		}
+		results = append(results, leaderResults...)
 	}
 	if len(results) == 0 {
 		return NewResult("No memory results found for query: " + query)
@@ -179,11 +188,21 @@ func (t *MemoryGetTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	userID := store.MemoryUserID(ctx)
 
+	agentStr := agentID.String()
+
 	// Try per-user first, then global
-	content, err := t.memStore.GetDocument(ctx, agentID.String(), userID, path)
+	content, err := t.memStore.GetDocument(ctx, agentStr, userID, path)
 	if err != nil && userID != "" {
-		// Fallback to global
-		content, err = t.memStore.GetDocument(ctx, agentID.String(), "", path)
+		content, err = t.memStore.GetDocument(ctx, agentStr, "", path)
+	}
+	// Fallback: try leader's memory for team members.
+	if err != nil {
+		if leaderID := LeaderAgentIDFromCtx(ctx); leaderID != "" && leaderID != agentStr {
+			content, err = t.memStore.GetDocument(ctx, leaderID, userID, path)
+			if err != nil && userID != "" {
+				content, err = t.memStore.GetDocument(ctx, leaderID, "", path)
+			}
+		}
 	}
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read %s: %v", path, err))

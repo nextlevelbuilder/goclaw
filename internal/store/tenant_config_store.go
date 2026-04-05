@@ -36,6 +36,8 @@ type SkillTenantConfig struct {
 type SkillTenantConfigStore interface {
 	// ListDisabledSkillIDs returns skill IDs disabled for a tenant.
 	ListDisabledSkillIDs(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error)
+	// ListAll returns all tenant overrides (skillID → enabled) for a tenant.
+	ListAll(ctx context.Context, tenantID uuid.UUID) (map[uuid.UUID]bool, error)
 	// Set creates or updates a tenant skill config.
 	Set(ctx context.Context, tenantID uuid.UUID, skillID uuid.UUID, enabled bool) error
 	// Delete removes a tenant skill config (reverts to default).

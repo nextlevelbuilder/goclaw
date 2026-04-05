@@ -13,6 +13,7 @@ type NotifyRoutingMeta struct {
 	ChatID    string
 	UserID    string
 	LeadAgent string // agent key (only used in leader mode)
+	PeerKind  string // "group" or "direct" — routes to correct session (#266)
 }
 
 // TeamNotifyQueue batches team task notifications per chat with debounce,

@@ -10,7 +10,7 @@ func init() {
 		MsgInvalidRequest:   "无效请求：%s",
 		MsgInvalidJSON:      "无效的 JSON",
 		MsgUnauthorized:     "未授权",
-		MsgPermissionDenied: "权限不足：无法访问 %s",
+		MsgPermissionDenied: "权限不足：%s",
 		MsgInternalError:    "内部错误：%s",
 		MsgInvalidSlug:      "%s 必须是有效的 slug（小写字母、数字、连字符）",
 		MsgFailedToList:     "获取 %s 列表失败",
@@ -95,6 +95,7 @@ func init() {
 
 		// Channels
 		MsgCannotDeleteDefaultInst: "无法删除默认Channel实例",
+		MsgCannotRemoveLastWriter:  "无法移除最后一个文件管理员",
 
 		// Skills
 		MsgSkillsUpdateNotSupported: "基于文件的Skill不支持 skills.update",

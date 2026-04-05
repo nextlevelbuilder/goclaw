@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -57,7 +58,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     [enabledProviders, provider],
   );
   const selectedProviderId = selectedProvider?.id;
-  const { models, loading: modelsLoading } = useProviderModels(selectedProviderId, selectedProvider?.provider_type);
+  const { models, loading: modelsLoading } = useProviderModels(selectedProviderId);
   const { verify, verifying, result: verifyResult, reset: resetVerify } = useProviderVerify();
 
   // Reset verification when provider or model changes
@@ -100,7 +101,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
       setDisplayName("");
       setProvider("");
       setModel("");
-      setAgentType("open");
+      setAgentType("predefined");
       setDescription("");
       setSelfEvolve(false);
       setError("");
@@ -220,37 +221,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
               )}
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>{t("create.agentType")}</Label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setAgentType("predefined")}
-                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  agentType === "predefined"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input bg-background hover:bg-accent"
-                }`}
-              >
-                {t("create.predefined")}
-                <span className="block text-xs font-normal opacity-70">{t("create.predefinedSubLabel")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAgentType("open")}
-                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                  agentType === "open"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-input bg-background hover:bg-accent"
-                }`}
-              >
-                {t("create.open")}
-                <span className="block text-xs font-normal opacity-70">{t("create.openSubLabel")}</span>
-              </button>
-            </div>
-          </div>
-
-          {agentType === "predefined" && (
+          {agentType === "predefined" ? (
             <div className="space-y-3">
               <Label>{t("create.describeAgent")}</Label>
               <div className="flex flex-wrap gap-1.5">
@@ -282,7 +253,33 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
                 <Switch id="create-self-evolve" checked={selfEvolve} onCheckedChange={setSelfEvolve} />
               </div>
             </div>
+          ) : (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 space-y-2">
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                {t("create.openWarning")}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setAgentType("predefined")}
+              >
+                {t("create.switchToPredefined")}
+              </Button>
+            </div>
           )}
+
+          {/* Collapsible toggle for Open agent type */}
+          <button
+            type="button"
+            onClick={() => setAgentType(agentType === "open" ? "predefined" : "open")}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ChevronRight className={`h-3 w-3 transition-transform ${agentType === "open" ? "rotate-90" : ""}`} />
+            {t("create.useOpenAgent")}
+          </button>
+
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}

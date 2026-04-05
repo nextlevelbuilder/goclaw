@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Clock, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, Clock, AlertTriangle, CheckCircle2, XCircle, ChevronDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pagination } from "@/components/shared/pagination";
@@ -21,6 +21,12 @@ function formatDuration(ms?: number): string {
   return `${(ms / 60000).toFixed(1)}m`;
 }
 
+function StatusIcon({ status }: { status?: string }) {
+  const isSuccess = status === "ok" || status === "success";
+  if (isSuccess) return <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />;
+  return <XCircle className="h-4 w-4 text-destructive shrink-0" />;
+}
+
 function RunEntry({ entry }: { entry: CronRunLogEntry }) {
   const { t } = useTranslation("cron");
   const [expanded, setExpanded] = useState(false);
@@ -28,80 +34,81 @@ function RunEntry({ entry }: { entry: CronRunLogEntry }) {
   const hasDetails = !!(entry.summary || entry.error);
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden">
-      {/* Header row — always visible */}
+    <div className={`group border-b last:border-b-0 ${expanded ? "bg-muted/20" : "hover:bg-muted/10"} transition-colors`}>
+      {/* Row */}
       <button
         type="button"
-        className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors sm:px-4"
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
         onClick={() => hasDetails && setExpanded(!expanded)}
         disabled={!hasDetails}
       >
-        {/* Status dot */}
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isSuccess ? "bg-emerald-500" : "bg-destructive"}`} />
+        <StatusIcon status={entry.status} />
 
-        {/* Timestamp + duration */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-medium">{formatDate(new Date(entry.ts))}</span>
-            {entry.durationMs != null && entry.durationMs > 0 && (
-              <span className="text-xs text-muted-foreground">({formatDuration(entry.durationMs)})</span>
-            )}
-          </div>
-          {/* Summary preview (collapsed) */}
-          {!expanded && entry.summary && (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{entry.summary}</p>
-          )}
-        </div>
+        {/* Time */}
+        <span className="text-sm tabular-nums shrink-0 w-[140px] sm:w-auto">
+          {formatDate(new Date(entry.ts))}
+        </span>
+
+        {/* Duration */}
+        {entry.durationMs != null && entry.durationMs > 0 && (
+          <Badge variant="outline" className="hidden sm:inline-flex gap-1 text-[10px] font-normal shrink-0">
+            <Zap className="h-2.5 w-2.5" />
+            {formatDuration(entry.durationMs)}
+          </Badge>
+        )}
+
+        {/* Summary preview */}
+        <span className="flex-1 min-w-0 truncate text-xs text-muted-foreground">
+          {entry.error ? entry.error.split("\n")[0] : entry.summary?.split("\n")[0] || ""}
+        </span>
 
         {/* Tokens */}
         {entry.inputTokens != null && entry.inputTokens > 0 && (
-          <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
-            {t("detail.inOut", {
-              input: formatTokens(entry.inputTokens),
-              output: formatTokens(entry.outputTokens ?? 0),
-            })}
+          <span className="hidden sm:block shrink-0 text-[10px] text-muted-foreground tabular-nums">
+            {formatTokens(entry.inputTokens)}/{formatTokens(entry.outputTokens ?? 0)}
           </span>
         )}
 
-        {/* Status badge */}
-        <Badge variant={isSuccess ? "success" : "destructive"} className="shrink-0">
-          {entry.status || "unknown"}
+        {/* Status */}
+        <Badge
+          variant={isSuccess ? "success" : "destructive"}
+          className="shrink-0 text-[10px] min-w-[36px] justify-center"
+        >
+          {entry.status || "?"}
         </Badge>
 
-        {/* Expand chevron */}
+        {/* Expand */}
         {hasDetails && (
-          <span className="shrink-0 text-muted-foreground">
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </span>
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
         )}
       </button>
 
-      {/* Expanded details */}
+      {/* Expanded */}
       {expanded && (
-        <div className="border-t px-3 py-3 sm:px-4">
+        <div className="px-3 pb-3 pl-10">
           {entry.summary && (
-            <div className="rounded-md bg-muted/30 p-3">
+            <div className="rounded-md bg-background border p-3 text-sm">
               <MarkdownRenderer content={entry.summary} className="prose-sm max-w-none" />
             </div>
           )}
           {entry.error && (
             <div className="mt-2 rounded-md border border-destructive/20 bg-destructive/5 p-3">
-              <div className="mb-1 flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                <span className="text-xs font-medium text-destructive">{t("detail.lastError")}</span>
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <AlertTriangle className="h-3 w-3 text-destructive" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-destructive">{t("detail.lastError")}</span>
               </div>
-              <MarkdownRenderer content={entry.error} className="prose-sm max-w-none text-destructive/80" />
+              <pre className="text-xs text-destructive/80 whitespace-pre-wrap break-all font-mono">{entry.error}</pre>
             </div>
           )}
-          {/* Token details on mobile */}
-          {entry.inputTokens != null && entry.inputTokens > 0 && (
-            <div className="mt-2 text-xs text-muted-foreground sm:hidden">
-              {t("detail.inOut", {
-                input: formatTokens(entry.inputTokens),
-                output: formatTokens(entry.outputTokens ?? 0),
-              })}
-            </div>
-          )}
+          {/* Mobile: duration + tokens */}
+          <div className="mt-2 flex items-center gap-3 text-[10px] text-muted-foreground sm:hidden">
+            {entry.durationMs != null && entry.durationMs > 0 && (
+              <span>{formatDuration(entry.durationMs)}</span>
+            )}
+            {entry.inputTokens != null && entry.inputTokens > 0 && (
+              <span>{formatTokens(entry.inputTokens)} in / {formatTokens(entry.outputTokens ?? 0)} out</span>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -149,42 +156,47 @@ export function CronRunHistoryTab({ job, getRunLog, onRefresh }: CronRunHistoryT
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
-          <h4 className="font-medium">{t("detail.runHistory")}</h4>
+          <h4 className="text-sm font-semibold">{t("detail.runHistory")}</h4>
           {runLogTotal > 0 && (
-            <span className="text-xs text-muted-foreground">({runLogTotal})</span>
+            <Badge variant="secondary" className="text-[10px]">{runLogTotal}</Badge>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={() => loadRunLog()} className="gap-1 text-xs">
-          <RefreshCw className="h-3 w-3" />
+        <Button variant="ghost" size="sm" onClick={() => loadRunLog()} className="gap-1.5 text-xs h-7">
+          <RefreshCw className={`h-3 w-3 ${runLogLoading ? "animate-spin" : ""}`} />
           {t("detail.refresh")}
         </Button>
       </div>
 
       {runLogLoading && runLog.length === 0 ? (
-        <div className="flex items-center justify-center py-8">
+        <div className="flex items-center justify-center py-12">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
         </div>
       ) : runLog.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">{t("detail.noHistory")}</p>
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Clock className="h-8 w-8 mb-2 opacity-30" />
+          <p className="text-sm">{t("detail.noHistory")}</p>
+        </div>
       ) : (
         <>
-          <div className="space-y-2">
+          <div className="rounded-lg border overflow-hidden bg-card">
             {runLog.map((entry, i) => (
               <RunEntry key={`${entry.ts}-${i}`} entry={entry} />
             ))}
           </div>
 
-          <div className="mt-4">
-            <Pagination
-              page={runLogPage}
-              pageSize={runLogPageSize}
-              total={runLogTotal}
-              totalPages={runLogTotalPages}
-              onPageChange={(p) => { setRunLogPage(p); loadRunLog(p); }}
-              onPageSizeChange={(s) => { setRunLogPageSize(s); setRunLogPage(1); loadRunLog(1, s); }}
-              pageSizes={[10, 20, 50]}
-            />
-          </div>
+          {runLogTotalPages > 1 && (
+            <div className="mt-4">
+              <Pagination
+                page={runLogPage}
+                pageSize={runLogPageSize}
+                total={runLogTotal}
+                totalPages={runLogTotalPages}
+                onPageChange={(p) => { setRunLogPage(p); loadRunLog(p); }}
+                onPageSizeChange={(s) => { setRunLogPageSize(s); setRunLogPage(1); loadRunLog(1, s); }}
+                pageSizes={[10, 20, 50]}
+              />
+            </div>
+          )}
         </>
       )}
     </div>

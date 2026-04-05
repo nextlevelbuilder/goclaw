@@ -7,22 +7,26 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/version"
 )
 
 const (
 	githubRepo         = "nextlevelbuilder/goclaw"
+	liteTagPrefix      = "lite-v"
 	updateCheckInterval = 1 * time.Hour
+	maxResponseBody    = 2 << 20 // 2 MB
 )
 
 // UpdateInfo holds the latest release information from GitHub.
 type UpdateInfo struct {
-	LatestVersion  string `json:"latestVersion"`
-	UpdateURL      string `json:"updateUrl"`
+	LatestVersion   string `json:"latestVersion"`
+	UpdateURL       string `json:"updateUrl"`
 	UpdateAvailable bool   `json:"updateAvailable"`
+	ReleaseNotes    string `json:"releaseNotes,omitempty"`
 }
 
 // UpdateChecker periodically checks GitHub for new releases.
@@ -30,6 +34,7 @@ type UpdateChecker struct {
 	currentVersion string
 	mu             sync.RWMutex
 	info           *UpdateInfo
+	etag           string // ETag for conditional requests
 }
 
 // NewUpdateChecker creates an UpdateChecker for the given current version.
@@ -39,7 +44,6 @@ func NewUpdateChecker(currentVersion string) *UpdateChecker {
 
 // Start begins periodic update checking. Call with a cancellable context.
 func (uc *UpdateChecker) Start(ctx context.Context) {
-	// Initial check after short delay (don't block startup)
 	go func() {
 		select {
 		case <-time.After(5 * time.Second):
@@ -68,11 +72,21 @@ func (uc *UpdateChecker) Info() *UpdateInfo {
 	return uc.info
 }
 
+// githubRelease is a minimal GitHub Release API response.
+type githubRelease struct {
+	TagName    string `json:"tag_name"`
+	HTMLURL    string `json:"html_url"`
+	Body       string `json:"body"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
+}
+
 func (uc *UpdateChecker) check() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
+	// Use releases list API (not /latest) to filter out lite-v* tags.
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases", githubRepo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		slog.Warn("update check: failed to create request", "error", err)
@@ -81,6 +95,11 @@ func (uc *UpdateChecker) check() {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "goclaw/"+uc.currentVersion)
 
+	// ETag conditional request to reduce API rate limit usage.
+	if uc.etag != "" {
+		req.Header.Set("If-None-Match", uc.etag)
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		slog.Warn("update check: request failed", "error", err)
@@ -88,89 +107,52 @@ func (uc *UpdateChecker) check() {
 	}
 	defer resp.Body.Close()
 
+	// 304 Not Modified — cached info is still valid.
+	if resp.StatusCode == http.StatusNotModified {
+		return
+	}
 	if resp.StatusCode != http.StatusOK {
 		slog.Warn("update check: unexpected status", "status", resp.StatusCode)
 		return
 	}
 
-	var release struct {
-		TagName string `json:"tag_name"`
-		HTMLURL string `json:"html_url"`
+	// Cache ETag.
+	if etag := resp.Header.Get("ETag"); etag != "" {
+		uc.etag = etag
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
+
+	var releases []githubRelease
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBody)).Decode(&releases); err != nil {
 		slog.Warn("update check: failed to decode response", "error", err)
 		return
 	}
 
-	if release.TagName == "" {
+	// Find the latest non-draft, non-prerelease, non-lite server release.
+	for _, rel := range releases {
+		if rel.Draft || rel.Prerelease {
+			continue
+		}
+		if strings.HasPrefix(rel.TagName, liteTagPrefix) {
+			continue
+		}
+		if !strings.HasPrefix(rel.TagName, "v") {
+			continue
+		}
+
+		info := &UpdateInfo{
+			LatestVersion:   rel.TagName,
+			UpdateURL:       rel.HTMLURL,
+			UpdateAvailable: version.IsNewer(rel.TagName, uc.currentVersion),
+			ReleaseNotes:    rel.Body,
+		}
+
+		uc.mu.Lock()
+		uc.info = info
+		uc.mu.Unlock()
+
+		if info.UpdateAvailable {
+			slog.Info("new version available", "current", uc.currentVersion, "latest", rel.TagName)
+		}
 		return
 	}
-
-	info := &UpdateInfo{
-		LatestVersion:   release.TagName,
-		UpdateURL:       release.HTMLURL,
-		UpdateAvailable: isNewer(uc.currentVersion, release.TagName),
-	}
-
-	uc.mu.Lock()
-	uc.info = info
-	uc.mu.Unlock()
-
-	if info.UpdateAvailable {
-		slog.Info("new version available", "current", uc.currentVersion, "latest", release.TagName)
-	}
-}
-
-// isNewer returns true if latest is a newer version than current.
-// Compares by stripping "v" prefix and doing simple string comparison.
-// Returns false if current is "dev" (development build).
-func isNewer(current, latest string) bool {
-	current = strings.TrimPrefix(current, "v")
-	latest = strings.TrimPrefix(latest, "v")
-
-	if current == "dev" || current == "" || latest == "" {
-		return false
-	}
-	if current == latest {
-		return false
-	}
-
-	// Semantic version comparison: split by "." and compare numerically
-	return compareSemver(latest, current) > 0
-}
-
-// compareSemver compares two semver strings (without "v" prefix).
-// Returns >0 if a > b, <0 if a < b, 0 if equal.
-// Handles pre-release suffixes by stripping them (e.g., "1.2.3-5-gabcdef").
-func compareSemver(a, b string) int {
-	partsA := parseSemver(a)
-	partsB := parseSemver(b)
-
-	for i := range 3 {
-		va, vb := 0, 0
-		if i < len(partsA) {
-			va = partsA[i]
-		}
-		if i < len(partsB) {
-			vb = partsB[i]
-		}
-		if va != vb {
-			return va - vb
-		}
-	}
-	return 0
-}
-
-func parseSemver(s string) []int {
-	// Strip pre-release suffix: "1.2.3-5-gabcdef" → "1.2.3"
-	if idx := strings.IndexByte(s, '-'); idx >= 0 {
-		s = s[:idx]
-	}
-	parts := strings.Split(s, ".")
-	nums := make([]int, 0, len(parts))
-	for _, p := range parts {
-		n, _ := strconv.Atoi(p)
-		nums = append(nums, n)
-	}
-	return nums
 }

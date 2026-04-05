@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -35,7 +34,7 @@ func (t *TeamTasksTool) handleBlockerComment(
 	if len([]rune(reason)) > 500 {
 		reason = string([]rune(reason)[:500])
 	}
-	if err := t.manager.teamStore.FailTask(ctx, taskID, team.ID, reason); err != nil {
+	if err := t.manager.Store().FailTask(ctx, taskID, team.ID, reason); err != nil {
 		slog.Warn("blocker: FailTask error", "task_id", taskID, "error", err)
 		// Task may have completed concurrently — not a hard error.
 		return NewResult("Blocker comment saved. Task may have already completed — check task status.")
@@ -45,27 +44,28 @@ func (t *TeamTasksTool) handleBlockerComment(
 	// 1. Cancel subscriber → sched.CancelSession() → member stops
 	// 2. Notify subscriber → "❌ Task failed" → chat channel (direct outbound)
 	// 3. WS broadcast → web UI dashboard real-time update
-	memberKey := t.manager.agentKeyFromID(ctx, agentID)
-	t.manager.broadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, protocol.TeamTaskEventPayload{
-		TeamID:        team.ID.String(),
-		TaskID:        taskID.String(),
-		TaskNumber:    task.TaskNumber,
-		Subject:       task.Subject,
-		Status:        store.TeamTaskStatusFailed,
-		Reason:        reason,
-		OwnerAgentKey: memberKey,
-		UserID:        store.UserIDFromContext(ctx),
-		Channel:       task.Channel,
-		ChatID:        task.ChatID,
-		Timestamp:     time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-		ActorType:     "agent",
-		ActorID:       memberKey,
-	})
+	memberKey := t.manager.AgentKeyFromID(ctx, agentID)
+	blockerPeerKind := ""
+	if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
+		blockerPeerKind = pk
+	}
+	t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, BuildTaskEventPayload(
+		team.ID.String(), taskID.String(),
+		store.TeamTaskStatusFailed,
+		"agent", memberKey,
+		WithTaskInfo(task.TaskNumber, task.Subject),
+		WithOwnerAgentKey(memberKey),
+		WithReason(reason),
+		WithUserID(store.UserIDFromContext(ctx)),
+		WithChannel(task.Channel),
+		WithChatID(task.ChatID),
+		WithPeerKind(blockerPeerKind),
+	))
 
 	// Escalate to leader if enabled in team settings.
 	escalationCfg := ParseBlockerEscalationConfig(team.Settings)
-	if escalationCfg.Enabled && t.manager.msgBus != nil {
-		leadAg, err := t.manager.cachedGetAgentByID(ctx, team.LeadAgentID)
+	if escalationCfg.Enabled {
+		leadAg, err := t.manager.CachedGetAgentByID(ctx, team.LeadAgentID)
 		if err == nil {
 			escalationMsg := fmt.Sprintf(
 				"[Escalation] Member %q is blocked on task #%d \"%s\"\n\n"+
@@ -73,16 +73,17 @@ func (t *TeamTasksTool) handleBlockerComment(
 					"Use team_tasks(action=\"retry\", task_id=\"%s\") to reopen with updated instructions.",
 				memberKey, task.TaskNumber, task.Subject, text, taskID)
 
-			if !t.manager.msgBus.TryPublishInbound(bus.InboundMessage{
+			if !t.manager.TryPublishInbound(bus.InboundMessage{
 				Channel:  task.Channel,
 				SenderID: "system:escalation",
 				ChatID:   task.ChatID,
 				Content:  escalationMsg,
 				UserID:   store.UserIDFromContext(ctx),
+				PeerKind: blockerPeerKind,
 				TenantID: store.TenantIDFromContext(ctx),
 				AgentID:  leadAg.AgentKey,
 			}) {
-				slog.Warn("blocker: inbound buffer full, escalation dropped",
+				slog.Warn("blocker: escalation dropped (bus unavailable or buffer full)",
 					"task_id", taskID, "leader", leadAg.AgentKey)
 			}
 		}

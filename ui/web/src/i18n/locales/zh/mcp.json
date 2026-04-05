@@ -18,6 +18,7 @@
   },
   "viewTools": "查看工具",
   "manageGrants": "管理授权",
+  "reconnect": "重新连接",
   "delete": {
     "title": "删除 MCP 服务器",
     "description": "确定要删除「{{name}}」吗？这将同时移除所有相关授权。",
@@ -98,7 +99,9 @@
     "deleted": "MCP 服务器已删除",
     "failedCreate": "创建 MCP 服务器失败",
     "failedUpdate": "更新 MCP 服务器失败",
-    "failedDelete": "删除 MCP 服务器失败"
+    "failedDelete": "删除 MCP 服务器失败",
+    "reconnected": "MCP 服务器连接已重置",
+    "failedReconnect": "重新连接 MCP 服务器失败"
   },
   "userCredentials": {
     "title": "我的凭证",

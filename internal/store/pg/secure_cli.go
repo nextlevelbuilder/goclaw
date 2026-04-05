@@ -26,6 +26,11 @@ func NewPGSecureCLIStore(db *sql.DB, encryptionKey string) *PGSecureCLIStore {
 const secureCLISelectCols = `id, binary_name, binary_path, description, encrypted_env,
  deny_args, deny_verbose, timeout_seconds, tips, agent_id, enabled, created_by, created_at, updated_at`
 
+// secureCLISelectColsAliased is the same as secureCLISelectCols but prefixed with table alias "b."
+// Required for LookupByBinary which uses LEFT JOIN (ambiguous column names without prefix).
+const secureCLISelectColsAliased = `b.id, b.binary_name, b.binary_path, b.description, b.encrypted_env,
+ b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.agent_id, b.enabled, b.created_by, b.created_at, b.updated_at`
+
 func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary) error {
 	if err := store.ValidateUserID(b.CreatedBy); err != nil {
 		return err
@@ -262,44 +267,136 @@ func (s *PGSecureCLIStore) ListByAgent(ctx context.Context, agentID uuid.UUID) (
 
 // LookupByBinary finds the best credential config for a binary name.
 // Agent-specific config takes priority over global (agent_id IS NULL).
-func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string, agentID *uuid.UUID) (*store.SecureCLIBinary, error) {
-	var row *sql.Row
+// If userID is non-empty, also fetches per-user env overrides via LEFT JOIN (zero extra queries).
+func (s *PGSecureCLIStore) LookupByBinary(ctx context.Context, binaryName string, agentID *uuid.UUID, userID string) (*store.SecureCLIBinary, error) {
+	tid := store.TenantIDFromContext(ctx)
+	isCross := store.IsCrossTenant(ctx)
+	if !isCross && tid == uuid.Nil {
+		return nil, nil
+	}
+
+	// Build query with optional LEFT JOIN for per-user credentials.
+	// Use aliased columns (b.) to avoid ambiguous column reference with JOIN.
+	selectCols := secureCLISelectColsAliased
+	joinClause := ""
+	if userID != "" {
+		selectCols += ", uc.encrypted_env AS user_env"
+		joinClause = " LEFT JOIN secure_cli_user_credentials uc ON uc.binary_id = b.id AND uc.user_id = $%d AND uc.tenant_id = $%d"
+	} else {
+		selectCols += ", NULL AS user_env"
+	}
+
+	var args []any
+	var query string
+
 	if agentID != nil {
-		if store.IsCrossTenant(ctx) {
-			row = s.db.QueryRowContext(ctx,
-				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-				 WHERE binary_name = $1 AND (agent_id = $2 OR agent_id IS NULL) AND enabled = true
-				 ORDER BY agent_id NULLS LAST LIMIT 1`, binaryName, *agentID)
-		} else {
-			tid := store.TenantIDFromContext(ctx)
-			if tid == uuid.Nil {
-				return nil, nil
+		if userID != "" {
+			if isCross {
+				args = []any{binaryName, *agentID, userID, tid}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b` +
+					fmt.Sprintf(joinClause, 3, 4) +
+					` WHERE b.binary_name = $1 AND (b.agent_id = $2 OR b.agent_id IS NULL) AND b.enabled = true
+					 ORDER BY b.agent_id NULLS LAST LIMIT 1`
+			} else {
+				args = []any{binaryName, *agentID, tid, userID, tid}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b` +
+					fmt.Sprintf(joinClause, 4, 5) +
+					` WHERE b.binary_name = $1 AND (b.agent_id = $2 OR b.agent_id IS NULL) AND b.enabled = true AND b.tenant_id = $3
+					 ORDER BY b.agent_id NULLS LAST LIMIT 1`
 			}
-			row = s.db.QueryRowContext(ctx,
-				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-				 WHERE binary_name = $1 AND (agent_id = $2 OR agent_id IS NULL) AND enabled = true AND tenant_id = $3
-				 ORDER BY agent_id NULLS LAST LIMIT 1`, binaryName, *agentID, tid)
+		} else {
+			if isCross {
+				args = []any{binaryName, *agentID}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b
+					 WHERE b.binary_name = $1 AND (b.agent_id = $2 OR b.agent_id IS NULL) AND b.enabled = true
+					 ORDER BY b.agent_id NULLS LAST LIMIT 1`
+			} else {
+				args = []any{binaryName, *agentID, tid}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b
+					 WHERE b.binary_name = $1 AND (b.agent_id = $2 OR b.agent_id IS NULL) AND b.enabled = true AND b.tenant_id = $3
+					 ORDER BY b.agent_id NULLS LAST LIMIT 1`
+			}
 		}
 	} else {
-		if store.IsCrossTenant(ctx) {
-			row = s.db.QueryRowContext(ctx,
-				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-				 WHERE binary_name = $1 AND agent_id IS NULL AND enabled = true LIMIT 1`, binaryName)
-		} else {
-			tid := store.TenantIDFromContext(ctx)
-			if tid == uuid.Nil {
-				return nil, nil
+		if userID != "" {
+			if isCross {
+				args = []any{binaryName, userID, tid}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b` +
+					fmt.Sprintf(joinClause, 2, 3) +
+					` WHERE b.binary_name = $1 AND b.agent_id IS NULL AND b.enabled = true LIMIT 1`
+			} else {
+				args = []any{binaryName, tid, userID, tid}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b` +
+					fmt.Sprintf(joinClause, 3, 4) +
+					` WHERE b.binary_name = $1 AND b.agent_id IS NULL AND b.enabled = true AND b.tenant_id = $2 LIMIT 1`
 			}
-			row = s.db.QueryRowContext(ctx,
-				`SELECT `+secureCLISelectCols+` FROM secure_cli_binaries
-				 WHERE binary_name = $1 AND agent_id IS NULL AND enabled = true AND tenant_id = $2 LIMIT 1`, binaryName, tid)
+		} else {
+			if isCross {
+				args = []any{binaryName}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b
+					 WHERE b.binary_name = $1 AND b.agent_id IS NULL AND b.enabled = true LIMIT 1`
+			} else {
+				args = []any{binaryName, tid}
+				query = `SELECT ` + selectCols + ` FROM secure_cli_binaries b
+					 WHERE b.binary_name = $1 AND b.agent_id IS NULL AND b.enabled = true AND b.tenant_id = $2 LIMIT 1`
+			}
 		}
 	}
-	b, err := s.scanRow(row)
+
+	row := s.db.QueryRowContext(ctx, query, args...)
+	b, err := s.scanRowWithUserEnv(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return b, err
+}
+
+// scanRowWithUserEnv scans a row that includes the extra user_env column from LEFT JOIN.
+func (s *PGSecureCLIStore) scanRowWithUserEnv(row *sql.Row) (*store.SecureCLIBinary, error) {
+	var b store.SecureCLIBinary
+	var binaryPath *string
+	var agentID *uuid.UUID
+	var denyArgs, denyVerbose *[]byte
+	var env []byte
+	var userEnv []byte
+
+	err := row.Scan(
+		&b.ID, &b.BinaryName, &binaryPath, &b.Description, &env,
+		&denyArgs, &denyVerbose,
+		&b.TimeoutSeconds, &b.Tips, &agentID,
+		&b.Enabled, &b.CreatedBy, &b.CreatedAt, &b.UpdatedAt,
+		&userEnv,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	b.BinaryPath = binaryPath
+	b.AgentID = agentID
+	if denyArgs != nil {
+		b.DenyArgs = *denyArgs
+	}
+	if denyVerbose != nil {
+		b.DenyVerbose = *denyVerbose
+	}
+
+	// Decrypt base env
+	if len(env) > 0 && s.encKey != "" {
+		if decrypted, err := crypto.Decrypt(string(env), s.encKey); err == nil {
+			b.EncryptedEnv = []byte(decrypted)
+		}
+	} else {
+		b.EncryptedEnv = env
+	}
+
+	// Decrypt per-user env
+	if len(userEnv) > 0 && s.encKey != "" {
+		if decrypted, err := crypto.Decrypt(string(userEnv), s.encKey); err == nil {
+			b.UserEnv = []byte(decrypted)
+		}
+	}
+
+	return &b, nil
 }
 
 func (s *PGSecureCLIStore) ListEnabled(ctx context.Context) ([]store.SecureCLIBinary, error) {

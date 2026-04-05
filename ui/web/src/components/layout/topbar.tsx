@@ -131,11 +131,10 @@ function UserMenu() {
   const tenantLabel = currentTenant?.name || currentTenantName || "";
 
   const handleSwitchTenant = (_tenantId: string, slug: string) => {
-    // Owner: narrow scope to specific tenant
-    // Non-owner: use tenant_hint for pairing
-    if (isOwner) {
-      localStorage.setItem(LOCAL_STORAGE_KEYS.TENANT_ID, slug);
-    } else {
+    // Always set TENANT_ID so WS and HTTP both resolve the correct tenant.
+    localStorage.setItem(LOCAL_STORAGE_KEYS.TENANT_ID, slug);
+    // Non-owner: also set TENANT_HINT for browser pairing backward compat (Path 3a).
+    if (!isOwner) {
       localStorage.setItem(LOCAL_STORAGE_KEYS.TENANT_HINT, slug);
     }
     window.location.reload();

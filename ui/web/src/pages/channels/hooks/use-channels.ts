@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
+import type { ChannelRuntimeStatus } from "@/types/channel";
 
-export interface ChannelStatus {
-  enabled: boolean;
-  running: boolean;
-}
+export type ChannelStatus = ChannelRuntimeStatus;
 
 export function useChannels() {
   const ws = useWs();

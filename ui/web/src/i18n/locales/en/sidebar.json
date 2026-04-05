@@ -32,6 +32,7 @@
     "providers": "Providers",
     "config": "Config",
     "approvals": "Approvals",
+    "importExport": "Import & Export",
     "nodes": "Nodes",
     "tts": "TTS",
     "activity": "Activity",

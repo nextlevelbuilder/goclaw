@@ -52,9 +52,11 @@ if [ ! -f "$ENV_FILE" ]; then
   if [ -f ".env.example" ]; then
     # Strip 'export ' prefix for Docker Compose compatibility
     sed 's/^export //' .env.example > "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
     echo "  [created]   .env from .env.example"
   else
     touch "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
     echo "  [created]   .env (empty)"
   fi
 else
@@ -84,5 +86,8 @@ fi
 echo ""
 echo "=== Done ==="
 echo ""
-echo "  Run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.selfservice.yml up -d --build"
+echo "  Run: make up"
+echo ""
+echo "  Web dashboard: http://localhost:18790"
+echo "  With separate nginx: make up WITH_WEB_NGINX=1 → http://localhost:3000"
 echo ""

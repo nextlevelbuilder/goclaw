@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GoClaw</title>
+  <script>
+    // Apply persisted theme before first paint to prevent flash
+    try {
+      const stored = JSON.parse(localStorage.getItem('goclaw-ui') || '{}')
+      if (stored.state?.theme === 'light') {
+        document.documentElement.classList.remove('dark')
+      }
+    } catch {}
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

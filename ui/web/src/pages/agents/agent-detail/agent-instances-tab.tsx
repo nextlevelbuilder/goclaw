@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
-import { createPortal } from "react-dom";
-import { Save, Loader2, Users, FileText, Search, UserPlus } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Save, Loader2, Users, FileText } from "lucide-react";
 import { toast } from "@/stores/use-toast-store";
 import { userFriendlyError } from "@/lib/error-utils";
 import { useTranslation } from "react-i18next";
@@ -9,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { useAgentInstances, type UserInstance } from "../hooks/use-agent-instances";
-import { useContactSearch } from "../hooks/use-contact-search";
+import { UserPickerCombobox } from "@/components/shared/user-picker-combobox";
 
 interface AgentInstancesTabProps {
   agentId: string;
@@ -60,8 +59,13 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
   // Existing instance user_ids for deduplication
   const existingIDs = useMemo(() => new Set(instances.map((i) => i.user_id)), [instances]);
 
-  const handleContactSelect = (senderID: string) => {
-    setSelected(senderID);
+  const [addUserId, setAddUserId] = useState("");
+
+  const handleAddUser = (val: string) => {
+    setAddUserId(val);
+    if (val && !existingIDs.has(val)) {
+      setSelected(val);
+    }
   };
 
   if (loading) {
@@ -72,10 +76,14 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
     <div className="flex gap-4" style={{ minHeight: 400 }}>
       {/* Instance list */}
       <div className="w-64 shrink-0 space-y-1 overflow-y-auto rounded-md border p-2">
-        <ContactSearchBox
-          existingIDs={existingIDs}
-          onSelect={handleContactSelect}
-        />
+        <div className="px-1 pb-2">
+          <UserPickerCombobox
+            value={addUserId}
+            onChange={handleAddUser}
+            placeholder={t("instances.searchContacts")}
+            className="w-full"
+          />
+        </div>
         {instances.length > 0 && (
           <div className="px-2 pb-1 pt-1 text-xs font-medium text-muted-foreground">
             {instances.length} instance{instances.length !== 1 ? "s" : ""}
@@ -135,98 +143,6 @@ export function AgentInstancesTab({ agentId }: AgentInstancesTabProps) {
   );
 }
 
-/** Inline contact search dropdown for adding new instances. */
-function ContactSearchBox({ existingIDs, onSelect }: { existingIDs: Set<string>; onSelect: (id: string) => void }) {
-  const { t } = useTranslation("agents");
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const { contacts } = useContactSearch(search);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
-
-  // Filter out contacts already in instances
-  const filtered = contacts.filter((c) => !existingIDs.has(c.sender_id));
-
-  // Compute dropdown position for portal rendering
-  useLayoutEffect(() => {
-    if (!open || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    setDropdownStyle({
-      position: "fixed",
-      top: rect.bottom + 4,
-      left: rect.left,
-      width: rect.width,
-      zIndex: 9999,
-    });
-  }, [open, search]);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        containerRef.current && !containerRef.current.contains(target) &&
-        (!dropdownRef.current || !dropdownRef.current.contains(target))
-      ) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  return (
-    <div ref={containerRef} className="relative px-1 pb-2">
-      <div className="relative">
-        <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
-          onFocus={() => search.length >= 2 && setOpen(true)}
-          placeholder={t("instances.searchContacts")}
-          className="h-8 w-full rounded-md border bg-transparent pl-7 pr-2 text-base md:text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-      {open && search.length >= 2 && filtered.length > 0 && createPortal(
-        <div ref={dropdownRef} style={dropdownStyle} className="max-h-48 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
-          {filtered.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                onSelect(c.sender_id);
-                setSearch("");
-                setOpen(false);
-              }}
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent hover:text-accent-foreground"
-            >
-              <UserPlus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">
-                  {c.display_name || c.sender_id}
-                </div>
-                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  {c.username && <span>@{c.username}</span>}
-                  <Badge variant="outline" className="text-[9px] px-1 py-0">{c.channel_type}</Badge>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>,
-        document.body,
-      )}
-      {open && search.length >= 2 && filtered.length === 0 && contacts.length === 0 && createPortal(
-        <div ref={dropdownRef} style={dropdownStyle} className="rounded-md border bg-popover p-3 text-center text-xs text-muted-foreground shadow-md">
-          {t("instances.noContactsFound")}
-        </div>,
-        document.body,
-      )}
-    </div>
-  );
-}
 
 function InstanceRow({ instance, isSelected, onClick, resolve }: { instance: UserInstance; isSelected: boolean; onClick: () => void; resolve: (id: string) => import("@/types/contact").ChannelContact | null }) {
   const lastSeen = instance.last_seen_at ? formatRelative(instance.last_seen_at) : null;

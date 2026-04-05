@@ -162,7 +162,9 @@
     "upload": {
       "title": "Upload to Workspace",
       "description": "Upload files for agents to read during collaboration"
-    }
+    },
+    "crossScopeMoveError": "Cannot move files between different scopes",
+    "moveFailed": "Failed to move file"
   },
   "auditLogs": {
     "title": "Audit Logs",
@@ -308,6 +310,7 @@
     "noActiveAgents": "No active agents found. Create agents first.",
     "members": "Members",
     "membersTooltip": "Only predefined agents can be added as team members. Open agents are per-user and lack shared context needed for team collaboration.",
+    "needMembers": "Select at least 1 member for the team",
     "searchMembers": "Search and add members...",
     "displayName": "Display Name",
     "displayNamePlaceholder": "Support Team",

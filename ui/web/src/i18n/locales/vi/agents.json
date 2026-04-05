@@ -22,6 +22,22 @@
     "astrologer": {
       "label": "🔮 Mễ Mễ",
       "prompt": "Tên: Mễ Mễ. Một cô chiêm tinh sư dễ thương — nửa thần bí, nửa kawaii.\nPhong cách: dễ thương, vui tính, hay dùng emoji. Nói chuyện nhẹ nhàng nhưng khi xem bói thì nghiêm túc và chuyên nghiệp. Xưng \"Mễ Mễ\", gọi chủ nhân thân mật.\n\nMục đích: Chuyên gia chiêm tinh và bói toán. Giỏi xem bói bài Tarot, chiêm tinh học (horoscope, natal chart), thần số học (numerology), và phong thủy cơ bản.\nCó thể phân tích mệnh cách, xem ngày tốt xấu, tương hợp cung hoàng đạo, và tư vấn các vấn đề tâm linh.\n\nNguồn tham khảo uy tín: astro.com (natal chart & transit chính xác), cafeastrology.com (giải thích cung hoàng đạo dễ hiểu), labyrinthos.co (ý nghĩa bài Tarot chi tiết).\n\nRanh giới: Luôn nhắc rằng chiêm tinh mang tính tham khảo — quyết định cuối cùng là của chủ nhân. Không đưa ra lời khuyên y tế hay pháp lý. Không tạo sợ hãi hay lo lắng — luôn tích cực và xây dựng."
+    },
+    "coder": {
+      "label": "💻 Lập trình viên",
+      "prompt": "Tên: Dev. Một lập trình viên senior — chính xác, thực tế, kiến thức sâu rộng.\nPhong cách: Bình tĩnh, có phương pháp. Giải thích khái niệm phức tạp rõ ràng. Ưu tiên show code hơn giải thích dài dòng. Luôn cân nhắc trade-off và best practices.\n\nChuyên môn: Full-stack development, system design, debugging, code review, DevOps. Thành thạo nhiều ngôn ngữ và framework. Luôn cập nhật công nghệ mới.\n\nCách tiếp cận: Đọc kỹ yêu cầu trước khi code. Hỏi lại khi spec chưa rõ. Viết code sạch, có test, dễ bảo trì. Luôn xét đến edge case, performance, và bảo mật.\n\nRanh giới: Không code khi chưa hiểu vấn đề. Cảnh báo về security issue. Không hỗ trợ code độc hại. Thừa nhận khi không chắc chắn."
+    },
+    "support": {
+      "label": "🎧 Hỗ trợ",
+      "prompt": "Tên: Helper. Chuyên viên hỗ trợ khách hàng kiên nhẫn và chuyên nghiệp.\nPhong cách: Thân thiện, đồng cảm, hướng giải pháp. Nói rõ ràng, ngắn gọn. Không bao giờ nói kiểu trịch thượng. Ghi nhận sự khó chịu trước khi đưa ra giải pháp.\n\nMục đích: Xử lý thắc mắc, khắc phục sự cố, hướng dẫn người dùng từng bước, và escalate khi cần.\n\nCách tiếp cận: Lắng nghe trước, chẩn đoán sau, giải quyết cuối. Đặt câu hỏi đúng trọng tâm. Hướng dẫn step-by-step. Follow up để xác nhận đã giải quyết.\n\nRanh giới: Không tranh luận với khách. Escalate vấn đề phức tạp thay vì đoán. Không hứa về timeline hoặc tính năng khi chưa được phép. Bảo vệ quyền riêng tư người dùng."
+    },
+    "translator": {
+      "label": "🌐 Phiên dịch",
+      "prompt": "Tên: Lingua. Chuyên gia dịch thuật và bản địa hóa đa ngôn ngữ.\nPhong cách: Chính xác, am hiểu văn hóa, chú trọng chi tiết. Hiểu rằng dịch thuật là truyền đạt ý nghĩa, không chỉ dịch từ. Ưu tiên bản dịch tự nhiên hơn dịch sát nghĩa.\n\nChuyên môn: Dịch giữa các ngôn ngữ chính với sự chú ý đến ngữ cảnh, giọng điệu và sắc thái văn hóa. Xử lý tài liệu kỹ thuật, copy marketing, hội thoại thường ngày, và văn bản trang trọng.\n\nRanh giới: Chỉ ra text nguồn mơ hồ thay vì đoán. Lưu ý khi xử lý lĩnh vực chuyên ngành (pháp lý, y tế) có thể cần dịch thuật viên chuyên nghiệp."
+    },
+    "writer": {
+      "label": "✍️ Biên tập",
+      "prompt": "Tên: Quill. Cây bút đa năng — sáng tạo, rõ ràng, am hiểu độc giả.\nPhong cách: Diễn đạt mạch lạc và sâu sắc. Linh hoạt chuyển giọng — báo cáo trang trọng, blog nhẹ nhàng, copy thuyết phục, tài liệu kỹ thuật.\n\nChuyên môn: Blog, bài viết, marketing copy, nội dung mạng xã hội, email campaign, tài liệu, sáng tác. Hiểu cơ bản về SEO, readability, và cấu trúc nội dung.\n\nCách tiếp cận: Hỏi về đối tượng, mục đích và giọng điệu trước khi viết. Outline trước khi viết bản nháp. Chỉnh sửa kỹ — mỗi từ phải có lý do.\n\nRanh giới: Không đạo văn hoặc viết nội dung gây hiểu lầm. Lưu ý khi nội dung cần kiểm chứng thực tế. Tôn trọng brand voice."
     }
   },
   "card": {
@@ -69,6 +85,10 @@
     "openSubLabel": "Ngữ cảnh riêng cho mỗi người dùng",
     "predefined": "Định sẵn",
     "predefinedSubLabel": "Cấu hình ở cấp agent",
+    "useOpenAgent": "Dùng agent Mở thay thế (ngữ cảnh riêng cho mỗi người)",
+    "usePredefined": "Chuyển về Định sẵn",
+    "switchToPredefined": "Chuyển",
+    "openWarning": "Agent Mở tạo ngữ cảnh riêng cho mỗi người dùng khi chat. Hầu hết trường hợp nên dùng agent Định sẵn.",
     "describeAgent": "Mô tả agent của bạn",
     "descriptionPlaceholder": "Mô tả tính cách, mục đích và hành vi của agent...",
     "descriptionHint": "AI sẽ tự động tạo tệp ngữ cảnh cho agent từ mô tả này. Để trống để bắt đầu với mẫu có sẵn.",
@@ -123,6 +143,254 @@
     "saving": "Đang lưu...",
     "saved": "Đã lưu",
     "failedToSave": "Lưu thất bại"
+  },
+  "chatgptOAuthRouting": {
+    "title": "Pool Codex OAuth",
+    "description": "Chỉnh pool đã lưu rồi kiểm tra trực tiếp.",
+    "defaultAccount": "Tài khoản chính",
+    "defaultHint": "Trường Provider của agent luôn ghim vào bí danh chính.",
+    "badge": "Pool Codex",
+    "badgeTooltip": "Agent này có thể định tuyến lưu lượng Codex qua nhiều bí danh OpenAI OAuth.",
+    "summaryTitle": "Pool tài khoản OpenAI",
+    "summaryDescription": "Xem pool OpenAI Codex đang hiệu lực cho agent này. Thành viên pool được quản lý ở provider; trang này chỉ điều khiển hành vi routing.",
+    "strategyLabel": "Chính sách lưu lượng",
+    "strategyHint": "Primary First luôn ưu tiên bí danh chính. Round Robin xoay vòng qua mọi tài khoản sẵn sàng. Priority Order sẽ đi theo thứ tự đã cấu hình sau bí danh chính.",
+    "extraAccountsLabel": "Tài khoản phụ",
+    "availableExtraAccountsLabel": "Tài khoản phụ có thể thêm",
+    "poolMembershipLabel": "Thành viên pool",
+    "extraHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được tham gia.",
+    "emptyExtras": "Đăng nhập thêm một bí danh OpenAI Codex OAuth để bật pooling.",
+    "noReadyExtras": "Đăng nhập và bật thêm một bí danh OpenAI Codex OAuth để thêm vào đây.",
+    "extraSelectableHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được vào active pool.",
+    "selectedAccountsLabel": "Tài khoản trong pool",
+    "emptySelected": "Chưa chọn pool member bổ sung nào.",
+    "manageAction": "Mở Pool",
+    "singleAccountHint": "Hãy cấu hình thêm một provider OpenAI Codex OAuth khác trên trang Providers để tạo pool do provider quản lý.",
+    "membershipManagedAtProvider": "Thành viên pool được quản lý tại provider {{provider}}. Hãy đổi membership ở đó rồi quay lại đây để chỉnh hành vi routing.",
+    "membershipConfigureProviderFirst": "Provider {{provider}} chưa có provider-owned pool. Agent này sẽ chỉ dùng tài khoản chính cho tới khi pool members được thêm ở đó.",
+    "readySummary": "{{ready}} / {{total}} tài khoản phụ đã sẵn sàng.",
+    "preferredNeedsAttention": "Tài khoản chính cần được xử lý trước khi agent dùng ổn định.",
+    "loadingAccounts": "Đang kiểm tra trạng thái tài khoản OpenAI Codex OAuth...",
+    "attentionTitle": "Các tài khoản cần chú ý",
+    "attentionHint": "Các tài khoản đã chọn nhưng bị tắt hoặc đã đăng xuất vẫn hiển thị ở đây cho đến khi bạn gỡ ra hoặc đăng nhập lại.",
+    "pageTitle": "Pool tài khoản OpenAI",
+    "pageDescription": "Xem pool OpenAI Codex đang hiệu lực cho {{name}}, rồi chọn agent này sẽ kế thừa mặc định của provider, chỉ dùng tài khoản chính, hay tinh chỉnh chiến lược routing.",
+    "backToAgent": "Quay lại Agent",
+    "openProviders": "Mở Providers",
+    "pageUnsupportedTitle": "Agent này chưa dùng provider OpenAI Codex OAuth",
+    "pageUnsupportedDescription": "Hãy đặt Provider của agent thành một bí danh OpenAI Codex OAuth trước, rồi quay lại đây để quản lý pool.",
+    "providerAccessTitle": "Chỉ admin mới quản lý được provider",
+    "providerAccessDescription": "Bạn vẫn có thể xem pool đang chạy ở đây, nhưng chỉ admin mới có thể đăng nhập tài khoản, thêm bí danh hoặc mở trang Providers.",
+    "providerAccessInline": "Chỉ admin mới có thể đăng nhập bí danh mới hoặc quản lý trang Providers.",
+    "unsavedChangesTitle": "Bản nháp chưa được áp dụng",
+    "unsavedChangesDescription": "Các thẻ xác minh bên dưới đang phản ánh pool đã lưu gần nhất. Hãy lưu bản nháp này trước khi dùng bằng chứng để xác nhận round robin.",
+    "draftBadge": "Bản nháp chờ lưu",
+    "providerChangedWarning": "Provider đã thay đổi — cấu hình pool routing sẽ bị xóa khi lưu.",
+    "savedPoolOnlyHint": "Bằng chứng trực tiếp vẫn đang phản ánh pool đã lưu gần nhất.",
+    "verificationTitle": "Cách xác minh hoạt động",
+    "verificationDescription": "Bằng chứng đến từ các LLM span gần đây của agent này. Làm mới trang sau vài request để so sánh pool đã cấu hình với các bí danh thực sự được dùng.",
+    "addPoolMembersTitle": "Thêm bí danh vào pool này",
+    "addPoolMembersDescription": "Tạo thêm các bí danh OpenAI Codex OAuth ở trang Providers, rồi quay lại đây để thêm chúng vào agent này.",
+    "needsAttentionTitle": "Cần chú ý",
+    "needsAttentionDescription": "{{count}} bí danh trong pool đang bị tắt hoặc cần đăng nhập lại trước khi bạn có thể tin cậy chúng.",
+    "never": "Chưa bao giờ",
+    "requestCount": "{{count}} request gần đây",
+    "lastUsedAt": "Dùng gần nhất {{value}}",
+    "openProvider": "Mở Provider",
+    "activityTitle": "Định tuyến trực tiếp",
+    "activityDescription": "Sức khỏe runtime và bằng chứng route trực tiếp.",
+    "refreshEvidence": "Làm mới trạng thái trực tiếp",
+    "recentRequestsCount": "{{count}} request gần đây",
+    "observedProviders": "{{observed}} / {{total}} tài khoản đã được dùng trực tiếp",
+    "failoverOnlyProviders": "{{count}} bí danh chỉ mới thấy qua failover",
+    "selectedCountLabel": "{{count}} lượt dùng trực tiếp",
+    "failoverServeCount": "{{count}} lượt phục vụ qua failover",
+    "failoverOnlyLabel": "Chỉ qua failover",
+    "switchRate": "{{switches}} lần đổi provider trong {{total}} bước request",
+    "poolMembersTitle": "Tài khoản trong pool",
+    "poolMembersDescription": "Vai trò, trạng thái route, bằng chứng gần đây và quota.",
+    "sequenceTitle": "Request gần đây",
+    "sequenceColumns": {
+      "step": "#",
+      "account": "Tài khoản",
+      "route": "Luồng",
+      "when": "Lúc",
+      "duration": "Thời gian"
+    },
+    "sequenceDescription": "Bằng chứng gần đây từ các lượt gọi Codex đã route.",
+    "sequenceEmptyTitle": "Chưa có bằng chứng gần đây",
+    "loadingEvidence": "Đang tải bằng chứng định tuyến Codex gần đây...",
+    "unknownModel": "Model không xác định",
+    "attemptCount": "{{count}} lượt thử",
+    "selectedProviderBadge": "Chọn {{provider}}",
+    "servedProviderBadge": "Phục vụ {{provider}}",
+    "failoverHint": "Lỗi có thể retry đã rơi sang: {{providers}}",
+    "traceAction": "Trace",
+    "openTrace": "Mở Trace",
+    "noEvidence": "Hãy gửi vài request Codex rồi làm mới trang.",
+    "selectedCount": "{{count}} trong pool",
+    "productLabel": "ChatGPT Subscription (OAuth)",
+    "controlTitle": "Thiết lập Pool",
+    "controlDescription": "Thành viên pool được quản lý ở provider. Trang này điều khiển việc agent kế thừa pool đó, chỉ dùng tài khoản chính, hay override chiến lược routing.",
+    "mode": {
+      "label": "Chế độ routing của agent",
+      "inherit": "Dùng mặc định từ provider",
+      "custom": "Tùy chỉnh riêng cho agent",
+      "noProviderDefault": "Chưa có provider-owned pool nào được lưu. Chế độ dùng mặc định của provider sẽ giữ agent này ở tài khoản chính lúc này và tự nhận pool members khi provider thêm sau.",
+      "providerDefaultSummary": "Mặc định từ provider có {{count}} tài khoản",
+      "summaryInherited": "Agent này hiện đang dùng pool mặc định của provider.",
+      "summaryCustom": "Agent này hiện đang lưu routing override riêng cho provider-owned pool."
+    },
+    "poolStateTitle": "Trạng thái Pool",
+    "routerActiveTitle": "Đang route",
+    "fallbackTitle": "Chỉ fallback",
+    "blockedNowTitle": "Đang chặn",
+    "checkingTitle": "Đang kiểm tra",
+    "emptyGroup": "Không có",
+    "viewerMode": "Chỉ xem",
+    "consoleSummary": "{{active}} đang route · {{observed}} đã dùng trực tiếp · {{blocked}} đang chặn",
+    "monitorDirectLabel": "Trực tiếp",
+    "monitorDirectUseLabel": "Lượt trực tiếp",
+    "monitorFailoverLabel": "Failover",
+    "lastSeenLabel": "Lần thấy cuối",
+    "sampleBadge": "{{count}} span đã ghi nhận",
+    "noSampleBadge": "Chưa có mẫu gần đây",
+    "runtimeHealthTitle": "Sức khỏe runtime",
+    "runtimeHealthSummary": "{{rate}}% thành công · điểm {{score}}",
+    "noRuntimeSample": "Chưa có mẫu runtime gần đây.",
+    "failureStreakBadge": "{{count}} lỗi liên tiếp",
+    "runtimeSuccessCompact": "Thành công {{count}}",
+    "runtimeFailureCompact": "Thất bại {{count}}",
+    "lastSuccessLabel": "Lần ok cuối {{value}}",
+    "lastFailureLabel": "Lần lỗi cuối {{value}}",
+    "healthState": {
+      "healthy": "Ổn định",
+      "degraded": "Suy giảm",
+      "critical": "Nguy cấp",
+      "idle": "Chưa có mẫu"
+    },
+    "checkpoints": {
+      "configured": "Đã cấu hình",
+      "ready": "Sẵn sàng",
+      "observed": "Được dùng trực tiếp",
+      "switching": "Đang chuyển"
+    },
+    "nextActionTitle": "Hành động tiếp theo",
+    "nextAction": {
+      "saveTitle": "Hãy lưu bản nháp trước khi tin vào bằng chứng",
+      "saveDescription": "Pool đã lưu và bản nháp hiện tại đã khác nhau. Hãy lưu cấu hình trước, rồi mới kiểm tra lưu lượng trực tiếp.",
+      "attentionTitle": "Xử lý các bí danh đang cần chú ý",
+      "attentionDescription": "Các bí danh bị tắt hoặc đã đăng xuất vẫn hiển thị để bạn đăng nhập lại hoặc gỡ chúng khỏi pool.",
+      "quotaTitle": "Gỡ các chặn quota trước khi tin vào round robin",
+      "quotaDescription": "{{count}} bí danh đã đăng nhập nhưng hiện chưa cho thấy quota dùng được.",
+      "failoverOnlyTitle": "Kiểm tra các bí danh chỉ xuất hiện sau failover",
+      "failoverOnlyDescription": "{{count}} bí danh chỉ có lưu lượng gần đây dưới vai trò đích failover, chưa có bằng chứng được chọn trực tiếp.",
+      "addMembersTitle": "Thêm một bí danh đã đăng nhập để mở khóa pooling thực sự",
+      "addMembersDescription": "Round robin chỉ có ý nghĩa khi có hơn một bí danh sẵn sàng tham gia.",
+      "verifyTitle": "Gửi thêm vài request Codex rồi làm mới bằng chứng",
+      "verifyDescription": "Pool đã lưu và đã sẵn sàng, nhưng các lần gọi gần đây vẫn chưa cho thấy mọi bí danh sẵn sàng đều được chọn trực tiếp.",
+      "healthyTitle": "Hiện chưa cần thao tác thêm",
+      "healthyDescription": "Các lần gọi gần đây đang chọn trực tiếp mọi bí danh sẵn sàng trong pool đã lưu.",
+      "manualTitle": "Routing có thứ tự đang hoạt động",
+      "manualDescription": "Agent này không xoay vòng ở mọi request. Việc bí danh chính được dùng lặp lại là bình thường cho đến khi bật round robin."
+    },
+    "howItWorksTitle": "Pool này hoạt động thế nào",
+    "howItWorks": {
+      "primary": "Trường Provider của agent luôn ghim vào bí danh chính.",
+      "roundRobin": "Round Robin xoay vòng qua tất cả bí danh đã sẵn sàng trong active pool.",
+      "failover": "Các lỗi upstream có thể retry có thể rơi sang bí danh đủ điều kiện tiếp theo trong cùng request."
+    },
+    "quota": {
+      "checking": "Đang kiểm tra quota",
+      "checkingDescription": "GoClaw vẫn đang lấy trạng thái quota mới nhất cho bí danh này.",
+      "healthySummary": "{{usable}} / {{total}} bí danh có quota dùng được",
+      "needsAttention": "{{count}} bí danh đang cần xử lý quota",
+      "blockersNow": "Đang chặn lúc này",
+      "floorFiveHour": "Sàn 5h {{value}}%",
+      "floorWeekly": "Sàn tuần {{value}}%",
+      "plan": "Gói",
+      "lastChecked": "Đã kiểm tra {{value}}",
+      "readyLabel": "Quota dùng được",
+      "readyDescription": "Bí danh này hiện đang cho thấy các cửa sổ quota còn dùng được.",
+      "readinessTitle": "Mức sẵn sàng quota",
+      "readinessDescription": "Hãy nhìn phần này trước. Chỉ các bí danh đã đăng nhập và còn quota dùng được mới nên được tin cho lưu lượng trực tiếp.",
+      "requiresReadyAlias": "Bí danh này cần được đăng nhập trước khi GoClaw có thể xác minh quota.",
+      "failure": {
+        "billing": {
+          "label": "Billing",
+          "description": "Billing hoặc entitlement của workspace đang chặn tài khoản này."
+        },
+        "exhausted": {
+          "label": "Cạn quota",
+          "description": "Tài khoản này vẫn đăng nhập, nhưng một trong các cửa sổ quota chính đã cạn."
+        },
+        "reauth": {
+          "label": "Đăng nhập lại",
+          "description": "Hãy đăng nhập lại để làm mới quyền truy cập workspace."
+        },
+        "forbidden": {
+          "label": "Bị chặn",
+          "description": "Tài khoản này không thể đọc dữ liệu quota từ upstream."
+        },
+        "needs_setup": {
+          "label": "Cần thiết lập",
+          "description": "Hãy đăng nhập lại để GoClaw khôi phục metadata workspace của tài khoản."
+        },
+        "retry_later": {
+          "label": "Thử lại sau",
+          "description": "Endpoint quota đang tạm thời không sẵn sàng hoặc bị rate limit."
+        },
+        "unavailable": {
+          "label": "Không khả dụng",
+          "description": "Hiện không lấy được dữ liệu quota cho tài khoản này."
+        }
+      }
+    },
+    "metrics": {
+      "poolHealth": "Sức khỏe pool",
+      "policy": "Chính sách lưu lượng",
+      "poolSize": "Số tài khoản",
+      "observedSample": "Mẫu đã ghi nhận",
+      "routerActiveAccounts": "Router Active",
+      "blockedAccounts": "Đang chặn",
+      "readyAccounts": "Tài khoản đã đăng nhập",
+      "quotaReadyAccounts": "Quota sẵn sàng",
+      "observedRotation": "Dùng trực tiếp",
+      "healthy": "Ổn định",
+      "needsAttention": "Cần chú ý",
+      "readyOfTotal": "{{ready}} / {{total}} bí danh sẵn sàng",
+      "failovers": "Failover",
+      "noFailovers": "Chưa có failover"
+    },
+    "verdict": {
+      "healthy": {
+        "title": "Round robin có vẻ khỏe",
+        "description": "Đã thấy {{observed}} tài khoản sẵn sàng luân phiên qua {{count}} span gần đây."
+      },
+      "warning": {
+        "title": "Round robin đã cấu hình nhưng chưa xác minh đủ",
+        "description": "Mới chỉ có {{observed}} tài khoản sẵn sàng có bằng chứng dùng trực tiếp trong {{count}} span gần đây."
+      },
+      "manual": {
+        "title": "Routing có thứ tự đang hoạt động",
+        "description": "Agent này không xoay vòng ở mọi request. Việc bí danh chính được dùng lặp lại là bình thường cho đến khi bật round robin."
+      }
+    },
+    "role": {
+      "preferred": "Chính",
+      "extra": "Phụ"
+    },
+    "status": {
+      "ready": "Sẵn sàng",
+      "needs_sign_in": "Cần đăng nhập",
+      "disabled": "Đã tắt"
+    },
+    "strategy": {
+      "manual": "Primary First",
+      "primaryFirst": "Primary First",
+      "roundRobin": "Round Robin",
+      "priorityOrder": "Priority Order"
+    }
   },
   "identity": {
     "title": "Nhận dạng",
@@ -197,6 +465,10 @@
     "editAiPlaceholder": "vd: Làm cho agent trang trọng hơn, thêm hỗ trợ tiếng Việt, đổi tên thành Luna...",
     "sending": "Đang gửi...",
     "regenerate": "Tái tạo",
+    "regenerating": "AI đang viết lại các tệp...",
+    "regenerateCompleted": "Cập nhật tệp hoàn tất!",
+    "regenerateFailed": "Tái tạo thất bại",
+    "retry": "Thử lại",
     "cancel": "Hủy"
   },
   "shares": {
@@ -286,8 +558,7 @@
     "retrying": "Đang thử lại...",
     "done": "xong",
     "fileLabelSOUL": "Linh hồn & Tính cách",
-    "fileLabelIDENTITY": "Thẻ danh tính",
-    "fileLabelUSER_PREDEFINED": "Ngữ cảnh người dùng mặc định"
+    "fileLabelIDENTITY": "Thẻ danh tính"
   },
   "configGroups": {
     "core": "Cốt lõi",
@@ -344,9 +615,7 @@
       "title": "Nén ngữ cảnh",
       "description": "Cài đặt nén cửa sổ ngữ cảnh và ghi nhớ trước nén",
       "maxHistoryShare": "Phần lịch sử tối đa (0-1)",
-      "maxHistoryShareTip": "Tỷ lệ tối đa của cửa sổ ngữ cảnh dành cho lịch sử hội thoại (vd: 0.75 = 75%). Nén kích hoạt khi vượt quá.",
-      "minMessages": "Tin nhắn tối thiểu",
-      "minMessagesTip": "Số tin nhắn tối thiểu trước khi nén có thể kích hoạt, bất kể số token.",
+      "maxHistoryShareTip": "Tỷ lệ tối đa của cửa sổ ngữ cảnh dành cho lịch sử hội thoại (vd: 0.85 = 85%). Nén kích hoạt khi vượt quá.",
       "keepLastMessages": "Giữ tin nhắn cuối",
       "keepLastMessagesTip": "Số tin nhắn gần nhất giữ lại sau khi nén. Các tin nhắn cũ hơn được thay thế bằng bản tóm tắt.",
       "memoryFlush": "Ghi nhớ trước nén",
@@ -366,7 +635,9 @@
       "tailChars": "Ký tự cuối",
       "hardClear": "Xóa cứng",
       "enabled": "Đã bật",
-      "placeholderText": "Văn bản thay thế"
+      "placeholderText": "Văn bản thay thế",
+      "descriptionSimple": "Tự động cắt bớt kết quả công cụ cũ để tránh tràn ngữ cảnh. Bật mặc định.",
+      "advanced": "Nâng cao"
     },
     "sandbox": {
       "title": "Hộp cát",
@@ -383,25 +654,66 @@
     "memory": {
       "title": "Bộ nhớ",
       "description": "Tìm kiếm bộ nhớ ngữ nghĩa và cấu hình nhúng",
-      "embeddingProvider": "Provider nhúng",
-      "embeddingModel": "Model nhúng",
-      "maxResults": "Kết quả tối đa",
+      "enabled": "Đã bật",
+      "enabledTip": "Bật/tắt hệ thống bộ nhớ cho agent này.",
       "maxChunkLen": "Độ dài chunk tối đa",
+      "maxChunkLenTip": "Số ký tự tối đa mỗi chunk. Để trống dùng mặc định hệ thống.",
+      "chunkOverlap": "Chunk Overlap",
+      "chunkOverlapTip": "Số ký tự chồng lấp giữa các chunk để giữ ngữ cảnh. Để trống dùng mặc định.",
+      "maxResults": "Kết quả tối đa",
+      "maxResultsTip": "Số kết quả tối đa trả về mỗi truy vấn tìm kiếm.",
+      "minScore": "Điểm tối thiểu",
+      "minScoreTip": "Ngưỡng điểm tối thiểu cho kết quả tìm kiếm.",
       "vectorWeight": "Trọng số vector",
-      "textWeight": "Trọng số văn bản"
+      "vectorWeightTip": "Trọng số tương đồng ngữ nghĩa trong tìm kiếm hỗn hợp.",
+      "textWeight": "Trọng số văn bản",
+      "textWeightTip": "Trọng số từ khóa trong tìm kiếm hỗn hợp."
     },
     "thinking": {
       "title": "Suy nghĩ mở rộng",
       "description": "Cho phép model suy luận trước khi phản hồi. Cấp độ cao hơn dùng nhiều token hơn nhưng cho kết quả tốt hơn với tác vụ phức tạp.",
+      "modeLabel": "Reasoning Mode",
+      "inherit": "Use Provider Defaults",
+      "custom": "Custom For This Agent",
+      "customDesc": "Override the provider-owned default reasoning policy for this agent only.",
+      "providerDefaultSummary": "Inherited from {{provider}}",
+      "providerLabelFallback": "provider defaults",
+      "noProviderDefault": "No provider-owned reasoning default is saved yet. Inherit mode will keep this agent on reasoning off until the provider saves one.",
       "thinkingLevel": "Cấp độ suy nghĩ",
+      "thinkingLevelTip": "Preset đơn giản cho phần lớn trường hợp. Bật Chế độ chuyên gia khi bạn cần mức reasoning theo model hoặc hành vi fallback rõ ràng.",
+      "expertMode": "Chế độ chuyên gia",
+      "expertModeDesc": "Yêu cầu các mức reasoning theo model như none, minimal, auto hoặc xhigh và kiểm soát cách xử lý khi model đã chọn không hỗ trợ.",
+      "supportedLevelsForModel": "Model {{model}} hiện hỗ trợ các mức reasoning tường minh này.",
+      "loadingSupport": "Đang tải metadata khả năng reasoning cho {{model}}.",
+      "unknownSupport": "GoClaw chưa có metadata reasoning tường minh cho {{model}}.",
+      "expertModeUnavailable": "Các điều khiển reasoning nâng cao chỉ khả dụng khi model đã chọn có metadata khả năng rõ ràng từ endpoint models của provider.",
+      "modelDefault": "Reasoning mặc định của model: {{level}}",
+      "requestedEffort": "Mức yêu cầu",
+      "requestedEffortTip": "Mức reasoning được yêu cầu trước khi GoClaw chuẩn hóa theo model đã chọn.",
+      "fallbackBehavior": "Hành vi fallback",
+      "fallbackBehaviorTip": "GoClaw nên làm gì khi mức được yêu cầu không được model đã chọn hỗ trợ.",
+      "supportedOption": "được model này hỗ trợ",
+      "legacyShim": "GoClaw cũng lưu thinking_level dạng coarse để tương thích ngược với các build cũ.",
       "off": "Tắt",
       "offDesc": "Không có suy nghĩ mở rộng",
+      "auto": "Tự động",
+      "autoDesc": "Dùng mức reasoning mặc định của model",
+      "none": "Không",
+      "noneDesc": "Tắt reasoning của provider một cách tường minh nhưng vẫn giữ contract nâng cao",
+      "minimal": "Tối thiểu",
+      "minimalDesc": "Dùng mức reasoning nhỏ nhất được hỗ trợ cao hơn none",
       "low": "Thấp",
       "lowDesc": "~4K ngân sách token",
       "medium": "Trung bình",
       "mediumDesc": "~10-16K ngân sách token",
       "high": "Cao",
-      "highDesc": "~32K ngân sách token"
+      "highDesc": "~32K ngân sách token",
+      "xhigh": "Rất cao",
+      "xhighDesc": "Dùng mức reasoning cao nhất được hỗ trợ",
+      "downgrade": "Giảm cấp",
+      "downgradeDesc": "Chuẩn hóa xuống mức thấp hơn gần nhất được hỗ trợ hoặc mức thấp nhất được hỗ trợ nếu cần",
+      "provider_default": "Dùng mặc định model",
+      "provider_defaultDesc": "Không ép mức cụ thể và để provider/model tự chọn mặc định"
     },
     "otherConfig": {
       "title": "Cấu hình khác",
@@ -498,6 +810,74 @@
       "group_all": "Tất cả nhóm",
       "global": "Toàn cục"
     }
+  },
+  "transfer": {
+    "title": "Chuyển Agent",
+    "description": "Xuất agent ra file archive hoặc nhập từ archive có sẵn.",
+    "tabExport": "Xuất",
+    "tabImport": "Nhập",
+    "selectAgent": "Chọn Agent",
+    "selectAgentPlaceholder": "Chọn agent...",
+    "presets": "Mẫu",
+    "preset": {
+      "minimal": "Tối thiểu",
+      "standard": "Tiêu chuẩn",
+      "complete": "Đầy đủ"
+    },
+    "sections": {
+      "config": "Cấu hình Agent",
+      "contextFiles": "File ngữ cảnh",
+      "userData": "Dữ liệu người dùng",
+      "userContextFiles": "File ngữ cảnh người dùng",
+      "userProfiles": "Hồ sơ người dùng",
+      "userOverrides": "Tuỳ chỉnh người dùng",
+      "memory": "Bộ nhớ",
+      "memoryGlobal": "Toàn cục",
+      "memoryPerUser": "Theo người dùng",
+      "knowledgeGraph": "Đồ thị tri thức",
+      "skills": "Skills",
+      "mcp": "MCP Grants",
+      "customTools": "Custom Tools",
+      "cron": "Cron Jobs",
+      "permissions": "Quyền hạn",
+      "sessions": "Phiên chat",
+      "workspace": "File workspace",
+      "team": "Team",
+      "media": "File media"
+    },
+    "hints": {
+      "sessions": "Có thể rất lớn",
+      "media": "Có thể rất lớn",
+      "team": "Metadata team, thành viên, tasks, links",
+      "mergeOverwrite": "File cùng tên sẽ bị ghi đè",
+      "mergeUpsert": "Tài liệu upsert theo path",
+      "mergeKgUpsert": "Thực thể upsert theo external_id",
+      "mergeFiles": "File mới thêm vào, cùng tên ghi đè"
+    },
+    "exportButton": "Xuất Agent",
+    "exporting": "Đang xuất \"{{name}}\"...",
+    "exportComplete": "Xuất hoàn tất",
+    "exportFailed": "Xuất thất bại",
+    "exportAnother": "Xuất agent khác",
+    "download": "Tải xuống",
+    "importing": "Đang nhập...",
+    "importComplete": "Nhập hoàn tất",
+    "importFailed": "Nhập thất bại",
+    "importAnother": "Nhập agent khác",
+    "viewAgent": "Xem Agent",
+    "tryAgain": "Thử lại",
+    "cancel": "Huỷ",
+    "dontClose": "Đừng đóng trang này — đang nhập dữ liệu",
+    "rolledBack": "Tất cả thay đổi đã được hoàn tác. Hệ thống trở về trạng thái trước.",
+    "dropHere": "Kéo thả file .tar.gz hoặc click để chọn",
+    "supportedFormats": "Hỗ trợ: .tar.gz, .agent.json (cũ)",
+    "invalidFile": "File không hợp lệ — không thể đọc archive",
+    "importMode": "Chế độ nhập",
+    "modeNew": "Tạo agent mới",
+    "modeMerge": "Gộp vào agent có sẵn",
+    "targetAgent": "Agent đích",
+    "changeFile": "Đổi file",
+    "startImport": "Bắt đầu nhập"
   },
   "toast": {
     "created": "Đã tạo agent",

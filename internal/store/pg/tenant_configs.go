@@ -107,6 +107,27 @@ func (s *PGSkillTenantConfigStore) ListDisabledSkillIDs(ctx context.Context, ten
 	return ids, rows.Err()
 }
 
+func (s *PGSkillTenantConfigStore) ListAll(ctx context.Context, tenantID uuid.UUID) (map[uuid.UUID]bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT skill_id, enabled FROM skill_tenant_configs WHERE tenant_id = $1`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[uuid.UUID]bool)
+	for rows.Next() {
+		var id uuid.UUID
+		var enabled bool
+		if err := rows.Scan(&id, &enabled); err != nil {
+			return nil, err
+		}
+		result[id] = enabled
+	}
+	return result, rows.Err()
+}
+
 func (s *PGSkillTenantConfigStore) Set(ctx context.Context, tenantID uuid.UUID, skillID uuid.UUID, enabled bool) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO skill_tenant_configs (skill_id, tenant_id, enabled, updated_at)

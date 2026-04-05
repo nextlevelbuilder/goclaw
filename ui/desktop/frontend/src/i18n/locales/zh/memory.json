@@ -1,0 +1,191 @@
+{
+  "title": "记忆",
+  "description": "浏览和管理Agent记忆文档、分块和嵌入",
+  "search": "搜索",
+  "create": "创建",
+  "indexAll": "全部索引",
+  "indexing": "索引中...",
+  "emptyTitle": "暂无记忆文档",
+  "emptyAgentDescription": "该Agent暂无记忆文档。",
+  "emptyGlobalDescription": "任何Agent均无记忆文档。",
+  "filters": {
+    "agent": "Agent",
+    "allAgents": "所有Agent",
+    "scope": "范围",
+    "allScope": "全部（全局 + 个人）",
+    "selectAgent": "选择Agent"
+  },
+  "tabs": {
+    "documents": "文档",
+    "knowledgeGraph": "知识图谱"
+  },
+  "columns": {
+    "path": "路径",
+    "agent": "Agent",
+    "scope": "范围",
+    "hash": "哈希值",
+    "updated": "更新时间",
+    "actions": "操作"
+  },
+  "scopeLabel": {
+    "personal": "个人",
+    "global": "全局"
+  },
+  "delete": {
+    "title": "删除记忆文档",
+    "description": "确定要删除「{{path}}」吗？这将同时删除所有关联的分块和嵌入。",
+    "confirmLabel": "删除"
+  },
+  "createDialog": {
+    "title": "创建记忆文档",
+    "path": "路径 *",
+    "pathPlaceholder": "例如 notes/project-overview.md",
+    "content": "内容 *",
+    "contentPlaceholder": "文档内容...",
+    "agentId": "Agent *",
+    "agentIdPlaceholder": "选择Agent...",
+    "scope": "范围",
+    "existingScope": "现有范围",
+    "customScope": "自定义",
+    "selectGroupUser": "选择群组/用户...",
+    "scopeHint": "全局 = 与所有用户共享。个人 = 限定于特定用户或群组对话。",
+    "autoIndex": "创建后自动索引",
+    "agentRequired": "请选择Agent",
+    "pathRequired": "路径不能为空",
+    "contentRequired": "内容不能为空",
+    "cancel": "取消",
+    "create": "创建",
+    "creating": "创建中..."
+  },
+  "documentDialog": {
+    "title": "记忆文档",
+    "path": "路径：",
+    "agent": "Agent：",
+    "scope": "范围：",
+    "hash": "哈希值：",
+    "updated": "更新时间：",
+    "content": "内容",
+    "chunks": "分块（{{count}}）",
+    "chunkIndex": "分块 {{index}}",
+    "noChunks": "无分块",
+    "embedded": "已嵌入",
+    "noEmbedding": "未嵌入"
+  },
+  "searchDialog": {
+    "title": "搜索记忆",
+    "query": "搜索查询",
+    "queryPlaceholder": "输入搜索查询...",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "按Agent筛选...",
+    "limit": "限制",
+    "search": "搜索",
+    "searching": "搜索中...",
+    "results": "结果",
+    "noResults": "未找到结果",
+    "similarity": "相似度",
+    "path": "路径："
+  },
+  "kg": {
+    "pageTitle": "Knowledge Graph",
+    "pageDescription": "探索从Agent记忆中提取的实体和关系。",
+    "selectAgentTitle": "选择Agent",
+    "selectAgentDescription": "选择Agent以查看其知识图谱。",
+    "emptyTitle": "暂无实体",
+    "emptyDescription": "该Agent暂无知识图谱实体。",
+    "emptySearchDescription": "没有与您搜索匹配的实体。",
+    "stats": {
+      "entities": "实体：{{count}}",
+      "relations": "关系：{{count}}"
+    },
+    "search": {
+      "placeholder": "搜索实体...",
+      "button": "搜索",
+      "clear": "清除"
+    },
+    "refresh": "刷新",
+    "extract": "提取",
+    "columns": {
+      "name": "名称",
+      "type": "类型",
+      "description": "描述",
+      "confidence": "置信度",
+      "actions": "操作",
+      "observations": "观察",
+      "relations": "关系"
+    },
+    "deleteEntity": {
+      "title": "删除实体",
+      "description": "删除「{{name}}」？这将同时移除所有关联关系。",
+      "confirmLabel": "删除"
+    },
+    "entity": {
+      "externalId": "外部 ID：",
+      "confidence": "置信度：",
+      "description": "描述：",
+      "source": "来源：",
+      "properties": "属性：",
+      "relations": "关系",
+      "traverse": "遍历（2 跳）",
+      "traversing": "遍历中...",
+      "loading": "加载中...",
+      "noRelations": "未找到关系。",
+      "traversalResults": "遍历结果（{{count}}）",
+      "direction": {
+        "outgoing": "→ 出向",
+        "incoming": "← 入向"
+      },
+      "columns": {
+        "direction": "方向",
+        "relation": "关系",
+        "target": "目标",
+        "confidence": "置信度"
+      }
+    },
+    "extractDialog": {
+      "title": "从文本中提取实体",
+      "providerLabel": "提取Provider",
+      "modelLabel": "提取模型",
+      "textLabel": "待提取文本",
+      "textPlaceholder": "粘贴对话文本、笔记或任何内容以提取实体和关系...",
+      "extract": "提取",
+      "extracting": "提取中...",
+      "cancel": "取消",
+      "agentId": "Agent ID",
+      "agentIdPlaceholder": "留空为全局"
+    },
+    "graphView": {
+      "loading": "正在加载图谱...",
+      "empty": "没有可视化的实体",
+      "nodes": "{{count}} 个节点",
+      "edges": "{{count}} 条边"
+    }
+  },
+  "toast": {
+    "created": "记忆文档已创建",
+    "deleted": "记忆文档已删除",
+    "indexed": "所有文档已索引",
+    "failedCreate": "创建文档失败",
+    "failedDelete": "删除文档失败",
+    "failedIndex": "索引文档失败",
+    "entitySaved": "实体已保存",
+    "entitySaveFailed": "保存实体失败",
+    "entityDeleted": "实体已删除",
+    "entityDeleteFailed": "删除实体失败",
+    "extractionComplete": "提取完成",
+    "extractionFailed": "提取失败",
+    "traversalFailed": "遍历失败",
+    "unknownError": "未知错误",
+    "docCreated": "文档已创建",
+    "docCreateFailed": "创建文档失败",
+    "docUpdated": "文档已更新",
+    "docUpdateFailed": "更新文档失败",
+    "docDeleted": "文档已删除",
+    "docDeleteFailed": "删除文档失败",
+    "docIndexed": "文档已索引",
+    "docIndexFailed": "索引文档失败",
+    "allIndexed": "所有文档已索引",
+    "allIndexFailed": "索引所有文档失败",
+    "searchFailed": "搜索失败",
+    "docLoadFailed": "加载文档失败"
+  }
+}

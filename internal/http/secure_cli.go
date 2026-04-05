@@ -2,9 +2,11 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -37,6 +39,12 @@ func (h *SecureCLIHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/cli-credentials/{id}", h.auth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/cli-credentials/{id}", h.auth(h.handleDelete))
 	mux.HandleFunc("POST /v1/cli-credentials/{id}/test", h.auth(h.handleDryRun))
+
+	// Per-user credential management
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/user-credentials", h.auth(h.handleListUserCredentials))
+	mux.HandleFunc("GET /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleGetUserCredentials))
+	mux.HandleFunc("PUT /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleSetUserCredentials))
+	mux.HandleFunc("DELETE /v1/cli-credentials/{id}/user-credentials/{userId}", h.auth(h.handleDeleteUserCredentials))
 }
 
 func (h *SecureCLIHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -53,6 +61,72 @@ func (h *SecureCLIHandler) emitCacheInvalidate(key string) {
 	})
 }
 
+// envKeysFromDecryptedJSON returns sorted env variable names from plaintext env JSON (decrypted blob).
+func envKeysFromDecryptedJSON(env []byte) []string {
+	empty := []string{}
+	if len(env) == 0 {
+		return empty
+	}
+	var m map[string]any
+	if err := json.Unmarshal(env, &m); err != nil {
+		return empty
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// mergeSecureCLIEnv merges incoming env from the UI with existing stored env.
+// Incoming defines the full set of keys shown in the form: keys omitted were removed.
+// Empty string means "keep existing value" for that key when it already exists.
+func mergeSecureCLIEnv(existingJSON []byte, incoming map[string]any) (map[string]string, error) {
+	existing := map[string]string{}
+	if len(existingJSON) > 0 {
+		if err := json.Unmarshal(existingJSON, &existing); err != nil {
+			return nil, fmt.Errorf("parse existing env: %w", err)
+		}
+	}
+	out := make(map[string]string)
+	for k, v := range incoming {
+		if k == "" {
+			continue
+		}
+		sv, err := envValueAsString(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid environment variable value")
+		}
+		if sv != "" {
+			out[k] = sv
+			continue
+		}
+		if ev, ok := existing[k]; ok {
+			out[k] = ev
+		}
+	}
+	return out, nil
+}
+
+func envValueAsString(v any) (string, error) {
+	switch t := v.(type) {
+	case string:
+		return t, nil
+	case float64:
+		return fmt.Sprint(t), nil
+	case bool:
+		if t {
+			return "true", nil
+		}
+		return "false", nil
+	case nil:
+		return "", nil
+	default:
+		return "", fmt.Errorf("value must be a string")
+	}
+}
+
 func (h *SecureCLIHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	locale := store.LocaleFromContext(r.Context())
 	result, err := h.store.List(r.Context())
@@ -61,8 +135,9 @@ func (h *SecureCLIHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgFailedToList, "CLI credentials")})
 		return
 	}
-	// Mask encrypted env — never send raw credentials to UI
+	// Never send env values; only variable names for editing.
 	for i := range result {
+		result[i].EnvKeys = envKeysFromDecryptedJSON(result[i].EncryptedEnv)
 		result[i].EncryptedEnv = nil
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": result})
@@ -178,7 +253,8 @@ func (h *SecureCLIHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b.EncryptedEnv = nil // don't expose credentials
+	b.EnvKeys = envKeysFromDecryptedJSON(b.EncryptedEnv)
+	b.EncryptedEnv = nil // don't expose credential values
 	writeJSON(w, http.StatusOK, b)
 }
 
@@ -208,10 +284,24 @@ func (h *SecureCLIHandler) handleUpdate(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	// If env is updated, serialize as JSON string for the store encrypt path
+	// If env is updated, merge with stored env so empty values mean "keep existing secret".
 	if envVal, ok := updates["env"]; ok {
 		if envMap, isMap := envVal.(map[string]any); isMap {
-			envJSON, _ := json.Marshal(envMap)
+			cur, err := h.store.Get(r.Context(), id)
+			if err != nil {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "credential", id.String())})
+				return
+			}
+			merged, err := mergeSecureCLIEnv(cur.EncryptedEnv, envMap)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			envJSON, err := json.Marshal(merged)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid env"})
+				return
+			}
 			updates["encrypted_env"] = string(envJSON)
 			delete(updates, "env")
 		}

@@ -26,7 +26,8 @@
     "reportBug": "报告问题",
     "upToDate": "已是最新",
     "updateAvailable": "有新版本: {{version}}",
-    "viewRelease": "查看发行说明 →"
+    "viewRelease": "查看发行说明 →",
+    "releaseNotes": "发行说明"
   },
   "systemSettings": "系统设置",
   "toggleTheme": "切换主题"

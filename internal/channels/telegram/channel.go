@@ -23,30 +23,32 @@ import (
 // Channel connects to Telegram via the Bot API using long polling.
 type Channel struct {
 	*channels.BaseChannel
-	bot              *telego.Bot
-	config           config.TelegramConfig
-	httpClient       *http.Client
-	transport        *http.Transport
-	ipv4Once         sync.Once          // guards enableIPv4Only to prevent data race
-	pairingService   store.PairingStore
-	agentStore      store.AgentStore              // for agent key lookup (nil if not configured)
-	configPermStore store.ConfigPermissionStore   // for group file writer management (nil if not configured)
-	teamStore       store.TeamStore               // for /tasks, /task_detail commands (nil if not configured)
-	placeholders     sync.Map         // localKey string → messageID int
-	stopThinking     sync.Map         // localKey string → *thinkingCancel
-	typingCtrls      sync.Map         // localKey string → *typing.Controller
-	reactions        sync.Map         // localKey string → *StatusReactionController
-	pairingReplySent sync.Map         // userID string → time.Time (debounce pairing replies)
-	threadIDs        sync.Map         // localKey string → messageThreadID int (for forum topic routing)
-	approvedGroups   sync.Map         // chatIDStr string → true (cached group pairing approval)
-	groupHistory     *channels.PendingHistory
-	historyLimit     int
-	requireMention   bool
-	pollCancel       context.CancelFunc // cancels the long polling context
-	pollDone         chan struct{}       // closed when polling goroutine exits
-	handlerWg        sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
-	handlerSem       chan struct{}       // bounded semaphore for concurrent handler goroutines
-	pendingDraftID   sync.Map           // localKey string → int (draftID)
+	bot               *telego.Bot
+	config            config.TelegramConfig
+	httpClient        *http.Client
+	transport         *http.Transport
+	ipv4Once          sync.Once // guards enableIPv4Only to prevent data race
+	pairingService    store.PairingStore
+	agentStore        store.AgentStore            // for agent key lookup (nil if not configured)
+	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
+	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
+	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)
+	placeholders      sync.Map                    // localKey string → messageID int
+	stopThinking      sync.Map                    // localKey string → *thinkingCancel
+	typingCtrls       sync.Map                    // localKey string → *typing.Controller
+	reactions         sync.Map                    // localKey string → *StatusReactionController
+	pairingReplySent  sync.Map                    // userID string → time.Time (debounce pairing replies)
+	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
+	approvedGroups    sync.Map                    // chatIDStr string → true (cached group pairing approval)
+	groupHistory      *channels.PendingHistory
+	historyLimit      int
+	requireMention    bool
+	mentionMode       string             // "strict" (default) or "yield"
+	pollCancel        context.CancelFunc // cancels the long polling context
+	pollDone          chan struct{}      // closed when polling goroutine exits
+	handlerWg         sync.WaitGroup     // tracks in-flight handler goroutines for graceful shutdown
+	handlerSem        chan struct{}      // bounded semaphore for concurrent handler goroutines
+	pendingDraftID    sync.Map           // localKey string → int (draftID)
 }
 
 type thinkingCancel struct {
@@ -59,16 +61,40 @@ func (c *thinkingCancel) Cancel() {
 	}
 }
 
+// Option configures optional dependencies for the Telegram channel.
+type Option func(*Channel)
+
+// WithAgentStore sets the agent store for agent key resolution.
+func WithAgentStore(s store.AgentStore) Option { return func(c *Channel) { c.agentStore = s } }
+
+// WithConfigPermStore sets the config permission store for group file writer management.
+func WithConfigPermStore(s store.ConfigPermissionStore) Option {
+	return func(c *Channel) { c.configPermStore = s }
+}
+
+// WithTeamStore sets the team store for /tasks, /task_detail commands.
+func WithTeamStore(s store.TeamStore) Option { return func(c *Channel) { c.teamStore = s } }
+
+// WithSubagentTaskStore sets the subagent task store for /subagents, /subagent commands.
+func WithSubagentTaskStore(s store.SubagentTaskStore) Option {
+	return func(c *Channel) { c.subagentTaskStore = s }
+}
+
+// WithPendingMessageStore sets the pending message store for group history buffering.
+func WithPendingMessageStore(s store.PendingMessageStore) Option {
+	return func(c *Channel) {
+		c.groupHistory = channels.MakeHistory(channels.TypeTelegram, s, c.TenantID())
+	}
+}
+
 // New creates a new Telegram channel from config.
 // pairingSvc is optional (nil = fall back to allowlist only).
-// agentStore is optional (nil = group file writer commands disabled).
-// configPermStore is optional (nil = group file writer commands disabled).
-// teamStore is optional (nil = /tasks, /task_detail commands disabled).
-func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, teamStore store.TeamStore, pendingStore store.PendingMessageStore) (*Channel, error) {
-	var opts []telego.BotOption
+// Optional stores are set via Option functions.
+func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.PairingStore, chanOpts ...Option) (*Channel, error) {
+	var botOpts []telego.BotOption
 
 	if cfg.APIServer != "" {
-		opts = append(opts, telego.WithAPIServer(cfg.APIServer))
+		botOpts = append(botOpts, telego.WithAPIServer(cfg.APIServer))
 	}
 
 	// Isolate transport per account: prevents cross-bot connection pool contention
@@ -94,9 +120,9 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		slog.Info("telegram: forced IPv4 for account via config")
 	}
 
-	opts = append(opts, telego.WithHTTPClient(httpClient))
+	botOpts = append(botOpts, telego.WithHTTPClient(httpClient))
 
-	bot, err := telego.NewBot(cfg.Token, opts...)
+	bot, err := telego.NewBot(cfg.Token, botOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create telegram bot: %w", err)
 	}
@@ -114,25 +140,48 @@ func New(cfg config.TelegramConfig, msgBus *bus.MessageBus, pairingSvc store.Pai
 		historyLimit = channels.DefaultGroupHistoryLimit
 	}
 
-	return &Channel{
-		BaseChannel:     base,
-		bot:             bot,
-		config:          cfg,
-		httpClient:      httpClient,
-		transport:       transport,
-		pairingService:  pairingSvc,
-		agentStore:      agentStore,
-		configPermStore: configPermStore,
-		teamStore:       teamStore,
-		groupHistory:    channels.MakeHistory(channels.TypeTelegram, pendingStore, base.TenantID()),
-		historyLimit:    historyLimit,
-		requireMention:  requireMention,
-	}, nil
+	mentionMode := cfg.MentionMode
+	if mentionMode == "" {
+		mentionMode = "strict"
+	}
+	if mentionMode != "strict" && mentionMode != "yield" {
+		slog.Warn("telegram: unknown mention_mode, defaulting to strict", "value", mentionMode)
+		mentionMode = "strict"
+	}
+
+	ch := &Channel{
+		BaseChannel:    base,
+		bot:            bot,
+		config:         cfg,
+		httpClient:     httpClient,
+		transport:      transport,
+		pairingService: pairingSvc,
+		groupHistory:   channels.MakeHistory(channels.TypeTelegram, nil, base.TenantID()),
+		historyLimit:   historyLimit,
+		requireMention: requireMention,
+		mentionMode:    mentionMode,
+	}
+	for _, o := range chanOpts {
+		o(ch)
+	}
+	return ch, nil
 }
 
 // Start begins long polling for Telegram updates.
 func (c *Channel) Start(ctx context.Context) error {
 	slog.Info("starting telegram bot (polling mode)")
+	c.MarkStarting("Validating Telegram bot")
+
+	probeCtx, probeCancel := context.WithTimeout(ctx, probeOverallTimeout)
+	me, err := c.bot.GetMe(probeCtx)
+	probeCancel()
+	if err != nil {
+		return fmt.Errorf("validate telegram bot: %w", err)
+	}
+	username := ""
+	if me != nil {
+		username = me.Username
+	}
 
 	// Create a cancellable context for the polling goroutine.
 	// Stop() cancels this context to cleanly shut down long polling.
@@ -155,18 +204,21 @@ func (c *Channel) Start(ctx context.Context) error {
 	}
 
 	c.SetRunning(true)
+	c.MarkHealthy(connectedSummary(username))
 	c.groupHistory.StartFlusher()
 	c.handlerSem = make(chan struct{}, 20) // limit concurrent message handlers
-	slog.Info("telegram bot connected", "username", c.bot.Username())
+	slog.Info("telegram bot connected", "username", username)
 
 	// Register bot menu commands with retry.
 	go func() {
 		commands := DefaultMenuCommands()
 		syncCtx, cancel := context.WithTimeout(pollCtx, probeOverallTimeout)
 		defer cancel()
+		var lastErr error
 
 		for attempt := 1; attempt <= 3; attempt++ {
 			if err := c.SyncMenuCommands(syncCtx, commands); err != nil {
+				lastErr = err
 				slog.Warn("failed to sync telegram menu commands", "error", err, "attempt", attempt)
 				if attempt < 3 {
 					select {
@@ -180,6 +232,9 @@ func (c *Channel) Start(ctx context.Context) error {
 				return
 			}
 		}
+		if lastErr != nil {
+			slog.Warn("telegram menu commands remain unsynced", "error", lastErr)
+		}
 	}()
 
 	go func() {
@@ -190,6 +245,9 @@ func (c *Channel) Start(ctx context.Context) error {
 				return
 			case update, ok := <-updates:
 				if !ok {
+					if pollCtx.Err() == nil {
+						c.MarkFailed("Polling stopped unexpectedly", "Telegram updates channel closed unexpectedly.", channels.ChannelFailureKindNetwork, true)
+					}
 					slog.Info("telegram updates channel closed")
 					return
 				}
@@ -287,6 +345,7 @@ func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) { c.groupHistory.SetTe
 func (c *Channel) Stop(_ context.Context) error {
 	slog.Info("stopping telegram bot")
 	c.SetRunning(false)
+	c.MarkStopped("Stopped")
 	c.groupHistory.StopFlusher()
 
 	if c.pollCancel != nil {
@@ -317,6 +376,13 @@ func (c *Channel) Stop(_ context.Context) error {
 		slog.Warn("telegram handler goroutines did not drain within timeout")
 	}
 	return nil
+}
+
+func connectedSummary(username string) string {
+	if username == "" {
+		return "Connected"
+	}
+	return fmt.Sprintf("Connected as @%s", username)
 }
 
 // applyIPv4Dialer forces a transport to use IPv4 only by overriding DialContext.

@@ -16,11 +16,16 @@
     "modelTip": "Embedding模型（如text-embedding-3-small）。必须支持/embeddings端点。",
     "providerPlaceholder": "选择Provider",
     "modelPlaceholder": "text-embedding-3-small",
-    "supportedProviders": "已验证1536d：OpenAI (text-embedding-3-small)、OpenRouter (openai/*)、Mistral (codestral-embed)。其他Provider如支持/embeddings并输出1536d也可使用。",
+    "supportedProviders": "已验证1536d：OpenAI (text-embedding-3-small/large)、Gemini (gemini-embedding-001 + dimensions)、Mistral (codestral-embed)、Cohere (embed-v4)、DashScope (text-embedding-v3 + dimensions)。原生维度 > 1536的模型需在Provider设置中配置dimensions。",
     "verify": "验证Embedding",
     "verifyRequired": "保存前请先验证Embedding模型。",
     "verifyFailed": "验证失败",
-    "dimensions": "{{count}}维"
+    "dimensions": "{{count}}维",
+    "dimensionsMismatch": "{{count}}维 — 不符合要求的1536",
+    "maxChunkLen": "最大块长度",
+    "maxChunkLenHint": "每个记忆块分割前的最大字符数。",
+    "chunkOverlap": "块重叠",
+    "chunkOverlapHint": "连续块之间的重叠字符数，用于保持上下文连续性。"
   },
   "ux": {
     "title": "UX行为",
@@ -34,6 +39,19 @@
     "intentClassify": "意图分类",
     "intentClassifyHint": "在路由到Agent之前分类用户意图。",
     "intentClassifyInfo": "消息被分类以优化Agent路由和行为。"
+  },
+  "kg": {
+    "title": "知识图谱",
+    "description": "从Agent记忆中提取实体和关系到可搜索的知识图谱。",
+    "provider": "提取Provider",
+    "model": "提取模型",
+    "providerTip": "用于从记忆中提取实体的LLM Provider。",
+    "modelTip": "实体/关系提取模型（如claude-sonnet-4-20250514）。",
+    "providerPlaceholder": "选择Provider",
+    "modelPlaceholder": "选择模型",
+    "minConfidence": "最低置信度",
+    "minConfidenceHint": "提取实体的最低置信度阈值（0–1）。",
+    "info": "当Agent写入记忆时自动提取实体和关系。留空Provider以禁用。"
   },
   "compaction": {
     "title": "待处理消息压缩",

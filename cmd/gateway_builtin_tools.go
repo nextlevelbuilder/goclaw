@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -12,7 +13,7 @@ import (
 // builtinToolSeedData returns the canonical list of built-in tools to seed into the database.
 // Seed preserves user-customized enabled/settings values across upgrades.
 func builtinToolSeedData() []store.BuiltinToolDef {
-	return []store.BuiltinToolDef{
+	defs := []store.BuiltinToolDef{
 		// filesystem
 		{Name: "read_file", DisplayName: "Read File", Description: "Read the contents of a file from the agent's workspace by path", Category: "filesystem", Enabled: true},
 		{Name: "write_file", DisplayName: "Write File", Description: "Write content to a file in the workspace, creating directories as needed", Category: "filesystem", Enabled: true},
@@ -107,6 +108,19 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Requires: []string{"managed_mode", "teams"},
 		},
 	}
+
+	// Lite edition: remove skill management tools — not available on desktop.
+	if !edition.Current().TeamFullMode {
+		liteHidden := map[string]bool{"skill_manage": true, "publish_skill": true}
+		filtered := defs[:0]
+		for _, d := range defs {
+			if !liteHidden[d.Name] {
+				filtered = append(filtered, d)
+			}
+		}
+		return filtered
+	}
+	return defs
 }
 
 // seedBuiltinTools seeds built-in tool definitions into the database.
@@ -220,14 +234,17 @@ func applyBuiltinToolDisables(ctx context.Context, bts store.BuiltinToolStore, t
 		return
 	}
 
-	var disabled int
+	var disabledCount, enabledCount int
 	for _, t := range all {
 		if !t.Enabled {
-			toolsReg.Unregister(t.Name)
-			disabled++
+			toolsReg.Disable(t.Name)
+			disabledCount++
+		} else {
+			toolsReg.Enable(t.Name)
+			enabledCount++
 		}
 	}
-	if disabled > 0 {
-		slog.Info("builtin tools disabled", "count", disabled)
+	if disabledCount > 0 {
+		slog.Info("builtin tools updated", "disabled", disabledCount, "enabled", enabledCount)
 	}
 }

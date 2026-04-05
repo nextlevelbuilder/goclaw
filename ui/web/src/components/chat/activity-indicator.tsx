@@ -25,8 +25,11 @@ export function ActivityIndicator({ activity, isRunning }: ActivityIndicatorProp
 
   return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-      <config.icon className={`h-4 w-4 animate-pulse ${config.color}`} />
+      <config.icon className={`h-4 w-4 ${config.animation} ${config.color}`} />
       <span className={config.color}>{config.label}</span>
+      {activity.phase !== "retrying" && activity.iteration && activity.iteration > 1 && (
+        <span className="text-muted-foreground">· Step {activity.iteration}</span>
+      )}
     </div>
   );
 }
@@ -34,26 +37,28 @@ export function ActivityIndicator({ activity, isRunning }: ActivityIndicatorProp
 function getPhaseConfig(activity: RunActivity) {
   switch (activity.phase) {
     case "thinking":
-      return { icon: Brain, color: "text-orange-500", label: "Thinking..." };
+      return { icon: Brain, animation: "animate-pulse", color: "text-amber-500", label: "Thinking..." };
     case "tool_exec":
       return {
         icon: Wrench,
+        animation: "animate-wobble",
         color: "text-blue-500",
         label: activity.tool ? `Running ${activity.tool}...` : "Running tools...",
       };
     case "streaming":
-      return { icon: Pencil, color: "text-foreground", label: "Writing..." };
+      return { icon: Pencil, animation: "", color: "text-foreground", label: "Writing..." };
     case "compacting":
-      return { icon: Archive, color: "text-amber-500", label: "Optimizing context..." };
+      return { icon: Archive, animation: "animate-pulse", color: "text-amber-500", label: "Optimizing context..." };
     case "retrying":
       return {
         icon: RefreshCw,
-        color: "text-orange-500",
+        animation: "animate-spin",
+        color: "text-amber-500",
         label: `Retrying (${activity.retryAttempt ?? 0}/${activity.retryMax ?? 0})...`,
       };
     case "leader_processing":
-      return { icon: Users, color: "text-emerald-500", label: "Processing team results..." };
+      return { icon: Users, animation: "animate-pulse", color: "text-emerald-500", label: "Processing team results..." };
     default:
-      return { icon: Brain, color: "text-muted-foreground", label: "Working..." };
+      return { icon: Brain, animation: "animate-pulse", color: "text-muted-foreground", label: "Working..." };
   }
 }

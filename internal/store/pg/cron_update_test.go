@@ -52,7 +52,7 @@ func TestScheduleKindCorruption_LogicPath(t *testing.T) {
 // The fix: UpdateJob now returns an error when payload Unmarshal fails,
 // so existing fields are never overwritten with zero values.
 func TestPayloadUnmarshal_CorruptedJSON(t *testing.T) {
-	corruptedJSON := []byte(`{"kind":"message","message":"daily report","deliver":true,CORRUPT`)
+	corruptedJSON := []byte(`{"kind":"message","message":"daily report",CORRUPT`)
 
 	var payload store.CronPayload
 	err := json.Unmarshal(corruptedJSON, &payload)
@@ -66,9 +66,6 @@ func TestPayloadUnmarshal_CorruptedJSON(t *testing.T) {
 	if payload.Message != "" {
 		t.Error("expected empty Message after failed Unmarshal")
 	}
-	if payload.Deliver {
-		t.Error("expected false Deliver after failed Unmarshal")
-	}
 
 	// If we ignored this error and applied patch fields, we'd wipe existing data.
 	// The fix returns an error instead.
@@ -76,13 +73,11 @@ func TestPayloadUnmarshal_CorruptedJSON(t *testing.T) {
 }
 
 // TestPayloadUnmarshal_ValidJSON verifies normal payload round-trip works.
+// Deliver/DeliverChannel/DeliverTo are now dedicated columns on CronJob, not payload fields.
 func TestPayloadUnmarshal_ValidJSON(t *testing.T) {
 	original := store.CronPayload{
 		Kind:    "message",
 		Message: "daily report",
-		Deliver: true,
-		Channel: "telegram",
-		To:      "admin-group",
 	}
 	data, _ := json.Marshal(original)
 
@@ -93,11 +88,5 @@ func TestPayloadUnmarshal_ValidJSON(t *testing.T) {
 
 	if decoded.Message != original.Message {
 		t.Errorf("Message mismatch: got %q, want %q", decoded.Message, original.Message)
-	}
-	if decoded.Channel != original.Channel {
-		t.Errorf("Channel mismatch: got %q, want %q", decoded.Channel, original.Channel)
-	}
-	if decoded.To != original.To {
-		t.Errorf("To mismatch: got %q, want %q", decoded.To, original.To)
 	}
 }

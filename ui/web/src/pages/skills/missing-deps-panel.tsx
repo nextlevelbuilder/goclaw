@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { ROUTES } from "@/lib/constants";
 import type { RuntimeStatus } from "./hooks/use-runtimes";
 
 interface MissingDepsPanelProps {
@@ -81,6 +83,12 @@ export function MissingDepsPanel({ missing, onInstallItem, runtimes }: MissingDe
               <p className="text-xs text-red-700 dark:text-red-300">
                 {t("deps.runtimeMissingDesc")}
               </p>
+              <Link
+                to={ROUTES.PACKAGES}
+                className="inline-flex text-xs font-medium text-red-700 underline underline-offset-4 hover:text-red-900 dark:text-red-300 dark:hover:text-red-100"
+              >
+                {t("deps.runtimeMissingAction")}
+              </Link>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {missingRuntimes.map((r) => (
                   <span

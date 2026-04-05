@@ -12,22 +12,7 @@ export type ParamField = {
 
 export const MEDIA_PARAMS_SCHEMA: Record<string, Record<string, ParamField[]>> = {
   create_image: {
-    minimax_native: [
-      {
-        key: "size",
-        label: "Size",
-        type: "select",
-        default: "1024*1024",
-        options: [
-          { value: "1024*1024", label: "1:1" },
-          { value: "1280*720", label: "16:9" },
-          { value: "720*1280", label: "9:16" },
-          { value: "1024*768", label: "4:3" },
-          { value: "768*1024", label: "3:4" },
-        ],
-      },
-      { key: "prompt_optimizer", label: "Prompt Optimizer", type: "toggle", default: true },
-    ],
+    minimax_native: [],
     bailian: [
       {
         key: "size",
@@ -72,6 +57,23 @@ export const MEDIA_PARAMS_SCHEMA: Record<string, Record<string, ParamField[]>> =
       { key: "fast_pretreatment", label: "Fast Mode", type: "toggle", default: false },
     ],
     gemini_native: [
+      {
+        key: "resolution",
+        label: "Resolution",
+        type: "select",
+        default: "720p",
+        options: [
+          { value: "720p", label: "720p (50% cheaper)" },
+          { value: "1080p", label: "1080p" },
+        ],
+      },
+      {
+        key: "generate_audio",
+        label: "Generate Audio",
+        type: "toggle",
+        default: true,
+        description: "Auto-generate synchronized audio",
+      },
       {
         key: "person_generation",
         label: "Person Generation",

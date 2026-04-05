@@ -271,25 +271,25 @@ flowchart LR
 
 ## 8. Extended Thinking
 
-Extended thinking allows LLMs to generate internal reasoning tokens before producing a response, improving quality for complex tasks. GoClaw supports this across multiple providers with a unified `thinking_level` configuration. See [12-extended-thinking.md](./12-extended-thinking.md) for full details.
+Extended thinking allows LLMs to generate internal reasoning tokens before producing a response, improving quality for complex tasks. GoClaw supports this across multiple providers with provider-owned reasoning defaults, agent inherit/custom overrides, and a legacy `thinking_level` shim for rollback compatibility. See [12-extended-thinking.md](./12-extended-thinking.md) for full details.
 
 ### Provider Mapping
 
 ```mermaid
 flowchart TD
-    LEVEL["thinking_level"] --> CHECK{"Provider<br/>supports thinking?"}
+    LEVEL["provider.settings.reasoning_defaults<br/>+ agent other_config.reasoning"] --> CHECK{"Provider<br/>supports thinking?"}
     CHECK -->|No| SKIP["Skip — normal request"]
     CHECK -->|Yes| TYPE{"Provider type?"}
 
     TYPE -->|Anthropic| ANTH["Budget tokens:<br/>low=4K, medium=10K, high=32K<br/>+ anthropic-beta header<br/>+ strip temperature"]
-    TYPE -->|OpenAI-compat| OAI["reasoning_effort:<br/>low / medium / high"]
+    TYPE -->|OpenAI-compat| OAI["capability-aware<br/>reasoning_effort"]
     TYPE -->|DashScope| DASH["enable_thinking: true<br/>Budget: low=4K, medium=16K, high=32K<br/>⚠ No streaming with tools"]
 ```
 
 ### Streaming
 
 - **Anthropic**: `thinking_delta` events accumulate into `StreamChunk.Thinking`
-- **OpenAI-compat**: `reasoning_content` in response delta
+- **OpenAI-compat**: `reasoning_content` in response delta, with GPT-5/Codex effort normalization when the model is known
 - **DashScope**: Falls back to non-streaming when tools are present, synthesizes chunk callbacks
 
 ### Tool Loop Handling
@@ -621,11 +621,82 @@ Codex supports SSE streaming similar to Anthropic:
 
 ### Extended Thinking
 
-Codex provider reports `SupportsThinking() = true`, allowing thinking_level to be injected. The provider maps thinking levels to reasoning_effort parameters as needed.
+Codex provider reports `SupportsThinking() = true`, allowing capability-aware reasoning effort injection. Providers can save reusable `settings.reasoning_defaults`, agents inherit them by default, and custom agent overrides remain additive. For known GPT-5/Codex models, GoClaw resolves requested versus effective effort before the request and records the source and outcome in trace metadata.
 
 ### Token Usage
 
 Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheReadTokens` are supported for prompt caching if available.
+
+### Provider-Level Defaults + Agent Overrides
+
+Multiple authenticated `chatgpt_oauth` providers can coexist in one tenant. Each provider name is one OpenAI Codex OAuth alias. Pool membership is authoritative at the provider layer: one alias owns the reusable pool, while member aliases stay leaf accounts.
+
+Provider default example:
+
+```json
+{
+  "name": "openai-codex",
+  "provider_type": "chatgpt_oauth",
+  "settings": {
+    "codex_pool": {
+      "strategy": "round_robin",
+      "extra_provider_names": ["codex-work"]
+    }
+  }
+}
+```
+
+Provider reasoning default example:
+
+```json
+{
+  "name": "openai-codex",
+  "provider_type": "chatgpt_oauth",
+  "settings": {
+    "reasoning_defaults": {
+      "effort": "high",
+      "fallback": "provider_default"
+    }
+  }
+}
+```
+
+Agent override example:
+
+```json
+{
+  "provider": "openai-codex",
+  "other_config": {
+    "reasoning": {
+      "override_mode": "custom",
+      "effort": "xhigh",
+      "fallback": "downgrade"
+    }
+  }
+}
+```
+
+Routing behavior:
+- The main `provider` field remains the preferred/default account.
+- Provider aliases are arbitrary. `openai-codex` and `codex-work` are examples, not required prefixes.
+- `settings.codex_pool.extra_provider_names` is the authoritative membership list for that pool owner.
+- A provider listed in another pool cannot also manage its own pool.
+- `override_mode: "inherit"` uses the primary provider's `settings.codex_pool`.
+- `override_mode: "custom"` is limited to routing behavior for that provider-owned pool.
+- `primary_first` keeps the preferred account fixed. When saved as a custom override with no extra names, it disables the pool for that agent and keeps the agent on the primary account only.
+- `round_robin` rotates requests across the preferred account plus the provider-owned extra authenticated OpenAI Codex OAuth accounts.
+- `priority_order` tries the preferred account first, then drains the provider-owned extra accounts in order.
+- Retryable upstream failures can fall through to the next eligible OpenAI Codex OAuth account in the same request.
+- Explicit provider names remain explicit. OAuth auth/logout is still provider-scoped.
+- Runtime observability for one agent is available at `GET /v1/agents/{id}/codex-pool-activity`, which exposes recent routed traces plus per-alias health derived from those traces.
+
+Reasoning behavior:
+- `settings.reasoning_defaults` is provider-owned and reusable across agents.
+- `reasoning.override_mode: "inherit"` follows the provider default.
+- `reasoning.override_mode: "custom"` stores an agent-local reasoning policy.
+- Existing `reasoning` payloads without `override_mode` still behave as custom overrides.
+- If no provider default is saved, inherit resolves to reasoning `off`.
+- Trace metadata surfaces the reasoning `source` so provider-default behavior is no longer implicit.
 
 ---
 
@@ -652,6 +723,7 @@ Tracks prompt, completion, and total tokens. `CacheCreationTokens` and `CacheRea
 | `internal/providers/codex.go` | CodexProvider: OAuth-based ChatGPT Responses API |
 | `internal/providers/codex_build.go` | Codex request builder: message formatting, phase handling |
 | `internal/providers/codex_types.go` | Codex request/response types and OAuth token management |
+| `internal/providers/chatgpt_oauth_router.go` | Agent-side routing across multiple authenticated OpenAI Codex OAuth providers |
 | `internal/providers/dashscope.go` | DashScope provider: OpenAI-compat wrapper with thinking budget, tools+streaming fallback |
 | `internal/providers/acp_provider.go` | ACPProvider: orchestrates ACP-compatible agent subprocesses |
 | `internal/providers/acp/types.go` | ACP protocol types: InitializeRequest, SessionUpdate, ContentBlock, etc. |

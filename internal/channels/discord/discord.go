@@ -33,8 +33,8 @@ type Channel struct {
 	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
 	groupHistory    *channels.PendingHistory
 	historyLimit    int
-	agentStore      store.AgentStore             // for agent key lookup (nil = writer commands disabled)
-	configPermStore store.ConfigPermissionStore   // for group file writer management (nil = writer commands disabled)
+	agentStore      store.AgentStore            // for agent key lookup (nil = writer commands disabled)
+	configPermStore store.ConfigPermissionStore // for group file writer management (nil = writer commands disabled)
 }
 
 // New creates a new Discord channel from config.
@@ -123,7 +123,7 @@ func (c *Channel) Stop(_ context.Context) error {
 }
 
 // Send delivers an outbound message to a Discord channel.
-func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) (err error) {
 	if !c.IsRunning() {
 		return fmt.Errorf("discord bot not running")
 	}
@@ -151,10 +151,10 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		return nil
 	}
 
-	// Stop typing indicator controller
-	if ctrl, ok := c.typingCtrls.LoadAndDelete(channelID); ok {
-		ctrl.(*typing.Controller).Stop()
-	}
+	typingCtrl := c.currentTypingCtrl(channelID)
+	defer func() {
+		c.finishTyping(channelID, typingCtrl, err)
+	}()
 
 	content := msg.Content
 
@@ -250,4 +250,47 @@ func lastIndexByte(s string, c byte) int {
 		}
 	}
 	return -1
+}
+
+func (c *Channel) currentTypingCtrl(channelID string) *typing.Controller {
+	ctrl, ok := c.typingCtrls.Load(channelID)
+	if !ok {
+		return nil
+	}
+
+	typed, ok := ctrl.(*typing.Controller)
+	if !ok {
+		c.typingCtrls.Delete(channelID)
+		return nil
+	}
+
+	return typed
+}
+
+func (c *Channel) finishTyping(channelID string, expected *typing.Controller, sendErr error) {
+	if expected == nil {
+		return
+	}
+	if sendErr != nil {
+		slog.Warn("discord: outbound send failed; keeping typing indicator active until TTL",
+			"channel_id", channelID, "error", sendErr)
+		return
+	}
+
+	current, ok := c.typingCtrls.Load(channelID)
+	if !ok {
+		return
+	}
+
+	typed, ok := current.(*typing.Controller)
+	if !ok {
+		c.typingCtrls.Delete(channelID)
+		return
+	}
+	if typed != expected {
+		return
+	}
+
+	c.typingCtrls.Delete(channelID)
+	typed.Stop()
 }

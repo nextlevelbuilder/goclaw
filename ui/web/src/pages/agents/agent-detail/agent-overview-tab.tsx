@@ -9,18 +9,19 @@ import { ModelBudgetSection } from "./overview-sections/model-budget-section";
 import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
 import { CapabilitiesSection } from "./overview-sections/capabilities-section";
+import { ChatGPTOAuthRoutingSummarySection } from "./overview-sections/chatgpt-oauth-routing-summary-section";
 import { HeartbeatCard } from "./overview-sections/heartbeat-card";
 import { MemorySection } from "./config-sections";
-import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import type { UseAgentHeartbeatReturn } from "../hooks/use-agent-heartbeat";
 
 interface AgentOverviewTabProps {
   agent: AgentData;
   onUpdate: (updates: Record<string, unknown>) => Promise<void>;
   heartbeat: UseAgentHeartbeatReturn;
+  onManageCodexPool: () => void;
 }
 
-export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTabProps) {
+export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool }: AgentOverviewTabProps) {
   const { t } = useTranslation("agents");
 
   const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
@@ -47,8 +48,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
     typeof otherCfg.skill_nudge_interval === "number" ? otherCfg.skill_nudge_interval : 15,
   );
 
-  // Memory (now standalone section)
-  const [memEnabled, setMemEnabled] = useState(agent.memory_config != null);
+  // Memory (always shown — per-agent overrides, empty = use system defaults)
   const [mem, setMem] = useState<MemoryConfig>(agent.memory_config ?? {});
 
   // Capabilities (subagents + tool policy)
@@ -64,13 +64,18 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updatedOtherConfig = {
+      const updatedOtherConfig: Record<string, unknown> = {
         ...otherCfg,
         emoji: emoji.trim() || undefined,
         self_evolve: selfEvolve,
         skill_evolve: skillEvolve,
         skill_nudge_interval: skillEvolve ? skillNudgeInterval : undefined,
       };
+      // When the provider changes, clear stale pool routing config so it
+      // doesn't reference members from the previous provider's pool.
+      if (provider !== agent.provider) {
+        delete updatedOtherConfig.chatgpt_oauth_routing;
+      }
       const budgetCents = budgetDollars ? Math.round(parseFloat(budgetDollars) * 100) : null;
       await onUpdate({
         display_name: displayName,
@@ -83,7 +88,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
         is_default: isDefault,
         other_config: updatedOtherConfig,
         budget_monthly_cents: budgetCents,
-        memory_config: memEnabled ? mem : null,
+        memory_config: mem,
         subagents_config: subEnabled ? sub : null,
         tools_config: toolsEnabled
           ? { profile: tools.profile, allow: tools.allow, deny: tools.deny, alsoAllow: tools.alsoAllow, byProvider: tools.byProvider }
@@ -128,19 +133,18 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat }: AgentOverviewTa
         onSaveBlockedChange={setLlmSaveBlocked}
       />
 
-      {/* Memory — standalone section (was inside Capabilities) */}
-      <section className="space-y-4">
-        <ConfigGroupHeader
-          title={t("configSections.memory.title")}
-          description={t("configSections.memory.description")}
-        />
-        <MemorySection
-          enabled={memEnabled}
-          value={mem}
-          onToggle={(v) => { setMemEnabled(v); if (!v) setMem({}); }}
-          onChange={setMem}
-        />
-      </section>
+      <ChatGPTOAuthRoutingSummarySection agent={agent} onManage={onManageCodexPool} />
+      {provider !== agent.provider && !!otherCfg.chatgpt_oauth_routing && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2 px-1">
+          {t("chatgptOAuthRouting.providerChangedWarning")}
+        </p>
+      )}
+
+      {/* Memory — always visible, per-agent overrides */}
+      <MemorySection
+        value={mem}
+        onChange={setMem}
+      />
 
       <HeartbeatCard heartbeat={heartbeat} />
 

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,10 +119,16 @@ func agentCacheKey(ctx context.Context, agentID string) string {
 }
 
 // Remove removes an agent from the router.
+// Matches both plain and tenant-scoped keys (same as InvalidateAgent).
 func (r *Router) Remove(agentID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	delete(r.agents, agentID)
+	suffix := ":" + agentID
+	for key := range r.agents {
+		if key == agentID || strings.HasSuffix(key, suffix) {
+			delete(r.agents, key)
+		}
+	}
 }
 
 // List returns all registered agent IDs.
@@ -298,6 +305,15 @@ func (r *Router) GetActivity(sessionKey string) *AgentActivityStatus {
 func (r *Router) IsSessionBusy(sessionKey string) bool {
 	_, ok := r.sessionRuns.Load(sessionKey)
 	return ok
+}
+
+// SessionRunID returns the active run ID for a session, if any.
+func (r *Router) SessionRunID(sessionKey string) (string, bool) {
+	val, ok := r.sessionRuns.Load(sessionKey)
+	if !ok {
+		return "", false
+	}
+	return val.(string), true
 }
 
 // AbortRunsForSession cancels all active runs for a session key.

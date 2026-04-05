@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -98,6 +99,7 @@ const (
 	TopicSystemConfigChanged   = "system_config:changed"
 	TopicPairingRevoked        = "pairing:revoked"
 	TopicAgentStatusChanged    = "agent:status_changed"
+	TopicAgentDeleted          = "agent:deleted"
 )
 
 // EventPairingRevoked is the event name broadcast when a paired device is revoked.
@@ -117,6 +119,13 @@ type AgentStatusChangedPayload struct {
 	AgentID   string `json:"agent_id"`
 	OldStatus string `json:"old_status"`
 	NewStatus string `json:"new_status"`
+}
+
+// AgentDeletedPayload carries agent deletion info for async cleanup (e.g. orphaned provider removal).
+type AgentDeletedPayload struct {
+	AgentKey string    `json:"agent_key"`
+	Provider string    `json:"provider,omitempty"` // provider name for orphan cleanup
+	TenantID uuid.UUID `json:"tenant_id,omitempty"`
 }
 
 // AuditEventPayload carries audit log data emitted by handlers.
@@ -159,4 +168,14 @@ type MessageRouter interface {
 	ConsumeInbound(ctx context.Context) (InboundMessage, bool)
 	PublishOutbound(msg OutboundMessage)
 	SubscribeOutbound(ctx context.Context) (OutboundMessage, bool)
+}
+
+// IsInternalSender returns true if the senderID belongs to an internal system
+// component (not a real channel user). These should not be stored as contacts.
+func IsInternalSender(senderID string) bool {
+	return strings.HasPrefix(senderID, "system:") ||
+		strings.HasPrefix(senderID, "notification:") ||
+		strings.HasPrefix(senderID, "teammate:") ||
+		strings.HasPrefix(senderID, "ticker:") ||
+		senderID == "session_send_tool"
 }

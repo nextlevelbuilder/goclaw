@@ -52,16 +52,27 @@ func (s *PGProviderStore) CreateProvider(ctx context.Context, p *store.LLMProvid
 	p.UpdatedAt = now
 	tid := tenantIDForInsert(ctx)
 	p.TenantID = tid
-	_, err := s.db.ExecContext(ctx,
+	// UPSERT: if provider with same (tenant_id, name) exists, update it and return its ID.
+	// This handles orphaned providers left after agent deletion (#295).
+	var actualID uuid.UUID
+	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO llm_providers (id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		 ON CONFLICT (tenant_id, name) DO UPDATE SET
+			display_name = EXCLUDED.display_name, provider_type = EXCLUDED.provider_type,
+			api_base = EXCLUDED.api_base, api_key = EXCLUDED.api_key,
+			enabled = EXCLUDED.enabled, settings = EXCLUDED.settings, updated_at = EXCLUDED.updated_at
+		 RETURNING id`,
 		p.ID, p.Name, p.DisplayName, p.ProviderType, p.APIBase, apiKey, p.Enabled, settings, now, now, tid,
-	)
+	).Scan(&actualID)
+	if err == nil {
+		p.ID = actualID // sync in-memory ID with actual DB row
+	}
 	return err
 }
 
 func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store.LLMProviderData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +91,7 @@ func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store
 }
 
 func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*store.LLMProviderData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +110,7 @@ func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*
 }
 
 func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProviderData, error) {
-	tClause, tArgs, err := tenantClauseN(ctx, 1)
+	tClause, tArgs, _, err := scopeClause(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +179,7 @@ func (s *PGProviderStore) UpdateProvider(ctx context.Context, id uuid.UUID, upda
 }
 
 func (s *PGProviderStore) DeleteProvider(ctx context.Context, id uuid.UUID) error {
-	tClause, tArgs, err := tenantClauseN(ctx, 2)
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
 	if err != nil {
 		return err
 	}

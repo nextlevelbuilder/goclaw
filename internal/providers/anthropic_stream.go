@@ -32,12 +32,16 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	var currentBlockType string
 	// Track thinking token count by accumulated chunk size
 	thinkingChars := 0
+	var thinkingSignature string
 
 	scanner := bufio.NewScanner(respBody)
 	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
 	var currentEvent string
 
 	for scanner.Scan() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		line := scanner.Text()
 
 		// Track event type
@@ -102,7 +106,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 						toolCallJSON[idx] += ev.Delta.PartialJSON
 					}
 				case "signature_delta":
-					// Signature is captured in content_block_stop via raw block reconstruction
+					thinkingSignature += ev.Delta.Signature
 				}
 			}
 
@@ -155,9 +159,11 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	// Parse accumulated tool call JSON arguments
 	for i, rawJSON := range toolCallJSON {
-		if rawJSON != "" {
+		if rawJSON != "" && i < len(result.ToolCalls) {
 			args := make(map[string]any)
-			_ = json.Unmarshal([]byte(rawJSON), &args)
+			if err := json.Unmarshal([]byte(rawJSON), &args); err != nil {
+				result.ToolCalls[i].ParseError = fmt.Sprintf("malformed JSON (%d chars): %v", len(rawJSON), err)
+			}
 			result.ToolCalls[i].Arguments = args
 		}
 	}
@@ -176,6 +182,8 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 			result.RawAssistantContent = b
 		}
 	}
+
+	result.ThinkingSignature = thinkingSignature
 
 	if onChunk != nil {
 		onChunk(StreamChunk{Done: true})

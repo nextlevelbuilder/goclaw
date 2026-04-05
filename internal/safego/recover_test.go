@@ -59,14 +59,12 @@ func TestRecover_Concurrent(t *testing.T) {
 	errors := make(chan string, n)
 
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			defer Recover(func(v any) {
 				errors <- fmt.Sprint(v)
 			}, "test", "concurrent")
 			panic("concurrent boom")
-		}()
+		})
 	}
 	wg.Wait()
 	close(errors)

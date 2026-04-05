@@ -35,6 +35,12 @@ func joinErrors(errs []string) string {
 	return result.String()
 }
 
+// ParseJSONBytesToStringSlice converts JSONB []byte to []string (exported for loop_mcp_user).
+func ParseJSONBytesToStringSlice(data []byte) []string { return jsonBytesToStringSlice(data) }
+
+// ParseJSONBytesToStringMap converts JSONB []byte to map[string]string (exported for loop_mcp_user).
+func ParseJSONBytesToStringMap(data []byte) map[string]string { return jsonBytesToStringMap(data) }
+
 // jsonBytesToStringSlice converts JSONB []byte to []string. Returns nil on error.
 func jsonBytesToStringSlice(data []byte) []string {
 	if len(data) == 0 {

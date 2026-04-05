@@ -140,9 +140,16 @@ export function PendingMessagesPage() {
                       onClick={() => setSelectedGroup(g)}
                     >
                       <td className="px-4 py-3 font-medium">{g.channel_name}</td>
-                      <td className="max-w-[200px] truncate px-4 py-3">
+                      <td className="max-w-[300px] truncate px-4 py-3">
                         {g.group_title ? (
-                          <span className="font-medium">{g.group_title}</span>
+                          <span className="font-medium">
+                            {g.group_title}
+                            {g.history_key.includes(":topic:") && (
+                              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                                &gt; topic:{g.history_key.split(":topic:")[1]}
+                              </span>
+                            )}
+                          </span>
                         ) : (
                           <span className="font-mono text-xs text-muted-foreground">{g.history_key}</span>
                         )}

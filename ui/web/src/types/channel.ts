@@ -13,6 +13,34 @@ export interface ChannelInstanceData {
   updated_at: string;
 }
 
+export interface ChannelRuntimeStatus {
+  enabled: boolean;
+  running: boolean;
+  state?:
+    | "registered"
+    | "starting"
+    | "healthy"
+    | "degraded"
+    | "failed"
+    | "stopped";
+  summary?: string;
+  detail?: string;
+  failure_kind?: "auth" | "config" | "network" | "unknown";
+  retryable?: boolean;
+  checked_at?: string;
+  failure_count?: number;
+  consecutive_failures?: number;
+  first_failed_at?: string;
+  last_failed_at?: string;
+  last_healthy_at?: string;
+  remediation?: {
+    code: "reauth" | "open_credentials" | "open_advanced" | "check_network";
+    headline: string;
+    hint?: string;
+    target?: "credentials" | "advanced" | "reauth" | "details";
+  };
+}
+
 export interface ChannelInstanceInput {
   name: string;
   display_name?: string;

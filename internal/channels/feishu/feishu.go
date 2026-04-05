@@ -575,7 +575,7 @@ func (c *Channel) ListGroupMembers(ctx context.Context, chatID string) ([]channe
 		}
 		// Auto-sync member into contact store
 		if cc := c.ContactCollector(); cc != nil {
-			cc.EnsureContact(ctx, channels.TypeFeishu, c.Name(), m.MemberID, m.MemberID, m.Name, "", "group")
+			cc.EnsureContact(ctx, channels.TypeFeishu, c.Name(), m.MemberID, m.MemberID, m.Name, "", "group", "user", "", "")
 		}
 	}
 	return result, nil

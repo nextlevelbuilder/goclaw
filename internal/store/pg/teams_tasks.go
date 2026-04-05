@@ -17,7 +17,9 @@ import (
 )
 
 // taskLockDuration is how long a claimed task stays locked before stale recovery resets it.
-const taskLockDuration = 30 * time.Minute
+// Must be significantly larger than the consumer heartbeat interval (5min) to avoid
+// race conditions where a delayed heartbeat causes premature stale recovery.
+const taskLockDuration = 60 * time.Minute
 
 // taskSelectCols is the shared SELECT column list for task queries (must match scanTaskRowsJoined).
 const taskSelectCols = `t.id, t.team_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
@@ -454,6 +456,36 @@ func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, team
 		deleted = append(deleted, id)
 	}
 	return deleted, rows.Err()
+}
+
+// ListActiveTasksByChatID returns non-terminal tasks for a given chat_id (session key).
+// Used to restore the active tasks sidebar when switching back to a session.
+func (s *PGTeamStore) ListActiveTasksByChatID(ctx context.Context, chatID string) ([]store.TeamTaskData, error) {
+	if chatID == "" {
+		return nil, nil
+	}
+	args := []any{chatID}
+	tenantWhere := ""
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return nil, fmt.Errorf("tenant_id required")
+		}
+		tenantWhere = fmt.Sprintf(" AND t.tenant_id = $%d", len(args)+1)
+		args = append(args, tid)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+taskSelectCols+`
+		 `+taskJoinClause+`
+		 WHERE COALESCE(t.chat_id,'') = $1
+		   AND t.status IN ('pending','in_progress','blocked','in_review')`+tenantWhere+`
+		 ORDER BY t.task_number ASC
+		 LIMIT 50`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTaskRowsJoined(rows)
 }
 
 func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {

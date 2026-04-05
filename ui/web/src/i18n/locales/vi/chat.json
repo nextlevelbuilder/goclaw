@@ -21,5 +21,9 @@
   "replyingTo": "Đang trả lời",
   "error": {
     "notConnected": "Chưa kết nối. Vui lòng chờ kết nối được thiết lập."
+  },
+  "selectAgent": {
+    "title": "Chọn agent",
+    "description": "Chọn agent để bắt đầu trò chuyện"
   }
 }

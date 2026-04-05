@@ -1,6 +1,7 @@
 package http
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -29,6 +31,7 @@ type MCPHandler struct {
 	msgBus      *bus.MessageBus
 	mgr         MCPToolLister  // optional, nil when Manager not available
 	poolEvictor MCPPoolEvictor // optional, nil when pool not available
+	db          *sql.DB        // for export/import direct queries
 }
 
 // NewMCPHandler creates a handler for MCP server management endpoints.
@@ -51,37 +54,48 @@ func (h *MCPHandler) emitCacheInvalidate() {
 
 // RegisterRoutes registers all MCP management routes on the given mux.
 func (h *MCPHandler) RegisterRoutes(mux *http.ServeMux) {
-	// Server CRUD
+	// Server CRUD (reads: viewer+, writes: admin+)
 	mux.HandleFunc("GET /v1/mcp/servers", h.auth(h.handleListServers))
-	mux.HandleFunc("POST /v1/mcp/servers", h.auth(h.handleCreateServer))
+	mux.HandleFunc("POST /v1/mcp/servers", h.adminAuth(h.handleCreateServer))
 	mux.HandleFunc("GET /v1/mcp/servers/{id}", h.auth(h.handleGetServer))
-	mux.HandleFunc("PUT /v1/mcp/servers/{id}", h.auth(h.handleUpdateServer))
-	mux.HandleFunc("DELETE /v1/mcp/servers/{id}", h.auth(h.handleDeleteServer))
+	mux.HandleFunc("PUT /v1/mcp/servers/{id}", h.adminAuth(h.handleUpdateServer))
+	mux.HandleFunc("DELETE /v1/mcp/servers/{id}", h.adminAuth(h.handleDeleteServer))
 
-	// Test connection (no save)
-	mux.HandleFunc("POST /v1/mcp/servers/test", h.auth(h.handleTestConnection))
+	// Test connection (admin+ — infra operation)
+	mux.HandleFunc("POST /v1/mcp/servers/test", h.adminAuth(h.handleTestConnection))
 
-	// Server tools (runtime-discovered)
+	// Reconnect (admin+ — evict pooled connection)
+	mux.HandleFunc("POST /v1/mcp/servers/{id}/reconnect", h.adminAuth(h.handleReconnectServer))
+
+	// Server tools (read-only: viewer+)
 	mux.HandleFunc("GET /v1/mcp/servers/{id}/tools", h.auth(h.handleListServerTools))
 
-	// Agent grants
+	// Agent grants (reads: viewer+, writes: admin+)
 	mux.HandleFunc("GET /v1/mcp/servers/{id}/grants", h.auth(h.handleListServerGrants))
-	mux.HandleFunc("POST /v1/mcp/servers/{id}/grants/agent", h.auth(h.handleGrantAgent))
-	mux.HandleFunc("DELETE /v1/mcp/servers/{id}/grants/agent/{agentID}", h.auth(h.handleRevokeAgent))
+	mux.HandleFunc("POST /v1/mcp/servers/{id}/grants/agent", h.adminAuth(h.handleGrantAgent))
+	mux.HandleFunc("DELETE /v1/mcp/servers/{id}/grants/agent/{agentID}", h.adminAuth(h.handleRevokeAgent))
 	mux.HandleFunc("GET /v1/mcp/grants/agent/{agentID}", h.auth(h.handleListAgentGrants))
 
-	// User grants
-	mux.HandleFunc("POST /v1/mcp/servers/{id}/grants/user", h.auth(h.handleGrantUser))
-	mux.HandleFunc("DELETE /v1/mcp/servers/{id}/grants/user/{userID}", h.auth(h.handleRevokeUser))
+	// User grants (admin+)
+	mux.HandleFunc("POST /v1/mcp/servers/{id}/grants/user", h.adminAuth(h.handleGrantUser))
+	mux.HandleFunc("DELETE /v1/mcp/servers/{id}/grants/user/{userID}", h.adminAuth(h.handleRevokeUser))
 
-	// Access requests
+	// Access requests (create: viewer+, list: viewer+, review: admin+)
 	mux.HandleFunc("POST /v1/mcp/requests", h.auth(h.handleCreateRequest))
 	mux.HandleFunc("GET /v1/mcp/requests", h.auth(h.handleListPendingRequests))
-	mux.HandleFunc("POST /v1/mcp/requests/{id}/review", h.auth(h.handleReviewRequest))
+	mux.HandleFunc("POST /v1/mcp/requests/{id}/review", h.adminAuth(h.handleReviewRequest))
+	// Export / Import (admin+)
+	mux.HandleFunc("GET /v1/mcp/export/preview", h.adminAuth(h.handleMCPExportPreview))
+	mux.HandleFunc("GET /v1/mcp/export", h.adminAuth(h.handleMCPExport))
+	mux.HandleFunc("POST /v1/mcp/import", h.adminAuth(h.handleMCPImport))
 }
 
 func (h *MCPHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth("", next)
+}
+
+func (h *MCPHandler) adminAuth(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 // --- Server CRUD ---
@@ -230,4 +244,29 @@ func (h *MCPHandler) handleDeleteServer(w http.ResponseWriter, r *http.Request) 
 	h.emitCacheInvalidate()
 	emitAudit(h.msgBus, r, "mcp_server.deleted", "mcp_server", id.String())
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (h *MCPHandler) handleReconnectServer(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID, "server")})
+		return
+	}
+
+	srv, err := h.store.GetServer(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "server", id.String())})
+		return
+	}
+
+	if h.poolEvictor != nil {
+		tid := store.TenantIDFromContext(r.Context())
+		h.poolEvictor.Evict(tid, srv.Name)
+	}
+
+	h.emitCacheInvalidate()
+	emitAudit(h.msgBus, r, "mcp_server.reconnected", "mcp_server", id.String())
+	slog.Info("mcp.server.reconnect_requested", "server", srv.Name, "id", id)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reconnected"})
 }

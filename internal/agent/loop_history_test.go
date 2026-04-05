@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -334,17 +336,24 @@ func TestUniquifyToolCallIDs(t *testing.T) {
 		}
 	})
 
-	t.Run("appends run prefix", func(t *testing.T) {
+	t.Run("produces fixed-length hashed IDs", func(t *testing.T) {
 		calls := []providers.ToolCall{
 			{ID: "call_123", Name: "read_file"},
 			{ID: "call_456", Name: "write_file"},
 		}
 		got := uniquifyToolCallIDs(calls, runID, 2)
-		if got[0].ID != "call_123_abcdef12_2_0" {
-			t.Errorf("unexpected ID: %s", got[0].ID)
+		// IDs must be exactly 40 chars: "call_" (5) + 35 hex chars
+		for i, tc := range got {
+			if len(tc.ID) != 40 {
+				t.Errorf("call %d: ID length = %d, want 40: %s", i, len(tc.ID), tc.ID)
+			}
+			if !strings.HasPrefix(tc.ID, "call_") {
+				t.Errorf("call %d: ID should start with call_, got: %s", i, tc.ID)
+			}
 		}
-		if got[1].ID != "call_456_abcdef12_2_1" {
-			t.Errorf("unexpected ID: %s", got[1].ID)
+		// Different original IDs must produce different hashed IDs
+		if got[0].ID == got[1].ID {
+			t.Errorf("different inputs should produce different IDs: %s", got[0].ID)
 		}
 	})
 
@@ -353,8 +362,11 @@ func TestUniquifyToolCallIDs(t *testing.T) {
 			{ID: "", Name: "read_file"},
 		}
 		got := uniquifyToolCallIDs(calls, runID, 0)
-		if got[0].ID != "call_abcdef12_0_0" {
-			t.Errorf("unexpected ID for empty: %s", got[0].ID)
+		if len(got[0].ID) != 40 {
+			t.Errorf("empty input: ID length = %d, want 40: %s", len(got[0].ID), got[0].ID)
+		}
+		if !strings.HasPrefix(got[0].ID, "call_") {
+			t.Errorf("empty input: ID should start with call_, got: %s", got[0].ID)
 		}
 	})
 
@@ -381,16 +393,147 @@ func TestUniquifyToolCallIDs(t *testing.T) {
 			t.Errorf("IDs should be unique, both are: %s", got[0].ID)
 		}
 	})
+
+	t.Run("includes runID and iteration in hash", func(t *testing.T) {
+		calls := []providers.ToolCall{
+			{ID: "same_id", Name: "read_file"},
+		}
+		iter0 := uniquifyToolCallIDs(calls, runID, 0)[0].ID
+		iter1 := uniquifyToolCallIDs(calls, runID, 1)[0].ID
+		otherRun := uniquifyToolCallIDs(calls, "12345678-1234-5678-1234-567812345678", 0)[0].ID
+
+		if iter0 == iter1 {
+			t.Errorf("iteration should affect hashed ID: %s", iter0)
+		}
+		if iter0 == otherRun {
+			t.Errorf("runID should affect hashed ID: %s", iter0)
+		}
+	})
 }
 
 func TestEstimateTokens(t *testing.T) {
 	msgs := []providers.Message{
-		{Role: "user", Content: "Hello world!"},             // 12 chars → ~4 tokens
+		{Role: "user", Content: "Hello world!"},                // 12 chars → ~4 tokens
 		{Role: "assistant", Content: "Hi there, how are you?"}, // 22 chars → ~7 tokens
 	}
 	got := EstimateTokens(msgs)
 	if got <= 0 {
 		t.Errorf("expected positive token estimate, got %d", got)
+	}
+}
+
+func TestEstimateTokensIncludesToolCalls(t *testing.T) {
+	// Message with tool calls should estimate higher than content-only.
+	contentOnly := []providers.Message{
+		{Role: "assistant", Content: "Let me search for that."},
+	}
+	withToolCalls := []providers.Message{
+		{Role: "assistant", Content: "Let me search for that.", ToolCalls: []providers.ToolCall{
+			{ID: "tc_1", Name: "web_fetch", Arguments: map[string]any{
+				"url": "https://example.com/very-long-path/to/some/resource?query=test",
+			}},
+		}},
+	}
+
+	contentTokens := EstimateTokens(contentOnly)
+	toolTokens := EstimateTokens(withToolCalls)
+
+	if toolTokens <= contentTokens {
+		t.Errorf("expected tool call tokens (%d) > content-only tokens (%d)", toolTokens, contentTokens)
+	}
+}
+
+func TestEstimateHistoryTokensSkipsSystem(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "system", Content: "You are a helpful assistant with a very long system prompt that includes tool definitions and context files..."},
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi there!"},
+	}
+
+	allTokens := EstimateTokens(msgs)
+	historyTokens := EstimateHistoryTokens(msgs)
+
+	if historyTokens >= allTokens {
+		t.Errorf("history tokens (%d) should be less than all tokens (%d)", historyTokens, allTokens)
+	}
+
+	// History should only count user + assistant messages.
+	expectedHistory := EstimateTokens(msgs[1:])
+	if historyTokens != expectedHistory {
+		t.Errorf("history tokens (%d) != expected (%d)", historyTokens, expectedHistory)
+	}
+}
+
+func TestEstimateOverhead(t *testing.T) {
+	loop := &Loop{contextWindow: 200000}
+
+	t.Run("no_calibration_data", func(t *testing.T) {
+		history := []providers.Message{{Role: "user", Content: "Hello"}}
+		overhead := loop.estimateOverhead(history, 0, 0)
+		// Should use fallback: 20% of 200k = 40000
+		if overhead != 40000 {
+			t.Errorf("expected fallback 40000, got %d", overhead)
+		}
+	})
+
+	t.Run("with_calibration", func(t *testing.T) {
+		history := []providers.Message{
+			{Role: "user", Content: "Hello world"},
+			{Role: "assistant", Content: "Hi there!"},
+		}
+		// Simulate: LLM reported 50k prompt tokens for 2 messages.
+		// History estimate for those 2 messages is small (~7 tokens).
+		// So overhead should be ~49993.
+		overhead := loop.estimateOverhead(history, 50000, 2)
+		if overhead <= 0 {
+			t.Errorf("expected positive overhead, got %d", overhead)
+		}
+		// Should be clamped to 40% of context = 80000
+		maxOverhead := int(float64(200000) * 0.4)
+		if overhead > maxOverhead {
+			t.Errorf("overhead %d exceeds max %d", overhead, maxOverhead)
+		}
+	})
+}
+
+func TestPruneContextMessagesDefaultEnabled(t *testing.T) {
+	// With nil config, pruning should run (not return early).
+	// Create messages with a large tool result that exceeds soft trim threshold.
+	largeContent := make([]byte, 10000)
+	for i := range largeContent {
+		largeContent[i] = 'x'
+	}
+	msgs := []providers.Message{
+		{Role: "user", Content: "Search for info"},
+		{Role: "assistant", Content: "I'll search.", ToolCalls: []providers.ToolCall{{ID: "tc1", Name: "web_fetch"}}},
+		{Role: "tool", Content: string(largeContent), ToolCallID: "tc1"},
+		{Role: "assistant", Content: "Found results."},
+		{Role: "user", Content: "Thanks"},
+		{Role: "assistant", Content: "You're welcome."},
+		{Role: "user", Content: "More info"},
+		{Role: "assistant", Content: "Sure, here you go."},
+	}
+
+	// With nil config and small context window (to trigger soft trim ratio > 0.3),
+	// pruning should trim the large tool result.
+	result := pruneContextMessages(msgs, 5000, nil)
+
+	// The large tool result should have been trimmed.
+	toolMsg := result[2]
+	if len(toolMsg.Content) >= 10000 {
+		t.Error("expected large tool result to be trimmed, but it was not")
+	}
+}
+
+func TestPruneContextMessagesExplicitOff(t *testing.T) {
+	msgs := []providers.Message{
+		{Role: "user", Content: "Hello"},
+	}
+	cfg := &config.ContextPruningConfig{Mode: "off"}
+	result := pruneContextMessages(msgs, 200000, cfg)
+	// Should return original messages unchanged.
+	if len(result) != len(msgs) {
+		t.Errorf("expected %d messages, got %d", len(msgs), len(result))
 	}
 }
 

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { useWsCall } from "@/hooks/use-ws-call";
@@ -12,6 +12,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+} from "lucide-react";
+
+const ReactMarkdown = lazy(() => import("react-markdown"));
 
 interface AboutDialogProps {
   open: boolean;
@@ -25,9 +32,14 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
   const { call: fetchHealth, data: health } =
     useWsCall<HealthPayload>(Methods.HEALTH);
 
+  const [notesExpanded, setNotesExpanded] = useState(false);
+
   useEffect(() => {
     if (open && connected) {
       fetchHealth();
+    }
+    if (!open) {
+      setNotesExpanded(false);
     }
   }, [open, connected, fetchHealth]);
 
@@ -36,14 +48,20 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
   const latestVersion = health?.latestVersion;
   const updateAvailable = health?.updateAvailable ?? false;
   const updateUrl = health?.updateUrl;
+  const releaseNotes = health?.releaseNotes;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2.5">
             <img src="/goclaw-icon.svg" alt="GoClaw" className="h-7 w-7" />
             {t("about.title")}
+            {updateAvailable && latestVersion && (
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                {latestVersion}
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -67,69 +85,59 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
               <div className="font-medium">
                 {t("about.updateAvailable", { version: latestVersion })}
               </div>
+
+              {/* Release notes (collapsible, markdown) */}
+              {releaseNotes && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setNotesExpanded((v) => !v)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {notesExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                    {t("about.releaseNotes")}
+                  </button>
+                  {notesExpanded && (
+                    <div className="mt-1.5 max-h-48 overflow-y-auto rounded border bg-muted/50 p-2.5 text-xs prose prose-xs dark:prose-invert prose-headings:text-sm prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-li:my-0">
+                      <Suspense fallback={<span>{releaseNotes}</span>}>
+                        <ReactMarkdown>{releaseNotes}</ReactMarkdown>
+                      </Suspense>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {updateUrl && (
                 <a
                   href={updateUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block text-primary hover:underline"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
                 >
                   {t("about.viewRelease")}
+                  <ExternalLink className="size-3" />
                 </a>
               )}
             </div>
           )}
 
-          {/* Source Code */}
-          <div className="grid grid-cols-[140px_1fr] items-baseline gap-2 text-sm">
-            <span className="text-muted-foreground">{t("about.sourceCode")}</span>
-            <a
-              href="https://github.com/nextlevelbuilder/goclaw"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline break-all"
-            >
-              github.com/nextlevelbuilder/goclaw
-            </a>
-          </div>
-
-          {/* License */}
-          <div className="grid grid-cols-[140px_1fr] items-baseline gap-2 text-sm">
-            <span className="text-muted-foreground">{t("about.license")}</span>
-            <a
-              href="https://creativecommons.org/licenses/by-nc/4.0/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              CC BY-NC 4.0
-            </a>
-          </div>
-
-          {/* Documentation */}
-          <div className="grid grid-cols-[140px_1fr] items-baseline gap-2 text-sm">
-            <span className="text-muted-foreground">{t("about.documentation")}</span>
-            <a
-              href="https://docs.goclaw.sh"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              docs.goclaw.sh
-            </a>
-          </div>
-
-          {/* Report Bug */}
-          <div className="grid grid-cols-[140px_1fr] items-baseline gap-2 text-sm">
-            <span className="text-muted-foreground">{t("about.reportBug")}</span>
-            <a
-              href="https://github.com/nextlevelbuilder/goclaw/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline break-all"
-            >
-              github.com/.../issues
-            </a>
+          {/* Links */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {[
+              { label: t("about.sourceCode"), href: "https://github.com/nextlevelbuilder/goclaw" },
+              { label: t("about.license"), href: "https://creativecommons.org/licenses/by-nc/4.0/" },
+              { label: t("about.documentation"), href: "https://docs.goclaw.sh" },
+              { label: t("about.reportBug"), href: "https://github.com/nextlevelbuilder/goclaw/issues" },
+            ].map(({ label, href }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                {label}
+              </a>
+            ))}
           </div>
         </div>
 

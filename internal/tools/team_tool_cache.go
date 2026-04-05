@@ -263,11 +263,40 @@ func (m *TeamToolManager) agentKeyFromID(ctx context.Context, id uuid.UUID) stri
 	return ag.AgentKey
 }
 
+// ============================================================
+// TeamToolBackend exported wrappers (cache layer)
+// ============================================================
+
+func (m *TeamToolManager) ResolveTeam(ctx context.Context) (*store.TeamData, uuid.UUID, error) {
+	return m.resolveTeam(ctx)
+}
+func (m *TeamToolManager) RequireLead(ctx context.Context, team *store.TeamData, agentID uuid.UUID) error {
+	return m.requireLead(ctx, team, agentID)
+}
+func (m *TeamToolManager) ResolveAgentByKey(ctx context.Context, key string) (uuid.UUID, error) {
+	return m.resolveAgentByKey(ctx, key)
+}
+func (m *TeamToolManager) AgentKeyFromID(ctx context.Context, id uuid.UUID) string {
+	return m.agentKeyFromID(ctx, id)
+}
+func (m *TeamToolManager) CachedListMembers(ctx context.Context, teamID, agentID uuid.UUID) ([]store.TeamMemberData, error) {
+	return m.cachedListMembers(ctx, teamID, agentID)
+}
+func (m *TeamToolManager) CachedGetAgentByID(ctx context.Context, id uuid.UUID) (*store.AgentData, error) {
+	return m.cachedGetAgentByID(ctx, id)
+}
+func (m *TeamToolManager) PreWarmAgentKeyCache(ctx context.Context, keys []string) {
+	m.preWarmAgentKeyCache(ctx, keys)
+}
+func (m *TeamToolManager) PreWarmAgentIDCache(ctx context.Context, ids []uuid.UUID) {
+	m.preWarmAgentIDCache(ctx, ids)
+}
+
 // taskTeamWorkspace extracts the team_workspace path from task metadata.
 func taskTeamWorkspace(task *store.TeamTaskData) string {
 	if task.Metadata == nil {
 		return ""
 	}
-	ws, _ := task.Metadata["team_workspace"].(string)
+	ws, _ := task.Metadata[TaskMetaTeamWorkspace].(string)
 	return ws
 }

@@ -21,6 +21,23 @@ type TokenSource interface {
 	Token() (string, error)
 }
 
+type RouteEligibilityClass string
+
+const (
+	RouteEligibilityHealthy RouteEligibilityClass = "healthy"
+	RouteEligibilityUnknown RouteEligibilityClass = "unknown"
+	RouteEligibilityBlocked RouteEligibilityClass = "blocked"
+)
+
+type RouteEligibility struct {
+	Class  RouteEligibilityClass
+	Reason string
+}
+
+type RouteEligibilityAware interface {
+	RouteEligibility(ctx context.Context) RouteEligibility
+}
+
 // Provider is the interface all LLM providers must implement.
 type Provider interface {
 	// Chat sends messages to the LLM and returns a response.
@@ -67,6 +84,10 @@ type ChatResponse struct {
 	// RawAssistantContent preserves the raw content blocks array from the provider response.
 	// Used by Anthropic to pass thinking blocks back in tool use loops (required by API).
 	RawAssistantContent json.RawMessage `json:"-"`
+
+	// ThinkingSignature is the accumulated signature from streaming thinking blocks.
+	// Required by Anthropic API for tool use passback when thinking is enabled.
+	ThinkingSignature string `json:"-"`
 }
 
 // StreamChunk is a piece of a streaming response.
@@ -86,22 +107,22 @@ type ImageContent struct {
 // Stored in session JSONB (~60 bytes each) instead of megabytes for base64.
 // On reload, MediaRefs are resolved to file paths and loaded into Images (for images).
 type MediaRef struct {
-	ID       string `json:"id"`                // unique media ID (uuid)
-	MimeType string `json:"mime_type"`         // e.g. "image/jpeg", "application/pdf"
-	Kind     string `json:"kind"`              // "image", "video", "audio", "document"
-	Path     string `json:"path,omitempty"`    // absolute workspace path (persisted for /v1/files/ serving)
+	ID       string `json:"id"`             // unique media ID (uuid)
+	MimeType string `json:"mime_type"`      // e.g. "image/jpeg", "application/pdf"
+	Kind     string `json:"kind"`           // "image", "video", "audio", "document"
+	Path     string `json:"path,omitempty"` // absolute workspace path (persisted for /v1/files/ serving)
 }
 
 // Message represents a conversation message.
 type Message struct {
-	Role            string         `json:"role"` // "system", "user", "assistant", "tool"
-	Content         string         `json:"content"`
-	Thinking        string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
-	Images          []ImageContent `json:"-"`                    // vision: base64 images (runtime only, never persisted to DB)
-	MediaRefs       []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
-	ToolCalls       []ToolCall     `json:"tool_calls,omitempty"`
-	ToolCallID      string         `json:"tool_call_id,omitempty"`      // for role="tool" responses
-	IsError         bool           `json:"is_error,omitempty"`          // for role="tool" responses
+	Role       string         `json:"role"` // "system", "user", "assistant", "tool"
+	Content    string         `json:"content"`
+	Thinking   string         `json:"thinking,omitempty"`   // reasoning_content for thinking models (Kimi, DeepSeek, etc.)
+	Images     []ImageContent `json:"-"`                    // vision: base64 images (runtime only, never persisted to DB)
+	MediaRefs  []MediaRef     `json:"media_refs,omitempty"` // persistent media file references
+	ToolCalls  []ToolCall     `json:"tool_calls,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"` // for role="tool" responses
+	IsError    bool           `json:"is_error,omitempty"`     // for role="tool" responses
 
 	// Phase is a Codex-specific field (gpt-5.3-codex) indicating message purpose.
 	// Values: "commentary" (intermediate), "final_answer" (closeout), or "" (unset).
@@ -121,10 +142,11 @@ type Message struct {
 
 // ToolCall represents a tool invocation requested by the LLM.
 type ToolCall struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Arguments map[string]any    `json:"arguments"`
-	Metadata  map[string]string `json:"metadata,omitempty"` // provider-specific (e.g. Gemini thought_signature)
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Arguments  map[string]any    `json:"arguments"`
+	Metadata   map[string]string `json:"metadata,omitempty"`    // provider-specific (e.g. Gemini thought_signature)
+	ParseError string            `json:"parse_error,omitempty"` // set when arguments JSON was malformed/truncated
 }
 
 // ToolDefinition describes a tool available to the LLM.
@@ -138,6 +160,7 @@ type ToolFunctionSchema struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
+	Strict      *bool          `json:"strict,omitempty"` // OpenAI strict mode — constrained decoding
 }
 
 // Usage tracks token consumption.

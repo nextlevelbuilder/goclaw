@@ -1,0 +1,191 @@
+{
+  "title": "Memory",
+  "description": "Browse and manage agent memory documents, chunks, and embeddings",
+  "search": "Search",
+  "create": "Create",
+  "indexAll": "Index All",
+  "indexing": "Indexing...",
+  "emptyTitle": "No memory documents",
+  "emptyAgentDescription": "This agent has no memory documents yet.",
+  "emptyGlobalDescription": "No memory documents found across any agent.",
+  "filters": {
+    "agent": "Agent",
+    "allAgents": "All agents",
+    "scope": "Scope",
+    "allScope": "All (global + personal)",
+    "selectAgent": "Select an agent"
+  },
+  "tabs": {
+    "documents": "Documents",
+    "knowledgeGraph": "Knowledge Graph"
+  },
+  "columns": {
+    "path": "Path",
+    "agent": "Agent",
+    "scope": "Scope",
+    "hash": "Hash",
+    "updated": "Updated",
+    "actions": "Actions"
+  },
+  "scopeLabel": {
+    "personal": "Personal",
+    "global": "Global"
+  },
+  "delete": {
+    "title": "Delete Memory Document",
+    "description": "Are you sure you want to delete \"{{path}}\"? This will also delete all associated chunks and embeddings.",
+    "confirmLabel": "Delete"
+  },
+  "createDialog": {
+    "title": "Create Memory Document",
+    "path": "Path *",
+    "pathPlaceholder": "e.g. notes/project-overview.md",
+    "content": "Content *",
+    "contentPlaceholder": "Document content...",
+    "agentId": "Agent *",
+    "agentIdPlaceholder": "Select agent...",
+    "scope": "Scope",
+    "existingScope": "Existing scope",
+    "customScope": "Custom",
+    "selectGroupUser": "Select group/user...",
+    "scopeHint": "Global = shared across all users. Personal = scoped to a specific user or group chat.",
+    "autoIndex": "Auto-index after creation",
+    "agentRequired": "Please select an agent",
+    "pathRequired": "Path is required",
+    "contentRequired": "Content is required",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creating": "Creating..."
+  },
+  "documentDialog": {
+    "title": "Memory Document",
+    "path": "Path:",
+    "agent": "Agent:",
+    "scope": "Scope:",
+    "hash": "Hash:",
+    "updated": "Updated:",
+    "content": "Content",
+    "chunks": "Chunks ({{count}})",
+    "chunkIndex": "Chunk {{index}}",
+    "noChunks": "No chunks",
+    "embedded": "Embedded",
+    "noEmbedding": "No embedding"
+  },
+  "searchDialog": {
+    "title": "Search Memory",
+    "query": "Search Query",
+    "queryPlaceholder": "Enter search query...",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "Filter by agent...",
+    "limit": "Limit",
+    "search": "Search",
+    "searching": "Searching...",
+    "results": "Results",
+    "noResults": "No results found",
+    "similarity": "similarity",
+    "path": "Path:"
+  },
+  "kg": {
+    "pageTitle": "Knowledge Graph",
+    "pageDescription": "Explore entities and relationships extracted from agent memory.",
+    "selectAgentTitle": "Select an agent",
+    "selectAgentDescription": "Choose an agent to view its knowledge graph.",
+    "emptyTitle": "No entities",
+    "emptyDescription": "No knowledge graph entities for this agent yet.",
+    "emptySearchDescription": "No entities match your search.",
+    "stats": {
+      "entities": "Entities: {{count}}",
+      "relations": "Relations: {{count}}"
+    },
+    "search": {
+      "placeholder": "Search entities...",
+      "button": "Search",
+      "clear": "Clear"
+    },
+    "refresh": "Refresh",
+    "extract": "Extract",
+    "columns": {
+      "name": "Name",
+      "type": "Type",
+      "description": "Description",
+      "confidence": "Confidence",
+      "actions": "Actions",
+      "observations": "Observations",
+      "relations": "Relations"
+    },
+    "deleteEntity": {
+      "title": "Delete Entity",
+      "description": "Delete \"{{name}}\"? This will also delete all associated relations.",
+      "confirmLabel": "Delete"
+    },
+    "entity": {
+      "externalId": "External ID:",
+      "confidence": "Confidence:",
+      "description": "Description:",
+      "source": "Source:",
+      "properties": "Properties:",
+      "relations": "Relations",
+      "traverse": "Traverse (2-hop)",
+      "traversing": "Traversing...",
+      "loading": "Loading...",
+      "noRelations": "No relations found.",
+      "traversalResults": "Traversal Results ({{count}})",
+      "direction": {
+        "outgoing": "→ outgoing",
+        "incoming": "← incoming"
+      },
+      "columns": {
+        "direction": "Direction",
+        "relation": "Relation",
+        "target": "Target",
+        "confidence": "Confidence"
+      }
+    },
+    "extractDialog": {
+      "title": "Extract Entities from Text",
+      "providerLabel": "Extraction Provider",
+      "modelLabel": "Extraction Model",
+      "textLabel": "Text to extract from",
+      "textPlaceholder": "Paste conversation text, notes, or any content to extract entities and relations from...",
+      "extract": "Extract",
+      "extracting": "Extracting...",
+      "cancel": "Cancel",
+      "agentId": "Agent ID",
+      "agentIdPlaceholder": "Leave blank for global"
+    },
+    "graphView": {
+      "loading": "Loading graph...",
+      "empty": "No entities to visualize",
+      "nodes": "{{count}} nodes",
+      "edges": "{{count}} edges"
+    }
+  },
+  "toast": {
+    "created": "Memory document created",
+    "deleted": "Memory document deleted",
+    "indexed": "All documents indexed",
+    "failedCreate": "Failed to create document",
+    "failedDelete": "Failed to delete document",
+    "failedIndex": "Failed to index documents",
+    "entitySaved": "Entity saved",
+    "entitySaveFailed": "Failed to save entity",
+    "entityDeleted": "Entity deleted",
+    "entityDeleteFailed": "Failed to delete entity",
+    "extractionComplete": "Extraction complete",
+    "extractionFailed": "Extraction failed",
+    "traversalFailed": "Traversal failed",
+    "unknownError": "Unknown error",
+    "docCreated": "Document created",
+    "docCreateFailed": "Failed to create document",
+    "docUpdated": "Document updated",
+    "docUpdateFailed": "Failed to update document",
+    "docDeleted": "Document deleted",
+    "docDeleteFailed": "Failed to delete document",
+    "docIndexed": "Document indexed",
+    "docIndexFailed": "Failed to index document",
+    "allIndexed": "All documents indexed",
+    "allIndexFailed": "Failed to index all",
+    "searchFailed": "Search failed",
+    "docLoadFailed": "Failed to load document"
+  }
+}

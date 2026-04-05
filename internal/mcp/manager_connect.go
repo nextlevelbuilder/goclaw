@@ -241,21 +241,30 @@ func (m *Manager) healthLoop(ctx context.Context, ss *serverState) {
 					ss.connected.Store(true)
 					ss.mu.Lock()
 					ss.reconnAttempts = 0
+					ss.healthFailures = 0
 					ss.lastErr = ""
 					ss.mu.Unlock()
 					continue
 				}
-				ss.connected.Store(false)
 				ss.mu.Lock()
+				ss.healthFailures++
+				failures := ss.healthFailures
 				ss.lastErr = err.Error()
 				ss.mu.Unlock()
 
-				slog.Warn("mcp.server.health_failed", "server", ss.name, "error", err)
-				m.tryReconnect(ctx, ss)
+				slog.Warn("mcp.server.health_failed", "server", ss.name, "error", err, "consecutive", failures)
+
+				// Only mark disconnected and attempt reconnect after consecutive failures
+				// to tolerate transient errors (e.g. 504 from upstream proxy).
+				if failures >= healthFailThreshold {
+					ss.connected.Store(false)
+					m.tryReconnect(ctx, ss)
+				}
 			} else {
 				ss.connected.Store(true)
 				ss.mu.Lock()
 				ss.reconnAttempts = 0
+				ss.healthFailures = 0
 				ss.lastErr = ""
 				ss.mu.Unlock()
 			}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyRound, Plus, RefreshCw, Pencil, Trash2 } from "lucide-react";
+import { KeyRound, Plus, RefreshCw, Pencil, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -11,6 +11,7 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useCliCredentials, useCliCredentialPresets } from "./hooks/use-cli-credentials";
 import { CliCredentialFormDialog } from "./cli-credential-form-dialog";
+import { CLIUserCredentialsDialog } from "./cli-user-credentials-dialog";
 import type { SecureCLIBinary, CLICredentialInput } from "./hooks/use-cli-credentials";
 
 export function CliCredentialsPage() {
@@ -21,6 +22,7 @@ export function CliCredentialsPage() {
   const [editItem, setEditItem] = useState<SecureCLIBinary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SecureCLIBinary | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [userCredsTarget, setUserCredsTarget] = useState<SecureCLIBinary | null>(null);
 
   const { items, loading, refresh, createCredential, updateCredential, deleteCredential } =
     useCliCredentials();
@@ -128,6 +130,9 @@ export function CliCredentialsPage() {
                     <td className="px-4 py-3 text-muted-foreground">{item.timeout_seconds}s</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => setUserCredsTarget(item)} title={t("userCredentials.title")}>
+                          <Users className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -172,6 +177,14 @@ export function CliCredentialsPage() {
         onConfirm={handleDelete}
         loading={deleteLoading}
       />
+
+      {userCredsTarget && (
+        <CLIUserCredentialsDialog
+          open={!!userCredsTarget}
+          onOpenChange={(open: boolean) => !open && setUserCredsTarget(null)}
+          binary={userCredsTarget}
+        />
+      )}
     </div>
   );
 }

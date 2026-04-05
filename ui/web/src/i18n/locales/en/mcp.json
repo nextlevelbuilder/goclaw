@@ -18,6 +18,7 @@
   },
   "viewTools": "View tools",
   "manageGrants": "Manage grants",
+  "reconnect": "Reconnect",
   "delete": {
     "title": "Delete MCP Server",
     "description": "Are you sure you want to delete \"{{name}}\"? This will also remove all associated grants.",
@@ -98,7 +99,9 @@
     "deleted": "MCP server deleted",
     "failedCreate": "Failed to create MCP server",
     "failedUpdate": "Failed to update MCP server",
-    "failedDelete": "Failed to delete MCP server"
+    "failedDelete": "Failed to delete MCP server",
+    "reconnected": "MCP server connection reset",
+    "failedReconnect": "Failed to reconnect MCP server"
   },
   "userCredentials": {
     "title": "My Credentials",

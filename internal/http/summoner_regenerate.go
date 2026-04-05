@@ -33,7 +33,7 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, p
 	if err != nil {
 		slog.Warn("summoning: failed to read existing files", "agent", agentID, "error", err)
 		s.emitEvent(agentID, tenantID, SummonEventFailed, "", err.Error())
-		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+		s.setAgentStatus(context.Background(), tenantID, agentID, store.AgentStatusSummonFailed)
 		return
 	}
 
@@ -44,7 +44,7 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, p
 		slog.Warn("summoning: regeneration failed", "agent", agentID, "error", err)
 		s.emitEvent(agentID, tenantID, SummonEventFailed, "", err.Error())
 		// Use fresh context — the original may have timed out, but we still need to update status.
-		s.setAgentStatus(context.Background(), agentID, store.AgentStatusSummonFailed)
+		s.setAgentStatus(context.Background(), tenantID, agentID, store.AgentStatusSummonFailed)
 		return
 	}
 
@@ -56,7 +56,19 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, p
 		updates["frontmatter"] = fm
 	}
 	if name := extractIdentityName(files[bootstrap.IdentityFile]); name != "" {
-		updates["display_name"] = name
+		agent, _ := s.agents.GetByID(ctx, agentID)
+		if agent != nil && agent.DisplayName != "" {
+			// User already set a custom name — preserve it, sync IDENTITY.md to match
+			if name != agent.DisplayName {
+				updated := bootstrap.UpdateIdentityField(files[bootstrap.IdentityFile], "Name", agent.DisplayName)
+				if updated != files[bootstrap.IdentityFile] {
+					_ = s.agents.SetAgentContextFile(ctx, agentID, bootstrap.IdentityFile, updated)
+				}
+			}
+		} else {
+			// No custom name — use LLM-generated name
+			updates["display_name"] = name
+		}
 	}
 	if len(updates) > 0 {
 		if err := s.agents.Update(ctx, agentID, updates); err != nil {
@@ -64,7 +76,7 @@ func (s *AgentSummoner) RegenerateAgent(agentID uuid.UUID, tenantID uuid.UUID, p
 		}
 	}
 
-	s.setAgentStatus(ctx, agentID, store.AgentStatusActive)
+	s.setAgentStatus(ctx, tenantID, agentID, store.AgentStatusActive)
 	s.emitEvent(agentID, tenantID, SummonEventCompleted, "", "")
 
 	slog.Info("summoning: regeneration completed", "agent", agentID, "files", len(files))
@@ -191,7 +203,15 @@ func (s *AgentSummoner) ensureUserPredefined(ctx context.Context, agentID uuid.U
 	}
 }
 
-func (s *AgentSummoner) setAgentStatus(ctx context.Context, agentID uuid.UUID, status string) {
+func (s *AgentSummoner) setAgentStatus(ctx context.Context, tenantID, agentID uuid.UUID, status string) {
+	// Summoning frequently calls this after a timeout/cancel path with context.Background().
+	// Re-attach tenant scope so AgentStore.Update targets the right tenant row.
+	if store.TenantIDFromContext(ctx) == uuid.Nil && !store.IsCrossTenant(ctx) {
+		if tenantID == uuid.Nil {
+			tenantID = store.MasterTenantID
+		}
+		ctx = store.WithTenantID(ctx, tenantID)
+	}
 	if err := s.agents.Update(ctx, agentID, map[string]any{"status": status}); err != nil {
 		slog.Warn("summoning: failed to update agent status", "agent", agentID, "status", status, "error", err)
 	}

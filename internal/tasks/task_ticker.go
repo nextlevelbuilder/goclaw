@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -234,12 +235,21 @@ func (t *TaskTicker) notifyLeaders(ctx context.Context, tasks []store.RecoveredT
 			chatID = scope.TeamID.String()
 		}
 
+		// Resolve PeerKind from first task's metadata for correct session routing (#266).
+		var peerKind string
+		if fullTask, err := t.teams.GetTask(ctx, scopeTasks[0].ID); err == nil && fullTask != nil && fullTask.Metadata != nil {
+			if pk, ok := fullTask.Metadata["peer_kind"].(string); ok {
+				peerKind = pk
+			}
+		}
+
 		if !t.msgBus.TryPublishInbound(bus.InboundMessage{
 			Channel:  channel,
 			SenderID: "ticker:system",
 			ChatID:   chatID,
 			AgentID:  lead.AgentKey,
 			UserID:   team.CreatedBy,
+			PeerKind: peerKind,
 			TenantID: scope.TenantID,
 			Content:  content,
 		}) {
@@ -261,13 +271,11 @@ func (t *TaskTicker) broadcastStaleEvents(ctx context.Context, tasks []store.Rec
 			continue
 		}
 		seen[task.TeamID] = true
-		bus.BroadcastForTenant(t.msgBus, protocol.EventTeamTaskStale, task.TenantID, protocol.TeamTaskEventPayload{
-			TeamID:    task.TeamID.String(),
-			Status:    store.TeamTaskStatusStale,
-			Timestamp: time.Now().UTC().Format("2006-01-02T15:04:05Z"),
-			ActorType: "system",
-			ActorID:   "task_ticker",
-		})
+		bus.BroadcastForTenant(t.msgBus, protocol.EventTeamTaskStale, task.TenantID, tools.BuildTaskEventPayload(
+			task.TeamID.String(), "",
+			store.TeamTaskStatusStale,
+			"system", "task_ticker",
+		))
 	}
 }
 

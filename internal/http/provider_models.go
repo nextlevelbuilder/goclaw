@@ -12,13 +12,20 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
+	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
+}
+
+type ProviderModelsResponse struct {
+	Models            []ModelInfo                    `json:"models"`
+	ReasoningDefaults *store.ProviderReasoningConfig `json:"reasoning_defaults,omitempty"`
 }
 
 // handleListProviderModels proxies to the upstream provider API to list
@@ -39,15 +46,27 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	respond := func(models []ModelInfo) {
+		writeJSON(w, http.StatusOK, ProviderModelsResponse{
+			Models:            models,
+			ReasoningDefaults: reasoningDefaultsForModels(p.Settings, models),
+		})
+	}
+
 	// Claude CLI doesn't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderClaudeCLI {
-		writeJSON(w, http.StatusOK, map[string]any{"models": claudeCLIModels()})
+		respond(claudeCLIModels())
+		return
+	}
+
+	if p.ProviderType == store.ProviderChatGPTOAuth {
+		respond(chatGPTOAuthModels())
 		return
 	}
 
 	// ACP agents don't need an API key — return hardcoded models
 	if p.ProviderType == store.ProviderACP {
-		writeJSON(w, http.StatusOK, map[string]any{"models": acpModels()})
+		respond(acpModels())
 		return
 	}
 
@@ -86,11 +105,26 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	if err != nil {
 		slog.Warn("providers.models", "provider", p.Name, "error", err)
 		// Return empty list instead of error — provider may not support /models
-		writeJSON(w, http.StatusOK, map[string]any{"models": []ModelInfo{}})
+		respond([]ModelInfo{})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+	respond(withReasoningCapabilities(models))
+}
+
+func reasoningDefaultsForModels(
+	settings []byte,
+	models []ModelInfo,
+) *store.ProviderReasoningConfig {
+	if len(models) == 0 {
+		return nil
+	}
+	for _, model := range models {
+		if model.Reasoning != nil {
+			return store.ParseProviderReasoningConfig(settings)
+		}
+	}
+	return nil
 }
 
 // fetchAnthropicModels calls the Anthropic models API.
@@ -292,4 +326,29 @@ func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo
 		models = append(models, ModelInfo{ID: m.ID, Name: m.ID})
 	}
 	return models, nil
+}
+
+func chatGPTOAuthModels() []ModelInfo {
+	return withReasoningCapabilities([]ModelInfo{
+		{ID: "gpt-5.4", Name: "GPT-5.4"},
+		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
+		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
+		{ID: "gpt-5.3-codex-spark", Name: "GPT-5.3 Codex Spark"},
+		{ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex"},
+		{ID: "gpt-5.2", Name: "GPT-5.2"},
+		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex"},
+		{ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max"},
+		{ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini"},
+		{ID: "gpt-5.1", Name: "GPT-5.1"},
+	})
+}
+
+func withReasoningCapabilities(models []ModelInfo) []ModelInfo {
+	result := make([]ModelInfo, 0, len(models))
+	for _, model := range models {
+		next := model
+		next.Reasoning = providers.LookupReasoningCapability(model.ID)
+		result = append(result, next)
+	}
+	return result
 }
