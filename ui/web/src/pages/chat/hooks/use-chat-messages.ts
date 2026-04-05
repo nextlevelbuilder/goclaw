@@ -46,13 +46,19 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   // Team task handling (extracted hook)
   const { teamTasks, setTeamTasks } = useChatTeamTasks(addLocalMessage);
 
+  // When transitioning from empty to a new session key (new-chat send flow),
+  // skip the next loadHistory() call. The optimistic user message is already
+  // in state, and loadHistory() would race with chat.send — potentially
+  // returning empty history before the server persists the message.
+  const skipNextHistoryRef = useRef(false);
+
   // Reset streaming/run state when session changes
   const prevKeyRef = useRef(sessionKey);
   useEffect(() => {
     if (sessionKey === prevKeyRef.current) return;
     const wasEmpty = !prevKeyRef.current;
     prevKeyRef.current = sessionKey;
-    if (wasEmpty) return; // new-chat send flow, don't reset
+    if (wasEmpty) { skipNextHistoryRef.current = true; return; } // new-chat send flow, don't reset
 
     setStreamText(null); setThinkingText(null); setToolStream([]);
     setIsRunning(false); setActivity(null); setBlockReplies([]); setTeamTasks([]);
@@ -76,7 +82,13 @@ export function useChatMessages(sessionKey: string, agentId: string) {
   useEffect(() => {
     let cancelled = false;
     if (sessionKey) {
-      loadHistory();
+      // Skip loadHistory for new-chat flow (empty → key) to avoid racing
+      // with chat.send. The optimistic user message is already displayed.
+      if (skipNextHistoryRef.current) {
+        skipNextHistoryRef.current = false;
+      } else {
+        loadHistory();
+      }
       ws.call<{ isRunning?: boolean; runId?: string; activity?: RunActivity }>(Methods.CHAT_SESSION_STATUS, { sessionKey })
         .then((res) => {
           if (cancelled) return;
