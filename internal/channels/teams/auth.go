@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -16,9 +18,12 @@ import (
 )
 
 const (
-	openIDMetadataURL = "https://login.botframework.com/v1/.well-known/openidconfiguration"
-	expectedIssuer    = "https://api.botframework.com"
+	openIDMetadataURL  = "https://login.botframework.com/v1/.well-known/openidconfiguration"
+	expectedIssuer     = "https://api.botframework.com"
 	keyRefreshInterval = 1 * time.Hour
+	keyRefreshCooldown = 5 * time.Second  // prevent thundering herd on kid miss
+	jwtLeeway          = 30 * time.Second // clock skew tolerance
+	maxFetchBodySize   = 1 << 20          // 1MB limit for JWKS/OIDC responses
 )
 
 // jwksKey is a single JWK from the JWKS endpoint.
@@ -90,6 +95,7 @@ func (v *tokenValidator) Validate(tokenString string) error {
 		jwt.WithIssuer(expectedIssuer),
 		jwt.WithAudience(v.botID),
 		jwt.WithExpirationRequired(),
+		jwt.WithLeeway(jwtLeeway),
 	)
 	if err != nil {
 		return fmt.Errorf("jwt validation: %w", err)
@@ -122,16 +128,26 @@ func (v *tokenValidator) refreshKeysIfStale() error {
 	return v.forceRefreshKeys()
 }
 
-// forceRefreshKeys fetches OpenID metadata and JWKS keys unconditionally.
+// forceRefreshKeys fetches OpenID metadata and JWKS keys.
+// Uses a cooldown to prevent thundering herd when multiple goroutines
+// encounter an unknown kid simultaneously.
 func (v *tokenValidator) forceRefreshKeys() error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
+
+	// Cooldown: skip if another goroutine already refreshed recently
+	if time.Since(v.lastFetch) < keyRefreshCooldown {
+		return nil
+	}
 
 	// Fetch OpenID metadata to get JWKS URI
 	if v.jwksURI == "" {
 		oidc, err := fetchJSON[openIDConfig](openIDMetadataURL)
 		if err != nil {
 			return fmt.Errorf("openid metadata: %w", err)
+		}
+		if !isAllowedJWKSURI(oidc.JWKSURI) {
+			return fmt.Errorf("untrusted jwks_uri: %s", oidc.JWKSURI)
 		}
 		v.jwksURI = oidc.JWKSURI
 	}
@@ -161,6 +177,19 @@ func (v *tokenValidator) forceRefreshKeys() error {
 	return nil
 }
 
+// isAllowedJWKSURI validates that a JWKS URI is from a known Microsoft domain.
+func isAllowedJWKSURI(rawURI string) bool {
+	u, err := url.Parse(rawURI)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "login.botframework.com" ||
+		strings.HasSuffix(host, ".login.botframework.com") ||
+		host == "login.microsoftonline.com" ||
+		strings.HasSuffix(host, ".login.microsoftonline.com")
+}
+
 // parseRSAPublicKey builds an RSA public key from base64url-encoded N and E.
 func parseRSAPublicKey(nB64, eB64 string) (*rsa.PublicKey, error) {
 	nBytes, err := base64.RawURLEncoding.DecodeString(nB64)
@@ -177,6 +206,7 @@ func parseRSAPublicKey(nB64, eB64 string) (*rsa.PublicKey, error) {
 }
 
 // fetchJSON fetches a URL and decodes the JSON response into T.
+// Response body is limited to maxFetchBodySize to prevent memory exhaustion.
 func fetchJSON[T any](url string) (T, error) {
 	var zero T
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -189,7 +219,7 @@ func fetchJSON[T any](url string) (T, error) {
 		return zero, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
 	}
 	var result T
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxFetchBodySize)).Decode(&result); err != nil {
 		return zero, err
 	}
 	return result, nil

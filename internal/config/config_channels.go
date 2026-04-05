@@ -200,6 +200,7 @@ type TeamsConfig struct {
 	BotType     string              `json:"bot_type,omitempty"`     // "SingleTenant" (default) or "MultiTenant"
 	TenantID    string              `json:"tenant_id,omitempty"`    // required for SingleTenant
 	DMPolicy    string              `json:"dm_policy,omitempty"`    // "open" (default), "pairing", "allowlist", "disabled"
+	GroupPolicy string              `json:"group_policy,omitempty"` // "open" (default), "allowlist", "disabled"
 	WebhookPath string              `json:"webhook_path,omitempty"` // default "/webhooks/teams"
 	AllowFrom   FlexibleStringSlice `json:"allow_from"`
 	BlockReply  *bool               `json:"block_reply,omitempty"` // override gateway block_reply (nil = inherit)
