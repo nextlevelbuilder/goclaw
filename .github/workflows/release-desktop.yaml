@@ -4,6 +4,9 @@ on:
   push:
     tags: ['lite-v*']
 
+# lite-v1.0.0       → stable release (prerelease: false)
+# lite-v1.0.0-beta.1 → beta release  (prerelease: true)
+
 permissions:
   contents: write
 
@@ -168,7 +171,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: "GoClaw Lite v${{ steps.version.outputs.version }}"
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           generate_release_notes: true
           files: artifacts/*
         env:

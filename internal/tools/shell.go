@@ -221,7 +221,7 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			}
 		}
 		sandboxKey := ToolSandboxKeyFromCtx(ctx)
-		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey)
+		return t.executeCredentialed(ctx, cred, binary, cmdArgs, cwd, sandboxKey, command)
 	}
 
 	// Exec approval check (matching TS exec-approval.ts pipeline)

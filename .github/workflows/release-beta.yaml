@@ -1,0 +1,154 @@
+name: Release Beta
+
+on:
+  push:
+    tags:
+      - "v*-beta*"
+      - "v*-rc*"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  DOCKERHUB_IMAGE: digitop/goclaw
+
+jobs:
+  # Build cross-platform binaries and create prerelease
+  build-binaries:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build web UI
+        run: |
+          corepack enable && corepack prepare pnpm@10.28.2 --activate
+          cd ui/web && pnpm install --frozen-lockfile && pnpm build && cd ../..
+          mkdir -p internal/webui/dist
+          cp -r ui/web/dist/* internal/webui/dist/
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          CGO_ENABLED=0 go build -tags embedui \
+            -ldflags="-s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=${VERSION}" \
+            -o goclaw .
+          tar -czf "goclaw-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" goclaw migrations/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: goclaw-*.tar.gz
+
+  # Create GitHub prerelease with binaries
+  create-prerelease:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "GoClaw ${{ github.ref_name }}"
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build and push Docker images tagged as beta
+  docker-images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - variant: latest
+            suffix: ""
+            enable_otel: "false"
+            enable_embedui: "true"
+            enable_python: "true"
+            enable_full_skills: "false"
+          - variant: full
+            suffix: "-full"
+            enable_otel: "false"
+            enable_embedui: "true"
+            enable_python: "true"
+            enable_full_skills: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=raw,value=${{ github.ref_name }},suffix=${{ matrix.suffix }}
+            type=raw,value=beta,enable=${{ matrix.suffix == '' }},suffix=
+            type=raw,value=beta${{ matrix.suffix }},enable=${{ matrix.suffix != '' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ENABLE_OTEL=${{ matrix.enable_otel }}
+            ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
+            ENABLE_PYTHON=${{ matrix.enable_python }}
+            ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
+            VERSION=${{ github.ref_name }}
+          cache-from: type=gha,scope=beta-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=beta-${{ matrix.variant }}

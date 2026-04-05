@@ -41,8 +41,71 @@ func parseCommandBinary(command string) (binary string, args []string, err error
 	return words[0], words[1:], nil
 }
 
+// detectUnquotedShellOperators scans a command string for shell metacharacters
+// that appear OUTSIDE of single or double quotes. This prevents false positives
+// when argument values contain characters like | (e.g. --jq '.[0] | .name').
+// Returns the list of detected operators, or nil if the command is clean.
+func detectUnquotedShellOperators(command string) []string {
+	unquoted := extractUnquotedSegments(command)
+	if unquoted == "" {
+		return nil
+	}
+	return detectShellOperators(unquoted)
+}
+
+// extractUnquotedSegments returns a string containing only the characters
+// from command that are outside of single-quoted and double-quoted segments.
+// Backslash escaping is handled both inside double quotes (\") and outside
+// quotes (\' \" \\) to match go-shellwords parsing behavior — without this,
+// \" outside quotes would incorrectly enter double-quote mode and hide
+// subsequent shell operators from detection.
+func extractUnquotedSegments(command string) string {
+	var buf strings.Builder
+	buf.Grow(len(command))
+
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(command); i++ {
+		ch := command[i]
+		switch {
+		case inSingle:
+			if ch == '\'' {
+				inSingle = false
+			}
+		case inDouble:
+			if ch == '\\' && i+1 < len(command) {
+				i++ // skip escaped character inside double quotes
+			} else if ch == '"' {
+				inDouble = false
+			}
+		default:
+			switch ch {
+			case '\\':
+				// Backslash outside quotes escapes the next character, preventing
+				// it from being treated as a quote delimiter. Both the backslash
+				// and the escaped character are emitted as unquoted content so
+				// that operator detection still sees them (e.g. \; remains visible).
+				buf.WriteByte(ch)
+				if i+1 < len(command) {
+					i++
+					buf.WriteByte(command[i])
+				}
+			case '\'':
+				inSingle = true
+			case '"':
+				inDouble = true
+			default:
+				buf.WriteByte(ch)
+			}
+		}
+	}
+	return buf.String()
+}
+
 // detectShellOperators scans a raw command string for shell metacharacters.
 // Returns the list of detected operators, or nil if the command is clean.
+// NOTE: This function does not respect quoting — use detectUnquotedShellOperators
+// for credentialed exec where argument values may contain metacharacters.
 func detectShellOperators(command string) []string {
 	matches := shellOperatorPattern.FindAllString(command, -1)
 	if len(matches) == 0 {
@@ -101,17 +164,20 @@ func matchesBinaryDeny(args []string, denyPatternsJSON json.RawMessage) string {
 
 // executeCredentialed runs a CLI command in Direct Exec Mode (no shell).
 // Credentials are injected as env vars into the child process only.
+// rawCommand is the original command string before shell-word parsing (preserves quoting).
 func (t *ExecTool) executeCredentialed(ctx context.Context, cred *store.SecureCLIBinary,
-	binary string, args []string, cwd string, sandboxKey string) *Result {
+	binary string, args []string, cwd string, sandboxKey string, rawCommand string) *Result {
 
 	// Step 0: Reject NUL bytes (defense-in-depth — also checked in Execute()).
-	rawCommand := binary + " " + strings.Join(args, " ")
 	if strings.ContainsRune(rawCommand, '\x00') {
 		return ErrorResult("command contains invalid NUL byte")
 	}
 
-	// Step 1: Check for shell operators (early detection for clear error)
-	if ops := detectShellOperators(rawCommand); len(ops) > 0 {
+	// Step 1: Check for shell operators in the ORIGINAL command (preserves quoting).
+	// We check the raw command string (before shell-word parsing) so that characters
+	// inside quoted argument values (e.g. | in --jq '.[0] | ...') are not falsely flagged.
+	// Only top-level (unquoted) shell operators indicate actual command chaining attempts.
+	if ops := detectUnquotedShellOperators(rawCommand); len(ops) > 0 {
 		return credentialedShellOperatorError(rawCommand, ops)
 	}
 
@@ -302,10 +368,10 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 		return nil, "", nil
 	}
 	if cred == nil {
-		slog.Warn("secure_cli.lookup: no credential found", "binary", binary, "agent_id", agentID)
+		slog.Debug("secure_cli.lookup: no credential found", "binary", binary, "agent_id", agentID)
 		return nil, "", nil
 	}
-	slog.Info("secure_cli.lookup: found credential", "binary", binary, "cred_id", cred.ID, "env_size", len(cred.EncryptedEnv))
+	slog.Debug("secure_cli.lookup: found credential", "binary", binary, "cred_id", cred.ID, "env_size", len(cred.EncryptedEnv))
 	return cred, binary, args
 }
 

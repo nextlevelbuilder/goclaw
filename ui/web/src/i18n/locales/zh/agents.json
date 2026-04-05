@@ -161,7 +161,6 @@
     "extraHint": "只有已启用且已登录的 OpenAI Codex OAuth 别名才能参与。",
     "emptyExtras": "再登录一个 OpenAI Codex OAuth 别名即可启用 pooling。",
     "noReadyExtras": "请先登录并启用另一个 OpenAI Codex OAuth 别名，然后再添加到这里。",
-    "clickToAdd": "点击添加",
     "extraSelectableHint": "只有已启用且已登录的 OpenAI Codex OAuth 别名才能进入 active pool。",
     "selectedAccountsLabel": "池中的账户",
     "emptySelected": "还没有选择额外的池成员。",
@@ -607,10 +606,14 @@
       "userIdPlaceholder": "输入用户ID（例如 telegram:386246614）",
       "warning": "启用共享后，所有共享用户可以读写同一工作区目录中的文件。记忆共享单独控制。上下文文件仍按用户隔离。",
       "memoryGroupLabel": "记忆与知识图谱",
+      "memoryGroupDescription": "控制用户之间的记忆和知识图谱隔离",
       "folderGroupLabel": "工作区文件夹",
-      "shareMemory": "共享记忆与知识图谱",
-      "shareMemoryTip": "所有用户访问相同的记忆和知识图谱。与工作区文件夹共享无关。关闭时，每个用户拥有独立的记忆空间。",
-      "shareMemoryNote": "切换不会迁移数据——切换到共享模式后，现有的用户独立记忆将无法访问。"
+      "shareMemory": "共享记忆",
+      "shareMemoryTip": "所有用户访问相同的记忆存储。关闭时，每个用户拥有独立的记忆空间。知识图谱共享在下方单独控制。",
+      "shareMemoryNote": "切换不会迁移数据——切换到共享模式后，现有的用户独立记忆将无法访问。",
+      "shareKG": "共享知识图谱",
+      "shareKGTip": "所有用户访问相同的知识图谱。关闭时，每个用户拥有独立的知识图谱，读取操作会回退到全局规范数据。",
+      "shareKGNote": "切换不会迁移数据——切换到共享模式后，现有的用户独立知识图谱实体将无法访问。"
     },
     "compaction": {
       "title": "压缩",

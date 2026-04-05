@@ -33,4 +33,8 @@ type PairingStore interface {
 	IsPaired(ctx context.Context, senderID, channel string) (bool, error)
 	ListPending(ctx context.Context) []PairingRequestData
 	ListPaired(ctx context.Context) []PairedDeviceData
+	// MigrateGroupChatID updates all references from oldChatID to newChatID
+	// across paired_devices, sessions, and channel_contacts within a transaction.
+	// Scoped by tenant_id and channel. Idempotent (safe to call multiple times).
+	MigrateGroupChatID(ctx context.Context, channel, oldChatID, newChatID string) error
 }

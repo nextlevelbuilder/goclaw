@@ -28,6 +28,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           allow-initial-development-versions: true
+          # Repo default branch is dev, but releases are cut from main.
+          custom-arguments: --no-ci
 
   # Build cross-platform binaries and attach to release
   build-binaries:

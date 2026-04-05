@@ -139,6 +139,9 @@ func (m *mockPairingStore) IsPaired(_ context.Context, senderID, channel string)
 }
 func (m *mockPairingStore) ListPending(context.Context) []store.PairingRequestData { return nil }
 func (m *mockPairingStore) ListPaired(context.Context) []store.PairedDeviceData    { return nil }
+func (m *mockPairingStore) MigrateGroupChatID(context.Context, string, string, string) error {
+	return nil
+}
 
 func TestResolveAuth_GatewayToken(t *testing.T) {
 	setupTestCache(t, nil)

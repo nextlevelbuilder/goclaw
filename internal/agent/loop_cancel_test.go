@@ -18,7 +18,7 @@ func TestParallelToolCollection_ContextCancel(t *testing.T) {
 	var err error
 
 collectLoop:
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case r, ok := <-resultCh:
 			if !ok {
@@ -50,7 +50,7 @@ func TestParallelToolCollection_AllComplete(t *testing.T) {
 	collected := make([]indexedResult, 0, 3)
 
 collectLoop:
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case r, ok := <-resultCh:
 			if !ok {

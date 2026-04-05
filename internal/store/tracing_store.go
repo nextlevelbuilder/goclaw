@@ -159,6 +159,9 @@ type TracingStore interface {
 
 	// Maintenance
 	DeleteTracesOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+	// RecoverStaleRunningTraces marks traces stuck in "running" since before cutoff as "error".
+	// Returns count of recovered traces. Called on startup to fix orphans from crashes.
+	RecoverStaleRunningTraces(ctx context.Context, cutoff time.Time) (int64, error)
 
 	// ListCodexPoolSpans returns recent LLM call spans for agents using Codex OAuth pool providers.
 	ListCodexPoolSpans(ctx context.Context, agentID, tenantID uuid.UUID, poolProviders []string, limit int) ([]CodexPoolSpan, error)

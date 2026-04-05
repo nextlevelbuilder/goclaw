@@ -438,10 +438,7 @@ func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) s
 	// Cap description length to match BuildSummary() truncation (skillDescMaxLen=200 runes).
 	totalChars := 0
 	for _, s := range filtered {
-		descLen := len(s.Description)
-		if descLen > 200 {
-			descLen = 200
-		}
+		descLen := min(len(s.Description), 200)
 		totalChars += len(s.Name) + descLen + 10 // +10 for XML tags overhead
 	}
 	estimatedTokens := totalChars / 4

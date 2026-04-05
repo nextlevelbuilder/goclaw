@@ -217,8 +217,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildToolCallStyleSection()...)
 	}
 
-	// 2.5. Credentialed CLI context (appended after tooling, before safety) — skip during bootstrap
-	if !cfg.IsBootstrap && cfg.CredentialCLIContext != "" {
+	// 2.5. Credentialed CLI context (appended after tooling, before safety) — skip during bootstrap.
+	// Only inject when exec tool is available — CLI tools require exec to run.
+	if !cfg.IsBootstrap && cfg.CredentialCLIContext != "" && slices.Contains(cfg.ToolNames, "exec") {
 		lines = append(lines, cfg.CredentialCLIContext, "")
 	}
 

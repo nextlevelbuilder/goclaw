@@ -15,6 +15,7 @@ import (
 type Manager struct {
 	mu          sync.Mutex
 	browser     *rod.Browser
+	launcher    *launcher.Launcher // retained for PID-based cleanup on crash
 	refs        *RefStore
 	pages       map[string]*rod.Page        // targetID → page
 	console     map[string][]ConsoleMessage // targetID → console messages
@@ -107,12 +108,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 		// Connection dead — clean up and reconnect
 		m.logger.Info("browser connection lost, reconnecting")
-		m.closeTenantContextsLocked()
-		m.browser = nil
-		m.pages = make(map[string]*rod.Page)
-		m.console = make(map[string][]ConsoleMessage)
-		m.pageTenants = make(map[string]string)
-		m.refs = NewRefStore()
+		m.cleanupDeadBrowserLocked()
 	}
 
 	var controlURL string
@@ -126,23 +122,45 @@ func (m *Manager) Start(ctx context.Context) error {
 		controlURL = u
 		m.logger.Info("connecting to remote Chrome", "cdp", controlURL, "remote", m.remoteURL)
 	} else {
-		// Local Chrome — launch via rod launcher
+		// Local Chrome — launch via rod launcher with stability flags
+		launchCtx, launchCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer launchCancel()
+
 		l := launcher.New().
+			Context(launchCtx).
+			Leakless(true).
 			Headless(m.headless).
 			Set("disable-gpu").
 			Set("no-first-run").
-			Set("no-default-browser-check")
+			Set("no-default-browser-check").
+			Set("disable-dev-shm-usage").
+			Set("disable-software-rasterizer").
+			Set("disable-extensions").
+			Set("disable-background-networking").
+			Set("disable-renderer-backgrounding").
+			Set("disable-background-timer-throttling").
+			Set("disable-backgrounding-occluded-windows")
 
 		u, err := l.Launch()
 		if err != nil {
 			return fmt.Errorf("launch Chrome: %w", err)
 		}
 		controlURL = u
-		m.logger.Info("Chrome launched", "cdp", controlURL, "headless", m.headless)
+		m.launcher = l
+		m.logger.Info("Chrome launched", "cdp", controlURL, "headless", m.headless, "pid", l.PID())
 	}
 
-	b := rod.New().ControlURL(controlURL)
+	connectCtx, connectCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer connectCancel()
+
+	b := rod.New().Context(connectCtx).ControlURL(controlURL)
 	if err := b.Connect(); err != nil {
+		// If local launch succeeded but connect failed, kill the orphan process
+		if m.launcher != nil {
+			m.launcher.Kill()
+			m.launcher.Cleanup()
+			m.launcher = nil
+		}
 		return fmt.Errorf("connect to Chrome: %w", err)
 	}
 
@@ -182,6 +200,12 @@ func (m *Manager) Stop(ctx context.Context) error {
 	if m.remoteURL == "" {
 		// Local Chrome — close the browser process
 		err = m.browser.Close()
+		// Force-kill via launcher if retained
+		if m.launcher != nil {
+			m.launcher.Kill()
+			m.launcher.Cleanup()
+			m.launcher = nil
+		}
 	}
 	// Remote Chrome — just drop the connection; sidecar stays alive
 
@@ -201,6 +225,23 @@ func (m *Manager) closeTenantContextsLocked() {
 		}
 	}
 	m.tenantCtxs = make(map[string]*rod.Browser)
+}
+
+// cleanupDeadBrowserLocked resets all state and kills any orphan Chrome process.
+// Must be called with mu held.
+func (m *Manager) cleanupDeadBrowserLocked() {
+	m.closeTenantContextsLocked()
+	if m.launcher != nil {
+		m.launcher.Kill()
+		m.launcher.Cleanup()
+		m.launcher = nil
+	}
+	m.browser = nil
+	m.pages = make(map[string]*rod.Page)
+	m.console = make(map[string][]ConsoleMessage)
+	m.pageTenants = make(map[string]string)
+	m.pageLastUsed = make(map[string]time.Time)
+	m.refs = NewRefStore()
 }
 
 // MasterTenantID is the well-known master tenant UUID string.

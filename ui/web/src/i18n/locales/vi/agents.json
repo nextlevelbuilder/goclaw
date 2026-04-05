@@ -161,7 +161,6 @@
     "extraHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được tham gia.",
     "emptyExtras": "Đăng nhập thêm một bí danh OpenAI Codex OAuth để bật pooling.",
     "noReadyExtras": "Đăng nhập và bật thêm một bí danh OpenAI Codex OAuth để thêm vào đây.",
-    "clickToAdd": "Bấm để thêm",
     "extraSelectableHint": "Chỉ các bí danh OpenAI Codex OAuth đã bật và đã đăng nhập mới được vào active pool.",
     "selectedAccountsLabel": "Tài khoản trong pool",
     "emptySelected": "Chưa chọn pool member bổ sung nào.",
@@ -607,10 +606,14 @@
       "userIdPlaceholder": "Nhập user ID (vd: telegram:386246614)",
       "warning": "Khi bật chia sẻ, tất cả người dùng được chia sẻ có thể đọc và ghi file trong cùng thư mục workspace. Chia sẻ bộ nhớ được cài đặt riêng. File ngữ cảnh vẫn được cô lập theo từng người dùng.",
       "memoryGroupLabel": "Memory & Knowledge Graph",
+      "memoryGroupDescription": "Kiểm soát cô lập memory và knowledge graph giữa các người dùng",
       "folderGroupLabel": "Thư mục Workspace",
-      "shareMemory": "Chia sẻ Memory & KG",
-      "shareMemoryTip": "Tất cả người dùng truy cập chung Memory và Knowledge Graph. Độc lập với việc chia sẻ thư mục workspace. Khi tắt, mỗi người dùng có vùng nhớ riêng.",
-      "shareMemoryNote": "Bật/tắt không di chuyển dữ liệu — memory per-user trước đó sẽ không truy cập được trong chế độ shared."
+      "shareMemory": "Chia sẻ Memory",
+      "shareMemoryTip": "Tất cả người dùng truy cập chung Memory. Khi tắt, mỗi người dùng có vùng nhớ riêng. Chia sẻ KG được cài đặt riêng bên dưới.",
+      "shareMemoryNote": "Bật/tắt không di chuyển dữ liệu — memory per-user trước đó sẽ không truy cập được trong chế độ shared.",
+      "shareKG": "Chia sẻ Knowledge Graph",
+      "shareKGTip": "Tất cả người dùng truy cập chung Knowledge Graph. Khi tắt, mỗi người dùng có KG riêng với fallback đọc từ global canonical.",
+      "shareKGNote": "Bật/tắt không di chuyển dữ liệu — KG per-user trước đó sẽ không truy cập được trong chế độ shared."
     },
     "compaction": {
       "title": "Nén ngữ cảnh",
