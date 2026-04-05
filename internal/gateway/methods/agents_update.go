@@ -34,6 +34,7 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		MaxToolIterations *int   `json:"max_tool_iterations"`
 		IsDefault         *bool  `json:"is_default"`
 		BudgetCents       *int   `json:"budget_monthly_cents"`
+		RestrictToWorkspace *bool `json:"restrict_to_workspace"`
 		// Per-agent config overrides
 		ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
 		SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`
@@ -92,6 +93,9 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		}
 		if params.BudgetCents != nil {
 			updates["budget_monthly_cents"] = *params.BudgetCents
+		}
+		if params.RestrictToWorkspace != nil {
+			updates["restrict_to_workspace"] = *params.RestrictToWorkspace
 		}
 		// Per-agent JSONB config overrides
 		if len(params.ToolsConfig) > 0 {

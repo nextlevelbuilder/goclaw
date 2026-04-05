@@ -321,7 +321,10 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Allowlist: only permit known agent columns to be updated.
 	// Defense-in-depth against column injection via arbitrary JSON keys.
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
-	allowed["restrict_to_workspace"] = true
+	// Allow restrict_to_workspace to be updated (not in agentAllowedFields to avoid creation default override)
+	if v, ok := updates["restrict_to_workspace"]; ok {
+		allowed["restrict_to_workspace"] = v
+	}
 
 	validationProvider := ag.Provider
 	if providerName, ok := allowed["provider"].(string); ok && providerName != "" {
