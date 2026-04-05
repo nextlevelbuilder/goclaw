@@ -95,14 +95,15 @@ func (v *tokenValidator) Validate(tokenString string) error {
 		return fmt.Errorf("jwt validation: %w", err)
 	}
 
-	// SingleTenant: verify tenant ID claim
+	// SingleTenant: verify tenant ID claim when present.
+	// Bot Framework Connector tokens (issuer: api.botframework.com) don't carry "tid" —
+	// tenant isolation is enforced at the Azure Bot Service level.
 	if v.tenantID != "" {
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			return fmt.Errorf("invalid claims type")
 		}
-		tid, _ := claims["tid"].(string)
-		if tid != v.tenantID {
+		if tid, exists := claims["tid"].(string); exists && tid != "" && tid != v.tenantID {
 			return fmt.Errorf("tenant mismatch: got %q, want %q", tid, v.tenantID)
 		}
 	}
