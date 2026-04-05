@@ -572,6 +572,8 @@ func runGateway() {
 
 	// Register config-based channels as fallback when no DB instances loaded.
 	registerConfigChannels(cfg, channelMgr, msgBus, pgStores, instanceLoader)
+	// Teams is config-only (no DB factory) — always register from config.
+	registerTeamsChannel(cfg, channelMgr, msgBus)
 
 	// Register channels/instances/links/teams RPC methods
 	wireChannelRPCMethods(server, pgStores, channelMgr, agentRouter, msgBus, workspace)
