@@ -15,6 +15,7 @@ export const channelTypeLabels: Record<string, string> = {
   zalo_oa: "Zalo OA",
   zalo_personal: "Zalo Personal",
   whatsapp: "WhatsApp",
+  teams: "Microsoft Teams",
 };
 
 export type BadgeVariant =

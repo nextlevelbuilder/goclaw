@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
+	teamschannel "github.com/nextlevelbuilder/goclaw/internal/channels/teams"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
@@ -129,6 +130,18 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		} else {
 			channelMgr.RegisterChannel(channels.TypeFeishu, f)
 			slog.Info("feishu/lark channel enabled (config)")
+		}
+	}
+
+	if cfg.Channels.Teams.Enabled {
+		if cfg.Channels.Teams.BotID == "" {
+			recordMissingConfig(channels.TypeTeams, "Set channels.teams.bot_id in config.")
+		} else if t, err := teamschannel.New(cfg.Channels.Teams, msgBus); err != nil {
+			channelMgr.RecordFailure(channels.TypeTeams, "", err)
+			slog.Error("failed to initialize teams channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel(channels.TypeTeams, t)
+			slog.Info("teams channel enabled (config)")
 		}
 	}
 }
