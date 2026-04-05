@@ -16,6 +16,7 @@ pkg-helper
 # Environment
 .env*
 !.env.example
+!.env.cloudflared.example
 
 app
 browser-poc
