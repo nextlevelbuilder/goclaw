@@ -106,41 +106,38 @@ func buildToolCallStyleSection() []string {
 	}
 }
 
-// buildMemoryRecallSection generates the ## Memory Recall section for the system prompt.
+// buildMemoryRecallSection generates the ## Memory Context section for the system prompt.
+// Memory and KG context is automatically pre-loaded by the gateway (auto-recall),
+// so the instruction focuses on using the pre-loaded context rather than mandating tool calls.
 func buildMemoryRecallSection(hasMemoryGet, hasKG bool) []string {
-	lines := []string{"## Memory Recall (MANDATORY)", ""}
+	lines := []string{"## Memory Context", ""}
 
-	// Core mandatory rule — applies to ALL requests, not just questions about the past.
 	lines = append(lines,
-		"**MANDATORY FIRST STEP — before processing ANY user request or task:**",
+		"Memory and knowledge graph context has been **automatically pre-loaded** into this conversation.",
+		"**CRITICAL:** Always review the [System: IMPORTANT] message in the conversation before answering.",
+		"The pre-loaded data is authoritative — if it contains relevant results, you MUST use them.",
+		"Never claim something doesn't exist if the pre-loaded context shows otherwise.",
 		"")
+
+	lines = append(lines,
+		"If the pre-loaded context seems insufficient for the current request, you may run additional searches:")
 
 	if hasKG {
 		lines = append(lines,
-			"1. Run `knowledge_graph_search` with relevant keywords (people, projects, topics mentioned).",
-			"2. Run `memory_search` with a relevant query to recall prior context, decisions, and notes.")
-		if hasMemoryGet {
-			lines = append(lines,
-				"3. If memory_search returns relevant hits, use `memory_get` to pull the needed sections.")
-		}
+			"- `memory_search` — for specific queries not covered by the auto-recall",
+			"- `knowledge_graph_search` — for relationship/connection queries")
 	} else {
 		lines = append(lines,
-			"1. Run `memory_search` with a relevant query to recall prior context, decisions, and notes.")
-		if hasMemoryGet {
-			lines = append(lines,
-				"2. If memory_search returns relevant hits, use `memory_get` to pull the needed sections.")
-		}
+			"- `memory_search` — for specific queries not covered by the auto-recall")
+	}
+	if hasMemoryGet {
+		lines = append(lines,
+			"- `memory_get` — to read specific memory file sections")
 	}
 
 	lines = append(lines,
 		"",
-		"This is NOT optional. Even for simple requests — the user may have relevant history, preferences, "+
-			"or ongoing projects that affect how you should respond. Skipping recall leads to redundant questions, "+
-			"contradicting past decisions, or ignoring established context.",
-		"",
-		"**Only skip recall when:** the message is a greeting, acknowledgment, or clearly needs no context (e.g. \"ok\", \"thanks\").",
-		"",
-		"If no relevant results found, proceed naturally without mentioning tool names.",
+		"Do not mention internal tool names to the user.",
 		"")
 
 	return lines
@@ -473,11 +470,11 @@ func extractSOULEcho(files []bootstrap.ContextFile) string {
 // extractMarkdownSection returns the body of a ## heading section, trimmed to ~200 chars.
 func extractMarkdownSection(content, heading string) string {
 	marker := "## " + heading
-	idx := strings.Index(content, marker)
-	if idx < 0 {
+	_, after, ok := strings.Cut(content, marker)
+	if !ok {
 		return ""
 	}
-	body := content[idx+len(marker):]
+	body := after
 	// Find next heading or end.
 	if next := strings.Index(body, "\n## "); next >= 0 {
 		body = body[:next]

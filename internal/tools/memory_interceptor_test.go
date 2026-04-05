@@ -317,12 +317,12 @@ func TestMemorySearch_LeaderFallback(t *testing.T) {
 	// mockMemoryStore.Search returns nil — just verify no crash and correct agent IDs used.
 	ctx := memCtx(memberID, "user1", leaderID.String())
 	result := tool.Execute(ctx, map[string]any{"query": "test"})
-	// With mock returning nil results for both, should get "No memory results found".
+	// With mock returning nil results for both, should return structured no-results output.
 	if result.IsError {
 		t.Fatalf("unexpected error: %s", result.ForLLM)
 	}
-	if !strings.Contains(result.ForLLM, "No memory results found") {
-		t.Errorf("expected no results message, got: %s", result.ForLLM)
+	if !strings.Contains(result.ForLLM, "\"has_results\": false") {
+		t.Errorf("expected structured no-results output, got: %s", result.ForLLM)
 	}
 }
 

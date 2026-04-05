@@ -111,13 +111,32 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 		}
 		results = append(results, leaderResults...)
 	}
-	if len(results) == 0 {
-		return NewResult("No memory results found for query: " + query)
-	}
 
 	output := map[string]any{
-		"results": results,
-		"count":   len(results),
+		"query":       query,
+		"results":     results,
+		"count":       len(results),
+		"has_results": len(results) > 0,
+	}
+	if len(results) > 0 {
+		paths := make([]string, 0, min(len(results), 5))
+		seen := make(map[string]struct{}, len(results))
+		for _, r := range results {
+			if r.Path == "" {
+				continue
+			}
+			if _, ok := seen[r.Path]; ok {
+				continue
+			}
+			seen[r.Path] = struct{}{}
+			paths = append(paths, r.Path)
+			if len(paths) >= 5 {
+				break
+			}
+		}
+		if len(paths) > 0 {
+			output["matched_paths"] = paths
+		}
 	}
 	if t.hasKG {
 		output["hint"] = "Also run knowledge_graph_search if the query involves people, teams, projects, or connections between entities."

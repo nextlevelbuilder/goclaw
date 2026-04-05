@@ -1,10 +1,11 @@
 package pg
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -12,6 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// shouldFallbackGlobal returns true when a per-user KG read found no results
+// and we should retry against the global canonical scope (user_id = '').
+func shouldFallbackGlobal(ctx context.Context, userID string) bool {
+	return !store.IsSharedKG(ctx) && userID != ""
+}
 
 // PGKnowledgeGraphStore implements store.KnowledgeGraphStore backed by Postgres.
 type PGKnowledgeGraphStore struct {
@@ -92,6 +99,18 @@ func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, 
 		FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
 		append([]any{eid, aid, userID}, tcArgs...)...,
 	)
+	entity, err := scanEntity(row)
+	if err == nil || !errors.Is(err, sql.ErrNoRows) || !shouldFallbackGlobal(ctx, userID) {
+		return entity, err
+	}
+
+	// Fallback: global canonical (user_id = '')
+	row = s.db.QueryRowContext(ctx, `
+		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
+		       properties, source_id, confidence, created_at, updated_at
+		FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
+		append([]any{eid, aid, ""}, tcArgs...)...,
+	)
 	return scanEntity(row)
 }
 
@@ -127,18 +146,38 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 		limit = 50
 	}
 
-	// Build dynamic WHERE clause: always filter by agent_id, optionally by user_id and entity_type
+	local, err := s.listEntitiesScoped(ctx, aid, userID, opts.EntityType, limit, opts.Offset, store.IsSharedKG(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !shouldFallbackGlobal(ctx, userID) || len(local) >= limit {
+		return local, nil
+	}
+
+	// Supplement with global canonical (user_id = '')
+	remaining := limit - len(local)
+	global, err := s.listEntitiesScoped(ctx, aid, "", opts.EntityType, remaining, 0, false)
+	if err != nil || len(global) == 0 {
+		return local, nil
+	}
+
+	return mergeEntitySlices(local, global, limit), nil
+}
+
+// listEntitiesScoped queries entities for a specific scope.
+// When shared=true, no user_id filter is applied. Otherwise user_id is filtered (can be "" for global canonical).
+func (s *PGKnowledgeGraphStore) listEntitiesScoped(ctx context.Context, aid uuid.UUID, userID, entityType string, limit, offset int, shared bool) ([]store.Entity, error) {
 	where := "agent_id = $1"
 	args := []any{aid}
 	idx := 2
-	if !store.IsSharedKG(ctx) && userID != "" {
+	if !shared {
 		where += fmt.Sprintf(" AND user_id = $%d", idx)
 		args = append(args, userID)
 		idx++
 	}
-	if opts.EntityType != "" {
+	if entityType != "" {
 		where += fmt.Sprintf(" AND entity_type = $%d", idx)
-		args = append(args, opts.EntityType)
+		args = append(args, entityType)
 		idx++
 	}
 	tc, tcArgs, _, err := scopeClause(ctx, idx)
@@ -150,7 +189,7 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 		args = append(args, tcArgs...)
 		idx++
 	}
-	args = append(args, limit, opts.Offset)
+	args = append(args, limit, offset)
 	query := fmt.Sprintf(`
 		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 		       properties, source_id, confidence, created_at, updated_at
@@ -165,6 +204,27 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 	return scanEntities(rows)
 }
 
+// mergeEntitySlices combines local and global entity results.
+// Local entities take priority; global entities with the same ID are skipped.
+func mergeEntitySlices(local, global []store.Entity, limit int) []store.Entity {
+	seen := make(map[string]bool, len(local))
+	for _, e := range local {
+		seen[e.ID] = true
+	}
+	merged := make([]store.Entity, len(local), min(limit, len(local)+len(global)))
+	copy(merged, local)
+	for _, e := range global {
+		if len(merged) >= limit {
+			break
+		}
+		if seen[e.ID] {
+			continue
+		}
+		merged = append(merged, e)
+	}
+	return merged
+}
+
 func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]store.Entity, error) {
 	aid := mustParseUUID(agentID)
 	if limit <= 0 {
@@ -173,25 +233,36 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 
 	shared := store.IsSharedKG(ctx)
 
-	// FTS search using tsvector
-	ftsResults, err := s.ftsSearchEntities(ctx, aid, userID, query, limit*2, shared)
-	if err != nil {
-		return nil, err
+	local := s.hybridSearchScoped(ctx, aid, userID, query, limit, shared)
+
+	if !shouldFallbackGlobal(ctx, userID) || len(local) >= limit {
+		return local, nil
 	}
 
-	// Vector search if provider available
+	// Supplement with global canonical results (user_id = '')
+	global := s.hybridSearchScoped(ctx, aid, "", query, limit, false)
+	if len(global) == 0 {
+		return local, nil
+	}
+
+	return mergeEntitySlices(local, global, limit), nil
+}
+
+// hybridSearchScoped performs FTS + vector hybrid search for a specific scope.
+func (s *PGKnowledgeGraphStore) hybridSearchScoped(ctx context.Context, aid uuid.UUID, userID, query string, limit int, shared bool) []store.Entity {
+	ftsResults, err := s.ftsSearchEntities(ctx, aid, userID, query, limit*2, shared)
+	if err != nil {
+		return nil
+	}
+
 	var vecResults []scoredEntity
 	if s.embProvider != nil {
 		embeddings, embErr := s.embProvider.Embed(ctx, []string{query})
 		if embErr == nil && len(embeddings) > 0 {
-			vecResults, err = s.vectorSearchEntities(ctx, embeddings[0], aid, userID, limit*2, shared)
-			if err != nil {
-				vecResults = nil
-			}
+			vecResults, _ = s.vectorSearchEntities(ctx, embeddings[0], aid, userID, limit*2, shared)
 		}
 	}
 
-	// If no vector results, fall back to FTS-only
 	if len(vecResults) == 0 {
 		if len(ftsResults) > limit {
 			ftsResults = ftsResults[:limit]
@@ -200,20 +271,18 @@ func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, use
 		for i, r := range ftsResults {
 			entities[i] = r.Entity
 		}
-		return entities, nil
+		return entities
 	}
 
-	// Hybrid merge with weights: 0.3 FTS, 0.7 vector
 	textW, vecW := 0.3, 0.7
 	if len(ftsResults) == 0 {
 		textW, vecW = 0, 1.0
 	}
 	merged := hybridMergeEntities(ftsResults, vecResults, textW, vecW)
-
 	if len(merged) > limit {
 		merged = merged[:limit]
 	}
-	return merged, nil
+	return merged
 }
 
 type scoredEntity struct {

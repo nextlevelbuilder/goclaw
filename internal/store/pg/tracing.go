@@ -564,3 +564,26 @@ func (s *PGTracingStore) DeleteTracesOlderThan(ctx context.Context, cutoff time.
 	}
 	return res.RowsAffected()
 }
+
+// RecoverStaleRunningTraces marks traces stuck in "running" since before cutoff as "error".
+// Also recovers their stuck spans. Called on startup to fix orphans from crashes.
+func (s *PGTracingStore) RecoverStaleRunningTraces(ctx context.Context, cutoff time.Time) (int64, error) {
+	// Recover stuck spans first.
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE spans SET status = 'error', error = 'recovered: server restart',
+		   end_time = NOW(), duration_ms = EXTRACT(EPOCH FROM (NOW() - start_time))::int * 1000
+		 WHERE status = 'running' AND start_time < $1`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("recover stale spans: %w", err)
+	}
+
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE traces SET status = 'error',
+		   error = 'recovered: stuck in running state (server restart)',
+		   end_time = NOW(), duration_ms = EXTRACT(EPOCH FROM (NOW() - start_time))::int * 1000
+		 WHERE status = 'running' AND start_time < $1`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("recover stale running traces: %w", err)
+	}
+	return res.RowsAffected()
+}

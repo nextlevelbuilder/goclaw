@@ -1,16 +1,15 @@
-const FALLBACK_BACKEND = "https://nta-goclaw.gearvn.com.vn";
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const backend = env.BACKEND_URL || FALLBACK_BACKEND;
+    const backend = env.BACKEND_URL;
 
     // Proxy API and WebSocket paths to backend
     if (
-      url.pathname.startsWith("/v1/") ||
-      url.pathname === "/ws" ||
-      url.pathname === "/health" ||
-      url.pathname.startsWith("/mcp/")
+      backend &&
+      (url.pathname.startsWith("/v1/") ||
+        url.pathname === "/ws" ||
+        url.pathname === "/health" ||
+        url.pathname.startsWith("/mcp/"))
     ) {
       const target = `${backend}${url.pathname}${url.search}`;
       const headers = new Headers(request.headers);
@@ -28,10 +27,22 @@ export default {
       });
     }
 
+    // If no backend configured, return error for API paths
+    if (
+      url.pathname.startsWith("/v1/") ||
+      url.pathname === "/ws" ||
+      url.pathname === "/health" ||
+      url.pathname.startsWith("/mcp/")
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Backend not configured" }),
+        { status: 503, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
     // Serve static assets, SPA fallback for client-side routes
     const assetResponse = await env.ASSETS.fetch(request);
     if (assetResponse.status === 404) {
-      // SPA fallback: serve index.html for client-side routes
       return env.ASSETS.fetch(new URL("/", request.url));
     }
     return assetResponse;

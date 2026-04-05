@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -42,6 +43,9 @@ func (m *mockKGStore) DeleteEntity(context.Context, string, string, string) erro
 func (m *mockKGStore) ListEntities(_ context.Context, _, _ string, opts store.EntityListOptions) ([]store.Entity, error) {
 	var out []store.Entity
 	for _, e := range m.entities {
+		if opts.EntityType != "" && e.EntityType != opts.EntityType {
+			continue
+		}
 		out = append(out, e)
 		if opts.Limit > 0 && len(out) >= opts.Limit {
 			break
@@ -416,4 +420,73 @@ func TestKGSearch_RelationsCappedAt5(t *testing.T) {
 	if !strings.Contains(text, "use entity_id=") {
 		t.Error("expected hint to use entity_id for full relations")
 	}
+}
+
+func TestKGListAll_ProjectFilter(t *testing.T) {
+	ms, _ := setupBaseGraph()
+	extraProjectID := uuid.NewString()
+	ms.entities[extraProjectID] = store.Entity{
+		ID:         extraProjectID,
+		AgentID:    testAgentID.String(),
+		UserID:     testUserID,
+		Name:       "Warranty Optimization",
+		EntityType: "project",
+	}
+
+	tool := NewKnowledgeGraphSearchTool()
+	tool.SetKGStore(ms)
+
+	result := tool.Execute(kgContext(), map[string]any{
+		"query":       "*",
+		"entity_type": "project",
+	})
+	if result.IsError {
+		t.Fatalf("unexpected error: %s", result.ForLLM)
+	}
+
+	var payload struct {
+		Mode            string   `json:"mode"`
+		EntityType      string   `json:"entity_type"`
+		Count           int      `json:"count"`
+		HasResults      bool     `json:"has_results"`
+		HasProjectMatch bool     `json:"has_project_match"`
+		ProjectNames    []string `json:"project_names"`
+		Entities        []struct {
+			Name       string `json:"name"`
+			EntityType string `json:"entity_type"`
+		} `json:"entities"`
+	}
+	if err := json.Unmarshal([]byte(result.ForLLM), &payload); err != nil {
+		t.Fatalf("expected JSON output, got error: %v\npayload: %s", err, result.ForLLM)
+	}
+
+	if payload.Mode != "list_all" {
+		t.Fatalf("expected list_all mode, got %q", payload.Mode)
+	}
+	if payload.EntityType != "project" {
+		t.Fatalf("expected entity_type project, got %q", payload.EntityType)
+	}
+	if !payload.HasResults || !payload.HasProjectMatch {
+		t.Fatalf("expected project matches, got %+v", payload)
+	}
+	if payload.Count != 2 {
+		t.Fatalf("expected 2 project entities, got %d", payload.Count)
+	}
+	for _, entity := range payload.Entities {
+		if entity.EntityType != "project" {
+			t.Fatalf("expected only project entities, got %+v", entity)
+		}
+	}
+	if !containsString(payload.ProjectNames, "GoClaw") || !containsString(payload.ProjectNames, "Warranty Optimization") {
+		t.Fatalf("expected project names in payload, got %+v", payload.ProjectNames)
+	}
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }

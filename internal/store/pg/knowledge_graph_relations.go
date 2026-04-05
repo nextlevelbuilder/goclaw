@@ -65,9 +65,22 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 	aid := mustParseUUID(agentID)
 	eid := mustParseUUID(entityID)
 
+	local, err := s.listRelationsScoped(ctx, aid, userID, eid, store.IsSharedKG(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !shouldFallbackGlobal(ctx, userID) || len(local) > 0 {
+		return local, nil
+	}
+
+	// Fallback: global canonical (user_id = '')
+	return s.listRelationsScoped(ctx, aid, "", eid, false)
+}
+
+func (s *PGKnowledgeGraphStore) listRelationsScoped(ctx context.Context, aid uuid.UUID, userID string, eid uuid.UUID, shared bool) ([]store.Relation, error) {
 	var q string
 	var args []any
-	if store.IsSharedKG(ctx) {
+	if shared {
 		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
 			return nil, err
@@ -106,10 +119,30 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	if limit <= 0 {
 		limit = 200
 	}
+
+	local, err := s.listAllRelationsScoped(ctx, aid, userID, limit, store.IsSharedKG(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !shouldFallbackGlobal(ctx, userID) || len(local) >= limit {
+		return local, nil
+	}
+
+	// Supplement with global canonical
+	remaining := limit - len(local)
+	global, err := s.listAllRelationsScoped(ctx, aid, "", remaining, false)
+	if err != nil || len(global) == 0 {
+		return local, nil
+	}
+
+	return mergeRelationSlices(local, global, limit), nil
+}
+
+func (s *PGKnowledgeGraphStore) listAllRelationsScoped(ctx context.Context, aid uuid.UUID, userID string, limit int, shared bool) ([]store.Relation, error) {
 	where := "agent_id = $1"
 	args := []any{aid}
 	idx := 2
-	if !store.IsSharedKG(ctx) && userID != "" {
+	if !shared {
 		where += fmt.Sprintf(" AND user_id = $%d", idx)
 		args = append(args, userID)
 		idx++
@@ -135,6 +168,26 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	}
 	defer rows.Close()
 	return scanRelations(rows)
+}
+
+// mergeRelationSlices combines local and global relation results, skipping duplicates.
+func mergeRelationSlices(local, global []store.Relation, limit int) []store.Relation {
+	seen := make(map[string]bool, len(local))
+	for _, r := range local {
+		seen[r.ID] = true
+	}
+	merged := make([]store.Relation, len(local), min(limit, len(local)+len(global)))
+	copy(merged, local)
+	for _, r := range global {
+		if len(merged) >= limit {
+			break
+		}
+		if seen[r.ID] {
+			continue
+		}
+		merged = append(merged, r)
+	}
+	return merged
 }
 
 func (s *PGKnowledgeGraphStore) IngestExtraction(ctx context.Context, agentID, userID string, entities []store.Entity, relations []store.Relation) ([]string, error) {

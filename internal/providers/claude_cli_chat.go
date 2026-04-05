@@ -112,6 +112,7 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	}
 
 	cmd := exec.CommandContext(ctx, p.cliPath, args...)
+	cmd.WaitDelay = 5 * time.Second // force-close pipes if process lingers after kill
 	cmd.Dir = workDir
 	cmd.Env = filterCLIEnv(os.Environ())
 	if stdin != nil {
@@ -151,6 +152,9 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	var contentBuf strings.Builder
 
 	for scanner.Scan() {
+		if ctx.Err() != nil {
+			break // context cancelled (abort) → exit immediately
+		}
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
@@ -199,6 +203,12 @@ func (p *ClaudeCLIProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 				}
 			}
 		}
+	}
+
+	// Context cancelled (abort): best-effort reap (bounded by WaitDelay), then return.
+	if ctx.Err() != nil {
+		_ = cmd.Wait()
+		return nil, ctx.Err()
 	}
 
 	if err := scanner.Err(); err != nil {

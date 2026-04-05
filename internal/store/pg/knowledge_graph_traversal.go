@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -13,6 +14,7 @@ import (
 // Traverse walks the knowledge graph from startEntityID up to maxDepth hops
 // using a recursive CTE. Returns all reachable entities (excluding the start node).
 // A 5-second statement timeout is applied for safety.
+// When in per-user mode, tries local scope first; if empty, falls back to global canonical.
 func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, startEntityID string, maxDepth int) ([]store.TraversalResult, error) {
 	if maxDepth <= 0 {
 		maxDepth = 3
@@ -20,7 +22,21 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 
 	aid := mustParseUUID(agentID)
 	startID := mustParseUUID(startEntityID)
+	shared := store.IsSharedKG(ctx)
 
+	results, err := s.traverseScoped(ctx, aid, startID, userID, maxDepth, shared)
+	if err != nil {
+		return nil, err
+	}
+	if len(results) > 0 || !shouldFallbackGlobal(ctx, userID) {
+		return results, nil
+	}
+
+	// Fallback: try global canonical scope (user_id = '', no mixing)
+	return s.traverseScoped(ctx, aid, startID, "", maxDepth, false)
+}
+
+func (s *PGKnowledgeGraphStore) traverseScoped(ctx context.Context, aid, startID uuid.UUID, userID string, maxDepth int, shared bool) ([]store.TraversalResult, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -33,8 +49,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 
 	var q string
 	var args []any
-	if store.IsSharedKG(ctx) {
-		// fixed params: $1=startID, $2=aid; tenant at $3 (if needed); maxDepth last
+	if shared {
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 3)
 		if tcErr != nil {
 			return nil, tcErr
@@ -82,7 +97,6 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 		args = append([]any{startID, aid}, tcArgs...)
 		args = append(args, maxDepth)
 	} else {
-		// fixed params: $1=startID, $2=aid, $3=userID; tenant at $4 (if needed); maxDepth last
 		tc, tcArgs, _, tcErr := scopeClause(ctx, 4)
 		if tcErr != nil {
 			return nil, tcErr

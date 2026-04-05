@@ -547,4 +547,8 @@ type runState struct {
 	// Truncation retry counter — caps consecutive truncation/parse-error retries
 	// to prevent burning through all iterations when max_tokens is too low.
 	truncationRetries int
+
+	// Project overview correction retries — ensures we don't loop forever when
+	// the model ignores project inventory constraints.
+	projectOverviewRetries int
 }

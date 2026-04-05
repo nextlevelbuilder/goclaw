@@ -10,6 +10,7 @@ Output valid JSON with this schema:
       "name": "Display Name",
       "entity_type": "person|organization|project|product|technology|task|event|document|concept|location",
       "description": "Brief description of the entity",
+      "properties": {},
       "confidence": 0.0-1.0
     }
   ],
@@ -59,6 +60,15 @@ Choosing between similar types:
 - provides, requires (capabilities: what an entity offers or needs)
 - related_to (LAST RESORT — if no specific relation fits, prefer omitting the relation entirely)
 
+## Properties
+Extract structured metadata into the "properties" object when mentioned or clearly implied:
+- project: status (active/completed/paused/cancelled), owner (person external_id)
+- task: status (todo/in_progress/done/cancelled), owner, priority (high/medium/low), due_date (YYYY-MM-DD)
+- person: role (developer/manager/designer/etc), team (organization external_id)
+- event: date (YYYY-MM-DD), status (upcoming/completed)
+- technology: version (if mentioned), category (database/framework/language/tool)
+- Use empty {} if no structured metadata can be extracted. Do NOT invent properties not present in the text.
+
 ## Rules
 - Extract 3-15 entities depending on text density. Short text = fewer entities
 - Confidence: 1.0 = explicitly stated fact, 0.8 = strongly implied, 0.5 = inferred from context
@@ -76,12 +86,12 @@ Input: "Talked to Minh about the GoClaw migration. He'll handle the database sch
 Output:
 {
   "entities": [
-    {"external_id": "minh", "name": "Minh", "entity_type": "person", "description": "Handling database schema changes for GoClaw", "confidence": 1.0},
-    {"external_id": "goclaw", "name": "GoClaw", "entity_type": "project", "description": "Project undergoing migration", "confidence": 1.0},
-    {"external_id": "goclaw-migration", "name": "GoClaw Migration", "entity_type": "task", "description": "Database migration task, deadline Friday", "confidence": 1.0},
-    {"external_id": "postgresql", "name": "PostgreSQL", "entity_type": "technology", "description": "Database used with pgvector extension", "confidence": 1.0},
-    {"external_id": "pgvector", "name": "pgvector", "entity_type": "technology", "description": "PostgreSQL extension for vector embeddings", "confidence": 0.8},
-    {"external_id": "migration-guide", "name": "Migration Guide", "entity_type": "document", "description": "Guide for the GoClaw database migration", "confidence": 1.0}
+    {"external_id": "minh", "name": "Minh", "entity_type": "person", "description": "Handling database schema changes for GoClaw", "properties": {"role": "developer"}, "confidence": 1.0},
+    {"external_id": "goclaw", "name": "GoClaw", "entity_type": "project", "description": "Project undergoing migration", "properties": {"status": "active", "owner": "minh"}, "confidence": 1.0},
+    {"external_id": "goclaw-migration", "name": "GoClaw Migration", "entity_type": "task", "description": "Database migration task, deadline Friday", "properties": {"status": "in_progress", "owner": "minh", "priority": "high", "due_date": "2026-04-11"}, "confidence": 1.0},
+    {"external_id": "postgresql", "name": "PostgreSQL", "entity_type": "technology", "description": "Database used with pgvector extension", "properties": {"category": "database"}, "confidence": 1.0},
+    {"external_id": "pgvector", "name": "pgvector", "entity_type": "technology", "description": "PostgreSQL extension for vector embeddings", "properties": {}, "confidence": 0.8},
+    {"external_id": "migration-guide", "name": "Migration Guide", "entity_type": "document", "description": "Guide for the GoClaw database migration", "properties": {}, "confidence": 1.0}
   ],
   "relations": [
     {"source_entity_id": "minh", "relation_type": "assigned_to", "target_entity_id": "goclaw-migration", "confidence": 1.0},

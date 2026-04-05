@@ -93,6 +93,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 	// 2g–2h. Inject leader pending-task reminders and member task context.
 	messages, memberTask := l.injectTeamTaskReminders(ctx, &req, messages)
 
+	// 2i. Auto-recall: inject memory + KG context before first LLM call.
+	messages, recallMeta := l.autoRecall(ctx, req.Message, messages)
+
 	// 3. Buffer new messages — write to session only AFTER the run completes.
 	// This prevents concurrent runs from seeing each other's in-progress messages.
 	// NOTE: pendingMsgs stores text + lightweight MediaRefs (not base64 images).
@@ -458,6 +461,21 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 				rs.pendingMsgs = append(rs.pendingMsgs, providers.Message{Role: "assistant", Content: resp.Content})
 				rs.pendingMsgs = append(rs.pendingMsgs, forSession...)
 				continue
+			}
+
+			// Project overview guard: if recall provided a project inventory but the
+			// response fails to mention multiple projects, force one corrective retry.
+			if recallMeta != nil && recallMeta.intent.Type == intentProjectOverview && recallMeta.projectCount > 1 &&
+				!responseMentionsProjectInventory(resp.Content, recallMeta.projectNames, recallMeta.projectCount) &&
+				rs.projectOverviewRetries < 1 {
+				if correction := buildRecallValidationFeedback(recallMeta); correction != "" {
+					rs.projectOverviewRetries++
+					messages = append(messages, providers.Message{Role: "assistant", Content: resp.Content})
+					messages = append(messages, providers.Message{Role: "user", Content: correction})
+					rs.pendingMsgs = append(rs.pendingMsgs, providers.Message{Role: "assistant", Content: resp.Content})
+					rs.pendingMsgs = append(rs.pendingMsgs, providers.Message{Role: "user", Content: correction})
+					continue
+				}
 			}
 
 			rs.finalContent = resp.Content
