@@ -152,7 +152,7 @@ export function ProviderModelSelect({
                     {p.display_name || p.name}
                     {poolOwnership.membersByOwner.has(p.name) && (
                       <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
-                        Pool
+                        {t("providers:list.poolBadge")}
                       </span>
                     )}
                   </span>

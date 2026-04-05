@@ -252,6 +252,7 @@
     "poolOwner": "Chủ pool",
     "poolMember": "Thành viên pool",
     "poolAvailable": "Sẵn sàng pool",
+    "poolBadge": "Pool",
     "standalone": "Độc lập",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "Được quản lý bởi {{provider}}",

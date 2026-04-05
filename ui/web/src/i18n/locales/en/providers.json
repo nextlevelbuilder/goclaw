@@ -284,6 +284,7 @@
     "poolOwner": "Pool owner",
     "poolMember": "Pool member",
     "poolAvailable": "Pool available",
+    "poolBadge": "Pool",
     "standalone": "Standalone",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "Managed by {{provider}}",

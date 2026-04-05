@@ -266,9 +266,10 @@ export function PoolSetupWizardDialog({
 }
 
 function ProviderPlanBadge({ provider }: { provider: ProviderData }) {
+  const { t } = useTranslation("common");
   if (!provider.enabled) {
     return (
-      <span className="text-[10px] text-muted-foreground shrink-0">Disabled</span>
+      <span className="text-[10px] text-muted-foreground shrink-0">{t("disabled")}</span>
     );
   }
   // plan_type is not available at this level without quota data, show nothing

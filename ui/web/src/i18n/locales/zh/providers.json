@@ -270,6 +270,7 @@
     "poolOwner": "池拥有者",
     "poolMember": "池成员",
     "poolAvailable": "可组池",
+    "poolBadge": "池",
     "standalone": "独立账户",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "由 {{provider}} 管理",

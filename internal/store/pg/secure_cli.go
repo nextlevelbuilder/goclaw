@@ -27,10 +27,10 @@ func NewPGSecureCLIStore(db *sql.DB, encryptionKey string) *PGSecureCLIStore {
 const secureCLISelectCols = `id, binary_name, binary_path, description, encrypted_env,
  deny_args, deny_verbose, timeout_seconds, tips, is_global, enabled, created_by, created_at, updated_at`
 
-// secureCLISelectColsAliased is the same as secureCLISelectCols but prefixed with table alias "b."
+// secureCLISelectColsAliased is prefixed with table alias "b."
 // Required for LookupByBinary which uses LEFT JOIN (ambiguous column names without prefix).
 const secureCLISelectColsAliased = `b.id, b.binary_name, b.binary_path, b.description, b.encrypted_env,
- b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.agent_id, b.enabled, b.created_by, b.created_at, b.updated_at`
+ b.deny_args, b.deny_verbose, b.timeout_seconds, b.tips, b.is_global, b.enabled, b.created_by, b.created_at, b.updated_at`
 
 func (s *PGSecureCLIStore) Create(ctx context.Context, b *store.SecureCLIBinary) error {
 	if err := store.ValidateUserID(b.CreatedBy); err != nil {
