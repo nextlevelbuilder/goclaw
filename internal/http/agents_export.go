@@ -665,24 +665,49 @@ func marshalAgentConfig(ag *store.AgentData) ([]byte, error) {
 		CompactionConfig  json.RawMessage `json:"compaction_config,omitempty"`
 		ContextPruning    json.RawMessage `json:"context_pruning,omitempty"`
 		OtherConfig       json.RawMessage `json:"other_config,omitempty"`
+		// Promoted config fields
+		Emoji               string          `json:"emoji,omitempty"`
+		AgentDescription    string          `json:"agent_description,omitempty"`
+		ThinkingLevel       string          `json:"thinking_level,omitempty"`
+		MaxTokens           int             `json:"max_tokens,omitempty"`
+		SelfEvolve          bool            `json:"self_evolve,omitempty"`
+		SkillEvolve         bool            `json:"skill_evolve,omitempty"`
+		SkillNudgeInterval  int             `json:"skill_nudge_interval,omitempty"`
+		ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty"`
+		WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty"`
+		ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty"`
+		ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty"`
+		KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty"`
 	}
 	return json.MarshalIndent(exportableAgent{
-		AgentKey:          ag.AgentKey,
-		DisplayName:       ag.DisplayName,
-		Frontmatter:       ag.Frontmatter,
-		Provider:          ag.Provider,
-		Model:             ag.Model,
-		ContextWindow:     ag.ContextWindow,
-		MaxToolIterations: ag.MaxToolIterations,
-		AgentType:         ag.AgentType,
-		Status:            ag.Status,
-		ToolsConfig:       ag.ToolsConfig,
-		SandboxConfig:     ag.SandboxConfig,
-		SubagentsConfig:   ag.SubagentsConfig,
-		MemoryConfig:      ag.MemoryConfig,
-		CompactionConfig:  ag.CompactionConfig,
-		ContextPruning:    ag.ContextPruning,
-		OtherConfig:       ag.OtherConfig,
+		AgentKey:            ag.AgentKey,
+		DisplayName:         ag.DisplayName,
+		Frontmatter:         ag.Frontmatter,
+		Provider:            ag.Provider,
+		Model:               ag.Model,
+		ContextWindow:       ag.ContextWindow,
+		MaxToolIterations:   ag.MaxToolIterations,
+		AgentType:           ag.AgentType,
+		Status:              ag.Status,
+		ToolsConfig:         ag.ToolsConfig,
+		SandboxConfig:       ag.SandboxConfig,
+		SubagentsConfig:     ag.SubagentsConfig,
+		MemoryConfig:        ag.MemoryConfig,
+		CompactionConfig:    ag.CompactionConfig,
+		ContextPruning:      ag.ContextPruning,
+		OtherConfig:         ag.OtherConfig,
+		Emoji:               ag.Emoji,
+		AgentDescription:    ag.AgentDescription,
+		ThinkingLevel:       ag.ThinkingLevel,
+		MaxTokens:           ag.MaxTokens,
+		SelfEvolve:          ag.SelfEvolve,
+		SkillEvolve:         ag.SkillEvolve,
+		SkillNudgeInterval:  ag.SkillNudgeInterval,
+		ReasoningConfig:     ag.ReasoningConfig,
+		WorkspaceSharing:    ag.WorkspaceSharing,
+		ChatGPTOAuthRouting: ag.ChatGPTOAuthRouting,
+		ShellDenyGroups:     ag.ShellDenyGroups,
+		KGDedupConfig:       ag.KGDedupConfig,
 	}, "", "  ")
 }
 

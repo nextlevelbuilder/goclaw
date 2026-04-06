@@ -210,7 +210,7 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if predefined agent has a description for LLM summoning
-	description := extractDescription(req.OtherConfig)
+	description := req.AgentDescription
 	if req.AgentType == store.AgentTypePredefined && description != "" && h.summoner != nil {
 		req.Status = store.AgentStatusSummoning
 	} else if req.Status == "" {
@@ -336,6 +336,14 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		validationAgent.OtherConfig = rawOtherConfig
+	}
+	if routing, ok := allowed["chatgpt_oauth_routing"]; ok {
+		rawRouting, err := marshalJSONRaw(routing)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
+			return
+		}
+		validationAgent.ChatGPTOAuthRouting = rawRouting
 	}
 
 	if err := validateChatGPTOAuthAgentRouting(

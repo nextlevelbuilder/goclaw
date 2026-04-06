@@ -84,3 +84,46 @@ CREATE INDEX idx_kg_entities_temporal ON kg_entities(agent_id, user_id, valid_fr
 CREATE INDEX idx_kg_relations_current ON kg_relations(agent_id, user_id)
     WHERE valid_until IS NULL;
 CREATE INDEX idx_kg_relations_temporal ON kg_relations(agent_id, user_id, valid_from, valid_until);
+
+-- Promote well-known fields from agents.other_config JSONB to dedicated columns
+
+-- 7 scalar columns
+ALTER TABLE agents
+  ADD COLUMN IF NOT EXISTS emoji TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS agent_description TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS thinking_level TEXT NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS max_tokens INT NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS self_evolve BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS skill_evolve BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS skill_nudge_interval INT NOT NULL DEFAULT 0;
+
+-- 5 nested JSONB columns (structs that stay JSON-shaped)
+ALTER TABLE agents
+  ADD COLUMN IF NOT EXISTS reasoning_config JSONB NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS workspace_sharing JSONB NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS chatgpt_oauth_routing JSONB NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS shell_deny_groups JSONB NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS kg_dedup_config JSONB NOT NULL DEFAULT '{}';
+
+-- Backfill from other_config
+UPDATE agents SET
+  emoji = COALESCE(other_config->>'emoji', ''),
+  agent_description = COALESCE(other_config->>'description', ''),
+  thinking_level = COALESCE(other_config->>'thinking_level', ''),
+  max_tokens = COALESCE((other_config->>'max_tokens')::int, 0),
+  self_evolve = COALESCE((other_config->>'self_evolve')::boolean, false),
+  skill_evolve = COALESCE((other_config->>'skill_evolve')::boolean, false),
+  skill_nudge_interval = COALESCE((other_config->>'skill_nudge_interval')::int, 0),
+  reasoning_config = COALESCE(other_config->'reasoning', '{}'),
+  workspace_sharing = COALESCE(other_config->'workspace_sharing', '{}'),
+  chatgpt_oauth_routing = COALESCE(other_config->'chatgpt_oauth_routing', '{}'),
+  shell_deny_groups = COALESCE(other_config->'shell_deny_groups', '{}'),
+  kg_dedup_config = COALESCE(other_config->'kg_dedup_config', '{}')
+WHERE other_config != '{}' AND other_config IS NOT NULL;
+
+-- Clean promoted keys from other_config
+UPDATE agents SET other_config = other_config
+  - 'emoji' - 'description' - 'thinking_level' - 'max_tokens'
+  - 'self_evolve' - 'skill_evolve' - 'skill_nudge_interval'
+  - 'reasoning' - 'workspace_sharing' - 'chatgpt_oauth_routing'
+  - 'shell_deny_groups' - 'kg_dedup_config';

@@ -56,21 +56,24 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const expertReasoningAvailable = Boolean(currentModelCapability?.levels?.length);
 
   const deriveState = (a: AgentData) => {
-    const otherObj = (a.other_config ?? {}) as Record<string, unknown>;
-    const rawReasoning = (otherObj.reasoning ?? {}) as Record<string, unknown>;
-    const rawThinkingLevel = normalizeReasoningEffort(otherObj.thinking_level);
-    const hasReasoningObject = Boolean(otherObj.reasoning) && typeof rawReasoning === "object";
-    const reasoningMode: ReasoningOverrideMode = rawReasoning.override_mode === "inherit"
+    // Read reasoning from top-level reasoning_config, with fallback to other_config for transition
+    const reasoningCfg = (a.reasoning_config ?? (a.other_config as Record<string, unknown> | null)?.reasoning ?? {}) as Record<string, unknown>;
+    const rawThinkingLevel = normalizeReasoningEffort(
+      a.thinking_level ?? (a.other_config as Record<string, unknown> | null)?.thinking_level,
+    );
+    const hasReasoningObject = Boolean(a.reasoning_config) || Boolean((a.other_config as Record<string, unknown> | null)?.reasoning);
+    const reasoningMode: ReasoningOverrideMode = reasoningCfg.override_mode === "inherit"
       ? "inherit"
       : hasReasoningObject || rawThinkingLevel
         ? "custom"
         : "inherit";
-    const reasoningEffort = normalizeReasoningEffort(rawReasoning.effort)
+    const reasoningEffort = normalizeReasoningEffort(reasoningCfg.effort)
       || rawThinkingLevel
       || providerReasoningDefaults?.effort
       || "off";
-    const reasoningFallback = normalizeReasoningFallback(rawReasoning.fallback);
-    const routing = normalizeChatGPTOAuthRouting(a.other_config);
+    const reasoningFallback = normalizeReasoningFallback(reasoningCfg.fallback);
+    // Read routing from top-level field, fallback to other_config for transition
+    const routing = normalizeChatGPTOAuthRouting(a.chatgpt_oauth_routing ?? a.other_config);
     const draftRouting = buildDraftRouting(routing);
     return {
       reasoningMode,
@@ -82,12 +85,13 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
         ? providerReasoningDefaults?.fallback ?? "downgrade"
         : reasoningFallback,
       reasoningExpert: reasoningMode === "custom" && (
-        Boolean(otherObj.reasoning)
+        hasReasoningObject
         || !SIMPLE_REASONING_LEVELS.has(reasoningEffort)
         || reasoningFallback !== "downgrade"
       ),
       chatgptRouting: draftRouting,
-      wsSharing: (otherObj.workspace_sharing ?? {}) as WorkspaceSharingConfig,
+      // Read workspace_sharing from top-level, fallback to other_config for transition
+      wsSharing: (a.workspace_sharing ?? (a.other_config as Record<string, unknown> | null)?.workspace_sharing ?? {}) as WorkspaceSharingConfig,
       comp: a.compaction_config ?? {},
       pruneEnabled: a.context_pruning?.mode !== "off",
       prune: a.context_pruning ?? {},
@@ -161,49 +165,51 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Only send the keys this dialog owns to avoid overwriting keys managed by
-      // the overview tab. The backend does a full column replace, so we must read
-      // the latest agent data and merge our keys into it.
-      const otherBase = buildAgentOtherConfigWithChatGPTOAuthRouting(
+      // Build routing payload (chatgpt_oauth_routing at top level)
+      const routingPayload = buildAgentOtherConfigWithChatGPTOAuthRouting(
         agent,
         chatgptRouting,
         currentProvider?.settings,
       );
-      delete otherBase.thinking_level;
-      delete otherBase.reasoning;
-      delete otherBase.workspace_sharing;
+
       const capabilityResolutionPending = !currentProvider || providersLoading || providerModelsLoading;
+      const updates: Record<string, unknown> = {
+        compaction_config: comp,
+        context_pruning: pruneEnabled ? (Object.keys(prune).length > 0 ? prune : null) : { mode: "off" },
+        sandbox_config: sbEnabled ? sb : null,
+        // chatgpt_oauth_routing comes from routingPayload at top level
+        ...routingPayload,
+      };
+
+      // Build reasoning_config and thinking_level as top-level fields
       if (reasoningMode === "inherit") {
-        otherBase.reasoning = {
-          override_mode: "inherit",
-        };
+        updates.reasoning_config = { override_mode: "inherit" };
+        updates.thinking_level = null;
       } else {
         const shouldPersistExpertReasoning = reasoningExpert
           && (expertReasoningAvailable || capabilityResolutionPending);
         const requestedEffort = shouldPersistExpertReasoning ? reasoningEffort : thinkingLevel;
         const legacyThinkingLevel = deriveLegacyThinkingLevel(requestedEffort);
-        if (legacyThinkingLevel !== "off") {
-          otherBase.thinking_level = legacyThinkingLevel;
-        }
+        updates.thinking_level = legacyThinkingLevel !== "off" ? legacyThinkingLevel : null;
         const reasoningConfig: Record<string, unknown> = {
           override_mode: "custom",
           effort: requestedEffort,
         };
         if (reasoningFallback !== "downgrade") reasoningConfig.fallback = reasoningFallback;
-        otherBase.reasoning = reasoningConfig;
+        updates.reasoning_config = reasoningConfig;
       }
+
+      // workspace_sharing at top level
       if (
         wsSharing.shared_dm || wsSharing.shared_group ||
         (wsSharing.shared_users?.length ?? 0) > 0 || wsSharing.share_memory
       ) {
-        otherBase.workspace_sharing = wsSharing;
+        updates.workspace_sharing = wsSharing;
+      } else {
+        updates.workspace_sharing = null;
       }
-      await onUpdate({
-        compaction_config: comp,
-        context_pruning: pruneEnabled ? (Object.keys(prune).length > 0 ? prune : null) : { mode: "off" },
-        sandbox_config: sbEnabled ? sb : null,
-        other_config: otherBase,
-      });
+
+      await onUpdate(updates);
       onOpenChange(false);
     } catch {
       // toast shown by hook — keep dialog open

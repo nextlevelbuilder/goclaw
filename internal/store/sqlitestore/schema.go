@@ -14,7 +14,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 6
+const SchemaVersion = 7
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -100,6 +100,102 @@ CREATE TABLE IF NOT EXISTS secure_cli_agent_grants (
 CREATE INDEX IF NOT EXISTS idx_scag_binary ON secure_cli_agent_grants(binary_id);
 CREATE INDEX IF NOT EXISTS idx_scag_agent ON secure_cli_agent_grants(agent_id);
 CREATE INDEX IF NOT EXISTS idx_scag_tenant ON secure_cli_agent_grants(tenant_id);`,
+	// Version 6 → 7: V3 tables (episodic, evolution, KG temporal) + promote other_config fields.
+	6: `-- V3: episodic summaries
+CREATE TABLE IF NOT EXISTS episodic_summaries (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id     VARCHAR(255) NOT NULL DEFAULT '',
+    session_key TEXT NOT NULL,
+    summary     TEXT NOT NULL,
+    l0_abstract TEXT NOT NULL DEFAULT '',
+    key_topics  TEXT NOT NULL DEFAULT '[]',
+    source_type TEXT NOT NULL DEFAULT 'session',
+    source_id   TEXT,
+    turn_count  INTEGER NOT NULL DEFAULT 0,
+    token_count INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    expires_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_episodic_agent_user ON episodic_summaries(agent_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_episodic_tenant ON episodic_summaries(tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_episodic_source_dedup ON episodic_summaries(agent_id, user_id, source_id)
+    WHERE source_id IS NOT NULL;
+
+-- V3: evolution metrics
+CREATE TABLE IF NOT EXISTS agent_evolution_metrics (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    session_key TEXT NOT NULL,
+    metric_type TEXT NOT NULL,
+    metric_key  TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_evo_metrics_agent_type ON agent_evolution_metrics(agent_id, metric_type);
+CREATE INDEX IF NOT EXISTS idx_evo_metrics_created ON agent_evolution_metrics(created_at);
+CREATE INDEX IF NOT EXISTS idx_evo_metrics_tenant ON agent_evolution_metrics(tenant_id);
+
+-- V3: evolution suggestions
+CREATE TABLE IF NOT EXISTS agent_evolution_suggestions (
+    id              TEXT NOT NULL PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    agent_id        TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    suggestion_type TEXT NOT NULL,
+    suggestion      TEXT NOT NULL,
+    rationale       TEXT NOT NULL,
+    parameters      TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by     TEXT,
+    reviewed_at     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_evo_suggestions_agent ON agent_evolution_suggestions(agent_id, status);
+CREATE INDEX IF NOT EXISTS idx_evo_suggestions_tenant ON agent_evolution_suggestions(tenant_id);
+
+-- V3: KG temporal validity
+ALTER TABLE kg_entities ADD COLUMN valid_from TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+ALTER TABLE kg_entities ADD COLUMN valid_until TEXT;
+CREATE INDEX IF NOT EXISTS idx_kg_entities_current ON kg_entities(agent_id, user_id) WHERE valid_until IS NULL;
+
+ALTER TABLE kg_relations ADD COLUMN valid_from TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+ALTER TABLE kg_relations ADD COLUMN valid_until TEXT;
+CREATE INDEX IF NOT EXISTS idx_kg_relations_current ON kg_relations(agent_id, user_id) WHERE valid_until IS NULL;
+
+-- Promote other_config fields to dedicated columns
+ALTER TABLE agents ADD COLUMN emoji TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN agent_description TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN thinking_level TEXT NOT NULL DEFAULT '';
+ALTER TABLE agents ADD COLUMN max_tokens INT NOT NULL DEFAULT 0;
+ALTER TABLE agents ADD COLUMN self_evolve BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE agents ADD COLUMN skill_evolve BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE agents ADD COLUMN skill_nudge_interval INT NOT NULL DEFAULT 0;
+ALTER TABLE agents ADD COLUMN reasoning_config TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE agents ADD COLUMN workspace_sharing TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE agents ADD COLUMN chatgpt_oauth_routing TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE agents ADD COLUMN shell_deny_groups TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE agents ADD COLUMN kg_dedup_config TEXT NOT NULL DEFAULT '{}';
+UPDATE agents SET
+  emoji = COALESCE(json_extract(other_config, '$.emoji'), ''),
+  agent_description = COALESCE(json_extract(other_config, '$.description'), ''),
+  thinking_level = COALESCE(json_extract(other_config, '$.thinking_level'), ''),
+  max_tokens = COALESCE(json_extract(other_config, '$.max_tokens'), 0),
+  self_evolve = COALESCE(json_extract(other_config, '$.self_evolve'), 0),
+  skill_evolve = COALESCE(json_extract(other_config, '$.skill_evolve'), 0),
+  skill_nudge_interval = COALESCE(json_extract(other_config, '$.skill_nudge_interval'), 0),
+  reasoning_config = COALESCE(json_extract(other_config, '$.reasoning'), '{}'),
+  workspace_sharing = COALESCE(json_extract(other_config, '$.workspace_sharing'), '{}'),
+  chatgpt_oauth_routing = COALESCE(json_extract(other_config, '$.chatgpt_oauth_routing'), '{}'),
+  shell_deny_groups = COALESCE(json_extract(other_config, '$.shell_deny_groups'), '{}'),
+  kg_dedup_config = COALESCE(json_extract(other_config, '$.kg_dedup_config'), '{}')
+WHERE other_config != '{}' AND other_config IS NOT NULL;
+UPDATE agents SET other_config = json_remove(other_config,
+  '$.emoji', '$.description', '$.thinking_level', '$.max_tokens',
+  '$.self_evolve', '$.skill_evolve', '$.skill_nudge_interval',
+  '$.reasoning', '$.workspace_sharing', '$.chatgpt_oauth_routing',
+  '$.shell_deny_groups', '$.kg_dedup_config');`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

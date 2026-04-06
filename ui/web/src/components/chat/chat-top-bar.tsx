@@ -38,7 +38,7 @@ export function ChatTopBar({ agentId, isRunning, isBusy, activity, teamTasks, on
       .then((res) => {
         const found = (res.agents ?? []).find((a) => a.agent_key === agentId);
         if (found) {
-          const emoji = (found.other_config?.emoji as string) || undefined;
+          const emoji = found.emoji || undefined;
           setAgent({ name: found.display_name || found.agent_key, emoji });
         } else {
           setAgent({ name: agentId });

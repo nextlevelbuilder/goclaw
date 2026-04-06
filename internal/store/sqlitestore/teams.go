@@ -158,7 +158,7 @@ func (s *SQLiteTeamStore) ListTeams(ctx context.Context) ([]store.TeamData, erro
 			 COALESCE(a.agent_key, '') AS agent_key,
 			 COALESCE(a.display_name, '') AS display_name,
 			 COALESCE(a.frontmatter, '') AS frontmatter,
-			 COALESCE(json_extract(a.other_config, '$.emoji'), '') AS emoji
+			 COALESCE(a.emoji, '') AS emoji
 			 FROM agent_team_members m
 			 JOIN agents a ON a.id = m.agent_id
 			 WHERE a.status = 'active'
@@ -215,7 +215,7 @@ func (s *SQLiteTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
-		 COALESCE(json_extract(a.other_config, '$.emoji'), '') AS emoji
+		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
 		 JOIN agent_teams at2 ON at2.id = m.team_id
@@ -258,7 +258,7 @@ func (s *SQLiteTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID)
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
-		 COALESCE(json_extract(a.other_config, '$.emoji'), '') AS emoji
+		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
 		 JOIN agent_teams at2 ON at2.id = m.team_id

@@ -42,6 +42,19 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		CompactionConfig json.RawMessage `json:"compaction_config,omitempty"`
 		ContextPruning   json.RawMessage `json:"context_pruning,omitempty"`
 		OtherConfig      json.RawMessage `json:"other_config,omitempty"`
+		// Promoted config fields
+		Emoji               *string         `json:"emoji,omitempty"`
+		AgentDescription    *string         `json:"agent_description,omitempty"`
+		ThinkingLevel       *string         `json:"thinking_level,omitempty"`
+		MaxTokens           *int            `json:"max_tokens,omitempty"`
+		SelfEvolve          *bool           `json:"self_evolve,omitempty"`
+		SkillEvolve         *bool           `json:"skill_evolve,omitempty"`
+		SkillNudgeInterval  *int            `json:"skill_nudge_interval,omitempty"`
+		ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty"`
+		WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty"`
+		ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty"`
+		ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty"`
+		KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -114,6 +127,43 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		}
 		if len(params.OtherConfig) > 0 {
 			updates["other_config"] = []byte(params.OtherConfig)
+		}
+		// Promoted config fields
+		if params.Emoji != nil {
+			updates["emoji"] = *params.Emoji
+		}
+		if params.AgentDescription != nil {
+			updates["agent_description"] = *params.AgentDescription
+		}
+		if params.ThinkingLevel != nil {
+			updates["thinking_level"] = *params.ThinkingLevel
+		}
+		if params.MaxTokens != nil {
+			updates["max_tokens"] = *params.MaxTokens
+		}
+		if params.SelfEvolve != nil {
+			updates["self_evolve"] = *params.SelfEvolve
+		}
+		if params.SkillEvolve != nil {
+			updates["skill_evolve"] = *params.SkillEvolve
+		}
+		if params.SkillNudgeInterval != nil {
+			updates["skill_nudge_interval"] = *params.SkillNudgeInterval
+		}
+		if len(params.ReasoningConfig) > 0 {
+			updates["reasoning_config"] = []byte(params.ReasoningConfig)
+		}
+		if len(params.WorkspaceSharing) > 0 {
+			updates["workspace_sharing"] = []byte(params.WorkspaceSharing)
+		}
+		if len(params.ChatGPTOAuthRouting) > 0 {
+			updates["chatgpt_oauth_routing"] = []byte(params.ChatGPTOAuthRouting)
+		}
+		if len(params.ShellDenyGroups) > 0 {
+			updates["shell_deny_groups"] = []byte(params.ShellDenyGroups)
+		}
+		if len(params.KGDedupConfig) > 0 {
+			updates["kg_dedup_config"] = []byte(params.KGDedupConfig)
 		}
 
 		if len(updates) > 0 {

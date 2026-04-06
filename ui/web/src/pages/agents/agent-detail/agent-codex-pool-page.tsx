@@ -58,8 +58,8 @@ export function AgentCodexPoolPage() {
     agent && currentProvider?.provider_type === "chatgpt_oauth",
   );
   const savedRouting = useMemo(
-    () => normalizeChatGPTOAuthRouting(agent?.other_config),
-    [agent?.other_config],
+    () => normalizeChatGPTOAuthRouting(agent?.chatgpt_oauth_routing ?? agent?.other_config),
+    [agent?.chatgpt_oauth_routing, agent?.other_config],
   );
   const savedEffectiveRouting = useMemo(
     () =>
@@ -220,13 +220,13 @@ export function AgentCodexPoolPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateAgent({
-        other_config: buildAgentOtherConfigWithChatGPTOAuthRouting(
-          agent,
-          routing,
-          currentProvider?.settings,
-        ),
-      });
+      // buildAgentOtherConfigWithChatGPTOAuthRouting returns top-level fields
+      const payload = buildAgentOtherConfigWithChatGPTOAuthRouting(
+        agent,
+        routing,
+        currentProvider?.settings,
+      );
+      await updateAgent(payload);
       await Promise.all([refreshActivity(), refreshQuotas()]);
     } catch {
       // toast handled in hook

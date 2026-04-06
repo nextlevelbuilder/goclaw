@@ -203,7 +203,7 @@ func (h *AgentsHandler) handleResummon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	description := extractDescription(ag.OtherConfig)
+	description := ag.AgentDescription
 	if description == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgNoDescription)})
 		return
@@ -218,19 +218,6 @@ func (h *AgentsHandler) handleResummon(w http.ResponseWriter, r *http.Request) {
 
 	emitAudit(h.msgBus, r, "agent.resummoned", "agent", id.String())
 	writeJSON(w, http.StatusAccepted, map[string]string{"ok": "true", "status": store.AgentStatusSummoning})
-}
-
-// extractDescription pulls the description string from other_config JSONB.
-func extractDescription(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var cfg map[string]any
-	if json.Unmarshal(raw, &cfg) != nil {
-		return ""
-	}
-	desc, _ := cfg["description"].(string)
-	return desc
 }
 
 // writeJSON moved to response_helpers.go

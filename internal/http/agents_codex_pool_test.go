@@ -87,12 +87,10 @@ func TestResolveCodexPoolRoutingHonorsInheritOverride(t *testing.T) {
 	agent := &store.AgentData{
 		TenantID: tenantID,
 		Provider: "openai-codex",
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"override_mode": "inherit",
-				"strategy": "round_robin",
-				"extra_provider_names": ["ignored-backup"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"override_mode": "inherit",
+			"strategy": "round_robin",
+			"extra_provider_names": ["ignored-backup"]
 		}`),
 	}
 
@@ -127,11 +125,9 @@ func TestResolveCodexPoolRoutingIgnoresNonCodexBaseProvider(t *testing.T) {
 	agent := &store.AgentData{
 		TenantID: tenantID,
 		Provider: "anthropic",
-		OtherConfig: json.RawMessage(`{
-			"chatgpt_oauth_routing": {
-				"strategy": "round_robin",
-				"extra_provider_names": ["codex-backup"]
-			}
+		ChatGPTOAuthRouting: json.RawMessage(`{
+			"strategy": "round_robin",
+			"extra_provider_names": ["codex-backup"]
 		}`),
 	}
 

@@ -104,6 +104,10 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 		 context_window, max_tool_iterations, workspace, restrict_to_workspace,
 		 tools_config, sandbox_config, subagents_config, memory_config,
 		 compaction_config, context_pruning, other_config,
+		 emoji, agent_description, thinking_level, max_tokens,
+		 self_evolve, skill_evolve, skill_nudge_interval,
+		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
+		 shell_deny_groups, kg_dedup_config,
 		 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id`
 
 func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
@@ -122,12 +126,21 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 		 context_window, max_tool_iterations, workspace, restrict_to_workspace,
 		 tools_config, sandbox_config, subagents_config, memory_config,
 		 compaction_config, context_pruning, other_config,
+		 emoji, agent_description, thinking_level, max_tokens,
+		 self_evolve, skill_evolve, skill_nudge_interval,
+		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
+		 shell_deny_groups, kg_dedup_config,
 		 agent_type, is_default, status, budget_monthly_cents, created_at, updated_at, tenant_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+		         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37)`,
 		agent.ID, agent.AgentKey, agent.DisplayName, sql.NullString{String: agent.Frontmatter, Valid: agent.Frontmatter != ""}, agent.OwnerID, agent.Provider, agent.Model,
 		agent.ContextWindow, agent.MaxToolIterations, agent.Workspace, agent.RestrictToWorkspace,
 		jsonOrEmpty(agent.ToolsConfig), jsonOrNull(agent.SandboxConfig), jsonOrNull(agent.SubagentsConfig), jsonOrNull(agent.MemoryConfig),
 		jsonOrNull(agent.CompactionConfig), jsonOrNull(agent.ContextPruning), jsonOrEmpty(agent.OtherConfig),
+		agent.Emoji, agent.AgentDescription, agent.ThinkingLevel, agent.MaxTokens,
+		agent.SelfEvolve, agent.SkillEvolve, agent.SkillNudgeInterval,
+		jsonOrEmpty(agent.ReasoningConfig), jsonOrEmpty(agent.WorkspaceSharing), jsonOrEmpty(agent.ChatGPTOAuthRouting),
+		jsonOrEmpty(agent.ShellDenyGroups), jsonOrEmpty(agent.KGDedupConfig),
 		agent.AgentType, agent.IsDefault, agent.Status, agent.BudgetMonthlyCents, now, now, tenantID,
 	)
 	if err != nil {
@@ -480,9 +493,13 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	var frontmatter sql.NullString
 	// pgx: scan nullable JSONB into *[]byte (NOT *json.RawMessage — pgx can't scan NULL into defined types)
 	var toolsCfg, sandboxCfg, subagentsCfg, memoryCfg, compactionCfg, pruningCfg, otherCfg *[]byte
+	var reasoningCfg, wsCfg, oauthCfg, shellCfg, kgCfg *[]byte
 	err := row.Scan(&d.ID, &d.AgentKey, &d.DisplayName, &frontmatter, &d.OwnerID, &d.Provider, &d.Model,
 		&d.ContextWindow, &d.MaxToolIterations, &d.Workspace, &d.RestrictToWorkspace,
 		&toolsCfg, &sandboxCfg, &subagentsCfg, &memoryCfg, &compactionCfg, &pruningCfg, &otherCfg,
+		&d.Emoji, &d.AgentDescription, &d.ThinkingLevel, &d.MaxTokens,
+		&d.SelfEvolve, &d.SkillEvolve, &d.SkillNudgeInterval,
+		&reasoningCfg, &wsCfg, &oauthCfg, &shellCfg, &kgCfg,
 		&d.AgentType, &d.IsDefault, &d.Status, &d.BudgetMonthlyCents, &d.CreatedAt, &d.UpdatedAt, &d.TenantID)
 	if err != nil {
 		return nil, err
@@ -511,6 +528,21 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	}
 	if otherCfg != nil {
 		d.OtherConfig = *otherCfg
+	}
+	if reasoningCfg != nil {
+		d.ReasoningConfig = *reasoningCfg
+	}
+	if wsCfg != nil {
+		d.WorkspaceSharing = *wsCfg
+	}
+	if oauthCfg != nil {
+		d.ChatGPTOAuthRouting = *oauthCfg
+	}
+	if shellCfg != nil {
+		d.ShellDenyGroups = *shellCfg
+	}
+	if kgCfg != nil {
+		d.KGDedupConfig = *kgCfg
 	}
 	return &d, nil
 }

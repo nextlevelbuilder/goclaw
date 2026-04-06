@@ -94,17 +94,16 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     setLoading(true);
     setSubmitError("");
     try {
-      const otherConfig: Record<string, unknown> = {};
-      if (data.emoji?.trim()) otherConfig.emoji = data.emoji.trim();
-      if (data.description?.trim()) otherConfig.description = data.description.trim();
-      if (data.selfEvolve) otherConfig.self_evolve = true;
       await onCreate({
         agent_key: data.agentKey,
         display_name: data.displayName || undefined,
         provider: data.provider,
         model: data.model,
         agent_type: data.agentType,
-        other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+        // Promoted fields at top level
+        emoji: data.emoji?.trim() || null,
+        agent_description: data.description?.trim() || null,
+        self_evolve: data.selfEvolve || false,
       });
       onOpenChange(false);
     } catch (err) {

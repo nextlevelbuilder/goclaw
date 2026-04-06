@@ -17,10 +17,9 @@ interface AgentListRowProps {
 export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }: AgentListRowProps) {
   const { t } = useTranslation("agents");
   const displayName = agentDisplayName(agent, t("card.unnamedAgent"));
-  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
-  const selfEvolve = agent.agent_type === "predefined" && Boolean(otherCfg.self_evolve);
-  const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
-  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
+  const selfEvolve = agent.agent_type === "predefined" && Boolean(agent.self_evolve);
+  const emoji = agent.emoji ?? "";
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
 
   return (
     <button

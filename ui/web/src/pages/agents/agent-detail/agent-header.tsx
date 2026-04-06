@@ -21,12 +21,11 @@ interface AgentHeaderProps {
 export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, onHeartbeat }: AgentHeaderProps) {
   const { t } = useTranslation("agents");
 
-  const otherCfg = (agent.other_config ?? {}) as Record<string, unknown>;
-  const emoji = typeof otherCfg.emoji === "string" ? otherCfg.emoji : "";
-  const selfEvolve = Boolean(otherCfg.self_evolve);
+  const emoji = agent.emoji ?? "";
+  const selfEvolve = Boolean(agent.self_evolve);
   const title = agentDisplayName(agent, t("card.unnamedAgent"));
   const keyDisplay = agentKeyDisplay(agent.agent_key);
-  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.other_config);
+  const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
 
   const hbConfigured = heartbeat != null;
   const hbEnabled = heartbeat?.enabled ?? false;

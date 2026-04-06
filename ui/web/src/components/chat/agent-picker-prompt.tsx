@@ -10,7 +10,7 @@ interface AgentPickerPromptProps {
 }
 
 function agentEmoji(agent: AgentData): string | undefined {
-  return (agent.other_config?.emoji as string) || undefined;
+  return agent.emoji || undefined;
 }
 
 export function AgentPickerPrompt({ onSelect }: AgentPickerPromptProps) {

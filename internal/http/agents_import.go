@@ -587,6 +587,55 @@ func (h *AgentsHandler) buildAgentFromArchive(cfg map[string]json.RawMessage, ag
 	ag.ContextPruning = rawOrNil(cfg["context_pruning"])
 	ag.OtherConfig = rawOrNil(cfg["other_config"])
 
+	// Promoted config fields — try top-level first, fall back to other_config for legacy exports
+	unmarshalField(cfg, "emoji", &ag.Emoji)
+	unmarshalField(cfg, "agent_description", &ag.AgentDescription)
+	unmarshalField(cfg, "thinking_level", &ag.ThinkingLevel)
+	unmarshalField(cfg, "max_tokens", &ag.MaxTokens)
+	unmarshalField(cfg, "self_evolve", &ag.SelfEvolve)
+	unmarshalField(cfg, "skill_evolve", &ag.SkillEvolve)
+	unmarshalField(cfg, "skill_nudge_interval", &ag.SkillNudgeInterval)
+	ag.ReasoningConfig = rawOrNil(cfg["reasoning_config"])
+	ag.WorkspaceSharing = rawOrNil(cfg["workspace_sharing"])
+	ag.ChatGPTOAuthRouting = rawOrNil(cfg["chatgpt_oauth_routing"])
+	ag.ShellDenyGroups = rawOrNil(cfg["shell_deny_groups"])
+	ag.KGDedupConfig = rawOrNil(cfg["kg_dedup_config"])
+
+	// Backward compat: extract promoted fields from other_config for pre-migration exports
+	if len(ag.OtherConfig) > 2 {
+		var oc map[string]json.RawMessage
+		if json.Unmarshal(ag.OtherConfig, &oc) == nil {
+			extractLegacy := func(key string, dest *string) {
+				if *dest == "" {
+					if v, ok := oc[key]; ok {
+						var s string
+						if json.Unmarshal(v, &s) == nil {
+							*dest = s
+						}
+					}
+				}
+			}
+			extractLegacy("emoji", &ag.Emoji)
+			extractLegacy("description", &ag.AgentDescription)
+			extractLegacy("thinking_level", &ag.ThinkingLevel)
+			if ag.ReasoningConfig == nil {
+				ag.ReasoningConfig = rawOrNil(oc["reasoning"])
+			}
+			if ag.WorkspaceSharing == nil {
+				ag.WorkspaceSharing = rawOrNil(oc["workspace_sharing"])
+			}
+			if ag.ChatGPTOAuthRouting == nil {
+				ag.ChatGPTOAuthRouting = rawOrNil(oc["chatgpt_oauth_routing"])
+			}
+			if ag.ShellDenyGroups == nil {
+				ag.ShellDenyGroups = rawOrNil(oc["shell_deny_groups"])
+			}
+			if ag.KGDedupConfig == nil {
+				ag.KGDedupConfig = rawOrNil(oc["kg_dedup_config"])
+			}
+		}
+	}
+
 	if ag.AgentType == "" {
 		ag.AgentType = store.AgentTypeOpen
 	}

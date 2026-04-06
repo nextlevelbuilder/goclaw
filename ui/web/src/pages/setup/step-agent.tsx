@@ -34,13 +34,13 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
   // Default to first preset (Fox Spirit)
   const defaultPreset = agentPresets[0];
   const [description, setDescription] = useState(
-    existingAgent?.other_config?.description as string ?? defaultPreset?.prompt ?? "",
+    existingAgent?.agent_description ?? defaultPreset?.prompt ?? "",
   );
   const [selectedPresetIdx, setSelectedPresetIdx] = useState<number | null>(
     existingAgent ? null : 0,
   );
   const [selfEvolve, setSelfEvolve] = useState(
-    !!(existingAgent?.other_config?.self_evolve),
+    Boolean(existingAgent?.self_evolve),
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -123,17 +123,15 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
     setError("");
 
     try {
-      const otherConfig: Record<string, unknown> = {};
-      if (description.trim()) otherConfig.description = description.trim();
-      if (selfEvolve) otherConfig.self_evolve = true;
-      if (selectedEmoji) otherConfig.emoji = selectedEmoji;
-
       if (isEditing) {
         const patch: Partial<AgentData> = {
           display_name: displayName.trim() || undefined,
           provider: provider.name,
           model: model || "",
-          other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+          // Promoted fields at top level
+          agent_description: description.trim() || null,
+          self_evolve: selfEvolve,
+          emoji: selectedEmoji || null,
         };
         await updateAgent(existingAgent!.id, patch);
         onComplete({ ...existingAgent!, ...patch } as AgentData);
@@ -145,7 +143,10 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
           model: model || "",
           agent_type: "predefined",
           is_default: true,
-          other_config: Object.keys(otherConfig).length > 0 ? otherConfig : undefined,
+          // Promoted fields at top level
+          agent_description: description.trim() || null,
+          self_evolve: selfEvolve,
+          emoji: selectedEmoji || null,
         };
 
         const result = await createAgent(data) as AgentData;

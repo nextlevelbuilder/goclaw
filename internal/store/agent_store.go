@@ -67,7 +67,21 @@ type AgentData struct {
 	MemoryConfig     json.RawMessage `json:"memory_config,omitempty"`
 	CompactionConfig json.RawMessage `json:"compaction_config,omitempty"`
 	ContextPruning   json.RawMessage `json:"context_pruning,omitempty"`
-	OtherConfig      json.RawMessage `json:"other_config,omitempty"`
+	OtherConfig      json.RawMessage `json:"other_config,omitempty"` // extensibility bag for future fields
+
+	// Promoted from other_config (migration 000037 v3)
+	Emoji               string          `json:"emoji"`
+	AgentDescription    string          `json:"agent_description"`
+	ThinkingLevel       string          `json:"thinking_level"`
+	MaxTokens           int             `json:"max_tokens"`
+	SelfEvolve          bool            `json:"self_evolve"`
+	SkillEvolve         bool            `json:"skill_evolve"`
+	SkillNudgeInterval  int             `json:"skill_nudge_interval"`
+	ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty"`
+	WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty"`
+	ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty"`
+	ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty"`
+	KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty"`
 }
 
 // ParseToolsConfig returns per-agent tool policy, or nil if not configured.
@@ -162,22 +176,14 @@ func (a *AgentData) ParseThinkingLevel() string {
 	return a.ParseReasoningConfig().Effort
 }
 
-// ParseReasoningConfig extracts additive advanced reasoning settings from other_config.
-// Legacy thinking_level remains a backward-compatible fallback source.
+// ParseReasoningConfig reads advanced reasoning settings from the dedicated
+// reasoning_config column with ThinkingLevel as legacy fallback.
 func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
 	cfg := AgentReasoningConfig{
 		OverrideMode: ReasoningOverrideInherit,
 		Effort:       "off",
 		Fallback:     ReasoningFallbackDowngrade,
 		Source:       ReasoningSourceUnset,
-	}
-	if len(a.OtherConfig) == 0 {
-		return cfg
-	}
-
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(a.OtherConfig, &raw) != nil {
-		return cfg
 	}
 
 	var reasoning struct {
@@ -186,13 +192,9 @@ func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
 		Fallback     string `json:"fallback"`
 	}
 	explicitInherit := false
-	if data, ok := raw["reasoning"]; ok && len(data) > 0 && json.Unmarshal(data, &reasoning) == nil {
+	if len(a.ReasoningConfig) > 2 && json.Unmarshal(a.ReasoningConfig, &reasoning) == nil {
 		if reasoning.OverrideMode == ReasoningOverrideInherit {
 			explicitInherit = true
-			cfg.OverrideMode = ReasoningOverrideInherit
-			cfg.Source = ReasoningSourceUnset
-			cfg.Effort = "off"
-			cfg.Fallback = ReasoningFallbackDowngrade
 		} else {
 			cfg.OverrideMode = ReasoningOverrideCustom
 			cfg.Source = ReasoningSourceAdvanced
@@ -203,19 +205,14 @@ func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
 		}
 	}
 
-	if !explicitInherit {
-		if data, ok := raw["thinking_level"]; ok && len(data) > 0 {
-			var legacy string
-			if json.Unmarshal(data, &legacy) == nil {
-				if effort := normalizeReasoningEffort(legacy); effort != "" {
-					if cfg.Source == ReasoningSourceUnset {
-						cfg.OverrideMode = ReasoningOverrideCustom
-						cfg.Source = ReasoningSourceLegacy
-						cfg.Effort = effort
-					} else if cfg.Effort == "off" {
-						cfg.Effort = effort
-					}
-				}
+	if !explicitInherit && a.ThinkingLevel != "" {
+		if effort := normalizeReasoningEffort(a.ThinkingLevel); effort != "" {
+			if cfg.Source == ReasoningSourceUnset {
+				cfg.OverrideMode = ReasoningOverrideCustom
+				cfg.Source = ReasoningSourceLegacy
+				cfg.Effort = effort
+			} else if cfg.Effort == "off" {
+				cfg.Effort = effort
 			}
 		}
 	}
@@ -223,69 +220,22 @@ func (a *AgentData) ParseReasoningConfig() AgentReasoningConfig {
 	return cfg
 }
 
-// ParseMaxTokens extracts max_tokens from other_config JSONB.
-// Returns 0 if not configured (caller should apply default).
-func (a *AgentData) ParseMaxTokens() int {
-	if len(a.OtherConfig) == 0 {
-		return 0
-	}
-	var cfg struct {
-		MaxTokens int `json:"max_tokens"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
-		return 0
-	}
-	return cfg.MaxTokens
-}
+// ParseMaxTokens returns per-agent max_tokens. 0 means use provider default.
+func (a *AgentData) ParseMaxTokens() int { return a.MaxTokens }
 
-// ParseSelfEvolve extracts self_evolve from other_config JSONB.
-// When true, predefined agents can update their SOUL.md (style/tone) through chat.
-func (a *AgentData) ParseSelfEvolve() bool {
-	if len(a.OtherConfig) == 0 {
-		return false
-	}
-	var cfg struct {
-		SelfEvolve bool `json:"self_evolve"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
-		return false
-	}
-	return cfg.SelfEvolve
-}
+// ParseSelfEvolve returns whether predefined agents can update their SOUL.md through chat.
+func (a *AgentData) ParseSelfEvolve() bool { return a.SelfEvolve }
 
-// ParseSkillEvolve extracts skill_evolve from other_config JSONB.
-// When true, the agent's learning loop is enabled: system prompt includes skill
-// creation guidance, and the loop injects nudges at tool count milestones.
-func (a *AgentData) ParseSkillEvolve() bool {
-	if len(a.OtherConfig) == 0 {
-		return false
-	}
-	var cfg struct {
-		SkillEvolve bool `json:"skill_evolve"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
-		return false
-	}
-	return cfg.SkillEvolve
-}
+// ParseSkillEvolve returns whether the agent's skill learning loop is enabled.
+func (a *AgentData) ParseSkillEvolve() bool { return a.SkillEvolve }
 
-// ParseSkillNudgeInterval extracts skill_nudge_interval from other_config JSONB.
-// Returns the interval (in tool calls) at which the loop injects a skill creation reminder.
-// Default 15 when not set. Explicitly 0 disables mid-loop nudges (system prompt guidance still shown).
+// ParseSkillNudgeInterval returns the tool-call interval for skill creation reminders.
+// Returns 15 (default) when column is 0 (unset).
 func (a *AgentData) ParseSkillNudgeInterval() int {
-	if len(a.OtherConfig) == 0 {
+	if a.SkillNudgeInterval <= 0 {
 		return 15
 	}
-	var cfg struct {
-		SkillNudgeInterval *int `json:"skill_nudge_interval"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil {
-		return 15
-	}
-	if cfg.SkillNudgeInterval == nil {
-		return 15
-	}
-	return *cfg.SkillNudgeInterval
+	return a.SkillNudgeInterval
 }
 
 // normalizeReasoningEffort delegates to providers.NormalizeReasoningEffort (DRY).
@@ -386,52 +336,48 @@ type ChatGPTOAuthRoutingConfig struct {
 	ExtraProviderNames []string `json:"extra_provider_names,omitempty"`
 }
 
-// ParseWorkspaceSharing extracts workspace_sharing from other_config JSONB.
+// ParseWorkspaceSharing reads workspace sharing config from the dedicated column.
 // Returns nil if not configured or all fields are default (isolation enabled).
 func (a *AgentData) ParseWorkspaceSharing() *WorkspaceSharingConfig {
-	if len(a.OtherConfig) == 0 {
+	if len(a.WorkspaceSharing) <= 2 {
 		return nil
 	}
-	var cfg struct {
-		WS *WorkspaceSharingConfig `json:"workspace_sharing"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.WS == nil {
+	var ws WorkspaceSharingConfig
+	if json.Unmarshal(a.WorkspaceSharing, &ws) != nil {
 		return nil
 	}
-	if !cfg.WS.SharedDM && !cfg.WS.SharedGroup && len(cfg.WS.SharedUsers) == 0 && !cfg.WS.ShareMemory && !cfg.WS.ShareKnowledgeGraph {
+	if !ws.SharedDM && !ws.SharedGroup && len(ws.SharedUsers) == 0 && !ws.ShareMemory && !ws.ShareKnowledgeGraph {
 		return nil
 	}
-	return cfg.WS
+	return &ws
 }
 
-// ParseChatGPTOAuthRouting extracts chatgpt_oauth_routing from other_config JSONB.
+// ParseChatGPTOAuthRouting reads chatgpt_oauth_routing from the dedicated column.
 // Returns nil when no routing is configured.
 func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
-	if len(a.OtherConfig) == 0 {
+	if len(a.ChatGPTOAuthRouting) <= 2 {
 		return nil
 	}
-	var cfg struct {
-		Routing *ChatGPTOAuthRoutingConfig `json:"chatgpt_oauth_routing"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil || cfg.Routing == nil {
+	var raw ChatGPTOAuthRoutingConfig
+	if json.Unmarshal(a.ChatGPTOAuthRouting, &raw) != nil {
 		return nil
 	}
-	explicitOverrideMode := strings.TrimSpace(cfg.Routing.OverrideMode) != ""
-	explicitStrategy := strings.TrimSpace(cfg.Routing.Strategy) != ""
-	explicitExtras := cfg.Routing.ExtraProviderNames != nil
-	routing := normalizeChatGPTOAuthRoutingConfig(cfg.Routing)
+	explicitOverrideMode := strings.TrimSpace(raw.OverrideMode) != ""
+	explicitStrategy := strings.TrimSpace(raw.Strategy) != ""
+	explicitExtras := raw.ExtraProviderNames != nil
+	routing := normalizeChatGPTOAuthRoutingConfig(&raw)
 	if routing == nil {
 		if !explicitOverrideMode && !explicitStrategy && !explicitExtras {
 			return nil
 		}
 		overrideMode := ChatGPTOAuthOverrideCustom
 		if explicitOverrideMode {
-			overrideMode = normalizeChatGPTOAuthOverrideMode(cfg.Routing.OverrideMode)
+			overrideMode = normalizeChatGPTOAuthOverrideMode(raw.OverrideMode)
 		}
 		return &ChatGPTOAuthRoutingConfig{
 			OverrideMode:       overrideMode,
-			Strategy:           normalizeChatGPTOAuthStrategy(cfg.Routing.Strategy),
-			ExtraProviderNames: normalizeProviderNames(cfg.Routing.ExtraProviderNames),
+			Strategy:           normalizeChatGPTOAuthStrategy(raw.Strategy),
+			ExtraProviderNames: normalizeProviderNames(raw.ExtraProviderNames),
 		}
 	}
 	if explicitOverrideMode {
@@ -544,19 +490,17 @@ func normalizeProviderNames(names []string) []string {
 	return out
 }
 
-// ParseShellDenyGroups extracts shell_deny_groups from other_config JSONB.
+// ParseShellDenyGroups reads shell deny group toggles from the dedicated column.
 // Returns nil if not configured (all defaults apply).
 func (a *AgentData) ParseShellDenyGroups() map[string]bool {
-	if len(a.OtherConfig) == 0 {
+	if len(a.ShellDenyGroups) <= 2 {
 		return nil
 	}
-	var cfg struct {
-		ShellDenyGroups map[string]bool `json:"shell_deny_groups"`
-	}
-	if json.Unmarshal(a.OtherConfig, &cfg) != nil || len(cfg.ShellDenyGroups) == 0 {
+	var groups map[string]bool
+	if json.Unmarshal(a.ShellDenyGroups, &groups) != nil || len(groups) == 0 {
 		return nil
 	}
-	return cfg.ShellDenyGroups
+	return groups
 }
 
 // AgentShareData represents an agent share grant.

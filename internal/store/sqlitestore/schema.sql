@@ -116,6 +116,18 @@ CREATE TABLE IF NOT EXISTS agents (
     compaction_config     TEXT,
     context_pruning       TEXT,
     other_config          TEXT NOT NULL DEFAULT '{}',
+    emoji                 TEXT NOT NULL DEFAULT '',
+    agent_description     TEXT NOT NULL DEFAULT '',
+    thinking_level        TEXT NOT NULL DEFAULT '',
+    max_tokens            INT NOT NULL DEFAULT 0,
+    self_evolve           BOOLEAN NOT NULL DEFAULT 0,
+    skill_evolve          BOOLEAN NOT NULL DEFAULT 0,
+    skill_nudge_interval  INT NOT NULL DEFAULT 0,
+    reasoning_config      TEXT NOT NULL DEFAULT '{}',
+    workspace_sharing     TEXT NOT NULL DEFAULT '{}',
+    chatgpt_oauth_routing TEXT NOT NULL DEFAULT '{}',
+    shell_deny_groups     TEXT NOT NULL DEFAULT '{}',
+    kg_dedup_config       TEXT NOT NULL DEFAULT '{}',
     is_default            BOOLEAN NOT NULL DEFAULT 0,
     agent_type            VARCHAR(20) NOT NULL DEFAULT 'open',
     status                VARCHAR(20) DEFAULT 'active',
@@ -974,11 +986,14 @@ CREATE TABLE IF NOT EXISTS kg_entities (
     tenant_id   TEXT NOT NULL REFERENCES tenants(id),
     created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    valid_from  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    valid_until TEXT,
     UNIQUE(agent_id, user_id, external_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_kg_entities_scope ON kg_entities(agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_kg_entities_type ON kg_entities(agent_id, user_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_kg_entities_current ON kg_entities(agent_id, user_id) WHERE valid_until IS NULL;
 CREATE INDEX IF NOT EXISTS idx_kg_entities_team ON kg_entities(team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_kg_entities_tenant ON kg_entities(tenant_id);
 
@@ -998,11 +1013,14 @@ CREATE TABLE IF NOT EXISTS kg_relations (
     team_id          TEXT REFERENCES agent_teams(id) ON DELETE SET NULL,
     tenant_id        TEXT NOT NULL REFERENCES tenants(id),
     created_at       TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    valid_from  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    valid_until TEXT,
     UNIQUE(agent_id, user_id, source_entity_id, relation_type, target_entity_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_kg_relations_source ON kg_relations(source_entity_id, relation_type);
 CREATE INDEX IF NOT EXISTS idx_kg_relations_target ON kg_relations(target_entity_id);
+CREATE INDEX IF NOT EXISTS idx_kg_relations_current ON kg_relations(agent_id, user_id) WHERE valid_until IS NULL;
 CREATE INDEX IF NOT EXISTS idx_kg_relations_team ON kg_relations(team_id) WHERE team_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_kg_relations_tenant ON kg_relations(tenant_id);
 
@@ -1369,3 +1387,69 @@ CREATE TABLE IF NOT EXISTS subagent_tasks (
 CREATE INDEX IF NOT EXISTS idx_subagent_tasks_parent_status ON subagent_tasks(tenant_id, parent_agent_key, status);
 CREATE INDEX IF NOT EXISTS idx_subagent_tasks_session ON subagent_tasks(session_key);
 CREATE INDEX IF NOT EXISTS idx_subagent_tasks_created ON subagent_tasks(tenant_id, created_at);
+
+-- ============================================================
+-- Table: episodic_summaries (V3 Tier 2 memory)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS episodic_summaries (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id     VARCHAR(255) NOT NULL DEFAULT '',
+    session_key TEXT NOT NULL,
+    summary     TEXT NOT NULL,
+    l0_abstract TEXT NOT NULL DEFAULT '',
+    key_topics  TEXT NOT NULL DEFAULT '[]',
+    source_type TEXT NOT NULL DEFAULT 'session',
+    source_id   TEXT,
+    turn_count  INTEGER NOT NULL DEFAULT 0,
+    token_count INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    expires_at  TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_episodic_agent_user ON episodic_summaries(agent_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_episodic_tenant ON episodic_summaries(tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_episodic_source_dedup ON episodic_summaries(agent_id, user_id, source_id)
+    WHERE source_id IS NOT NULL;
+
+-- ============================================================
+-- Table: agent_evolution_metrics (V3 self-evolution Stage 1)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS agent_evolution_metrics (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id),
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    session_key TEXT NOT NULL,
+    metric_type TEXT NOT NULL,
+    metric_key  TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_evo_metrics_agent_type ON agent_evolution_metrics(agent_id, metric_type);
+CREATE INDEX IF NOT EXISTS idx_evo_metrics_created ON agent_evolution_metrics(created_at);
+CREATE INDEX IF NOT EXISTS idx_evo_metrics_tenant ON agent_evolution_metrics(tenant_id);
+
+-- ============================================================
+-- Table: agent_evolution_suggestions (V3 self-evolution Stage 2)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS agent_evolution_suggestions (
+    id              TEXT NOT NULL PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    agent_id        TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    suggestion_type TEXT NOT NULL,
+    suggestion      TEXT NOT NULL,
+    rationale       TEXT NOT NULL,
+    parameters      TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by     TEXT,
+    reviewed_at     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_evo_suggestions_agent ON agent_evolution_suggestions(agent_id, status);
+CREATE INDEX IF NOT EXISTS idx_evo_suggestions_tenant ON agent_evolution_suggestions(tenant_id);

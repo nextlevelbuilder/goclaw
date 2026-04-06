@@ -155,7 +155,7 @@ func (s *PGTeamStore) ListTeams(ctx context.Context) ([]store.TeamData, error) {
 			 COALESCE(a.agent_key, '') AS agent_key,
 			 COALESCE(a.display_name, '') AS display_name,
 			 COALESCE(a.frontmatter, '') AS frontmatter,
-			 COALESCE(a.other_config->>'emoji', '') AS emoji
+			 COALESCE(a.emoji, '') AS emoji
 			 FROM agent_team_members m
 			 JOIN agents a ON a.id = m.agent_id
 			 WHERE a.status = 'active'
@@ -210,7 +210,7 @@ func (s *PGTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]stor
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
-		 COALESCE(a.other_config->>'emoji', '') AS emoji
+		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
 		 JOIN agent_teams at2 ON at2.id = m.team_id
@@ -251,7 +251,7 @@ func (s *PGTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID) ([]
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
-		 COALESCE(a.other_config->>'emoji', '') AS emoji
+		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
 		 JOIN agent_teams at2 ON at2.id = m.team_id
