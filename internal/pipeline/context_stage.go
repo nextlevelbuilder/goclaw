@@ -73,8 +73,8 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		state.Messages.SetHistory(updated)
 	}
 
-	// 7. Auto-inject L0 memory context into system prompt
-	if s.deps.AutoInject != nil && state.Input.Message != "" {
+	// 7. Auto-inject L0 memory context into system prompt (gated on v3 retrieval flag)
+	if s.deps.Config.V3RetrievalEnabled && s.deps.AutoInject != nil && state.Input.Message != "" {
 		section, err := s.deps.AutoInject(ctx, state.Input.Message, state.Input.UserID)
 		if err == nil && section != "" {
 			state.Context.MemorySection = section

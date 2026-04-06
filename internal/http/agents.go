@@ -323,6 +323,17 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	allowed := filterAllowedKeys(updates, agentAllowedFields)
 	allowed["restrict_to_workspace"] = true
 
+	// Validate v3 flag values in other_config (must be boolean).
+	if oc, ok := allowed["other_config"]; ok && oc != nil {
+		switch v := oc.(type) {
+		case map[string]any:
+			if err := store.ValidateV3Flags(v); err != nil {
+				writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, err.Error())
+				return
+			}
+		}
+	}
+
 	validationProvider := ag.Provider
 	if providerName, ok := allowed["provider"].(string); ok && providerName != "" {
 		validationProvider = providerName

@@ -76,4 +76,8 @@ type PipelineConfig struct {
 	ContextWindow      int
 	MaxTokens          int
 	Compaction         *config.CompactionConfig
+
+	// V3 feature sub-flags (pipeline is already enabled when this config is used)
+	V3MemoryEnabled    bool
+	V3RetrievalEnabled bool
 }

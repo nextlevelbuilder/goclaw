@@ -53,6 +53,8 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 			ContextWindow:      l.contextWindow,
 			MaxTokens:          l.maxTokens,
 			Compaction:         l.compactionCfg,
+			V3MemoryEnabled:    l.v3MemoryEnabled,
+			V3RetrievalEnabled: l.v3RetrievalEnabled,
 		},
 		EmitEvent: func(event any) {
 			if ae, ok := event.(AgentEvent); ok {

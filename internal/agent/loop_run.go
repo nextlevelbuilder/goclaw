@@ -192,9 +192,18 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			}
 			return nil, err
 		}
-		// Jump to the existing success finalization below
-		// by assigning result/err and falling through to the post-runLoop code.
-		// But this duplicates too much — cleaner to just return here and handle tracing inline.
+		// Structured performance log for v3 pipeline runs.
+		elapsed := time.Since(runStart)
+		logAttrs := []any{
+			"agent", l.id, "duration_ms", elapsed.Milliseconds(),
+			"iterations", result.Iterations,
+			"v3_memory", l.v3MemoryEnabled, "v3_retrieval", l.v3RetrievalEnabled,
+		}
+		if result.Usage != nil {
+			logAttrs = append(logAttrs, "total_tokens", result.Usage.TotalTokens)
+		}
+		slog.Info("v3.run.completed", logAttrs...)
+
 		if agentSpanID != uuid.Nil {
 			l.emitAgentSpanEnd(ctx, agentSpanID, runStart, result, nil)
 		}

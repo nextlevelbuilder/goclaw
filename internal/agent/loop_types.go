@@ -85,8 +85,10 @@ type Loop struct {
 	memoryCfg    *config.MemoryConfig
 	sandboxCfg   *sandbox.Config
 
-	// v3 feature flags (from agent settings JSONB)
-	v3PipelineEnabled bool
+	// v3 feature flags (from agent other_config JSONB)
+	v3PipelineEnabled  bool
+	v3MemoryEnabled    bool
+	v3RetrievalEnabled bool
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
 	sessions        store.SessionStore
@@ -226,8 +228,10 @@ type LoopConfig struct {
 	DataDir          string // global workspace root for team workspace resolution
 	WorkspaceSharing *store.WorkspaceSharingConfig
 
-	// V3 feature flags (from agent settings JSONB)
-	V3PipelineEnabled bool
+	// V3 feature flags (from agent other_config JSONB)
+	V3PipelineEnabled  bool
+	V3MemoryEnabled    bool
+	V3RetrievalEnabled bool
 
 	// Per-agent DB overrides (nil = use global defaults)
 	RestrictToWs *bool
@@ -377,6 +381,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		dataDir:                cfg.DataDir,
 		workspaceSharing:       cfg.WorkspaceSharing,
 		v3PipelineEnabled:      cfg.V3PipelineEnabled,
+		v3MemoryEnabled:        cfg.V3MemoryEnabled,
+		v3RetrievalEnabled:     cfg.V3RetrievalEnabled,
 		restrictToWs:           cfg.RestrictToWs,
 		subagentsCfg:           cfg.SubagentsCfg,
 		memoryCfg:              cfg.MemoryCfg,

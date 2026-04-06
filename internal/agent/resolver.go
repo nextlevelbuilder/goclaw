@@ -357,6 +357,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			dataDir = config.TenantDataDir(deps.DataDir, ag.TenantID, tenantSlug)
 		}
 
+		// v3 feature flags (from other_config JSONB)
+		v3f := ag.ParseV3Flags()
+
 		restrictVal := true // always restrict agents to their workspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
@@ -364,6 +367,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
+			V3PipelineEnabled:     v3f.PipelineEnabled,
+			V3MemoryEnabled:       v3f.MemoryEnabled,
+			V3RetrievalEnabled:    v3f.RetrievalEnabled,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ContextWindow:          contextWindow,

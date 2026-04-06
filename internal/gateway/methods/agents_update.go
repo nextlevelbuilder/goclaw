@@ -126,6 +126,14 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 			updates["context_pruning"] = []byte(params.ContextPruning)
 		}
 		if len(params.OtherConfig) > 0 {
+			// Validate v3 flag values (must be boolean) before persisting.
+			var otherMap map[string]any
+			if json.Unmarshal(params.OtherConfig, &otherMap) == nil {
+				if err := store.ValidateV3Flags(otherMap); err != nil {
+					client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
+					return
+				}
+			}
 			updates["other_config"] = []byte(params.OtherConfig)
 		}
 		// Promoted config fields
