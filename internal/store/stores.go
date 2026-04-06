@@ -34,4 +34,5 @@ type Stores struct {
 	SkillTenantCfgs        SkillTenantConfigStore
 	SystemConfigs          SystemConfigStore
 	SubagentTasks          SubagentTaskStore
+	Vault                  VaultStore
 }

@@ -21,6 +21,7 @@ type WriteFileTool struct {
 	memIntc         *MemoryInterceptor          // nil = no memory routing
 	permStore       store.ConfigPermissionStore // nil = no group write restriction
 	workspaceIntc   *WorkspaceInterceptor       // nil = no team workspace validation
+	vaultIntc       *VaultInterceptor           // nil = no vault registration
 }
 
 // DenyPaths adds path prefixes that write_file must reject.
@@ -46,6 +47,11 @@ func (t *WriteFileTool) SetConfigPermStore(s store.ConfigPermissionStore) {
 // SetWorkspaceInterceptor enables team workspace validation and event broadcasting.
 func (t *WriteFileTool) SetWorkspaceInterceptor(intc *WorkspaceInterceptor) {
 	t.workspaceIntc = intc
+}
+
+// SetVaultInterceptor enables vault document registration on file writes.
+func (t *WriteFileTool) SetVaultInterceptor(v *VaultInterceptor) {
+	t.vaultIntc = v
 }
 
 func NewWriteFileTool(workspace string, restrict bool) *WriteFileTool {
@@ -200,6 +206,10 @@ func (t *WriteFileTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	if t.workspaceIntc != nil {
 		t.workspaceIntc.AfterWrite(ctx, resolved, "write")
+	}
+
+	if t.vaultIntc != nil {
+		go t.vaultIntc.AfterWrite(context.WithoutCancel(ctx), resolved, content)
 	}
 
 	verb := "written"

@@ -102,6 +102,15 @@ type MemorySectionData struct {
 	L0Summaries []memory.L0Summary
 	HasSearch   bool
 	HasKG       bool
+	VaultDocs   []VaultDocSummary `json:"vault_docs,omitempty"`
+	HasVault    bool              `json:"has_vault,omitempty"`
+}
+
+// VaultDocSummary is a brief vault document entry for prompt injection.
+type VaultDocSummary struct {
+	Title   string `json:"title"`
+	Path    string `json:"path"`
+	DocType string `json:"doc_type"`
 }
 
 // SandboxSectionData populates the sandbox template section.
