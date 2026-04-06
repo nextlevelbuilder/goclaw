@@ -389,6 +389,12 @@ func setupMemoryEmbeddings(
 					}
 				}()
 			}
+
+			// Wire embedding provider into vault store for semantic document search.
+			if pgStores.Vault != nil {
+				pgStores.Vault.SetEmbeddingProvider(embProvider)
+				slog.Info("vault embeddings enabled", "provider", embProvider.Name())
+			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")
 		}

@@ -305,6 +305,9 @@ func wireExtras(
 		slog.Info("knowledge graph tool wired (Postgres)")
 	}
 
+	// Wire vault tools and interceptors (conditional on vault store availability)
+	wireVault(stores, toolsReg, workspace)
+
 	// --- Cache invalidation event subscribers ---
 
 	// Context file cache: invalidate on agent/context data changes

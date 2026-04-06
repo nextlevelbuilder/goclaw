@@ -52,7 +52,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		ConfigPermissions: NewSQLiteConfigPermissionStore(db),
 		Memory:         NewSQLiteMemoryStore(db),
 		SubagentTasks:  NewSQLiteSubagentTaskStore(),
-		// Phase 2 Batch B+C stores (nil = gracefully skipped by gateway):
-		// AgentLinks, KnowledgeGraph, SecureCLI
+		// PG-only stores (nil = gracefully skipped by gateway):
+		// AgentLinks, KnowledgeGraph, SecureCLI, Vault
 	}, nil
 }
