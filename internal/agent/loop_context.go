@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
 
 // contextSetupResult holds the outputs of injectContext that are needed by the main loop.
@@ -172,6 +173,41 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 			if req.TeamID == "" {
 				ctx = tools.WithToolTeamID(ctx, team.ID.String())
 			}
+		}
+	}
+
+	// V3 workspace: resolve once, set immutable context.
+	// Enabled per-agent via settings JSONB: {"v3_pipeline_enabled": true}
+	// v2 code path above runs unconditionally — v3 adds new context key alongside.
+	if l.v3PipelineEnabled {
+		var teamIDPtr *string
+		if req.TeamID != "" {
+			teamIDPtr = &req.TeamID
+		}
+		var teamWSConfig *workspace.TeamWorkspaceConfig
+		if resolvedTeamSettings != nil {
+			var cfg workspace.TeamWorkspaceConfig
+			if json.Unmarshal(resolvedTeamSettings, &cfg) == nil {
+				teamWSConfig = &cfg
+			}
+		}
+		resolver := workspace.NewResolver()
+		wc, wsErr := resolver.Resolve(ctx, workspace.ResolveParams{
+			AgentID:    l.agentUUID.String(),
+			AgentType:  l.agentType,
+			UserID:     req.UserID,
+			ChatID:     req.ChatID,
+			TenantID:   store.TenantIDFromContext(ctx).String(),
+			TenantSlug: store.TenantSlugFromContext(ctx),
+			PeerKind:   req.PeerKind,
+			TeamID:    teamIDPtr,
+			TeamConfig: teamWSConfig,
+			BaseDir:   l.dataDir,
+		})
+		if wsErr != nil {
+			slog.Warn("v3 workspace resolution failed, falling back to v2", "err", wsErr)
+		} else {
+			ctx = workspace.WithContext(ctx, wc)
 		}
 	}
 

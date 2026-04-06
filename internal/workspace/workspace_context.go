@@ -61,6 +61,7 @@ type ResolveParams struct {
 	UserID     string
 	ChatID     string
 	TenantID   string
+	TenantSlug string // human-readable tenant name for path composition
 	PeerKind   string // "direct" | "group"
 	TeamID     *string
 	TeamConfig *TeamWorkspaceConfig
@@ -69,9 +70,15 @@ type ResolveParams struct {
 }
 
 // TeamWorkspaceConfig maps to team.settings JSON.
+// WorkspaceScope uses "shared"/"isolated" string to match existing DB schema.
 type TeamWorkspaceConfig struct {
-	SharedWorkspace bool   `json:"shared_workspace"`
-	WorkspacePath   string `json:"workspace_path,omitempty"`
+	WorkspaceScope string `json:"workspace_scope"`
+	WorkspacePath  string `json:"workspace_path,omitempty"`
+}
+
+// IsShared returns true when workspace_scope is "shared".
+func (c *TeamWorkspaceConfig) IsShared() bool {
+	return c != nil && c.WorkspaceScope == "shared"
 }
 
 // DelegateContext carries delegation-specific workspace overrides.
@@ -79,6 +86,22 @@ type DelegateContext struct {
 	LinkID      string
 	SharedPath  string
 	ExportPaths []string // read-only exports from delegator
+}
+
+// DefaultEnforcementLabel returns a human-readable workspace description
+// for system prompt injection based on scope and sharing mode.
+func DefaultEnforcementLabel(scope Scope, shared bool) string {
+	switch scope {
+	case ScopeDelegate:
+		return "You are working on a delegated task. Only access files in your designated workspace."
+	case ScopeTeam:
+		if shared {
+			return "You are working in a shared team workspace. Other members can see your files."
+		}
+		return "You are working in an isolated team workspace."
+	default:
+		return "You are working in the user's personal workspace."
+	}
 }
 
 // context key for WorkspaceContext propagation.
