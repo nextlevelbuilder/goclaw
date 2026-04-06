@@ -328,7 +328,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	}
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return ErrorResult(fmt.Sprintf("command timed out after %s", t.timeout))
 		}
 		if result == "" {

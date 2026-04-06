@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -21,7 +22,7 @@ func ExportTeamByID(ctx context.Context, db *sql.DB, teamID uuid.UUID) (*TeamExp
 			" FROM agent_teams WHERE id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	).Scan(&t.Name, &t.Description, &t.Status, &t.Settings)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -162,7 +163,7 @@ func ExportTeamLeadAgentID(ctx context.Context, db *sql.DB, teamID uuid.UUID) (u
 		"SELECT lead_agent_id FROM agent_teams WHERE id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	).Scan(&leadID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return uuid.Nil, nil
 	}
 	return leadID, err
@@ -179,7 +180,7 @@ func ExportTeamAgentBasicInfo(ctx context.Context, db *sql.DB, agentID uuid.UUID
 		"SELECT agent_key FROM agents WHERE id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	).Scan(&agentKey)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return agentKey, err

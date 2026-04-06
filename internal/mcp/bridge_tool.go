@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -112,7 +113,7 @@ func (t *BridgeTool) Execute(ctx context.Context, args map[string]any) *tools.Re
 
 	result, err := t.client.CallTool(callCtx, req)
 	if err != nil {
-		if callCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(callCtx.Err(), context.DeadlineExceeded) {
 			return tools.ErrorResult(fmt.Sprintf("MCP tool %q timeout after %ds", t.registeredName, t.timeoutSec))
 		}
 		return tools.ErrorResult(fmt.Sprintf("MCP tool %q error: %v", t.registeredName, err))

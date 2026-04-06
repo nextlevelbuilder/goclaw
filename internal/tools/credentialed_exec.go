@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -259,7 +260,7 @@ func formatCredentialedResult(binary string, args []string,
 	}
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return ErrorResult(fmt.Sprintf("[CREDENTIALED EXEC] Command timed out after %s.\nBinary: %s", timeout, binary))
 		}
 		exitCode := -1

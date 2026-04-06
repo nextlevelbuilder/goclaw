@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -176,7 +177,7 @@ func ImportMCPServer(ctx context.Context, db *sql.DB, srv MCPServerExport, creat
 	if err == nil {
 		return existing, false, nil // already exists — return existing ID
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return uuid.Nil, false, err
 	}
 

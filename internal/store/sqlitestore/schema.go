@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"log/slog"
 )
@@ -118,7 +119,7 @@ func EnsureSchema(db *sql.DB) error {
 
 	var current int
 	err := db.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&current)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		// Fresh database — apply full schema.
 		slog.Info("sqlite: applying initial schema", "version", SchemaVersion)
 		tx, txErr := db.Begin()
