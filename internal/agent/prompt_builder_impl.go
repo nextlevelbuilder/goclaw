@@ -40,6 +40,13 @@ func (b *BridgePromptBuilder) Build(cfg PromptConfig) (string, error) {
 		})
 	}
 
+	if cfg.Instructions && cfg.InstructionContent != "" {
+		spc.ContextFiles = append(spc.ContextFiles, bootstrap.ContextFile{
+			Path:    "AGENTS.md",
+			Content: cfg.InstructionContent,
+		})
+	}
+
 	if cfg.Tools {
 		names := make([]string, 0, len(cfg.ToolsData.ToolDefs))
 		for _, td := range cfg.ToolsData.ToolDefs {
