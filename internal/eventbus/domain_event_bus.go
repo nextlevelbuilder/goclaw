@@ -27,9 +27,10 @@ type DomainEventBus interface {
 // Config for the domain event bus worker pool.
 type Config struct {
 	QueueSize     int           // buffered channel capacity (default 1000)
-	WorkerCount   int           // goroutines per event type (default 2)
+	WorkerCount   int           // goroutines processing events (default 2)
 	RetryAttempts int           // retry on handler error (default 3)
 	RetryDelay    time.Duration // backoff base (default 1s, exponential)
+	DedupTTL      time.Duration // dedup window for SourceID (default 5m)
 }
 
 // DefaultConfig returns sensible defaults for the event bus.
@@ -39,5 +40,6 @@ func DefaultConfig() Config {
 		WorkerCount:   2,
 		RetryAttempts: 3,
 		RetryDelay:    time.Second,
+		DedupTTL:      5 * time.Minute,
 	}
 }
