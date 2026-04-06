@@ -55,7 +55,14 @@ func buildMCPToolsInlineSection(descs map[string]string) []string {
 		mcpOptionalParamInstruction,
 		"",
 	}
-	for name, desc := range descs {
+	// Sort MCP tool names for deterministic ordering — critical for prompt caching.
+	sortedNames := make([]string, 0, len(descs))
+	for name := range descs {
+		sortedNames = append(sortedNames, name)
+	}
+	slices.Sort(sortedNames)
+	for _, name := range sortedNames {
+		desc := descs[name]
 		if len(desc) > mcpToolDescMaxLen {
 			desc = desc[:mcpToolDescMaxLen] + "…"
 		}

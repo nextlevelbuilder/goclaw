@@ -130,8 +130,16 @@ func (pe *PolicyEngine) FilterTools(
 		}
 	}
 
-	// Add registry aliases for allowed canonical tools
-	for alias, canonical := range registry.Aliases() {
+	// Add registry aliases for allowed canonical tools.
+	// Sort alias names for deterministic ordering (prompt caching).
+	aliasList := make([]string, 0, len(registry.Aliases()))
+	for alias := range registry.Aliases() {
+		aliasList = append(aliasList, alias)
+	}
+	slices.Sort(aliasList)
+	aliasMap := registry.Aliases()
+	for _, alias := range aliasList {
+		canonical := aliasMap[alias]
 		if !allowedSet[canonical] {
 			continue
 		}
