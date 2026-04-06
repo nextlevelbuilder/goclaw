@@ -89,12 +89,23 @@ var leafSubagentDenyList = []string{
 
 // PolicyEngine evaluates tool access based on layered config policies.
 type PolicyEngine struct {
-	globalPolicy *config.ToolsConfig
+	globalPolicy     *config.ToolsConfig
+	denyCapabilities []ToolCapability // capability-based deny rules (v3)
+	registry         *Registry        // for metadata lookups (nil = skip capability checks)
 }
 
 // NewPolicyEngine creates a policy engine from global config.
 func NewPolicyEngine(cfg *config.ToolsConfig) *PolicyEngine {
 	return &PolicyEngine{globalPolicy: cfg}
+}
+
+// SetRegistry enables capability-based filtering by providing metadata lookups.
+func (pe *PolicyEngine) SetRegistry(r *Registry) { pe.registry = r }
+
+// DenyCapability adds a capability to the deny list.
+// Tools with this capability are excluded from FilterTools results.
+func (pe *PolicyEngine) DenyCapability(cap ToolCapability) {
+	pe.denyCapabilities = append(pe.denyCapabilities, cap)
 }
 
 // FilterTools returns only the tools allowed by the policy for the given context.
@@ -110,6 +121,11 @@ func (pe *PolicyEngine) FilterTools(
 ) []providers.ToolDefinition {
 	allTools := registry.List()
 	allowed := pe.evaluate(allTools, providerName, agentToolPolicy, groupToolAllow)
+
+	// Step 8: Capability-based deny (v3 RBAC)
+	if len(pe.denyCapabilities) > 0 && pe.registry != nil {
+		allowed = pe.filterByCapability(allowed)
+	}
 
 	// Apply subagent restrictions
 	if isSubagent {
@@ -449,4 +465,23 @@ func copySlice(s []string) []string {
 	c := make([]string, len(s))
 	copy(c, s)
 	return c
+}
+
+// filterByCapability removes tools whose metadata matches any denied capability.
+func (pe *PolicyEngine) filterByCapability(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		meta := pe.registry.GetMetadata(name)
+		denied := false
+		for _, denyCap := range pe.denyCapabilities {
+			if meta.HasCapability(denyCap) {
+				denied = true
+				break
+			}
+		}
+		if !denied {
+			out = append(out, name)
+		}
+	}
+	return out
 }

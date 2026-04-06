@@ -38,3 +38,23 @@ func (m ToolMetadata) IsMutating() bool {
 func (m ToolMetadata) IsReadOnly() bool {
 	return m.HasCapability(CapReadOnly)
 }
+
+// inferMetadata returns default metadata for a tool based on name conventions.
+// Used when no explicit metadata was registered.
+func inferMetadata(name string) ToolMetadata {
+	meta := ToolMetadata{Name: name}
+	switch {
+	case name == "read_file" || name == "list_files" || name == "read_image" ||
+		name == "read_audio" || name == "read_video" || name == "read_document" ||
+		name == "memory_search" || name == "memory_get" || name == "memory_expand" ||
+		name == "skill_search" || name == "knowledge_graph_search" ||
+		name == "sessions_list" || name == "session_status" || name == "sessions_history" ||
+		name == "datetime" || name == "web_search" || name == "web_fetch":
+		meta.Capabilities = []ToolCapability{CapReadOnly}
+	case name == "spawn":
+		meta.Capabilities = []ToolCapability{CapAsync}
+	default:
+		meta.Capabilities = []ToolCapability{CapMutating}
+	}
+	return meta
+}
