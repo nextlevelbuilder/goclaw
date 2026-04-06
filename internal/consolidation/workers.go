@@ -5,59 +5,53 @@
 package consolidation
 
 import (
-	"context"
-
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	"github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// EpisodicWorkerDeps bundles dependencies for EpisodicWorker.
-type EpisodicWorkerDeps struct {
+// ConsolidationDeps bundles all dependencies for the consolidation pipeline.
+type ConsolidationDeps struct {
 	EpisodicStore store.EpisodicStore
+	KGStore       store.KnowledgeGraphStore
 	EventBus      eventbus.DomainEventBus
+	Provider      providers.Provider // for LLM summarization
+	Model         string
+	Extractor     *knowledgegraph.Extractor
 }
 
-// SemanticWorkerDeps bundles dependencies for SemanticExtractionWorker.
-type SemanticWorkerDeps struct {
-	KGStore  store.KnowledgeGraphStore
-	EventBus eventbus.DomainEventBus
-}
-
-// DedupWorkerDeps bundles dependencies for DedupWorker.
-type DedupWorkerDeps struct {
-	KGStore store.KnowledgeGraphStore
-}
-
-// Register wires all consolidation workers to the event bus.
-// Called at gateway startup.
 // Register wires all consolidation workers to the event bus.
 // Returns a cleanup function that unsubscribes all handlers.
-func Register(eb eventbus.DomainEventBus, episodic EpisodicWorkerDeps, semantic SemanticWorkerDeps, dedup DedupWorkerDeps) func() {
-	unsub1 := eb.Subscribe(eventbus.EventSessionCompleted, newEpisodicHandler(episodic))
-	unsub2 := eb.Subscribe(eventbus.EventEpisodicCreated, newSemanticHandler(semantic))
-	unsub3 := eb.Subscribe(eventbus.EventEntityUpserted, newDedupHandler(dedup))
+func Register(deps ConsolidationDeps) func() {
+	episodic := &episodicWorker{
+		store:    deps.EpisodicStore,
+		provider: deps.Provider,
+		model:    deps.Model,
+		eventBus: deps.EventBus,
+	}
+	semantic := &semanticWorker{
+		kgStore:   deps.KGStore,
+		extractor: deps.Extractor,
+		eventBus:  deps.EventBus,
+	}
+	dedup := &dedupWorker{
+		kgStore: deps.KGStore,
+	}
+
+	unsub1 := deps.EventBus.Subscribe(eventbus.EventSessionCompleted, episodic.Handle)
+	unsub2 := deps.EventBus.Subscribe(eventbus.EventEpisodicCreated, semantic.Handle)
+	unsub3 := deps.EventBus.Subscribe(eventbus.EventEntityUpserted, dedup.Handle)
 	return func() { unsub1(); unsub2(); unsub3() }
 }
 
-// Handler stubs — implementation deferred to implementation phase.
+// summarizationPrompt for LLM session summarization.
+const summarizationPrompt = `Summarize this conversation session concisely. Focus on:
+- Key decisions made
+- Facts learned about the user or project
+- Tasks completed or in-progress
+- Important technical details
+- User preferences expressed
 
-func newEpisodicHandler(deps EpisodicWorkerDeps) eventbus.DomainEventHandler {
-	return func(ctx context.Context, event eventbus.DomainEvent) error {
-		// TODO(v3): summarize session → store episodic → publish episodic.created
-		return nil
-	}
-}
-
-func newSemanticHandler(deps SemanticWorkerDeps) eventbus.DomainEventHandler {
-	return func(ctx context.Context, event eventbus.DomainEvent) error {
-		// TODO(v3): extract KG entities from episodic summary → upsert → publish entity.upserted
-		return nil
-	}
-}
-
-func newDedupHandler(deps DedupWorkerDeps) eventbus.DomainEventHandler {
-	return func(ctx context.Context, event eventbus.DomainEvent) error {
-		// TODO(v3): compare embeddings → auto-merge or flag → handle temporal supersession
-		return nil
-	}
-}
+Output: 2-4 paragraph summary. Include entity names explicitly.
+Do NOT include greetings, filler, or metadata.`
