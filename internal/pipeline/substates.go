@@ -11,6 +11,7 @@ type ContextState struct {
 	ContextFiles   []any  // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
 	SkillsSummary  string
 	TeamContext    string // team workspace context injected for team runs
+	MemorySection  string // L0 auto-injected memory context for system prompt
 	HadBootstrap   bool
 	OverheadTokens int // system prompt + context files (accurate via TokenCounter)
 }

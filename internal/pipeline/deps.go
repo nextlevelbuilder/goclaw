@@ -21,6 +21,9 @@ type PipelineDeps struct {
 	// Callbacks from agent.Loop — Phase 8 adapter wires these.
 	EmitEvent func(event any)
 
+	// Auto-inject memory context (ContextStage, L0 tier)
+	AutoInject func(ctx context.Context, userMessage, agentID, userID, tenantID string) (string, error)
+
 	// Context callbacks (ContextStage)
 	ResolveWorkspace func(ctx context.Context, input *RunInput) (*workspace.WorkspaceContext, error)
 	LoadContextFiles func(ctx context.Context, userID string) ([]bootstrap.ContextFile, bool) // files, hadBootstrap
