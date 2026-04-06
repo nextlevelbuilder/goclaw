@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -89,6 +90,7 @@ type Loop struct {
 	v3PipelineEnabled  bool
 	v3MemoryEnabled    bool
 	v3RetrievalEnabled bool
+	autoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
 	sessions        store.SessionStore
@@ -232,6 +234,7 @@ type LoopConfig struct {
 	V3PipelineEnabled  bool
 	V3MemoryEnabled    bool
 	V3RetrievalEnabled bool
+	AutoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
 	// Per-agent DB overrides (nil = use global defaults)
 	RestrictToWs *bool
@@ -383,6 +386,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		v3PipelineEnabled:      cfg.V3PipelineEnabled,
 		v3MemoryEnabled:        cfg.V3MemoryEnabled,
 		v3RetrievalEnabled:     cfg.V3RetrievalEnabled,
+		autoInjector:           cfg.AutoInjector,
 		restrictToWs:           cfg.RestrictToWs,
 		subagentsCfg:           cfg.SubagentsCfg,
 		memoryCfg:              cfg.MemoryCfg,

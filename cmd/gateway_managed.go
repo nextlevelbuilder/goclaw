@@ -18,6 +18,7 @@ import (
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	memorypkg "github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -129,6 +130,12 @@ func wireExtras(
 		skillAccessStore = sas
 	}
 
+	// V3 auto-inject: create AutoInjector if episodic store is available.
+	var autoInjector memorypkg.AutoInjector
+	if stores.Episodic != nil {
+		autoInjector = memorypkg.NewAutoInjector(stores.Episodic)
+	}
+
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
 		AgentStore:             stores.Agents,
 		ProviderStore:          stores.Providers,
@@ -169,6 +176,7 @@ func wireExtras(
 		BuiltinToolTenantCfgs:  stores.BuiltinToolTenantCfgs,
 		SkillTenantCfgs:        stores.SkillTenantCfgs,
 		Workspace:              workspace,
+		AutoInjector:           autoInjector,
 		OnEvent: func(event agent.AgentEvent) {
 			// Sign /v1/files/ and /v1/media/ URLs in content before delivery.
 			// Sessions store clean paths; signing happens only at delivery time.

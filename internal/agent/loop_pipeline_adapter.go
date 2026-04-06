@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
 
@@ -61,6 +63,10 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 				l.emit(ae)
 			}
 		},
+
+		// V3 auto-inject: episodic memory L0 injection into system prompt.
+		// Captures agent/tenant context via closure for store scoping.
+		AutoInject: l.makeAutoInjectCallback(req),
 
 		// Context callbacks
 		ResolveWorkspace: cb.resolveWorkspace,
@@ -175,5 +181,25 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 		BlockReplies:   pr.BlockReplies,
 		LastBlockReply: pr.LastBlockReply,
 		LoopKilled:     pr.LoopKilled,
+	}
+}
+
+// makeAutoInjectCallback creates the AutoInject callback that captures agent/tenant context.
+// Returns nil if autoInjector is not configured (v3 retrieval disabled or no episodic store).
+func (l *Loop) makeAutoInjectCallback(req *RunRequest) func(ctx context.Context, userMessage, userID string) (string, error) {
+	if l.autoInjector == nil {
+		return nil
+	}
+	return func(ctx context.Context, userMessage, userID string) (string, error) {
+		result, err := l.autoInjector.Inject(ctx, memory.InjectParams{
+			AgentID:     l.agentUUID.String(),
+			UserID:      userID,
+			TenantID:    store.TenantIDFromContext(ctx).String(),
+			UserMessage: userMessage,
+		})
+		if err != nil || result == nil {
+			return "", err
+		}
+		return result.Section, nil
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
@@ -101,6 +102,9 @@ type ResolverDeps struct {
 
 	// Global workspace root (GOCLAW_WORKSPACE)
 	Workspace string
+
+	// V3 auto-inject: episodic memory injection into system prompt (nil = disabled)
+	AutoInjector memory.AutoInjector
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -370,6 +374,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			V3PipelineEnabled:     v3f.PipelineEnabled,
 			V3MemoryEnabled:       v3f.MemoryEnabled,
 			V3RetrievalEnabled:    v3f.RetrievalEnabled,
+			AutoInjector:          deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ContextWindow:          contextWindow,
