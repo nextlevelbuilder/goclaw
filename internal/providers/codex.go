@@ -52,6 +52,21 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 func (p *CodexProvider) Name() string           { return p.name }
 func (p *CodexProvider) DefaultModel() string   { return p.defaultModel }
 func (p *CodexProvider) SupportsThinking() bool { return true }
+
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+func (p *CodexProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     false,
+		MaxContextWindow: 1_000_000,
+		TokenizerID:      "o200k_base",
+	}
+}
+
 func (p *CodexProvider) WithRoutingDefaults(strategy string, extraProviderNames []string) *CodexProvider {
 	p.routingDefaults = &CodexRoutingDefaults{
 		Strategy:           strategy,

@@ -72,6 +72,21 @@ func NewACPProvider(binary string, args []string, workDir string, idleTTL time.D
 func (p *ACPProvider) Name() string         { return "acp" }
 func (p *ACPProvider) DefaultModel() string { return p.defaultModel }
 
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+// ACP is subprocess-based (JSON-RPC 2.0 over stdio) — no HTTP adapter, capabilities only.
+func (p *ACPProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           false,
+		CacheControl:     false,
+		MaxContextWindow: 200_000,
+		TokenizerID:      "cl100k_base",
+	}
+}
+
 // Chat sends a prompt and returns the complete response (non-streaming).
 func (p *ACPProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	sessionKey := extractStringOpt(req.Options, OptSessionKey)

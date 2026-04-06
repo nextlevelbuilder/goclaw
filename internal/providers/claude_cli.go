@@ -125,6 +125,21 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 func (p *ClaudeCLIProvider) Name() string        { return "claude-cli" }
 func (p *ClaudeCLIProvider) DefaultModel() string { return p.defaultModel }
 
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+// ClaudeCLI is subprocess-based — no HTTP adapter, capabilities only.
+func (p *ClaudeCLIProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           false,
+		CacheControl:     false,
+		MaxContextWindow: 200_000,
+		TokenizerID:      "cl100k_base",
+	}
+}
+
 // Close cleans up temp files (per-session MCP configs, hooks settings). Implements io.Closer.
 func (p *ClaudeCLIProvider) Close() error {
 	// Clean up per-session MCP config directories this provider created

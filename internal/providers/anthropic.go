@@ -78,6 +78,20 @@ func (p *AnthropicProvider) Name() string           { return "anthropic" }
 func (p *AnthropicProvider) DefaultModel() string   { return p.defaultModel }
 func (p *AnthropicProvider) SupportsThinking() bool { return true }
 
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+func (p *AnthropicProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     true,
+		MaxContextWindow: 200_000,
+		TokenizerID:      "cl100k_base",
+	}
+}
+
 func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	model := resolveAnthropicModel(req.Model, p.defaultModel)
 

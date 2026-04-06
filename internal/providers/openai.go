@@ -132,6 +132,20 @@ func (p *OpenAIProvider) APIBase() string        { return p.apiBase }
 func (p *OpenAIProvider) AuthPrefix() string     { return p.authPrefix }
 func (p *OpenAIProvider) ProviderType() string   { return p.providerType }
 
+// Capabilities implements CapabilitiesAware for pipeline code-path selection.
+func (p *OpenAIProvider) Capabilities() ProviderCapabilities {
+	return ProviderCapabilities{
+		Streaming:        true,
+		ToolCalling:      true,
+		StreamWithTools:  true,
+		Thinking:         true,
+		Vision:           true,
+		CacheControl:     false,
+		MaxContextWindow: 128_000,
+		TokenizerID:      "o200k_base",
+	}
+}
+
 // schemaProviderName returns the most specific provider identifier for schema normalization.
 // Prefers providerType (from DB) over name for accurate profile matching.
 func (p *OpenAIProvider) schemaProviderName() string {
