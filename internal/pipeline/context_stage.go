@@ -75,7 +75,7 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 
 	// 7. Auto-inject L0 memory context into system prompt
 	if s.deps.AutoInject != nil && state.Input.Message != "" {
-		section, err := s.deps.AutoInject(ctx, state.Input.Message, state.Input.UserID, state.Input.UserID, "")
+		section, err := s.deps.AutoInject(ctx, state.Input.Message, state.Input.UserID)
 		if err == nil && section != "" {
 			state.Context.MemorySection = section
 			// Append memory section to system prompt

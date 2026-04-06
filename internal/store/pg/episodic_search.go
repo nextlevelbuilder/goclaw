@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// tenantFromCtx extracts tenant_id from context, returns uuid.Nil if not set.
+func tenantFromCtx(ctx context.Context) uuid.UUID { return store.TenantIDFromContext(ctx) }
 
 // episodicScored holds a search result with its individual score.
 type episodicScored struct {
@@ -23,9 +27,10 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, session_key, l0_abstract, ts_rank(tsv, plainto_tsquery('simple', $1)) AS score, created_at
 		FROM episodic_summaries
-		WHERE agent_id = $2 AND user_id = $3 AND tsv @@ plainto_tsquery('simple', $1)
+		WHERE agent_id = $2 AND user_id = $3 AND tenant_id = $5
+		  AND tsv @@ plainto_tsquery('simple', $1)
 		ORDER BY score DESC LIMIT $4`,
-		query, agentID, userID, limit)
+		query, agentID, userID, limit, tenantFromCtx(ctx))
 	if err != nil {
 		return nil
 	}
@@ -48,9 +53,10 @@ func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, session_key, l0_abstract, 1 - (embedding <=> $1) AS score, created_at
 		FROM episodic_summaries
-		WHERE agent_id = $2 AND user_id = $3 AND embedding IS NOT NULL
+		WHERE agent_id = $2 AND user_id = $3 AND tenant_id = $5
+		  AND embedding IS NOT NULL
 		ORDER BY embedding <=> $1 LIMIT $4`,
-		vecStr, agentID, userID, limit)
+		vecStr, agentID, userID, limit, tenantFromCtx(ctx))
 	if err != nil {
 		return nil
 	}

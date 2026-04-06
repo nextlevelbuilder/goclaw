@@ -91,9 +91,9 @@ func (s *PGEpisodicStore) List(ctx context.Context, agentID, userID string, limi
 		       turn_count, token_count, l0_abstract, source_id, source_type,
 		       created_at, expires_at
 		FROM episodic_summaries
-		WHERE agent_id = $1 AND user_id = $2
+		WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $5
 		ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
-		agentID, userID, limit, offset)
+		agentID, userID, limit, offset, store.TenantIDFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
