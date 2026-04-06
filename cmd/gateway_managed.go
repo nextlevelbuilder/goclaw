@@ -177,6 +177,7 @@ func wireExtras(
 		SkillTenantCfgs:        stores.SkillTenantCfgs,
 		Workspace:              workspace,
 		AutoInjector:           autoInjector,
+		EvolutionMetricsStore:  stores.EvolutionMetrics,
 		OnEvent: func(event agent.AgentEvent) {
 			// Sign /v1/files/ and /v1/media/ URLs in content before delivery.
 			// Sessions store clean paths; signing happens only at delivery time.
@@ -463,6 +464,12 @@ func wireExtras(
 			applyBuiltinToolDisables(context.Background(), stores.BuiltinTools, toolsReg)
 			agentRouter.InvalidateAll()
 		})
+	}
+
+	// V3 evolution: daily suggestion engine + weekly evaluation cron (background goroutine).
+	if stores.EvolutionMetrics != nil && stores.EvolutionSuggestions != nil {
+		sugEngine := agent.NewSuggestionEngine(stores.EvolutionMetrics, stores.EvolutionSuggestions)
+		go runEvolutionCron(stores, sugEngine)
 	}
 
 	// Register team tools (team_tasks + workspace interceptor) if team store is available.

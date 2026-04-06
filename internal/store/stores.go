@@ -36,4 +36,6 @@ type Stores struct {
 	SubagentTasks          SubagentTaskStore
 	Vault                  VaultStore
 	Episodic               EpisodicStore
+	EvolutionMetrics       EvolutionMetricsStore
+	EvolutionSuggestions   EvolutionSuggestionStore
 }

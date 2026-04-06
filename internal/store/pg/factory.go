@@ -54,5 +54,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		SubagentTasks:         NewPGSubagentTaskStore(db),
 		Vault:                 NewPGVaultStore(db),
 		Episodic:              NewPGEpisodicStore(db),
+		EvolutionMetrics:      NewPGEvolutionMetricsStore(db),
+		EvolutionSuggestions:  NewPGEvolutionSuggestionStore(db),
 	}, nil
 }
