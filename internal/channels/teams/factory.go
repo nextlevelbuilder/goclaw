@@ -20,6 +20,8 @@ type teamsCreds struct {
 
 // teamsInstanceConfig maps the config JSONB from channel_instances table.
 type teamsInstanceConfig struct {
+	BotType     string                     `json:"bot_type,omitempty"`
+	TenantID    string                     `json:"tenant_id,omitempty"`
 	WebhookPath string                     `json:"webhook_path,omitempty"`
 	DMPolicy    string                     `json:"dm_policy,omitempty"`
 	GroupPolicy string                     `json:"group_policy,omitempty"`
@@ -48,12 +50,23 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		}
 	}
 
+	// bot_type and tenant_id can come from either credentials or config.
+	// Credentials take priority (API callers), config is where the UI stores them.
+	botType := c.BotType
+	if botType == "" {
+		botType = ic.BotType
+	}
+	tenantID := c.TenantID
+	if tenantID == "" {
+		tenantID = ic.TenantID
+	}
+
 	teamsCfg := config.TeamsConfig{
 		Enabled:     true,
 		BotID:       c.BotID,
 		BotPassword: c.BotPassword,
-		BotType:     c.BotType,
-		TenantID:    c.TenantID,
+		BotType:     botType,
+		TenantID:    tenantID,
 		WebhookPath: ic.WebhookPath,
 		DMPolicy:    ic.DMPolicy,
 		GroupPolicy: ic.GroupPolicy,
