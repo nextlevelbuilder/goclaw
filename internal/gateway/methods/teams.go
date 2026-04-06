@@ -185,12 +185,6 @@ func (m *TeamsMethods) handleCreate(ctx context.Context, client *gateway.Client,
 		}
 	}
 
-	// Auto-create outbound agent_links from lead to each member.
-	// Only the lead can delegate to members.
-	if m.linkStore != nil {
-		m.autoCreateTeamLinks(ctx, team.ID, leadAgent, memberAgents, client.UserID())
-	}
-
 	// Invalidate agent + team tool caches so TEAM.md gets injected
 	m.invalidateTeamCaches(ctx, team.ID)
 

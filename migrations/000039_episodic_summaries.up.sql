@@ -26,3 +26,7 @@ CREATE INDEX idx_episodic_expires ON episodic_summaries(expires_at) WHERE expire
 CREATE INDEX idx_episodic_tsv ON episodic_summaries USING gin(tsv);
 CREATE INDEX idx_episodic_embedding ON episodic_summaries
     USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
+
+-- Clear all agent_links. Teams use agent_team_members directly;
+-- delegate tool (v3) will use explicit links created via API.
+TRUNCATE agent_links;
