@@ -379,5 +379,12 @@
     "retry": "Thử lại",
     "close": "Đóng",
     "skip": "Bỏ qua"
+  },
+  "teams": {
+    "appPackage": {
+      "download": "Tải gói ứng dụng",
+      "generating": "Đang tạo...",
+      "error": "Không thể tạo gói ứng dụng"
+    }
   }
 }

@@ -34,6 +34,14 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ### Added
 
+#### Teams App Package Generator
+- **CLI command**: `goclaw teams app-package --name "Bot" -o teams-app.zip` with support for `--stdout`, `--bot-id`, `--icon-color`, `--icon-outline`
+- **HTTP API**: `GET /v1/teams/app-package?name=Bot&bot_id=xxx` or `?instance_id=uuid` for programmatic package generation
+- **Web UI**: Download button on Teams channel detail page for quick sideload package export
+- **Core library**: `internal/channels/teams/appmanifest/` package for manifest generation with validation, PNG icon handling, and configurable metadata
+- **Icon support**: Custom 192x192 (color) and 32x32 (outline) PNG icons with automatic fallback to embedded defaults
+- **Manifest defaults**: Version 1.19 schema, Teams App Registrations support, configurable scopes and metadata URLs
+
 #### Parallel Sub-Agent Enhancement (#600) (2026-03-31)
 - **Smart leader delegation**: Conditional leader delegation prompt instead of forced delegation for all subagent spawns
 - **Compaction prompt persistence**: Preserves pending subagent and team task state across context summarization to maintain work continuity

@@ -386,6 +386,7 @@ func runGateway() {
 	}
 	if channelInstancesH != nil {
 		server.SetChannelInstancesHandler(channelInstancesH)
+		server.SetTeamsAppPackageHandler(httpapi.NewTeamsAppPackageHandler(pgStores.ChannelInstances))
 	}
 	if providersH != nil {
 		server.SetProvidersHandler(providersH)

@@ -464,5 +464,12 @@
     "retry": "Retry",
     "close": "Close",
     "skip": "Skip"
+  },
+  "teams": {
+    "appPackage": {
+      "download": "Download App Package",
+      "generating": "Generating...",
+      "error": "Failed to generate app package"
+    }
   }
 }

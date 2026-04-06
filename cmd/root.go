@@ -38,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(configCmd())
 	rootCmd.AddCommand(modelsCmd())
 	rootCmd.AddCommand(channelsCmd())
+	rootCmd.AddCommand(teamsCmd())
 	rootCmd.AddCommand(cronCmd())
 	rootCmd.AddCommand(skillsCmd())
 	rootCmd.AddCommand(sessionsCmd())
