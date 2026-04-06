@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +22,24 @@ const (
 	multiTenantTokenURL = "https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token"
 	tokenScope          = "https://api.botframework.com/.default"
 	tokenRefreshMargin  = 5 * time.Minute // refresh before actual expiry
+
+	// Retry constants for Bot Framework API (rate limit: 50 RPS, 1800/hr per thread)
+	sendMaxRetries    = 3
+	sendBaseDelay     = 500 * time.Millisecond
+	sendMaxDelay      = 30 * time.Second
+	sendMaxRetryAfter = 120 * time.Second // cap absurd Retry-After values
 )
+
+// teamsSendError wraps Bot Framework API errors with status code and Retry-After.
+type teamsSendError struct {
+	statusCode int
+	retryAfter time.Duration
+	body       string
+}
+
+func (e *teamsSendError) Error() string {
+	return fmt.Sprintf("bot framework API %d: %s", e.statusCode, e.body)
+}
 
 // botClient acquires Azure AD tokens and sends replies via Bot Framework REST API.
 type botClient struct {
@@ -42,23 +62,59 @@ func newBotClient(botID, botPassword, tenantID string) *botClient {
 	}
 }
 
-// SendReply sends a text reply to a Teams conversation.
+// SendReply sends a text reply to a Teams conversation with retry.
 func (c *botClient) SendReply(ctx context.Context, serviceURL, conversationID, text string) error {
 	activity := Activity{
 		Type: "message",
 		Text: text,
 	}
-	return c.SendActivity(ctx, serviceURL, conversationID, activity)
+	return c.retrySendActivity(ctx, serviceURL, conversationID, activity)
 }
 
-// SendActivity posts an Activity to a conversation via Bot Framework REST API.
+// SendActivity posts an Activity with retry logic for 429/5xx errors.
 func (c *botClient) SendActivity(ctx context.Context, serviceURL, conversationID string, activity Activity) error {
+	return c.retrySendActivity(ctx, serviceURL, conversationID, activity)
+}
+
+// retrySendActivity wraps doSendActivity with exponential backoff retry.
+func (c *botClient) retrySendActivity(ctx context.Context, serviceURL, conversationID string, activity Activity) error {
+	var lastErr error
+	for attempt := range sendMaxRetries {
+		err := c.doSendActivity(ctx, serviceURL, conversationID, activity)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+
+		sendErr, ok := err.(*teamsSendError)
+		if !ok || !isRetryableStatus(sendErr.statusCode) {
+			return err // non-retryable error, fail immediately
+		}
+
+		delay := computeBackoff(attempt, sendErr.retryAfter)
+		slog.Warn("teams: retrying send",
+			"attempt", attempt+1,
+			"status", sendErr.statusCode,
+			"delay", delay,
+			"error", err,
+		)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	return lastErr
+}
+
+// doSendActivity performs a single HTTP POST to the Bot Framework API.
+func (c *botClient) doSendActivity(ctx context.Context, serviceURL, conversationID string, activity Activity) error {
 	token, err := c.ensureToken(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire token: %w", err)
 	}
 
-	// Build URL: {serviceUrl}/v3/conversations/{conversationId}/activities
 	u := strings.TrimRight(serviceURL, "/") + "/v3/conversations/" + url.PathEscape(conversationID) + "/activities"
 
 	body, err := json.Marshal(activity)
@@ -80,11 +136,55 @@ func (c *botClient) SendActivity(ctx context.Context, serviceURL, conversationID
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
+		retryAfter := parseRetryAfterHeader(resp.Header.Get("Retry-After"))
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("bot framework API %d: %s", resp.StatusCode, string(respBody))
+		return &teamsSendError{
+			statusCode: resp.StatusCode,
+			retryAfter: retryAfter,
+			body:       string(respBody),
+		}
 	}
 
 	return nil
+}
+
+// isRetryableStatus returns true for 429 (rate limit) and 5xx (server errors).
+func isRetryableStatus(code int) bool {
+	return code == 429 || code == 500 || code == 502 || code == 503 || code == 504
+}
+
+// computeBackoff returns the delay for a retry attempt.
+// Honors Retry-After if present, otherwise uses exponential backoff with jitter.
+func computeBackoff(attempt int, retryAfter time.Duration) time.Duration {
+	if retryAfter > 0 {
+		if retryAfter > sendMaxRetryAfter {
+			retryAfter = sendMaxRetryAfter
+		}
+		return retryAfter
+	}
+	// Exponential backoff: base * 2^attempt + jitter
+	delay := sendBaseDelay * time.Duration(math.Pow(2, float64(attempt)))
+	if delay > sendMaxDelay {
+		delay = sendMaxDelay
+	}
+	// Add 0-25% jitter
+	if quarter := int64(delay / 4); quarter > 0 {
+		return delay + time.Duration(rand.Int64N(quarter))
+	}
+	return delay
+}
+
+// parseRetryAfterHeader parses the Retry-After header value.
+// Supports integer seconds (standard for Bot Framework). Returns 0 if missing/invalid.
+func parseRetryAfterHeader(value string) time.Duration {
+	if value == "" {
+		return 0
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // ensureToken returns a valid Azure AD token, refreshing if expired.

@@ -100,6 +100,9 @@ func (c *Channel) handleMessage(activity Activity) {
 	// Store serviceURL only after policy check passes
 	c.storeServiceURL(activity.Conversation.ID, activity.ServiceURL)
 
+	// Start typing indicator while agent processes
+	c.startTyping(activity.Conversation.ID)
+
 	// Build metadata
 	metadata := map[string]string{
 		"activity_id":     activity.ID,

@@ -8,10 +8,12 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
@@ -32,6 +34,7 @@ type Channel struct {
 	validator   *tokenValidator
 	client      *botClient
 	serviceURLs sync.Map // conversationID → serviceURL (string)
+	typingCtrls sync.Map // conversationID → *typing.Controller
 }
 
 // New creates a new Microsoft Teams channel.
@@ -89,11 +92,51 @@ func (c *Channel) Start(_ context.Context) error {
 	return nil
 }
 
-// Stop gracefully shuts down the channel.
+// Stop gracefully shuts down the channel and cleans up typing controllers.
 func (c *Channel) Stop(_ context.Context) error {
 	c.SetRunning(false)
+	c.typingCtrls.Range(func(key, value any) bool {
+		value.(*typing.Controller).Stop()
+		c.typingCtrls.Delete(key)
+		return true
+	})
 	slog.Info("teams channel stopped")
 	return nil
+}
+
+// sendTyping sends a typing indicator activity to a conversation.
+func (c *Channel) sendTyping(conversationID string) error {
+	serviceURL, ok := c.serviceURLs.Load(conversationID)
+	if !ok {
+		return nil // no serviceURL yet, skip silently
+	}
+	activity := Activity{Type: "typing"}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return c.client.doSendActivity(ctx, serviceURL.(string), conversationID, activity)
+}
+
+// startTyping starts a typing indicator controller for a conversation.
+func (c *Channel) startTyping(conversationID string) {
+	ctrl := typing.New(typing.Options{
+		MaxDuration:       60 * time.Second,
+		KeepaliveInterval: 3 * time.Second, // Teams typing auto-expires in 3s
+		StartFn: func() error {
+			return c.sendTyping(conversationID)
+		},
+	})
+	ctrl.Start()
+	// Stop previous controller if exists (rapid messages)
+	if prev, loaded := c.typingCtrls.Swap(conversationID, ctrl); loaded {
+		prev.(*typing.Controller).Stop()
+	}
+}
+
+// stopTyping stops and removes the typing indicator for a conversation.
+func (c *Channel) stopTyping(chatID string) {
+	if ctrl, ok := c.typingCtrls.LoadAndDelete(chatID); ok {
+		ctrl.(*typing.Controller).Stop()
+	}
 }
 
 // Send delivers an outbound message to a Teams conversation.
@@ -101,6 +144,9 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	if !c.IsRunning() {
 		return fmt.Errorf("teams: channel not running")
 	}
+
+	// Stop typing indicator before sending reply
+	c.stopTyping(msg.ChatID)
 
 	serviceURL, ok := c.serviceURLs.Load(msg.ChatID)
 	if !ok {
@@ -112,15 +158,24 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return nil
 	}
 
-	// Truncate to Teams message limit (~28KB, use 25000 chars as safe limit)
-	text = channels.Truncate(text, 25000)
+	// Sanitize markdown and split into chunks (Teams limit: 80KB)
+	text = sanitizeForTeams(text)
+	chunks := chunkMarkdown(text, teamsMaxMessageBytes)
 
-	if err := c.client.SendReply(ctx, serviceURL.(string), msg.ChatID, text); err != nil {
-		slog.Error("teams: failed to send reply",
-			"conversation", msg.ChatID,
-			"error", err,
-		)
-		return err
+	for _, chunk := range chunks {
+		activity := Activity{
+			Type: "message",
+			Text: chunk,
+			// textFormat defaults to "markdown" in Teams — no need to set
+		}
+		if err := c.client.retrySendActivity(ctx, serviceURL.(string), msg.ChatID, activity); err != nil {
+			slog.Error("teams: failed to send chunk",
+				"conversation", msg.ChatID,
+				"chunk_len", len(chunk),
+				"error", err,
+			)
+			return err
+		}
 	}
 
 	return nil
