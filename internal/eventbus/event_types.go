@@ -21,6 +21,9 @@ const (
 	EventDelegateSent      EventType = "delegate.sent"
 	EventDelegateCompleted EventType = "delegate.completed"
 	EventDelegateFailed    EventType = "delegate.failed"
+
+	// Evolution events (v3 self-improvement)
+	EventSuggestionCreated EventType = "evolution.suggestion_created"
 )
 
 // DomainEvent is a typed event with metadata for the consolidation pipeline.
