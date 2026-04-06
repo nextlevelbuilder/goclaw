@@ -548,7 +548,7 @@ func TestToolStage_SingleTool_ExecutesSequentially(t *testing.T) {
 	}
 }
 
-func TestToolStage_MultipleTools_ParallelExec_MessagesInOrder(t *testing.T) {
+func TestToolStage_MultipleTools_Sequential_MessagesInOrder(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
 		ExecuteToolCall: func(_ context.Context, _ *RunState, tc providers.ToolCall) ([]providers.Message, error) {

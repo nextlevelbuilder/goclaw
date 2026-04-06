@@ -93,7 +93,10 @@ func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.Run
 
 func (l *Loop) makeEnrichMedia(req *RunRequest) func(ctx context.Context, input *pipeline.RunInput) error {
 	return func(ctx context.Context, input *pipeline.RunInput) error {
-		// enrichInputMedia needs *RunRequest — use the captured req
+		// enrichInputMedia returns updated context, messages, and media refs.
+		// The messages contain vision-injected content. For now we enrich the req
+		// in place so buildMessages picks up media changes on its next call.
+		// Full pipeline-native media handling is a follow-up.
 		_, _, _ = l.enrichInputMedia(ctx, req, nil)
 		return nil
 	}
@@ -112,8 +115,12 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		if req.MaxIterations > 0 && req.MaxIterations < maxIter {
 			maxIter = req.MaxIterations
 		}
-		toolDefs, _, _ := l.buildFilteredTools(req, state.Context.HadBootstrap,
+		toolDefs, _, injectedMsgs := l.buildFilteredTools(req, state.Context.HadBootstrap,
 			state.Iteration, maxIter, state.Messages.All())
+		// Append tool-awareness messages (e.g., dynamic tool hints) to pending buffer
+		for _, msg := range injectedMsgs {
+			state.Messages.AppendPending(msg)
+		}
 		return toolDefs, nil
 	}
 }

@@ -3,9 +3,6 @@ package pipeline
 import (
 	"context"
 	"fmt"
-	"sync"
-
-	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // ToolStage runs per iteration after PruneStage. Executes tool calls from
@@ -37,27 +34,25 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 		return fmt.Errorf("ExecuteToolCall callback not configured")
 	}
 
-	// Execute tools: single or parallel
-	var allMsgs []providers.Message
-	if len(toolCalls) == 1 {
-		msgs, err := s.deps.ExecuteToolCall(ctx, state, toolCalls[0])
+	// Execute tools sequentially to avoid data races on shared state
+	// (loop detector, media results, deliverables mutated by callbacks).
+	// Parallel execution can be re-added with per-goroutine state isolation.
+	for _, tc := range toolCalls {
+		msgs, err := s.deps.ExecuteToolCall(ctx, state, tc)
 		if err != nil {
-			return fmt.Errorf("execute tool %s: %w", toolCalls[0].Name, err)
+			return fmt.Errorf("execute tool %s: %w", tc.Name, err)
 		}
-		allMsgs = msgs
-	} else {
-		msgs, err := s.executeParallel(ctx, state, toolCalls)
-		if err != nil {
-			return err
+		for _, msg := range msgs {
+			state.Messages.AppendPending(msg)
 		}
-		allMsgs = msgs
-	}
+		state.Tool.TotalToolCalls++
 
-	// Append all tool result messages to pending buffer
-	for _, msg := range allMsgs {
-		state.Messages.AppendPending(msg)
+		// Check exit conditions after each tool (loop kill may fire mid-batch)
+		if state.Tool.LoopKilled {
+			s.result = BreakLoop
+			return nil
+		}
 	}
-	state.Tool.TotalToolCalls += len(toolCalls)
 
 	// Exit condition checks
 	s.checkExitConditions(state)
@@ -65,39 +60,7 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 	return nil
 }
 
-// executeParallel runs multiple tool calls concurrently, returns messages in original order.
-// Each goroutine receives only ctx + tc — no shared RunState mutation.
-func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, toolCalls []providers.ToolCall) ([]providers.Message, error) {
-	type indexedResult struct {
-		msgs []providers.Message
-		err  error
-	}
-
-	var wg sync.WaitGroup
-	results := make([]indexedResult, len(toolCalls))
-
-	for i, tc := range toolCalls {
-		wg.Add(1)
-		go func(idx int, tc providers.ToolCall) {
-			defer wg.Done()
-			msgs, err := s.deps.ExecuteToolCall(ctx, state, tc)
-			results[idx] = indexedResult{msgs: msgs, err: err}
-		}(i, tc)
-	}
-	wg.Wait()
-
-	// Results already in order (indexed by position), collect sequentially
-	var allMsgs []providers.Message
-	for i, r := range results {
-		if r.err != nil {
-			return nil, fmt.Errorf("parallel tool %d: %w", i, r.err)
-		}
-		allMsgs = append(allMsgs, r.msgs...)
-	}
-	return allMsgs, nil
-}
-
-// checkExitConditions checks loop kill, read-only streak, and tool budget.
+// checkExitConditions checks read-only streak and tool budget.
 func (s *ToolStage) checkExitConditions(state *RunState) {
 	// Exit condition #4: loop detector triggered critical
 	if state.Tool.LoopKilled {
