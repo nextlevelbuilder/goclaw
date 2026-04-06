@@ -2,15 +2,12 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
-	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // pipelineCallbacks creates all callback closures that capture *Loop.
@@ -28,6 +25,8 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		compactMessages:    l.makeCompactMessages(),
 		runMemoryFlush:     l.makeRunMemoryFlush(),
 		executeToolCall:    l.makeExecuteToolCall(req, bridgeRS),
+		executeToolRaw:     l.makeExecuteToolRaw(req),
+		processToolResult:  l.makeProcessToolResult(req, bridgeRS),
 		checkReadOnly:      l.makeCheckReadOnly(req, bridgeRS),
 		sanitizeContent:    SanitizeAssistantContent,
 		flushMessages:      l.makeFlushMessages(),
@@ -50,6 +49,8 @@ type pipelineCallbackSet struct {
 	compactMessages    func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error)
 	runMemoryFlush     func(ctx context.Context, state *pipeline.RunState) error
 	executeToolCall    func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error)
+	executeToolRaw     func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error)
+	processToolResult  func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message
 	checkReadOnly      func(state *pipeline.RunState) (*providers.Message, bool)
 	sanitizeContent    func(string) string
 	flushMessages      func(ctx context.Context, sessionKey string, msgs []providers.Message) error
@@ -59,9 +60,22 @@ type pipelineCallbackSet struct {
 }
 
 func (l *Loop) makeResolveWorkspace(req *RunRequest) func(ctx context.Context, input *pipeline.RunInput) (*workspace.WorkspaceContext, error) {
+	resolver := workspace.NewResolver()
 	return func(ctx context.Context, input *pipeline.RunInput) (*workspace.WorkspaceContext, error) {
-		// Delegate to WorkspaceResolver if available, else return nil (adapter fills later)
-		return nil, nil // TODO: wire workspace.Resolver when v3 workspace is active
+		var teamID *string
+		if input.TeamID != "" {
+			teamID = &input.TeamID
+		}
+		return resolver.Resolve(ctx, workspace.ResolveParams{
+			AgentID:   l.id,
+			AgentType: l.agentType,
+			UserID:    input.UserID,
+			ChatID:    input.ChatID,
+			TenantID:  l.tenantID.String(),
+			PeerKind:  input.PeerKind,
+			TeamID:    teamID,
+			BaseDir:   l.workspace,
+		})
 	}
 }
 
@@ -193,68 +207,3 @@ func (l *Loop) makeBootstrapCleanup() func(ctx context.Context, state *pipeline.
 	}
 }
 
-// makeExecuteToolCall wraps tool execution: name resolution, policy check, execute, process result.
-// Uses bridgeRS to share loop detection state between the pipeline and agent's processToolResult.
-func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
-	emitRun := func(event AgentEvent) {
-		event.RunKind = req.RunKind
-		event.SessionKey = req.SessionKey
-		event.UserID = req.UserID
-		event.Channel = req.Channel
-		l.emit(event)
-	}
-
-	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
-		registryName := l.resolveToolCallName(tc.Name)
-		argsJSON, _ := json.Marshal(tc.Arguments)
-		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
-
-		// Emit tool.call event
-		emitRun(AgentEvent{
-			Type:    protocol.AgentEventToolCall,
-			AgentID: l.id,
-			RunID:   state.RunID,
-			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
-		})
-
-		// Execute tool via registry (policy filtering already done by BuildFilteredTools in ThinkStage)
-		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
-			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
-
-		// Process result via existing processToolResult (uses bridgeRS for loop detection)
-		toolMsg, warningMsgs, action := l.processToolResult(ctx, bridgeRS, req, emitRun, tc, registryName, result, state.Context.HadBootstrap)
-
-		// Sync side effects back to pipeline RunState
-		state.Tool.LoopKilled = bridgeRS.loopKilled
-		state.Tool.AsyncToolCalls = bridgeRS.asyncToolCalls
-		for _, mr := range bridgeRS.mediaResults[len(state.Tool.MediaResults):] {
-			state.Tool.MediaResults = append(state.Tool.MediaResults, pipeline.MediaResult{
-				Path: mr.Path, ContentType: mr.ContentType, Size: mr.Size, AsVoice: mr.AsVoice,
-			})
-		}
-		state.Tool.Deliverables = bridgeRS.deliverables
-		state.Evolution.BootstrapWrite = bridgeRS.bootstrapWriteDetected
-		state.Evolution.TeamTaskSpawns = bridgeRS.teamTaskSpawns
-
-		if state.Tool.LoopKilled && action == toolResultBreak {
-			state.Observe.FinalContent = bridgeRS.finalContent
-		}
-
-		var msgs []providers.Message
-		msgs = append(msgs, toolMsg)
-		msgs = append(msgs, warningMsgs...)
-		return msgs, nil
-	}
-}
-
-// makeCheckReadOnly wraps read-only streak detection using the bridged runState.
-func (l *Loop) makeCheckReadOnly(req *RunRequest, bridgeRS *runState) func(state *pipeline.RunState) (*providers.Message, bool) {
-	return func(state *pipeline.RunState) (*providers.Message, bool) {
-		warnMsg, shouldBreak := l.checkReadOnlyStreak(bridgeRS, req)
-		if shouldBreak {
-			state.Tool.LoopKilled = bridgeRS.loopKilled
-			state.Observe.FinalContent = bridgeRS.finalContent
-		}
-		return warnMsg, shouldBreak
-	}
-}

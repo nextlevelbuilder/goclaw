@@ -3,6 +3,9 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"sync"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // ToolStage runs per iteration after PruneStage. Executes tool calls from
@@ -34,9 +37,13 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 		return fmt.Errorf("ExecuteToolCall callback not configured")
 	}
 
-	// Execute tools sequentially to avoid data races on shared state
-	// (loop detector, media results, deliverables mutated by callbacks).
-	// Parallel execution can be re-added with per-goroutine state isolation.
+	// Parallel path: separate I/O (parallel) from state mutation (sequential).
+	// Requires both ExecuteToolRaw and ProcessToolResult callbacks.
+	if len(toolCalls) > 1 && s.deps.ExecuteToolRaw != nil && s.deps.ProcessToolResult != nil {
+		return s.executeParallel(ctx, state, toolCalls)
+	}
+
+	// Sequential fallback: ExecuteToolCall handles both I/O and state mutation.
 	for _, tc := range toolCalls {
 		msgs, err := s.deps.ExecuteToolCall(ctx, state, tc)
 		if err != nil {
@@ -46,29 +53,64 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			state.Messages.AppendPending(msg)
 		}
 		state.Tool.TotalToolCalls++
-
-		// Check exit conditions after each tool (loop kill may fire mid-batch)
 		if state.Tool.LoopKilled {
 			s.result = BreakLoop
 			return nil
 		}
 	}
 
-	// Exit condition checks
 	s.checkExitConditions(state)
+	return nil
+}
 
+// executeParallel runs tool I/O concurrently, then processes results sequentially.
+func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, toolCalls []providers.ToolCall) error {
+	type rawResult struct {
+		tc      providers.ToolCall
+		msg     providers.Message
+		rawData any
+		err     error
+	}
+
+	// Phase 1: parallel I/O (no state mutation)
+	results := make([]rawResult, len(toolCalls))
+	var wg sync.WaitGroup
+	for i, tc := range toolCalls {
+		wg.Add(1)
+		go func(idx int, tc providers.ToolCall) {
+			defer wg.Done()
+			msg, rawData, err := s.deps.ExecuteToolRaw(ctx, tc)
+			results[idx] = rawResult{tc: tc, msg: msg, rawData: rawData, err: err}
+		}(i, tc)
+	}
+	wg.Wait()
+
+	// Phase 2: sequential state mutation (safe, deterministic order)
+	for _, r := range results {
+		if r.err != nil {
+			return fmt.Errorf("execute tool %s: %w", r.tc.Name, r.err)
+		}
+		processed := s.deps.ProcessToolResult(ctx, state, r.tc, r.msg, r.rawData)
+		for _, msg := range processed {
+			state.Messages.AppendPending(msg)
+		}
+		state.Tool.TotalToolCalls++
+		if state.Tool.LoopKilled {
+			s.result = BreakLoop
+			return nil
+		}
+	}
+
+	s.checkExitConditions(state)
 	return nil
 }
 
 // checkExitConditions checks read-only streak and tool budget.
 func (s *ToolStage) checkExitConditions(state *RunState) {
-	// Exit condition #4: loop detector triggered critical
 	if state.Tool.LoopKilled {
 		s.result = BreakLoop
 		return
 	}
-
-	// Exit condition #5: read-only streak
 	if s.deps.CheckReadOnly != nil {
 		warningMsg, shouldBreak := s.deps.CheckReadOnly(state)
 		if warningMsg != nil {
@@ -79,8 +121,6 @@ func (s *ToolStage) checkExitConditions(state *RunState) {
 			return
 		}
 	}
-
-	// Exit condition #6: tool budget exceeded
 	if s.deps.Config.MaxToolCalls > 0 && state.Tool.TotalToolCalls >= s.deps.Config.MaxToolCalls {
 		s.result = BreakLoop
 	}

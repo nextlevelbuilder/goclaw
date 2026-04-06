@@ -40,8 +40,14 @@ type PipelineDeps struct {
 	RunMemoryFlush func(ctx context.Context, state *RunState) error
 
 	// Tool callbacks (ToolStage)
-	// ExecuteToolCall runs a single tool call. Returns result messages to append.
+	// ExecuteToolCall runs a single tool call with full state mutation (sequential only).
 	ExecuteToolCall func(ctx context.Context, state *RunState, tc providers.ToolCall) ([]providers.Message, error)
+	// ExecuteToolRaw runs tool I/O only (parallel-safe, no state mutation).
+	// Returns tool message + opaque raw data passed through to ProcessToolResult.
+	// If nil, ToolStage falls back to sequential ExecuteToolCall.
+	ExecuteToolRaw func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error)
+	// ProcessToolResult processes a raw tool result with state mutation (sequential only).
+	ProcessToolResult func(ctx context.Context, state *RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message
 	// CheckReadOnly checks read-only streak. Returns warning message (if any) and whether to break.
 	CheckReadOnly func(state *RunState) (*providers.Message, bool)
 

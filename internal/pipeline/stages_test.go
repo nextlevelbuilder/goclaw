@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
@@ -1046,6 +1047,262 @@ func TestFinalizeStage_PopulatesFileSizes_SkipsNonexistent(t *testing.T) {
 	}
 	if state.Tool.MediaResults[0].Size != 0 {
 		t.Errorf("Size = %d for nonexistent file, want 0", state.Tool.MediaResults[0].Size)
+	}
+}
+
+// --- ContextStage tests ---
+
+func TestContextStage_ResolveWorkspace(t *testing.T) {
+	t.Parallel()
+	wantWS := &workspace.WorkspaceContext{ActivePath: "/resolved"}
+	deps := &PipelineDeps{
+		ResolveWorkspace: func(_ context.Context, _ *RunInput) (*workspace.WorkspaceContext, error) {
+			return wantWS, nil
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Workspace != wantWS {
+		t.Errorf("Workspace = %v, want %v", state.Workspace, wantWS)
+	}
+}
+
+func TestContextStage_ResolveWorkspaceError(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		ResolveWorkspace: func(_ context.Context, _ *RunInput) (*workspace.WorkspaceContext, error) {
+			return nil, errors.New("workspace not found")
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected error from ResolveWorkspace, got nil")
+	}
+}
+
+func TestContextStage_LoadContextFiles(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		LoadContextFiles: func(_ context.Context, _ string) ([]bootstrap.ContextFile, bool) {
+			return []bootstrap.ContextFile{
+				{Path: "SOUL.md", Content: "soul content"},
+			}, true
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if len(state.Context.ContextFiles) != 1 {
+		t.Fatalf("ContextFiles len = %d, want 1", len(state.Context.ContextFiles))
+	}
+	if !state.Context.HadBootstrap {
+		t.Error("HadBootstrap should be true")
+	}
+}
+
+func TestContextStage_BuildMessages(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message) ([]providers.Message, error) {
+			return []providers.Message{
+				{Role: "system", Content: "system prompt"},
+				{Role: "user", Content: "history msg"},
+			}, nil
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	sys := state.Messages.System()
+	if sys.Content != "system prompt" {
+		t.Errorf("System content = %q, want system prompt", sys.Content)
+	}
+	hist := state.Messages.History()
+	if len(hist) != 1 || hist[0].Content != "history msg" {
+		t.Errorf("History = %v, want 1 history msg", hist)
+	}
+}
+
+func TestContextStage_BuildMessages_ErrorPropagates(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message) ([]providers.Message, error) {
+			return nil, errors.New("build failed")
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected error from BuildMessages, got nil")
+	}
+}
+
+func TestContextStage_ComputeOverhead(t *testing.T) {
+	t.Parallel()
+	// TokenCounter returns 50 tokens per message; system msg = 1 msg → 50
+	deps := &PipelineDeps{
+		TokenCounter: &mockTokenCounter{countPerMessage: 50},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+	// put a system message so the counter has something to count
+	state.Messages.SetSystem(providers.Message{Role: "system", Content: "sys"})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Context.OverheadTokens != 50 {
+		t.Errorf("OverheadTokens = %d, want 50", state.Context.OverheadTokens)
+	}
+}
+
+func TestContextStage_EnrichMedia(t *testing.T) {
+	t.Parallel()
+	called := false
+	deps := &PipelineDeps{
+		EnrichMedia: func(_ context.Context, _ *RunInput) error {
+			called = true
+			return nil
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !called {
+		t.Error("EnrichMedia callback was not called")
+	}
+}
+
+func TestContextStage_EnrichMedia_ErrorPropagates(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		EnrichMedia: func(_ context.Context, _ *RunInput) error {
+			return errors.New("media enrichment failed")
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected error from EnrichMedia, got nil")
+	}
+}
+
+func TestContextStage_InjectReminders(t *testing.T) {
+	t.Parallel()
+	reminder := providers.Message{Role: "user", Content: "reminder msg"}
+	deps := &PipelineDeps{
+		InjectReminders: func(_ context.Context, _ *RunInput, msgs []providers.Message) []providers.Message {
+			return append(msgs, reminder)
+		},
+	}
+	stage := NewContextStage(deps)
+	state := defaultState()
+	state.Messages.SetHistory([]providers.Message{
+		{Role: "user", Content: "existing"},
+	})
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	hist := state.Messages.History()
+	if len(hist) != 2 {
+		t.Fatalf("History len = %d, want 2 (existing + reminder)", len(hist))
+	}
+	if hist[1].Content != "reminder msg" {
+		t.Errorf("hist[1].Content = %q, want reminder msg", hist[1].Content)
+	}
+}
+
+func TestContextStage_AllNilCallbacks(t *testing.T) {
+	t.Parallel()
+	// No callbacks set — should not panic
+	deps := &PipelineDeps{}
+	stage := NewContextStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+}
+
+// --- MemoryFlushStage tests ---
+
+func TestMemoryFlushStage_CallsCallback(t *testing.T) {
+	t.Parallel()
+	called := false
+	deps := &PipelineDeps{
+		RunMemoryFlush: func(_ context.Context, _ *RunState) error {
+			called = true
+			return nil
+		},
+	}
+	stage := NewMemoryFlushStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if !called {
+		t.Error("RunMemoryFlush was not called")
+	}
+}
+
+func TestMemoryFlushStage_NilCallback(t *testing.T) {
+	t.Parallel()
+	// RunMemoryFlush is nil — should not panic and return nil
+	deps := &PipelineDeps{}
+	stage := NewMemoryFlushStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+}
+
+func TestMemoryFlushStage_ErrorNonFatal(t *testing.T) {
+	t.Parallel()
+	// Callback returns an error — MemoryFlushStage must swallow it (non-fatal).
+	deps := &PipelineDeps{
+		RunMemoryFlush: func(_ context.Context, _ *RunState) error {
+			return errors.New("flush db unavailable")
+		},
+	}
+	stage := NewMemoryFlushStage(deps)
+	state := defaultState()
+
+	err := stage.Execute(context.Background(), state)
+	// must NOT propagate the error
+	if err != nil {
+		t.Errorf("Execute() should swallow flush error, got: %v", err)
 	}
 }
 

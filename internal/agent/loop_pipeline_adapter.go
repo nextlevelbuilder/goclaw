@@ -79,8 +79,10 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		RunMemoryFlush: cb.runMemoryFlush,
 
 		// Tool callbacks
-		ExecuteToolCall: cb.executeToolCall,
-		CheckReadOnly:   cb.checkReadOnly,
+		ExecuteToolCall:   cb.executeToolCall,
+		ExecuteToolRaw:    cb.executeToolRaw,
+		ProcessToolResult: cb.processToolResult,
+		CheckReadOnly:     cb.checkReadOnly,
 
 		// Observe: drain InjectCh
 		DrainInjectCh: func() []providers.Message {
