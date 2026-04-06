@@ -23,7 +23,7 @@ const (
 	keyRefreshInterval = 1 * time.Hour
 	keyRefreshCooldown = 5 * time.Second  // prevent thundering herd on kid miss
 	jwtLeeway          = 30 * time.Second // clock skew tolerance
-	maxFetchBodySize   = 1 << 20          // 1MB limit for JWKS/OIDC responses
+	maxFetchBodySize   = 4 << 20          // 4MB limit — Bot Framework JWKS response is ~1.8MB
 )
 
 // jwksKey is a single JWK from the JWKS endpoint.
