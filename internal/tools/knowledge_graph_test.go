@@ -409,7 +409,7 @@ func TestKGSearch_RelationsCappedAt5(t *testing.T) {
 	tool.SetKGStore(ms)
 
 	ctx := kgContext()
-	result := tool.executeSearch(ctx, testAgentID.String(), testUserID, "HubEntity", nil)
+	result := tool.executeSearch(ctx, testAgentID.String(), testUserID, "HubEntity", nil, store.TemporalQueryOptions{})
 	text := result.ForLLM
 
 	relCount := strings.Count(text, "—[connects]→")

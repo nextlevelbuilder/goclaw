@@ -35,4 +35,5 @@ type Stores struct {
 	SystemConfigs          SystemConfigStore
 	SubagentTasks          SubagentTaskStore
 	Vault                  VaultStore
+	Episodic               EpisodicStore
 }

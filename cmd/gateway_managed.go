@@ -289,6 +289,21 @@ func wireExtras(
 		slog.Info("memory layering enabled")
 	}
 
+	// V3: Wire episodic store on memory tools (search + expand)
+	if stores.Episodic != nil {
+		if searchTool, ok := toolsReg.Get("memory_search"); ok {
+			if mst, ok := searchTool.(*tools.MemorySearchTool); ok {
+				mst.SetEpisodicStore(stores.Episodic)
+			}
+		}
+		if expandTool, ok := toolsReg.Get("memory_expand"); ok {
+			if met, ok := expandTool.(*tools.MemoryExpandTool); ok {
+				met.SetEpisodicStore(stores.Episodic)
+			}
+		}
+		slog.Info("v3 episodic memory wired to tools")
+	}
+
 	// Wire knowledge graph store on KG tool + hint in memory_search results
 	if stores.KnowledgeGraph != nil {
 		if kgTool, ok := toolsReg.Get("knowledge_graph_search"); ok {

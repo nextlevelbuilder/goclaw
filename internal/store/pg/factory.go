@@ -53,5 +53,6 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		SystemConfigs:         NewPGSystemConfigStore(db),
 		SubagentTasks:         NewPGSubagentTaskStore(db),
 		Vault:                 NewPGVaultStore(db),
+		Episodic:              NewPGEpisodicStore(db),
 	}, nil
 }

@@ -85,6 +85,7 @@ func setupToolRegistry(
 	// Memory tools — PG-backed; always registered (PG memory is always available)
 	toolsReg.Register(tools.NewMemorySearchTool())
 	toolsReg.Register(tools.NewMemoryGetTool())
+	toolsReg.Register(tools.NewMemoryExpandTool())
 	toolsReg.Register(tools.NewKnowledgeGraphSearchTool())
 	slog.Info("memory + knowledge graph tools registered (PG-backed)")
 
@@ -394,6 +395,12 @@ func setupMemoryEmbeddings(
 			if pgStores.Vault != nil {
 				pgStores.Vault.SetEmbeddingProvider(embProvider)
 				slog.Info("vault embeddings enabled", "provider", embProvider.Name())
+			}
+
+			// V3: Wire embedding provider into episodic store for semantic search.
+			if pgStores.Episodic != nil {
+				pgStores.Episodic.SetEmbeddingProvider(embProvider)
+				slog.Info("episodic embeddings enabled", "provider", embProvider.Name())
 			}
 		} else {
 			slog.Warn("memory embeddings disabled (no API key), chunks stored without vectors")

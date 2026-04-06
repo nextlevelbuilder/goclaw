@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -52,6 +53,10 @@ func (t *KnowledgeGraphSearchTool) Parameters() map[string]any {
 				"type":        "number",
 				"description": "Maximum traversal depth (default 2, max 5)",
 			},
+			"as_of": map[string]any{
+				"type":        "string",
+				"description": "ISO 8601 timestamp for point-in-time query (e.g. '2026-01-15T00:00:00Z'). Omit for current facts only.",
+			},
 		},
 		"required": []string{"query"},
 	}
@@ -84,13 +89,21 @@ func (t *KnowledgeGraphSearchTool) Execute(ctx context.Context, args map[string]
 		return t.executeTraversal(ctx, agentID.String(), userID, entityID, maxDepth, query)
 	}
 
+	// Parse temporal as_of parameter
+	var temporal store.TemporalQueryOptions
+	if asOfStr, ok := args["as_of"].(string); ok && asOfStr != "" {
+		if asOf, err := time.Parse(time.RFC3339, asOfStr); err == nil {
+			temporal.AsOf = &asOf
+		}
+	}
+
 	// List-all mode: query="*"
 	if query == "*" {
-		return t.executeListAll(ctx, agentID.String(), userID)
+		return t.executeListAll(ctx, agentID.String(), userID, temporal)
 	}
 
 	// Search mode
-	return t.executeSearch(ctx, agentID.String(), userID, query, args)
+	return t.executeSearch(ctx, agentID.String(), userID, query, args, temporal)
 }
 
 func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID, userID, entityID string, maxDepth int, query string) *Result {
@@ -158,14 +171,14 @@ func (t *KnowledgeGraphSearchTool) executeTraversal(ctx context.Context, agentID
 
 	// Tier 3: fallback to search if query provided
 	if query != "" && query != "*" {
-		return t.executeSearch(ctx, agentID, userID, query, nil)
+		return t.executeSearch(ctx, agentID, userID, query, nil, store.TemporalQueryOptions{})
 	}
 
 	return NewResult(fmt.Sprintf("No connected entities found from entity_id=%q.", entityID))
 }
 
-func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, userID string) *Result {
-	entities, err := t.kgStore.ListEntities(ctx, agentID, userID, store.EntityListOptions{Limit: 30})
+func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, userID string, temporal store.TemporalQueryOptions) *Result {
+	entities, err := t.kgStore.ListEntitiesTemporal(ctx, agentID, userID, store.EntityListOptions{Limit: 30}, temporal)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("list entities failed: %v", err))
 	}
@@ -184,7 +197,7 @@ func (t *KnowledgeGraphSearchTool) executeListAll(ctx context.Context, agentID, 
 	return NewResult(sb.String())
 }
 
-func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, userID, query string, args map[string]any) *Result {
+func (t *KnowledgeGraphSearchTool) executeSearch(ctx context.Context, agentID, userID, query string, args map[string]any, _ store.TemporalQueryOptions) *Result {
 	entities, err := t.kgStore.SearchEntities(ctx, agentID, userID, query, 10)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("entity search failed: %v", err))
