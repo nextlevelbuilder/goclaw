@@ -1,0 +1,62 @@
+package store
+
+import (
+	"context"
+	"time"
+)
+
+// EpisodicSummary represents a Tier 2 episodic memory entry.
+// Created from session summaries via the consolidation pipeline.
+type EpisodicSummary struct {
+	ID           string     `json:"id"`
+	TenantID     string     `json:"tenant_id"`
+	AgentID      string     `json:"agent_id"`
+	UserID       string     `json:"user_id"`
+	SessionKey   string     `json:"session_key"`
+	Summary      string     `json:"summary"`
+	KeyTopics    []string   `json:"key_topics"`
+	L0Abstract   string     `json:"l0_abstract"` // ~50 tokens, pre-computed
+	SourceType   string     `json:"source_type"` // "session", "v2_daily", "manual"
+	SourceID     string     `json:"source_id"`   // dedup key
+	TurnCount    int        `json:"turn_count"`
+	TokenCount   int        `json:"token_count"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+}
+
+// EpisodicSearchResult is a search hit with L0 summary.
+type EpisodicSearchResult struct {
+	EpisodicID string    `json:"episodic_id"`
+	L0Abstract string    `json:"l0_abstract"`
+	Score      float64   `json:"score"`
+	CreatedAt  time.Time `json:"created_at"`
+	SessionKey string    `json:"session_key"`
+}
+
+// EpisodicSearchOptions configures episodic search behavior.
+type EpisodicSearchOptions struct {
+	MaxResults   int
+	MinScore     float64
+	VectorWeight float64
+	TextWeight   float64
+}
+
+// EpisodicStore manages Tier 2 episodic memory.
+type EpisodicStore interface {
+	// CRUD
+	Create(ctx context.Context, ep *EpisodicSummary) error
+	Get(ctx context.Context, id string) (*EpisodicSummary, error)
+	Delete(ctx context.Context, id string) error
+	List(ctx context.Context, agentID, userID string, limit, offset int) ([]EpisodicSummary, error)
+
+	// Search (hybrid FTS + vector, returns L0 by default)
+	Search(ctx context.Context, query string, agentID, userID string, opts EpisodicSearchOptions) ([]EpisodicSearchResult, error)
+
+	// Lifecycle
+	ExistsBySourceID(ctx context.Context, agentID, userID, sourceID string) (bool, error)
+	PruneExpired(ctx context.Context) (int, error)
+
+	// Embedding
+	SetEmbeddingProvider(provider EmbeddingProvider)
+	Close() error
+}
