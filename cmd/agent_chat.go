@@ -15,6 +15,7 @@ import (
 func agentChatCmd() *cobra.Command {
 	var (
 		agentName  string
+		userID     string
 		message    string
 		sessionKey string
 	)
@@ -30,18 +31,19 @@ Examples:
   goclaw agent chat -m "What time is it?"    # One-shot message
   goclaw agent chat -s my-session            # Continue a session`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runAgentChat(agentName, message, sessionKey)
+			runAgentChat(agentName, message, sessionKey, userID)
 		},
 	}
 
 	cmd.Flags().StringVarP(&agentName, "name", "n", "default", "agent name")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "one-shot message (omit for interactive mode)")
 	cmd.Flags().StringVarP(&sessionKey, "session", "s", "", "session key (default: auto-generated)")
+	cmd.Flags().StringVarP(&userID, "user", "u", "", "user ID for authentication")
 
 	return cmd
 }
 
-func runAgentChat(agentName, message, sessionKey string) {
+func runAgentChat(agentName, message, sessionKey, userID string) {
 	cfgPath := resolveConfigPath()
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -68,7 +70,7 @@ func runAgentChat(agentName, message, sessionKey string) {
 	}
 
 	fmt.Fprintf(os.Stderr, "Connected to gateway at %s\n", addr)
-	runClientMode(cfg, addr, agentName, message, sessionKey)
+	runClientMode(cfg, addr, agentName, message, sessionKey, userID)
 }
 
 // --- Gateway detection ---

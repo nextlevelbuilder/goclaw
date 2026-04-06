@@ -15,7 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey string) {
+func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey, userID string) {
 	wsURL := fmt.Sprintf("ws://%s/ws", addr)
 
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -26,7 +26,7 @@ func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey stri
 	defer conn.Close()
 
 	// Authenticate
-	if err := wsConnect(conn, cfg.Gateway.Token); err != nil {
+	if err := wsConnect(conn, cfg.Gateway.Token, userID); err != nil {
 		fmt.Fprintf(os.Stderr, "Gateway auth failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -79,10 +79,13 @@ func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey stri
 }
 
 // wsConnect sends the connect RPC and waits for auth response.
-func wsConnect(conn *websocket.Conn, token string) error {
+func wsConnect(conn *websocket.Conn, token, userID string) error {
 	params := map[string]string{}
 	if token != "" {
 		params["token"] = token
+	}
+	if userID != "" {
+		params["user_id"] = userID
 	}
 	paramsJSON, _ := json.Marshal(params)
 
