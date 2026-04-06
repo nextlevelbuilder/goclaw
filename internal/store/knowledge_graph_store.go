@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Entity represents a node in the knowledge graph.
 type Entity struct {
@@ -16,6 +19,8 @@ type Entity struct {
 	Confidence  float64           `json:"confidence"`
 	CreatedAt   int64             `json:"created_at"`
 	UpdatedAt   int64             `json:"updated_at"`
+	ValidFrom   *time.Time        `json:"valid_from,omitempty"`
+	ValidUntil  *time.Time        `json:"valid_until,omitempty"`
 }
 
 // Relation represents an edge between two entities.
@@ -29,6 +34,8 @@ type Relation struct {
 	Confidence     float64           `json:"confidence"`
 	Properties     map[string]string `json:"properties,omitempty"`
 	CreatedAt      int64             `json:"created_at"`
+	ValidFrom      *time.Time        `json:"valid_from,omitempty"`
+	ValidUntil     *time.Time        `json:"valid_until,omitempty"`
 }
 
 // TraversalResult is a connected entity with path info.
@@ -100,6 +107,10 @@ type KnowledgeGraphStore interface {
 	DismissCandidate(ctx context.Context, agentID, candidateID string) error
 
 	Stats(ctx context.Context, agentID, userID string) (*GraphStats, error)
+
+	// Temporal queries (v3)
+	ListEntitiesTemporal(ctx context.Context, agentID, userID string, opts EntityListOptions, temporal TemporalQueryOptions) ([]Entity, error)
+	SupersedeEntity(ctx context.Context, old *Entity, replacement *Entity) error
 
 	// SetEmbeddingProvider configures the embedding provider for semantic search.
 	SetEmbeddingProvider(provider EmbeddingProvider)
