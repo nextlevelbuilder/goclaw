@@ -12,7 +12,9 @@ import (
 // Called when l.v3PipelineEnabled is true.
 func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, error) {
 	input := convertRunInput(&req)
-	deps := l.buildPipelineDeps(&req)
+	// Bridge runState shares loop detection state between pipeline and agent.
+	bridgeRS := &runState{}
+	deps := l.buildPipelineDeps(&req, bridgeRS)
 
 	model := l.model
 	if req.ModelOverride != "" {
@@ -34,13 +36,13 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 }
 
 // buildPipelineDeps maps Loop fields + methods to PipelineDeps callbacks.
-func (l *Loop) buildPipelineDeps(req *RunRequest) pipeline.PipelineDeps {
+func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.PipelineDeps {
 	maxIter := l.maxIterations
 	if req.MaxIterations > 0 && req.MaxIterations < maxIter {
 		maxIter = req.MaxIterations
 	}
 
-	cb := l.pipelineCallbacks(req)
+	cb := l.pipelineCallbacks(req, bridgeRS)
 
 	return pipeline.PipelineDeps{
 		TokenCounter: tokencount.NewFallbackCounter(),
@@ -76,9 +78,9 @@ func (l *Loop) buildPipelineDeps(req *RunRequest) pipeline.PipelineDeps {
 		// Memory flush
 		RunMemoryFlush: cb.runMemoryFlush,
 
-		// Tool callbacks — ExecuteToolCall needs deep loop.go integration, wired later
-		ExecuteToolCall: nil,
-		CheckReadOnly:   nil,
+		// Tool callbacks
+		ExecuteToolCall: cb.executeToolCall,
+		CheckReadOnly:   cb.checkReadOnly,
 
 		// Observe: drain InjectCh
 		DrainInjectCh: func() []providers.Message {

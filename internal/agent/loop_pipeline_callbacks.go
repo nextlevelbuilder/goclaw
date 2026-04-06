@@ -2,33 +2,38 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // pipelineCallbacks creates all callback closures that capture *Loop.
 // Each callback bridges a pipeline.PipelineDeps function to an existing Loop method.
-func (l *Loop) pipelineCallbacks(req *RunRequest) pipelineCallbackSet {
+func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCallbackSet {
 	return pipelineCallbackSet{
-		resolveWorkspace: l.makeResolveWorkspace(req),
-		loadContextFiles: l.makeLoadContextFiles(),
-		buildMessages:    l.makeBuildMessages(),
-		enrichMedia:      l.makeEnrichMedia(req),
-		injectReminders:  l.makeInjectReminders(req),
+		resolveWorkspace:   l.makeResolveWorkspace(req),
+		loadContextFiles:   l.makeLoadContextFiles(),
+		buildMessages:      l.makeBuildMessages(),
+		enrichMedia:        l.makeEnrichMedia(req),
+		injectReminders:    l.makeInjectReminders(req),
 		buildFilteredTools: l.makeBuildFilteredTools(req),
-		callLLM:          l.makeCallLLM(req),
-		pruneMessages:    l.makePruneMessages(),
-		compactMessages:  l.makeCompactMessages(),
-		runMemoryFlush:   l.makeRunMemoryFlush(),
-		sanitizeContent:  SanitizeAssistantContent,
-		flushMessages:    l.makeFlushMessages(),
-		updateMetadata:   l.makeUpdateMetadata(req),
-		bootstrapCleanup: l.makeBootstrapCleanup(),
-		maybeSummarize:   l.maybeSummarize,
+		callLLM:            l.makeCallLLM(req),
+		pruneMessages:      l.makePruneMessages(),
+		compactMessages:    l.makeCompactMessages(),
+		runMemoryFlush:     l.makeRunMemoryFlush(),
+		executeToolCall:    l.makeExecuteToolCall(req, bridgeRS),
+		checkReadOnly:      l.makeCheckReadOnly(req, bridgeRS),
+		sanitizeContent:    SanitizeAssistantContent,
+		flushMessages:      l.makeFlushMessages(),
+		updateMetadata:     l.makeUpdateMetadata(req),
+		bootstrapCleanup:   l.makeBootstrapCleanup(),
+		maybeSummarize:     l.maybeSummarize,
 	}
 }
 
@@ -44,6 +49,8 @@ type pipelineCallbackSet struct {
 	pruneMessages      func(msgs []providers.Message, budget int) []providers.Message
 	compactMessages    func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error)
 	runMemoryFlush     func(ctx context.Context, state *pipeline.RunState) error
+	executeToolCall    func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error)
+	checkReadOnly      func(state *pipeline.RunState) (*providers.Message, bool)
 	sanitizeContent    func(string) string
 	flushMessages      func(ctx context.Context, sessionKey string, msgs []providers.Message) error
 	updateMetadata     func(ctx context.Context, sessionKey string, usage providers.Usage) error
@@ -176,5 +183,71 @@ func (l *Loop) makeBootstrapCleanup() func(ctx context.Context, state *pipeline.
 			return nil
 		}
 		return l.bootstrapCleanup(ctx, l.agentUUID, state.Input.UserID)
+	}
+}
+
+// makeExecuteToolCall wraps tool execution: name resolution, policy check, execute, process result.
+// Uses bridgeRS to share loop detection state between the pipeline and agent's processToolResult.
+func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
+	emitRun := func(event AgentEvent) {
+		event.RunKind = req.RunKind
+		event.SessionKey = req.SessionKey
+		event.UserID = req.UserID
+		event.Channel = req.Channel
+		l.emit(event)
+	}
+
+	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
+		registryName := l.resolveToolCallName(tc.Name)
+		argsJSON, _ := json.Marshal(tc.Arguments)
+		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
+
+		// Emit tool.call event
+		emitRun(AgentEvent{
+			Type:    protocol.AgentEventToolCall,
+			AgentID: l.id,
+			RunID:   state.RunID,
+			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
+		})
+
+		// Execute tool via registry (policy filtering already done by BuildFilteredTools in ThinkStage)
+		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
+			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+
+		// Process result via existing processToolResult (uses bridgeRS for loop detection)
+		toolMsg, warningMsgs, action := l.processToolResult(ctx, bridgeRS, req, emitRun, tc, registryName, result, state.Context.HadBootstrap)
+
+		// Sync side effects back to pipeline RunState
+		state.Tool.LoopKilled = bridgeRS.loopKilled
+		state.Tool.AsyncToolCalls = bridgeRS.asyncToolCalls
+		for _, mr := range bridgeRS.mediaResults[len(state.Tool.MediaResults):] {
+			state.Tool.MediaResults = append(state.Tool.MediaResults, pipeline.MediaResult{
+				Path: mr.Path, ContentType: mr.ContentType, Size: mr.Size, AsVoice: mr.AsVoice,
+			})
+		}
+		state.Tool.Deliverables = bridgeRS.deliverables
+		state.Evolution.BootstrapWrite = bridgeRS.bootstrapWriteDetected
+		state.Evolution.TeamTaskSpawns = bridgeRS.teamTaskSpawns
+
+		if state.Tool.LoopKilled && action == toolResultBreak {
+			state.Observe.FinalContent = bridgeRS.finalContent
+		}
+
+		var msgs []providers.Message
+		msgs = append(msgs, toolMsg)
+		msgs = append(msgs, warningMsgs...)
+		return msgs, nil
+	}
+}
+
+// makeCheckReadOnly wraps read-only streak detection using the bridged runState.
+func (l *Loop) makeCheckReadOnly(req *RunRequest, bridgeRS *runState) func(state *pipeline.RunState) (*providers.Message, bool) {
+	return func(state *pipeline.RunState) (*providers.Message, bool) {
+		warnMsg, shouldBreak := l.checkReadOnlyStreak(bridgeRS, req)
+		if shouldBreak {
+			state.Tool.LoopKilled = bridgeRS.loopKilled
+			state.Observe.FinalContent = bridgeRS.finalContent
+		}
+		return warnMsg, shouldBreak
 	}
 }
