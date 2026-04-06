@@ -84,5 +84,6 @@ type EvolutionSuggestionStore interface {
 	CreateSuggestion(ctx context.Context, s EvolutionSuggestion) error
 	ListSuggestions(ctx context.Context, agentID uuid.UUID, status string, limit int) ([]EvolutionSuggestion, error)
 	UpdateSuggestionStatus(ctx context.Context, id uuid.UUID, status, reviewedBy string) error
+	UpdateSuggestionParameters(ctx context.Context, id uuid.UUID, params json.RawMessage) error
 	GetSuggestion(ctx context.Context, id uuid.UUID) (*EvolutionSuggestion, error)
 }

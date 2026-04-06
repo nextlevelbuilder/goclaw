@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -72,21 +73,33 @@ func (s *PGEvolutionSuggestionStore) ListSuggestions(ctx context.Context, agentI
 }
 
 func (s *PGEvolutionSuggestionStore) UpdateSuggestionStatus(ctx context.Context, id uuid.UUID, status, reviewedBy string) error {
+	tenantID := store.TenantIDFromContext(ctx)
 	now := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE agent_evolution_suggestions
 		 SET status = $1, reviewed_by = $2, reviewed_at = $3
-		 WHERE id = $4`,
-		status, reviewedBy, now, id)
+		 WHERE id = $4 AND tenant_id = $5`,
+		status, reviewedBy, now, id, tenantID)
+	return err
+}
+
+func (s *PGEvolutionSuggestionStore) UpdateSuggestionParameters(ctx context.Context, id uuid.UUID, params json.RawMessage) error {
+	tenantID := store.TenantIDFromContext(ctx)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agent_evolution_suggestions SET parameters = $1
+		 WHERE id = $2 AND tenant_id = $3`,
+		params, id, tenantID)
 	return err
 }
 
 func (s *PGEvolutionSuggestionStore) GetSuggestion(ctx context.Context, id uuid.UUID) (*store.EvolutionSuggestion, error) {
+	tenantID := store.TenantIDFromContext(ctx)
 	var sg store.EvolutionSuggestion
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, tenant_id, agent_id, suggestion_type, suggestion, rationale,
 		        parameters, status, reviewed_by, reviewed_at, created_at
-		 FROM agent_evolution_suggestions WHERE id = $1`, id).Scan(
+		 FROM agent_evolution_suggestions WHERE id = $1 AND tenant_id = $2`,
+		id, tenantID).Scan(
 		&sg.ID, &sg.TenantID, &sg.AgentID, &sg.SuggestionType,
 		&sg.Suggestion, &sg.Rationale, &sg.Parameters, &sg.Status,
 		&sg.ReviewedBy, &sg.ReviewedAt, &sg.CreatedAt)

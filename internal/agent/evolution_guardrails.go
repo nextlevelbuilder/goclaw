@@ -120,13 +120,17 @@ func ApplySuggestion(ctx context.Context, agentStore store.AgentStore, sugStore 
 		return fmt.Errorf("update agent config: %w", err)
 	}
 
-	// Update suggestion with baseline + applied status.
+	// Persist baseline into suggestion parameters for future rollback.
 	var sgParams map[string]any
 	_ = json.Unmarshal(sg.Parameters, &sgParams)
 	if sgParams == nil {
 		sgParams = make(map[string]any)
 	}
 	sgParams["_baseline"] = baseline
+	updatedParams, _ := json.Marshal(sgParams)
+	if err := sugStore.UpdateSuggestionParameters(ctx, sg.ID, updatedParams); err != nil {
+		return fmt.Errorf("save baseline: %w", err)
+	}
 	if err := sugStore.UpdateSuggestionStatus(ctx, sg.ID, "applied", "auto-adapt"); err != nil {
 		return fmt.Errorf("update suggestion status: %w", err)
 	}
