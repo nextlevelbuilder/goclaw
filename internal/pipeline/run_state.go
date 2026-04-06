@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
@@ -9,6 +10,7 @@ import (
 // Passed by pointer through all stages.
 type RunState struct {
 	// Identity (set once at pipeline start, immutable during run)
+	Input     *RunInput
 	Workspace *workspace.WorkspaceContext
 	Model     string
 	Provider  providers.Provider
@@ -31,66 +33,76 @@ type RunState struct {
 	ExitCode  StageResult
 }
 
-// MessageBuffer wraps the message list with append/replace semantics.
-// Sequential pipeline guarantees only one stage writes at a time.
-type MessageBuffer struct {
-	system  providers.Message   // system prompt (rebuilt by ContextStage)
-	history []providers.Message // conversation history
-	pending []providers.Message // new messages this run (flushed at checkpoint)
+// NewRunState creates a RunState with identity fields set.
+func NewRunState(input *RunInput, ws *workspace.WorkspaceContext, model string, provider providers.Provider) *RunState {
+	return &RunState{
+		Input:     input,
+		Workspace: ws,
+		Model:     model,
+		Provider:  provider,
+		RunID:     input.RunID,
+		Messages:  NewMessageBuffer(providers.Message{}),
+	}
 }
 
-// NewMessageBuffer creates a buffer with the given system message.
-func NewMessageBuffer(system providers.Message) *MessageBuffer {
-	return &MessageBuffer{system: system}
+// BuildResult converts final RunState into a RunResult.
+func (rs *RunState) BuildResult() *RunResult {
+	return &RunResult{
+		RunID:          rs.RunID,
+		Content:        rs.Observe.FinalContent,
+		Thinking:       rs.Observe.FinalThinking,
+		TotalUsage:     rs.Think.TotalUsage,
+		Iterations:     rs.Iteration,
+		ToolCalls:      rs.Tool.TotalToolCalls,
+		LoopKilled:     rs.Tool.LoopKilled,
+		AsyncToolCalls: rs.Tool.AsyncToolCalls,
+		MediaResults:   rs.Tool.MediaResults,
+		Deliverables:   rs.Tool.Deliverables,
+		BlockReplies:   rs.Observe.BlockReplies,
+		LastBlockReply: rs.Observe.LastBlockReply,
+	}
 }
 
-// All returns system + history + pending as a single slice for LLM calls.
-func (mb *MessageBuffer) All() []providers.Message {
-	out := make([]providers.Message, 0, 1+len(mb.history)+len(mb.pending))
-	out = append(out, mb.system)
-	out = append(out, mb.history...)
-	out = append(out, mb.pending...)
-	return out
+// RunInput is the pipeline's view of a run request.
+// Converted from agent.RunRequest by the adapter in Phase 8.
+type RunInput struct {
+	SessionKey        string
+	Message           string
+	Media             []bus.MediaFile
+	ForwardMedia      []bus.MediaFile
+	Channel           string
+	ChannelType       string
+	ChatTitle         string
+	ChatID            string
+	PeerKind          string
+	RunID             string
+	UserID            string
+	SenderID          string
+	Stream            bool
+	ExtraSystemPrompt string
+	SkillFilter       []string
+	HistoryLimit      int
+	ToolAllow         []string
+	LightContext      bool
+	RunKind           string
+	DelegationID      string
+	TeamID            string
+	TeamTaskID        string
+	ParentAgentID     string
+	MaxIterations     int
+	ModelOverride     string
+	HideInput         bool
+	ContentSuffix     string
+	LeaderAgentID     string
+	WorkspaceChannel  string
+	WorkspaceChatID   string
+	TeamWorkspace     string
 }
 
-// System returns the system message.
-func (mb *MessageBuffer) System() providers.Message { return mb.system }
-
-// SetSystem replaces the system message (ContextStage rebuilds it).
-func (mb *MessageBuffer) SetSystem(msg providers.Message) { mb.system = msg }
-
-// History returns conversation history (read-only view).
-func (mb *MessageBuffer) History() []providers.Message { return mb.history }
-
-// SetHistory replaces history (used when loading from session store).
-func (mb *MessageBuffer) SetHistory(msgs []providers.Message) { mb.history = msgs }
-
-// AppendPending adds a new message to the pending buffer.
-func (mb *MessageBuffer) AppendPending(msg providers.Message) {
-	mb.pending = append(mb.pending, msg)
-}
-
-// Pending returns pending messages (read-only view).
-func (mb *MessageBuffer) Pending() []providers.Message { return mb.pending }
-
-// FlushPending moves pending messages to history and returns them.
-func (mb *MessageBuffer) FlushPending() []providers.Message {
-	flushed := mb.pending
-	mb.history = append(mb.history, mb.pending...)
-	mb.pending = nil
-	return flushed
-}
-
-// ReplaceHistory replaces history after compaction.
-func (mb *MessageBuffer) ReplaceHistory(msgs []providers.Message) {
-	mb.history = msgs
-	mb.pending = nil // compaction absorbs pending
-}
-
-// HistoryLen returns history count (excludes system + pending).
-func (mb *MessageBuffer) HistoryLen() int { return len(mb.history) }
-
-// TotalLen returns total message count including system.
-func (mb *MessageBuffer) TotalLen() int {
-	return 1 + len(mb.history) + len(mb.pending)
+// MediaResult represents a media file produced during tool execution.
+type MediaResult struct {
+	Path        string
+	ContentType string
+	Size        int64
+	AsVoice     bool
 }

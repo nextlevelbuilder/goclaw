@@ -156,6 +156,76 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusRunning)
 	}
 
+	// V3 pipeline path (feature-flagged)
+	if l.v3PipelineEnabled {
+		result, err := l.runViaPipeline(ctx, req)
+		// Tracing + events handled below via the same finalize path
+		if err != nil {
+			if agentSpanID != uuid.Nil {
+				l.emitAgentSpanEnd(ctx, agentSpanID, runStart, nil, err)
+			}
+			if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+				status := store.TraceStatusError
+				if ctx.Err() != nil {
+					status = store.TraceStatusCancelled
+				}
+				traceCtx := ctx
+				if ctx.Err() != nil {
+					traceCtx = context.WithoutCancel(ctx)
+				}
+				l.traceCollector.SetTraceStatus(traceCtx, traceID, status)
+			}
+			if ctx.Err() != nil {
+				emitRun(AgentEvent{Type: protocol.AgentEventRunCancelled, AgentID: l.id, RunID: req.RunID})
+			} else {
+				emitRun(AgentEvent{Type: protocol.AgentEventRunFailed, AgentID: l.id, RunID: req.RunID, Payload: map[string]string{"error": err.Error()}})
+			}
+			if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+				traceFinalized = true
+				traceCtx := ctx
+				traceStatus := store.TraceStatusError
+				if ctx.Err() != nil {
+					traceCtx = context.WithoutCancel(ctx)
+					traceStatus = store.TraceStatusCancelled
+				}
+				l.traceCollector.FinishTrace(traceCtx, traceID, traceStatus, err.Error(), "")
+			}
+			return nil, err
+		}
+		// Jump to the existing success finalization below
+		// by assigning result/err and falling through to the post-runLoop code.
+		// But this duplicates too much — cleaner to just return here and handle tracing inline.
+		if agentSpanID != uuid.Nil {
+			l.emitAgentSpanEnd(ctx, agentSpanID, runStart, result, nil)
+		}
+		if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+			l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusCompleted)
+		}
+		completedPayload := map[string]any{"content": result.Content}
+		if result != nil && result.Usage != nil {
+			completedPayload["usage"] = map[string]any{
+				"prompt_tokens":         result.Usage.PromptTokens,
+				"completion_tokens":     result.Usage.CompletionTokens,
+				"total_tokens":          result.Usage.TotalTokens,
+				"cache_creation_tokens": result.Usage.CacheCreationTokens,
+				"cache_read_tokens":     result.Usage.CacheReadTokens,
+			}
+		}
+		if result != nil && len(result.Media) > 0 {
+			completedPayload["media"] = result.Media
+		}
+		emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID, Payload: completedPayload})
+		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
+			traceFinalized = true
+			if result != nil {
+				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
+			} else {
+				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
+			}
+		}
+		return result, nil
+	}
+
 	result, err := l.runLoop(ctx, req)
 
 	// Finalize the root agent span. Uses EmitSpanUpdate (channel send) so it

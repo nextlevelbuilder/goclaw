@@ -1,0 +1,88 @@
+package pipeline
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
+)
+
+// ContextStage runs once in setup. Resolves workspace, loads context files,
+// builds system prompt, computes overhead tokens, enriches media, injects team reminders.
+type ContextStage struct {
+	deps *PipelineDeps
+}
+
+// NewContextStage creates a ContextStage with the given dependencies.
+func NewContextStage(deps *PipelineDeps) *ContextStage {
+	return &ContextStage{deps: deps}
+}
+
+func (s *ContextStage) Name() string { return "context" }
+
+// Execute populates RunState with workspace, context files, system prompt, and overhead tokens.
+func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
+	// 1. Resolve workspace
+	if s.deps.ResolveWorkspace != nil {
+		ws, err := s.deps.ResolveWorkspace(ctx, state.Input)
+		if err != nil {
+			return fmt.Errorf("resolve workspace: %w", err)
+		}
+		state.Workspace = ws
+	}
+
+	// 2. Load context files (agent-level + per-user + fallback bootstrap)
+	if s.deps.LoadContextFiles != nil {
+		files, hadBootstrap := s.deps.LoadContextFiles(ctx, state.Input.UserID)
+		state.Context.ContextFiles = toAnySlice(files)
+		state.Context.HadBootstrap = hadBootstrap
+	}
+
+	// 3. Build system prompt + history via callback (wraps buildMessages)
+	if s.deps.BuildMessages != nil {
+		msgs, err := s.deps.BuildMessages(ctx, state.Input, state.Messages.History())
+		if err != nil {
+			return fmt.Errorf("build messages: %w", err)
+		}
+		if len(msgs) > 0 {
+			state.Messages.SetSystem(msgs[0])
+			if len(msgs) > 1 {
+				state.Messages.SetHistory(msgs[1:])
+			}
+		}
+	}
+
+	// 4. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead)
+	if s.deps.TokenCounter != nil {
+		system := state.Messages.System()
+		overhead := s.deps.TokenCounter.CountMessages(state.Model, []providers.Message{system})
+		state.Context.OverheadTokens = overhead
+	}
+
+	// 5. Enrich input media (resolve refs, inline descriptions)
+	if s.deps.EnrichMedia != nil {
+		if err := s.deps.EnrichMedia(ctx, state.Input); err != nil {
+			return fmt.Errorf("enrich media: %w", err)
+		}
+	}
+
+	// 6. Inject team task reminders into messages
+	if s.deps.InjectReminders != nil {
+		updated := s.deps.InjectReminders(ctx, state.Input, state.Messages.History())
+		state.Messages.SetHistory(updated)
+	}
+
+	return nil
+}
+
+// toAnySlice converts []bootstrap.ContextFile to []any for ContextState.ContextFiles.
+// Phase 8 will remove this when ContextState uses typed field.
+func toAnySlice(files []bootstrap.ContextFile) []any {
+	out := make([]any, len(files))
+	for i, f := range files {
+		out[i] = f
+	}
+	return out
+}
+

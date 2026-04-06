@@ -8,7 +8,9 @@ import (
 
 // ContextState: owned by ContextStage, read by ThinkStage.
 type ContextState struct {
+	ContextFiles   []any  // bootstrap.ContextFile — typed in Phase 2, any avoids circular import
 	SkillsSummary  string
+	TeamContext    string // team workspace context injected for team runs
 	HadBootstrap   bool
 	OverheadTokens int // system prompt + context files (accurate via TokenCounter)
 }
@@ -30,9 +32,12 @@ type PruneState struct {
 
 // ToolState: owned by ToolStage.
 type ToolState struct {
+	LoopDetector   any // concrete type toolLoopState lives in agent; Phase 5 defines LoopDetector interface
 	TotalToolCalls int
-	AsyncToolCalls []string // tool names that executed async (spawn)
-	LoopKilled     bool     // set when loop detector triggers critical
+	AsyncToolCalls []string      // tool names that executed async (spawn)
+	MediaResults   []MediaResult // media files produced by tools
+	Deliverables   []string      // tool output content for team task results
+	LoopKilled     bool          // set when loop detector triggers critical
 }
 
 // ObserveState: owned by ObserveStage.
@@ -52,20 +57,27 @@ type CompactState struct {
 
 // EvolutionState: owned by skill evolution nudge logic.
 type EvolutionState struct {
-	Nudge70Sent    bool
-	Nudge90Sent    bool
-	PostscriptSent bool
-	BootstrapWrite bool // BOOTSTRAP.md write detected
+	Nudge70Sent      bool
+	Nudge90Sent      bool
+	PostscriptSent   bool
+	BootstrapWrite   bool // BOOTSTRAP.md write detected
+	TeamTaskCreates  int  // team_tasks tool calls
+	TeamTaskSpawns   int  // delegate tool calls (spawns)
 }
 
 // RunResult is the final output of a pipeline run.
 type RunResult struct {
-	Content       string
-	Thinking      string
-	TotalUsage    providers.Usage
-	Iterations    int
-	ToolCalls     int
-	LoopKilled    bool
-	Duration      time.Duration
+	RunID          string
+	Content        string
+	Thinking       string
+	TotalUsage     providers.Usage
+	Iterations     int
+	ToolCalls      int
+	LoopKilled     bool
+	Duration       time.Duration
 	AsyncToolCalls []string
+	MediaResults   []MediaResult
+	Deliverables   []string
+	BlockReplies   int
+	LastBlockReply string
 }
