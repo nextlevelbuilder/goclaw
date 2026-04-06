@@ -22,7 +22,9 @@ type CapabilitiesAware interface {
 }
 
 // ProviderAdapter transforms between internal wire format and provider-specific format.
-// Each provider implements this to isolate quirks from the pipeline loop.
+// Used internally by each Provider implementation to separate serialization from transport.
+// The existing Provider interface (Chat/ChatStream) is unchanged — ProviderAdapter is
+// composed inside each provider, not a replacement.
 type ProviderAdapter interface {
 	// ToRequest converts internal ChatRequest to provider-specific wire bytes.
 	ToRequest(req ChatRequest) ([]byte, http.Header, error)

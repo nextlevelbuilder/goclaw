@@ -16,9 +16,9 @@ type Pipeline struct {
 	iteration []Stage // runs per iteration
 	finalize  []Stage // runs once after loop
 
-	maxIterations int
-	tokenCounter  tokencount.TokenCounter
-	eventBus      eventbus.DomainEventBus
+	Config       PipelineConfig
+	TokenCounter tokencount.TokenCounter
+	EventBus     eventbus.DomainEventBus
 }
 
 // PipelineConfig holds pipeline-level settings.
@@ -36,9 +36,9 @@ func NewPipeline(setup, iteration, finalize []Stage, cfg PipelineConfig, tc toke
 		setup:         setup,
 		iteration:     iteration,
 		finalize:      finalize,
-		maxIterations: cfg.MaxIterations,
-		tokenCounter:  tc,
-		eventBus:      eb,
+		Config:       cfg,
+		TokenCounter: tc,
+		EventBus:     eb,
 	}
 }
 
@@ -54,7 +54,7 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 	}
 
 	// 2. Iteration loop
-	for state.Iteration = 0; state.Iteration < p.maxIterations; state.Iteration++ {
+	for state.Iteration = 0; state.Iteration < p.Config.MaxIterations; state.Iteration++ {
 		for _, stage := range p.iteration {
 			if err := stage.Execute(ctx, state); err != nil {
 				return nil, fmt.Errorf("iter %d %s: %w", state.Iteration, stage.Name(), err)
@@ -63,8 +63,10 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 			if swr, ok := stage.(StageWithResult); ok {
 				switch swr.Result() {
 				case BreakLoop:
+					state.ExitCode = BreakLoop
 					goto finalize
 				case AbortRun:
+					state.ExitCode = AbortRun
 					goto finalize
 				}
 			}

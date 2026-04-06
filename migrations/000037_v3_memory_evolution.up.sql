@@ -9,11 +9,12 @@ CREATE TABLE episodic_summaries (
     user_id     VARCHAR(255) NOT NULL DEFAULT '',
     session_key TEXT NOT NULL,
 
-    summary     TEXT NOT NULL,
-    key_topics  TEXT[] DEFAULT '{}',
-    embedding   vector(1536),
-    source_type TEXT NOT NULL DEFAULT 'session',
-    source_id   TEXT,
+    summary      TEXT NOT NULL,
+    l0_abstract  TEXT NOT NULL DEFAULT '',
+    key_topics   TEXT[] DEFAULT '{}',
+    embedding    vector(1536),
+    source_type  TEXT NOT NULL DEFAULT 'session',
+    source_id    TEXT,
     turn_count  INT NOT NULL DEFAULT 0,
     token_count INT NOT NULL DEFAULT 0,
 
@@ -23,9 +24,11 @@ CREATE TABLE episodic_summaries (
 
 CREATE INDEX idx_episodic_agent_user ON episodic_summaries(agent_id, user_id);
 CREATE INDEX idx_episodic_tenant ON episodic_summaries(tenant_id);
-CREATE INDEX idx_episodic_source ON episodic_summaries(agent_id, source_id);
+CREATE UNIQUE INDEX idx_episodic_source_dedup ON episodic_summaries(agent_id, user_id, source_id)
+    WHERE source_id IS NOT NULL;
 CREATE INDEX idx_episodic_tsv ON episodic_summaries USING GIN(to_tsvector('simple', summary));
-CREATE INDEX idx_episodic_vec ON episodic_summaries USING hnsw(embedding vector_cosine_ops);
+CREATE INDEX idx_episodic_vec ON episodic_summaries USING hnsw(embedding vector_cosine_ops)
+    WHERE embedding IS NOT NULL;
 CREATE INDEX idx_episodic_expires ON episodic_summaries(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Evolution metrics (Stage 1 self-evolution)

@@ -3,15 +3,17 @@ package store
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // EpisodicSummary represents a Tier 2 episodic memory entry.
 // Created from session summaries via the consolidation pipeline.
 type EpisodicSummary struct {
-	ID           string     `json:"id"`
-	TenantID     string     `json:"tenant_id"`
-	AgentID      string     `json:"agent_id"`
-	UserID       string     `json:"user_id"`
+	ID           uuid.UUID  `json:"id"`
+	TenantID     uuid.UUID  `json:"tenant_id"`
+	AgentID      uuid.UUID  `json:"agent_id"`
+	UserID       string     `json:"user_id"` // string: chat-based IDs
 	SessionKey   string     `json:"session_key"`
 	Summary      string     `json:"summary"`
 	KeyTopics    []string   `json:"key_topics"`
@@ -42,6 +44,8 @@ type EpisodicSearchOptions struct {
 }
 
 // EpisodicStore manages Tier 2 episodic memory.
+// Implementations MUST extract tenant_id from context via store.TenantIDFromContext(ctx)
+// and scope all queries by it. Cross-tenant retrieval is a security violation.
 type EpisodicStore interface {
 	// CRUD
 	Create(ctx context.Context, ep *EpisodicSummary) error
