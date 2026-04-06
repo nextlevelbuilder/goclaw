@@ -25,7 +25,7 @@ func (s *PGAgentStore) GetAgentContextFiles(ctx context.Context, agentID uuid.UU
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = $1"+tClause,
+		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = $1"+tClause+" ORDER BY file_name",
 		append([]any{agentID}, tArgs...)...)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (s *PGAgentStore) GetUserContextFiles(ctx context.Context, agentID uuid.UUI
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND user_id = $2"+tClause,
+		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND user_id = $2"+tClause+" ORDER BY file_name",
 		append([]any{agentID, userID}, tArgs...)...)
 	if err != nil {
 		return nil, err

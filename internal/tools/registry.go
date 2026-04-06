@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -222,18 +223,34 @@ func safeExecute(tool Tool, ctx context.Context, args map[string]any) (result *R
 
 // ProviderDefs returns tool definitions for LLM provider APIs.
 // Includes alias definitions (same params/description, alias name).
+// Results are sorted by tool name for deterministic ordering (prompt caching).
 func (r *Registry) ProviderDefs() []providers.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	defs := make([]providers.ToolDefinition, 0, len(r.tools)+len(r.aliases))
-	for name, tool := range r.tools {
-		if r.disabled[name] {
-			continue
+	// Sort canonical tool names for deterministic ordering.
+	sortedNames := make([]string, 0, len(r.tools))
+	for name := range r.tools {
+		if !r.disabled[name] {
+			sortedNames = append(sortedNames, name)
 		}
-		defs = append(defs, ToProviderDef(tool))
 	}
-	for alias, canonical := range r.aliases {
+	slices.Sort(sortedNames)
+
+	defs := make([]providers.ToolDefinition, 0, len(sortedNames)+len(r.aliases))
+	for _, name := range sortedNames {
+		defs = append(defs, ToProviderDef(r.tools[name]))
+	}
+
+	// Sort alias names for deterministic ordering.
+	sortedAliases := make([]string, 0, len(r.aliases))
+	for alias := range r.aliases {
+		sortedAliases = append(sortedAliases, alias)
+	}
+	slices.Sort(sortedAliases)
+
+	for _, alias := range sortedAliases {
+		canonical := r.aliases[alias]
 		if r.disabled[canonical] {
 			continue
 		}
@@ -254,6 +271,8 @@ func (r *Registry) ProviderDefs() []providers.ToolDefinition {
 }
 
 // List returns all registered canonical tool names (excludes aliases).
+// Results are sorted lexicographically for deterministic ordering — critical
+// for LLM prompt caching (Anthropic/OpenAI cache by exact prefix match).
 func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -263,6 +282,7 @@ func (r *Registry) List() []string {
 			names = append(names, name)
 		}
 	}
+	slices.Sort(names)
 	return names
 }
 

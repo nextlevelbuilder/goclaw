@@ -214,7 +214,7 @@ func setupToolRegistry(
 	if execTool, ok := toolsReg.Get("exec"); ok {
 		if et, ok := execTool.(*tools.ExecTool); ok {
 			et.DenyPaths(dataDir, ".goclaw/")
-			et.AllowPathExemptions(".goclaw/skills-store/")
+			et.AllowPathExemptions(".goclaw/skills-store/", filepath.Join(dataDir, "skills-store")+"/")
 			// Harden: block access to internal workspace files via shell commands.
 			// Prevents `cat ../config.json`, `cat memory.db` etc. from user workspaces.
 			et.DenyPaths(

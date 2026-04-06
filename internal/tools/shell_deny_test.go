@@ -170,6 +170,258 @@ func TestExecute_RejectsNULByte(t *testing.T) {
 	}
 }
 
+func TestPathExemptions(t *testing.T) {
+	tool := &ExecTool{
+		workspace: "/workspace",
+		restrict:  false,
+	}
+	tool.DenyPaths("/app/data", ".goclaw/")
+	tool.AllowPathExemptions(".goclaw/skills-store/", "/app/data/skills-store/")
+
+	cases := []struct {
+		name  string
+		cmd   string
+		allow bool // true = exempt (should pass deny check), false = denied
+	}{
+		// --- Exempted commands ---
+		{
+			"relative_skills_store",
+			"python3 .goclaw/skills-store/ck-ui/scripts/search.py --query test",
+			true,
+		},
+		{
+			"absolute_skills_store",
+			`python3 /app/data/skills-store/ck-ui-ux-pro-max/1/scripts/search.py "professional" --design-system`,
+			true,
+		},
+		{
+			"quoted_double_absolute",
+			`cat "/app/data/skills-store/my-skill/README.md"`,
+			true,
+		},
+		{
+			"quoted_single_absolute",
+			`cat '/app/data/skills-store/my-skill/README.md'`,
+			true,
+		},
+		{
+			"quoted_double_relative",
+			`python3 ".goclaw/skills-store/tool.py"`,
+			true,
+		},
+
+		// --- Denied commands (not exempt) ---
+		{
+			"datadir_config",
+			"cat /app/data/config.json",
+			false,
+		},
+		{
+			"datadir_db",
+			"cp /app/data/goclaw.db /tmp/",
+			false,
+		},
+		{
+			"dotgoclaw_root",
+			"ls .goclaw/",
+			false,
+		},
+		{
+			"dotgoclaw_secrets",
+			"cat .goclaw/secrets.json",
+			false,
+		},
+
+		// --- Path traversal attacks (must be denied) ---
+		{
+			"traversal_absolute",
+			"cat /app/data/skills-store/../../config.json",
+			false,
+		},
+		{
+			"traversal_relative",
+			"cat .goclaw/skills-store/../secrets.json",
+			false,
+		},
+		{
+			"traversal_double_quoted",
+			`cat "/app/data/skills-store/../config.json"`,
+			false,
+		},
+		{
+			"traversal_deep",
+			"python3 /app/data/skills-store/skill/../../../etc/passwd",
+			false,
+		},
+
+		// --- Comment/pipe bypass attempts (denied by per-field matching) ---
+		{
+			"comment_with_exempt_path",
+			"cat /app/data/config.json # .goclaw/skills-store/legit",
+			false, // /app/data/config.json matches deny and is NOT exempt
+		},
+
+		// --- Unicode/encoding bypass attempts (must be denied) ---
+		{
+			"unicode_fullwidth_dots",
+			"cat /app/data/skills-store/\uff0e\uff0e/config.json", // fullwidth dots ．．
+			false, // NFKC normalizes ．→. so ".." check catches it
+		},
+		{
+			"zero_width_in_traversal",
+			"cat /app/data/skills-store/..\u200b/config.json", // zero-width space in ..
+			false, // normalizeCommand strips zero-width chars, ".." check catches it
+		},
+
+		// --- Pipe/redirect attempts (must be denied) ---
+		{
+			"pipe_after_exempt_path",
+			"cat /app/data/skills-store/tool.py | grep password /app/data/config.json",
+			false, // /app/data/config.json matches deny, pipe doesn't exempt it
+		},
+
+		// --- Subshell/backtick in path (should be denied if contains datadir) ---
+		{
+			"subshell_in_command",
+			"$(cat /app/data/config.json)",
+			false,
+		},
+		{
+			"backtick_in_command",
+			"`cat /app/data/config.json`",
+			false,
+		},
+
+		// --- Edge: exempt path as substring (should NOT exempt) ---
+		{
+			"exempt_prefix_not_in_path",
+			"cat /app/data/not-skills-store/secret.txt",
+			false, // /app/data/not-skills-store/ does NOT start with /app/data/skills-store/
+		},
+		{
+			"partial_exempt_match",
+			"cat /app/data/skills-storebad/evil.py",
+			false, // /app/data/skills-storebad/ does NOT start with /app/data/skills-store/
+		},
+
+		// --- Symlink-named path (defense-in-depth; sandbox handles actual resolution) ---
+		{
+			"skills_store_valid_nested",
+			"python3 /app/data/skills-store/my-skill/v2/scripts/run.py --flag",
+			true, // legitimate nested skill path
+		},
+		{
+			"skills_store_just_prefix",
+			"ls /app/data/skills-store/",
+			true, // listing skills-store itself is allowed
+		},
+
+		// --- Exact deny path (not a prefix of skills-store) ---
+		{
+			"exact_datadir",
+			"ls /app/data",
+			false,
+		},
+		{
+			"datadir_trailing_slash",
+			"ls /app/data/",
+			false,
+		},
+	}
+
+	allPatterns := make([]*regexp.Regexp, 0)
+	allPatterns = append(allPatterns, tool.pathDenyPatterns...)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			normalizedCmd := normalizeCommand(tc.cmd)
+			denied := false
+			for _, pattern := range allPatterns {
+				if !pattern.MatchString(normalizedCmd) {
+					continue
+				}
+				// Replicate per-field exemption logic from Execute()
+				fields := strings.Fields(strings.TrimSpace(normalizedCmd))
+				matchingFields := 0
+				exemptFields := 0
+				for _, field := range fields {
+					clean := strings.Trim(field, `"'`)
+					if !pattern.MatchString(clean) {
+						continue
+					}
+					matchingFields++
+					if strings.Contains(clean, "..") {
+						continue // traversal — never exempt
+					}
+					for _, ex := range tool.denyExemptions {
+						if strings.HasPrefix(clean, ex) {
+							exemptFields++
+							break
+						}
+					}
+				}
+				exempt := matchingFields > 0 && exemptFields == matchingFields
+				if !exempt {
+					denied = true
+					break
+				}
+			}
+
+			if tc.allow && denied {
+				t.Errorf("expected command to be exempt (allowed), but was denied: %s", tc.cmd)
+			}
+			if !tc.allow && !denied {
+				t.Errorf("expected command to be denied, but was allowed: %s", tc.cmd)
+			}
+		})
+	}
+}
+
+// TestPathExemptions_MixedArgs verifies that a command with both a denied
+// path and an exempt path in different arguments is correctly denied.
+// Per-field matching ensures the non-exempt field causes denial.
+func TestPathExemptions_MixedArgs(t *testing.T) {
+	tool := &ExecTool{}
+	tool.DenyPaths("/app/data")
+	tool.AllowPathExemptions("/app/data/skills-store/")
+
+	cmd := "cat /app/data/config.json /app/data/skills-store/tool.py"
+	normalizedCmd := normalizeCommand(cmd)
+
+	denied := false
+	for _, pattern := range tool.pathDenyPatterns {
+		if !pattern.MatchString(normalizedCmd) {
+			continue
+		}
+		fields := strings.Fields(strings.TrimSpace(normalizedCmd))
+		matchingFields := 0
+		exemptFields := 0
+		for _, field := range fields {
+			clean := strings.Trim(field, `"'`)
+			if !pattern.MatchString(clean) {
+				continue
+			}
+			matchingFields++
+			if strings.Contains(clean, "..") {
+				continue
+			}
+			for _, ex := range tool.denyExemptions {
+				if strings.HasPrefix(clean, ex) {
+					exemptFields++
+					break
+				}
+			}
+		}
+		if matchingFields == 0 || exemptFields != matchingFields {
+			denied = true
+		}
+	}
+
+	if !denied {
+		t.Error("mixed-path command should be denied: /app/data/config.json is not exempt")
+	}
+}
+
 func TestLimitedBuffer(t *testing.T) {
 	t.Run("under limit", func(t *testing.T) {
 		lb := &limitedBuffer{max: 100}
