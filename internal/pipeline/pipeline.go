@@ -73,14 +73,17 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 		}
 
 		if ctx.Err() != nil {
+			state.ExitCode = AbortRun
 			break
 		}
 	}
 
 finalize:
-	// 3. Finalize (once, errors logged not fatal)
+	// 3. Finalize (once, errors logged not fatal).
+	// Use background context so finalize stages can persist state even after cancellation.
+	finalizeCtx := context.WithoutCancel(ctx)
 	for _, stage := range p.finalize {
-		if err := stage.Execute(ctx, state); err != nil {
+		if err := stage.Execute(finalizeCtx, state); err != nil {
 			slog.Warn("finalize stage error", "stage", stage.Name(), "err", err)
 		}
 	}

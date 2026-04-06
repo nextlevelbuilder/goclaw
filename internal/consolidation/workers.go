@@ -30,10 +30,13 @@ type DedupWorkerDeps struct {
 
 // Register wires all consolidation workers to the event bus.
 // Called at gateway startup.
-func Register(eb eventbus.DomainEventBus, episodic EpisodicWorkerDeps, semantic SemanticWorkerDeps, dedup DedupWorkerDeps) {
-	eb.Subscribe(eventbus.EventSessionCompleted, newEpisodicHandler(episodic))
-	eb.Subscribe(eventbus.EventEpisodicCreated, newSemanticHandler(semantic))
-	eb.Subscribe(eventbus.EventEntityUpserted, newDedupHandler(dedup))
+// Register wires all consolidation workers to the event bus.
+// Returns a cleanup function that unsubscribes all handlers.
+func Register(eb eventbus.DomainEventBus, episodic EpisodicWorkerDeps, semantic SemanticWorkerDeps, dedup DedupWorkerDeps) func() {
+	unsub1 := eb.Subscribe(eventbus.EventSessionCompleted, newEpisodicHandler(episodic))
+	unsub2 := eb.Subscribe(eventbus.EventEpisodicCreated, newSemanticHandler(semantic))
+	unsub3 := eb.Subscribe(eventbus.EventEntityUpserted, newDedupHandler(dedup))
+	return func() { unsub1(); unsub2(); unsub3() }
 }
 
 // Handler stubs — implementation deferred to implementation phase.
