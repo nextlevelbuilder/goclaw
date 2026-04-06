@@ -136,8 +136,8 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 }
 
 // registerTeamsChannel registers the Teams channel from config.
-// Teams is config-only (no DB instance factory yet), so it always loads from config
-// regardless of whether the instance loader is active.
+// registerTeamsChannel registers Teams from config for backward compatibility.
+// DB instances are also supported via teams.Factory registered in the instance loader.
 func registerTeamsChannel(cfg *config.Config, channelMgr *channels.Manager, msgBus *bus.MessageBus) {
 	if !cfg.Channels.Teams.Enabled {
 		return
