@@ -159,22 +159,36 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Check for dangerous commands (applies to both host and sandbox).
 	for _, pattern := range allPatterns {
 		if pattern.MatchString(normalizedCommand) {
-			// Check if any exemption applies (e.g. skills-store within .goclaw).
-			// Uses argument-level prefix matching to prevent bypass via comments
-			// (e.g. "echo pwned # .goclaw/skills-store/") while still allowing
-			// commands like "cat .goclaw/skills-store/tool.py".
+			// Check if exemption applies. Only exempt if EVERY field that
+			// individually matches the deny pattern is covered by an exemption.
+			// This prevents pipe/comment bypass: "cat /app/data/skills-store/x | cat /app/data/secret"
+			// — the second field matches deny but has no exemption → denied.
+			// Strips surrounding quotes (LLMs often quote paths) and rejects
+			// path traversal ("..") to prevent exemption escape.
 			exempt := false
 			trimmed := strings.TrimSpace(normalizedCommand)
-			for _, ex := range t.denyExemptions {
-				for _, field := range strings.Fields(trimmed) {
-					if strings.HasPrefix(field, ex) {
-						exempt = true
+			fields := strings.Fields(trimmed)
+			matchingFields := 0
+			exemptFields := 0
+			for _, field := range fields {
+				clean := strings.Trim(field, `"'`)
+				if !pattern.MatchString(clean) {
+					continue // field doesn't trigger this deny pattern
+				}
+				matchingFields++
+				if strings.Contains(clean, "..") {
+					continue // path traversal — never exempt
+				}
+				for _, ex := range t.denyExemptions {
+					if strings.HasPrefix(clean, ex) {
+						exemptFields++
 						break
 					}
 				}
-				if exempt {
-					break
-				}
+			}
+			// Exempt only if at least one field matched AND all matched fields are exempt.
+			if matchingFields > 0 && exemptFields == matchingFields {
+				exempt = true
 			}
 			if exempt {
 				continue
