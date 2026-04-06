@@ -502,6 +502,35 @@ func findContextFileContent(files []bootstrap.ContextFile, name string) string {
 	return ""
 }
 
+// buildOrchestrationSection generates the delegation targets prompt section.
+// Only shown when orchestration mode is delegate or team.
+func buildOrchestrationSection(data OrchestrationSectionData) []string {
+	if data.Mode == ModeSpawn || len(data.DelegateTargets) == 0 {
+		return nil
+	}
+	lines := []string{
+		"## Delegation Targets",
+		"",
+		"You can delegate tasks to the following agents using the `delegate` tool:",
+	}
+	for _, t := range data.DelegateTargets {
+		entry := fmt.Sprintf("- **%s**", t.AgentKey)
+		if t.DisplayName != "" {
+			entry += fmt.Sprintf(" (%s)", t.DisplayName)
+		}
+		if t.Description != "" {
+			entry += " — " + t.Description
+		}
+		lines = append(lines, entry)
+	}
+	lines = append(lines,
+		"",
+		"Use `delegate` with the agent_key of the target agent. Do NOT invent agent keys.",
+		"",
+	)
+	return lines
+}
+
 // hasTeamWorkspace checks if team_tasks is in the tool list (indicates team context).
 func hasTeamWorkspace(toolNames []string) bool {
 	return slices.Contains(toolNames, "team_tasks")

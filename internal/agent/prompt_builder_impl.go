@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"strings"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -99,6 +101,13 @@ func (b *BridgePromptBuilder) Build(cfg PromptConfig) (string, error) {
 	// Append L0 memory section if present (v3 auto-inject).
 	if cfg.Memory && len(cfg.MemoryData.L0Summaries) > 0 {
 		prompt += "\n\n" + formatMemorySection(cfg.MemoryData)
+	}
+
+	// Append orchestration delegation targets section (v3).
+	if cfg.Orchestration {
+		if orchLines := buildOrchestrationSection(cfg.OrchestrationData); len(orchLines) > 0 {
+			prompt += "\n\n" + strings.Join(orchLines, "\n")
+		}
 	}
 
 	return prompt, nil

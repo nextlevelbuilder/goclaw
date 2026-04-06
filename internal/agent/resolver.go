@@ -93,6 +93,9 @@ type ResolverDeps struct {
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
 
+	// V3 evolution metrics store
+	EvolutionMetricsStore store.EvolutionMetricsStore
+
 	// Tenant store for workspace path resolution
 	TenantStore store.TenantStore
 
@@ -364,6 +367,29 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// v3 feature flags (from other_config JSONB)
 		v3f := ag.ParseV3Flags()
 
+		// v3 orchestration mode: resolve from team membership + agent links
+		orchMode := ResolveOrchestrationMode(ctx, ag.ID, deps.TeamStore, deps.AgentLinkStore)
+
+		// Populate delegation targets for prompt injection (only when mode >= delegate).
+		var delegateTargets []DelegateTargetEntry
+		if orchMode != ModeSpawn && deps.AgentLinkStore != nil {
+			if links, err := deps.AgentLinkStore.DelegateTargets(ctx, ag.ID); err == nil {
+				for _, link := range links {
+					delegateTargets = append(delegateTargets, DelegateTargetEntry{
+						AgentKey:    link.TargetAgentKey,
+						DisplayName: link.TargetDisplayName,
+						Description: link.Description,
+					})
+				}
+			}
+		}
+
+		// v3 evolution metrics: only wire store when feature flag enabled
+		var evoMetricsStore store.EvolutionMetricsStore
+		if v3f.EvolutionMetrics && deps.EvolutionMetricsStore != nil {
+			evoMetricsStore = deps.EvolutionMetricsStore
+		}
+
 		restrictVal := true // always restrict agents to their workspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
@@ -428,6 +454,9 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MCPStore:               deps.MCPStore,
 			MCPPool:                deps.MCPPool,
 			MCPUserCredSrvs:        mcpUserCredSrvs,
+			OrchMode:               orchMode,
+			DelegateTargets:        delegateTargets,
+			EvolutionMetricsStore:  evoMetricsStore,
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)

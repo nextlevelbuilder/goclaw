@@ -13,8 +13,9 @@ type PromptConfig struct {
 	Skills       bool
 	Team         bool
 	Workspace    bool
-	Memory       bool // auto-inject L0 section
-	Sandbox      bool
+	Memory        bool // auto-inject L0 section
+	Sandbox       bool
+	Orchestration bool // v3 orchestration delegation targets
 
 	// Data payloads (populated when section enabled)
 	IdentityData       IdentityData
@@ -26,6 +27,7 @@ type PromptConfig struct {
 	WorkspaceData      WorkspaceSectionData
 	MemoryData         MemorySectionData
 	SandboxData        SandboxSectionData
+	OrchestrationData  OrchestrationSectionData
 	ExtraPrompt        string
 
 	// Provider variant (selects template file)

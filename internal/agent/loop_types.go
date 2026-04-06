@@ -191,6 +191,13 @@ type Loop struct {
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	memStore store.MemoryStore
+
+	// v3 orchestration mode (spawn/delegate/team) — controls tool visibility
+	orchMode          OrchestrationMode
+	delegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+
+	// v3 evolution metrics store (nil = disabled)
+	evolutionMetricsStore store.EvolutionMetricsStore
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -334,6 +341,13 @@ type LoopConfig struct {
 	MCPStore        store.MCPServerStore  // for credential lookup
 	MCPPool         *mcpbridge.Pool       // user-keyed connection pool
 	MCPUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
+
+	// V3 orchestration mode (resolved by resolver, controls tool visibility)
+	OrchMode          OrchestrationMode
+	DelegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+
+	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
+	EvolutionMetricsStore store.EvolutionMetricsStore
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -436,6 +450,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 		mcpStore:               cfg.MCPStore,
 		mcpPool:                cfg.MCPPool,
 		mcpUserCredSrvs:        cfg.MCPUserCredSrvs,
+		orchMode:               cfg.OrchMode,
+		delegateTargets:        cfg.DelegateTargets,
+		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
 	}
 }
 

@@ -587,7 +587,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 			l.emitToolSpanEnd(ctx, toolSpanID, toolSpanStart, result)
 
 			// Record tool execution time for adaptive thresholds.
-			toolTiming.Record(tc.Name, time.Since(toolSpanStart).Milliseconds())
+			toolDur := time.Since(toolSpanStart)
+			toolTiming.Record(tc.Name, toolDur.Milliseconds())
+
+			// V3 evolution metrics: record tool execution (non-blocking, best-effort).
+			l.recordToolMetric(iterCtx, req.SessionKey, registryName, !result.IsError, toolDur)
 
 			// Process tool result: loop detection, events, media, deliverables.
 			toolMsg, warningMsgs, action := l.processToolResult(ctx, rs, &req, emitRun, tc, registryName, result, hadBootstrap)
@@ -708,7 +712,11 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 			var deferredWarnings []providers.Message
 			for _, r := range collected {
 				// Record tool execution time for adaptive thresholds.
-				toolTiming.Record(r.tc.Name, time.Since(r.spanStart).Milliseconds())
+				pToolDur := time.Since(r.spanStart)
+				toolTiming.Record(r.tc.Name, pToolDur.Milliseconds())
+
+				// V3 evolution metrics: record parallel tool execution (non-blocking).
+				l.recordToolMetric(iterCtx, req.SessionKey, r.registryName, !r.result.IsError, pToolDur)
 
 				// Process tool result: loop detection, events, media, deliverables.
 				toolMsg, warningMsgs, action := l.processToolResult(ctx, rs, &req, emitRun, r.tc, r.registryName, r.result, hadBootstrap)

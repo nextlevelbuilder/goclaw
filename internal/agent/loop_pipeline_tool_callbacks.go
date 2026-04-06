@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -27,8 +31,13 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
 		})
 
+		toolStart := time.Now()
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+		toolDuration := time.Since(toolStart)
+
+		// v3 evolution metrics: record tool execution non-blocking (best-effort).
+		l.recordToolMetric(ctx, req.SessionKey, registryName, !result.IsError, toolDuration)
 
 		toolMsg, warningMsgs, action := l.processToolResult(ctx, bridgeRS, req, emitRun, tc, registryName, result, state.Context.HadBootstrap)
 		syncBridgeToState(bridgeRS, state, action)
@@ -40,33 +49,54 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 	}
 }
 
+// toolRawResult wraps a tools.Result with timing for metrics recording.
+type toolRawResult struct {
+	result   *tools.Result
+	duration time.Duration
+}
+
 // makeExecuteToolRaw wraps tool I/O only (parallel-safe, no state mutation).
-// Returns tool message + *tools.Result as opaque raw data for ProcessToolResult.
+// Returns tool message + toolRawResult (with timing) as opaque raw data for ProcessToolResult.
 func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 	return func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 		registryName := l.resolveToolCallName(tc.Name)
+		start := time.Now()
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
+		dur := time.Since(start)
 		msg := providers.Message{
 			Role:       "tool",
 			Content:    result.ForLLM,
 			ToolCallID: tc.ID,
 			IsError:    result.IsError,
 		}
-		return msg, result, nil
+		return msg, &toolRawResult{result: result, duration: dur}, nil
 	}
 }
 
 // makeProcessToolResult wraps post-execution bookkeeping (sequential, mutates bridgeRS).
-// rawData is *tools.Result from ExecuteToolRaw — no re-execution.
+// rawData is *toolRawResult from ExecuteToolRaw — no re-execution.
 func (l *Loop) makeProcessToolResult(req *RunRequest, bridgeRS *runState) func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message {
 	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall, rawMsg providers.Message, rawData any) []providers.Message {
 		registryName := l.resolveToolCallName(tc.Name)
-		result, _ := rawData.(*tools.Result)
+
+		// Extract result and timing from toolRawResult wrapper.
+		var result *tools.Result
+		var dur time.Duration
+		if raw, ok := rawData.(*toolRawResult); ok && raw != nil {
+			result = raw.result
+			dur = raw.duration
+		} else if r, ok := rawData.(*tools.Result); ok {
+			result = r // backward compat
+		}
 		if result == nil {
 			return []providers.Message{rawMsg}
 		}
+
+		// Record tool metrics (non-blocking, best-effort).
+		l.recordToolMetric(ctx, req.SessionKey, registryName, !result.IsError, dur)
+
 		toolMsg, warningMsgs, action := l.processToolResult(ctx, bridgeRS, req, emitRun, tc, registryName, result, state.Context.HadBootstrap)
 		syncBridgeToState(bridgeRS, state, action)
 
@@ -99,6 +129,34 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 	if state.Tool.LoopKilled && action == toolResultBreak {
 		state.Observe.FinalContent = bridgeRS.finalContent
 	}
+}
+
+// recordToolMetric records a tool execution metric non-blocking (best-effort).
+// No-op when evolution metrics store is not configured.
+func (l *Loop) recordToolMetric(ctx context.Context, sessionKey, toolName string, success bool, duration time.Duration) {
+	if l.evolutionMetricsStore == nil {
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	go func() {
+		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
+		defer cancel()
+		value, _ := json.Marshal(map[string]any{
+			"success":     success,
+			"duration_ms": duration.Milliseconds(),
+		})
+		if err := l.evolutionMetricsStore.RecordMetric(bgCtx, store.EvolutionMetric{
+			ID:         uuid.New(),
+			TenantID:   tenantID,
+			AgentID:    l.agentUUID,
+			SessionKey: sessionKey,
+			MetricType: store.MetricTool,
+			MetricKey:  toolName,
+			Value:      value,
+		}); err != nil {
+			slog.Debug("evolution.metric.record_failed", "tool", toolName, "error", err)
+		}
+	}()
 }
 
 // makeToolEmitRun creates a tool event emitter with request context.
