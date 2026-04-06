@@ -90,6 +90,7 @@ var leafSubagentDenyList = []string{
 // PolicyEngine evaluates tool access based on layered config policies.
 type PolicyEngine struct {
 	globalPolicy     *config.ToolsConfig
+	mu               sync.RWMutex     // protects denyCapabilities + registry
 	denyCapabilities []ToolCapability // capability-based deny rules (v3)
 	registry         *Registry        // for metadata lookups (nil = skip capability checks)
 }
@@ -100,11 +101,17 @@ func NewPolicyEngine(cfg *config.ToolsConfig) *PolicyEngine {
 }
 
 // SetRegistry enables capability-based filtering by providing metadata lookups.
-func (pe *PolicyEngine) SetRegistry(r *Registry) { pe.registry = r }
+func (pe *PolicyEngine) SetRegistry(r *Registry) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+	pe.registry = r
+}
 
 // DenyCapability adds a capability to the deny list.
 // Tools with this capability are excluded from FilterTools results.
 func (pe *PolicyEngine) DenyCapability(cap ToolCapability) {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
 	pe.denyCapabilities = append(pe.denyCapabilities, cap)
 }
 
@@ -123,8 +130,12 @@ func (pe *PolicyEngine) FilterTools(
 	allowed := pe.evaluate(allTools, providerName, agentToolPolicy, groupToolAllow)
 
 	// Step 8: Capability-based deny (v3 RBAC)
-	if len(pe.denyCapabilities) > 0 && pe.registry != nil {
-		allowed = pe.filterByCapability(allowed)
+	pe.mu.RLock()
+	denyCaps := pe.denyCapabilities
+	capReg := pe.registry
+	pe.mu.RUnlock()
+	if len(denyCaps) > 0 && capReg != nil {
+		allowed = filterByCapability(allowed, denyCaps, capReg)
 	}
 
 	// Apply subagent restrictions
@@ -468,12 +479,12 @@ func copySlice(s []string) []string {
 }
 
 // filterByCapability removes tools whose metadata matches any denied capability.
-func (pe *PolicyEngine) filterByCapability(names []string) []string {
+func filterByCapability(names []string, denyCaps []ToolCapability, reg *Registry) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
-		meta := pe.registry.GetMetadata(name)
+		meta := reg.GetMetadata(name)
 		denied := false
-		for _, denyCap := range pe.denyCapabilities {
+		for _, denyCap := range denyCaps {
 			if meta.HasCapability(denyCap) {
 				denied = true
 				break
