@@ -40,6 +40,8 @@ func (l *Loop) buildPipelineDeps(req *RunRequest) pipeline.PipelineDeps {
 		maxIter = req.MaxIterations
 	}
 
+	cb := l.pipelineCallbacks(req)
+
 	return pipeline.PipelineDeps{
 		TokenCounter: tokencount.NewFallbackCounter(),
 		Config: pipeline.PipelineConfig{
@@ -56,25 +58,25 @@ func (l *Loop) buildPipelineDeps(req *RunRequest) pipeline.PipelineDeps {
 			}
 		},
 
-		// Context callbacks — placeholders, wired in Phase 8 follow-up
-		ResolveWorkspace: nil,
-		LoadContextFiles: nil,
-		BuildMessages:    nil,
-		EnrichMedia:      nil,
-		InjectReminders:  nil,
+		// Context callbacks
+		ResolveWorkspace: cb.resolveWorkspace,
+		LoadContextFiles: cb.loadContextFiles,
+		BuildMessages:    cb.buildMessages,
+		EnrichMedia:      cb.enrichMedia,
+		InjectReminders:  cb.injectReminders,
 
-		// Think callbacks — placeholders
-		BuildFilteredTools: nil,
-		CallLLM:            nil,
+		// Think callbacks
+		BuildFilteredTools: cb.buildFilteredTools,
+		CallLLM:            cb.callLLM,
 
-		// Prune callbacks — placeholders
-		PruneMessages:   nil,
-		CompactMessages: nil,
+		// Prune callbacks
+		PruneMessages:   cb.pruneMessages,
+		CompactMessages: cb.compactMessages,
 
-		// Memory flush — placeholder
-		RunMemoryFlush: nil,
+		// Memory flush
+		RunMemoryFlush: cb.runMemoryFlush,
 
-		// Tool callbacks — placeholders
+		// Tool callbacks — ExecuteToolCall needs deep loop.go integration, wired later
 		ExecuteToolCall: nil,
 		CheckReadOnly:   nil,
 
@@ -97,12 +99,12 @@ func (l *Loop) buildPipelineDeps(req *RunRequest) pipeline.PipelineDeps {
 			}
 		},
 
-		// Checkpoint + Finalize — placeholders
-		FlushMessages:    nil,
-		SanitizeContent:  nil,
-		UpdateMetadata:   nil,
-		BootstrapCleanup: nil,
-		MaybeSummarize:   nil,
+		// Checkpoint + Finalize
+		FlushMessages:    cb.flushMessages,
+		SanitizeContent:  cb.sanitizeContent,
+		UpdateMetadata:   cb.updateMetadata,
+		BootstrapCleanup: cb.bootstrapCleanup,
+		MaybeSummarize:   cb.maybeSummarize,
 	}
 }
 
