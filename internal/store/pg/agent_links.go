@@ -179,14 +179,25 @@ func linkTenantClause(ctx context.Context, agentID uuid.UUID, baseCondition stri
 
 func (s *PGAgentLinkStore) CanDelegate(ctx context.Context, fromAgentID, toAgentID uuid.UUID) (bool, error) {
 	var exists bool
+	// Tenant-scoped: add tenant_id filter unless cross-tenant context.
+	tenantFilter := ""
+	args := []any{fromAgentID, toAgentID}
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return false, nil // fail-closed: no tenant = no access
+		}
+		tenantFilter = " AND tenant_id = $3"
+		args = append(args, tenantID)
+	}
 	err := s.db.QueryRowContext(ctx,
 		`SELECT EXISTS(
-			SELECT 1 FROM agent_links WHERE status = 'active' AND (
+			SELECT 1 FROM agent_links WHERE status = 'active'`+tenantFilter+` AND (
 				(source_agent_id = $1 AND target_agent_id = $2 AND direction IN ('outbound', 'bidirectional'))
 				OR
 				(source_agent_id = $2 AND target_agent_id = $1 AND direction IN ('inbound', 'bidirectional'))
 			)
-		)`, fromAgentID, toAgentID).Scan(&exists)
+		)`, args...).Scan(&exists)
 	return exists, err
 }
 

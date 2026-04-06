@@ -64,8 +64,8 @@ func (s *PGEvolutionMetricsStore) AggregateToolMetrics(ctx context.Context, agen
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT metric_key,
 		        COUNT(*) AS call_count,
-		        AVG(CASE WHEN (value->>'success')::boolean THEN 1.0 ELSE 0.0 END) AS success_rate,
-		        AVG((value->>'duration_ms')::numeric) AS avg_duration_ms
+		        AVG(CASE WHEN COALESCE(value->>'success','false') = 'true' THEN 1.0 ELSE 0.0 END) AS success_rate,
+		        AVG(COALESCE(NULLIF(value->>'duration_ms','')::numeric, 0)) AS avg_duration_ms
 		 FROM agent_evolution_metrics
 		 WHERE agent_id = $1 AND metric_type = 'tool' AND created_at >= $2 AND tenant_id = $3
 		 GROUP BY metric_key
@@ -94,8 +94,8 @@ func (s *PGEvolutionMetricsStore) AggregateRetrievalMetrics(ctx context.Context,
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT metric_key,
 		        COUNT(*) AS query_count,
-		        AVG(CASE WHEN (value->>'used_in_reply')::boolean THEN 1.0 ELSE 0.0 END) AS usage_rate,
-		        AVG((value->>'top_score')::numeric) AS avg_score
+		        AVG(CASE WHEN COALESCE(value->>'used_in_reply','false') = 'true' THEN 1.0 ELSE 0.0 END) AS usage_rate,
+		        AVG(COALESCE(NULLIF(value->>'top_score','')::numeric, 0)) AS avg_score
 		 FROM agent_evolution_metrics
 		 WHERE agent_id = $1 AND metric_type = 'retrieval' AND created_at >= $2 AND tenant_id = $3
 		 GROUP BY metric_key

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -117,23 +116,3 @@ func formatMemorySection(data MemorySectionData) string {
 	return section
 }
 
-// formatVaultSection renders vault document summaries for prompt injection.
-func formatVaultSection(docs []VaultDocSummary) string {
-	if len(docs) == 0 {
-		return ""
-	}
-	section := "## Knowledge Vault\n\nAvailable documents:\n"
-	for _, d := range docs {
-		section += "- " + d.Title + " (" + d.DocType + ")\n"
-	}
-	return section
-}
-
-// memoryL0ToStrings is a helper for tests.
-func memoryL0ToStrings(summaries []memory.L0Summary) []string {
-	out := make([]string, len(summaries))
-	for i, s := range summaries {
-		out[i] = s.Summary
-	}
-	return out
-}

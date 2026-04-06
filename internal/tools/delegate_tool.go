@@ -89,6 +89,9 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 	if ts, ok := args["timeout"].(float64); ok && int(ts) > 0 {
 		timeoutSec = int(ts)
 	}
+	if timeoutSec > 600 {
+		timeoutSec = 600 // hard cap to prevent resource exhaustion
+	}
 
 	if agentKey == "" || task == "" {
 		return ErrorResult("agent_key and task are required")
@@ -177,10 +180,11 @@ func (t *DelegateTool) executeSyncMode(ctx context.Context, req DelegateRequest,
 
 // executeAsyncMode spawns a goroutine and returns immediately.
 func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest) *Result {
-	// Detach context for background execution (parent may cancel).
-	bgCtx := context.WithoutCancel(ctx)
+	// Detach from parent cancel but add a deadline to prevent goroutine leaks.
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
 
 	go func() {
+		defer cancel()
 		content, err := t.runFn(bgCtx, req)
 		if err != nil {
 			t.emitEvent(bgCtx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
