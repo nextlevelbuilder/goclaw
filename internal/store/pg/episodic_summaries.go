@@ -49,7 +49,7 @@ func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary)
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO episodic_summaries
 			(id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
-			 message_count, token_count, embedding, l0_abstract, source_id,
+			 turn_count, token_count, embedding, l0_abstract, source_id,
 			 source_type, created_at, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		ON CONFLICT (agent_id, user_id, source_id) DO NOTHING`,
@@ -67,15 +67,17 @@ func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary)
 func (s *PGEpisodicStore) Get(ctx context.Context, id string) (*store.EpisodicSummary, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
-		       message_count, token_count, l0_abstract, source_id, source_type,
+		       turn_count, token_count, l0_abstract, source_id, source_type,
 		       created_at, expires_at
-		FROM episodic_summaries WHERE id = $1`, id)
+		FROM episodic_summaries WHERE id = $1 AND tenant_id = $2`,
+		id, store.TenantIDFromContext(ctx))
 	return scanEpisodic(row)
 }
 
 // Delete removes an episodic summary.
 func (s *PGEpisodicStore) Delete(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM episodic_summaries WHERE id = $1`, id)
+	_, err := s.db.ExecContext(ctx, `DELETE FROM episodic_summaries WHERE id = $1 AND tenant_id = $2`,
+		id, store.TenantIDFromContext(ctx))
 	return err
 }
 
@@ -86,7 +88,7 @@ func (s *PGEpisodicStore) List(ctx context.Context, agentID, userID string, limi
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
-		       message_count, token_count, l0_abstract, source_id, source_type,
+		       turn_count, token_count, l0_abstract, source_id, source_type,
 		       created_at, expires_at
 		FROM episodic_summaries
 		WHERE agent_id = $1 AND user_id = $2

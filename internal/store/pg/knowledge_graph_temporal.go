@@ -75,7 +75,7 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 	_, err = tx.ExecContext(ctx, `
 		UPDATE kg_entities SET valid_until = $1, updated_at = $2
 		WHERE agent_id = $3 AND user_id = $4 AND external_id = $5 AND valid_until IS NULL`,
-		now, now.Unix(), old.AgentID, old.UserID, old.ExternalID)
+		now, now, old.AgentID, old.UserID, old.ExternalID)
 	if err != nil {
 		return fmt.Errorf("supersede expire old: %w", err)
 	}
@@ -88,7 +88,7 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)`,
 		replacement.AgentID, replacement.UserID, replacement.ExternalID,
 		replacement.Name, replacement.EntityType, replacement.Description,
-		props, replacement.SourceID, replacement.Confidence, now.Unix(), now)
+		props, replacement.SourceID, replacement.Confidence, now, now)
 	if err != nil {
 		return fmt.Errorf("supersede insert new: %w", err)
 	}
@@ -97,15 +97,19 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 }
 
 // scanEntityTemporal scans a row including valid_from/valid_until columns.
+// CreatedAt/UpdatedAt are TIMESTAMPTZ in DB but int64 (UnixMilli) in struct.
 func scanEntityTemporal(rows *sql.Rows) (*store.Entity, error) {
 	var e store.Entity
 	var props json.RawMessage
+	var createdAt, updatedAt time.Time
 	err := rows.Scan(&e.ID, &e.AgentID, &e.UserID, &e.ExternalID, &e.Name,
 		&e.EntityType, &e.Description, &props, &e.SourceID, &e.Confidence,
-		&e.CreatedAt, &e.UpdatedAt, &e.ValidFrom, &e.ValidUntil)
+		&createdAt, &updatedAt, &e.ValidFrom, &e.ValidUntil)
 	if err != nil {
 		return nil, err
 	}
+	e.CreatedAt = createdAt.UnixMilli()
+	e.UpdatedAt = updatedAt.UnixMilli()
 	if props != nil {
 		_ = json.Unmarshal(props, &e.Properties)
 	}

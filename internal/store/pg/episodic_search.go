@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -119,5 +118,3 @@ func scanEpisodicRow(rows *sql.Rows) (*store.EpisodicSummary, error) {
 // Ensure PGEpisodicStore implements store.EpisodicStore.
 var _ store.EpisodicStore = (*PGEpisodicStore)(nil)
 
-// Suppress unused import warning for uuid — used in Create via uuid.NewV7().
-var _ = uuid.Must
