@@ -16,6 +16,11 @@ const (
 	EventMemoryLint       EventType = "memory.lint"
 	EventRunCompleted     EventType = "run.completed"
 	EventToolExecuted     EventType = "tool.executed"
+
+	// Delegation events (v3 orchestration)
+	EventDelegateSent      EventType = "delegate.sent"
+	EventDelegateCompleted EventType = "delegate.completed"
+	EventDelegateFailed    EventType = "delegate.failed"
 )
 
 // DomainEvent is a typed event with metadata for the consolidation pipeline.
@@ -74,4 +79,29 @@ type ToolExecutedPayload struct {
 	Duration time.Duration
 	Success  bool
 	ReadOnly bool
+}
+
+// DelegateSentPayload is emitted when a delegation is dispatched.
+type DelegateSentPayload struct {
+	DelegationID string
+	FromAgent    string
+	ToAgent      string
+	Task         string
+	Mode         string // "async" or "sync"
+}
+
+// DelegateCompletedPayload is emitted when a delegatee finishes.
+type DelegateCompletedPayload struct {
+	DelegationID string
+	FromAgent    string
+	ToAgent      string
+	Content      string
+}
+
+// DelegateFailedPayload is emitted when a delegation fails.
+type DelegateFailedPayload struct {
+	DelegationID string
+	FromAgent    string
+	ToAgent      string
+	Error        string
 }
