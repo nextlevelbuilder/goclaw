@@ -115,28 +115,15 @@ func exportTeamMembers(ctx context.Context, db *sql.DB, teamID, leadAgentID uuid
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var out []TeamMemberExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
 		"SELECT a.agent_key, m.role"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1 AND m.agent_id != $2"+tc,
 		append([]any{teamID, leadAgentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []TeamMemberExport
-	for rows.Next() {
-		var m TeamMemberExport
-		if err := rows.Scan(&m.AgentKey, &m.Role); err != nil {
-			slog.Warn("export.team.member.scan", "error", err)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // ExportTeamTasks returns all tasks for a team, resolving agent keys for owner/creator.
@@ -383,29 +370,16 @@ func ExportAgentLinks(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]Age
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
-		"SELECT sa.agent_key, ta.agent_key, l.direction, COALESCE(l.description,'')"+
+	var out []AgentLinkExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
+		"SELECT sa.agent_key AS source_agent_key, ta.agent_key AS target_agent_key, l.direction, COALESCE(l.description,'') AS description"+
 			" FROM agent_links l"+
 			" JOIN agents sa ON sa.id = l.source_agent_id"+
 			" JOIN agents ta ON ta.id = l.target_agent_id"+
 			" WHERE (l.source_agent_id = $1 OR l.target_agent_id = $1)"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []AgentLinkExport
-	for rows.Next() {
-		var l AgentLinkExport
-		if err := rows.Scan(&l.SourceAgentKey, &l.TargetAgentKey, &l.Direction, &l.Description); err != nil {
-			slog.Warn("export.agent_link.scan", "error", err)
-			continue
-		}
-		out = append(out, l)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // ExportTeamPreviewCounts returns team-related counts for the preview endpoint.

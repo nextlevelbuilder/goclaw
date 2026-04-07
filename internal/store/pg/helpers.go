@@ -56,6 +56,13 @@ func derefStr(s *string) string {
 	return *s
 }
 
+func derefInt(p *int) int {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
 func derefUUID(u *uuid.UUID) uuid.UUID {
 	if u == nil {
 		return uuid.Nil

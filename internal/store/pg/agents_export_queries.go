@@ -332,25 +332,12 @@ func ExportSkillGrants(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]Sk
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var result []SkillGrantExport
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT skill_id, pinned_version, granted_by FROM skill_agent_grants WHERE agent_id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []SkillGrantExport
-	for rows.Next() {
-		var g SkillGrantExport
-		if err := rows.Scan(&g.SkillID, &g.PinnedVersion, &g.GrantedBy); err != nil {
-			slog.Warn("export.scan", "error", err)
-			continue
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 // ExportMCPGrants returns all MCP server grants for the given agent.
@@ -359,26 +346,13 @@ func ExportMCPGrants(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]MCPG
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var result []MCPGrantExport
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT server_id, enabled, tool_allow, tool_deny, config_overrides, granted_by"+
 			" FROM mcp_agent_grants WHERE agent_id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []MCPGrantExport
-	for rows.Next() {
-		var g MCPGrantExport
-		if err := rows.Scan(&g.ServerID, &g.Enabled, &g.ToolAllow, &g.ToolDeny, &g.ConfigOverrides, &g.GrantedBy); err != nil {
-			slog.Warn("export.scan", "error", err)
-			continue
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 // ExportCronJobs returns all cron jobs for the given agent.
@@ -417,26 +391,13 @@ func ExportConfigPermissions(ctx context.Context, db *sql.DB, agentID uuid.UUID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var result []ConfigPermissionExport
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT scope, config_type, user_id, permission, metadata, granted_by"+
 			" FROM agent_config_permissions WHERE agent_id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []ConfigPermissionExport
-	for rows.Next() {
-		var p ConfigPermissionExport
-		if err := rows.Scan(&p.Scope, &p.ConfigType, &p.UserID, &p.Permission, &p.Metadata, &p.GrantedBy); err != nil {
-			slog.Warn("export.scan", "error", err)
-			continue
-		}
-		result = append(result, p)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 // ExportUserProfiles returns all user profiles for the given agent.
@@ -445,25 +406,12 @@ func ExportUserProfiles(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]U
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var result []UserProfileExport
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT user_id, workspace FROM user_agent_profiles WHERE agent_id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []UserProfileExport
-	for rows.Next() {
-		var p UserProfileExport
-		if err := rows.Scan(&p.UserID, &p.Workspace); err != nil {
-			slog.Warn("export.scan", "error", err)
-			continue
-		}
-		result = append(result, p)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 // ExportUserOverrides returns all user model overrides for the given agent.
@@ -472,25 +420,12 @@ func ExportUserOverrides(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var result []UserOverrideExport
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT user_id, provider, model, settings"+
 			" FROM user_agent_overrides WHERE agent_id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []UserOverrideExport
-	for rows.Next() {
-		var o UserOverrideExport
-		if err := rows.Scan(&o.UserID, &o.Provider, &o.Model, &o.Settings); err != nil {
-			slog.Warn("export.scan", "error", err)
-			continue
-		}
-		result = append(result, o)
-	}
-	return result, rows.Err()
+	return result, err
 }
 

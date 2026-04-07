@@ -77,16 +77,15 @@ func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store
 		return nil, err
 	}
 	var p store.LLMProviderData
-	var apiKey string
-	err = s.db.QueryRowContext(ctx,
+	err = pkgSqlxDB.GetContext(ctx, &p,
 		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
 		 FROM llm_providers WHERE id = $1`+tClause,
 		append([]any{id}, tArgs...)...,
-	).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt, &p.TenantID)
+	)
 	if err != nil {
 		return nil, fmt.Errorf("provider not found: %s", id)
 	}
-	p.APIKey = s.decryptKey(apiKey, p.Name)
+	p.APIKey = s.decryptKey(p.APIKey, p.Name)
 	return &p, nil
 }
 
@@ -96,16 +95,15 @@ func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*
 		return nil, err
 	}
 	var p store.LLMProviderData
-	var apiKey string
-	err = s.db.QueryRowContext(ctx,
+	err = pkgSqlxDB.GetContext(ctx, &p,
 		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
 		 FROM llm_providers WHERE name = $1`+tClause,
 		append([]any{name}, tArgs...)...,
-	).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt, &p.TenantID)
+	)
 	if err != nil {
 		return nil, fmt.Errorf("provider not found: %s", name)
 	}
-	p.APIKey = s.decryptKey(apiKey, p.Name)
+	p.APIKey = s.decryptKey(p.APIKey, p.Name)
 	return &p, nil
 }
 
@@ -114,46 +112,30 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 	if err != nil {
 		return nil, err
 	}
-	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE true` + tClause + ` ORDER BY name`
-	rows, err := s.db.QueryContext(ctx, q, tArgs...)
+	var result []store.LLMProviderData
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
+		 FROM llm_providers WHERE true`+tClause+` ORDER BY name`, tArgs...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.LLMProviderData
-	for rows.Next() {
-		var p store.LLMProviderData
-		var apiKey string
-		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt, &p.TenantID); err != nil {
-			continue
-		}
-		p.APIKey = s.decryptKey(apiKey, p.Name)
-		result = append(result, p)
+	for i := range result {
+		result[i].APIKey = s.decryptKey(result[i].APIKey, result[i].Name)
 	}
 	return result, nil
 }
 
 // ListAllProviders returns all providers across all tenants. Server-internal only.
 func (s *PGProviderStore) ListAllProviders(ctx context.Context) ([]store.LLMProviderData, error) {
-	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE true ORDER BY name`
-	rows, err := s.db.QueryContext(ctx, q)
+	var result []store.LLMProviderData
+	err := pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
+		 FROM llm_providers WHERE true ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.LLMProviderData
-	for rows.Next() {
-		var p store.LLMProviderData
-		var apiKey string
-		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, &p.CreatedAt, &p.UpdatedAt, &p.TenantID); err != nil {
-			continue
-		}
-		p.APIKey = s.decryptKey(apiKey, p.Name)
-		result = append(result, p)
+	for i := range result {
+		result[i].APIKey = s.decryptKey(result[i].APIKey, result[i].Name)
 	}
 	return result, nil
 }

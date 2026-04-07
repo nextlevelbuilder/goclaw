@@ -23,6 +23,8 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		return nil, fmt.Errorf("ensure schema: %w", err)
 	}
 
+	initSqlx(db)
+
 	slog.Info("sqlite stores initialized", "path", cfg.SQLitePath)
 
 	return &store.Stores{
