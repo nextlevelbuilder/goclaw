@@ -483,6 +483,31 @@ func runGateway() {
 		server.SetKnowledgeGraphHandler(httpapi.NewKnowledgeGraphHandler(pgStores.KnowledgeGraph, providerRegistry))
 	}
 
+	// V3: Evolution metrics + suggestions API
+	if pgStores != nil && pgStores.EvolutionMetrics != nil && pgStores.EvolutionSuggestions != nil {
+		server.SetEvolutionHandler(httpapi.NewEvolutionHandler(pgStores.EvolutionMetrics, pgStores.EvolutionSuggestions))
+	}
+
+	// V3: Knowledge Vault document API
+	if pgStores != nil && pgStores.Vault != nil {
+		server.SetVaultHandler(httpapi.NewVaultHandler(pgStores.Vault))
+	}
+
+	// V3: Episodic memory summaries API
+	if pgStores != nil && pgStores.Episodic != nil {
+		server.SetEpisodicHandler(httpapi.NewEpisodicHandler(pgStores.Episodic))
+	}
+
+	// V3: Orchestration mode API (read-only)
+	if pgStores != nil && pgStores.Agents != nil {
+		server.SetOrchestrationHandler(httpapi.NewOrchestrationHandler(pgStores.Agents, pgStores.Teams, pgStores.AgentLinks))
+	}
+
+	// V3: Per-agent v3 feature flags API
+	if pgStores != nil && pgStores.Agents != nil {
+		server.SetV3FlagsHandler(httpapi.NewV3FlagsHandler(pgStores.Agents))
+	}
+
 	// Workspace file serving endpoint — serves files by absolute path, auth-token protected.
 	// Supports media from any agent workspace (each agent has its own workspace from DB).
 	server.SetFilesHandler(httpapi.NewFilesHandler(workspace, dataDir))

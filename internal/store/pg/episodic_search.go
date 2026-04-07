@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,14 +24,29 @@ type episodicScored struct {
 }
 
 // ftsSearch performs full-text search on episodic summaries.
+// Uses inline to_tsvector to match the functional GIN index on summary.
+// When userID is empty, returns results across all users (admin view).
 func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID string, limit int) []episodicScored {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, session_key, l0_abstract, ts_rank(tsv, plainto_tsquery('simple', $1)) AS score, created_at
+	q := `SELECT id, session_key, l0_abstract,
+	        ts_rank(to_tsvector('simple', summary), plainto_tsquery('simple', $1)) AS score, created_at
 		FROM episodic_summaries
-		WHERE agent_id = $2 AND user_id = $3 AND tenant_id = $5
-		  AND tsv @@ plainto_tsquery('simple', $1)
-		ORDER BY score DESC LIMIT $4`,
-		query, agentID, userID, limit, tenantFromCtx(ctx))
+		WHERE agent_id = $2
+		  AND to_tsvector('simple', summary) @@ plainto_tsquery('simple', $1)`
+	args := []any{query, agentID}
+	p := 3
+
+	if userID != "" {
+		q += fmt.Sprintf(" AND user_id = $%d", p)
+		args = append(args, userID)
+		p++
+	}
+	q += fmt.Sprintf(" AND tenant_id = $%d", p)
+	args = append(args, tenantFromCtx(ctx))
+	p++
+	q += fmt.Sprintf(" ORDER BY score DESC LIMIT $%d", p)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil
 	}
@@ -48,15 +64,28 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 }
 
 // vectorSearch performs cosine similarity search on episodic embeddings.
+// When userID is empty, returns results across all users (admin view).
 func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32, agentID, userID string, limit int) []episodicScored {
 	vecStr := vectorToString(embedding)
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, session_key, l0_abstract, 1 - (embedding <=> $1) AS score, created_at
+	q := `SELECT id, session_key, l0_abstract, 1 - (embedding <=> $1) AS score, created_at
 		FROM episodic_summaries
-		WHERE agent_id = $2 AND user_id = $3 AND tenant_id = $5
-		  AND embedding IS NOT NULL
-		ORDER BY embedding <=> $1 LIMIT $4`,
-		vecStr, agentID, userID, limit, tenantFromCtx(ctx))
+		WHERE agent_id = $2
+		  AND embedding IS NOT NULL`
+	args := []any{vecStr, agentID}
+	p := 3
+
+	if userID != "" {
+		q += fmt.Sprintf(" AND user_id = $%d", p)
+		args = append(args, userID)
+		p++
+	}
+	q += fmt.Sprintf(" AND tenant_id = $%d", p)
+	args = append(args, tenantFromCtx(ctx))
+	p++
+	q += fmt.Sprintf(" ORDER BY embedding <=> $1 LIMIT $%d", p)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil
 	}
@@ -123,4 +152,3 @@ func scanEpisodicRow(rows *sql.Rows) (*store.EpisodicSummary, error) {
 
 // Ensure PGEpisodicStore implements store.EpisodicStore.
 var _ store.EpisodicStore = (*PGEpisodicStore)(nil)
-

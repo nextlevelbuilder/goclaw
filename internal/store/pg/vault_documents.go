@@ -136,12 +136,19 @@ func (s *PGVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID, pa
 // ListDocuments returns vault documents for a tenant+agent with optional filters.
 func (s *PGVaultStore) ListDocuments(ctx context.Context, tenantID, agentID string, opts store.VaultListOptions) ([]store.VaultDocument, error) {
 	tid := mustParseUUID(tenantID)
-	aid := mustParseUUID(agentID)
 
 	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
-		FROM vault_documents WHERE tenant_id = $1 AND agent_id = $2`
-	args := []any{tid, aid}
-	p := 3
+		FROM vault_documents WHERE tenant_id = $1`
+	args := []any{tid}
+	p := 2
+
+	// Agent filter is optional — omit for cross-agent listing.
+	if agentID != "" {
+		aid := mustParseUUID(agentID)
+		q += fmt.Sprintf(" AND agent_id = $%d", p)
+		args = append(args, aid)
+		p++
+	}
 
 	if opts.Scope != "" {
 		q += fmt.Sprintf(" AND scope = $%d", p)

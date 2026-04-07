@@ -82,18 +82,34 @@ func (s *PGEpisodicStore) Delete(ctx context.Context, id string) error {
 }
 
 // List returns episodic summaries ordered by created_at DESC.
+// When userID is empty, returns summaries for all users of the agent.
 func (s *PGEpisodicStore) List(ctx context.Context, agentID, userID string, limit, offset int) ([]store.EpisodicSummary, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
-		       turn_count, token_count, l0_abstract, source_id, source_type,
-		       created_at, expires_at
-		FROM episodic_summaries
-		WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $5
-		ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
-		agentID, userID, limit, offset, store.TenantIDFromContext(ctx))
+	tenantID := store.TenantIDFromContext(ctx)
+
+	var rows *sql.Rows
+	var err error
+	if userID != "" {
+		rows, err = s.db.QueryContext(ctx, `
+			SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+			       turn_count, token_count, l0_abstract, source_id, source_type,
+			       created_at, expires_at
+			FROM episodic_summaries
+			WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $5
+			ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
+			agentID, userID, limit, offset, tenantID)
+	} else {
+		rows, err = s.db.QueryContext(ctx, `
+			SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+			       turn_count, token_count, l0_abstract, source_id, source_type,
+			       created_at, expires_at
+			FROM episodic_summaries
+			WHERE agent_id = $1 AND tenant_id = $4
+			ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+			agentID, limit, offset, tenantID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -163,15 +179,17 @@ func (s *PGEpisodicStore) ExistsBySourceID(ctx context.Context, agentID, userID,
 	var exists bool
 	err := s.db.QueryRowContext(ctx, `
 		SELECT EXISTS(SELECT 1 FROM episodic_summaries
-		WHERE agent_id = $1 AND user_id = $2 AND source_id = $3)`,
-		agentID, userID, sourceID).Scan(&exists)
+		WHERE agent_id = $1 AND user_id = $2 AND source_id = $3 AND tenant_id = $4)`,
+		agentID, userID, sourceID, store.TenantIDFromContext(ctx)).Scan(&exists)
 	return exists, err
 }
 
-// PruneExpired deletes episodic summaries past their expiry.
+// PruneExpired deletes episodic summaries past their expiry within the caller's tenant.
 func (s *PGEpisodicStore) PruneExpired(ctx context.Context) (int, error) {
+	tenantID := store.TenantIDFromContext(ctx)
 	res, err := s.db.ExecContext(ctx, `
-		DELETE FROM episodic_summaries WHERE expires_at IS NOT NULL AND expires_at < NOW()`)
+		DELETE FROM episodic_summaries
+		WHERE expires_at IS NOT NULL AND expires_at < NOW() AND tenant_id = $1`, tenantID)
 	if err != nil {
 		return 0, err
 	}

@@ -24,7 +24,7 @@ func NewPGEvolutionSuggestionStore(db *sql.DB) *PGEvolutionSuggestionStore {
 func (s *PGEvolutionSuggestionStore) CreateSuggestion(ctx context.Context, sg store.EvolutionSuggestion) error {
 	tenantID := store.TenantIDFromContext(ctx)
 	if tenantID == uuid.Nil {
-		tenantID = sg.TenantID
+		return fmt.Errorf("evolution.CreateSuggestion: tenant_id required in context")
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_evolution_suggestions
@@ -77,21 +77,33 @@ func (s *PGEvolutionSuggestionStore) ListSuggestions(ctx context.Context, agentI
 func (s *PGEvolutionSuggestionStore) UpdateSuggestionStatus(ctx context.Context, id uuid.UUID, status, reviewedBy string) error {
 	tenantID := store.TenantIDFromContext(ctx)
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE agent_evolution_suggestions
 		 SET status = $1, reviewed_by = $2, reviewed_at = $3
 		 WHERE id = $4 AND tenant_id = $5`,
 		status, reviewedBy, now, id, tenantID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("suggestion not found or access denied")
+	}
+	return nil
 }
 
 func (s *PGEvolutionSuggestionStore) UpdateSuggestionParameters(ctx context.Context, id uuid.UUID, params json.RawMessage) error {
 	tenantID := store.TenantIDFromContext(ctx)
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE agent_evolution_suggestions SET parameters = $1
 		 WHERE id = $2 AND tenant_id = $3`,
 		params, id, tenantID)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("suggestion not found or access denied")
+	}
+	return nil
 }
 
 func (s *PGEvolutionSuggestionStore) GetSuggestion(ctx context.Context, id uuid.UUID) (*store.EvolutionSuggestion, error) {

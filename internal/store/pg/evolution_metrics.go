@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ func NewPGEvolutionMetricsStore(db *sql.DB) *PGEvolutionMetricsStore {
 func (s *PGEvolutionMetricsStore) RecordMetric(ctx context.Context, m store.EvolutionMetric) error {
 	tenantID := store.TenantIDFromContext(ctx)
 	if tenantID == uuid.Nil {
-		tenantID = m.TenantID
+		return fmt.Errorf("evolution.RecordMetric: tenant_id required in context")
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_evolution_metrics (id, tenant_id, agent_id, session_key, metric_type, metric_key, value)
