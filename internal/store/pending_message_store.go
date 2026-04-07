@@ -10,26 +10,26 @@ import (
 // PendingMessage represents a buffered group chat message (or LLM-generated summary)
 // stored in channel_pending_messages table.
 type PendingMessage struct {
-	ID            uuid.UUID `json:"id"`
-	ChannelName   string    `json:"channel_name"`
-	HistoryKey    string    `json:"history_key"`
-	Sender        string    `json:"sender"`
-	SenderID      string    `json:"sender_id"`
-	Body          string    `json:"body"`
-	PlatformMsgID string    `json:"platform_msg_id"`
-	IsSummary     bool      `json:"is_summary"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID            uuid.UUID `json:"id" db:"id"`
+	ChannelName   string    `json:"channel_name" db:"channel_name"`
+	HistoryKey    string    `json:"history_key" db:"history_key"`
+	Sender        string    `json:"sender" db:"sender"`
+	SenderID      string    `json:"sender_id" db:"sender_id"`
+	Body          string    `json:"body" db:"body"`
+	PlatformMsgID string    `json:"platform_msg_id" db:"platform_msg_id"`
+	IsSummary     bool      `json:"is_summary" db:"is_summary"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // PendingMessageGroup is a summary row for the grouped overview page.
 type PendingMessageGroup struct {
-	ChannelName  string    `json:"channel_name"`
-	HistoryKey   string    `json:"history_key"`
-	GroupTitle   string    `json:"group_title,omitempty"`
-	MessageCount int       `json:"message_count"`
-	HasSummary   bool      `json:"has_summary"`
-	LastActivity time.Time `json:"last_activity"`
+	ChannelName  string    `json:"channel_name" db:"channel_name"`
+	HistoryKey   string    `json:"history_key" db:"history_key"`
+	GroupTitle   string    `json:"group_title,omitempty" db:"group_title"`
+	MessageCount int       `json:"message_count" db:"message_count"`
+	HasSummary   bool      `json:"has_summary" db:"has_summary"`
+	LastActivity time.Time `json:"last_activity" db:"last_activity"`
 }
 
 // PendingMessageStore persists group chat messages for context when bot is mentioned.

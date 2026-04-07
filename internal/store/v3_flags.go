@@ -5,11 +5,11 @@ import "encoding/json"
 // V3Flags holds per-agent v3 feature flags stored in other_config JSONB.
 // All flags default to false (v2 behavior) when missing or malformed.
 type V3Flags struct {
-	PipelineEnabled  bool `json:"v3_pipeline_enabled"`
-	MemoryEnabled    bool `json:"v3_memory_enabled"`
-	RetrievalEnabled bool `json:"v3_retrieval_enabled"`
-	EvolutionMetrics bool `json:"self_evolution_metrics"`
-	EvolutionSuggest bool `json:"self_evolution_suggestions"`
+	PipelineEnabled  bool `json:"v3_pipeline_enabled" db:"-"`
+	MemoryEnabled    bool `json:"v3_memory_enabled" db:"-"`
+	RetrievalEnabled bool `json:"v3_retrieval_enabled" db:"-"`
+	EvolutionMetrics bool `json:"self_evolution_metrics" db:"-"`
+	EvolutionSuggest bool `json:"self_evolution_suggestions" db:"-"`
 }
 
 // v3FlagKeys lists all recognized v3 flag keys for validation.

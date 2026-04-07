@@ -168,24 +168,24 @@ func (s *PGPairingStore) IsPaired(ctx context.Context, senderID, channel string)
 // pairingRequestRow is an sqlx scan struct for pairing_requests.
 // Domain struct uses int64 (Unix ms) for timestamps, DB stores time.Time.
 type pairingRequestRow struct {
-	Code      string `json:"code"`
-	SenderID  string `json:"sender_id"`
-	Channel   string `json:"channel"`
-	ChatID    string `json:"chat_id"`
-	AccountID string `json:"account_id"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Metadata  []byte    `json:"metadata"`
+	Code      string    `json:"code" db:"code"`
+	SenderID  string    `json:"sender_id" db:"sender_id"`
+	Channel   string    `json:"channel" db:"channel"`
+	ChatID    string    `json:"chat_id" db:"chat_id"`
+	AccountID string    `json:"account_id" db:"account_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
+	Metadata  []byte    `json:"metadata" db:"metadata"`
 }
 
 // pairedDeviceRow is an sqlx scan struct for paired_devices.
 type pairedDeviceRow struct {
-	SenderID string    `json:"sender_id"`
-	Channel  string    `json:"channel"`
-	ChatID   string    `json:"chat_id"`
-	PairedBy string    `json:"paired_by"`
-	PairedAt time.Time `json:"paired_at"`
-	Metadata []byte    `json:"metadata"`
+	SenderID string    `json:"sender_id" db:"sender_id"`
+	Channel  string    `json:"channel" db:"channel"`
+	ChatID   string    `json:"chat_id" db:"chat_id"`
+	PairedBy string    `json:"paired_by" db:"paired_by"`
+	PairedAt time.Time `json:"paired_at" db:"paired_at"`
+	Metadata []byte    `json:"metadata" db:"metadata"`
 }
 
 func (s *PGPairingStore) ListPending(ctx context.Context) []store.PairingRequestData {

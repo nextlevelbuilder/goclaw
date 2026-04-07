@@ -21,9 +21,8 @@ var pkgSqlxDB *sqlx.DB
 // The returned *sqlx.DB shares the same connection pool — no new connections are created.
 func initSqlx(db *sql.DB) {
 	pkgSqlxDB = sqlx.NewDb(db, "pgx")
-	// Use json struct tags for column mapping with camelCase→snake_case conversion.
-	// Handles both camelCase tags (agentId → agent_id) and already snake_case (parent_trace_id → unchanged).
-	pkgSqlxDB.Mapper = reflectx.NewMapperFunc("json", store.CamelToSnake)
+	// Use explicit db struct tags for column mapping. CamelToSnake fallback for fields without db tag.
+	pkgSqlxDB.Mapper = reflectx.NewMapperFunc("db", store.CamelToSnake)
 }
 
 // SqlxDB returns the package-level *sqlx.DB for use in store methods.

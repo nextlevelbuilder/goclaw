@@ -19,14 +19,14 @@ const (
 
 // EvolutionMetric is a single recorded metric data point.
 type EvolutionMetric struct {
-	ID         uuid.UUID       `json:"id"`
-	TenantID   uuid.UUID       `json:"tenant_id"`
-	AgentID    uuid.UUID       `json:"agent_id"`
-	SessionKey string          `json:"session_key"`
-	MetricType MetricType      `json:"metric_type"`
-	MetricKey  string          `json:"metric_key"`
-	Value      json.RawMessage `json:"value"`
-	CreatedAt  time.Time       `json:"created_at"`
+	ID         uuid.UUID       `json:"id" db:"id"`
+	TenantID   uuid.UUID       `json:"tenant_id" db:"tenant_id"`
+	AgentID    uuid.UUID       `json:"agent_id" db:"agent_id"`
+	SessionKey string          `json:"session_key" db:"session_key"`
+	MetricType MetricType      `json:"metric_type" db:"metric_type"`
+	MetricKey  string          `json:"metric_key" db:"metric_key"`
+	Value      json.RawMessage `json:"value" db:"value"`
+	CreatedAt  time.Time       `json:"created_at" db:"created_at"`
 }
 
 // ToolAggregate summarizes per-tool metrics over a period.
@@ -66,17 +66,17 @@ const (
 
 // EvolutionSuggestion is a data-driven suggestion for agent improvement.
 type EvolutionSuggestion struct {
-	ID             uuid.UUID       `json:"id"`
-	TenantID       uuid.UUID       `json:"tenant_id"`
-	AgentID        uuid.UUID       `json:"agent_id"`
-	SuggestionType SuggestionType  `json:"suggestion_type"`
-	Suggestion     string          `json:"suggestion"`
-	Rationale      string          `json:"rationale"`
-	Parameters     json.RawMessage `json:"parameters,omitempty"`
-	Status         string          `json:"status"` // pending, approved, rejected, applied, rolled_back
-	ReviewedBy     string          `json:"reviewed_by,omitempty"`
-	ReviewedAt     *time.Time      `json:"reviewed_at,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
+	ID             uuid.UUID       `json:"id" db:"id"`
+	TenantID       uuid.UUID       `json:"tenant_id" db:"tenant_id"`
+	AgentID        uuid.UUID       `json:"agent_id" db:"agent_id"`
+	SuggestionType SuggestionType  `json:"suggestion_type" db:"suggestion_type"`
+	Suggestion     string          `json:"suggestion" db:"suggestion"`
+	Rationale      string          `json:"rationale" db:"rationale"`
+	Parameters     json.RawMessage `json:"parameters,omitempty" db:"parameters"`
+	Status         string          `json:"status" db:"status"` // pending, approved, rejected, applied, rolled_back
+	ReviewedBy     string          `json:"reviewed_by,omitempty" db:"reviewed_by"`
+	ReviewedAt     *time.Time      `json:"reviewed_at,omitempty" db:"reviewed_at"`
+	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
 }
 
 // EvolutionSuggestionStore manages suggestions (Stage 2).

@@ -8,9 +8,9 @@ import (
 
 // BuiltinToolTenantConfig represents a per-tenant override for a builtin tool.
 type BuiltinToolTenantConfig struct {
-	ToolName string `json:"tool_name"`
-	TenantID uuid.UUID `json:"tenant_id"`
-	Enabled  *bool  `json:"enabled,omitempty"` // nil = use default, false = disabled, true = enabled
+	ToolName string    `json:"tool_name" db:"tool_name"`
+	TenantID uuid.UUID `json:"tenant_id" db:"tenant_id"`
+	Enabled  *bool     `json:"enabled,omitempty" db:"enabled"` // nil = use default, false = disabled, true = enabled
 }
 
 // BuiltinToolTenantConfigStore manages per-tenant builtin tool overrides.
@@ -27,9 +27,9 @@ type BuiltinToolTenantConfigStore interface {
 
 // SkillTenantConfig represents a per-tenant override for a skill.
 type SkillTenantConfig struct {
-	SkillID  uuid.UUID `json:"skill_id"`
-	TenantID uuid.UUID `json:"tenant_id"`
-	Enabled  bool      `json:"enabled"`
+	SkillID  uuid.UUID `json:"skill_id" db:"skill_id"`
+	TenantID uuid.UUID `json:"tenant_id" db:"tenant_id"`
+	Enabled  bool      `json:"enabled" db:"enabled"`
 }
 
 // SkillTenantConfigStore manages per-tenant skill visibility.

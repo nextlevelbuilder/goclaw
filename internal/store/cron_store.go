@@ -18,92 +18,92 @@ var (
 
 // CronJob represents a scheduled job.
 type CronJob struct {
-	ID             string       `json:"id"`
-	TenantID       uuid.UUID    `json:"tenantId,omitempty"`
-	Name           string       `json:"name"`
-	AgentID        string       `json:"agentId,omitempty"`
-	UserID         string       `json:"userId,omitempty"`
-	Enabled        bool         `json:"enabled"`
-	Schedule       CronSchedule `json:"schedule"`
-	Payload        CronPayload  `json:"payload"`
-	State          CronJobState `json:"state"`
-	CreatedAtMS    int64        `json:"createdAtMs"`
-	UpdatedAtMS    int64        `json:"updatedAtMs"`
-	DeleteAfterRun bool         `json:"deleteAfterRun,omitempty"`
-	Stateless      bool         `json:"stateless"`
-	Deliver        bool         `json:"deliver"`
-	DeliverChannel string       `json:"deliverChannel"`
-	DeliverTo      string       `json:"deliverTo"`
-	WakeHeartbeat  bool         `json:"wakeHeartbeat"`
+	ID             string       `json:"id" db:"id"`
+	TenantID       uuid.UUID    `json:"tenantId,omitempty" db:"tenant_id"`
+	Name           string       `json:"name" db:"name"`
+	AgentID        string       `json:"agentId,omitempty" db:"agent_id"`
+	UserID         string       `json:"userId,omitempty" db:"user_id"`
+	Enabled        bool         `json:"enabled" db:"enabled"`
+	Schedule       CronSchedule `json:"schedule" db:"-"`
+	Payload        CronPayload  `json:"payload" db:"-"`
+	State          CronJobState `json:"state" db:"-"`
+	CreatedAtMS    int64        `json:"createdAtMs" db:"-"`
+	UpdatedAtMS    int64        `json:"updatedAtMs" db:"-"`
+	DeleteAfterRun bool         `json:"deleteAfterRun,omitempty" db:"delete_after_run"`
+	Stateless      bool         `json:"stateless" db:"stateless"`
+	Deliver        bool         `json:"deliver" db:"deliver"`
+	DeliverChannel string       `json:"deliverChannel" db:"deliver_channel"`
+	DeliverTo      string       `json:"deliverTo" db:"deliver_to"`
+	WakeHeartbeat  bool         `json:"wakeHeartbeat" db:"wake_heartbeat"`
 }
 
 // CronSchedule defines when a job should run.
 type CronSchedule struct {
-	Kind    string `json:"kind"` // "at", "every", "cron"
-	AtMS    *int64 `json:"atMs,omitempty"`
-	EveryMS *int64 `json:"everyMs,omitempty"`
-	Expr    string `json:"expr,omitempty"`
-	TZ      string `json:"tz,omitempty"`
+	Kind    string `json:"kind" db:"-"` // "at", "every", "cron"
+	AtMS    *int64 `json:"atMs,omitempty" db:"-"`
+	EveryMS *int64 `json:"everyMs,omitempty" db:"-"`
+	Expr    string `json:"expr,omitempty" db:"-"`
+	TZ      string `json:"tz,omitempty" db:"-"`
 }
 
 // CronPayload describes what a job does when triggered.
 type CronPayload struct {
-	Kind    string `json:"kind"`
-	Message string `json:"message"`
-	Command string `json:"command,omitempty"`
+	Kind    string `json:"kind" db:"-"`
+	Message string `json:"message" db:"-"`
+	Command string `json:"command,omitempty" db:"-"`
 }
 
 // CronJobState tracks runtime state for a job.
 type CronJobState struct {
-	NextRunAtMS *int64 `json:"nextRunAtMs,omitempty"`
-	LastRunAtMS *int64 `json:"lastRunAtMs,omitempty"`
-	LastStatus  string `json:"lastStatus,omitempty"`
-	LastError   string `json:"lastError,omitempty"`
+	NextRunAtMS *int64 `json:"nextRunAtMs,omitempty" db:"-"`
+	LastRunAtMS *int64 `json:"lastRunAtMs,omitempty" db:"-"`
+	LastStatus  string `json:"lastStatus,omitempty" db:"-"`
+	LastError   string `json:"lastError,omitempty" db:"-"`
 }
 
 // CronRunLogEntry records a job execution.
 type CronRunLogEntry struct {
-	Ts           int64  `json:"ts"`
-	JobID        string `json:"jobId"`
-	Status       string `json:"status,omitempty"`
-	Error        string `json:"error,omitempty"`
-	Summary      string `json:"summary,omitempty"`
-	DurationMS   int64  `json:"durationMs,omitempty"`
-	InputTokens  int    `json:"inputTokens,omitempty"`
-	OutputTokens int    `json:"outputTokens,omitempty"`
+	Ts           int64  `json:"ts" db:"-"`
+	JobID        string `json:"jobId" db:"-"`
+	Status       string `json:"status,omitempty" db:"-"`
+	Error        string `json:"error,omitempty" db:"-"`
+	Summary      string `json:"summary,omitempty" db:"-"`
+	DurationMS   int64  `json:"durationMs,omitempty" db:"-"`
+	InputTokens  int    `json:"inputTokens,omitempty" db:"-"`
+	OutputTokens int    `json:"outputTokens,omitempty" db:"-"`
 }
 
 // CronJobResult is the output of a cron job handler execution.
 type CronJobResult struct {
-	Content      string `json:"content"`
-	InputTokens  int    `json:"inputTokens,omitempty"`
-	OutputTokens int    `json:"outputTokens,omitempty"`
-	DurationMS   int64  `json:"durationMs,omitempty"`
+	Content      string `json:"content" db:"-"`
+	InputTokens  int    `json:"inputTokens,omitempty" db:"-"`
+	OutputTokens int    `json:"outputTokens,omitempty" db:"-"`
+	DurationMS   int64  `json:"durationMs,omitempty" db:"-"`
 }
 
 // CronJobPatch holds optional fields for updating a job.
 type CronJobPatch struct {
-	Name           string        `json:"name,omitempty"`
-	AgentID        *string       `json:"agentId,omitempty"`
-	Enabled        *bool         `json:"enabled,omitempty"`
-	Schedule       *CronSchedule `json:"schedule,omitempty"`
-	Message        string        `json:"message,omitempty"`
-	DeleteAfterRun *bool         `json:"deleteAfterRun,omitempty"`
-	Stateless      *bool         `json:"stateless,omitempty"`
-	Deliver        *bool         `json:"deliver,omitempty"`
-	DeliverChannel *string       `json:"deliverChannel,omitempty"`
-	DeliverTo      *string       `json:"deliverTo,omitempty"`
-	WakeHeartbeat  *bool         `json:"wakeHeartbeat,omitempty"`
+	Name           string        `json:"name,omitempty" db:"-"`
+	AgentID        *string       `json:"agentId,omitempty" db:"-"`
+	Enabled        *bool         `json:"enabled,omitempty" db:"-"`
+	Schedule       *CronSchedule `json:"schedule,omitempty" db:"-"`
+	Message        string        `json:"message,omitempty" db:"-"`
+	DeleteAfterRun *bool         `json:"deleteAfterRun,omitempty" db:"-"`
+	Stateless      *bool         `json:"stateless,omitempty" db:"-"`
+	Deliver        *bool         `json:"deliver,omitempty" db:"-"`
+	DeliverChannel *string       `json:"deliverChannel,omitempty" db:"-"`
+	DeliverTo      *string       `json:"deliverTo,omitempty" db:"-"`
+	WakeHeartbeat  *bool         `json:"wakeHeartbeat,omitempty" db:"-"`
 }
 
 // CronEvent represents a job lifecycle event sent to subscribers.
 type CronEvent struct {
-	Action  string `json:"action"` // "running", "completed", "error"
-	JobID   string `json:"jobId"`
-	JobName string `json:"jobName,omitempty"`
-	UserID  string `json:"userId,omitempty"` // job owner for event filtering
-	Status  string `json:"status,omitempty"` // final status for completed/error
-	Error   string `json:"error,omitempty"`
+	Action  string `json:"action" db:"-"` // "running", "completed", "error"
+	JobID   string `json:"jobId" db:"-"`
+	JobName string `json:"jobName,omitempty" db:"-"`
+	UserID  string `json:"userId,omitempty" db:"-"` // job owner for event filtering
+	Status  string `json:"status,omitempty" db:"-"` // final status for completed/error
+	Error   string `json:"error,omitempty" db:"-"`
 }
 
 // CronStore manages scheduled jobs.
@@ -139,10 +139,10 @@ type CacheInvalidatable interface {
 // CronJobMutableState holds the mutable fields of a cron job loaded within a
 // transaction for read-compute-write operations (EnableJob, UpdateJob).
 type CronJobMutableState struct {
-	Enabled   bool
-	Schedule  CronSchedule
-	NextRunAt *time.Time
-	Payload   CronPayload
+	Enabled   bool         `db:"-"`
+	Schedule  CronSchedule `db:"-"`
+	NextRunAt *time.Time   `db:"-"`
+	Payload   CronPayload  `db:"-"`
 }
 
 // ComputeNextRun calculates the next run time for a cron schedule.

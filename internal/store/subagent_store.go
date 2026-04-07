@@ -10,27 +10,27 @@ import (
 // SubagentTaskData represents a persisted subagent task for audit trail and cost attribution.
 type SubagentTaskData struct {
 	BaseModel
-	TenantID       uuid.UUID      `json:"tenant_id"`
-	ParentAgentKey string         `json:"parent_agent_key"`
-	SessionKey     *string        `json:"session_key,omitempty"`
-	Subject        string         `json:"subject"`
-	Description    string         `json:"description"`
-	Status         string         `json:"status"`
-	Result         *string        `json:"result,omitempty"`
-	Depth          int            `json:"depth"`
-	Model          *string        `json:"model,omitempty"`
-	Provider       *string        `json:"provider,omitempty"`
-	Iterations     int            `json:"iterations"`
-	InputTokens    int64          `json:"input_tokens"`
-	OutputTokens   int64          `json:"output_tokens"`
-	OriginChannel  *string        `json:"origin_channel,omitempty"`
-	OriginChatID   *string        `json:"origin_chat_id,omitempty"`
-	OriginPeerKind *string        `json:"origin_peer_kind,omitempty"`
-	OriginUserID   *string        `json:"origin_user_id,omitempty"`
-	SpawnedBy      *uuid.UUID     `json:"spawned_by,omitempty"`
-	CompletedAt    *time.Time     `json:"completed_at,omitempty"`
-	ArchivedAt     *time.Time     `json:"archived_at,omitempty"`
-	Metadata       map[string]any `json:"metadata,omitempty"`
+	TenantID       uuid.UUID      `json:"tenant_id" db:"tenant_id"`
+	ParentAgentKey string         `json:"parent_agent_key" db:"parent_agent_key"`
+	SessionKey     *string        `json:"session_key,omitempty" db:"session_key"`
+	Subject        string         `json:"subject" db:"subject"`
+	Description    string         `json:"description" db:"description"`
+	Status         string         `json:"status" db:"status"`
+	Result         *string        `json:"result,omitempty" db:"result"`
+	Depth          int            `json:"depth" db:"depth"`
+	Model          *string        `json:"model,omitempty" db:"model"`
+	Provider       *string        `json:"provider,omitempty" db:"provider"`
+	Iterations     int            `json:"iterations" db:"iterations"`
+	InputTokens    int64          `json:"input_tokens" db:"input_tokens"`
+	OutputTokens   int64          `json:"output_tokens" db:"output_tokens"`
+	OriginChannel  *string        `json:"origin_channel,omitempty" db:"origin_channel"`
+	OriginChatID   *string        `json:"origin_chat_id,omitempty" db:"origin_chat_id"`
+	OriginPeerKind *string        `json:"origin_peer_kind,omitempty" db:"origin_peer_kind"`
+	OriginUserID   *string        `json:"origin_user_id,omitempty" db:"origin_user_id"`
+	SpawnedBy      *uuid.UUID     `json:"spawned_by,omitempty" db:"spawned_by"`
+	CompletedAt    *time.Time     `json:"completed_at,omitempty" db:"completed_at"`
+	ArchivedAt     *time.Time     `json:"archived_at,omitempty" db:"archived_at"`
+	Metadata       map[string]any `json:"metadata,omitempty" db:"metadata"`
 }
 
 // SubagentTaskStore persists subagent task lifecycle for audit trail and cost attribution.

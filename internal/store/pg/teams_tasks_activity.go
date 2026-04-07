@@ -42,14 +42,14 @@ func (s *PGTeamStore) AddTaskComment(ctx context.Context, comment *store.TeamTas
 
 // taskCommentRow is a scan struct for team_task_comments with nullable user_id.
 type taskCommentRow struct {
-	ID          uuid.UUID  `json:"id"`
-	TaskID      uuid.UUID  `json:"task_id"`
-	AgentID     *uuid.UUID `json:"agent_id"`
-	UserID      *string    `json:"user_id"`
-	Content     string     `json:"content"`
-	CommentType string     `json:"comment_type"`
-	CreatedAt   time.Time  `json:"created_at"`
-	AgentKey    string     `json:"agent_key"`
+	ID          uuid.UUID  `json:"id" db:"id"`
+	TaskID      uuid.UUID  `json:"task_id" db:"task_id"`
+	AgentID     *uuid.UUID `json:"agent_id" db:"agent_id"`
+	UserID      *string    `json:"user_id" db:"user_id"`
+	Content     string     `json:"content" db:"content"`
+	CommentType string     `json:"comment_type" db:"comment_type"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	AgentKey    string     `json:"agent_key" db:"agent_key"`
 }
 
 func (r taskCommentRow) toCommentData() store.TeamTaskCommentData {
@@ -212,17 +212,17 @@ func (s *PGTeamStore) GetAttachment(ctx context.Context, attachmentID uuid.UUID)
 
 // taskAttachmentRow is a scan struct for team_task_attachments with nullable created_by_sender_id.
 type taskAttachmentRow struct {
-	ID                uuid.UUID       `json:"id"`
-	TaskID            uuid.UUID       `json:"task_id"`
-	TeamID            uuid.UUID       `json:"team_id"`
-	ChatID            string          `json:"chat_id"`
-	Path              string          `json:"path"`
-	FileSize          int64           `json:"file_size"`
-	MimeType          string          `json:"mime_type"`
-	CreatedByAgentID  *uuid.UUID      `json:"created_by_agent_id"`
-	CreatedBySenderID *string         `json:"created_by_sender_id"`
-	Metadata          json.RawMessage `json:"metadata"`
-	CreatedAt         time.Time       `json:"created_at"`
+	ID                uuid.UUID       `json:"id" db:"id"`
+	TaskID            uuid.UUID       `json:"task_id" db:"task_id"`
+	TeamID            uuid.UUID       `json:"team_id" db:"team_id"`
+	ChatID            string          `json:"chat_id" db:"chat_id"`
+	Path              string          `json:"path" db:"path"`
+	FileSize          int64           `json:"file_size" db:"file_size"`
+	MimeType          string          `json:"mime_type" db:"mime_type"`
+	CreatedByAgentID  *uuid.UUID      `json:"created_by_agent_id" db:"created_by_agent_id"`
+	CreatedBySenderID *string         `json:"created_by_sender_id" db:"created_by_sender_id"`
+	Metadata          json.RawMessage `json:"metadata" db:"metadata"`
+	CreatedAt         time.Time       `json:"created_at" db:"created_at"`
 }
 
 func (r taskAttachmentRow) toAttachmentData() store.TeamTaskAttachmentData {

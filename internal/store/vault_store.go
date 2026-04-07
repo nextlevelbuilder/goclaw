@@ -7,34 +7,34 @@ import (
 
 // VaultDocument is a registered document in the Knowledge Vault.
 type VaultDocument struct {
-	ID          string         `json:"id"`
-	TenantID    string         `json:"tenant_id"`
-	AgentID     string         `json:"agent_id"`
-	Scope       string         `json:"scope"`       // personal, team, shared
-	Path        string         `json:"path"`         // workspace-relative path
-	Title       string         `json:"title"`
-	DocType     string         `json:"doc_type"`     // context, memory, note, skill, episodic
-	ContentHash string         `json:"content_hash"` // SHA-256 hex digest
-	Metadata    map[string]any `json:"metadata,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID          string         `json:"id" db:"id"`
+	TenantID    string         `json:"tenant_id" db:"tenant_id"`
+	AgentID     string         `json:"agent_id" db:"agent_id"`
+	Scope       string         `json:"scope" db:"scope"`             // personal, team, shared
+	Path        string         `json:"path" db:"path"`               // workspace-relative path
+	Title       string         `json:"title" db:"title"`
+	DocType     string         `json:"doc_type" db:"doc_type"`       // context, memory, note, skill, episodic
+	ContentHash string         `json:"content_hash" db:"content_hash"` // SHA-256 hex digest
+	Metadata    map[string]any `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt   time.Time      `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at" db:"updated_at"`
 }
 
 // VaultLink is a directed link between two vault documents.
 type VaultLink struct {
-	ID        string    `json:"id"`
-	FromDocID string    `json:"from_doc_id"`
-	ToDocID   string    `json:"to_doc_id"`
-	LinkType  string    `json:"link_type"` // wikilink, reference, etc.
-	Context   string    `json:"context"`   // surrounding text snippet
-	CreatedAt time.Time `json:"created_at"`
+	ID        string    `json:"id" db:"id"`
+	FromDocID string    `json:"from_doc_id" db:"from_doc_id"`
+	ToDocID   string    `json:"to_doc_id" db:"to_doc_id"`
+	LinkType  string    `json:"link_type" db:"link_type"` // wikilink, reference, etc.
+	Context   string    `json:"context" db:"context"`     // surrounding text snippet
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 // VaultSearchResult is a single result from vault search.
 type VaultSearchResult struct {
-	Document VaultDocument `json:"document"`
-	Score    float64       `json:"score"`
-	Source   string        `json:"source"` // vault, episodic, kg
+	Document VaultDocument `json:"document" db:"-"`
+	Score    float64       `json:"score" db:"-"`
+	Source   string        `json:"source" db:"-"` // vault, episodic, kg
 }
 
 // VaultSearchOptions configures a vault search query.

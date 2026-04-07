@@ -18,16 +18,16 @@ const (
 
 // ConfigPermission represents an allow/deny rule for agent configuration.
 type ConfigPermission struct {
-	ID         uuid.UUID       `json:"id"`
-	AgentID    uuid.UUID       `json:"agentId"`
-	Scope      string          `json:"scope"`      // "agent" | "group:telegram:-100456" | "group:*" | "*"
-	ConfigType string          `json:"configType"` // "heartbeat" | "cron" | "context_files" | "file_writer" | "*"
-	UserID     string          `json:"userId"`
-	Permission string          `json:"permission"` // "allow" | "deny"
-	GrantedBy  *string         `json:"grantedBy,omitempty"`
-	Metadata   json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt  time.Time       `json:"createdAt"`
-	UpdatedAt  time.Time       `json:"updatedAt"`
+	ID         uuid.UUID       `json:"id" db:"id"`
+	AgentID    uuid.UUID       `json:"agentId" db:"agent_id"`
+	Scope      string          `json:"scope" db:"scope"`           // "agent" | "group:telegram:-100456" | "group:*" | "*"
+	ConfigType string          `json:"configType" db:"config_type"` // "heartbeat" | "cron" | "context_files" | "file_writer" | "*"
+	UserID     string          `json:"userId" db:"user_id"`
+	Permission string          `json:"permission" db:"permission"` // "allow" | "deny"
+	GrantedBy  *string         `json:"grantedBy,omitempty" db:"granted_by"`
+	Metadata   json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt  time.Time       `json:"createdAt" db:"created_at"`
+	UpdatedAt  time.Time       `json:"updatedAt" db:"updated_at"`
 }
 
 // ConfigPermissionStore manages agent configuration permissions with wildcard scope matching.

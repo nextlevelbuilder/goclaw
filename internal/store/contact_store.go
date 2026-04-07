@@ -10,21 +10,21 @@ import (
 // ChannelContact represents a user discovered through channel interactions.
 // Global (not per-agent): same person on the same platform = one row.
 type ChannelContact struct {
-	ID              uuid.UUID  `json:"id"`
-	ChannelType     string     `json:"channel_type"`
-	ChannelInstance *string    `json:"channel_instance,omitempty"`
-	SenderID        string     `json:"sender_id"`
-	UserID          *string    `json:"user_id,omitempty"`
-	DisplayName     *string    `json:"display_name,omitempty"`
-	Username        *string    `json:"username,omitempty"`
-	AvatarURL       *string    `json:"avatar_url,omitempty"`
-	PeerKind        *string    `json:"peer_kind,omitempty"`
-	ContactType     string     `json:"contact_type"` // "user", "group", or "topic"
-	ThreadID        *string    `json:"thread_id,omitempty"`
-	ThreadType      *string    `json:"thread_type,omitempty"`
-	MergedID        *uuid.UUID `json:"merged_id,omitempty"`
-	FirstSeenAt     time.Time  `json:"first_seen_at"`
-	LastSeenAt      time.Time  `json:"last_seen_at"`
+	ID              uuid.UUID  `json:"id" db:"id"`
+	ChannelType     string     `json:"channel_type" db:"channel_type"`
+	ChannelInstance *string    `json:"channel_instance,omitempty" db:"channel_instance"`
+	SenderID        string     `json:"sender_id" db:"sender_id"`
+	UserID          *string    `json:"user_id,omitempty" db:"user_id"`
+	DisplayName     *string    `json:"display_name,omitempty" db:"display_name"`
+	Username        *string    `json:"username,omitempty" db:"username"`
+	AvatarURL       *string    `json:"avatar_url,omitempty" db:"avatar_url"`
+	PeerKind        *string    `json:"peer_kind,omitempty" db:"peer_kind"`
+	ContactType     string     `json:"contact_type" db:"contact_type"` // "user", "group", or "topic"
+	ThreadID        *string    `json:"thread_id,omitempty" db:"thread_id"`
+	ThreadType      *string    `json:"thread_type,omitempty" db:"thread_type"`
+	MergedID        *uuid.UUID `json:"merged_id,omitempty" db:"merged_id"`
+	FirstSeenAt     time.Time  `json:"first_seen_at" db:"first_seen_at"`
+	LastSeenAt      time.Time  `json:"last_seen_at" db:"last_seen_at"`
 }
 
 // ContactListOpts holds pagination and filter options for listing contacts.

@@ -42,46 +42,46 @@ const (
 // AgentData represents an agent in the database.
 type AgentData struct {
 	BaseModel
-	TenantID            uuid.UUID `json:"tenant_id"`
-	AgentKey            string    `json:"agent_key"`
-	DisplayName         string    `json:"display_name,omitempty"`
-	Frontmatter         string    `json:"frontmatter,omitempty"` // short expertise summary (NOT other_config.description which is the summoning prompt)
-	OwnerID             string    `json:"owner_id"`
-	Provider            string    `json:"provider"`
-	Model               string    `json:"model"`
-	ContextWindow       int       `json:"context_window"`
-	MaxToolIterations   int       `json:"max_tool_iterations"`
-	Workspace           string    `json:"workspace"`
-	RestrictToWorkspace bool      `json:"restrict_to_workspace"`
-	AgentType           string    `json:"agent_type"` // "open" or "predefined"
-	IsDefault           bool      `json:"is_default"`
-	Status              string    `json:"status"`
+	TenantID            uuid.UUID `json:"tenant_id" db:"tenant_id"`
+	AgentKey            string    `json:"agent_key" db:"agent_key"`
+	DisplayName         string    `json:"display_name,omitempty" db:"display_name"`
+	Frontmatter         string    `json:"frontmatter,omitempty" db:"frontmatter"` // short expertise summary (NOT other_config.description which is the summoning prompt)
+	OwnerID             string    `json:"owner_id" db:"owner_id"`
+	Provider            string    `json:"provider" db:"provider"`
+	Model               string    `json:"model" db:"model"`
+	ContextWindow       int       `json:"context_window" db:"context_window"`
+	MaxToolIterations   int       `json:"max_tool_iterations" db:"max_tool_iterations"`
+	Workspace           string    `json:"workspace" db:"workspace"`
+	RestrictToWorkspace bool      `json:"restrict_to_workspace" db:"restrict_to_workspace"`
+	AgentType           string    `json:"agent_type" db:"agent_type"` // "open" or "predefined"
+	IsDefault           bool      `json:"is_default" db:"is_default"`
+	Status              string    `json:"status" db:"status"`
 
 	// Budget: optional monthly spending limit in cents (nil = unlimited)
-	BudgetMonthlyCents *int `json:"budget_monthly_cents,omitempty"`
+	BudgetMonthlyCents *int `json:"budget_monthly_cents,omitempty" db:"budget_monthly_cents"`
 
 	// Per-agent JSONB config (nullable — nil means "use global defaults")
-	ToolsConfig      json.RawMessage `json:"tools_config,omitempty"`
-	SandboxConfig    json.RawMessage `json:"sandbox_config,omitempty"`
-	SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty"`
-	MemoryConfig     json.RawMessage `json:"memory_config,omitempty"`
-	CompactionConfig json.RawMessage `json:"compaction_config,omitempty"`
-	ContextPruning   json.RawMessage `json:"context_pruning,omitempty"`
-	OtherConfig      json.RawMessage `json:"other_config,omitempty"` // extensibility bag for future fields
+	ToolsConfig      json.RawMessage `json:"tools_config,omitempty" db:"tools_config"`
+	SandboxConfig    json.RawMessage `json:"sandbox_config,omitempty" db:"sandbox_config"`
+	SubagentsConfig  json.RawMessage `json:"subagents_config,omitempty" db:"subagents_config"`
+	MemoryConfig     json.RawMessage `json:"memory_config,omitempty" db:"memory_config"`
+	CompactionConfig json.RawMessage `json:"compaction_config,omitempty" db:"compaction_config"`
+	ContextPruning   json.RawMessage `json:"context_pruning,omitempty" db:"context_pruning"`
+	OtherConfig      json.RawMessage `json:"other_config,omitempty" db:"other_config"` // extensibility bag for future fields
 
 	// Promoted from other_config (migration 000037 v3)
-	Emoji               string          `json:"emoji"`
-	AgentDescription    string          `json:"agent_description"`
-	ThinkingLevel       string          `json:"thinking_level"`
-	MaxTokens           int             `json:"max_tokens"`
-	SelfEvolve          bool            `json:"self_evolve"`
-	SkillEvolve         bool            `json:"skill_evolve"`
-	SkillNudgeInterval  int             `json:"skill_nudge_interval"`
-	ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty"`
-	WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty"`
-	ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty"`
-	ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty"`
-	KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty"`
+	Emoji               string          `json:"emoji" db:"emoji"`
+	AgentDescription    string          `json:"agent_description" db:"agent_description"`
+	ThinkingLevel       string          `json:"thinking_level" db:"thinking_level"`
+	MaxTokens           int             `json:"max_tokens" db:"max_tokens"`
+	SelfEvolve          bool            `json:"self_evolve" db:"self_evolve"`
+	SkillEvolve         bool            `json:"skill_evolve" db:"skill_evolve"`
+	SkillNudgeInterval  int             `json:"skill_nudge_interval" db:"skill_nudge_interval"`
+	ReasoningConfig     json.RawMessage `json:"reasoning_config,omitempty" db:"reasoning_config"`
+	WorkspaceSharing    json.RawMessage `json:"workspace_sharing,omitempty" db:"workspace_sharing"`
+	ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty" db:"chatgpt_oauth_routing"`
+	ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty" db:"shell_deny_groups"`
+	KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty" db:"kg_dedup_config"`
 }
 
 // ParseToolsConfig returns per-agent tool policy, or nil if not configured.
@@ -252,11 +252,11 @@ func normalizeReasoningFallback(value string) string {
 // When shared_dm/shared_group is true, users share the base workspace directory
 // instead of each getting an isolated subfolder.
 type WorkspaceSharingConfig struct {
-	SharedDM            bool     `json:"shared_dm"`
-	SharedGroup         bool     `json:"shared_group"`
-	SharedUsers         []string `json:"shared_users,omitempty"`
-	ShareMemory         bool     `json:"share_memory"`
-	ShareKnowledgeGraph bool     `json:"share_knowledge_graph"`
+	SharedDM            bool     `json:"shared_dm" db:"-"`
+	SharedGroup         bool     `json:"shared_group" db:"-"`
+	SharedUsers         []string `json:"shared_users,omitempty" db:"-"`
+	ShareMemory         bool     `json:"share_memory" db:"-"`
+	ShareKnowledgeGraph bool     `json:"share_knowledge_graph" db:"-"`
 }
 
 const (
@@ -273,10 +273,10 @@ const (
 )
 
 type AgentReasoningConfig struct {
-	OverrideMode string `json:"override_mode,omitempty"`
-	Effort       string `json:"effort,omitempty"`
-	Fallback     string `json:"fallback,omitempty"`
-	Source       string `json:"-"`
+	OverrideMode string `json:"override_mode,omitempty" db:"-"`
+	Effort       string `json:"effort,omitempty" db:"-"`
+	Fallback     string `json:"fallback,omitempty" db:"-"`
+	Source       string `json:"-" db:"-"`
 }
 
 // ResolveEffectiveReasoningConfig applies provider-owned defaults unless the agent
@@ -331,9 +331,9 @@ const (
 // ChatGPTOAuthRoutingConfig controls optional multi-account selection for agents
 // whose primary provider is a ChatGPT OAuth-backed provider.
 type ChatGPTOAuthRoutingConfig struct {
-	OverrideMode       string   `json:"override_mode,omitempty"`
-	Strategy           string   `json:"strategy,omitempty"`
-	ExtraProviderNames []string `json:"extra_provider_names,omitempty"`
+	OverrideMode       string   `json:"override_mode,omitempty" db:"-"`
+	Strategy           string   `json:"strategy,omitempty" db:"-"`
+	ExtraProviderNames []string `json:"extra_provider_names,omitempty" db:"-"`
 }
 
 // ParseWorkspaceSharing reads workspace sharing config from the dedicated column.
@@ -506,33 +506,33 @@ func (a *AgentData) ParseShellDenyGroups() map[string]bool {
 // AgentShareData represents an agent share grant.
 type AgentShareData struct {
 	BaseModel
-	AgentID   uuid.UUID `json:"agent_id"`
-	UserID    string    `json:"user_id"`
-	Role      string    `json:"role"`
-	GrantedBy string    `json:"granted_by"`
+	AgentID   uuid.UUID `json:"agent_id" db:"agent_id"`
+	UserID    string    `json:"user_id" db:"user_id"`
+	Role      string    `json:"role" db:"role"`
+	GrantedBy string    `json:"granted_by" db:"granted_by"`
 }
 
 // AgentContextFileData represents an agent-level context file (SOUL.md, IDENTITY.md, etc).
 type AgentContextFileData struct {
-	AgentID  uuid.UUID `json:"agent_id"`
-	FileName string    `json:"file_name"`
-	Content  string    `json:"content"`
+	AgentID  uuid.UUID `json:"agent_id" db:"agent_id"`
+	FileName string    `json:"file_name" db:"file_name"`
+	Content  string    `json:"content" db:"content"`
 }
 
 // UserContextFileData represents a per-user context file.
 type UserContextFileData struct {
-	AgentID  uuid.UUID `json:"agent_id"`
-	UserID   string    `json:"user_id"`
-	FileName string    `json:"file_name"`
-	Content  string    `json:"content"`
+	AgentID  uuid.UUID `json:"agent_id" db:"agent_id"`
+	UserID   string    `json:"user_id" db:"user_id"`
+	FileName string    `json:"file_name" db:"file_name"`
+	Content  string    `json:"content" db:"content"`
 }
 
 // UserAgentOverrideData represents per-user agent overrides.
 type UserAgentOverrideData struct {
-	AgentID  uuid.UUID `json:"agent_id"`
-	UserID   string    `json:"user_id"`
-	Provider string    `json:"provider,omitempty"`
-	Model    string    `json:"model,omitempty"`
+	AgentID  uuid.UUID `json:"agent_id" db:"agent_id"`
+	UserID   string    `json:"user_id" db:"user_id"`
+	Provider string    `json:"provider,omitempty" db:"provider"`
+	Model    string    `json:"model,omitempty" db:"model"`
 }
 
 // AgentCRUDStore manages core agent CRUD operations.
@@ -596,9 +596,9 @@ type AgentStore interface {
 
 // UserInstanceData represents a user instance for a predefined agent.
 type UserInstanceData struct {
-	UserID      string            `json:"user_id"`
-	FirstSeenAt *string           `json:"first_seen_at,omitempty"`
-	LastSeenAt  *string           `json:"last_seen_at,omitempty"`
-	FileCount   int               `json:"file_count"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
+	UserID      string            `json:"user_id" db:"user_id"`
+	FirstSeenAt *string           `json:"first_seen_at,omitempty" db:"first_seen_at"`
+	LastSeenAt  *string           `json:"last_seen_at,omitempty" db:"last_seen_at"`
+	FileCount   int               `json:"file_count" db:"file_count"`
+	Metadata    map[string]string `json:"metadata,omitempty" db:"-"`
 }

@@ -11,15 +11,15 @@ import (
 // ChannelInstanceData represents a channel instance in the database.
 type ChannelInstanceData struct {
 	BaseModel
-	TenantID    uuid.UUID       `json:"tenant_id,omitempty"`
-	Name        string          `json:"name"`
-	DisplayName string          `json:"display_name"`
-	ChannelType string          `json:"channel_type"`
-	AgentID     uuid.UUID       `json:"agent_id"`
-	Credentials []byte          `json:"-"`    // encrypted, never serialized to API
-	Config      json.RawMessage `json:"config"`
-	Enabled     bool            `json:"enabled"`
-	CreatedBy   string          `json:"created_by"`
+	TenantID    uuid.UUID       `json:"tenant_id,omitempty" db:"tenant_id"`
+	Name        string          `json:"name" db:"name"`
+	DisplayName string          `json:"display_name" db:"display_name"`
+	ChannelType string          `json:"channel_type" db:"channel_type"`
+	AgentID     uuid.UUID       `json:"agent_id" db:"agent_id"`
+	Credentials []byte          `json:"-" db:"credentials"` // encrypted, never serialized to API
+	Config      json.RawMessage `json:"config" db:"config"`
+	Enabled     bool            `json:"enabled" db:"enabled"`
+	CreatedBy   string          `json:"created_by" db:"created_by"`
 }
 
 // IsDefaultChannelInstance returns true if the instance name matches a default/seeded channel.

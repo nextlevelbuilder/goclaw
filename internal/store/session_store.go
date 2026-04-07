@@ -10,80 +10,80 @@ import (
 
 // SessionData holds conversation state for one session.
 type SessionData struct {
-	Key      string              `json:"key"`
-	Messages []providers.Message `json:"messages"`
-	Summary  string              `json:"summary,omitempty"`
-	Created  time.Time           `json:"created"`
-	Updated  time.Time           `json:"updated"`
+	Key      string              `json:"key" db:"key"`
+	Messages []providers.Message `json:"messages" db:"messages"`
+	Summary  string              `json:"summary,omitempty" db:"summary"`
+	Created  time.Time           `json:"created" db:"created_at"`
+	Updated  time.Time           `json:"updated" db:"updated_at"`
 
-	AgentUUID uuid.UUID  `json:"agentUUID,omitempty"` // DB agent UUID
-	UserID    string     `json:"userID,omitempty"`    // External user ID (e.g. Telegram user ID)
-	TeamID    *uuid.UUID `json:"teamID,omitempty"`    // Team UUID (set for team sessions)
+	AgentUUID uuid.UUID  `json:"agentUUID,omitempty" db:"agent_id"` // DB agent UUID
+	UserID    string     `json:"userID,omitempty" db:"user_id"`     // External user ID (e.g. Telegram user ID)
+	TeamID    *uuid.UUID `json:"teamID,omitempty" db:"team_id"`     // Team UUID (set for team sessions)
 
-	Model                      string `json:"model,omitempty"`
-	Provider                   string `json:"provider,omitempty"`
-	Channel                    string `json:"channel,omitempty"`
-	InputTokens                int64  `json:"inputTokens,omitempty"`
-	OutputTokens               int64  `json:"outputTokens,omitempty"`
-	CompactionCount            int    `json:"compactionCount,omitempty"`
-	MemoryFlushCompactionCount int    `json:"memoryFlushCompactionCount,omitempty"`
-	MemoryFlushAt              int64  `json:"memoryFlushAt,omitempty"`
-	Label                      string `json:"label,omitempty"`
-	SpawnedBy                  string            `json:"spawnedBy,omitempty"`
-	SpawnDepth                 int               `json:"spawnDepth,omitempty"`
-	Metadata                   map[string]string `json:"metadata,omitempty"`
+	Model                      string `json:"model,omitempty" db:"model"`
+	Provider                   string `json:"provider,omitempty" db:"provider"`
+	Channel                    string `json:"channel,omitempty" db:"channel"`
+	InputTokens                int64  `json:"inputTokens,omitempty" db:"input_tokens"`
+	OutputTokens               int64  `json:"outputTokens,omitempty" db:"output_tokens"`
+	CompactionCount            int    `json:"compactionCount,omitempty" db:"compaction_count"`
+	MemoryFlushCompactionCount int    `json:"memoryFlushCompactionCount,omitempty" db:"memory_flush_compaction_count"`
+	MemoryFlushAt              int64  `json:"memoryFlushAt,omitempty" db:"-"`
+	Label                      string `json:"label,omitempty" db:"label"`
+	SpawnedBy                  string            `json:"spawnedBy,omitempty" db:"spawned_by"`
+	SpawnDepth                 int               `json:"spawnDepth,omitempty" db:"spawn_depth"`
+	Metadata                   map[string]string `json:"metadata,omitempty" db:"metadata"`
 
 	// Adaptive throttle: cached per-session so scheduler reads without DB lookup.
-	ContextWindow    int `json:"contextWindow,omitempty"`    // agent's context window (set on first run)
-	LastPromptTokens int `json:"lastPromptTokens,omitempty"` // actual prompt tokens from last LLM response
-	LastMessageCount int `json:"lastMessageCount,omitempty"` // message count at time of last LLM call
+	ContextWindow    int `json:"contextWindow,omitempty" db:"context_window"`       // agent's context window (set on first run)
+	LastPromptTokens int `json:"lastPromptTokens,omitempty" db:"last_prompt_tokens"` // actual prompt tokens from last LLM response
+	LastMessageCount int `json:"lastMessageCount,omitempty" db:"last_message_count"` // message count at time of last LLM call
 }
 
 // SessionInfo is lightweight session metadata for listing.
 type SessionInfo struct {
-	Key          string            `json:"key"`
-	MessageCount int               `json:"messageCount"`
-	Created      time.Time         `json:"created"`
-	Updated      time.Time         `json:"updated"`
-	Label        string            `json:"label,omitempty"`
-	Channel      string            `json:"channel,omitempty"`
-	UserID       string            `json:"userID,omitempty"`
-	Metadata     map[string]string `json:"metadata,omitempty"`
+	Key          string            `json:"key" db:"key"`
+	MessageCount int               `json:"messageCount" db:"message_count"`
+	Created      time.Time         `json:"created" db:"created_at"`
+	Updated      time.Time         `json:"updated" db:"updated_at"`
+	Label        string            `json:"label,omitempty" db:"label"`
+	Channel      string            `json:"channel,omitempty" db:"channel"`
+	UserID       string            `json:"userID,omitempty" db:"user_id"`
+	Metadata     map[string]string `json:"metadata,omitempty" db:"metadata"`
 }
 
 // SessionListOpts holds pagination options for ListPaged.
 type SessionListOpts struct {
-	AgentID  string
-	Channel  string    // optional: filter by channel prefix ("ws", "telegram", etc.)
-	UserID   string    // optional: filter by user_id
-	TenantID uuid.UUID // optional: filter by tenant (uuid.Nil = no filter)
-	Limit    int
-	Offset   int
+	AgentID  string    `db:"-"`
+	Channel  string    `db:"-"` // optional: filter by channel prefix ("ws", "telegram", etc.)
+	UserID   string    `db:"-"` // optional: filter by user_id
+	TenantID uuid.UUID `db:"-"` // optional: filter by tenant (uuid.Nil = no filter)
+	Limit    int       `db:"-"`
+	Offset   int       `db:"-"`
 }
 
 // SessionListResult is the paginated result of ListPaged.
 type SessionListResult struct {
-	Sessions []SessionInfo `json:"sessions"`
-	Total    int           `json:"total"`
+	Sessions []SessionInfo `json:"sessions" db:"-"`
+	Total    int           `json:"total" db:"-"`
 }
 
 // SessionInfoRich is an enriched session info for API responses (includes model, tokens, agent name).
 type SessionInfoRich struct {
 	SessionInfo
-	Model           string `json:"model,omitempty"`
-	Provider        string `json:"provider,omitempty"`
-	InputTokens     int64  `json:"inputTokens,omitempty"`
-	OutputTokens    int64  `json:"outputTokens,omitempty"`
-	AgentName       string `json:"agentName,omitempty"`
-	EstimatedTokens int    `json:"estimatedTokens,omitempty"` // estimated current context tokens (messages bytes/4 + 12k system prompt)
-	ContextWindow   int    `json:"contextWindow,omitempty"`   // agent's context window size
-	CompactionCount int    `json:"compactionCount,omitempty"` // number of compactions performed
+	Model           string `json:"model,omitempty" db:"model"`
+	Provider        string `json:"provider,omitempty" db:"provider"`
+	InputTokens     int64  `json:"inputTokens,omitempty" db:"input_tokens"`
+	OutputTokens    int64  `json:"outputTokens,omitempty" db:"output_tokens"`
+	AgentName       string `json:"agentName,omitempty" db:"agent_name"`
+	EstimatedTokens int    `json:"estimatedTokens,omitempty" db:"-"` // estimated current context tokens (messages bytes/4 + 12k system prompt)
+	ContextWindow   int    `json:"contextWindow,omitempty" db:"context_window"` // agent's context window size
+	CompactionCount int    `json:"compactionCount,omitempty" db:"compaction_count"` // number of compactions performed
 }
 
 // SessionListRichResult is the paginated result of ListPagedRich.
 type SessionListRichResult struct {
-	Sessions []SessionInfoRich `json:"sessions"`
-	Total    int               `json:"total"`
+	Sessions []SessionInfoRich `json:"sessions" db:"-"`
+	Total    int               `json:"total" db:"-"`
 }
 
 // SessionCoreStore manages session lifecycle, messages, and history.

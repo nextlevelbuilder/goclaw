@@ -10,58 +10,58 @@ import (
 
 // AgentHeartbeat represents the heartbeat configuration for an agent.
 type AgentHeartbeat struct {
-	ID               uuid.UUID       `json:"id"`
-	AgentID          uuid.UUID       `json:"agentId"`
-	Enabled          bool            `json:"enabled"`
-	IntervalSec      int             `json:"intervalSec"`
-	Prompt           *string         `json:"prompt,omitempty"`
-	ProviderID       *uuid.UUID      `json:"providerId,omitempty"`
-	Model            *string         `json:"model,omitempty"`
-	IsolatedSession  bool            `json:"isolatedSession"`
-	LightContext     bool            `json:"lightContext"`
-	AckMaxChars      int             `json:"ackMaxChars"`
-	MaxRetries       int             `json:"maxRetries"`
-	ActiveHoursStart *string         `json:"activeHoursStart,omitempty"`
-	ActiveHoursEnd   *string         `json:"activeHoursEnd,omitempty"`
-	Timezone         *string         `json:"timezone,omitempty"`
-	Channel          *string         `json:"channel,omitempty"`
-	ChatID           *string         `json:"chatId,omitempty"`
-	NextRunAt        *time.Time      `json:"nextRunAt,omitempty"`
-	LastRunAt        *time.Time      `json:"lastRunAt,omitempty"`
-	LastStatus       *string         `json:"lastStatus,omitempty"`
-	LastError        *string         `json:"lastError,omitempty"`
-	RunCount         int             `json:"runCount"`
-	SuppressCount    int             `json:"suppressCount"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	UpdatedAt        time.Time       `json:"updatedAt"`
+	ID               uuid.UUID       `json:"id" db:"id"`
+	AgentID          uuid.UUID       `json:"agentId" db:"agent_id"`
+	Enabled          bool            `json:"enabled" db:"enabled"`
+	IntervalSec      int             `json:"intervalSec" db:"interval_sec"`
+	Prompt           *string         `json:"prompt,omitempty" db:"prompt"`
+	ProviderID       *uuid.UUID      `json:"providerId,omitempty" db:"provider_id"`
+	Model            *string         `json:"model,omitempty" db:"model"`
+	IsolatedSession  bool            `json:"isolatedSession" db:"isolated_session"`
+	LightContext     bool            `json:"lightContext" db:"light_context"`
+	AckMaxChars      int             `json:"ackMaxChars" db:"ack_max_chars"`
+	MaxRetries       int             `json:"maxRetries" db:"max_retries"`
+	ActiveHoursStart *string         `json:"activeHoursStart,omitempty" db:"active_hours_start"`
+	ActiveHoursEnd   *string         `json:"activeHoursEnd,omitempty" db:"active_hours_end"`
+	Timezone         *string         `json:"timezone,omitempty" db:"timezone"`
+	Channel          *string         `json:"channel,omitempty" db:"channel"`
+	ChatID           *string         `json:"chatId,omitempty" db:"chat_id"`
+	NextRunAt        *time.Time      `json:"nextRunAt,omitempty" db:"next_run_at"`
+	LastRunAt        *time.Time      `json:"lastRunAt,omitempty" db:"last_run_at"`
+	LastStatus       *string         `json:"lastStatus,omitempty" db:"last_status"`
+	LastError        *string         `json:"lastError,omitempty" db:"last_error"`
+	RunCount         int             `json:"runCount" db:"run_count"`
+	SuppressCount    int             `json:"suppressCount" db:"suppress_count"`
+	Metadata         json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt        time.Time       `json:"createdAt" db:"created_at"`
+	UpdatedAt        time.Time       `json:"updatedAt" db:"updated_at"`
 }
 
 // HeartbeatState holds runtime state updates for a heartbeat run.
 type HeartbeatState struct {
-	NextRunAt     *time.Time
-	LastRunAt     *time.Time
-	LastStatus    string
-	LastError     string
-	RunCount      int
-	SuppressCount int
+	NextRunAt     *time.Time `db:"-"`
+	LastRunAt     *time.Time `db:"-"`
+	LastStatus    string     `db:"-"`
+	LastError     string     `db:"-"`
+	RunCount      int        `db:"-"`
+	SuppressCount int        `db:"-"`
 }
 
 // HeartbeatRunLog records a single heartbeat execution.
 type HeartbeatRunLog struct {
-	ID           uuid.UUID       `json:"id"`
-	HeartbeatID  uuid.UUID       `json:"heartbeatId"`
-	AgentID      uuid.UUID       `json:"agentId"`
-	Status       string          `json:"status"`
-	Summary      *string         `json:"summary,omitempty"`
-	Error        *string         `json:"error,omitempty"`
-	DurationMS   *int            `json:"durationMs,omitempty"`
-	InputTokens  int             `json:"inputTokens"`
-	OutputTokens int             `json:"outputTokens"`
-	SkipReason   *string         `json:"skipReason,omitempty"`
-	Metadata     json.RawMessage `json:"metadata,omitempty"`
-	RanAt        time.Time       `json:"ranAt"`
-	CreatedAt    time.Time       `json:"createdAt"`
+	ID           uuid.UUID       `json:"id" db:"id"`
+	HeartbeatID  uuid.UUID       `json:"heartbeatId" db:"heartbeat_id"`
+	AgentID      uuid.UUID       `json:"agentId" db:"agent_id"`
+	Status       string          `json:"status" db:"status"`
+	Summary      *string         `json:"summary,omitempty" db:"summary"`
+	Error        *string         `json:"error,omitempty" db:"error"`
+	DurationMS   *int            `json:"durationMs,omitempty" db:"duration_ms"`
+	InputTokens  int             `json:"inputTokens" db:"input_tokens"`
+	OutputTokens int             `json:"outputTokens" db:"output_tokens"`
+	SkipReason   *string         `json:"skipReason,omitempty" db:"skip_reason"`
+	Metadata     json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	RanAt        time.Time       `json:"ranAt" db:"ran_at"`
+	CreatedAt    time.Time       `json:"createdAt" db:"created_at"`
 }
 
 // StaggerOffset returns a deterministic offset for spreading heartbeats evenly.
@@ -88,20 +88,20 @@ func StaggerOffset(agentID uuid.UUID, intervalSec int) time.Duration {
 
 // HeartbeatEvent represents a heartbeat lifecycle event sent to subscribers.
 type HeartbeatEvent struct {
-	Action   string `json:"action"` // "running", "completed", "suppressed", "error", "skipped"
-	AgentID  string `json:"agentId"`
-	AgentKey string `json:"agentKey,omitempty"`
-	Status   string `json:"status,omitempty"`
-	Error    string `json:"error,omitempty"`
-	Reason   string `json:"reason,omitempty"` // skip reason
+	Action   string `json:"action" db:"-"` // "running", "completed", "suppressed", "error", "skipped"
+	AgentID  string `json:"agentId" db:"-"`
+	AgentKey string `json:"agentKey,omitempty" db:"-"`
+	Status   string `json:"status,omitempty" db:"-"`
+	Error    string `json:"error,omitempty" db:"-"`
+	Reason   string `json:"reason,omitempty" db:"-"` // skip reason
 }
 
 // DeliveryTarget represents a known channel+chatID pair from session history.
 type DeliveryTarget struct {
-	Channel string `json:"channel"`
-	ChatID  string `json:"chatId"`
-	Title   string `json:"title,omitempty"` // chat/group title from session metadata
-	Kind    string `json:"kind"`            // "dm" or "group"
+	Channel string `json:"channel" db:"-"`
+	ChatID  string `json:"chatId" db:"-"`
+	Title   string `json:"title,omitempty" db:"-"` // chat/group title from session metadata
+	Kind    string `json:"kind" db:"-"`            // "dm" or "group"
 }
 
 // HeartbeatStore manages agent heartbeat configurations and run logs.

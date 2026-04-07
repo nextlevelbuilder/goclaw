@@ -12,28 +12,28 @@ import (
 
 // CustomSkillExport holds portable skill metadata (no internal UUIDs in references).
 type CustomSkillExport struct {
-	ID          string          `json:"id"` // UUID string — used as key for grant references within archive
-	Name        string          `json:"name"`
-	Slug        string          `json:"slug"`
-	Description *string         `json:"description,omitempty"`
-	Visibility  string          `json:"visibility"`
-	Version     int             `json:"version"`
-	Frontmatter json.RawMessage `json:"frontmatter,omitempty"`
-	Tags        []string        `json:"tags,omitempty"`
-	Deps        json.RawMessage `json:"deps,omitempty"`
-	FilePath    string          `json:"file_path,omitempty"` // original path — for reading file content
+	ID          string          `json:"id" db:"-"` // UUID string — used as key for grant references within archive
+	Name        string          `json:"name" db:"name"`
+	Slug        string          `json:"slug" db:"slug"`
+	Description *string         `json:"description,omitempty" db:"description"`
+	Visibility  string          `json:"visibility" db:"visibility"`
+	Version     int             `json:"version" db:"version"`
+	Frontmatter json.RawMessage `json:"frontmatter,omitempty" db:"frontmatter"`
+	Tags        []string        `json:"tags,omitempty" db:"tags"`
+	Deps        json.RawMessage `json:"deps,omitempty" db:"deps"`
+	FilePath    string          `json:"file_path,omitempty" db:"file_path"` // original path — for reading file content
 }
 
 // SkillGrantWithKey references a skill grant by agent_key (portable cross-system).
 type SkillGrantWithKey struct {
-	AgentKey      string `json:"agent_key"`
-	PinnedVersion int    `json:"pinned_version"`
+	AgentKey      string `json:"agent_key" db:"agent_key"`
+	PinnedVersion int    `json:"pinned_version" db:"pinned_version"`
 }
 
 // SkillsExportPreview holds lightweight counts for the export preview endpoint.
 type SkillsExportPreview struct {
-	CustomSkills int `json:"custom_skills"`
-	TotalGrants  int `json:"total_grants"`
+	CustomSkills int `json:"custom_skills" db:"custom_skills"`
+	TotalGrants  int `json:"total_grants" db:"total_grants"`
 }
 
 // ExportCustomSkills returns all non-system skills scoped to the current tenant.

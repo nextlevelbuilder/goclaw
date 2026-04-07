@@ -30,25 +30,25 @@ const (
 
 // TenantData represents a tenant in the database.
 type TenantData struct {
-	ID        uuid.UUID       `json:"id"`
-	Name      string          `json:"name"`
-	Slug      string          `json:"slug"`
-	Status    string          `json:"status"`
-	Settings  json.RawMessage `json:"settings,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID        uuid.UUID       `json:"id" db:"id"`
+	Name      string          `json:"name" db:"name"`
+	Slug      string          `json:"slug" db:"slug"`
+	Status    string          `json:"status" db:"status"`
+	Settings  json.RawMessage `json:"settings,omitempty" db:"settings"`
+	CreatedAt time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 // TenantUserData represents a user's membership in a tenant.
 type TenantUserData struct {
-	ID          uuid.UUID       `json:"id"`
-	TenantID    uuid.UUID       `json:"tenant_id"`
-	UserID      string          `json:"user_id"`
-	DisplayName *string         `json:"display_name,omitempty"`
-	Role        string          `json:"role"`
-	Metadata    json.RawMessage `json:"metadata,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID          uuid.UUID       `json:"id" db:"id"`
+	TenantID    uuid.UUID       `json:"tenant_id" db:"tenant_id"`
+	UserID      string          `json:"user_id" db:"user_id"`
+	DisplayName *string         `json:"display_name,omitempty" db:"display_name"`
+	Role        string          `json:"role" db:"role"`
+	Metadata    json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 // TenantStore manages tenants and tenant-user membership.

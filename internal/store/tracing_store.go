@@ -39,62 +39,62 @@ const (
 
 // TraceData represents a top-level trace (one per user request).
 type TraceData struct {
-	ID                uuid.UUID       `json:"id"`
-	ParentTraceID     *uuid.UUID      `json:"parent_trace_id,omitempty"` // linked parent trace (delegation)
-	AgentID           *uuid.UUID      `json:"agent_id,omitempty"`
-	UserID            string          `json:"user_id,omitempty"`
-	SessionKey        string          `json:"session_key,omitempty"`
-	RunID             string          `json:"run_id,omitempty"`
-	StartTime         time.Time       `json:"start_time"`
-	EndTime           *time.Time      `json:"end_time,omitempty"`
-	DurationMS        int             `json:"duration_ms,omitempty"`
-	Name              string          `json:"name,omitempty"`
-	Channel           string          `json:"channel,omitempty"`
-	InputPreview      string          `json:"input_preview,omitempty"`
-	OutputPreview     string          `json:"output_preview,omitempty"`
-	TotalInputTokens  int             `json:"total_input_tokens"`
-	TotalOutputTokens int             `json:"total_output_tokens"`
-	TotalCost         float64         `json:"total_cost"`
-	SpanCount         int             `json:"span_count"`
-	LLMCallCount      int             `json:"llm_call_count"`
-	ToolCallCount     int             `json:"tool_call_count"`
-	Status            string          `json:"status"`
-	Error             string          `json:"error,omitempty"`
-	Metadata          json.RawMessage `json:"metadata,omitempty"`
-	Tags              []string        `json:"tags,omitempty"`
-	TeamID            *uuid.UUID      `json:"team_id,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
+	ID                uuid.UUID       `json:"id" db:"id"`
+	ParentTraceID     *uuid.UUID      `json:"parent_trace_id,omitempty" db:"parent_trace_id"` // linked parent trace (delegation)
+	AgentID           *uuid.UUID      `json:"agent_id,omitempty" db:"agent_id"`
+	UserID            string          `json:"user_id,omitempty" db:"user_id"`
+	SessionKey        string          `json:"session_key,omitempty" db:"session_key"`
+	RunID             string          `json:"run_id,omitempty" db:"run_id"`
+	StartTime         time.Time       `json:"start_time" db:"start_time"`
+	EndTime           *time.Time      `json:"end_time,omitempty" db:"end_time"`
+	DurationMS        int             `json:"duration_ms,omitempty" db:"duration_ms"`
+	Name              string          `json:"name,omitempty" db:"name"`
+	Channel           string          `json:"channel,omitempty" db:"channel"`
+	InputPreview      string          `json:"input_preview,omitempty" db:"input_preview"`
+	OutputPreview     string          `json:"output_preview,omitempty" db:"output_preview"`
+	TotalInputTokens  int             `json:"total_input_tokens" db:"total_input_tokens"`
+	TotalOutputTokens int             `json:"total_output_tokens" db:"total_output_tokens"`
+	TotalCost         float64         `json:"total_cost" db:"total_cost"`
+	SpanCount         int             `json:"span_count" db:"span_count"`
+	LLMCallCount      int             `json:"llm_call_count" db:"llm_call_count"`
+	ToolCallCount     int             `json:"tool_call_count" db:"tool_call_count"`
+	Status            string          `json:"status" db:"status"`
+	Error             string          `json:"error,omitempty" db:"error"`
+	Metadata          json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	Tags              []string        `json:"tags,omitempty" db:"tags"`
+	TeamID            *uuid.UUID      `json:"team_id,omitempty" db:"team_id"`
+	CreatedAt         time.Time       `json:"created_at" db:"created_at"`
 }
 
 // SpanData represents a single operation within a trace.
 type SpanData struct {
-	ID            uuid.UUID       `json:"id"`
-	TraceID       uuid.UUID       `json:"trace_id"`
-	ParentSpanID  *uuid.UUID      `json:"parent_span_id,omitempty"`
-	AgentID       *uuid.UUID      `json:"agent_id,omitempty"`
-	SpanType      string          `json:"span_type"` // "llm_call", "tool_call", "agent", "embedding", "event"
-	Name          string          `json:"name,omitempty"`
-	StartTime     time.Time       `json:"start_time"`
-	EndTime       *time.Time      `json:"end_time,omitempty"`
-	DurationMS    int             `json:"duration_ms,omitempty"`
-	Status        string          `json:"status"`
-	Error         string          `json:"error,omitempty"`
-	Level         string          `json:"level,omitempty"`
-	Model         string          `json:"model,omitempty"`
-	Provider      string          `json:"provider,omitempty"`
-	InputTokens   int             `json:"input_tokens,omitempty"`
-	OutputTokens  int             `json:"output_tokens,omitempty"`
-	TotalCost     *float64        `json:"total_cost,omitempty"`
-	FinishReason  string          `json:"finish_reason,omitempty"`
-	ModelParams   json.RawMessage `json:"model_params,omitempty"`
-	ToolName      string          `json:"tool_name,omitempty"`
-	ToolCallID    string          `json:"tool_call_id,omitempty"`
-	InputPreview  string          `json:"input_preview,omitempty"`
-	OutputPreview string          `json:"output_preview,omitempty"`
-	Metadata      json.RawMessage `json:"metadata,omitempty"`
-	TeamID        *uuid.UUID      `json:"team_id,omitempty"`
-	TenantID      uuid.UUID       `json:"tenant_id"`
-	CreatedAt     time.Time       `json:"created_at"`
+	ID            uuid.UUID       `json:"id" db:"id"`
+	TraceID       uuid.UUID       `json:"trace_id" db:"trace_id"`
+	ParentSpanID  *uuid.UUID      `json:"parent_span_id,omitempty" db:"parent_span_id"`
+	AgentID       *uuid.UUID      `json:"agent_id,omitempty" db:"agent_id"`
+	SpanType      string          `json:"span_type" db:"span_type"` // "llm_call", "tool_call", "agent", "embedding", "event"
+	Name          string          `json:"name,omitempty" db:"name"`
+	StartTime     time.Time       `json:"start_time" db:"start_time"`
+	EndTime       *time.Time      `json:"end_time,omitempty" db:"end_time"`
+	DurationMS    int             `json:"duration_ms,omitempty" db:"duration_ms"`
+	Status        string          `json:"status" db:"status"`
+	Error         string          `json:"error,omitempty" db:"error"`
+	Level         string          `json:"level,omitempty" db:"level"`
+	Model         string          `json:"model,omitempty" db:"model"`
+	Provider      string          `json:"provider,omitempty" db:"provider"`
+	InputTokens   int             `json:"input_tokens,omitempty" db:"input_tokens"`
+	OutputTokens  int             `json:"output_tokens,omitempty" db:"output_tokens"`
+	TotalCost     *float64        `json:"total_cost,omitempty" db:"total_cost"`
+	FinishReason  string          `json:"finish_reason,omitempty" db:"finish_reason"`
+	ModelParams   json.RawMessage `json:"model_params,omitempty" db:"model_params"`
+	ToolName      string          `json:"tool_name,omitempty" db:"tool_name"`
+	ToolCallID    string          `json:"tool_call_id,omitempty" db:"tool_call_id"`
+	InputPreview  string          `json:"input_preview,omitempty" db:"input_preview"`
+	OutputPreview string          `json:"output_preview,omitempty" db:"output_preview"`
+	Metadata      json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	TeamID        *uuid.UUID      `json:"team_id,omitempty" db:"team_id"`
+	TenantID      uuid.UUID       `json:"tenant_id" db:"tenant_id"`
+	CreatedAt     time.Time       `json:"created_at" db:"created_at"`
 }
 
 // TraceListOpts configures trace listing.
@@ -117,11 +117,11 @@ type CostSummaryOpts struct {
 
 // CostSummaryRow is a single row of aggregated cost data.
 type CostSummaryRow struct {
-	AgentID           *uuid.UUID `json:"agent_id,omitempty"`
-	TotalCost         float64    `json:"total_cost"`
-	TotalInputTokens  int        `json:"total_input_tokens"`
-	TotalOutputTokens int        `json:"total_output_tokens"`
-	TraceCount        int        `json:"trace_count"`
+	AgentID           *uuid.UUID `json:"agent_id,omitempty" db:"agent_id"`
+	TotalCost         float64    `json:"total_cost" db:"total_cost"`
+	TotalInputTokens  int        `json:"total_input_tokens" db:"total_input_tokens"`
+	TotalOutputTokens int        `json:"total_output_tokens" db:"total_output_tokens"`
+	TraceCount        int        `json:"trace_count" db:"trace_count"`
 }
 
 // CodexPoolSpan holds the fields from a single LLM span for Codex pool activity analysis.

@@ -10,29 +10,29 @@ import (
 // EpisodicSummary represents a Tier 2 episodic memory entry.
 // Created from session summaries via the consolidation pipeline.
 type EpisodicSummary struct {
-	ID           uuid.UUID  `json:"id"`
-	TenantID     uuid.UUID  `json:"tenant_id"`
-	AgentID      uuid.UUID  `json:"agent_id"`
-	UserID       string     `json:"user_id"` // string: chat-based IDs
-	SessionKey   string     `json:"session_key"`
-	Summary      string     `json:"summary"`
-	KeyTopics    []string   `json:"key_topics"`
-	L0Abstract   string     `json:"l0_abstract"` // ~50 tokens, pre-computed
-	SourceType   string     `json:"source_type"` // "session", "v2_daily", "manual"
-	SourceID     string     `json:"source_id"`   // dedup key
-	TurnCount    int        `json:"turn_count"`
-	TokenCount   int        `json:"token_count"`
-	CreatedAt    time.Time  `json:"created_at"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	ID           uuid.UUID  `json:"id" db:"id"`
+	TenantID     uuid.UUID  `json:"tenant_id" db:"tenant_id"`
+	AgentID      uuid.UUID  `json:"agent_id" db:"agent_id"`
+	UserID       string     `json:"user_id" db:"user_id"` // string: chat-based IDs
+	SessionKey   string     `json:"session_key" db:"session_key"`
+	Summary      string     `json:"summary" db:"summary"`
+	KeyTopics    []string   `json:"key_topics" db:"key_topics"`
+	L0Abstract   string     `json:"l0_abstract" db:"l0_abstract"` // ~50 tokens, pre-computed
+	SourceType   string     `json:"source_type" db:"source_type"` // "session", "v2_daily", "manual"
+	SourceID     string     `json:"source_id" db:"source_id"`     // dedup key
+	TurnCount    int        `json:"turn_count" db:"turn_count"`
+	TokenCount   int        `json:"token_count" db:"token_count"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty" db:"expires_at"`
 }
 
 // EpisodicSearchResult is a search hit with L0 summary.
 type EpisodicSearchResult struct {
-	EpisodicID string    `json:"episodic_id"`
-	L0Abstract string    `json:"l0_abstract"`
-	Score      float64   `json:"score"`
-	CreatedAt  time.Time `json:"created_at"`
-	SessionKey string    `json:"session_key"`
+	EpisodicID string    `json:"episodic_id" db:"episodic_id"`
+	L0Abstract string    `json:"l0_abstract" db:"l0_abstract"`
+	Score      float64   `json:"score" db:"score"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	SessionKey string    `json:"session_key" db:"session_key"`
 }
 
 // EpisodicSearchOptions configures episodic search behavior.

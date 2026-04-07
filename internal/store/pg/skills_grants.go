@@ -186,9 +186,9 @@ func (s *PGSkillStore) ListAccessible(ctx context.Context, agentID uuid.UUID, us
 
 // SkillGrantInfo is a simplified grant record for API responses.
 type SkillGrantInfo struct {
-	SkillID       uuid.UUID `json:"skill_id"`
-	PinnedVersion int       `json:"pinned_version"`
-	GrantedBy     string    `json:"granted_by"`
+	SkillID       uuid.UUID `json:"skill_id" db:"skill_id"`
+	PinnedVersion int       `json:"pinned_version" db:"pinned_version"`
+	GrantedBy     string    `json:"granted_by" db:"granted_by"`
 }
 
 // ListWithGrantStatus returns all active skills with grant status for a specific agent.

@@ -24,10 +24,10 @@ type permCacheEntry struct {
 }
 
 type permRow struct {
-	Scope      string `json:"scope"`
-	ConfigType string `json:"config_type"`
-	Permission string `json:"permission"`
-	UserID     string `json:"user_id"` // individual user ID or "*" (group wildcard)
+	Scope      string `json:"scope" db:"scope"`
+	ConfigType string `json:"config_type" db:"config_type"`
+	Permission string `json:"permission" db:"permission"`
+	UserID     string `json:"user_id" db:"user_id"` // individual user ID or "*" (group wildcard)
 }
 
 // fwCacheEntry holds cached file_writer ConfigPermission rows for a scope.

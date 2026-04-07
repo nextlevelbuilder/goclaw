@@ -32,66 +32,66 @@ type MemoryDocExport struct {
 // Phase 2 export types.
 
 type SkillGrantExport struct {
-	SkillID       string `json:"skill_id"`
-	PinnedVersion int    `json:"pinned_version"`
-	GrantedBy     string `json:"granted_by"`
+	SkillID       string `json:"skill_id" db:"skill_id"`
+	PinnedVersion int    `json:"pinned_version" db:"pinned_version"`
+	GrantedBy     string `json:"granted_by" db:"granted_by"`
 }
 
 type MCPGrantExport struct {
-	ServerID        string          `json:"server_id"`
-	Enabled         bool            `json:"enabled"`
-	ToolAllow       json.RawMessage `json:"tool_allow,omitempty"`
-	ToolDeny        json.RawMessage `json:"tool_deny,omitempty"`
-	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty"`
-	GrantedBy       string          `json:"granted_by"`
+	ServerID        string          `json:"server_id" db:"server_id"`
+	Enabled         bool            `json:"enabled" db:"enabled"`
+	ToolAllow       json.RawMessage `json:"tool_allow,omitempty" db:"tool_allow"`
+	ToolDeny        json.RawMessage `json:"tool_deny,omitempty" db:"tool_deny"`
+	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty" db:"config_overrides"`
+	GrantedBy       string          `json:"granted_by" db:"granted_by"`
 }
 
 type CronJobExport struct {
-	Name           string          `json:"name"`
-	ScheduleKind   string          `json:"schedule_kind"`
-	CronExpression *string         `json:"cron_expression,omitempty"`
-	IntervalMS     *int64          `json:"interval_ms,omitempty"`
-	RunAt          *string         `json:"run_at,omitempty"`
-	Timezone       *string         `json:"timezone,omitempty"`
-	Payload        json.RawMessage `json:"payload"`
-	DeleteAfterRun bool            `json:"delete_after_run"`
+	Name           string          `json:"name" db:"name"`
+	ScheduleKind   string          `json:"schedule_kind" db:"schedule_kind"`
+	CronExpression *string         `json:"cron_expression,omitempty" db:"cron_expression"`
+	IntervalMS     *int64          `json:"interval_ms,omitempty" db:"interval_ms"`
+	RunAt          *string         `json:"run_at,omitempty" db:"run_at"`
+	Timezone       *string         `json:"timezone,omitempty" db:"timezone"`
+	Payload        json.RawMessage `json:"payload" db:"payload"`
+	DeleteAfterRun bool            `json:"delete_after_run" db:"delete_after_run"`
 }
 
 type ConfigPermissionExport struct {
-	Scope      string          `json:"scope"`
-	ConfigType string          `json:"config_type"`
-	UserID     string          `json:"user_id"`
-	Permission string          `json:"permission"`
-	Metadata   json.RawMessage `json:"metadata,omitempty"`
-	GrantedBy  *string         `json:"granted_by,omitempty"`
+	Scope      string          `json:"scope" db:"scope"`
+	ConfigType string          `json:"config_type" db:"config_type"`
+	UserID     string          `json:"user_id" db:"user_id"`
+	Permission string          `json:"permission" db:"permission"`
+	Metadata   json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	GrantedBy  *string         `json:"granted_by,omitempty" db:"granted_by"`
 }
 
 type UserProfileExport struct {
-	UserID    string  `json:"user_id"`
-	Workspace *string `json:"workspace,omitempty"`
+	UserID    string  `json:"user_id" db:"user_id"`
+	Workspace *string `json:"workspace,omitempty" db:"workspace"`
 }
 
 type UserOverrideExport struct {
-	UserID   string          `json:"user_id"`
-	Provider *string         `json:"provider,omitempty"`
-	Model    *string         `json:"model,omitempty"`
-	Settings json.RawMessage `json:"settings,omitempty"`
+	UserID   string          `json:"user_id" db:"user_id"`
+	Provider *string         `json:"provider,omitempty" db:"provider"`
+	Model    *string         `json:"model,omitempty" db:"model"`
+	Settings json.RawMessage `json:"settings,omitempty" db:"settings"`
 }
 
 type ExportPreview struct {
-	ContextFiles     int `json:"context_files"`
-	UserContextFiles int `json:"user_context_files_users"`
-	MemoryGlobal     int `json:"memory_global"`
-	MemoryPerUser    int `json:"memory_per_user"`
-	KGEntities       int `json:"kg_entities"`
-	KGRelations      int `json:"kg_relations"`
-	CronJobs         int `json:"cron_jobs"`
-	UserProfiles     int `json:"user_profiles"`
-	UserOverrides    int `json:"user_overrides"`
+	ContextFiles     int `json:"context_files" db:"context_files"`
+	UserContextFiles int `json:"user_context_files_users" db:"user_context_files_users"`
+	MemoryGlobal     int `json:"memory_global" db:"memory_global"`
+	MemoryPerUser    int `json:"memory_per_user" db:"memory_per_user"`
+	KGEntities       int `json:"kg_entities" db:"kg_entities"`
+	KGRelations      int `json:"kg_relations" db:"kg_relations"`
+	CronJobs         int `json:"cron_jobs" db:"cron_jobs"`
+	UserProfiles     int `json:"user_profiles" db:"user_profiles"`
+	UserOverrides    int `json:"user_overrides" db:"user_overrides"`
 	// Team section
-	TeamTasks   int `json:"team_tasks"`
-	TeamMembers int `json:"team_members"`
-	AgentLinks  int `json:"agent_links"`
+	TeamTasks   int `json:"team_tasks" db:"team_tasks"`
+	TeamMembers int `json:"team_members" db:"team_members"`
+	AgentLinks  int `json:"agent_links" db:"agent_links"`
 }
 
 const exportBatchSize = 1000

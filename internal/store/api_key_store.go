@@ -9,19 +9,19 @@ import (
 
 // APIKeyData represents a gateway API key with scoped permissions.
 type APIKeyData struct {
-	ID         uuid.UUID  `json:"id"`
-	TenantID   uuid.UUID  `json:"tenant_id"` // uuid.Nil when NULL in DB
-	Name       string     `json:"name"`
-	Prefix     string     `json:"prefix"`               // first 8 chars for display
-	KeyHash    string     `json:"-"`                    // SHA-256 hex, never serialized
-	Scopes     []string   `json:"scopes"`               // e.g. ["operator.admin","operator.read"]
-	OwnerID    string     `json:"owner_id,omitempty"`   // bound user; when set, auth forces user_id = owner_id
-	ExpiresAt  *time.Time `json:"expires_at"`           // nil = never
-	LastUsedAt *time.Time `json:"last_used_at"`
-	Revoked    bool       `json:"revoked"`
-	CreatedBy  string     `json:"created_by"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID         uuid.UUID  `json:"id" db:"id"`
+	TenantID   uuid.UUID  `json:"tenant_id" db:"tenant_id"` // uuid.Nil when NULL in DB
+	Name       string     `json:"name" db:"name"`
+	Prefix     string     `json:"prefix" db:"prefix"`               // first 8 chars for display
+	KeyHash    string     `json:"-" db:"key_hash"`                  // SHA-256 hex, never serialized
+	Scopes     []string   `json:"scopes" db:"scopes"`               // e.g. ["operator.admin","operator.read"]
+	OwnerID    string     `json:"owner_id,omitempty" db:"owner_id"` // bound user; when set, auth forces user_id = owner_id
+	ExpiresAt  *time.Time `json:"expires_at" db:"expires_at"`       // nil = never
+	LastUsedAt *time.Time `json:"last_used_at" db:"last_used_at"`
+	Revoked    bool       `json:"revoked" db:"revoked"`
+	CreatedBy  string     `json:"created_by" db:"created_by"`
+	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // APIKeyStore manages gateway API keys.

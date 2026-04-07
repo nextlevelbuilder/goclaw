@@ -12,32 +12,32 @@ import (
 // MCPServerExport holds portable MCP server metadata.
 // Sensitive fields (api_key, env, headers) are intentionally excluded.
 type MCPServerExport struct {
-	Name        string          `json:"name"`
-	DisplayName string          `json:"display_name,omitempty"`
-	Transport   string          `json:"transport"`
-	Command     string          `json:"command,omitempty"`
-	Args        json.RawMessage `json:"args,omitempty"`
-	URL         string          `json:"url,omitempty"`
-	ToolPrefix  string          `json:"tool_prefix,omitempty"`
-	TimeoutSec  int             `json:"timeout_sec"`
-	Settings    json.RawMessage `json:"settings,omitempty"`
-	Enabled     bool            `json:"enabled"`
+	Name        string          `json:"name" db:"name"`
+	DisplayName string          `json:"display_name,omitempty" db:"display_name"`
+	Transport   string          `json:"transport" db:"transport"`
+	Command     string          `json:"command,omitempty" db:"command"`
+	Args        json.RawMessage `json:"args,omitempty" db:"args"`
+	URL         string          `json:"url,omitempty" db:"url"`
+	ToolPrefix  string          `json:"tool_prefix,omitempty" db:"tool_prefix"`
+	TimeoutSec  int             `json:"timeout_sec" db:"timeout_sec"`
+	Settings    json.RawMessage `json:"settings,omitempty" db:"settings"`
+	Enabled     bool            `json:"enabled" db:"enabled"`
 }
 
 // MCPGrantWithKey references an MCP agent grant by server_name and agent_key (portable).
 type MCPGrantWithKey struct {
-	ServerName      string          `json:"server_name"`
-	AgentKey        string          `json:"agent_key"`
-	Enabled         bool            `json:"enabled"`
-	ToolAllow       json.RawMessage `json:"tool_allow,omitempty"`
-	ToolDeny        json.RawMessage `json:"tool_deny,omitempty"`
-	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty"`
+	ServerName      string          `json:"server_name" db:"server_name"`
+	AgentKey        string          `json:"agent_key" db:"agent_key"`
+	Enabled         bool            `json:"enabled" db:"enabled"`
+	ToolAllow       json.RawMessage `json:"tool_allow,omitempty" db:"tool_allow"`
+	ToolDeny        json.RawMessage `json:"tool_deny,omitempty" db:"tool_deny"`
+	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty" db:"config_overrides"`
 }
 
 // MCPExportPreview holds lightweight counts for the export preview endpoint.
 type MCPExportPreview struct {
-	Servers     int `json:"servers"`
-	AgentGrants int `json:"agent_grants"`
+	Servers     int `json:"servers" db:"servers"`
+	AgentGrants int `json:"agent_grants" db:"agent_grants"`
 }
 
 // ExportMCPServers returns all MCP servers scoped to the current tenant.
