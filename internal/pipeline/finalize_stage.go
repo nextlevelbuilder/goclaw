@@ -27,10 +27,14 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		state.Observe.FinalContent = s.deps.SanitizeContent(state.Observe.FinalContent)
 	}
 
-	// 2. Deduplicate + populate media sizes
+	// 2. NO_REPLY detection: save to session for context but mark as silent.
+	// Must run BEFORE session flush so the agent message is persisted even if suppressed.
+	isSilent := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
+
+	// 3. Deduplicate + populate media sizes
 	s.processMedia(state)
 
-	// 3. Flush remaining pending messages to session store
+	// 4. Flush remaining pending messages to session store
 	pending := state.Messages.FlushPending()
 	if len(pending) > 0 && s.deps.FlushMessages != nil {
 		if err := s.deps.FlushMessages(ctx, state.Input.SessionKey, pending); err != nil {
@@ -38,23 +42,40 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		}
 	}
 
-	// 4. Update session metadata (token usage)
+	// 5. Update session metadata (token usage)
 	if s.deps.UpdateMetadata != nil {
 		if err := s.deps.UpdateMetadata(ctx, state.Input.SessionKey, state.Think.TotalUsage); err != nil {
 			slog.Warn("finalize metadata update failed", "err", err)
 		}
 	}
 
-	// 5. Bootstrap auto-cleanup
+	// 6. Bootstrap auto-cleanup
 	if state.Context.HadBootstrap && s.deps.BootstrapCleanup != nil {
 		if err := s.deps.BootstrapCleanup(ctx, state); err != nil {
 			slog.Warn("bootstrap cleanup failed", "err", err)
 		}
 	}
 
-	// 6. Post-run summarization (async background)
+	// 7. Post-run summarization (async background)
 	if s.deps.MaybeSummarize != nil {
 		s.deps.MaybeSummarize(ctx, state.Input.SessionKey)
+	}
+
+	// 8. Emit session.completed for consolidation pipeline (episodic → semantic → dreaming).
+	if s.deps.EmitSessionCompleted != nil {
+		s.deps.EmitSessionCompleted(ctx, state.Input.SessionKey)
+	}
+
+	// 9. Strip internal [[...]] tags from user-facing content (matching v2 StripMessageDirectives).
+	if state.Observe.FinalContent != "" && s.deps.StripMessageDirectives != nil {
+		state.Observe.FinalContent = s.deps.StripMessageDirectives(state.Observe.FinalContent)
+	}
+
+	// 10. Suppress NO_REPLY (after session flush — content is persisted for context).
+	if isSilent {
+		slog.Info("v3 pipeline: NO_REPLY detected, suppressing delivery",
+			"session", state.Input.SessionKey)
+		state.Observe.FinalContent = ""
 	}
 
 	// run.completed event is emitted by loop_run.go after Pipeline.Run() returns,

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -117,8 +118,21 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		},
 
 		// Checkpoint + Finalize
-		FlushMessages:    cb.flushMessages,
-		SanitizeContent:  cb.sanitizeContent,
+		FlushMessages:          cb.flushMessages,
+		SanitizeContent:        cb.sanitizeContent,
+		StripMessageDirectives: StripMessageDirectives,
+		IsSilentReply:          IsSilentReply,
+		EmitSessionCompleted: func(ctx context.Context, sessionKey string) {
+			if l.domainBus != nil {
+				l.domainBus.Publish(eventbus.DomainEvent{
+					Type:     eventbus.EventSessionCompleted,
+					TenantID: l.tenantID.String(),
+					AgentID:  l.id,
+					UserID:   req.UserID,
+					SourceID: sessionKey,
+				})
+			}
+		},
 		UpdateMetadata:   cb.updateMetadata,
 		BootstrapCleanup: cb.bootstrapCleanup,
 		MaybeSummarize:   cb.maybeSummarize,
