@@ -792,7 +792,10 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 	}
 
 	if len(writers) == 0 {
-		return "", files // fail-open
+		// No writers configured yet — grant full access (bootstrap mode).
+		// Explicitly tell the agent it can use all tools to prevent LLM
+		// from self-restricting based on training assumptions.
+		return "## Group File Permissions\n\nNo file writer restrictions configured. You have full access to all tools including cron, write_file, and memory in this group.\n", files
 	}
 
 	// System-initiated runs (cron, delegate, subagent) have no sender ID.
