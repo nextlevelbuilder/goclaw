@@ -117,6 +117,7 @@ func (m *Manager) WebhookHandlers() []WebhookRoute {
 		if wh, ok := ch.(WebhookChannel); ok {
 			if path, handler := wh.WebhookHandler(); path != "" && handler != nil {
 				if seen[path] {
+					slog.Warn("webhook path already mounted, skipping duplicate", "path", path, "channel", ch.Name())
 					continue
 				}
 				seen[path] = true
