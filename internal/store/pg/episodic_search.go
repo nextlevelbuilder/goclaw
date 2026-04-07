@@ -46,19 +46,13 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 	q += fmt.Sprintf(" ORDER BY score DESC LIMIT $%d", p)
 	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rows []episodicScoredRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
 		return nil
 	}
-	defer rows.Close()
-
-	var results []episodicScored
-	for rows.Next() {
-		var r episodicScored
-		if err := rows.Scan(&r.id, &r.sessionKey, &r.l0, &r.score, &r.createdAt); err != nil {
-			continue
-		}
-		results = append(results, r)
+	results := make([]episodicScored, len(rows))
+	for i := range rows {
+		results[i] = rows[i].toEpisodicScored()
 	}
 	return results
 }
@@ -85,19 +79,13 @@ func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32,
 	q += fmt.Sprintf(" ORDER BY embedding <=> $1 LIMIT $%d", p)
 	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rows []episodicScoredRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
 		return nil
 	}
-	defer rows.Close()
-
-	var results []episodicScored
-	for rows.Next() {
-		var r episodicScored
-		if err := rows.Scan(&r.id, &r.sessionKey, &r.l0, &r.score, &r.createdAt); err != nil {
-			continue
-		}
-		results = append(results, r)
+	results := make([]episodicScored, len(rows))
+	for i := range rows {
+		results[i] = rows[i].toEpisodicScored()
 	}
 	return results
 }

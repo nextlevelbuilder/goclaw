@@ -75,22 +75,23 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 	return id, true, p.FilePath, nil
 }
 
+// skillDirRow is an sqlx scan struct for slug→file_path queries.
+type skillDirRow struct {
+	Slug     string `db:"slug"`
+	FilePath string `db:"file_path"`
+}
+
 // ListSystemSkillDirs returns slug->file_path map for all enabled system skills.
 // Disabled system skills are excluded — dep checking and injection are skipped for them.
 func (s *PGSkillStore) ListSystemSkillDirs(ctx context.Context) map[string]string {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT slug, file_path FROM skills WHERE is_system = true AND enabled = true`)
-	if err != nil {
+	var rows []skillDirRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT slug, file_path FROM skills WHERE is_system = true AND enabled = true`); err != nil {
 		return nil
 	}
-	defer rows.Close()
-	dirs := make(map[string]string)
-	for rows.Next() {
-		var slug, path string
-		if err := rows.Scan(&slug, &path); err != nil {
-			continue
-		}
-		dirs[slug] = path
+	dirs := make(map[string]string, len(rows))
+	for _, r := range rows {
+		dirs[r.Slug] = r.FilePath
 	}
 	return dirs
 }

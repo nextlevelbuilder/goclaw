@@ -18,45 +18,40 @@ func NewPGBuiltinToolTenantConfigStore(db *sql.DB) *PGBuiltinToolTenantConfigSto
 }
 
 func (s *PGBuiltinToolTenantConfigStore) ListDisabled(ctx context.Context, tenantID uuid.UUID) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx,
+	type row struct {
+		ToolName string `db:"tool_name"`
+	}
+	var rows []row
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
 		`SELECT tool_name FROM builtin_tool_tenant_configs WHERE tenant_id = $1 AND enabled = false`,
 		tenantID,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var names []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		names = append(names, name)
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		names = append(names, r.ToolName)
 	}
-	return names, rows.Err()
+	return names, nil
 }
 
 func (s *PGBuiltinToolTenantConfigStore) ListAll(ctx context.Context, tenantID uuid.UUID) (map[string]bool, error) {
-	rows, err := s.db.QueryContext(ctx,
+	type row struct {
+		ToolName string `db:"tool_name"`
+		Enabled  bool   `db:"enabled"`
+	}
+	var rows []row
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
 		`SELECT tool_name, enabled FROM builtin_tool_tenant_configs WHERE tenant_id = $1`,
 		tenantID,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make(map[string]bool)
-	for rows.Next() {
-		var name string
-		var enabled bool
-		if err := rows.Scan(&name, &enabled); err != nil {
-			return nil, err
-		}
-		result[name] = enabled
+	result := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		result[r.ToolName] = r.Enabled
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *PGBuiltinToolTenantConfigStore) Set(ctx context.Context, tenantID uuid.UUID, toolName string, enabled bool) error {
@@ -87,45 +82,40 @@ func NewPGSkillTenantConfigStore(db *sql.DB) *PGSkillTenantConfigStore {
 }
 
 func (s *PGSkillTenantConfigStore) ListDisabledSkillIDs(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := s.db.QueryContext(ctx,
+	type row struct {
+		SkillID uuid.UUID `db:"skill_id"`
+	}
+	var rows []row
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
 		`SELECT skill_id FROM skill_tenant_configs WHERE tenant_id = $1 AND enabled = false`,
 		tenantID,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.SkillID)
 	}
-	return ids, rows.Err()
+	return ids, nil
 }
 
 func (s *PGSkillTenantConfigStore) ListAll(ctx context.Context, tenantID uuid.UUID) (map[uuid.UUID]bool, error) {
-	rows, err := s.db.QueryContext(ctx,
+	type row struct {
+		SkillID uuid.UUID `db:"skill_id"`
+		Enabled bool      `db:"enabled"`
+	}
+	var rows []row
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
 		`SELECT skill_id, enabled FROM skill_tenant_configs WHERE tenant_id = $1`,
 		tenantID,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	result := make(map[uuid.UUID]bool)
-	for rows.Next() {
-		var id uuid.UUID
-		var enabled bool
-		if err := rows.Scan(&id, &enabled); err != nil {
-			return nil, err
-		}
-		result[id] = enabled
+	result := make(map[uuid.UUID]bool, len(rows))
+	for _, r := range rows {
+		result[r.SkillID] = r.Enabled
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *PGSkillTenantConfigStore) Set(ctx context.Context, tenantID uuid.UUID, skillID uuid.UUID, enabled bool) error {

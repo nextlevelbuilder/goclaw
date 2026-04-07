@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -89,41 +90,35 @@ func (s *PGEpisodicStore) List(ctx context.Context, agentID, userID string, limi
 	}
 	tenantID := store.TenantIDFromContext(ctx)
 
-	var rows *sql.Rows
-	var err error
+	var q string
+	var args []any
 	if userID != "" {
-		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+		q = `SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			       turn_count, token_count, l0_abstract, source_id, source_type,
 			       created_at, expires_at
 			FROM episodic_summaries
 			WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $5
-			ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
-			agentID, userID, limit, offset, tenantID)
+			ORDER BY created_at DESC LIMIT $3 OFFSET $4`
+		args = []any{agentID, userID, limit, offset, tenantID}
 	} else {
-		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+		q = `SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
 			       turn_count, token_count, l0_abstract, source_id, source_type,
 			       created_at, expires_at
 			FROM episodic_summaries
 			WHERE agent_id = $1 AND tenant_id = $4
-			ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-			agentID, limit, offset, tenantID)
+			ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+		args = []any{agentID, limit, offset, tenantID}
 	}
-	if err != nil {
+
+	var rows []episodicSummaryRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var results []store.EpisodicSummary
-	for rows.Next() {
-		ep, err := scanEpisodicRow(rows)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, *ep)
+	results := make([]store.EpisodicSummary, len(rows))
+	for i := range rows {
+		results[i] = rows[i].toEpisodicSummary()
 	}
-	return results, rows.Err()
+	return results, nil
 }
 
 // Search performs hybrid FTS + vector search on episodic summaries.
@@ -195,4 +190,61 @@ func (s *PGEpisodicStore) PruneExpired(ctx context.Context) (int, error) {
 	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
+}
+
+// ListUnpromoted returns episodic summaries not yet promoted to long-term memory, oldest first.
+// Scoped to agent/user within the caller's tenant.
+func (s *PGEpisodicStore) ListUnpromoted(ctx context.Context, agentID, userID string, limit int) ([]store.EpisodicSummary, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	var rows []episodicSummaryRow
+	err := pkgSqlxDB.SelectContext(ctx, &rows, `
+		SELECT id, tenant_id, agent_id, user_id, session_key, summary, key_topics,
+		       turn_count, token_count, l0_abstract, source_id, source_type,
+		       created_at, expires_at
+		FROM episodic_summaries
+		WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $3 AND promoted_at IS NULL
+		ORDER BY created_at ASC LIMIT $4`,
+		agentID, userID, tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("episodic list_unpromoted: %w", err)
+	}
+	results := make([]store.EpisodicSummary, len(rows))
+	for i := range rows {
+		results[i] = rows[i].toEpisodicSummary()
+	}
+	return results, nil
+}
+
+// MarkPromoted sets promoted_at=now() for the given episodic summary IDs.
+// Scoped to the caller's tenant for safety.
+func (s *PGEpisodicStore) MarkPromoted(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE episodic_summaries SET promoted_at = NOW()
+		WHERE id = ANY($1) AND tenant_id = $2`,
+		pq.Array(ids), tenantID)
+	if err != nil {
+		return fmt.Errorf("episodic mark_promoted: %w", err)
+	}
+	return nil
+}
+
+// CountUnpromoted returns the count of unpromoted episodic summaries for an agent/user.
+func (s *PGEpisodicStore) CountUnpromoted(ctx context.Context, agentID, userID string) (int, error) {
+	tenantID := store.TenantIDFromContext(ctx)
+	var count int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM episodic_summaries
+		WHERE agent_id = $1 AND user_id = $2 AND tenant_id = $3 AND promoted_at IS NULL`,
+		agentID, userID, tenantID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("episodic count_unpromoted: %w", err)
+	}
+	return count, nil
 }

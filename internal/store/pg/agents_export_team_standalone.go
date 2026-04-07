@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -39,34 +38,25 @@ func GetTeamMemberAgents(ctx context.Context, db *sql.DB, teamID uuid.UUID) ([]s
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var rows []teamMemberAgentRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows,
 		"SELECT a.id, a.agent_key"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var out []struct {
+	out := make([]struct {
 		ID       uuid.UUID
 		AgentKey string
+	}, len(rows))
+	for i, r := range rows {
+		out[i].ID = r.ID
+		out[i].AgentKey = r.AgentKey
 	}
-	for rows.Next() {
-		var item struct {
-			ID       uuid.UUID
-			AgentKey string
-		}
-		if err := rows.Scan(&item.ID, &item.AgentKey); err != nil {
-			slog.Warn("export.team.member_agents.scan", "error", err)
-			continue
-		}
-		out = append(out, item)
-	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // ExportTeamLinksForTeam returns agent_links where both source and target are members of the team.
@@ -75,8 +65,9 @@ func ExportTeamLinksForTeam(ctx context.Context, db *sql.DB, teamID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
-		"SELECT sa.agent_key, ta.agent_key, l.direction, COALESCE(l.description,'')"+
+	var out []AgentLinkExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
+		"SELECT sa.agent_key AS source_agent_key, ta.agent_key AS target_agent_key, l.direction, COALESCE(l.description,'') AS description"+
 			" FROM agent_links l"+
 			" JOIN agents sa ON sa.id = l.source_agent_id"+
 			" JOIN agents ta ON ta.id = l.target_agent_id"+
@@ -84,21 +75,7 @@ func ExportTeamLinksForTeam(ctx context.Context, db *sql.DB, teamID uuid.UUID) (
 			" AND l.target_agent_id IN (SELECT agent_id FROM agent_team_members WHERE team_id = $1)"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []AgentLinkExport
-	for rows.Next() {
-		var l AgentLinkExport
-		if err := rows.Scan(&l.SourceAgentKey, &l.TargetAgentKey, &l.Direction, &l.Description); err != nil {
-			slog.Warn("export.team.links.scan", "error", err)
-			continue
-		}
-		out = append(out, l)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // ExportTeamPreviewCountsByID returns task/member/link counts for a team by team_id.
@@ -127,28 +104,15 @@ func ExportTeamMembersNonLead(ctx context.Context, db *sql.DB, teamID uuid.UUID,
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var out []TeamMemberExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
 		"SELECT a.agent_key, m.role"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1 AND m.agent_id != $2"+tc,
 		append([]any{teamID, leadAgentID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []TeamMemberExport
-	for rows.Next() {
-		var m TeamMemberExport
-		if err := rows.Scan(&m.AgentKey, &m.Role); err != nil {
-			slog.Warn("export.team.members_non_lead.scan", "error", err)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // ExportTeamLeadAgentID returns the lead agent_id for a team, or uuid.Nil if not found.
@@ -191,28 +155,15 @@ func ExportTeamMembersAll(ctx context.Context, db *sql.DB, teamID uuid.UUID) ([]
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var out []TeamMemberExport
+	err = pkgSqlxDB.SelectContext(ctx, &out,
 		"SELECT a.agent_key, m.role"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out []TeamMemberExport
-	for rows.Next() {
-		var m TeamMemberExport
-		if err := rows.Scan(&m.AgentKey, &m.Role); err != nil {
-			slog.Warn("export.team.all_members.scan", "error", err)
-			continue
-		}
-		out = append(out, m)
-	}
-	return out, rows.Err()
+	return out, err
 }
 
 // exportTeamAgentFullData returns a fully-serializable agent config for team export.

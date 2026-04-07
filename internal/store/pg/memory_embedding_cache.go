@@ -36,27 +36,25 @@ func (s *PGMemoryStore) lookupEmbeddingCache(ctx context.Context, hashes []strin
 		strings.Join(placeholders, ","), len(hashes)+1, len(hashes)+2,
 	)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
+	type cacheRow struct {
+		Hash      string `db:"hash"`
+		Embedding string `db:"embedding"`
+	}
+	var cacheRows []cacheRow
+	if err := pkgSqlxDB.SelectContext(ctx, &cacheRows, query, args...); err != nil {
 		return nil, fmt.Errorf("lookup embedding cache: %w", err)
 	}
-	defer rows.Close()
 
 	result := make(map[string][]float32, len(hashes))
-	for rows.Next() {
-		var hash, vecStr string
-		if err := rows.Scan(&hash, &vecStr); err != nil {
-			slog.Warn("embedding cache scan error", "error", err)
-			continue
-		}
-		vec, err := parseVector(vecStr)
+	for _, row := range cacheRows {
+		vec, err := parseVector(row.Embedding)
 		if err != nil {
-			slog.Warn("embedding cache parse error", "hash", hash, "error", err)
+			slog.Warn("embedding cache parse error", "hash", row.Hash, "error", err)
 			continue
 		}
-		result[hash] = vec
+		result[row.Hash] = vec
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // writeEmbeddingCache batch-upserts embedding cache entries.

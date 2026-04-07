@@ -2,7 +2,6 @@ package pg
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
@@ -65,7 +64,11 @@ func (s *PGCronStore) GetRunLog(ctx context.Context, jobID string, limit, offset
 		offset = 0
 	}
 
-	const cols = "r.job_id, r.status, r.error, r.summary, r.ran_at, COALESCE(r.duration_ms, 0), COALESCE(r.input_tokens, 0), COALESCE(r.output_tokens, 0)"
+	// Aliased cols so sqlx StructScan maps to cronRunLogRow db tags.
+	const cols = "r.job_id, r.status, r.error, r.summary, r.ran_at," +
+		" COALESCE(r.duration_ms, 0) AS duration_ms," +
+		" COALESCE(r.input_tokens, 0) AS input_tokens," +
+		" COALESCE(r.output_tokens, 0) AS output_tokens"
 
 	// Build tenant-aware WHERE clause via JOIN with cron_jobs.
 	var tenantJoin, tenantWhere string
@@ -80,8 +83,8 @@ func (s *PGCronStore) GetRunLog(ctx context.Context, jobID string, limit, offset
 	}
 
 	var total int
-	var rows *sql.Rows
-	var err error
+	var dataQ string
+	var dataArgs []any
 
 	if jobID != "" {
 		id, parseErr := uuid.Parse(jobID)
@@ -90,49 +93,28 @@ func (s *PGCronStore) GetRunLog(ctx context.Context, jobID string, limit, offset
 		}
 		argIdx := len(tenantArgs) + 1
 		countQ := fmt.Sprintf("SELECT COUNT(*) FROM cron_run_logs r%s WHERE r.job_id = $%d%s", tenantJoin, argIdx, tenantWhere)
-		countArgs := append(tenantArgs, id)
-		s.db.QueryRowContext(ctx, countQ, countArgs...).Scan(&total)
+		s.db.QueryRowContext(ctx, countQ, append(tenantArgs, id)...).Scan(&total) //nolint:errcheck
 
-		dataQ := fmt.Sprintf("SELECT %s FROM cron_run_logs r%s WHERE r.job_id = $%d%s ORDER BY r.ran_at DESC LIMIT $%d OFFSET $%d",
+		dataQ = fmt.Sprintf("SELECT %s FROM cron_run_logs r%s WHERE r.job_id = $%d%s ORDER BY r.ran_at DESC LIMIT $%d OFFSET $%d",
 			cols, tenantJoin, argIdx, tenantWhere, argIdx+1, argIdx+2)
-		dataArgs := append(tenantArgs, id, limit, offset)
-		rows, err = s.db.QueryContext(ctx, dataQ, dataArgs...)
+		dataArgs = append(tenantArgs, id, limit, offset)
 	} else {
 		argIdx := len(tenantArgs) + 1
 		countQ := fmt.Sprintf("SELECT COUNT(*) FROM cron_run_logs r%s WHERE 1=1%s", tenantJoin, tenantWhere)
-		s.db.QueryRowContext(ctx, countQ, tenantArgs...).Scan(&total)
+		s.db.QueryRowContext(ctx, countQ, tenantArgs...).Scan(&total) //nolint:errcheck
 
-		dataQ := fmt.Sprintf("SELECT %s FROM cron_run_logs r%s WHERE 1=1%s ORDER BY r.ran_at DESC LIMIT $%d OFFSET $%d",
+		dataQ = fmt.Sprintf("SELECT %s FROM cron_run_logs r%s WHERE 1=1%s ORDER BY r.ran_at DESC LIMIT $%d OFFSET $%d",
 			cols, tenantJoin, tenantWhere, argIdx, argIdx+1)
-		dataArgs := append(tenantArgs, limit, offset)
-		rows, err = s.db.QueryContext(ctx, dataQ, dataArgs...)
+		dataArgs = append(tenantArgs, limit, offset)
 	}
-	if err != nil {
-		return nil, 0
-	}
-	defer rows.Close()
 
-	var result []store.CronRunLogEntry
-	for rows.Next() {
-		var jobUUID uuid.UUID
-		var status string
-		var errStr, summary *string
-		var ranAt time.Time
-		var durationMS int64
-		var inputTokens, outputTokens int
-		if err := rows.Scan(&jobUUID, &status, &errStr, &summary, &ranAt, &durationMS, &inputTokens, &outputTokens); err != nil {
-			continue
-		}
-		result = append(result, store.CronRunLogEntry{
-			Ts:           ranAt.UnixMilli(),
-			JobID:        jobUUID.String(),
-			Status:       status,
-			Error:        derefStr(errStr),
-			Summary:      derefStr(summary),
-			DurationMS:   durationMS,
-			InputTokens:  inputTokens,
-			OutputTokens: outputTokens,
-		})
+	var scanned []cronRunLogRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, dataQ, dataArgs...); err != nil {
+		return nil, total
+	}
+	result := make([]store.CronRunLogEntry, 0, len(scanned))
+	for i := range scanned {
+		result = append(result, scanned[i].toCronRunLogEntry())
 	}
 	return result, total
 }

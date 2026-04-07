@@ -4,10 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 )
 
 // CustomSkillExport holds portable skill metadata (no internal UUIDs in references).
@@ -42,56 +40,20 @@ func ExportCustomSkills(ctx context.Context, db *sql.DB) ([]CustomSkillExport, e
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var scanned []customSkillExportRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned,
 		"SELECT id, name, slug, description, visibility, version, frontmatter, tags, deps, file_path"+
 			" FROM skills WHERE is_system = false"+tc+
 			" ORDER BY name",
 		tcArgs...,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []CustomSkillExport
-	for rows.Next() {
-		var (
-			id          uuid.UUID
-			name        string
-			slug        string
-			desc        *string
-			visibility  string
-			version     int
-			fmRaw       []byte
-			tags        []string
-			depsRaw     []byte
-			filePath    *string
-		)
-		if err := rows.Scan(&id, &name, &slug, &desc, &visibility, &version, &fmRaw, pq.Array(&tags), &depsRaw, &filePath); err != nil {
-			slog.Warn("skills_export.scan", "error", err)
-			continue
-		}
-		sk := CustomSkillExport{
-			ID:         id.String(),
-			Name:       name,
-			Slug:       slug,
-			Description: desc,
-			Visibility: visibility,
-			Version:    version,
-			Tags:       tags,
-		}
-		if len(fmRaw) > 0 {
-			sk.Frontmatter = json.RawMessage(fmRaw)
-		}
-		if len(depsRaw) > 0 {
-			sk.Deps = json.RawMessage(depsRaw)
-		}
-		if filePath != nil {
-			sk.FilePath = *filePath
-		}
-		result = append(result, sk)
+	result := make([]CustomSkillExport, len(scanned))
+	for i := range scanned {
+		result[i] = scanned[i].toCustomSkillExport()
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // ExportSkillGrantsWithAgentKey returns all agent grants for a skill, resolved to agent_key.
@@ -100,28 +62,17 @@ func ExportSkillGrantsWithAgentKey(ctx context.Context, db *sql.DB, skillID uuid
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
+	var result []SkillGrantWithKey
+	if err := pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT a.agent_key, g.pinned_version"+
 			" FROM skill_agent_grants g"+
 			" JOIN agents a ON a.id = g.agent_id"+
 			" WHERE g.skill_id = $1"+tc,
 		append([]any{skillID}, tcArgs...)...,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []SkillGrantWithKey
-	for rows.Next() {
-		var g SkillGrantWithKey
-		if err := rows.Scan(&g.AgentKey, &g.PinnedVersion); err != nil {
-			slog.Warn("skills_export.grants.scan", "error", err)
-			continue
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // ExportSkillsPreview returns aggregate counts for skills export preview.

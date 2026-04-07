@@ -79,40 +79,18 @@ func (s *PGSessionStore) List(ctx context.Context, agentID string) []store.Sessi
 		where = " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') FROM sessions"+where+" ORDER BY updated_at DESC",
-		args...)
-	if err != nil {
+	var scanned []sessionListRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned,
+		"SELECT session_key, messages, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') AS metadata FROM sessions"+where+" ORDER BY updated_at DESC",
+		args...); err != nil {
 		return nil
 	}
-	defer rows.Close()
 
 	var result []store.SessionInfo
-	for rows.Next() {
-		var key string
-		var msgsJSON []byte
-		var createdAt, updatedAt time.Time
-		var label, channel, userID *string
-		var metaJSON []byte
-		if err := rows.Scan(&key, &msgsJSON, &createdAt, &updatedAt, &label, &channel, &userID, &metaJSON); err != nil {
-			continue
-		}
+	for i := range scanned {
 		var msgs []providers.Message
-		json.Unmarshal(msgsJSON, &msgs)
-		var meta map[string]string
-		if len(metaJSON) > 0 {
-			json.Unmarshal(metaJSON, &meta)
-		}
-		result = append(result, store.SessionInfo{
-			Key:          key,
-			MessageCount: len(msgs),
-			Created:      createdAt,
-			Updated:      updatedAt,
-			Label:        derefStr(label),
-			Channel:      derefStr(channel),
-			UserID:       derefStr(userID),
-			Metadata:     meta,
-		})
+		json.Unmarshal(scanned[i].MsgsJSON, &msgs) //nolint:errcheck
+		result = append(result, scanned[i].toSessionInfo(len(msgs)))
 	}
 	return result
 }
@@ -135,43 +113,18 @@ func (s *PGSessionStore) ListPaged(ctx context.Context, opts store.SessionListOp
 
 	// Fetch page using jsonb_array_length to avoid loading full messages
 	nextIdx := len(whereArgs) + 1
-	selectQ := fmt.Sprintf(`SELECT session_key, jsonb_array_length(messages), created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}')
+	selectQ := fmt.Sprintf(`SELECT session_key, jsonb_array_length(messages) AS message_count, created_at, updated_at, label, channel, user_id, COALESCE(metadata, '{}') AS metadata
 		FROM sessions%s ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, where, nextIdx, nextIdx+1)
 	selectArgs := append(append([]any{}, whereArgs...), limit, offset)
 
-	rows, err := s.db.QueryContext(ctx, selectQ, selectArgs...)
-	if err != nil {
+	var scanned []sessionPagedRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, selectQ, selectArgs...); err != nil {
 		return store.SessionListResult{Sessions: []store.SessionInfo{}, Total: total}
 	}
-	defer rows.Close()
 
-	var result []store.SessionInfo
-	for rows.Next() {
-		var key string
-		var msgCount int
-		var createdAt, updatedAt time.Time
-		var label, channel, userID *string
-		var metaJSON []byte
-		if err := rows.Scan(&key, &msgCount, &createdAt, &updatedAt, &label, &channel, &userID, &metaJSON); err != nil {
-			continue
-		}
-		var meta map[string]string
-		if len(metaJSON) > 0 {
-			json.Unmarshal(metaJSON, &meta)
-		}
-		result = append(result, store.SessionInfo{
-			Key:          key,
-			MessageCount: msgCount,
-			Created:      createdAt,
-			Updated:      updatedAt,
-			Label:        derefStr(label),
-			Channel:      derefStr(channel),
-			UserID:       derefStr(userID),
-			Metadata:     meta,
-		})
-	}
-	if result == nil {
-		result = []store.SessionInfo{}
+	result := make([]store.SessionInfo, 0, len(scanned))
+	for i := range scanned {
+		result = append(result, scanned[i].toSessionInfo())
 	}
 	return store.SessionListResult{Sessions: result, Total: total}
 }
@@ -194,12 +147,12 @@ func (s *PGSessionStore) ListPagedRich(ctx context.Context, opts store.SessionLi
 	}
 
 	// Fetch page with agent name via LEFT JOIN
-	const richCols = `s.session_key, jsonb_array_length(s.messages), s.created_at, s.updated_at,
-		s.label, s.channel, s.user_id, COALESCE(s.metadata, '{}'),
+	const richCols = `s.session_key, jsonb_array_length(s.messages) AS message_count, s.created_at, s.updated_at,
+		s.label, s.channel, s.user_id, COALESCE(s.metadata, '{}') AS metadata,
 		s.model, s.provider, s.input_tokens, s.output_tokens,
-		COALESCE(a.display_name, ''),
-		octet_length(s.messages::text) / 4 + 12000,
-		COALESCE(a.context_window, 200000), -- config.DefaultContextWindow
+		COALESCE(a.display_name, '') AS agent_name,
+		octet_length(s.messages::text) / 4 + 12000 AS estimated_tokens,
+		COALESCE(a.context_window, 200000) AS context_window,
 		s.compaction_count`
 
 	nextIdx := len(whereArgs) + 1
@@ -208,55 +161,14 @@ func (s *PGSessionStore) ListPagedRich(ctx context.Context, opts store.SessionLi
 		%s ORDER BY s.updated_at DESC LIMIT $%d OFFSET $%d`, richCols, where, nextIdx, nextIdx+1)
 	selectArgs := append(append([]any{}, whereArgs...), limit, offset)
 
-	rows, err := s.db.QueryContext(ctx, selectQ, selectArgs...)
-	if err != nil {
+	var scanned []sessionRichRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, selectQ, selectArgs...); err != nil {
 		return store.SessionListRichResult{Sessions: []store.SessionInfoRich{}, Total: total}
 	}
-	defer rows.Close()
 
-	var result []store.SessionInfoRich
-	for rows.Next() {
-		var key string
-		var msgCount int
-		var createdAt, updatedAt time.Time
-		var label, channel, userID *string
-		var metaJSON []byte
-		var model, provider *string
-		var inputTokens, outputTokens int64
-		var agentName string
-		var estimatedTokens, contextWindow, compactionCount int
-		if err := rows.Scan(&key, &msgCount, &createdAt, &updatedAt, &label, &channel, &userID, &metaJSON,
-			&model, &provider, &inputTokens, &outputTokens, &agentName,
-			&estimatedTokens, &contextWindow, &compactionCount); err != nil {
-			continue
-		}
-		var meta map[string]string
-		if len(metaJSON) > 0 {
-			json.Unmarshal(metaJSON, &meta)
-		}
-		result = append(result, store.SessionInfoRich{
-			SessionInfo: store.SessionInfo{
-				Key:          key,
-				MessageCount: msgCount,
-				Created:      createdAt,
-				Updated:      updatedAt,
-				Label:        derefStr(label),
-				Channel:      derefStr(channel),
-				UserID:       derefStr(userID),
-				Metadata:     meta,
-			},
-			Model:           derefStr(model),
-			Provider:        derefStr(provider),
-			InputTokens:     inputTokens,
-			OutputTokens:    outputTokens,
-			AgentName:       agentName,
-			EstimatedTokens: estimatedTokens,
-			ContextWindow:   contextWindow,
-			CompactionCount: compactionCount,
-		})
-	}
-	if result == nil {
-		result = []store.SessionInfoRich{}
+	result := make([]store.SessionInfoRich, 0, len(scanned))
+	for i := range scanned {
+		result = append(result, scanned[i].toSessionInfoRich())
 	}
 	return store.SessionListRichResult{Sessions: result, Total: total}
 }

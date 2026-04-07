@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -47,43 +46,16 @@ func ExportMCPServers(ctx context.Context, db *sql.DB) ([]MCPServerExport, error
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
-		"SELECT name, COALESCE(display_name,''), transport,"+
-			" COALESCE(command,''), args, COALESCE(url,''),"+
-			" COALESCE(tool_prefix,''), timeout_sec, settings, enabled"+
+	var result []MCPServerExport
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		"SELECT name, COALESCE(display_name,'') AS display_name, transport,"+
+			" COALESCE(command,'') AS command, args, COALESCE(url,'') AS url,"+
+			" COALESCE(tool_prefix,'') AS tool_prefix, timeout_sec, settings, enabled"+
 			" FROM mcp_servers WHERE 1=1"+tc+
 			" ORDER BY name",
 		tcArgs...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []MCPServerExport
-	for rows.Next() {
-		var (
-			srv      MCPServerExport
-			argsRaw  []byte
-			settings []byte
-		)
-		if err := rows.Scan(
-			&srv.Name, &srv.DisplayName, &srv.Transport,
-			&srv.Command, &argsRaw, &srv.URL,
-			&srv.ToolPrefix, &srv.TimeoutSec, &settings, &srv.Enabled,
-		); err != nil {
-			slog.Warn("mcp_export.servers.scan", "error", err)
-			continue
-		}
-		if len(argsRaw) > 0 {
-			srv.Args = json.RawMessage(argsRaw)
-		}
-		if len(settings) > 0 {
-			srv.Settings = json.RawMessage(settings)
-		}
-		result = append(result, srv)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 // ExportMCPGrantsWithKeys returns all MCP agent grants with server_name and agent_key resolved.
@@ -92,8 +64,9 @@ func ExportMCPGrantsWithKeys(ctx context.Context, db *sql.DB) ([]MCPGrantWithKey
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx,
-		"SELECT s.name, a.agent_key, g.enabled, g.tool_allow, g.tool_deny, g.config_overrides"+
+	var result []MCPGrantWithKey
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		"SELECT s.name AS server_name, a.agent_key, g.enabled, g.tool_allow, g.tool_deny, g.config_overrides"+
 			" FROM mcp_agent_grants g"+
 			" JOIN mcp_servers s ON s.id = g.server_id"+
 			" JOIN agents a ON a.id = g.agent_id"+
@@ -101,38 +74,7 @@ func ExportMCPGrantsWithKeys(ctx context.Context, db *sql.DB) ([]MCPGrantWithKey
 			" ORDER BY s.name, a.agent_key",
 		tcArgs...,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []MCPGrantWithKey
-	for rows.Next() {
-		var (
-			g               MCPGrantWithKey
-			toolAllow       []byte
-			toolDeny        []byte
-			configOverrides []byte
-		)
-		if err := rows.Scan(
-			&g.ServerName, &g.AgentKey, &g.Enabled,
-			&toolAllow, &toolDeny, &configOverrides,
-		); err != nil {
-			slog.Warn("mcp_export.grants.scan", "error", err)
-			continue
-		}
-		if len(toolAllow) > 0 {
-			g.ToolAllow = json.RawMessage(toolAllow)
-		}
-		if len(toolDeny) > 0 {
-			g.ToolDeny = json.RawMessage(toolDeny)
-		}
-		if len(configOverrides) > 0 {
-			g.ConfigOverrides = json.RawMessage(configOverrides)
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	return result, err
 }
 
 // ExportMCPPreview returns aggregate counts for MCP export preview.

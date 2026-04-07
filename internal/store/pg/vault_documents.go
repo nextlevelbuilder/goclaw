@@ -174,28 +174,16 @@ func (s *PGVaultStore) ListDocuments(ctx context.Context, tenantID, agentID stri
 		args = append(args, opts.Offset)
 	}
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var scanned []vaultDocRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var docs []store.VaultDocument
-	for rows.Next() {
-		var doc store.VaultDocument
-		var id, tID, aID uuid.UUID
-		var meta []byte
-		if err := rows.Scan(&id, &tID, &aID, &doc.Scope, &doc.Path, &doc.Title,
-			&doc.DocType, &doc.ContentHash, &meta, &doc.CreatedAt, &doc.UpdatedAt); err != nil {
-			return nil, err
-		}
-		doc.ID = id.String()
-		doc.TenantID = tID.String()
-		doc.AgentID = aID.String()
-		_ = json.Unmarshal(meta, &doc.Metadata)
-		docs = append(docs, doc)
+	docs := make([]store.VaultDocument, 0, len(scanned))
+	for i := range scanned {
+		docs = append(docs, scanned[i].toVaultDocument())
 	}
-	return docs, rows.Err()
+	return docs, nil
 }
 
 // UpdateHash updates the content hash for a vault document with tenant isolation.
@@ -276,12 +264,11 @@ func (s *PGVaultStore) ftsSearch(ctx context.Context, query string, tenantID, ag
 	q += fmt.Sprintf(" ORDER BY rank DESC LIMIT $%d", p)
 	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var scanned []vaultSearchRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return s.scanSearchResults(rows, "vault")
+	return vaultSearchRowsToResults(scanned, "vault"), nil
 }
 
 func (s *PGVaultStore) vectorSearch(ctx context.Context, embedding []float32, tenantID, agentID uuid.UUID, scope string, docTypes []string, limit int) ([]store.VaultSearchResult, error) {
@@ -307,33 +294,20 @@ func (s *PGVaultStore) vectorSearch(ctx context.Context, embedding []float32, te
 	q += fmt.Sprintf(" ORDER BY embedding <=> $1 LIMIT $%d", p)
 	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var scanned []vaultSearchRow
+	if err := pkgSqlxDB.SelectContext(ctx, &scanned, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return s.scanSearchResults(rows, "vault")
+	return vaultSearchRowsToResults(scanned, "vault"), nil
 }
 
-func (s *PGVaultStore) scanSearchResults(rows *sql.Rows, source string) ([]store.VaultSearchResult, error) {
-	var results []store.VaultSearchResult
-	for rows.Next() {
-		var r store.VaultSearchResult
-		var id, tID, aID uuid.UUID
-		var meta []byte
-		if err := rows.Scan(&id, &tID, &aID, &r.Document.Scope, &r.Document.Path, &r.Document.Title,
-			&r.Document.DocType, &r.Document.ContentHash, &meta, &r.Document.CreatedAt, &r.Document.UpdatedAt,
-			&r.Score); err != nil {
-			return nil, err
-		}
-		r.Document.ID = id.String()
-		r.Document.TenantID = tID.String()
-		r.Document.AgentID = aID.String()
-		_ = json.Unmarshal(meta, &r.Document.Metadata)
-		r.Source = source
-		results = append(results, r)
+// vaultSearchRowsToResults converts a slice of vaultSearchRow to store.VaultSearchResult.
+func vaultSearchRowsToResults(rows []vaultSearchRow, source string) []store.VaultSearchResult {
+	results := make([]store.VaultSearchResult, 0, len(rows))
+	for i := range rows {
+		results = append(results, rows[i].toVaultSearchResult(source))
 	}
-	return results, rows.Err()
+	return results
 }
 
 // mergeResults combines FTS and vector results with weighted scoring.

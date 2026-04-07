@@ -53,26 +53,12 @@ func (s *PGAgentStore) BackfillAgentEmbeddings(ctx context.Context) (int, error)
 	if s.embProvider == nil {
 		return 0, nil
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, COALESCE(display_name, ''), COALESCE(frontmatter, '')
-		 FROM agents WHERE deleted_at IS NULL AND frontmatter IS NOT NULL AND frontmatter != '' AND embedding IS NULL`)
-	if err != nil {
+	var pending []agentBackfillRow
+	if err := pkgSqlxDB.SelectContext(ctx, &pending,
+		`SELECT id, COALESCE(display_name, '') AS display_name, COALESCE(frontmatter, '') AS frontmatter
+		 FROM agents WHERE deleted_at IS NULL AND frontmatter IS NOT NULL AND frontmatter != '' AND embedding IS NULL`,
+	); err != nil {
 		return 0, err
-	}
-	defer rows.Close()
-
-	type agentRow struct {
-		id          uuid.UUID
-		displayName string
-		frontmatter string
-	}
-	var pending []agentRow
-	for rows.Next() {
-		var r agentRow
-		if err := rows.Scan(&r.id, &r.displayName, &r.frontmatter); err != nil {
-			continue
-		}
-		pending = append(pending, r)
 	}
 	if len(pending) == 0 {
 		return 0, nil
@@ -81,16 +67,16 @@ func (s *PGAgentStore) BackfillAgentEmbeddings(ctx context.Context) (int, error)
 	slog.Info("backfilling agent embeddings", "count", len(pending))
 	updated := 0
 	for _, ag := range pending {
-		text := ag.displayName
-		if ag.frontmatter != "" {
-			text += ": " + ag.frontmatter
+		text := ag.DisplayName
+		if ag.Frontmatter != "" {
+			text += ": " + ag.Frontmatter
 		}
 		embeddings, err := s.embProvider.Embed(ctx, []string{text})
 		if err != nil || len(embeddings) == 0 || len(embeddings[0]) == 0 {
 			continue
 		}
 		vecStr := vectorToString(embeddings[0])
-		if _, err := s.db.ExecContext(ctx, `UPDATE agents SET embedding = $1::vector WHERE id = $2`, vecStr, ag.id); err != nil {
+		if _, err := s.db.ExecContext(ctx, `UPDATE agents SET embedding = $1::vector WHERE id = $2`, vecStr, ag.ID); err != nil {
 			continue
 		}
 		updated++
@@ -359,19 +345,13 @@ func (s *PGAgentStore) ListShares(ctx context.Context, agentID uuid.UUID) ([]sto
 		q += " AND tenant_id = $2"
 		args = append(args, tid)
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var rows []agentShareRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.AgentShareData
-	for rows.Next() {
-		var d store.AgentShareData
-		if err := rows.Scan(&d.ID, &d.AgentID, &d.UserID, &d.Role, &d.GrantedBy, &d.CreatedAt); err != nil {
-			continue
-		}
-		result = append(result, d)
+	result := make([]store.AgentShareData, len(rows))
+	for i, r := range rows {
+		result[i] = r.toAgentShareData()
 	}
 	return result, nil
 }

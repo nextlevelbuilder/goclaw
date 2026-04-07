@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -24,21 +23,12 @@ func (s *PGAgentStore) GetAgentContextFiles(ctx context.Context, agentID uuid.UU
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = $1"+tClause+" ORDER BY file_name",
-		append([]any{agentID}, tArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var result []store.AgentContextFileData
-	for rows.Next() {
-		var d store.AgentContextFileData
-		if err := rows.Scan(&d.AgentID, &d.FileName, &d.Content); err != nil {
-			continue
-		}
-		result = append(result, d)
+	if err := pkgSqlxDB.SelectContext(ctx, &result,
+		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = $1"+tClause+" ORDER BY file_name",
+		append([]any{agentID}, tArgs...)...,
+	); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -86,21 +76,12 @@ func (s *PGAgentStore) GetUserContextFiles(ctx context.Context, agentID uuid.UUI
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND user_id = $2"+tClause+" ORDER BY file_name",
-		append([]any{agentID, userID}, tArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
 	var result []store.UserContextFileData
-	for rows.Next() {
-		var d store.UserContextFileData
-		if err := rows.Scan(&d.AgentID, &d.UserID, &d.FileName, &d.Content); err != nil {
-			continue
-		}
-		result = append(result, d)
+	if err := pkgSqlxDB.SelectContext(ctx, &result,
+		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND user_id = $2"+tClause+" ORDER BY file_name",
+		append([]any{agentID, userID}, tArgs...)...,
+	); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -120,23 +101,14 @@ func (s *PGAgentStore) ListUserContextFilesByName(ctx context.Context, agentID u
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
+	var result []store.UserContextFileData
+	if err := pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = $1 AND file_name = $2"+tClause,
-		append([]any{agentID, fileName}, tArgs...)...)
-	if err != nil {
+		append([]any{agentID, fileName}, tArgs...)...,
+	); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.UserContextFileData
-	for rows.Next() {
-		var d store.UserContextFileData
-		if err := rows.Scan(&d.AgentID, &d.UserID, &d.FileName, &d.Content); err != nil {
-			continue
-		}
-		result = append(result, d)
-	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *PGAgentStore) DeleteUserContextFile(ctx context.Context, agentID uuid.UUID, userID, fileName string) error {
@@ -284,12 +256,13 @@ func (s *PGAgentStore) ListUserInstances(ctx context.Context, agentID uuid.UUID)
 	if !store.IsCrossTenant(ctx) {
 		subTenantFilter = " AND tenant_id = $2"
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	var rows []userInstanceRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, `
 		SELECT p.user_id,
 		       TO_CHAR(p.first_seen_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS first_seen_at,
 		       TO_CHAR(p.last_seen_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS last_seen_at,
 		       COALESCE(fc.cnt, 0) AS file_count,
-		       COALESCE(p.metadata, '{}')
+		       COALESCE(p.metadata, '{}') AS metadata
 		FROM user_agent_profiles p
 		LEFT JOIN (
 		    SELECT user_id, COUNT(*) AS cnt
@@ -299,23 +272,12 @@ func (s *PGAgentStore) ListUserInstances(ctx context.Context, agentID uuid.UUID)
 		) fc ON fc.user_id = p.user_id
 		WHERE p.agent_id = $1`+tClause+`
 		ORDER BY p.last_seen_at DESC
-	`, append([]any{agentID}, tArgs...)...)
-	if err != nil {
+	`, append([]any{agentID}, tArgs...)...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []store.UserInstanceData
-	for rows.Next() {
-		var d store.UserInstanceData
-		var metaJSON []byte
-		if err := rows.Scan(&d.UserID, &d.FirstSeenAt, &d.LastSeenAt, &d.FileCount, &metaJSON); err != nil {
-			continue
-		}
-		if len(metaJSON) > 0 {
-			json.Unmarshal(metaJSON, &d.Metadata)
-		}
-		result = append(result, d)
+	result := make([]store.UserInstanceData, len(rows))
+	for i, r := range rows {
+		result[i] = r.toUserInstanceData()
 	}
 	return result, nil
 }
@@ -345,15 +307,12 @@ func (s *PGAgentStore) GetUserOverride(ctx context.Context, agentID uuid.UUID, u
 		return nil, err
 	}
 	var d store.UserAgentOverrideData
-	err = s.db.QueryRowContext(ctx,
+	err = pkgSqlxDB.GetContext(ctx, &d,
 		"SELECT agent_id, user_id, provider, model FROM user_agent_overrides WHERE agent_id = $1 AND user_id = $2"+tClause,
 		append([]any{agentID, userID}, tArgs...)...,
-	).Scan(&d.AgentID, &d.UserID, &d.Provider, &d.Model)
+	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil // not found = no override
-		}
-		return nil, nil
+		return nil, nil // not found = no override
 	}
 	return &d, nil
 }
