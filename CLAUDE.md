@@ -74,7 +74,10 @@ ui/web/                       React SPA (pnpm, Vite, Tailwind, Radix UI)
 ```bash
 go build -o goclaw . && ./goclaw onboard && source .env.local && ./goclaw
 ./goclaw migrate up                 # DB migrations
-go test -v ./tests/integration/     # Integration tests
+# Integration tests (requires pgvector pg18 on port 5433)
+docker run -d --name pgtest -p 5433:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=goclaw_test pgvector/pgvector:pg18
+TEST_DATABASE_URL="postgres://postgres:test@localhost:5433/goclaw_test?sslmode=disable" \
+  go test -v -tags integration ./tests/integration/
 
 cd ui/web && pnpm install && pnpm dev   # Web dashboard (dev)
 

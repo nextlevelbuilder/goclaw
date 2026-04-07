@@ -95,8 +95,47 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 		t.Fatalf("seed agent: %v", err)
 	}
 
-	// Cleanup after test.
+	// Cleanup after test — delete in FK order (children first, parents last).
 	t.Cleanup(func() {
+		// Team-related (deepest children first)
+		db.Exec("DELETE FROM team_task_comments WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM team_task_events WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM team_task_attachments WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM team_tasks WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM agent_team_members WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM agent_teams WHERE tenant_id = $1", tenantID)
+
+		// Knowledge stores
+		db.Exec("DELETE FROM vault_links WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM vault_documents WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM kg_dedup_candidates WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM kg_relations WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM kg_entities WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM memory_chunks WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM memory_documents WHERE tenant_id = $1", tenantID)
+
+		// Sessions
+		db.Exec("DELETE FROM sessions WHERE tenant_id = $1", tenantID)
+
+		// Security stores
+		db.Exec("DELETE FROM mcp_user_credentials WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM mcp_access_requests WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM mcp_user_grants WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM mcp_agent_grants WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM mcp_servers WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM secure_cli_user_credentials WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM secure_cli_agent_grants WHERE binary_id IN (SELECT id FROM secure_cli_binaries WHERE tenant_id = $1)", tenantID)
+		db.Exec("DELETE FROM secure_cli_binaries WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM api_keys WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM agent_config_permissions WHERE agent_id = $1", agentID)
+		db.Exec("DELETE FROM channel_contacts WHERE tenant_id = $1", tenantID)
+
+		// Agent-related
+		db.Exec("DELETE FROM agent_shares WHERE agent_id = $1", agentID)
+		db.Exec("DELETE FROM agent_context_files WHERE agent_id = $1", agentID)
+		db.Exec("DELETE FROM user_context_files WHERE agent_id = $1", agentID)
+		db.Exec("DELETE FROM user_agent_overrides WHERE agent_id = $1", agentID)
+		db.Exec("DELETE FROM agent_user_profiles WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM agent_evolution_suggestions WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM agent_evolution_metrics WHERE agent_id = $1", agentID)
 		db.Exec("DELETE FROM agents WHERE id = $1", agentID)
@@ -110,3 +149,19 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 func tenantCtx(tenantID uuid.UUID) context.Context {
 	return store.WithTenantID(context.Background(), tenantID)
 }
+
+// userCtx returns a context with both tenant ID and user ID set.
+func userCtx(tenantID uuid.UUID, userID string) context.Context {
+	ctx := store.WithTenantID(context.Background(), tenantID)
+	return store.WithUserID(ctx, userID)
+}
+
+// crossTenantCtx returns a context that bypasses tenant scoping.
+func crossTenantCtx() context.Context {
+	return store.WithCrossTenant(
+		store.WithTenantID(context.Background(), store.MasterTenantID),
+	)
+}
+
+// testEncryptionKey is a fixed 32-byte key for stores that require AES-256-GCM encryption in tests.
+const testEncryptionKey = "0123456789abcdef0123456789abcdef"
