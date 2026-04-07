@@ -2,7 +2,7 @@
  * MermaidBlock — lazy-loads mermaid and renders diagrams as SVG.
  * Re-renders on theme change. Shows skeleton while loading, error fallback on failure.
  */
-import { useEffect, useRef, useState, useId } from "react";
+import { useEffect, useState, useId } from "react";
 import { useUiStore } from "@/stores/use-ui-store";
 
 interface MermaidBlockProps {
@@ -23,10 +23,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const abortRef = useRef(false);
-
   useEffect(() => {
-    abortRef.current = false;
     setSvg(null);
     setError(null);
     setLoading(true);
@@ -39,7 +36,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
         mermaid.initialize({
           startOnLoad: false,
           theme: isDarkMode(theme) ? "dark" : "default",
-          securityLevel: "loose",
+          securityLevel: "strict",
         });
 
         const { svg: renderedSvg } = await mermaid.render(diagramId, code);
@@ -57,7 +54,6 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
 
     return () => {
       cancelled = true;
-      abortRef.current = true;
     };
   }, [code, theme, diagramId]);
 

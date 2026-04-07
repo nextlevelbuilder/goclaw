@@ -13,7 +13,8 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 
-requestIdleCallback(() => {
+const ric = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 1));
+ric(() => {
   const elapsed = performance.now() - loaderStart;
   const delay = Math.max(0, LOADER_MIN_MS - elapsed);
   setTimeout(() => {

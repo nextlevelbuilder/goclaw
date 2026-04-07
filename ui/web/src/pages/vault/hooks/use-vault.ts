@@ -60,7 +60,7 @@ export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
   const docIds = useMemo(() => documents.map((d) => d.id), [documents]);
 
   const { data, isLoading } = useQuery({
-    queryKey: [VAULT_KEY, "all-links", agentId, docIds.length],
+    queryKey: [VAULT_KEY, "all-links", agentId, [...docIds].sort().join(",")],
     queryFn: async () => {
       if (docIds.length === 0) return [];
       // Fetch outlinks for all docs in parallel (batch of 10)

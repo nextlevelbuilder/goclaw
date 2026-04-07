@@ -18,6 +18,7 @@
       @keyframes pulse{0%,100%{opacity:.5;transform:scale(.92)}50%{opacity:1;transform:scale(1)}}
       @keyframes shimmer{from{transform:translateX(-10rem)}to{transform:translateX(10rem)}}
       .fade-out{opacity:0;transition:opacity 300ms ease}
+      @media(prefers-reduced-motion:reduce){.loader-logo{animation:none;opacity:1}.shimmer-bar{animation:none}}
       @media(prefers-color-scheme:dark){
         #app-loader{background:#09090b}
         .loader-shimmer{background:#27272a}
