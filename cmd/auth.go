@@ -1,12 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/oauth"
@@ -24,54 +20,10 @@ func authCmd() *cobra.Command {
 	return cmd
 }
 
-// gatewayURL returns the base URL for the running gateway.
-func gatewayURL() string {
-	if u := os.Getenv("GOCLAW_GATEWAY_URL"); u != "" {
-		return strings.TrimRight(u, "/")
-	}
-	host := os.Getenv("GOCLAW_HOST")
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	port := os.Getenv("GOCLAW_PORT")
-	if port == "" {
-		port = "3577"
-	}
-	return fmt.Sprintf("http://%s:%s", host, port)
-}
-
 // gatewayRequest sends an authenticated request to the running gateway.
+// Delegates to the shared HTTP client in gateway_http_client.go.
 func gatewayRequest(method, path string) (map[string]any, error) {
-	url := gatewayURL() + path
-	req, err := http.NewRequest(method, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if token := os.Getenv("GOCLAW_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("cannot reach gateway at %s: %w", gatewayURL(), err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("invalid response from gateway: %s", string(body))
-	}
-
-	if resp.StatusCode >= 400 {
-		if msg, ok := result["error"].(string); ok {
-			return nil, fmt.Errorf("gateway error: %s", msg)
-		}
-		return nil, fmt.Errorf("gateway returned status %d", resp.StatusCode)
-	}
-
-	return result, nil
+	return gatewayHTTPDo(method, path, nil)
 }
 
 func authStatusCmd() *cobra.Command {

@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null 
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
-.PHONY: build build-full run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
+.PHONY: build build-full build-tui run clean version up down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg
 
 # Build backend only (API-only, no embedded web UI)
 build:
@@ -13,6 +13,10 @@ build-full: check-web
 	rm -rf internal/webui/dist && mkdir -p internal/webui/dist
 	cp -r ui/web/dist/* internal/webui/dist/
 	CGO_ENABLED=0 go build -tags embedui -ldflags="$(LDFLAGS)" -o $(BINARY) .
+
+# Build with TUI (Bubble Tea enhanced CLI)
+build-tui:
+	CGO_ENABLED=0 go build -tags tui -ldflags="$(LDFLAGS)" -o $(BINARY) .
 
 run: build
 	./$(BINARY)

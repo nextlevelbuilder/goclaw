@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"text/tabwriter"
@@ -26,10 +27,18 @@ func skillsCmd() *cobra.Command {
 
 func skillsListCmd() *cobra.Command {
 	var jsonOutput bool
+	var agentID string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List all available skills",
 		Run: func(cmd *cobra.Command, args []string) {
+			// If --agent specified and gateway is running, use HTTP API
+			if agentID != "" && isGatewayReachable() {
+				runSkillsListHTTP(agentID, jsonOutput)
+				return
+			}
+
+			// Fallback: filesystem-based skill listing
 			loader := loadSkillsLoader()
 			allSkills := loader.ListSkills(context.Background())
 
@@ -48,14 +57,15 @@ func skillsListCmd() *cobra.Command {
 			fmt.Fprintf(tw, "NAME\tSOURCE\tDESCRIPTION\n")
 			for _, s := range allSkills {
 				desc := s.Description
-				if len(desc) > 60 {
-					desc = desc[:57] + "..."
+				if runes := []rune(desc); len(runes) > 60 {
+					desc = string(runes[:57]) + "..."
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\n", s.Name, s.Source, desc)
 			}
 			tw.Flush()
 		},
 	}
+	cmd.Flags().StringVar(&agentID, "agent", "", "agent ID to list skills for (uses gateway API)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "output as JSON")
 	return cmd
 }
@@ -85,6 +95,47 @@ func skillsShowCmd() *cobra.Command {
 			}
 		},
 	}
+}
+
+// runSkillsListHTTP fetches skills for a specific agent from the gateway API.
+func runSkillsListHTTP(agentID string, jsonOutput bool) {
+	resp, err := gatewayHTTPGet("/v1/agents/" + url.PathEscape(agentID) + "/skills")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if jsonOutput {
+		data, _ := json.MarshalIndent(resp, "", "  ")
+		fmt.Println(string(data))
+		return
+	}
+
+	raw, _ := json.Marshal(resp["skills"])
+	var skills []struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(raw, &skills); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing skills: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(skills) == 0 {
+		fmt.Println("No skills found for this agent.")
+		return
+	}
+
+	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(tw, "NAME\tDESCRIPTION\n")
+	for _, s := range skills {
+		desc := s.Description
+		if runes := []rune(desc); len(runes) > 60 {
+			desc = string(runes[:57]) + "..."
+		}
+		fmt.Fprintf(tw, "%s\t%s\n", s.Name, desc)
+	}
+	tw.Flush()
 }
 
 func loadSkillsLoader() *skills.Loader {
