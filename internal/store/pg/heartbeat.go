@@ -227,7 +227,7 @@ func (s *PGHeartbeatStore) ListLogs(ctx context.Context, agentID uuid.UUID, limi
 }
 
 // ListDeliveryTargets returns known delivery targets (channel, chatID, title, kind) from channel_contacts.
-// Queries contacts with contact_type IN ('group','topic') for the given tenant.
+// Queries contacts with contact_type IN ('group','topic','user') for the given tenant.
 // For topic contacts, chatID is built as senderID + ":topic:" + threadID.
 func (s *PGHeartbeatStore) ListDeliveryTargets(ctx context.Context, tenantID uuid.UUID) ([]store.DeliveryTarget, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -241,7 +241,7 @@ func (s *PGHeartbeatStore) ListDeliveryTargets(ctx context.Context, tenantID uui
 		             ELSE 'dm' END AS kind
 		 FROM channel_contacts cc
 		 WHERE cc.tenant_id = $1
-		   AND cc.contact_type IN ('group', 'topic')
+		   AND cc.contact_type IN ('group', 'topic', 'user')
 		 ORDER BY cc.channel_instance, cc.display_name`,
 		tenantID,
 	)
