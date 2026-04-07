@@ -97,9 +97,14 @@ func runGateway() {
 	// Create core components
 	msgBus := bus.New()
 
+	// Create model registry with forward-compat resolvers (shared across all providers)
+	modelReg := providers.NewInMemoryRegistry()
+	modelReg.RegisterResolver("anthropic", &providers.AnthropicForwardCompat{})
+	modelReg.RegisterResolver("openai", &providers.OpenAIForwardCompat{})
+
 	// Create provider registry
 	providerRegistry := providers.NewRegistry(store.TenantIDFromContext)
-	registerProviders(providerRegistry, cfg)
+	registerProviders(providerRegistry, cfg, modelReg)
 
 	// Resolve workspace (must be absolute for system prompt + file tool path resolution)
 	workspace := config.ExpandHome(cfg.Agents.Defaults.Workspace)
@@ -141,8 +146,9 @@ func runGateway() {
 	// Register providers from DB (overrides config providers).
 	if pgStores.Providers != nil {
 		dbGatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
-		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP, cfg)
+		registerProvidersFromDB(providerRegistry, pgStores.Providers, pgStores.ConfigSecrets, dbGatewayAddr, cfg.Gateway.Token, pgStores.MCP, cfg, modelReg)
 	}
+	slog.Info("model registry initialized", "anthropic_models", len(modelReg.Catalog("anthropic")), "openai_models", len(modelReg.Catalog("openai")))
 
 	// Warn if deprecated session scope settings are configured
 	if cfg.Sessions.Scope != "" && cfg.Sessions.Scope != "per-sender" {
