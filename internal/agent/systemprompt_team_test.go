@@ -27,6 +27,7 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 			name: "leader inbound chat — team sections present, no spawn",
 			cfg: SystemPromptConfig{
 				IsTeamContext: true,
+				IsTeamLead:    true,
 				HasSpawn:      true,
 				ToolNames:     []string{"team_tasks", "spawn", "read_file"},
 				TeamWorkspace: "/app/workspace/teams/test",
@@ -50,9 +51,10 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 			wantNotIn: []string{"Team Shared Workspace", "Team Members"},
 		},
 		{
-			name: "team dispatch (member) — team sections present, no spawn",
+			name: "team dispatch (member) — workspace present, NO member roster (it's in TEAM.md)",
 			cfg: SystemPromptConfig{
 				IsTeamContext: true,
+				IsTeamLead:    false,
 				HasSpawn:      true,
 				ToolNames:     []string{"team_tasks", "spawn", "read_file"},
 				TeamWorkspace: "/app/workspace/teams/test",
@@ -60,8 +62,8 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 				ContextFiles:  []bootstrap.ContextFile{teamMD},
 				AgentType:     store.AgentTypePredefined,
 			},
-			wantIn:    []string{"Team Shared Workspace", "Team Members"},
-			wantNotIn: []string{"Sub-Agent Spawning"},
+			wantIn:    []string{"Team Shared Workspace"},
+			wantNotIn: []string{"Sub-Agent Spawning", "Team Members"},
 		},
 		{
 			name: "solo agent (no team) — spawn present, availability note",
@@ -108,6 +110,7 @@ func TestBuildSystemPrompt_TeamContextInjection(t *testing.T) {
 			name: "leader + no spawn tool — team present, no spawn section",
 			cfg: SystemPromptConfig{
 				IsTeamContext: true,
+				IsTeamLead:    true,
 				HasSpawn:      false,
 				ToolNames:     []string{"team_tasks", "read_file"},
 				TeamWorkspace: "/app/workspace/teams/test",
