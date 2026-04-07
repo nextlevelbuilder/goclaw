@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -104,9 +105,20 @@ func (m *ConfigPermissionsMethods) handleGrant(ctx context.Context, client *gate
 		}
 	}
 
+	// If scope is a bare chat ID (no "group:" prefix), use the caller's
+	// user_id from context which already has the correct "group:{channel}:{chatID}" format.
+	// This handles channels (like Teams) where the agent calls grant via RPC
+	// without knowing the full scope format.
+	scope := params.Scope
+	if params.ConfigType == store.ConfigTypeFileWriter && scope != "" && !strings.HasPrefix(scope, "group:") && !strings.HasPrefix(scope, "guild:") {
+		if ctxUserID := store.UserIDFromContext(ctx); strings.HasPrefix(ctxUserID, "group:") || strings.HasPrefix(ctxUserID, "guild:") {
+			scope = ctxUserID
+		}
+	}
+
 	perm := &store.ConfigPermission{
 		AgentID:    agentUUID,
-		Scope:      params.Scope,
+		Scope:      scope,
 		ConfigType: params.ConfigType,
 		UserID:     params.UserID,
 		Permission: params.Permission,
