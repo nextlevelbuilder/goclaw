@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useHttp } from "@/hooks/use-ws";
 import type { VaultDocument, VaultLink, VaultSearchResult } from "@/types/vault";
 
-const VAULT_KEY = "vault";
+export const VAULT_KEY = "vault";
 
 /** List vault documents — cross-agent (agentId empty) or per-agent. */
 export function useVaultDocuments(agentId: string, opts: { scope?: string; docType?: string; limit?: number; offset?: number }) {
@@ -63,7 +63,6 @@ export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
     queryKey: [VAULT_KEY, "all-links", agentId, [...docIds].sort().join(",")],
     queryFn: async () => {
       if (docIds.length === 0) return [];
-      // Fetch outlinks for all docs in parallel (batch of 10)
       const allLinks: VaultLink[] = [];
       const batchSize = 10;
       for (let i = 0; i < docIds.length; i += batchSize) {
@@ -79,7 +78,6 @@ export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
           allLinks.push(...r.outlinks);
         }
       }
-      // Deduplicate by link id
       const seen = new Set<string>();
       return allLinks.filter((l) => {
         if (seen.has(l.id)) return false;
@@ -112,3 +110,29 @@ export function useVaultLinks(agentId: string, docId: string | null) {
     loading: isLoading,
   };
 }
+
+/** Fetch file content for a vault document via storage endpoint. */
+export function useVaultFileContent(path: string | null) {
+  const http = useHttp();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: [VAULT_KEY, "file-content", path],
+    queryFn: () => http.get<{ content: string; path: string; size: number }>(
+      `/v1/storage/files/${encodeURIComponent(path!)}`,
+    ),
+    enabled: !!path,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  return { content: data?.content ?? null, size: data?.size ?? 0, loading: isLoading, error: !!error };
+}
+
+// Re-export mutations for convenience — consumers can import from this single file
+export {
+  useCreateDocument,
+  useUpdateDocument,
+  useDeleteDocument,
+  useCreateLink,
+  useDeleteLink,
+} from "./use-vault-mutations";

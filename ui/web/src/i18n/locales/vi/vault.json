@@ -1,1 +1,78 @@
-{}
+{
+  "title": "Kho Tri Thức",
+  "description": "Kho tài liệu với wikilinks và tìm kiếm ngữ nghĩa",
+  "search": "Tìm kiếm",
+  "searchPlaceholder": "Tìm tài liệu...",
+  "filterAgent": "Agent",
+  "allAgents": "Tất cả agent",
+  "noDocuments": "Không có tài liệu trong kho",
+  "noResults": "Không có kết quả",
+  "searchFailed": "Tìm kiếm thất bại",
+  "create": "Tạo mới",
+  "createDoc": "Tạo Tài Liệu",
+  "edit": "Chỉnh sửa",
+  "save": "Lưu",
+  "saving": "Đang lưu...",
+  "cancel": "Hủy",
+  "delete": "Xóa",
+  "confirmDelete": "Xóa tài liệu này?",
+  "yes": "Có",
+  "no": "Không",
+  "createLink": "Thêm Liên Kết",
+  "addLink": "Thêm Liên Kết",
+  "deleteLink": "Xóa liên kết",
+  "columns": {
+    "title": "Tiêu đề",
+    "path": "Đường dẫn",
+    "type": "Loại",
+    "scope": "Phạm vi",
+    "updated": "Cập nhật"
+  },
+  "detail": {
+    "metadata": "Siêu dữ liệu",
+    "outlinks": "Liên kết đi",
+    "backlinks": "Liên kết ngược",
+    "noLinks": "Không có liên kết",
+    "contentPreview": "Xem nội dung",
+    "fileNotFound": "Không tìm thấy tệp",
+    "emptyContent": "Không có nội dung"
+  },
+  "fields": {
+    "title": "Tiêu đề",
+    "titlePlaceholder": "Tiêu đề tài liệu",
+    "path": "Đường dẫn",
+    "pathPlaceholder": "vd. notes/tai-lieu.md",
+    "docType": "Loại",
+    "scope": "Phạm vi",
+    "fromDoc": "Từ",
+    "toDoc": "Đến tài liệu",
+    "selectDoc": "Chọn tài liệu...",
+    "linkType": "Loại liên kết",
+    "linkContext": "Ngữ cảnh",
+    "linkContextPlaceholder": "Ngữ cảnh tùy chọn cho liên kết này"
+  },
+  "scope": {
+    "personal": "Cá nhân",
+    "team": "Nhóm",
+    "shared": "Chia sẻ"
+  },
+  "type": {
+    "context": "Ngữ cảnh",
+    "memory": "Bộ nhớ",
+    "note": "Ghi chú",
+    "skill": "Kỹ năng",
+    "episodic": "Giai thoại"
+  },
+  "toast": {
+    "docCreated": "Đã tạo tài liệu",
+    "docCreateFailed": "Tạo tài liệu thất bại",
+    "docUpdated": "Đã cập nhật tài liệu",
+    "docUpdateFailed": "Cập nhật tài liệu thất bại",
+    "docDeleted": "Đã xóa tài liệu",
+    "docDeleteFailed": "Xóa tài liệu thất bại",
+    "linkCreated": "Đã tạo liên kết",
+    "linkCreateFailed": "Tạo liên kết thất bại",
+    "linkDeleted": "Đã xóa liên kết",
+    "linkDeleteFailed": "Xóa liên kết thất bại"
+  }
+}

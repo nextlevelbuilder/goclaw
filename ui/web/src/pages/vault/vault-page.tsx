@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, FileArchive, TableProperties, GitGraph } from "lucide-react";
+import { Search, FileArchive, TableProperties, GitGraph, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
@@ -8,6 +8,7 @@ import { useVaultDocuments, useVaultAllLinks } from "./hooks/use-vault";
 import { VaultDocumentsTable } from "./vault-documents-table";
 import { VaultDetailDialog } from "./vault-detail-dialog";
 import { VaultSearchDialog } from "./vault-search-dialog";
+import { VaultCreateDialog } from "./vault-create-dialog";
 import type { VaultDocument } from "@/types/vault";
 
 const VaultGraphView = lazy(() =>
@@ -21,6 +22,7 @@ export function VaultPage() {
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedDoc, setSelectedDoc] = useState<VaultDocument | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "graph">("table");
 
   const { documents, loading } = useVaultDocuments(selectedAgent, { limit: 50 });
@@ -38,6 +40,14 @@ export function VaultPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+            disabled={!selectedAgent}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            {t("create")}
+          </Button>
           <Button
             size="sm" variant="outline"
             onClick={() => setSearchOpen(true)}
@@ -118,7 +128,17 @@ export function VaultPage() {
         doc={selectedDoc}
         open={!!selectedDoc}
         onOpenChange={(open) => !open && setSelectedDoc(null)}
+        onDeleted={() => setSelectedDoc(null)}
       />
+
+      {/* Create document dialog */}
+      {selectedAgent && (
+        <VaultCreateDialog
+          agentId={selectedAgent}
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+        />
+      )}
 
       {/* Search dialog */}
       {selectedAgent && (

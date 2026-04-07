@@ -8,6 +8,19 @@
   "noDocuments": "No documents in vault",
   "noResults": "No search results",
   "searchFailed": "Search failed",
+  "create": "Create",
+  "createDoc": "Create Document",
+  "edit": "Edit",
+  "save": "Save",
+  "saving": "Saving...",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "confirmDelete": "Delete this document?",
+  "yes": "Yes",
+  "no": "No",
+  "createLink": "Add Link",
+  "addLink": "Add Link",
+  "deleteLink": "Delete link",
   "columns": {
     "title": "Title",
     "path": "Path",
@@ -19,7 +32,24 @@
     "metadata": "Metadata",
     "outlinks": "Outgoing Links",
     "backlinks": "Backlinks",
-    "noLinks": "No links"
+    "noLinks": "No links",
+    "contentPreview": "Content Preview",
+    "fileNotFound": "File not found or inaccessible",
+    "emptyContent": "No content available"
+  },
+  "fields": {
+    "title": "Title",
+    "titlePlaceholder": "Document title",
+    "path": "Path",
+    "pathPlaceholder": "e.g. notes/my-doc.md",
+    "docType": "Type",
+    "scope": "Scope",
+    "fromDoc": "From",
+    "toDoc": "To Document",
+    "selectDoc": "Select a document...",
+    "linkType": "Link Type",
+    "linkContext": "Context",
+    "linkContextPlaceholder": "Optional context for this link"
   },
   "scope": {
     "personal": "Personal",
@@ -32,5 +62,17 @@
     "note": "Note",
     "skill": "Skill",
     "episodic": "Episodic"
+  },
+  "toast": {
+    "docCreated": "Document created",
+    "docCreateFailed": "Failed to create document",
+    "docUpdated": "Document updated",
+    "docUpdateFailed": "Failed to update document",
+    "docDeleted": "Document deleted",
+    "docDeleteFailed": "Failed to delete document",
+    "linkCreated": "Link created",
+    "linkCreateFailed": "Failed to create link",
+    "linkDeleted": "Link deleted",
+    "linkDeleteFailed": "Failed to delete link"
   }
 }

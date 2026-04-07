@@ -1,1 +1,78 @@
-{}
+{
+  "title": "知识库",
+  "description": "带有维基链接和语义搜索的文档注册表",
+  "search": "搜索",
+  "searchPlaceholder": "搜索文档...",
+  "filterAgent": "智能体",
+  "allAgents": "所有智能体",
+  "noDocuments": "知识库中没有文档",
+  "noResults": "没有搜索结果",
+  "searchFailed": "搜索失败",
+  "create": "创建",
+  "createDoc": "创建文档",
+  "edit": "编辑",
+  "save": "保存",
+  "saving": "保存中...",
+  "cancel": "取消",
+  "delete": "删除",
+  "confirmDelete": "删除此文档？",
+  "yes": "是",
+  "no": "否",
+  "createLink": "添加链接",
+  "addLink": "添加链接",
+  "deleteLink": "删除链接",
+  "columns": {
+    "title": "标题",
+    "path": "路径",
+    "type": "类型",
+    "scope": "范围",
+    "updated": "更新时间"
+  },
+  "detail": {
+    "metadata": "元数据",
+    "outlinks": "出链",
+    "backlinks": "反链",
+    "noLinks": "无链接",
+    "contentPreview": "内容预览",
+    "fileNotFound": "文件未找到",
+    "emptyContent": "无内容"
+  },
+  "fields": {
+    "title": "标题",
+    "titlePlaceholder": "文档标题",
+    "path": "路径",
+    "pathPlaceholder": "例如 notes/my-doc.md",
+    "docType": "类型",
+    "scope": "范围",
+    "fromDoc": "来源",
+    "toDoc": "目标文档",
+    "selectDoc": "选择文档...",
+    "linkType": "链接类型",
+    "linkContext": "上下文",
+    "linkContextPlaceholder": "此链接的可选上下文"
+  },
+  "scope": {
+    "personal": "个人",
+    "team": "团队",
+    "shared": "共享"
+  },
+  "type": {
+    "context": "上下文",
+    "memory": "记忆",
+    "note": "笔记",
+    "skill": "技能",
+    "episodic": "情景记忆"
+  },
+  "toast": {
+    "docCreated": "文档已创建",
+    "docCreateFailed": "创建文档失败",
+    "docUpdated": "文档已更新",
+    "docUpdateFailed": "更新文档失败",
+    "docDeleted": "文档已删除",
+    "docDeleteFailed": "删除文档失败",
+    "linkCreated": "链接已创建",
+    "linkCreateFailed": "创建链接失败",
+    "linkDeleted": "链接已删除",
+    "linkDeleteFailed": "删除链接失败"
+  }
+}
