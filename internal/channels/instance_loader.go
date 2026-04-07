@@ -180,6 +180,9 @@ func coerceStringBools(data json.RawMessage) json.RawMessage {
 			case "false":
 				m[k] = false
 				changed = true
+			case "inherit":
+				delete(m, k) // nil = inherit gateway default
+				changed = true
 			}
 		}
 	}
