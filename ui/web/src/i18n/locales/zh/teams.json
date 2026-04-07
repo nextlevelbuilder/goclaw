@@ -363,5 +363,40 @@
     "delegations": "委派",
     "settings": "设置",
     "addMember": "添加成员"
+  },
+  "tabs": {
+    "teams": "Agent Team",
+    "board": "看板",
+    "links": "Agent链接",
+    "settings": "设置"
+  },
+  "links": {
+    "title": "Agent链接",
+    "empty": "暂无Agent链接配置。",
+    "create": "创建链接",
+    "editLink": "编辑链接",
+    "save": "保存",
+    "source": "源Agent",
+    "target": "目标Agent",
+    "selectAgent": "选择Agent...",
+    "direction": "方向",
+    "outbound": "出站",
+    "inbound": "入站",
+    "bidirectional": "双向",
+    "description": "描述",
+    "descriptionPlaceholder": "可选描述...",
+    "maxConcurrent": "最大并发数",
+    "status": "状态",
+    "active": "活跃",
+    "disabled": "禁用",
+    "deleteTitle": "删除链接",
+    "confirmDelete": "删除此Agent链接？此操作无法撤销。",
+    "deleted": "链接已删除",
+    "deleteFailed": "删除链接失败",
+    "created": "链接已创建",
+    "createFailed": "创建链接失败",
+    "updated": "链接已更新",
+    "updateFailed": "更新链接失败",
+    "sameAgentError": "源Agent和目标Agent必须不同。"
   }
 }

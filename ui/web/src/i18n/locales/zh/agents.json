@@ -53,6 +53,61 @@
     "evolvingTooltip": "Agent可以自我进化其沟通风格 (SOUL.md)。身份和工作流程保持不变。",
     "staticTooltip": "Agent风格是静态的。在设置中启用自我进化以允许风格适应。"
   },
+  "v3Info": {
+    "title": "v3 新特性",
+    "subtitle": "相比 v2 架构的重大改进",
+    "features": {
+      "pipeline": {
+        "title": "流水线",
+        "v2v3": "单体 7K LOC → 8 个可插拔阶段",
+        "desc": "结构化 context → history → prompt → think → act → observe → memory → summarize 循环，每阶段支持独立回调。",
+        "stat": "8 阶段"
+      },
+      "memory": {
+        "title": "记忆",
+        "v2v3": "单层 → 3 层（工作 → 情景 → 语义）",
+        "desc": "工作记忆保存活跃上下文；情景记忆存储会话摘要；语义层由知识图谱支撑。",
+        "stat": "3 层"
+      },
+      "retrieval": {
+        "title": "检索",
+        "v2v3": "手动搜索 → L0/L1/L2 渐进式加载",
+        "desc": "L0 摘要自动注入每个会话，L1/L2 按需通过 BM25 + 向量混合搜索加载。",
+        "stat": "自动注入"
+      },
+      "vault": {
+        "title": "知识库",
+        "v2v3": "无知识库 → 文档注册 + Wiki链接 + 混合搜索",
+        "desc": "集中式文档存储，支持 [[wikilink]] 解析、文件系统同步和跨全部知识的统一搜索。",
+        "stat": "全新"
+      },
+      "evolution": {
+        "title": "自我进化",
+        "v2v3": "无指标 → 指标 → 建议 → 自动适应",
+        "desc": "记录工具成功率和检索质量，生成改进建议，通过护栏保护的变更机制应用并支持回滚。",
+        "stat": "3 阶段"
+      },
+      "orchestration": {
+        "title": "编排",
+        "v2v3": "仅生成 → 生成 + 委派 + 团队模式",
+        "desc": "Delegate 工具通过 agent_links 实现 Agent 间任务移交，支持自动、显式和手动三种委派模式。",
+        "stat": "3 种模式"
+      },
+      "resilience": {
+        "title": "Provider 弹性",
+        "v2v3": "直接调用 → 中间件 + 故障转移 + 冷却",
+        "desc": "可组合请求中间件链处理速率限制、过载、认证错误和网络故障，自动故障转移。",
+        "stat": "9 种错误类型"
+      },
+      "registry": {
+        "title": "模型注册表",
+        "v2v3": "静态配置 → 动态注册表 + 前向兼容解析器",
+        "desc": "ModelRegistry 跨 Provider 解析模型别名，前向兼容解析器将废弃 ID 映射到当前等效项。",
+        "stat": "自动解析"
+      }
+    },
+    "note": "v3 功能按 Agent 可选开启，在 Agent 设置中启用。"
+  },
   "delete": {
     "title": "删除Agent",
     "description": "永久删除此Agent及其所有上下文文件、Session和配置。此操作无法撤销。",

@@ -53,6 +53,61 @@
     "evolvingTooltip": "Agent có thể tự tiến hóa phong cách giao tiếp (SOUL.md). Nhận dạng và quy trình làm việc giữ nguyên.",
     "staticTooltip": "Phong cách agent là tĩnh. Bật Tự Tiến Hóa trong cài đặt để cho phép thích nghi phong cách."
   },
+  "v3Info": {
+    "title": "Điểm Mới Trong v3",
+    "subtitle": "Cải tiến lớn so với kiến trúc v2",
+    "features": {
+      "pipeline": {
+        "title": "Pipeline",
+        "v2v3": "Monolithic 7K LOC → 8 giai đoạn độc lập",
+        "desc": "Vòng lặp context → history → prompt → think → act → observe → memory → summarize với callback riêng từng giai đoạn.",
+        "stat": "8 giai đoạn"
+      },
+      "memory": {
+        "title": "Bộ Nhớ",
+        "v2v3": "Một tầng → 3 tầng (Working → Episodic → Semantic)",
+        "desc": "Working memory lưu ngữ cảnh đang dùng; episodic lưu tóm tắt phiên; semantic được hỗ trợ bởi đồ thị tri thức.",
+        "stat": "3 tầng"
+      },
+      "retrieval": {
+        "title": "Truy Xuất",
+        "v2v3": "Tìm kiếm thủ công → Tải tiến dần L0/L1/L2",
+        "desc": "Bản tóm tắt L0 tự động chèn vào mỗi phiên. L1/L2 tải theo yêu cầu qua tìm kiếm kết hợp BM25 + vector.",
+        "stat": "Tự động chèn"
+      },
+      "vault": {
+        "title": "Kho Tri Thức",
+        "v2v3": "Không có → Đăng ký tài liệu + wikilinks + tìm kiếm lai",
+        "desc": "Kho tài liệu tập trung với phân giải [[wikilink]], đồng bộ filesystem và tìm kiếm thống nhất trên toàn bộ tri thức.",
+        "stat": "MỚI"
+      },
+      "evolution": {
+        "title": "Tự Tiến Hóa",
+        "v2v3": "Không có số liệu → Số liệu → Đề xuất → Tự thích nghi",
+        "desc": "Ghi lại tỉ lệ thành công của tool và chất lượng truy xuất, tạo đề xuất, áp dụng thay đổi được bảo vệ bởi guardrail với khả năng rollback.",
+        "stat": "3 giai đoạn"
+      },
+      "orchestration": {
+        "title": "Điều Phối",
+        "v2v3": "Chỉ spawn → Spawn + Delegate + Chế độ nhóm",
+        "desc": "Công cụ Delegate cho phép chuyển giao nhiệm vụ giữa các agent qua agent_links. Ba chế độ: tự động, tường minh và thủ công.",
+        "stat": "3 chế độ"
+      },
+      "resilience": {
+        "title": "Độ Bền Provider",
+        "v2v3": "Gọi trực tiếp → Middleware + chuyển dự phòng + cooldown",
+        "desc": "Chuỗi middleware xử lý giới hạn tốc độ, quá tải, lỗi xác thực và lỗi mạng với chuyển dự phòng tự động.",
+        "stat": "9 loại lỗi"
+      },
+      "registry": {
+        "title": "Registry Model",
+        "v2v3": "Cấu hình tĩnh → Registry động + resolver tương thích ngược",
+        "desc": "ModelRegistry phân giải bí danh model qua các provider. Resolver tương thích ngược ánh xạ ID cũ sang tương đương hiện tại.",
+        "stat": "Tự phân giải"
+      }
+    },
+    "note": "Tính năng v3 được bật tùy chọn cho từng agent. Kích hoạt trong cài đặt agent."
+  },
   "delete": {
     "title": "Xóa agent",
     "description": "Xóa vĩnh viễn agent này, tất cả tệp ngữ cảnh, session và cấu hình. Hành động này không thể hoàn tác.",

@@ -55,19 +55,59 @@
     "staticTooltip": "Agent style is static. Enable Self-Evolution in settings to allow style adaptation."
   },
   "v3Info": {
-    "title": "Agent v3 Features",
-    "subtitle": "Key improvements over v2 pipeline",
-    "pipeline": "8-Stage Pipeline",
-    "pipelineDesc": "Structured think → act → observe loop with dedicated stages for context assembly, tool execution, and response generation.",
-    "memory": "Episodic Memory",
-    "memoryDesc": "Auto-summarizes conversations into L0 abstracts with key topics. Injected into future sessions for long-term continuity.",
-    "retrieval": "Improved Retrieval",
-    "retrievalDesc": "New retrieval pipeline with BM25 + vector search for more relevant context injection from knowledge base and memories.",
-    "metrics": "Evolution Metrics",
-    "metricsDesc": "Records tool success rates, retrieval quality, and user feedback to measure agent effectiveness over time.",
-    "suggestions": "Data-Driven Suggestions",
-    "suggestionsDesc": "Generates improvement suggestions from recorded metrics. Review, approve, or reject changes with one click.",
-    "note": "v3 features are opt-in per agent. Enable them in the V3 Features section on the agent overview page."
+    "title": "What's New in v3",
+    "subtitle": "Major improvements over v2 architecture",
+    "features": {
+      "pipeline": {
+        "title": "Pipeline",
+        "v2v3": "Monolithic 7K LOC → 8 pluggable stages",
+        "desc": "Structured context → history → prompt → think → act → observe → memory → summarize loop with per-stage callbacks.",
+        "stat": "8 stages"
+      },
+      "memory": {
+        "title": "Memory",
+        "v2v3": "Single-tier → 3-tier (Working → Episodic → Semantic)",
+        "desc": "Working memory holds active context; episodic stores session summaries; semantic layer is backed by knowledge graph.",
+        "stat": "3 tiers"
+      },
+      "retrieval": {
+        "title": "Retrieval",
+        "v2v3": "Manual search → L0/L1/L2 progressive loading",
+        "desc": "L0 abstracts auto-inject into every session. L1/L2 load on demand via BM25 + vector hybrid search.",
+        "stat": "Auto-inject"
+      },
+      "vault": {
+        "title": "Knowledge Vault",
+        "v2v3": "No vault → Document registry + wikilinks + hybrid search",
+        "desc": "Centralized document store with [[wikilink]] resolution, filesystem sync, and unified search across all knowledge.",
+        "stat": "NEW"
+      },
+      "evolution": {
+        "title": "Self-Evolution",
+        "v2v3": "No metrics → Metrics → Suggestions → Auto-adapt",
+        "desc": "Records tool success rates and retrieval quality, generates suggestions, applies guardrail-protected changes with rollback.",
+        "stat": "3 stages"
+      },
+      "orchestration": {
+        "title": "Orchestration",
+        "v2v3": "Spawn only → Spawn + Delegate + Team modes",
+        "desc": "Delegate tool enables inter-agent task handoff with agent_links. Three delegation modes: auto, explicit, and manual.",
+        "stat": "3 modes"
+      },
+      "resilience": {
+        "title": "Provider Resilience",
+        "v2v3": "Direct calls → Middleware + failover + cooldown",
+        "desc": "Composable request middleware chain handles rate limits, overload, auth errors, and network failures with automatic failover.",
+        "stat": "9 error types"
+      },
+      "registry": {
+        "title": "Model Registry",
+        "v2v3": "Static config → Dynamic registry + forward-compat resolver",
+        "desc": "ModelRegistry resolves model aliases across providers. Forward-compat resolver maps deprecated IDs to current equivalents.",
+        "stat": "Auto-resolve"
+      }
+    },
+    "note": "v3 features are opt-in per agent. Enable them in agent settings."
   },
   "delete": {
     "title": "Delete Agent",
