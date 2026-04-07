@@ -140,6 +140,19 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 	state.Tool.Deliverables = bridgeRS.deliverables
 	state.Evolution.BootstrapWrite = bridgeRS.bootstrapWriteDetected
 	state.Evolution.TeamTaskSpawns = bridgeRS.teamTaskSpawns
+	// Sync media results from v2 processToolResult → v3 pipeline state.
+	// Without this, MEDIA: paths from tool results never reach FinalizeStage.
+	if len(bridgeRS.mediaResults) > 0 {
+		state.Tool.MediaResults = state.Tool.MediaResults[:0]
+		for _, mr := range bridgeRS.mediaResults {
+			state.Tool.MediaResults = append(state.Tool.MediaResults, pipeline.MediaResult{
+				Path:        mr.Path,
+				ContentType: mr.ContentType,
+				Size:        mr.Size,
+				AsVoice:     mr.AsVoice,
+			})
+		}
+	}
 	if state.Tool.LoopKilled && action == toolResultBreak {
 		state.Observe.FinalContent = bridgeRS.finalContent
 	}
