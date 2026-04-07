@@ -25,13 +25,18 @@ var claudeModelAliases = map[string]string{
 	"haiku":  "claude-haiku-4-5-20251001",
 }
 
-// resolveModel expands a short alias to a full model ID, or returns the input unchanged.
-func resolveAnthropicModel(model, defaultModel string) string {
+// resolveAnthropicModel expands a short alias to a full model ID, or returns the input unchanged.
+// If a registry is provided, triggers forward-compat resolution for unknown models.
+func resolveAnthropicModel(model, defaultModel string, registry ModelRegistry) string {
 	if model == "" {
 		return defaultModel
 	}
 	if full, ok := claudeModelAliases[model]; ok {
 		return full
+	}
+	// Trigger forward-compat resolution to cache specs for token counting
+	if registry != nil {
+		_ = registry.Resolve("anthropic", model)
 	}
 	return model
 }
@@ -43,6 +48,8 @@ type AnthropicProvider struct {
 	defaultModel string
 	client       *http.Client
 	retryConfig  RetryConfig
+	middlewares  RequestMiddleware // composed middleware chain (nil = no-op)
+	registry     ModelRegistry    // model resolution registry (nil = skip)
 }
 
 // NewAnthropicProvider creates a new Anthropic provider.
@@ -53,6 +60,8 @@ func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProv
 		defaultModel: defaultClaudeModel,
 		client:       &http.Client{Timeout: DefaultHTTPTimeout},
 		retryConfig:  DefaultRetryConfig(),
+		// No CacheMiddleware: Anthropic uses block-level cache_control in buildRequestBody
+		middlewares: ComposeMiddlewares(FastModeMiddleware, ServiceTierMiddleware),
 	}
 	for _, o := range opts {
 		o(p)
@@ -64,6 +73,14 @@ type AnthropicOption func(*AnthropicProvider)
 
 func WithAnthropicModel(model string) AnthropicOption {
 	return func(p *AnthropicProvider) { p.defaultModel = model }
+}
+
+func WithAnthropicRegistry(r ModelRegistry) AnthropicOption {
+	return func(p *AnthropicProvider) { p.registry = r }
+}
+
+func WithAnthropicMiddlewares(mws ...RequestMiddleware) AnthropicOption {
+	return func(p *AnthropicProvider) { p.middlewares = ComposeMiddlewares(mws...) }
 }
 
 func WithAnthropicBaseURL(baseURL string) AnthropicOption {
@@ -92,10 +109,23 @@ func (p *AnthropicProvider) Capabilities() ProviderCapabilities {
 	}
 }
 
+// middlewareConfig builds a MiddlewareConfig for the current request.
+func (p *AnthropicProvider) middlewareConfig(model string, req ChatRequest) MiddlewareConfig {
+	return MiddlewareConfig{
+		Provider: "anthropic",
+		Model:    model,
+		Caps:     p.Capabilities(),
+		AuthType: "api_key",
+		APIBase:  p.baseURL,
+		Options:  req.Options,
+	}
+}
+
 func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
-	model := resolveAnthropicModel(req.Model, p.defaultModel)
+	model := resolveAnthropicModel(req.Model, p.defaultModel, p.registry)
 
 	body := p.buildRequestBody(model, req, false)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
 	return RetryDo(ctx, p.retryConfig, func() (*ChatResponse, error) {
 		respBody, err := p.doRequest(ctx, body)

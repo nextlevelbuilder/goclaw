@@ -1406,13 +1406,16 @@ CREATE TABLE IF NOT EXISTS episodic_summaries (
     turn_count  INTEGER NOT NULL DEFAULT 0,
     token_count INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    expires_at  TEXT
+    expires_at  TEXT,
+    promoted_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_episodic_agent_user ON episodic_summaries(agent_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_episodic_tenant ON episodic_summaries(tenant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_episodic_source_dedup ON episodic_summaries(agent_id, user_id, source_id)
     WHERE source_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_episodic_unpromoted ON episodic_summaries(agent_id, user_id, created_at)
+    WHERE promoted_at IS NULL;
 
 -- ============================================================
 -- Table: agent_evolution_metrics (V3 self-evolution Stage 1)

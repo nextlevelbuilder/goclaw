@@ -217,23 +217,11 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) (err error) {
 }
 
 // sendChunked sends a message, splitting into multiple messages if over 2000 chars.
+// Uses markdown-aware chunking to avoid splitting inside fenced code blocks.
 func (c *Channel) sendChunked(channelID, content string) error {
 	const maxLen = 2000
 
-	for len(content) > 0 {
-		chunk := content
-		if len(chunk) > maxLen {
-			// Try to break at a newline
-			cutAt := maxLen
-			if idx := lastIndexByte(content[:maxLen], '\n'); idx > maxLen/2 {
-				cutAt = idx + 1
-			}
-			chunk = content[:cutAt]
-			content = content[cutAt:]
-		} else {
-			content = ""
-		}
-
+	for _, chunk := range channels.ChunkMarkdown(content, maxLen) {
 		if _, err := c.session.ChannelMessageSend(channelID, chunk); err != nil {
 			return fmt.Errorf("send discord message: %w", err)
 		}

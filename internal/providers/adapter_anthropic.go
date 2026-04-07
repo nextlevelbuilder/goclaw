@@ -45,7 +45,7 @@ func (a *AnthropicAdapter) ToRequest(req ChatRequest) ([]byte, http.Header, erro
 		stream = v
 	}
 
-	model := resolveAnthropicModel(req.Model, a.provider.defaultModel)
+	model := resolveAnthropicModel(req.Model, a.provider.defaultModel, a.provider.registry)
 	body := a.provider.buildRequestBody(model, req, stream)
 
 	data, err := json.Marshal(body)

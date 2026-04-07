@@ -406,20 +406,7 @@ func (c *Channel) downloadMedia(url string) (string, error) {
 // --- Chunked text sending ---
 
 func (c *Channel) sendChunkedText(chatID, text string) error {
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > maxTextLength {
-			// Try to break at newline
-			cutAt := maxTextLength
-			if idx := strings.LastIndex(text[:maxTextLength], "\n"); idx > maxTextLength/2 {
-				cutAt = idx + 1
-			}
-			chunk = text[:cutAt]
-			text = text[cutAt:]
-		} else {
-			text = ""
-		}
-
+	for _, chunk := range channels.ChunkMarkdown(text, maxTextLength) {
 		if err := c.sendMessage(chatID, chunk); err != nil {
 			return err
 		}

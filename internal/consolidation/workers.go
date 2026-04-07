@@ -14,6 +14,7 @@ import (
 // ConsolidationDeps bundles all dependencies for the consolidation pipeline.
 type ConsolidationDeps struct {
 	EpisodicStore store.EpisodicStore
+	MemoryStore   store.MemoryStore
 	KGStore       store.KnowledgeGraphStore
 	EventBus      eventbus.DomainEventBus
 	Provider      providers.Provider // for LLM summarization
@@ -39,10 +40,19 @@ func Register(deps ConsolidationDeps) func() {
 		kgStore: deps.KGStore,
 	}
 
+	dreaming := &dreamingWorker{
+		episodicStore: deps.EpisodicStore,
+		memoryStore:   deps.MemoryStore,
+		provider:      deps.Provider,
+		threshold:     dreamingDefaultThreshold,
+		debounce:      dreamingDefaultDebounce,
+	}
+
 	unsub1 := deps.EventBus.Subscribe(eventbus.EventSessionCompleted, episodic.Handle)
 	unsub2 := deps.EventBus.Subscribe(eventbus.EventEpisodicCreated, semantic.Handle)
 	unsub3 := deps.EventBus.Subscribe(eventbus.EventEntityUpserted, dedup.Handle)
-	return func() { unsub1(); unsub2(); unsub3() }
+	unsub4 := deps.EventBus.Subscribe(eventbus.EventEpisodicCreated, dreaming.Handle)
+	return func() { unsub1(); unsub2(); unsub3(); unsub4() }
 }
 
 // summarizationPrompt for LLM session summarization.

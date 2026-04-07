@@ -24,14 +24,14 @@ type episodicScored struct {
 }
 
 // ftsSearch performs full-text search on episodic summaries.
-// Uses inline to_tsvector to match the functional GIN index on summary.
+// Uses the stored search_vector column (GIN-indexed, 'english' config from migration 040).
 // When userID is empty, returns results across all users (admin view).
 func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID string, limit int) []episodicScored {
 	q := `SELECT id, session_key, l0_abstract,
-	        ts_rank(to_tsvector('simple', summary), plainto_tsquery('simple', $1)) AS score, created_at
+	        ts_rank(search_vector, plainto_tsquery('english', $1)) AS score, created_at
 		FROM episodic_summaries
 		WHERE agent_id = $2
-		  AND to_tsvector('simple', summary) @@ plainto_tsquery('simple', $1)`
+		  AND search_vector @@ plainto_tsquery('english', $1)`
 	args := []any{query, agentID}
 	p := 3
 

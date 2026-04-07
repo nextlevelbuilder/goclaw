@@ -320,19 +320,7 @@ func (c *Channel) probeBotInfo(ctx context.Context) error {
 // --- Send helpers ---
 
 func (c *Channel) sendChunkedText(ctx context.Context, chatID, receiveIDType, text string, chunkLimit int) error {
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > chunkLimit {
-			cutAt := chunkLimit
-			if idx := strings.LastIndex(text[:chunkLimit], "\n"); idx > chunkLimit/2 {
-				cutAt = idx + 1
-			}
-			chunk = text[:cutAt]
-			text = text[cutAt:]
-		} else {
-			text = ""
-		}
-
+	for _, chunk := range channels.ChunkMarkdown(text, chunkLimit) {
 		if err := c.sendText(ctx, chatID, receiveIDType, chunk); err != nil {
 			return err
 		}

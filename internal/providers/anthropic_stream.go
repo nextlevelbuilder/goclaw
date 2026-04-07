@@ -10,9 +10,10 @@ import (
 )
 
 func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
-	model := resolveAnthropicModel(req.Model, p.defaultModel)
+	model := resolveAnthropicModel(req.Model, p.defaultModel, p.registry)
 
 	body := p.buildRequestBody(model, req, true)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
 	// Retry only the connection phase; once streaming starts, no retry.
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {

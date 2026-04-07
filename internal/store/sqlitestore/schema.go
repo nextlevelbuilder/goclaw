@@ -14,7 +14,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 7
+const SchemaVersion = 8
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -196,6 +196,11 @@ UPDATE agents SET other_config = json_remove(other_config,
   '$.self_evolve', '$.skill_evolve', '$.skill_nudge_interval',
   '$.reasoning', '$.workspace_sharing', '$.chatgpt_oauth_routing',
   '$.shell_deny_groups', '$.kg_dedup_config');`,
+
+	// Version 7 → 8: add promoted_at to episodic_summaries for dreaming pipeline.
+	7: `ALTER TABLE episodic_summaries ADD COLUMN promoted_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_episodic_unpromoted ON episodic_summaries(agent_id, user_id, created_at)
+    WHERE promoted_at IS NULL;`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

@@ -29,8 +29,10 @@ type OpenAIProvider struct {
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
 	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
 	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
-	client       *http.Client
-	retryConfig  RetryConfig
+	client      *http.Client
+	retryConfig RetryConfig
+	middlewares RequestMiddleware // composed middleware chain (nil = no-op)
+	registry    ModelRegistry    // model resolution registry (nil = skip)
 }
 
 // isOpenAINativeEndpoint returns true for endpoints confirmed to be native OpenAI
@@ -100,6 +102,7 @@ func NewOpenAIProvider(name, apiKey, apiBase, defaultModel string) *OpenAIProvid
 		defaultModel: defaultModel,
 		client:       &http.Client{Timeout: DefaultHTTPTimeout},
 		retryConfig:  DefaultRetryConfig(),
+		middlewares:  ComposeMiddlewares(FastModeMiddleware, ServiceTierMiddleware, CacheMiddleware),
 	}
 }
 
@@ -121,6 +124,18 @@ func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
 func (p *OpenAIProvider) WithSiteInfo(url, title string) *OpenAIProvider {
 	p.siteURL = url
 	p.siteTitle = title
+	return p
+}
+
+// WithRegistry sets the model registry for forward-compat resolution.
+func (p *OpenAIProvider) WithRegistry(r ModelRegistry) *OpenAIProvider {
+	p.registry = r
+	return p
+}
+
+// WithMiddlewares sets the composed request middleware chain.
+func (p *OpenAIProvider) WithMiddlewares(mws ...RequestMiddleware) *OpenAIProvider {
+	p.middlewares = ComposeMiddlewares(mws...)
 	return p
 }
 
@@ -146,6 +161,18 @@ func (p *OpenAIProvider) Capabilities() ProviderCapabilities {
 	}
 }
 
+// middlewareConfig builds a MiddlewareConfig from provider fields and the current request.
+func (p *OpenAIProvider) middlewareConfig(model string, req ChatRequest) MiddlewareConfig {
+	return MiddlewareConfig{
+		Provider: p.name,
+		Model:    model,
+		Caps:     p.Capabilities(),
+		AuthType: "api_key",
+		APIBase:  p.apiBase,
+		Options:  req.Options,
+	}
+}
+
 // schemaProviderName returns the most specific provider identifier for schema normalization.
 // Prefers providerType (from DB) over name for accurate profile matching.
 func (p *OpenAIProvider) schemaProviderName() string {
@@ -164,6 +191,7 @@ func (p *OpenAIProvider) WithProviderType(pt string) *OpenAIProvider {
 // resolveModel returns the model ID to use for a request.
 // For OpenRouter, model IDs require a provider prefix (e.g. "anthropic/claude-sonnet-4-5-20250929").
 // If the caller passes an unprefixed model, fall back to the provider's default.
+// After alias resolution, checks the registry for forward-compat specs.
 func (p *OpenAIProvider) resolveModel(model string) string {
 	if model == "" {
 		return p.defaultModel
@@ -171,12 +199,18 @@ func (p *OpenAIProvider) resolveModel(model string) string {
 	if p.name == "openrouter" && !strings.Contains(model, "/") {
 		return p.defaultModel
 	}
+	// Trigger forward-compat resolution to cache specs for token counting.
+	// The model ID itself is unchanged — we don't rename models.
+	if p.registry != nil {
+		_ = p.registry.Resolve("openai", model)
+	}
 	return model
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	model := p.resolveModel(req.Model)
 	body := p.buildRequestBody(model, req, false)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
 	chatFn := p.chatRequestFn(ctx, body)
 
@@ -215,6 +249,7 @@ func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any)
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
 	model := p.resolveModel(req.Model)
 	body := p.buildRequestBody(model, req, true)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
 	// Retry only the connection phase; once streaming starts, no retry.
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {

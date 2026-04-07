@@ -117,6 +117,11 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 		// Sessions
 		db.Exec("DELETE FROM sessions WHERE tenant_id = $1", tenantID)
 
+		// Skills
+		db.Exec("DELETE FROM skill_agent_grants WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM skill_user_grants WHERE tenant_id = $1", tenantID)
+		db.Exec("DELETE FROM skills WHERE tenant_id = $1", tenantID)
+
 		// Security stores
 		db.Exec("DELETE FROM mcp_user_credentials WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM mcp_access_requests WHERE tenant_id = $1", tenantID)

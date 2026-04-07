@@ -60,6 +60,14 @@ type EpisodicStore interface {
 	ExistsBySourceID(ctx context.Context, agentID, userID, sourceID string) (bool, error)
 	PruneExpired(ctx context.Context) (int, error)
 
+	// Promotion lifecycle (used by consolidation pipeline)
+	// ListUnpromoted returns summaries not yet promoted to long-term memory, oldest first.
+	ListUnpromoted(ctx context.Context, agentID, userID string, limit int) ([]EpisodicSummary, error)
+	// MarkPromoted sets promoted_at=now() for the given IDs.
+	MarkPromoted(ctx context.Context, ids []string) error
+	// CountUnpromoted returns the count of unpromoted summaries for an agent/user.
+	CountUnpromoted(ctx context.Context, agentID, userID string) (int, error)
+
 	// Embedding
 	SetEmbeddingProvider(provider EmbeddingProvider)
 	Close() error

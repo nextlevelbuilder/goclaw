@@ -14,6 +14,12 @@ const (
 	OptReasoningEffort = "reasoning_effort"
 	OptEnableThinking  = "enable_thinking"
 	OptThinkingBudget  = "thinking_budget"
+
+	// Middleware-related options (Phase 2 will use these)
+	OptServiceTier          = "service_tier"
+	OptFastMode             = "fast_mode"
+	OptPromptCacheKey       = "prompt_cache_key"
+	OptPromptCacheRetention = "prompt_cache_retention"
 )
 
 // TokenSource provides an OAuth access token (with auto-refresh).

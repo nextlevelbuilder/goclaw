@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	slackapi "github.com/slack-go/slack"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -87,11 +88,9 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	return c.sendChunked(channelID, content, threadTS)
 }
 
+// sendChunked sends message chunks using markdown-aware splitting.
 func (c *Channel) sendChunked(channelID, content, threadTS string) error {
-	for len(content) > 0 {
-		chunk, rest := splitAtLimit(content, maxMessageLen)
-		content = rest
-
+	for _, chunk := range channels.ChunkMarkdown(content, maxMessageLen) {
 		opts := []slackapi.MsgOption{slackapi.MsgOptionText(chunk, false)}
 		if threadTS != "" {
 			opts = append(opts, slackapi.MsgOptionTS(threadTS))
@@ -104,17 +103,14 @@ func (c *Channel) sendChunked(channelID, content, threadTS string) error {
 	return nil
 }
 
-// splitAtLimit splits content at maxLen runes, preferring newline boundaries.
+// splitAtLimit splits content into first chunk + remaining using markdown-aware chunking.
 func splitAtLimit(content string, maxLen int) (chunk, remaining string) {
-	runes := []rune(content)
-	if len(runes) <= maxLen {
-		return content, ""
+	chunks := channels.ChunkMarkdown(content, maxLen)
+	if len(chunks) == 0 {
+		return "", ""
 	}
-	cutAt := maxLen
-	// Try to break at a newline in the second half
-	candidate := string(runes[:maxLen])
-	if idx := strings.LastIndex(candidate, "\n"); idx > len(candidate)/2 {
-		return content[:idx+1], content[idx+1:]
+	if len(chunks) == 1 {
+		return chunks[0], ""
 	}
-	return string(runes[:cutAt]), string(runes[cutAt:])
+	return chunks[0], strings.Join(chunks[1:], "\n")
 }

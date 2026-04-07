@@ -24,6 +24,7 @@ type CodexProvider struct {
 	defaultModel    string
 	client          *http.Client
 	retryConfig     RetryConfig
+	middlewares     RequestMiddleware // composed middleware chain (nil = no-op)
 	tokenSource     TokenSource
 	routingDefaults *CodexRoutingDefaults
 }
@@ -47,6 +48,12 @@ func NewCodexProvider(name string, tokenSource TokenSource, apiBase, defaultMode
 		retryConfig:  DefaultRetryConfig(),
 		tokenSource:  tokenSource,
 	}
+}
+
+// WithMiddlewares sets the composed request middleware chain.
+func (p *CodexProvider) WithMiddlewares(mws ...RequestMiddleware) *CodexProvider {
+	p.middlewares = ComposeMiddlewares(mws...)
+	return p
 }
 
 func (p *CodexProvider) Name() string           { return p.name }
@@ -95,8 +102,25 @@ func (p *CodexProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespons
 	return p.ChatStream(ctx, req, nil)
 }
 
+// middlewareConfig builds a MiddlewareConfig for the current request.
+func (p *CodexProvider) middlewareConfig(req ChatRequest) MiddlewareConfig {
+	model := req.Model
+	if model == "" {
+		model = p.defaultModel
+	}
+	return MiddlewareConfig{
+		Provider: p.name,
+		Model:    model,
+		Caps:     p.Capabilities(),
+		AuthType: "oauth",
+		APIBase:  p.apiBase,
+		Options:  req.Options,
+	}
+}
+
 func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
 	body := p.buildRequestBody(req, true)
+	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(req))
 
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
 		return p.doRequest(ctx, body)
