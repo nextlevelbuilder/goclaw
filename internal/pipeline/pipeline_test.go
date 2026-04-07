@@ -103,9 +103,10 @@ func TestPipeline_FinalizeRunsOnce(t *testing.T) {
 
 func TestPipeline_BreakLoopExitsIteration(t *testing.T) {
 	t.Parallel()
-	// first stage in iteration returns BreakLoop
+	// BreakLoop completes all remaining stages in the iteration (ObserveStage
+	// must run to capture FinalContent), then exits the outer loop.
 	breaker := newMockStageWithResult("breaker", BreakLoop)
-	after := newMockStageNoResult("after") // should NOT run after break
+	after := newMockStageNoResult("after") // SHOULD run after BreakLoop (remaining stage)
 
 	p := NewPipeline(
 		nil,
@@ -122,8 +123,8 @@ func TestPipeline_BreakLoopExitsIteration(t *testing.T) {
 	if breaker.execCnt != 1 {
 		t.Errorf("breaker ran %d times, want 1", breaker.execCnt)
 	}
-	if after.execCnt != 0 {
-		t.Errorf("after ran %d times after BreakLoop, want 0", after.execCnt)
+	if after.execCnt != 1 {
+		t.Errorf("after ran %d times after BreakLoop, want 1 (remaining stages complete)", after.execCnt)
 	}
 	if result == nil {
 		t.Fatal("result is nil")

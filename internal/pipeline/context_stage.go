@@ -80,9 +80,10 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		state.Context.OverheadTokens = overhead
 	}
 
-	// 6. Enrich input media (resolve refs, inline descriptions)
+	// 6. Enrich input media (resolve refs, inline descriptions).
+	// Receives full RunState so it can access MessageBuffer for in-place enrichment.
 	if s.deps.EnrichMedia != nil {
-		if err := s.deps.EnrichMedia(ctx, state.Input); err != nil {
+		if err := s.deps.EnrichMedia(ctx, state); err != nil {
 			return fmt.Errorf("enrich media: %w", err)
 		}
 	}

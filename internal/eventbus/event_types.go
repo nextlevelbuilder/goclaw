@@ -12,9 +12,8 @@ type EventType string
 const (
 	EventSessionCompleted EventType = "session.completed"
 	EventEpisodicCreated  EventType = "episodic.created"
-	EventEntityUpserted   EventType = "entity.upserted"
-	EventMemoryLint       EventType = "memory.lint"
-	EventRunCompleted     EventType = "run.completed"
+	EventEntityUpserted EventType = "entity.upserted"
+	EventRunCompleted   EventType = "run.completed"
 	EventToolExecuted     EventType = "tool.executed"
 
 	// Delegation events (v3 orchestration)
@@ -22,8 +21,6 @@ const (
 	EventDelegateCompleted EventType = "delegate.completed"
 	EventDelegateFailed    EventType = "delegate.failed"
 
-	// Evolution events (v3 self-improvement)
-	EventSuggestionCreated EventType = "evolution.suggestion_created"
 )
 
 // DomainEvent is a typed event with metadata for the consolidation pipeline.
@@ -60,11 +57,6 @@ type EpisodicCreatedPayload struct {
 // EntityUpsertedPayload is emitted after KG entity upsert.
 type EntityUpsertedPayload struct {
 	EntityIDs []string
-}
-
-// MemoryLintPayload triggers periodic memory cleanup.
-type MemoryLintPayload struct {
-	Scope string // "agent" or "user"
 }
 
 // RunCompletedPayload is emitted after pipeline run finishes.

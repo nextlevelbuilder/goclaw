@@ -37,7 +37,7 @@ type PipelineDeps struct {
 	ResolveWorkspace func(ctx context.Context, input *RunInput) (*workspace.WorkspaceContext, error)
 	LoadContextFiles func(ctx context.Context, userID string) ([]bootstrap.ContextFile, bool) // files, hadBootstrap
 	BuildMessages    func(ctx context.Context, input *RunInput, history []providers.Message, summary string) ([]providers.Message, error)
-	EnrichMedia      func(ctx context.Context, input *RunInput) error
+	EnrichMedia      func(ctx context.Context, state *RunState) error
 	InjectReminders  func(ctx context.Context, input *RunInput, msgs []providers.Message) []providers.Message
 
 	// Think callbacks (ThinkStage)
@@ -70,10 +70,13 @@ type PipelineDeps struct {
 	FlushMessages func(ctx context.Context, sessionKey string, msgs []providers.Message) error
 
 	// Finalize callbacks (FinalizeStage)
-	SanitizeContent  func(content string) string
-	UpdateMetadata   func(ctx context.Context, sessionKey string, usage providers.Usage) error
-	BootstrapCleanup func(ctx context.Context, state *RunState) error
-	MaybeSummarize   func(ctx context.Context, sessionKey string)
+	SanitizeContent        func(content string) string
+	StripMessageDirectives func(content string) string
+	IsSilentReply          func(content string) bool
+	EmitSessionCompleted   func(ctx context.Context, sessionKey string)
+	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error
+	BootstrapCleanup       func(ctx context.Context, state *RunState) error
+	MaybeSummarize         func(ctx context.Context, sessionKey string)
 }
 
 // PipelineConfig holds pipeline-level settings.

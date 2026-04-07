@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -20,16 +21,17 @@ type DelegateRunFunc func(ctx context.Context, req DelegateRequest) (string, err
 
 // DelegateRequest describes a delegation dispatch.
 type DelegateRequest struct {
-	FromAgentID   uuid.UUID
-	FromAgentKey  string
-	ToAgentKey    string
-	Task          string
-	DelegationID  string
-	UserID        string
-	Channel       string
-	ChatID        string
-	PeerKind      string
-	SessionKey    string
+	FromAgentID uuid.UUID
+	FromAgentKey string
+	ToAgentKey   string
+	Task         string
+	DelegationID string
+	UserID       string
+	TenantID     string
+	Channel      string
+	ChatID       string
+	PeerKind     string
+	SessionKey   string
 }
 
 // DelegateTool implements the `delegate` tool for inter-agent task delegation.
@@ -39,7 +41,11 @@ type DelegateTool struct {
 	agents   store.AgentCRUDStore
 	eventBus eventbus.DomainEventBus
 	runFn    DelegateRunFunc
+	msgBus   *bus.MessageBus // for async announce back to parent
 }
+
+// SetMsgBus sets the message bus for async result delivery to parent agent.
+func (t *DelegateTool) SetMsgBus(mb *bus.MessageBus) { t.msgBus = mb }
 
 // NewDelegateTool creates a delegate tool.
 func NewDelegateTool(links store.AgentLinkStore, agents store.AgentCRUDStore, eb eventbus.DomainEventBus, runFn DelegateRunFunc) *DelegateTool {
@@ -129,6 +135,11 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 		Task:         task,
 		DelegationID: delegationID,
 		UserID:       userID,
+		TenantID:     store.TenantIDFromContext(ctx).String(),
+		Channel:      ToolChannelFromCtx(ctx),
+		ChatID:       ToolChatIDFromCtx(ctx),
+		PeerKind:     ToolPeerKindFromCtx(ctx),
+		SessionKey:   ToolSessionKeyFromCtx(ctx),
 	}
 
 	// Emit delegate.sent event
@@ -194,6 +205,7 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest
 				Error:        err.Error(),
 			})
 			slog.Warn("delegate.async.failed", "to", req.ToAgentKey, "error", err)
+			t.announceToParent(req, fmt.Sprintf("[Delegation to %s failed: %v]", req.ToAgentKey, err))
 			return
 		}
 		t.emitEvent(bgCtx, eventbus.EventDelegateCompleted, eventbus.DelegateCompletedPayload{
@@ -202,6 +214,7 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest
 			ToAgent:      req.ToAgentKey,
 			Content:      truncate(content, 500),
 		})
+		t.announceToParent(req, fmt.Sprintf("[Delegation result from %s]\n\n%s", req.ToAgentKey, content))
 	}()
 
 	result, _ := json.Marshal(map[string]any{
@@ -211,6 +224,31 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest
 		"message":       fmt.Sprintf("Task delegated to %s. You will be notified when complete.", req.ToAgentKey),
 	})
 	return NewResult(string(result))
+}
+
+// announceToParent delivers the delegate result back to the parent agent's
+// conversation via msgBus, following the same pattern as subagent announce.
+func (t *DelegateTool) announceToParent(req DelegateRequest, content string) {
+	if t.msgBus == nil || req.ChatID == "" {
+		return
+	}
+	tenantUUID, _ := uuid.Parse(req.TenantID)
+	t.msgBus.PublishInbound(bus.InboundMessage{
+		Channel:  "system",
+		SenderID: fmt.Sprintf("subagent:delegate:%s", req.DelegationID),
+		ChatID:   req.ChatID,
+		Content:  content,
+		UserID:   req.UserID,
+		TenantID: tenantUUID,
+		Metadata: map[string]string{
+			"origin_channel":     req.Channel,
+			"origin_peer_kind":   req.PeerKind,
+			"origin_session_key": req.SessionKey,
+			"delegate_id":        req.DelegationID,
+			"delegate_from":      req.FromAgentKey,
+			"delegate_to":        req.ToAgentKey,
+		},
+	})
 }
 
 func (t *DelegateTool) emitEvent(ctx context.Context, eventType eventbus.EventType, payload any) {

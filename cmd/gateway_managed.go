@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 
@@ -334,6 +335,41 @@ func wireExtras(
 
 	// Wire vault tools and interceptors (conditional on vault store availability)
 	wireVault(stores, toolsReg, workspace)
+
+	// Wire delegate tool for inter-agent delegation via agent_links.
+	if stores.AgentLinks != nil && stores.Agents != nil {
+		delegateRunFn := func(ctx context.Context, req tools.DelegateRequest) (string, error) {
+			loop, err := agentRouter.Get(ctx, req.ToAgentKey)
+			if err != nil {
+				return "", fmt.Errorf("target agent %q not found: %w", req.ToAgentKey, err)
+			}
+			sessionKey := fmt.Sprintf("delegate:%s:%s:%s",
+				req.FromAgentID.String()[:8], req.ToAgentKey, req.DelegationID)
+
+			// Link delegate trace to parent trace
+			delegateCtx := tracing.WithDelegateParentTraceID(ctx, tracing.TraceIDFromContext(ctx))
+
+			runReq := agent.RunRequest{
+				RunID:         uuid.New().String(),
+				SessionKey:    sessionKey,
+				Message:       req.Task,
+				UserID:        req.UserID,
+				Channel:       "delegate",
+				RunKind:       "delegate",
+				DelegationID:  req.DelegationID,
+				ParentAgentID: req.FromAgentKey,
+			}
+			result, err := loop.Run(delegateCtx, runReq)
+			if err != nil {
+				return "", err
+			}
+			return result.Content, nil
+		}
+		delegateTool := tools.NewDelegateTool(stores.AgentLinks, stores.Agents, domainBus, delegateRunFn)
+		delegateTool.SetMsgBus(msgBus)
+		toolsReg.Register(delegateTool)
+		slog.Info("delegate tool wired")
+	}
 
 	// --- Cache invalidation event subscribers ---
 

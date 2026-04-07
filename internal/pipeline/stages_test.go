@@ -1179,7 +1179,7 @@ func TestContextStage_EnrichMedia(t *testing.T) {
 	t.Parallel()
 	called := false
 	deps := &PipelineDeps{
-		EnrichMedia: func(_ context.Context, _ *RunInput) error {
+		EnrichMedia: func(_ context.Context, _ *RunState) error {
 			called = true
 			return nil
 		},
@@ -1199,7 +1199,7 @@ func TestContextStage_EnrichMedia(t *testing.T) {
 func TestContextStage_EnrichMedia_ErrorPropagates(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
-		EnrichMedia: func(_ context.Context, _ *RunInput) error {
+		EnrichMedia: func(_ context.Context, _ *RunState) error {
 			return errors.New("media enrichment failed")
 		},
 	}

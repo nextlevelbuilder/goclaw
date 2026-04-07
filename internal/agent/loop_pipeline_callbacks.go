@@ -9,6 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // pipelineCallbacks creates all callback closures that capture *Loop.
@@ -32,7 +33,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		processToolResult:  l.makeProcessToolResult(req, bridgeRS),
 		checkReadOnly:      l.makeCheckReadOnly(req, bridgeRS),
 		sanitizeContent:    SanitizeAssistantContent,
-		flushMessages:      l.makeFlushMessages(),
+		flushMessages:      l.makeFlushMessages(req),
 		updateMetadata:     l.makeUpdateMetadata(req),
 		bootstrapCleanup:   l.makeBootstrapCleanup(),
 		maybeSummarize:     l.maybeSummarize,
@@ -46,7 +47,7 @@ type pipelineCallbackSet struct {
 	resolveWorkspace   func(ctx context.Context, input *pipeline.RunInput) (*workspace.WorkspaceContext, error)
 	loadContextFiles   func(ctx context.Context, userID string) ([]bootstrap.ContextFile, bool)
 	buildMessages      func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error)
-	enrichMedia        func(ctx context.Context, input *pipeline.RunInput) error
+	enrichMedia        func(ctx context.Context, state *pipeline.RunState) error
 	injectReminders    func(ctx context.Context, input *pipeline.RunInput, msgs []providers.Message) []providers.Message
 	buildFilteredTools func(state *pipeline.RunState) ([]providers.ToolDefinition, error)
 	callLLM            func(ctx context.Context, state *pipeline.RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
@@ -137,13 +138,24 @@ func (l *Loop) makeLoadSessionHistory() func(ctx context.Context, sessionKey str
 	}
 }
 
-func (l *Loop) makeEnrichMedia(req *RunRequest) func(ctx context.Context, input *pipeline.RunInput) error {
-	return func(ctx context.Context, input *pipeline.RunInput) error {
-		// enrichInputMedia returns updated context, messages, and media refs.
-		// The messages contain vision-injected content. For now we enrich the req
-		// in place so buildMessages picks up media changes on its next call.
-		// Full pipeline-native media handling is a follow-up.
-		_, _, _ = l.enrichInputMedia(ctx, req, nil)
+func (l *Loop) makeEnrichMedia(req *RunRequest) func(ctx context.Context, state *pipeline.RunState) error {
+	return func(ctx context.Context, state *pipeline.RunState) error {
+		// enrichInputMedia enriches messages in-place: attaches inline images,
+		// reloads historical media, enriches <media:*> tags, populates context
+		// with refs for tool access. Must receive actual messages (not nil) to
+		// avoid index-out-of-range panic on inline image attachment.
+		msgs := state.Messages.All()
+		if len(msgs) == 0 {
+			return nil
+		}
+		enrichedCtx, enrichedMsgs, _ := l.enrichInputMedia(ctx, req, msgs)
+		// Propagate enriched context (media images/docs/audio/video refs for tools).
+		state.Ctx = enrichedCtx
+		// Update history with enriched messages (media tags, inline images).
+		// Skip system message (index 0) — only history + user messages are enriched.
+		if len(enrichedMsgs) > 1 {
+			state.Messages.SetHistory(enrichedMsgs[1:])
+		}
 		return nil
 	}
 }
@@ -161,17 +173,37 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		if req.MaxIterations > 0 && req.MaxIterations < maxIter {
 			maxIter = req.MaxIterations
 		}
-		toolDefs, _, injectedMsgs := l.buildFilteredTools(req, state.Context.HadBootstrap,
-			state.Iteration, maxIter, state.Messages.All())
-		// Append tool-awareness messages (e.g., dynamic tool hints) to pending buffer
-		for _, msg := range injectedMsgs {
-			state.Messages.AppendPending(msg)
+		allMsgs := state.Messages.All()
+		toolDefs, _, returnedMsgs := l.buildFilteredTools(req, state.Context.HadBootstrap,
+			state.Iteration, maxIter, allMsgs)
+		// buildFilteredTools returns the full messages slice; only messages appended
+		// beyond the original length are injections (e.g. final-iteration hint).
+		// Appending the entire slice would duplicate system+history into pending.
+		if len(returnedMsgs) > len(allMsgs) {
+			for _, msg := range returnedMsgs[len(allMsgs):] {
+				state.Messages.AppendPending(msg)
+			}
 		}
 		return toolDefs, nil
 	}
 }
 
 func (l *Loop) makeCallLLM(req *RunRequest) func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
+	// emitRun enriches events with routing context so channels + WS can route them.
+	emitRun := func(event AgentEvent) {
+		event.RunKind = req.RunKind
+		event.DelegationID = req.DelegationID
+		event.TeamID = req.TeamID
+		event.TeamTaskID = req.TeamTaskID
+		event.ParentAgentID = req.ParentAgentID
+		event.UserID = req.UserID
+		event.Channel = req.Channel
+		event.ChatID = req.ChatID
+		event.SessionKey = req.SessionKey
+		event.TenantID = l.tenantID
+		l.emit(event)
+	}
+
 	return func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
 		provider := state.Provider
 
@@ -190,12 +222,45 @@ func (l *Loop) makeCallLLM(req *RunRequest) func(ctx context.Context, state *pip
 		var err error
 		if req.Stream {
 			resp, err = provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
-				if l.onEvent != nil {
-					l.onEvent(AgentEvent{Type: "chunk", Payload: chunk})
+				if chunk.Thinking != "" {
+					emitRun(AgentEvent{
+						Type:    protocol.ChatEventThinking,
+						AgentID: l.id,
+						RunID:   req.RunID,
+						Payload: map[string]string{"content": chunk.Thinking},
+					})
+				}
+				if chunk.Content != "" {
+					emitRun(AgentEvent{
+						Type:    protocol.ChatEventChunk,
+						AgentID: l.id,
+						RunID:   req.RunID,
+						Payload: map[string]string{"content": chunk.Content},
+					})
 				}
 			})
 		} else {
 			resp, err = provider.Chat(ctx, chatReq)
+		}
+
+		// Non-streaming: emit content events matching v2 behavior (channels need these).
+		if !req.Stream && err == nil && resp != nil {
+			if resp.Thinking != "" {
+				emitRun(AgentEvent{
+					Type:    protocol.ChatEventThinking,
+					AgentID: l.id,
+					RunID:   req.RunID,
+					Payload: map[string]string{"content": resp.Thinking},
+				})
+			}
+			if resp.Content != "" {
+				emitRun(AgentEvent{
+					Type:    protocol.ChatEventChunk,
+					AgentID: l.id,
+					RunID:   req.RunID,
+					Payload: map[string]string{"content": resp.Content},
+				})
+			}
 		}
 
 		l.emitLLMSpanEnd(ctx, spanID, start, resp, err, opts...)
@@ -230,8 +295,20 @@ func (l *Loop) makeRunMemoryFlush() func(ctx context.Context, state *pipeline.Ru
 	}
 }
 
-func (l *Loop) makeFlushMessages() func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
+func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
+	// Track whether user message has been persisted (first flush only).
+	// v2 adds user message to pendingMsgs explicitly; v3 keeps it in history
+	// (via BuildMessages) so it never reaches FlushPending. This closure
+	// persists the user message on first flush to match v2 session format.
+	var userMsgFlushed bool
 	return func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
+		if !userMsgFlushed && !req.HideInput && req.Message != "" {
+			userMsgFlushed = true
+			l.sessions.AddMessage(ctx, sessionKey, providers.Message{
+				Role:    "user",
+				Content: req.Message,
+			})
+		}
 		for _, msg := range msgs {
 			l.sessions.AddMessage(ctx, sessionKey, msg)
 		}
@@ -243,6 +320,9 @@ func (l *Loop) makeUpdateMetadata(req *RunRequest) func(ctx context.Context, ses
 	return func(ctx context.Context, sessionKey string, usage providers.Usage) error {
 		l.sessions.UpdateMetadata(ctx, sessionKey, l.model, l.provider.Name(), req.Channel)
 		l.sessions.AccumulateTokens(ctx, sessionKey, int64(usage.PromptTokens), int64(usage.CompletionTokens))
+		// Persist session to DB (matching v2 finalizeRun behavior).
+		// FlushMessages already ran, so all pending messages are in the cache.
+		l.sessions.Save(ctx, sessionKey)
 		return nil
 	}
 }
