@@ -3,11 +3,11 @@ package pg
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -113,28 +113,28 @@ func mergeEpisodicScores(fts, vec []episodicScored, textWeight, vecWeight float6
 // scanEpisodic scans a single row into EpisodicSummary.
 func scanEpisodic(row *sql.Row) (*store.EpisodicSummary, error) {
 	var ep store.EpisodicSummary
-	var topics json.RawMessage
+	var topics pq.StringArray
 	err := row.Scan(&ep.ID, &ep.TenantID, &ep.AgentID, &ep.UserID, &ep.SessionKey,
 		&ep.Summary, &topics, &ep.TurnCount, &ep.TokenCount,
 		&ep.L0Abstract, &ep.SourceID, &ep.SourceType, &ep.CreatedAt, &ep.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
-	_ = json.Unmarshal(topics, &ep.KeyTopics)
+	ep.KeyTopics = []string(topics)
 	return &ep, nil
 }
 
 // scanEpisodicRow scans from sql.Rows (same fields as scanEpisodic).
 func scanEpisodicRow(rows *sql.Rows) (*store.EpisodicSummary, error) {
 	var ep store.EpisodicSummary
-	var topics json.RawMessage
+	var topics pq.StringArray
 	err := rows.Scan(&ep.ID, &ep.TenantID, &ep.AgentID, &ep.UserID, &ep.SessionKey,
 		&ep.Summary, &topics, &ep.TurnCount, &ep.TokenCount,
 		&ep.L0Abstract, &ep.SourceID, &ep.SourceType, &ep.CreatedAt, &ep.ExpiresAt)
 	if err != nil {
 		return nil, err
 	}
-	_ = json.Unmarshal(topics, &ep.KeyTopics)
+	ep.KeyTopics = []string(topics)
 	return &ep, nil
 }
 

@@ -3,7 +3,6 @@ package pg
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -33,7 +32,7 @@ func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary)
 	id := uuid.Must(uuid.NewV7())
 	ep.ID = id
 
-	topics, _ := json.Marshal(ep.KeyTopics)
+	topics := pq.Array(ep.KeyTopics)
 	now := time.Now().UTC()
 
 	var embStr *string
@@ -53,7 +52,7 @@ func (s *PGEpisodicStore) Create(ctx context.Context, ep *store.EpisodicSummary)
 			 turn_count, token_count, embedding, l0_abstract, source_id,
 			 source_type, created_at, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-		ON CONFLICT (agent_id, user_id, source_id) DO NOTHING`,
+		ON CONFLICT (agent_id, user_id, source_id) WHERE source_id IS NOT NULL DO NOTHING`,
 		id, ep.TenantID, ep.AgentID, ep.UserID, ep.SessionKey,
 		ep.Summary, topics, ep.TurnCount, ep.TokenCount,
 		embStr, ep.L0Abstract, ep.SourceID, ep.SourceType, now, ep.ExpiresAt)
