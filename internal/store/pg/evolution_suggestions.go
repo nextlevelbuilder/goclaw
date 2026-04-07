@@ -62,11 +62,13 @@ func (s *PGEvolutionSuggestionStore) ListSuggestions(ctx context.Context, agentI
 	var suggestions []store.EvolutionSuggestion
 	for rows.Next() {
 		var sg store.EvolutionSuggestion
+		var reviewedBy sql.NullString
 		if err := rows.Scan(&sg.ID, &sg.TenantID, &sg.AgentID, &sg.SuggestionType,
 			&sg.Suggestion, &sg.Rationale, &sg.Parameters, &sg.Status,
-			&sg.ReviewedBy, &sg.ReviewedAt, &sg.CreatedAt); err != nil {
+			&reviewedBy, &sg.ReviewedAt, &sg.CreatedAt); err != nil {
 			return nil, err
 		}
+		sg.ReviewedBy = reviewedBy.String
 		suggestions = append(suggestions, sg)
 	}
 	return suggestions, rows.Err()
@@ -95,6 +97,7 @@ func (s *PGEvolutionSuggestionStore) UpdateSuggestionParameters(ctx context.Cont
 func (s *PGEvolutionSuggestionStore) GetSuggestion(ctx context.Context, id uuid.UUID) (*store.EvolutionSuggestion, error) {
 	tenantID := store.TenantIDFromContext(ctx)
 	var sg store.EvolutionSuggestion
+	var reviewedBy sql.NullString
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, tenant_id, agent_id, suggestion_type, suggestion, rationale,
 		        parameters, status, reviewed_by, reviewed_at, created_at
@@ -102,7 +105,8 @@ func (s *PGEvolutionSuggestionStore) GetSuggestion(ctx context.Context, id uuid.
 		id, tenantID).Scan(
 		&sg.ID, &sg.TenantID, &sg.AgentID, &sg.SuggestionType,
 		&sg.Suggestion, &sg.Rationale, &sg.Parameters, &sg.Status,
-		&sg.ReviewedBy, &sg.ReviewedAt, &sg.CreatedAt)
+		&reviewedBy, &sg.ReviewedAt, &sg.CreatedAt)
+	sg.ReviewedBy = reviewedBy.String
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
