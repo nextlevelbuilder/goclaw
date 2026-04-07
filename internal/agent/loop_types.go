@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
@@ -93,6 +94,7 @@ type Loop struct {
 	autoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
 	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
+	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	sessions        store.SessionStore
 	tools           tools.ToolExecutor
 	toolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
@@ -250,6 +252,7 @@ type LoopConfig struct {
 	SandboxCfg   *sandbox.Config
 
 	Bus             bus.EventPublisher
+	DomainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	Sessions        store.SessionStore
 	Tools           *tools.Registry
 	ToolPolicy      *tools.PolicyEngine    // optional: filters tools sent to LLM
@@ -406,6 +409,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		memoryCfg:              cfg.MemoryCfg,
 		sandboxCfg:             cfg.SandboxCfg,
 		eventPub:               cfg.Bus,
+		domainBus:              cfg.DomainBus,
 		sessions:               cfg.Sessions,
 		tools:                  cfg.Tools,
 		toolPolicy:             cfg.ToolPolicy,

@@ -18,6 +18,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
@@ -97,6 +99,18 @@ func runGateway() {
 	// Create core components
 	msgBus := bus.New()
 
+	// V3 domain event bus for consolidation pipeline (episodic → semantic → dreaming)
+	domainBus := eventbus.NewDomainEventBus(eventbus.Config{
+		QueueSize:   1000,
+		WorkerCount: 2,
+	})
+	domainBus.Start(context.Background())
+	defer func() {
+		if err := domainBus.Drain(10 * time.Second); err != nil {
+			slog.Warn("domain event bus drain timeout", "error", err)
+		}
+	}()
+
 	// Create model registry with forward-compat resolvers (shared across all providers)
 	modelReg := providers.NewInMemoryRegistry()
 	modelReg.RegisterResolver("anthropic", &providers.AnthropicForwardCompat{})
@@ -170,6 +184,28 @@ func runGateway() {
 		}
 	}
 	setupMemoryEmbeddings(pgStores, providerRegistry)
+
+	// V3: Wire consolidation pipeline (episodic → semantic → KG → dreaming)
+	if pgStores.Episodic != nil {
+		// Resolve a default provider for LLM summarization (use first master-tenant provider)
+		var consolidationProvider providers.Provider
+		if names := providerRegistry.ListForTenant(providers.MasterTenantID); len(names) > 0 {
+			consolidationProvider, _ = providerRegistry.GetForTenant(providers.MasterTenantID, names[0])
+		}
+		if consolidationProvider != nil {
+			cleanupConsolidation := consolidation.Register(consolidation.ConsolidationDeps{
+				EpisodicStore: pgStores.Episodic,
+				MemoryStore:   pgStores.Memory,
+				KGStore:       pgStores.KnowledgeGraph,
+				EventBus:      domainBus,
+				Provider:      consolidationProvider,
+			})
+			defer cleanupConsolidation()
+			slog.Info("consolidation pipeline registered")
+		} else {
+			slog.Warn("consolidation pipeline skipped: no provider available")
+		}
+	}
 
 	loadBootstrapFiles(pgStores, workspace, agentCfg)
 
@@ -352,7 +388,7 @@ func runGateway() {
 	var mcpPool *mcpbridge.Pool
 	var mediaStore *media.Store
 	var postTurn tools.PostTurnProcessor
-	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient)
+	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus)
 	if mcpPool != nil {
 		defer mcpPool.Stop()
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
@@ -108,6 +109,9 @@ type ResolverDeps struct {
 
 	// V3 auto-inject: episodic memory injection into system prompt (nil = disabled)
 	AutoInjector memory.AutoInjector
+
+	// V3 domain event bus for consolidation pipeline (nil = disabled)
+	DomainBus eventbus.DomainEventBus
 }
 
 // NewManagedResolver creates a ResolverFunc that builds Loops from DB agent data.
@@ -416,6 +420,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MemoryCfg:              ag.ParseMemoryConfig(),
 			SandboxCfg:             sandboxCfgOverride,
 			Bus:                    deps.Bus,
+			DomainBus:              deps.DomainBus,
 			Sessions:               deps.Sessions,
 			Tools:                  toolsReg,
 			ToolPolicy:             deps.ToolPolicy,
