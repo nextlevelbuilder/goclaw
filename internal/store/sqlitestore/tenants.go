@@ -48,38 +48,42 @@ func (s *SQLiteTenantStore) CreateTenant(ctx context.Context, tenant *store.Tena
 	return err
 }
 
+const tenantSelectCols = `id, name, slug, status, settings, created_at, updated_at`
+
 func (s *SQLiteTenantStore) GetTenant(ctx context.Context, id uuid.UUID) (*store.TenantData, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, slug, status, settings, created_at, updated_at
-		 FROM tenants WHERE id = ?`, id)
-	return scanTenantRow(row)
-}
-
-func (s *SQLiteTenantStore) GetTenantBySlug(ctx context.Context, slug string) (*store.TenantData, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, slug, status, settings, created_at, updated_at
-		 FROM tenants WHERE slug = ?`, slug)
-	return scanTenantRow(row)
-}
-
-func (s *SQLiteTenantStore) ListTenants(ctx context.Context) ([]store.TenantData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, slug, status, settings, created_at, updated_at
-		 FROM tenants ORDER BY created_at`)
+	var row tenantRow
+	err := pkgSqlxDB.GetContext(ctx, &row,
+		`SELECT `+tenantSelectCols+` FROM tenants WHERE id = ?`, id)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	d := row.toTenantData()
+	return &d, nil
+}
 
-	var tenants []store.TenantData
-	for rows.Next() {
-		d, err := scanTenantRowScanner(rows)
-		if err != nil {
-			return nil, err
-		}
-		tenants = append(tenants, *d)
+func (s *SQLiteTenantStore) GetTenantBySlug(ctx context.Context, slug string) (*store.TenantData, error) {
+	var row tenantRow
+	err := pkgSqlxDB.GetContext(ctx, &row,
+		`SELECT `+tenantSelectCols+` FROM tenants WHERE slug = ?`, slug)
+	if err != nil {
+		return nil, err
 	}
-	return tenants, rows.Err()
+	d := row.toTenantData()
+	return &d, nil
+}
+
+func (s *SQLiteTenantStore) ListTenants(ctx context.Context) ([]store.TenantData, error) {
+	var rows []tenantRow
+	err := pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT `+tenantSelectCols+` FROM tenants ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]store.TenantData, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, r.toTenantData())
+	}
+	return result, nil
 }
 
 func (s *SQLiteTenantStore) UpdateTenant(ctx context.Context, id uuid.UUID, updates map[string]any) error {
@@ -101,17 +105,16 @@ func (s *SQLiteTenantStore) AddUser(ctx context.Context, tenantID uuid.UUID, use
 	return err
 }
 
+const tenantUserSelectCols = `id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at`
+
 func (s *SQLiteTenantStore) GetTenantUser(ctx context.Context, id uuid.UUID) (*store.TenantUserData, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at
-		 FROM tenant_users WHERE id = ?`, id)
-	var d store.TenantUserData
-	createdAt, updatedAt := scanTimePair()
-	if err := row.Scan(&d.ID, &d.TenantID, &d.UserID, &d.DisplayName, &d.Role, &d.Metadata, createdAt, updatedAt); err != nil {
+	var row tenantUserRow
+	err := pkgSqlxDB.GetContext(ctx, &row,
+		`SELECT `+tenantUserSelectCols+` FROM tenant_users WHERE id = ?`, id)
+	if err != nil {
 		return nil, err
 	}
-	d.CreatedAt = createdAt.Time
-	d.UpdatedAt = updatedAt.Time
+	d := row.toTenantUserData()
 	return &d, nil
 }
 
@@ -162,25 +165,23 @@ func (s *SQLiteTenantStore) GetUserRole(ctx context.Context, tenantID uuid.UUID,
 }
 
 func (s *SQLiteTenantStore) ListUsers(ctx context.Context, tenantID uuid.UUID) ([]store.TenantUserData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at
-		 FROM tenant_users WHERE tenant_id = ? ORDER BY created_at`, tenantID)
+	var rows []tenantUserRow
+	err := pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT `+tenantUserSelectCols+` FROM tenant_users WHERE tenant_id = ? ORDER BY created_at`, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanTenantUserRows(rows)
+	return convertTenantUserRows(rows), nil
 }
 
 func (s *SQLiteTenantStore) ListUserTenants(ctx context.Context, userID string) ([]store.TenantUserData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at
-		 FROM tenant_users WHERE user_id = ? ORDER BY created_at`, userID)
+	var rows []tenantUserRow
+	err := pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT `+tenantUserSelectCols+` FROM tenant_users WHERE user_id = ? ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanTenantUserRows(rows)
+	return convertTenantUserRows(rows), nil
 }
 
 func (s *SQLiteTenantStore) ResolveUserTenant(ctx context.Context, userID string) (uuid.UUID, error) {
@@ -199,42 +200,13 @@ func (s *SQLiteTenantStore) ResolveUserTenant(ctx context.Context, userID string
 }
 
 // ============================================================
-// Scan helpers
+// Conversion helpers
 // ============================================================
 
-func scanTenantRow(row *sql.Row) (*store.TenantData, error) {
-	var d store.TenantData
-	createdAt, updatedAt := scanTimePair()
-	if err := row.Scan(&d.ID, &d.Name, &d.Slug, &d.Status, &d.Settings, createdAt, updatedAt); err != nil {
-		return nil, err
+func convertTenantUserRows(rows []tenantUserRow) []store.TenantUserData {
+	result := make([]store.TenantUserData, 0, len(rows))
+	for _, r := range rows {
+		result = append(result, r.toTenantUserData())
 	}
-	d.CreatedAt = createdAt.Time
-	d.UpdatedAt = updatedAt.Time
-	return &d, nil
-}
-
-func scanTenantRowScanner(row interface{ Scan(...any) error }) (*store.TenantData, error) {
-	var d store.TenantData
-	createdAt, updatedAt := scanTimePair()
-	if err := row.Scan(&d.ID, &d.Name, &d.Slug, &d.Status, &d.Settings, createdAt, updatedAt); err != nil {
-		return nil, err
-	}
-	d.CreatedAt = createdAt.Time
-	d.UpdatedAt = updatedAt.Time
-	return &d, nil
-}
-
-func scanTenantUserRows(rows *sql.Rows) ([]store.TenantUserData, error) {
-	var result []store.TenantUserData
-	for rows.Next() {
-		var d store.TenantUserData
-		createdAt, updatedAt := scanTimePair()
-		if err := rows.Scan(&d.ID, &d.TenantID, &d.UserID, &d.DisplayName, &d.Role, &d.Metadata, createdAt, updatedAt); err != nil {
-			return nil, err
-		}
-		d.CreatedAt = createdAt.Time
-		d.UpdatedAt = updatedAt.Time
-		result = append(result, d)
-	}
-	return result, rows.Err()
+	return result
 }

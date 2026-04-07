@@ -15,6 +15,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+const providerSelectCols = `id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id`
+
 // SQLiteProviderStore implements store.ProviderStore backed by SQLite.
 type SQLiteProviderStore struct {
 	db     *sql.DB
@@ -80,21 +82,17 @@ func (s *SQLiteProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*s
 	if err != nil {
 		return nil, err
 	}
-	var p store.LLMProviderData
-	var apiKey string
-	createdAt, updatedAt := scanTimePair()
+	var row providerRow
 	args := append([]any{id}, tArgs...)
-	err = s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE id = ?`+tClause,
+	err = pkgSqlxDB.GetContext(ctx, &row,
+		`SELECT `+providerSelectCols+` FROM llm_providers WHERE id = ?`+tClause,
 		args...,
-	).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, createdAt, updatedAt, &p.TenantID)
+	)
 	if err != nil {
 		return nil, fmt.Errorf("provider not found: %s", id)
 	}
-	p.CreatedAt = createdAt.Time
-	p.UpdatedAt = updatedAt.Time
-	p.APIKey = s.decryptKey(apiKey, p.Name)
+	p := row.toLLMProviderData()
+	p.APIKey = s.decryptKey(p.APIKey, p.Name)
 	return &p, nil
 }
 
@@ -103,21 +101,17 @@ func (s *SQLiteProviderStore) GetProviderByName(ctx context.Context, name string
 	if err != nil {
 		return nil, err
 	}
-	var p store.LLMProviderData
-	var apiKey string
-	createdAt, updatedAt := scanTimePair()
+	var row providerRow
 	args := append([]any{name}, tArgs...)
-	err = s.db.QueryRowContext(ctx,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE name = ?`+tClause,
+	err = pkgSqlxDB.GetContext(ctx, &row,
+		`SELECT `+providerSelectCols+` FROM llm_providers WHERE name = ?`+tClause,
 		args...,
-	).Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, createdAt, updatedAt, &p.TenantID)
+	)
 	if err != nil {
 		return nil, fmt.Errorf("provider not found: %s", name)
 	}
-	p.CreatedAt = createdAt.Time
-	p.UpdatedAt = updatedAt.Time
-	p.APIKey = s.decryptKey(apiKey, p.Name)
+	p := row.toLLMProviderData()
+	p.APIKey = s.decryptKey(p.APIKey, p.Name)
 	return &p, nil
 }
 
@@ -126,24 +120,27 @@ func (s *SQLiteProviderStore) ListProviders(ctx context.Context) ([]store.LLMPro
 	if err != nil {
 		return nil, err
 	}
-	q := `SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE true` + tClause + ` ORDER BY name`
-	rows, err := s.db.QueryContext(ctx, q, tArgs...)
+	var rows []providerRow
+	err = pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT `+providerSelectCols+` FROM llm_providers WHERE true`+tClause+` ORDER BY name`,
+		tArgs...,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return s.scanProviders(rows)
+	return s.convertAndDecryptProviders(rows), nil
 }
 
 // ListAllProviders returns all providers across all tenants. Server-internal only.
 func (s *SQLiteProviderStore) ListAllProviders(ctx context.Context) ([]store.LLMProviderData, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers ORDER BY name`)
+	var rows []providerRow
+	err := pkgSqlxDB.SelectContext(ctx, &rows,
+		`SELECT `+providerSelectCols+` FROM llm_providers ORDER BY name`,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return s.scanProviders(rows)
+	return s.convertAndDecryptProviders(rows), nil
 }
 
 func (s *SQLiteProviderStore) UpdateProvider(ctx context.Context, id uuid.UUID, updates map[string]any) error {
@@ -191,22 +188,13 @@ func (s *SQLiteProviderStore) decryptKey(apiKey, providerName string) string {
 	return apiKey
 }
 
-func (s *SQLiteProviderStore) scanProviders(rows *sql.Rows) ([]store.LLMProviderData, error) {
-	defer rows.Close()
-	var result []store.LLMProviderData
-	for rows.Next() {
-		var p store.LLMProviderData
-		var apiKey string
-		createdAt, updatedAt := scanTimePair()
-		if err := rows.Scan(&p.ID, &p.Name, &p.DisplayName, &p.ProviderType, &p.APIBase, &apiKey, &p.Enabled, &p.Settings, createdAt, updatedAt, &p.TenantID); err != nil {
-			slog.Error("providers.scan", "error", err)
-			continue
-		}
-		p.CreatedAt = createdAt.Time
-		p.UpdatedAt = updatedAt.Time
-		p.APIKey = s.decryptKey(apiKey, p.Name)
+func (s *SQLiteProviderStore) convertAndDecryptProviders(rows []providerRow) []store.LLMProviderData {
+	result := make([]store.LLMProviderData, 0, len(rows))
+	for _, r := range rows {
+		p := r.toLLMProviderData()
+		p.APIKey = s.decryptKey(p.APIKey, p.Name)
 		result = append(result, p)
 	}
-	return result, rows.Err()
+	return result
 }
 
