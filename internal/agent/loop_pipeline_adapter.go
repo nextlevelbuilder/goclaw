@@ -136,7 +136,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		StripMessageDirectives: StripMessageDirectives,
 		DeduplicateMediaSuffix: deduplicateMediaSuffix,
 		IsSilentReply:          IsSilentReply,
-		EmitSessionCompleted: func(ctx context.Context, sessionKey string) {
+		EmitSessionCompleted: func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int) {
 			if l.domainBus != nil {
 				l.domainBus.Publish(eventbus.DomainEvent{
 					Type:     eventbus.EventSessionCompleted,
@@ -144,6 +144,12 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 					AgentID:  l.id,
 					UserID:   req.UserID,
 					SourceID: sessionKey,
+					Payload: &eventbus.SessionCompletedPayload{
+						SessionKey:      sessionKey,
+						MessageCount:    msgCount,
+						TokensUsed:      tokensUsed,
+						CompactionCount: compactionCount,
+					},
 				})
 			}
 		},

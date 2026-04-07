@@ -107,7 +107,9 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 
 	// 8. Emit session.completed for consolidation pipeline (episodic → semantic → dreaming).
 	if s.deps.EmitSessionCompleted != nil {
-		s.deps.EmitSessionCompleted(ctx, state.Input.SessionKey)
+		msgCount := state.Messages.TotalLen()
+		tokensUsed := state.Think.TotalUsage.PromptTokens + state.Think.TotalUsage.CompletionTokens
+		s.deps.EmitSessionCompleted(ctx, state.Input.SessionKey, msgCount, tokensUsed, state.Compact.CompactionCount)
 	}
 
 	// 9. Strip internal [[...]] tags from user-facing content (matching v2 StripMessageDirectives).

@@ -204,6 +204,12 @@ func (l *Loop) finalizeRun(
 			AgentID:  l.id,
 			UserID:   req.UserID,
 			SourceID: req.SessionKey,
+			Payload: &eventbus.SessionCompletedPayload{
+				SessionKey:      req.SessionKey,
+				MessageCount:    len(history) + len(rs.pendingMsgs),
+				TokensUsed:      rs.totalUsage.PromptTokens + rs.totalUsage.CompletionTokens,
+				CompactionCount: l.sessions.GetCompactionCount(ctx, req.SessionKey),
+			},
 		})
 	}
 
