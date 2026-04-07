@@ -108,7 +108,11 @@ func TestThinkStage_Truncation_FirstRetry_AppendsContinueMessage(t *testing.T) {
 	deps := &PipelineDeps{
 		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
 		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
-			return &providers.ChatResponse{FinishReason: "length"}, nil
+			// Truncation only triggers when tool calls are present (args truncated).
+			return &providers.ChatResponse{
+				FinishReason: "length",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "write_file"}},
+			}, nil
 		},
 	}
 	stage := NewThinkStage(deps)
@@ -124,13 +128,16 @@ func TestThinkStage_Truncation_FirstRetry_AppendsContinueMessage(t *testing.T) {
 	if state.Think.TruncRetries != 1 {
 		t.Errorf("TruncRetries = %d, want 1", state.Think.TruncRetries)
 	}
-	// retry message appended
+	// retry messages appended: assistant (partial) + user (hint)
 	pending := state.Messages.Pending()
-	if len(pending) != 1 {
-		t.Fatalf("pending len = %d, want 1", len(pending))
+	if len(pending) != 2 {
+		t.Fatalf("pending len = %d, want 2", len(pending))
 	}
-	if pending[0].Role != "user" {
-		t.Errorf("retry message role = %q, want user", pending[0].Role)
+	if pending[0].Role != "assistant" {
+		t.Errorf("pending[0] role = %q, want assistant", pending[0].Role)
+	}
+	if pending[1].Role != "user" {
+		t.Errorf("pending[1] role = %q, want user", pending[1].Role)
 	}
 }
 
@@ -139,7 +146,10 @@ func TestThinkStage_Truncation_ThirdRetry_ReturnsAbortRun(t *testing.T) {
 	deps := &PipelineDeps{
 		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
 		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
-			return &providers.ChatResponse{FinishReason: "length"}, nil
+			return &providers.ChatResponse{
+				FinishReason: "length",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "write_file"}},
+			}, nil
 		},
 	}
 	stage := NewThinkStage(deps)
@@ -1317,17 +1327,22 @@ func TestFinalizeStage_FlushesRemainingPending(t *testing.T) {
 	}
 	stage := NewFinalizeStage(deps)
 	state := defaultState()
-	state.Messages.AppendPending(providers.Message{Role: "assistant", Content: "final"})
+	state.Observe.FinalContent = "hello"
+	state.Messages.AppendPending(providers.Message{Role: "assistant", Content: "tool result"})
 
 	err := stage.Execute(context.Background(), state)
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	if len(flushedMsgs) != 1 {
-		t.Fatalf("flushed %d messages, want 1", len(flushedMsgs))
+	// Expect 2 flushed: the pre-existing pending + the final assistant message built by FinalizeStage
+	if len(flushedMsgs) != 2 {
+		t.Fatalf("flushed %d messages, want 2", len(flushedMsgs))
 	}
-	if flushedMsgs[0].Content != "final" {
-		t.Errorf("flushed[0].Content = %q", flushedMsgs[0].Content)
+	if flushedMsgs[0].Content != "tool result" {
+		t.Errorf("flushed[0].Content = %q, want tool result", flushedMsgs[0].Content)
+	}
+	if flushedMsgs[1].Role != "assistant" || flushedMsgs[1].Content != "hello" {
+		t.Errorf("flushed[1] = %q/%q, want assistant/hello", flushedMsgs[1].Role, flushedMsgs[1].Content)
 	}
 }
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // FinalizeStage runs once after the iteration loop exits. Sanitizes content,
@@ -31,8 +34,49 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// Must run BEFORE session flush so the agent message is persisted even if suppressed.
 	isSilent := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
 
+	// 2b. Fallback for empty content (matching v2: channels need non-empty content to deliver).
+	if state.Observe.FinalContent == "" && !isSilent {
+		state.Observe.FinalContent = "..."
+	}
+
+	// 2c. Append content suffix (e.g. image markdown for WS) with dedup.
+	if state.Input.ContentSuffix != "" && s.deps.DeduplicateMediaSuffix != nil {
+		state.Observe.FinalContent += s.deps.DeduplicateMediaSuffix(state.Observe.FinalContent, state.Input.ContentSuffix)
+	}
+
+	// 2d. Merge forwarded media into results (matching v2 finalizeRun).
+	for _, mf := range state.Input.ForwardMedia {
+		ct := mf.MimeType
+		state.Tool.MediaResults = append(state.Tool.MediaResults, MediaResult{Path: mf.Path, ContentType: ct})
+	}
+
 	// 3. Deduplicate + populate media sizes
 	s.processMedia(state)
+
+	// 3b. Build final assistant message with MediaRefs for session persistence.
+	assistantMsg := providers.Message{
+		Role:     "assistant",
+		Content:  state.Observe.FinalContent,
+		Thinking: state.Observe.FinalThinking,
+	}
+	for _, mr := range state.Tool.MediaResults {
+		kind := "document"
+		switch {
+		case len(mr.ContentType) > 6 && mr.ContentType[:6] == "image/":
+			kind = "image"
+		case len(mr.ContentType) > 6 && mr.ContentType[:6] == "audio/":
+			kind = "audio"
+		case len(mr.ContentType) > 6 && mr.ContentType[:6] == "video/":
+			kind = "video"
+		}
+		assistantMsg.MediaRefs = append(assistantMsg.MediaRefs, providers.MediaRef{
+			ID:       filepath.Base(mr.Path),
+			MimeType: mr.ContentType,
+			Kind:     kind,
+			Path:     mr.Path,
+		})
+	}
+	state.Messages.AppendPending(assistantMsg)
 
 	// 4. Flush remaining pending messages to session store
 	pending := state.Messages.FlushPending()

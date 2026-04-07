@@ -47,7 +47,7 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		Tools:    toolDefs,
 		Model:    state.Model,
 		Options: map[string]any{
-			"max_tokens": s.deps.Config.MaxTokens,
+			providers.OptMaxTokens: s.deps.Config.MaxTokens,
 		},
 	}
 
@@ -61,40 +61,58 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	}
 	state.Think.LastResponse = resp
 
-	// 5. Accumulate usage
+	// 5. Accumulate usage (including ThinkingTokens for reasoning models)
 	if resp.Usage != nil {
 		state.Think.TotalUsage.PromptTokens += resp.Usage.PromptTokens
 		state.Think.TotalUsage.CompletionTokens += resp.Usage.CompletionTokens
 		state.Think.TotalUsage.TotalTokens += resp.Usage.TotalTokens
+		state.Think.TotalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
 	}
 
-	// 6. Handle truncation (finish_reason == "length")
-	if resp.FinishReason == "length" {
+	// 6. Handle truncation: only retry when tool call args are truncated or malformed.
+	// Text-only truncation (no tool calls) is a valid long answer — deliver it.
+	truncated := resp.FinishReason == "length" && len(resp.ToolCalls) > 0
+	parseErr := !truncated && toolCallsHaveParseErrors(resp.ToolCalls)
+	if truncated || parseErr {
 		state.Think.TruncRetries++
 		if state.Think.TruncRetries >= maxTruncRetries {
 			s.result = AbortRun
 			return nil
 		}
-		state.Messages.AppendPending(providers.Message{
-			Role:    "user",
-			Content: "Your response was cut off. Please continue from where you stopped. Be more concise.",
-		})
+		hint := "[System] Your output was truncated because it exceeded max_tokens. Your tool call arguments were incomplete. Please retry with shorter content — split large writes into multiple smaller calls."
+		if parseErr {
+			hint = "[System] One or more tool call arguments were malformed (truncated JSON). Please retry with shorter content."
+		}
+		state.Messages.AppendPending(providers.Message{Role: "assistant", Content: resp.Content})
+		state.Messages.AppendPending(providers.Message{Role: "user", Content: hint})
 		return nil // Continue to next iteration for retry
 	}
 	state.Think.TruncRetries = 0 // reset on success
 
-	// 7. Append assistant response to pending messages
-	assistantMsg := providers.Message{
-		Role:     "assistant",
-		Content:  resp.Content,
-		Thinking: resp.Thinking,
+	// 7. Uniquify tool call IDs (OpenAI returns 400 on duplicates across iterations).
+	// Skip if raw content present (Anthropic thinking passback) to avoid desync.
+	if len(resp.ToolCalls) > 0 && resp.RawAssistantContent == nil && s.deps.UniqueToolCallIDs != nil {
+		resp.ToolCalls = s.deps.UniqueToolCallIDs(resp.ToolCalls, state.RunID, state.Iteration)
 	}
-	if len(resp.ToolCalls) > 0 {
-		assistantMsg.ToolCalls = resp.ToolCalls
+
+	// 8. Append assistant response with full passback fields (reasoning, phase, raw content).
+	assistantMsg := providers.Message{
+		Role:                "assistant",
+		Content:             resp.Content,
+		Thinking:            resp.Thinking,
+		ToolCalls:           resp.ToolCalls,
+		Phase:               resp.Phase,               // Codex phase metadata
+		RawAssistantContent: resp.RawAssistantContent, // Anthropic thinking blocks passback
 	}
 	state.Messages.AppendPending(assistantMsg)
 
-	// 8. Flow control: no tool calls = final answer -> BreakLoop
+	// 9. Emit block.reply for intermediate assistant content during tool iterations.
+	// Non-streaming channels (Zalo, Discord, WhatsApp) need this for delivery.
+	if len(resp.ToolCalls) > 0 && resp.Content != "" && s.deps.EmitBlockReply != nil {
+		s.deps.EmitBlockReply(resp.Content)
+	}
+
+	// 10. Flow control: no tool calls = final answer -> BreakLoop
 	if len(resp.ToolCalls) == 0 {
 		s.result = BreakLoop
 	}
@@ -123,4 +141,15 @@ func (s *ThinkStage) maybeInjectNudge(state *RunState) {
 			Content: "[System] You have used 70% of your iteration budget. Start wrapping up your work.",
 		})
 	}
+}
+
+// toolCallsHaveParseErrors returns true if any tool call has a non-empty ParseError,
+// indicating the arguments JSON was malformed or truncated by the provider.
+func toolCallsHaveParseErrors(calls []providers.ToolCall) bool {
+	for _, tc := range calls {
+		if tc.ParseError != "" {
+			return true
+		}
+	}
+	return false
 }

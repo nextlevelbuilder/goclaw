@@ -9,6 +9,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // runViaPipeline delegates a run to the v3 pipeline.
@@ -55,7 +56,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 			MaxToolCalls:       l.maxToolCalls,
 			CheckpointInterval: 5,
 			ContextWindow:      l.contextWindow,
-			MaxTokens:          l.maxTokens,
+			MaxTokens:          l.effectiveMaxTokens(),
 			Compaction:         l.compactionCfg,
 			V3MemoryEnabled:    l.v3MemoryEnabled,
 			V3RetrievalEnabled: l.v3RetrievalEnabled,
@@ -84,6 +85,18 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		// Think callbacks
 		BuildFilteredTools: cb.buildFilteredTools,
 		CallLLM:            cb.callLLM,
+		UniqueToolCallIDs:  uniquifyToolCallIDs,
+		EmitBlockReply: func(content string) {
+			sanitized := SanitizeAssistantContent(content)
+			if sanitized != "" && !IsSilentReply(sanitized) {
+				cb.emitRun(AgentEvent{
+					Type:    protocol.AgentEventBlockReply,
+					AgentID: l.id,
+					RunID:   req.RunID,
+					Payload: map[string]string{"content": sanitized},
+				})
+			}
+		},
 
 		// Prune callbacks
 		PruneMessages:   cb.pruneMessages,
@@ -121,6 +134,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		FlushMessages:          cb.flushMessages,
 		SanitizeContent:        cb.sanitizeContent,
 		StripMessageDirectives: StripMessageDirectives,
+		DeduplicateMediaSuffix: deduplicateMediaSuffix,
 		IsSilentReply:          IsSilentReply,
 		EmitSessionCompleted: func(ctx context.Context, sessionKey string) {
 			if l.domainBus != nil {

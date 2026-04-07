@@ -41,8 +41,10 @@ type PipelineDeps struct {
 	InjectReminders  func(ctx context.Context, input *RunInput, msgs []providers.Message) []providers.Message
 
 	// Think callbacks (ThinkStage)
-	BuildFilteredTools func(state *RunState) ([]providers.ToolDefinition, error)
-	CallLLM            func(ctx context.Context, state *RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
+	BuildFilteredTools  func(state *RunState) ([]providers.ToolDefinition, error)
+	CallLLM             func(ctx context.Context, state *RunState, req providers.ChatRequest) (*providers.ChatResponse, error)
+	UniqueToolCallIDs   func(calls []providers.ToolCall, runID string, iteration int) []providers.ToolCall
+	EmitBlockReply      func(content string) // emit block.reply for intermediate assistant content
 
 	// Prune callbacks (PruneStage)
 	PruneMessages   func(msgs []providers.Message, budget int) []providers.Message
@@ -70,8 +72,9 @@ type PipelineDeps struct {
 	FlushMessages func(ctx context.Context, sessionKey string, msgs []providers.Message) error
 
 	// Finalize callbacks (FinalizeStage)
-	SanitizeContent        func(content string) string
-	StripMessageDirectives func(content string) string
+	SanitizeContent          func(content string) string
+	StripMessageDirectives   func(content string) string
+	DeduplicateMediaSuffix   func(content, suffix string) string
 	IsSilentReply          func(content string) bool
 	EmitSessionCompleted   func(ctx context.Context, sessionKey string)
 	UpdateMetadata         func(ctx context.Context, sessionKey string, usage providers.Usage) error

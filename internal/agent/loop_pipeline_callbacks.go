@@ -5,9 +5,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -15,7 +20,22 @@ import (
 // pipelineCallbacks creates all callback closures that capture *Loop.
 // Each callback bridges a pipeline.PipelineDeps function to an existing Loop method.
 func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCallbackSet {
+	// Shared emitRun enriches events with routing context (matching v2 pattern).
+	emitRun := func(event AgentEvent) {
+		event.RunKind = req.RunKind
+		event.DelegationID = req.DelegationID
+		event.TeamID = req.TeamID
+		event.TeamTaskID = req.TeamTaskID
+		event.ParentAgentID = req.ParentAgentID
+		event.UserID = req.UserID
+		event.Channel = req.Channel
+		event.ChatID = req.ChatID
+		event.SessionKey = req.SessionKey
+		event.TenantID = l.tenantID
+		l.emit(event)
+	}
 	return pipelineCallbackSet{
+		emitRun:            emitRun,
 		injectContext:      l.makeInjectContext(req),
 		loadSessionHistory: l.makeLoadSessionHistory(),
 		resolveWorkspace:   l.makeResolveWorkspace(req),
@@ -24,7 +44,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		enrichMedia:        l.makeEnrichMedia(req),
 		injectReminders:    l.makeInjectReminders(req),
 		buildFilteredTools: l.makeBuildFilteredTools(req),
-		callLLM:            l.makeCallLLM(req),
+		callLLM:            l.makeCallLLM(req, emitRun),
 		pruneMessages:      l.makePruneMessages(),
 		compactMessages:    l.makeCompactMessages(),
 		runMemoryFlush:     l.makeRunMemoryFlush(),
@@ -42,6 +62,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 
 // pipelineCallbackSet groups all typed callbacks for PipelineDeps.
 type pipelineCallbackSet struct {
+	emitRun            func(AgentEvent)
 	injectContext      func(ctx context.Context, input *pipeline.RunInput) (context.Context, error)
 	loadSessionHistory func(ctx context.Context, sessionKey string) ([]providers.Message, string)
 	resolveWorkspace   func(ctx context.Context, input *pipeline.RunInput) (*workspace.WorkspaceContext, error)
@@ -188,24 +209,37 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 	}
 }
 
-func (l *Loop) makeCallLLM(req *RunRequest) func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
-	// emitRun enriches events with routing context so channels + WS can route them.
-	emitRun := func(event AgentEvent) {
-		event.RunKind = req.RunKind
-		event.DelegationID = req.DelegationID
-		event.TeamID = req.TeamID
-		event.TeamTaskID = req.TeamTaskID
-		event.ParentAgentID = req.ParentAgentID
-		event.UserID = req.UserID
-		event.Channel = req.Channel
-		event.ChatID = req.ChatID
-		event.SessionKey = req.SessionKey
-		event.TenantID = l.tenantID
-		l.emit(event)
-	}
-
+func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
 	return func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
 		provider := state.Provider
+		model := state.Model
+
+		// Enrich ChatRequest options to match v2 (providers need these for caching, routing, audit).
+		if chatReq.Options == nil {
+			chatReq.Options = make(map[string]any)
+		}
+		chatReq.Options[providers.OptTemperature] = config.DefaultTemperature
+		chatReq.Options[providers.OptSessionKey] = req.SessionKey
+		chatReq.Options[providers.OptAgentID] = l.agentUUID.String()
+		chatReq.Options[providers.OptUserID] = req.UserID
+		chatReq.Options[providers.OptChannel] = req.Channel
+		chatReq.Options[providers.OptChatID] = req.ChatID
+		chatReq.Options[providers.OptPeerKind] = req.PeerKind
+		chatReq.Options[providers.OptWorkspace] = tools.ToolWorkspaceFromCtx(ctx)
+		if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+			chatReq.Options[providers.OptTenantID] = tid.String()
+		}
+
+		// Reasoning decision: resolve effort level for thinking models (o3, DeepSeek-R1, Kimi).
+		reasoningDecision := providers.ResolveReasoningDecision(
+			provider, model,
+			l.reasoningConfig.Effort,
+			l.reasoningConfig.Fallback,
+			l.reasoningConfig.Source,
+		)
+		if effort := reasoningDecision.RequestEffort(); effort != "" {
+			chatReq.Options[providers.OptThinkingLevel] = effort
+		}
 
 		// Emit LLM span start (matching runLoop tracing behavior).
 		start := time.Now().UTC()
