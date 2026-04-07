@@ -144,6 +144,14 @@ flowchart TD
 | `status` | Gateway status (connected clients, agents, channels) |
 | `providers.models` | List available models from all providers |
 
+### Agent Evolution (v3)
+
+| Method | Description |
+|--------|-------------|
+| `agent.evolution.suggestions` | Get evolution suggestions for an agent (requires metrics enabled) |
+| `agent.evolution.apply` | Apply a suggested evolution to an agent configuration |
+| `agent.evolution.rollback` | Roll back applied evolution with quality guardrails |
+
 ### Chat
 
 | Method | Description |
@@ -588,6 +596,7 @@ Error responses include `retryable` (boolean) and `retryAfterMs` (integer) field
 | `internal/gateway/methods/usage.go` | usage.get/summary handlers |
 | `internal/gateway/methods/api_keys.go` | api_keys.list/create/revoke handlers |
 | `internal/gateway/methods/send.go` | send handler (direct message to channel) |
+| `internal/gateway/methods/agent_links.go` | agent_links.* handlers (v3 delegation links) |
 | `internal/http/chat_completions.go` | POST /v1/chat/completions (OpenAI-compatible) |
 | `internal/http/responses.go` | POST /v1/responses (OpenResponses protocol) |
 | `internal/http/tools_invoke.go` | POST /v1/tools/invoke (direct tool execution) |

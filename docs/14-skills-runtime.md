@@ -188,3 +188,9 @@ To add a new package to the Docker image:
 5. **Rebuild**: `docker compose ... up -d --build`
 
 For packages only needed by specific skills, prefer runtime installation (Option B) to keep the image lean.
+
+---
+
+## 8. Skill Search (v3)
+
+Skills are searchable via BM25 keyword + semantic similarity matching (in `internal/skills/search.go`). The skill loader indexes all available skills from workspace/project/global/builtin sources. Skill discovery combines keyword matching with embeddings for improved recall of relevant tools to agent tasks.

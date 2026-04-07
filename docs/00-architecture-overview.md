@@ -132,6 +132,13 @@ flowchart TD
 | `internal/sessions/` | Session management and lifecycle |
 | `internal/tasks/` | Task management system |
 | `internal/upgrade/` | Database schema version tracking and migrations |
+| `internal/pipeline/` | **[V3]** 8-stage pluggable agent pipeline (context → history → prompt → think → act → observe → memory → summarize) |
+| `internal/eventbus/` | **[V3]** DomainEventBus: typed event publishing, worker pool, dedup, retry, used by consolidation workers |
+| `internal/consolidation/` | **[V3]** Memory consolidation workers: episodic (recent facts), semantic (embeddings), dreaming (synthesis), dedup |
+| `internal/tokencount/` | **[V3]** Token counting: tiktoken BPE counter with fallback, used by pipeline for context tracking |
+| `internal/workspace/` | **[V3]** Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
+| `internal/vault/` | **[V3]** Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
+| `internal/channels/whatsapp/` | **[V3]** Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
 
 ---
 
@@ -409,11 +416,68 @@ flowchart TD
 
 ---
 
+## V3 Architecture (Wave 1 & Wave 2 - dev-v3 branch)
+
+### Overview
+
+V3 introduces a **pluggable 8-stage pipeline** (replacing the monolithic `runLoop`), an event-driven architecture via `DomainEventBus`, and advanced memory consolidation. The system maintains backward compatibility via a **dual-mode gate** at the loop level: agents can opt into v3 pipeline or stay on v2 monolithic loop per-agent via `other_config` JSONB.
+
+### 8-Stage Pipeline
+
+| Stage | Phase | Responsibility |
+|-------|-------|-----------------|
+| **ContextStage** | Setup (once) | Inject agent/user/workspace context, compute per-user files |
+| **ThinkStage** | Iteration | Build system prompt, filter tools by policy, call LLM |
+| **PruneStage** | Iteration | Context pruning (2-pass: soft trim → hard clear), run memory flush if compaction triggered |
+| **ToolStage** | Iteration | Execute tool calls (parallel goroutines for multiple calls) |
+| **ObserveStage** | Iteration | Process tool results, append to messages |
+| **CheckpointStage** | Iteration | Track iteration state, check for loop exit conditions |
+| **FinalizeStage** | Finalize (once) | Sanitize output, flush messages, update session metadata |
+
+### Feature Flags (in `agents.other_config` JSONB)
+
+| Flag | Key | Type | Default | Purpose |
+|------|-----|------|---------|---------|
+| Pipeline | `v3_pipeline_enabled` | bool | false | Use v3 pipeline instead of v2 monolithic loop |
+| Memory | `v3_memory_enabled` | bool | false | Enable episodic/semantic consolidation workers via DomainEventBus |
+| Retrieval | `v3_retrieval_enabled` | bool | false | Enable Knowledge Vault with wikilinks + hybrid search, L0 auto-injection |
+| Evolution Metrics | `self_evolution_metrics` | bool | false | Track agent metrics for evolution suggestions (tool usage, retrieval patterns) |
+| Evolution Suggestions | `self_evolution_suggestions` | bool | false | Generate and apply evolution suggestions (auto-adapt prompt/tools) |
+
+### Memory Consolidation System
+
+**DomainEventBus** drives asynchronous consolidation:
+
+- **Episodic Worker** — Extracts facts from recent runs, clusters by topic, stores in `episodic_memory` table with embeddings
+- **Semantic Worker** — Reprocesses episodic clusters, generates abstracted summaries, produces `semantic_memory` entries
+- **Dreaming Worker** — Synthesizes novel insights from memory clusters, cross-links related memories, drives self-evolution
+- **Dedup Worker** — Prevents duplicate memory entries, maintains consistency across consolidation cycles
+
+### Workspace Context Resolver
+
+Six distinct workspace scenarios:
+
+1. **Agent default** — Agent workspace from config, sandbox environment
+2. **Team lead** — Team workspace as default (agent coordinates tasks)
+3. **Team member** — Agent workspace with team workspace accessible via `WithToolTeamWorkspace()`
+4. **Dispatch** — Temporary workspace from `req.TeamWorkspace` (one-off delegated task)
+5. **Subagent** — Inherited workspace from parent agent via context propagation
+6. **Cron** — Workspace resolved from agent + timezone context at cron trigger time
+
+### Knowledge Vault (Wikilinks + Hybrid Search)
+
+- **Wikilinks**: Bidirectional semantic links (`[[related-concept]]`) automatically extracted from memories
+- **Hybrid Search**: BM25 keyword search + vector similarity (pgvector) combined via RRF (reciprocal rank fusion)
+- **L0 Auto-Injection**: Top-K vault entries injected into system prompt as "relevant context from vault"
+- **Filesystem Sync**: Vault entries exported as `.md` files for manual editing, re-imported with change tracking
+
+---
+
 ## Cross-References
 
 | Document | Content |
 |----------|---------|
-| [01-agent-loop.md](./01-agent-loop.md) | Agent loop detail, sanitization pipeline, history management |
+| [01-agent-loop.md](./01-agent-loop.md) | Agent loop detail, v3 pipeline stages, sanitization pipeline, history management, orchestration modes, self-evolution |
 | [02-providers.md](./02-providers.md) | LLM providers, retry logic, schema cleaning |
 | [03-tools-system.md](./03-tools-system.md) | Tool registry, policy engine, interceptors, custom tools, MCP grants |
 | [04-gateway-protocol.md](./04-gateway-protocol.md) | WebSocket protocol v3, HTTP API, RBAC, identity propagation |

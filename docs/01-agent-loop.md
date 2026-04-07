@@ -2,11 +2,161 @@
 
 ## Overview
 
-The Agent Loop implements a **Think --> Act --> Observe** cycle. Each agent owns a `Loop` instance configured with a provider, model, tools, workspace, and agent type. A user message enters as a `RunRequest`, passes through `runLoop`, and exits as a `RunResult`. The loop iterates up to 20 times: the LLM thinks, optionally calls tools, observes results, and repeats until it produces a final text response.
+The Agent Loop implements a **Think --> Act --> Observe** cycle. Each agent owns a `Loop` instance configured with a provider, model, tools, workspace, and agent type. A user message enters as a `RunRequest`, passes through the loop, and exits as a `RunResult`. 
+
+**V3 Dual Mode**: The loop supports two execution paths:
+- **V2 (monolithic)**: Original `runLoop()` function (default for backward compatibility)
+- **V3 (pipeline)**: Pluggable 8-stage pipeline (`internal/pipeline/`, enabled via feature flag)
+
+Both paths implement the same external behavior; the difference is internal architecture. The loop iterates up to 20 times: the LLM thinks, optionally calls tools, observes results, and repeats until it produces a final text response.
 
 ---
 
-## 1. RunRequest Flow
+## V3 Pipeline Architecture
+
+When `pipeline_enabled` is true, `Loop.Run()` delegates to `runViaPipeline()`, which orchestrates the v3 pipeline:
+
+```mermaid
+flowchart TD
+    RUN["Loop.Run<br/>runRequest"] --> GATE{pipeline_enabled?}
+    GATE -->|false| V2["runLoop<br/>v2 monolithic"]
+    GATE -->|true| V3["runViaPipeline<br/>v3 pipeline"]
+
+    V3 --> NEWSTATE["NewRunState<br/>input, nil, model, provider"]
+    NEWSTATE --> NEWPIPE["NewDefaultPipeline<br/>8 stages"]
+    NEWPIPE --> PIPE_RUN["Pipeline.Run<br/>setup → iteration loop → finalize"]
+
+    PIPE_RUN --> CONVERT["convertRunResult<br/>pResult → RunResult"]
+    CONVERT --> RESULT["RunResult"]
+```
+
+### Stage Execution Order
+
+```
+Setup (runs once)
+├─ ContextStage: Inject context, compute workspace, ensure per-user files
+│
+Iteration Loop (max 20 iterations)
+├─ ThinkStage: Build system prompt, filter tools, call LLM
+├─ PruneStage: Soft/hard trim context, run memory flush if needed
+├─ ToolStage: Execute tool calls (parallel)
+├─ ObserveStage: Process tool results, append messages
+└─ CheckpointStage: Check iteration state, conditionally break
+
+Finalize (runs once, uses background context if cancelled)
+└─ FinalizeStage: Sanitize output, flush messages, update metadata
+```
+
+### Stage Details
+
+**ContextStage**
+- Inject context: `WithAgentID()`, `WithUserID()`, `WithAgentType()`, `WithLocale()`
+- Resolve per-user workspace (base + sanitized userID)
+- Ensure per-user files exist (idempotent via `sync.Map` cache)
+- Persist agent/user IDs on session
+
+**ThinkStage**
+- Resolve workspace + context files dynamically
+- Build system prompt (15+ sections)
+- Inject conversation summary if exists
+- Run history pipeline (limitHistoryTurns → pruneContextMessages → sanitizeHistory)
+- Filter tools through PolicyEngine (RBAC)
+- Call LLM, record span with token counts
+- Emit `chunk` events (streaming) or single response
+
+**PruneStage**
+- Estimate token ratio vs context window
+- If >= 30%, run soft trim pass (keep first/last 1500 chars, replace middle with "...")
+- If >= 50%, run hard clear pass (replace with placeholder)
+- Trigger memory flush (synchronous) if compaction threshold exceeded
+
+**ToolStage**
+- Execute single tool sequentially (no goroutine overhead)
+- Execute multiple tools in parallel via goroutines, sort results by index
+- Emit `tool.call` before, `tool.result` after
+- Record tool span
+- Append tool messages to buffer
+
+**ObserveStage**
+- Process tool result stream
+- Handle `NO_REPLY` convention (silent completion)
+- Append assistant message with tool call info
+
+**CheckpointStage**
+- Increment iteration counter
+- Check if max iterations reached → `BreakLoop`
+- Check if context cancelled → `AbortRun`
+
+**FinalizeStage**
+- Run 7-step output sanitization pipeline
+- Flush buffered messages atomically
+- Update session metadata (model, provider, token counts)
+- Emit `run.completed` or `run.failed` event
+
+---
+
+## Orchestration Modes
+
+Agents support three orchestration modes that determine which inter-agent tools are available:
+
+### ModeSpawn (Default)
+- **Use case**: Single independent agent
+- **Tools available**: `spawn` (self-clone child agents)
+- **Tools hidden**: `delegate`, `team_tasks`
+- **Resolution**: Default when no team or delegate links
+
+### ModeDelegate
+- **Use case**: Agent with linked delegate targets
+- **Tools available**: `spawn`, `delegate` (dispatch to linked agents)
+- **Tools hidden**: `team_tasks`
+- **Resolution**: When `agent_links` table has rows with source = this agent
+
+### ModeTeam
+- **Use case**: Agent in a team (multiple agents collaborating)
+- **Tools available**: `spawn`, `delegate`, `team_tasks` (full team workspace)
+- **Tools hidden**: None
+- **Resolution**: When `teams` table has a row with agent_id = this agent
+
+**Mode Resolution Priority**: Team > Delegate > Spawn
+
+The system prompt includes relevant details for each mode (delegate targets, team context, shared workspace paths).
+
+---
+
+## Self-Evolution System
+
+Agents can auto-adapt their behavior based on metrics and admin-approved suggestions.
+
+### Evolution Suggestion Engine
+
+Analyzes agent metrics on a periodic schedule (cron job):
+
+1. **LowRetrievalUsageRule** — Detects if `memory_search` or `knowledge_graph_search` is underutilized; suggests enabling vault
+2. **ToolFailureRule** — Identifies frequently failing tools; suggests limiting tool set or retraining
+3. **RepeatedToolRule** — Detects repetitive tool calls (loop detection); suggests prompt adjustment
+
+### Adaptation Guardrails
+
+**AdaptationGuardrails** struct controls safety limits (stored in `agents.other_config.evolution_guardrails`):
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `max_delta_per_cycle` | 0.1 | Max parameter change per cycle (prevents wild swings) |
+| `min_data_points` | 100 | Require at least N metrics before applying suggestion |
+| `rollback_on_drop_pct` | 20.0 | Revert if quality drops >20% after applying |
+| `locked_params` | [] | Parameter names that cannot auto-change (e.g., "temperature") |
+
+### Suggestion Workflow
+
+1. **SuggestionEngine.Analyze()** evaluates rules against 7-day metrics window
+2. Generates `EvolutionSuggestion` records (status="pending")
+3. Admin reviews in dashboard, approves/rejects
+4. On approval, auto-adapt worker applies suggestion + records baseline metrics
+5. Next cycle detects quality regression and auto-rolls back if threshold exceeded
+
+---
+
+## 1. RunRequest Flow (V2 Monolithic - Original)
 
 The full lifecycle of a single agent run is broken into seven phases.
 
@@ -562,10 +712,13 @@ Enabled via the `GOCLAW_TRACE_VERBOSE=1` environment variable.
 
 ## 14. File Reference
 
+### Agent Loop (V2 & V3)
+
 | File | Responsibility |
 |------|---------------|
-| `internal/agent/loop_run.go` | Run() entry point: trace creation, span management, event emission wrapper |
-| `internal/agent/loop.go` | runLoop() core loop: LLM iteration, tool execution, message buffering, event emission |
+| `internal/agent/loop_run.go` | Run() entry point: dual-mode gate (v2 vs v3), trace creation, span management |
+| `internal/agent/loop_pipeline_adapter.go` | Bridge v2 Loop to v3 Pipeline: state conversion, dependency injection, callback wiring |
+| `internal/agent/loop.go` | runLoop() core loop: LLM iteration, tool execution, message buffering (v2 path) |
 | `internal/agent/loop_history.go` | History pipeline: limitHistoryTurns, pruneContextMessages, sanitizeHistory, summary injection |
 | `internal/agent/pruning.go` | Context pruning: 2-pass soft trim and hard clear algorithm |
 | `internal/agent/loop_compact.go` | Mid-loop compaction: in-memory message summarization during iterations |
@@ -577,4 +730,52 @@ Enabled via the `GOCLAW_TRACE_VERBOSE=1` environment variable.
 | `internal/agent/sanitize.go` | 7-step output sanitization pipeline |
 | `internal/agent/memoryflush.go` | Pre-compaction memory flush: embedded agent turn with write_file tool |
 | `internal/agent/toolloop.go` | Tool execution and loop detection (no-progress warnings) |
+| `internal/agent/orchestration_mode.go` | OrchestrationMode enum: spawn/delegate/team, mode resolution logic, prompt section data |
+| `internal/agent/suggestion_engine.go` | SuggestionEngine: metrics analysis, rule evaluation, evolution suggestion generation |
+| `internal/agent/evolution_guardrails.go` | AdaptationGuardrails: safety checks for auto-adaptation, delta constraints, rollback logic |
 | `internal/bootstrap/files.go` | Bootstrap file loading and context file preparation |
+
+### V3 Pipeline
+
+| File | Responsibility |
+|------|---------------|
+| `internal/pipeline/pipeline.go` | Pipeline orchestrator: setup → iteration → finalize stage execution |
+| `internal/pipeline/stage.go` | Stage interface: Execute(ctx, state), StageResult (Continue/BreakLoop/AbortRun) |
+| `internal/pipeline/context_stage.go` | ContextStage: context injection, workspace resolution, per-user file setup |
+| `internal/pipeline/think_stage.go` | ThinkStage: system prompt building, tool filtering, LLM call |
+| `internal/pipeline/prune_stage.go` | PruneStage: context pruning (2-pass), memory flush trigger |
+| `internal/pipeline/tool_stage.go` | ToolStage: tool execution (serial/parallel), result processing |
+| `internal/pipeline/observe_stage.go` | ObserveStage: tool result stream handling, NO_REPLY detection |
+| `internal/pipeline/checkpoint_stage.go` | CheckpointStage: iteration tracking, exit conditions |
+| `internal/pipeline/finalize_stage.go` | FinalizeStage: output sanitization, message flush, metadata update |
+| `internal/pipeline/memory_flush_stage.go` | MemoryFlushStage: pre-compaction memory persistence |
+| `internal/pipeline/run_state.go` | RunState: mutable pipeline state, iteration tracking, exit codes |
+| `internal/pipeline/substates.go` | Sub-state structures (messages, tool results, context) |
+| `internal/pipeline/message_buffer.go` | MessageBuffer: deferred message persistence |
+
+### V3 Memory & Knowledge
+
+| File | Responsibility |
+|------|---------------|
+| `internal/consolidation/episodic_worker.go` | Episodic memory: extract facts from runs, cluster by topic, embed |
+| `internal/consolidation/semantic_worker.go` | Semantic memory: reprocess episodic clusters, generate abstractions |
+| `internal/consolidation/dreaming_worker.go` | Dreaming worker: synthesize insights, cross-link memories, drive evolution |
+| `internal/consolidation/dedup_worker.go` | Dedup worker: prevent duplicate entries, maintain consistency |
+| `internal/consolidation/workers.go` | Worker pool startup and lifecycle |
+| `internal/vault/retriever_impl.go` | Vault retrieval: hybrid search (BM25+vector), RRF ranking |
+| `internal/vault/auto_injector_impl.go` | L0 auto-injection: top-K vault entries into system prompt |
+| `internal/vault/links.go` | Wikilink parsing and semantic mesh construction |
+| `internal/vault/sync_worker.go` | Filesystem sync: vault → .md files, .md → vault re-import |
+
+### V3 Infrastructure
+
+| File | Responsibility |
+|------|---------------|
+| `internal/eventbus/domain_event_bus.go` | DomainEventBus interface: Publish, Subscribe, Start, Drain |
+| `internal/eventbus/bus_impl.go` | BusImpl: worker pool, event dedup, retry with backoff |
+| `internal/eventbus/event_types.go` | DomainEvent type definitions, EventType enums |
+| `internal/tokencount/tiktoken_counter.go` | Tiktoken BPE token counter (cl100k_base for OpenAI models) |
+| `internal/tokencount/token_counter.go` | TokenCounter interface and factory |
+| `internal/tokencount/fallback_counter.go` | Fallback counter (linear estimation) if tiktoken unavailable |
+| `internal/workspace/resolver_impl.go` | WorkspaceContext resolver: 6 scenarios, context variables |
+| `internal/workspace/workspace_context.go` | WorkspaceContext data structure and context injection |

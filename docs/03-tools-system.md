@@ -76,8 +76,14 @@ Context keys ensure each tool call receives the correct per-call values without 
 
 | Tool | Description |
 |------|-------------|
-| `memory_search` | Search memory documents (BM25 + vector) |
-| `memory_get` | Retrieve a specific memory document |
+| `memory_search` | Search memory documents (BM25 + vector hybrid search) |
+| `memory_get` | Retrieve a specific memory document (L1 summary) |
+| `memory_expand` | Load full episodic memory content by ID (L2 deep retrieval) |
+
+**Memory Layers:**
+- **L1 (Search)**: `memory_search` returns abstracts + vector scores for ranking
+- **L2 (Expand)**: `memory_expand` retrieves full summary for a given episodic ID
+- **Vault**: `vault_search` unified discovery across memory + vault docs + knowledge graph
 
 ### Sessions (group: `sessions`)
 
@@ -89,10 +95,11 @@ Context keys ensure each tool call receives the correct per-call values without 
 | `spawn` | Spawn subagent or delegate to another agent |
 | `session_status` | Get current session status |
 
-### Knowledge & Search (group: `knowledge`)
+### Knowledge & Vault (group: `knowledge`)
 
 | Tool | Description |
 |------|-------------|
+| `vault_search` | Primary discovery: unified search across vault docs, memory, knowledge graph (hybrid FTS + vector) |
 | `knowledge_graph_search` | Search knowledge graph for entities and relationships |
 | `skill_search` | Search available skills (BM25) |
 
@@ -112,7 +119,9 @@ Context keys ensure each tool call receives the correct per-call values without 
 
 ### Delegation (group: `delegation`)
 
-> The `delegate` tool has been removed. Delegation is now handled via agent teams using `team_tasks` and `team_message`.
+| Tool | Description |
+|------|-------------|
+| `delegate` | Inter-agent task delegation via agent_links (async/sync modes with timeout) |
 
 ### Teams (group: `teams`)
 
@@ -321,6 +330,38 @@ When a sandbox manager is configured and a `sandboxKey` exists in context, comma
 
 ---
 
+## 4a. Tool Capabilities & Metadata (v3)
+
+Each tool is annotated with structured metadata describing capabilities, group membership, and requirements:
+
+```go
+type ToolCapability string
+
+const (
+	CapReadOnly   ToolCapability = "read-only"    // no side effects
+	CapMutating   ToolCapability = "mutating"     // modifies state
+	CapAsync      ToolCapability = "async"        // returns immediately
+	CapMCPBridged ToolCapability = "mcp-bridged"  // proxied to external MCP
+)
+
+type ToolMetadata struct {
+	Name              string
+	Capabilities      []ToolCapability
+	Group             string // "fs", "web", "runtime", "memory", "team", etc.
+	RequiresWorkspace bool
+	ProviderHints     map[string]any
+}
+```
+
+**Default capability inference** (based on tool name):
+- **Read-only**: `read_file`, `list_files`, `memory_search`, `memory_expand`, `web_fetch`, `skill_search`, `knowledge_graph_search`, `sessions_history`, `datetime`, `web_search`, `read_image`, `read_audio`, `read_video`, `read_document`
+- **Async**: `spawn` (subagent spawning)
+- **Mutating**: All other tools (write, exec, message, team tasks, etc.)
+
+Metadata enables capability-aware tool filtering (e.g., restrict agents to read-only tools, gate async operations).
+
+---
+
 ## 5. Policy Engine
 
 The policy engine determines which tools the LLM can use through a 7-step allow pipeline followed by deny subtraction and additive alsoAllow.
@@ -433,60 +474,44 @@ Results are announced back to the parent agent via the message bus, optionally b
 
 ---
 
-## 7. Delegation System
+## 7. Delegation System (v3)
 
-> **Note:** The `delegate` tool has been removed. The `DelegateManager` described below is deprecated/removed. Delegation is now handled via agent teams: leads create tasks on the shared board (`team_tasks`) and spawn member agents explicitly. See [11-agent-teams.md](11-agent-teams.md) for the current model.
+The `delegate` tool enables inter-agent task delegation using agent_links for permission management. Unlike subagents (anonymous clones), delegation crosses agent boundaries to fully independent agents with distinct identities, tools, providers, and context files.
 
-Delegation allows named agents to delegate tasks to other fully independent agents (each with its own identity, tools, provider, model, and context files). Unlike subagents (anonymous clones), delegation crosses agent boundaries via explicit permission links.
+### Delegate Tool
 
-### DelegateManager (Removed)
+Invoked with agent_key, task, mode (async/sync), and optional timeout:
 
-The `delegate` tool and its `DelegateManager` in `internal/tools/subagent_spawn_tool.go` have been removed. Previously supported actions:
+```json
+{
+  "agent_key": "data-analyst",
+  "task": "Analyze Q3 sales trends",
+  "mode": "sync",
+  "timeout": 300
+}
+```
 
-| Action | Mode | Behavior |
-|--------|------|----------|
-| `delegate` | `sync` | Caller waits for result (quick lookups, fact checks) |
-| `delegate` | `async` | Caller moves on; result announced later via message bus (`delegate:{id}`) |
-| `cancel` | -- | Cancel a running async delegation by ID |
-| `list` | -- | List active delegations |
-| `history` | -- | Query past delegations from `delegation_history` table |
+**Modes:**
+- **async** (default) — Fire-and-forget; result announced via message bus as `delegate:{delegationID}`. No blocking.
+- **sync** — Block up to timeout seconds; return result directly. Max timeout: 600s.
 
-### Callback Pattern
+### Permission Model
 
-The `tools` package cannot import `agent` (import cycle). A callback function bridges the gap:
+Delegation requires an `agent_link` from caller → target. Link status checked at runtime:
 
 ```go
-type AgentRunFunc func(ctx context.Context, agentKey string, req DelegateRunRequest) (*DelegateRunResult, error)
+allowed, err := links.CanDelegate(ctx, fromAgentID, toAgentID)
 ```
 
-The `cmd` layer provides the implementation at wiring time. The `tools` package never knows `agent` exists.
+If link missing or disabled, returns *"no delegation link from current agent to '{targetKey}'"*.
 
-### Concurrency Control
+### Event Emission
 
-Delegation concurrency is controlled at the agent level to prevent overload:
+Emits `delegate.sent` event with delegation ID, from/to agents, task description, and mode. Enables audit trails and async result routing.
 
-| Layer | Config | Scope |
-|-------|--------|-------|
-| Per-agent | `other_config.max_delegation_load` | B from all sources |
+### Coordination with Teams
 
-When limits hit, the error message is written for LLM reasoning: *"Agent at capacity (5/5). Try a different agent or handle it yourself."*
-
-### DELEGATION.md Auto-Injection
-
-During agent resolution, `DELEGATION.md` is auto-generated and injected into the system prompt:
-
-- **≤15 targets**: Full inline list with agent keys, names, and frontmatter
-- **>15 targets**: Brief description-only list (LLM reads available delegation targets via resolver)
-
-### Context File Merging (Open Agents)
-
-For open agents, per-user context files merge with resolver-injected base files. Per-user files override same-name base files, but base-only files like `DELEGATION.md` are preserved:
-
-```
-Base files (resolver):     DELEGATION.md
-Per-user files (DB):       AGENTS.md, SOUL.md, TOOLS.md, USER.md, ...
-Merged result:             AGENTS.md, SOUL.md, TOOLS.md, USER.md, ..., DELEGATION.md ✓
-```
+Delegation is independent of teams. However, team leads often delegate to team members rather than spawning. For structured workflows with shared task board, use agent teams instead (see [11-agent-teams.md](11-agent-teams.md)).
 
 ---
 
@@ -679,6 +704,7 @@ The tool registry supports per-session rate limiting via `ToolRateLimiter`. When
 | File | Purpose |
 |------|---------|
 | `internal/tools/{registry,types,policy,result}.go` | Registry, interfaces, PolicyEngine (7-step pipeline), result types |
+| `internal/tools/capability.go` | Tool metadata: capabilities (read-only, mutating, async, mcp-bridged), groups, hints |
 | `internal/tools/{context_keys,rate_limiter}.go` | Context key definitions, per-session rate limiting |
 | `internal/tools/{scrub,scrub_server}.go` | Credential scrubbing and dynamic value registration |
 
@@ -705,10 +731,17 @@ The tool registry supports per-session rate limiting via `ToolRateLimiter`. When
 | `internal/tools/web_fetch{,_convert,_convert_handlers,_convert_utils,_hidden}.go` | web_fetch tool: fetch, HTML→Markdown, element handlers |
 | `internal/tools/web_shared.go` | Shared web utilities |
 
-### Memory, Knowledge & Sessions
+### Memory, Vault & Knowledge
 | File | Purpose |
 |------|---------|
-| `internal/tools/{memory,knowledge_graph,skill_search}.go` | Memory search, KG queries, skill BM25 search |
+| `internal/tools/memory{,_expand}.go` | Memory search (L1) + expand (L2 deep retrieval) |
+| `internal/tools/vault_search.go` | Vault search: unified hybrid FTS + vector search across vault/memory/KG |
+| `internal/tools/{knowledge_graph,skill_search}.go` | Knowledge graph + skill BM25 search |
+
+### Delegation & Sessions
+| File | Purpose |
+|------|---------|
+| `internal/tools/delegate_tool.go` | Delegate tool: inter-agent task delegation via agent_links (async/sync) |
 | `internal/tools/sessions{,_history,_send}.go` | Session list, history, send tools |
 | `internal/tools/subagent{,_spawn_tool,_config,_exec,_control,_tracing}.go` | SubagentManager: spawn, cancel, steer, tracing |
 

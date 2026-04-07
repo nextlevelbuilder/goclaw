@@ -1070,6 +1070,12 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 
 ---
 
+## Notes on V3 Endpoints
+
+GoClaw v3 introduces new HTTP endpoints for agent evolution metrics, episodic memory, knowledge vault, and orchestration. These are documented separately in [22 — V3 HTTP Endpoints](22-v3-http-endpoints.md) to keep this document focused on the core REST API. V3 endpoints follow the same authentication, error handling, and header conventions as documented above.
+
+---
+
 ## File Reference
 
 | File | Purpose |
@@ -1119,3 +1125,8 @@ These endpoints require an active WebSocket connection to the `/ws` endpoint wit
 | `internal/http/contact_merge_handlers.go` | Contact merge/unmerge |
 | `internal/http/user_search.go` | User search |
 | `internal/http/secure_cli_user_credentials.go` | CLI per-user credentials |
+| `internal/http/evolution_handlers.go` | V3: Evolution metrics + suggestions endpoints |
+| `internal/http/episodic_handlers.go` | V3: Episodic memory list + search endpoints |
+| `internal/http/vault_handlers.go` | V3: Vault document + link endpoints |
+| `internal/http/orchestration_handlers.go` | V3: Orchestration mode info endpoint |
+| `internal/http/v3_flags_handlers.go` | V3: Feature flag get/toggle endpoints |

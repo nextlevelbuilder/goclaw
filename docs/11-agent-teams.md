@@ -613,7 +613,20 @@ When limits are hit, the error message is written for LLM reasoning: "Agent at c
 
 ---
 
-## 11. Delegation Context
+## 11. Agent Links & Delegation Graph (v3)
+
+Agent links define directed delegation relationships between agents, separate from team membership. Each link tracks:
+- **Source agent** (can delegate to)
+- **Target agent** (can receive delegations from)
+- **Direction** (outbound from source, inbound to target)
+- **Team context** (optional `team_id` if created by team setup)
+- **Concurrency limit** (max simultaneous delegations for this link)
+
+**Team-created links** are automatically created when a team is set up (lead → each member). Links remain even if the team is deleted or members are removed, allowing manual cleanup.
+
+**Delegation graph visibility** — agents can query available delegation targets via the delegation system. The graph determines which agents appear in the `spawn` tool's available targets.
+
+## 12. Delegation Context
 
 ### SenderID Clearing
 
@@ -642,7 +655,7 @@ Context keys injected:
 
 ---
 
-## 12. Events
+## 13. Events
 
 Teams emit events for real-time UI updates and observability.
 
@@ -680,6 +693,9 @@ Teams emit events for real-time UI updates and observability.
 | `internal/tools/subagent_exec.go` | Delegation execution, artifact accumulation, session cleanup |
 | `internal/tools/subagent_config.go` | Delegation configuration and concurrency control |
 | `internal/tools/subagent_tracing.go` | Delegation tracing and event broadcasting |
+| `internal/store/agent_link_store.go` | AgentLinkStore interface: CRUD for delegation links |
+| `internal/store/pg/agent_links.go` | PostgreSQL agent link persistence and querying |
+| `internal/gateway/methods/agent_links.go` | agent_links.* RPC handlers (v3 delegation graph management) |
 | `internal/tools/workspace_dir.go` | WorkspaceDir helper, shared/isolated mode detection, file limits |
 | `internal/tools/context_keys.go` | Tool context injection: team_id, team_workspace, team_task_id, workspace channel/chatid |
 | `internal/agent/resolver.go` | TEAM.md generation (buildTeamMD), injection during agent resolution |

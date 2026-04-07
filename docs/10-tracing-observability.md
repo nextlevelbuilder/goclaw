@@ -224,6 +224,7 @@ Delegation history is automatically recorded by `DelegateManager.saveDelegationH
 | `internal/agent/loop_tracing.go` | Span emission from agent loop (LLM, tool, agent spans) |
 | `internal/http/delegations.go` | Delegation history HTTP API handler |
 | `internal/gateway/methods/delegations.go` | Delegation history RPC handlers |
+| `internal/pipeline/` | v3 agent loop pipeline (stages route to agent loop for span emission) |
 
 ---
 
