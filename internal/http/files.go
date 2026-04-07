@@ -53,6 +53,39 @@ func (h *FilesHandler) handleSign(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"path required"}`, http.StatusBadRequest)
 		return
 	}
+
+	// Validate path is within workspace or dataDir before signing.
+	// Defense-in-depth: prevents signing tokens for arbitrary system files.
+	absPath := filepath.Clean(body.Path)
+	if !filepath.IsAbs(absPath) {
+		// Windows drive letter path (e.g. "C:\...") — keep as-is, consistent with handleServe.
+		if len(absPath) >= 2 && absPath[1] == ':' {
+			// already absolute on Windows
+		} else {
+			absPath = filepath.Clean("/" + absPath)
+		}
+	}
+	sep := string(filepath.Separator)
+	if (h.workspace == "" || (!strings.HasPrefix(absPath, h.workspace+sep) && absPath != h.workspace)) &&
+		(h.dataDir == "" || (!strings.HasPrefix(absPath, h.dataDir+sep) && absPath != h.dataDir)) {
+		slog.Warn("security.files_sign_path_denied", "path", absPath, "workspace", h.workspace, "data_dir", h.dataDir)
+		http.Error(w, `{"error":"path outside allowed directories"}`, http.StatusForbidden)
+		return
+	}
+
+	// Multi-tenant (RBAC): additionally restrict to the requesting tenant's dirs.
+	// Prevents tenant A from signing a URL for tenant B's files.
+	if edition.Current().RBACEnabled {
+		tenantData := config.TenantDataDir(h.dataDir, store.TenantIDFromContext(authedReq.Context()), store.TenantSlugFromContext(authedReq.Context()))
+		tenantWs := config.TenantWorkspace(h.workspace, store.TenantIDFromContext(authedReq.Context()), store.TenantSlugFromContext(authedReq.Context()))
+		if (!strings.HasPrefix(absPath, tenantData+sep) && absPath != tenantData) &&
+			(!strings.HasPrefix(absPath, tenantWs+sep) && absPath != tenantWs) {
+			slog.Warn("security.files_sign_tenant_denied", "path", absPath, "tenant_data", tenantData, "tenant_ws", tenantWs)
+			http.Error(w, `{"error":"path outside allowed directories"}`, http.StatusForbidden)
+			return
+		}
+	}
+
 	urlPath := "/v1/files/" + strings.TrimPrefix(filepath.Clean(body.Path), "/")
 	ft := SignFileToken(urlPath, FileSigningKey(), FileTokenTTL)
 	writeJSON(w, http.StatusOK, map[string]string{
@@ -124,8 +157,22 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Defense-in-depth: validate workspace/dataDir boundary even for signed file tokens.
+	// The token cryptographically binds the URL path, but we also verify the resolved
+	// absolute path stays within allowed directories to limit blast radius of any
+	// bug in the signing flow.
+	if r.URL.Query().Get("ft") != "" {
+		sep := string(filepath.Separator)
+		inWorkspace := h.workspace != "" && (strings.HasPrefix(absPath, h.workspace+sep) || absPath == h.workspace)
+		inDataDir := h.dataDir != "" && (strings.HasPrefix(absPath, h.dataDir+sep) || absPath == h.dataDir)
+		if !inWorkspace && !inDataDir {
+			slog.Warn("security.files_ft_path_denied", "path", absPath, "workspace", h.workspace, "data_dir", h.dataDir)
+			http.NotFound(w, r)
+			return
+		}
+	}
+
 	// Path isolation: validate file path is within allowed directories.
-	// Skip for HMAC file tokens — path is cryptographically bound in the signature.
 	if r.URL.Query().Get("ft") == "" {
 		allowed := false
 
@@ -171,14 +218,17 @@ func (h *FilesHandler) handleServe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil || info.IsDir() {
+		// For ft= signed requests, the path is cryptographically bound — no fallback search.
+		// Searching the global workspace could cross tenant boundaries if a same-basename
+		// file exists in another tenant's directory.
+		if r.URL.Query().Get("ft") != "" {
+			http.NotFound(w, r)
+			return
+		}
 		// Fallback: search workspace for file by basename (handles LLM-hallucinated paths).
 		// Generated media filenames include timestamps and are globally unique.
-		// For ft= signed requests, search from workspace root (no tenant context available);
-		// for bearer requests, scope to tenant workspace.
+		// Scoped to tenant workspace (bearer auth always has tenant context).
 		ws := h.tenantWorkspace(r)
-		if r.URL.Query().Get("ft") != "" {
-			ws = h.workspace // ft= auth has no tenant context; path is cryptographically bound
-		}
 		if resolved := h.findInWorkspace(ws, filepath.Base(absPath)); resolved != "" {
 			absPath = resolved
 			info, _ = os.Stat(absPath)

@@ -18,6 +18,11 @@ func TenantDataDir(dataDir string, tenantID uuid.UUID, tenantSlug string) string
 	if tenantID == masterTenantID {
 		return dataDir
 	}
+	// Empty slug (transient DB lookup failure) would resolve to the tenants/ parent dir,
+	// granting cross-tenant access. Fall back to UUID-based path instead.
+	if tenantSlug == "" {
+		return filepath.Join(dataDir, "tenants", tenantID.String())
+	}
 	result := filepath.Join(dataDir, "tenants", tenantSlug)
 	// Defense-in-depth: prevent path traversal via malicious slug.
 	tenantsBase := filepath.Join(dataDir, "tenants") + string(filepath.Separator)
@@ -33,6 +38,11 @@ func TenantDataDir(dataDir string, tenantID uuid.UUID, tenantSlug string) string
 func TenantWorkspace(workspace string, tenantID uuid.UUID, tenantSlug string) string {
 	if tenantID == masterTenantID {
 		return workspace
+	}
+	// Empty slug (transient DB lookup failure) would resolve to the tenants/ parent dir,
+	// granting cross-tenant access. Fall back to UUID-based path instead.
+	if tenantSlug == "" {
+		return filepath.Join(workspace, "tenants", tenantID.String())
 	}
 	result := filepath.Join(workspace, "tenants", tenantSlug)
 	tenantsBase := filepath.Join(workspace, "tenants") + string(filepath.Separator)

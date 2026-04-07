@@ -319,25 +319,28 @@ func runGateway() {
 	}
 	slog.Info("tool aliases registered", "count", len(toolsReg.Aliases()))
 
-	// Allow read_file to access skills directories and CLI workspaces (outside workspace).
+	// Allow read_file and list_files to access skills directories and CLI workspaces (outside workspace).
 	// Skills can live under dataDir/skills/, ~/.agents/skills/, dataDir/skills-store/, etc.
 	// CLI workspaces live in dataDir/cli-workspaces/ (agent working files).
 	homeDir, _ := os.UserHomeDir()
+	skillsAllowPaths := []string{globalSkillsDir, builtinSkillsDir, filepath.Join(dataDir, "tenants")}
+	if homeDir != "" {
+		skillsAllowPaths = append(skillsAllowPaths, filepath.Join(homeDir, ".agents", "skills"))
+	}
+	if pgStores.Skills != nil {
+		skillsAllowPaths = append(skillsAllowPaths, pgStores.Skills.Dirs()...)
+	}
+	// Wire AllowPaths to read_file
 	if readTool, ok := toolsReg.Get("read_file"); ok {
 		if pa, ok := readTool.(tools.PathAllowable); ok {
-			pa.AllowPaths(globalSkillsDir)
-			if homeDir != "" {
-				pa.AllowPaths(filepath.Join(homeDir, ".agents", "skills"))
-			}
+			pa.AllowPaths(skillsAllowPaths...)
 			pa.AllowPaths(filepath.Join(dataDir, "cli-workspaces"))
-			// Also allow the skills store directory (uploaded skill content).
-			if pgStores.Skills != nil {
-				pa.AllowPaths(pgStores.Skills.Dirs()...)
-			}
-			// Allow builtin skills dir (fallback when managed copy is missing).
-			pa.AllowPaths(builtinSkillsDir)
-			// Allow tenant-scoped skills-store dirs (dataDir/tenants/{slug}/skills-store/).
-			pa.AllowPaths(filepath.Join(dataDir, "tenants"))
+		}
+	}
+	// Wire AllowPaths to list_files (agents need to list skill directories for discovery)
+	if listTool, ok := toolsReg.Get("list_files"); ok {
+		if pa, ok := listTool.(tools.PathAllowable); ok {
+			pa.AllowPaths(skillsAllowPaths...)
 		}
 	}
 
