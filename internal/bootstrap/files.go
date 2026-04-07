@@ -53,6 +53,19 @@ var minimalAllowlist = map[string]bool{
 	ToolsFile:  true,
 }
 
+// teamSessionAllowlist is the set of context files loaded for team-dispatched
+// member sessions. User profile and monitoring files are excluded because they
+// are irrelevant for task execution — the member agent responds to a task, not
+// directly to the end user.
+var teamSessionAllowlist = map[string]bool{
+	SoulFile:     true, // persona/tone — needed for identity
+	IdentityFile: true, // agent name/emoji — needed for identity
+	AgentsFile:   true, // behavioral rules — still relevant
+	ToolsFile:    true, // local tool notes
+	TeamFile:     true, // team workflow — essential
+	MemoryFile:   true, // may contain useful context
+}
+
 // File represents a workspace bootstrap file loaded from disk.
 type File struct {
 	Name    string // filename (e.g. "AGENTS.md")
@@ -101,6 +114,21 @@ func FilterForSession(files []File, sessionKey string) []File {
 	var filtered []File
 	for _, f := range files {
 		if minimalAllowlist[f.Name] {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// FilterContextFilesForTeamSession removes user-profile and monitoring files
+// from a ContextFile slice for team-dispatched member sessions.
+// Persona (SOUL.md, IDENTITY.md), behavioral rules (AGENTS.md, TOOLS.md),
+// team context (TEAM.md), and memory are preserved.
+func FilterContextFilesForTeamSession(files []ContextFile) []ContextFile {
+	var filtered []ContextFile
+	for _, f := range files {
+		base := filepath.Base(f.Path)
+		if teamSessionAllowlist[base] {
 			filtered = append(filtered, f)
 		}
 	}
