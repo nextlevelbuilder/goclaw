@@ -65,6 +65,15 @@ func CheckFileWriterPermission(ctx context.Context, permStore ConfigPermissionSt
 		return nil // system context (cron, subagent)
 	}
 	numericID := strings.SplitN(senderID, "|", 2)[0]
+
+	// Bootstrap exception: if no writers exist yet for this group, allow the first caller.
+	// This mirrors the Telegram /addwriter bootstrap pattern — prevents deadlock where
+	// no one can grant permissions because no one has permissions.
+	existingWriters, _ := permStore.ListFileWriters(ctx, agentID, userID)
+	if len(existingWriters) == 0 {
+		return nil // no writers configured → allow (bootstrap)
+	}
+
 	allowed, err := permStore.CheckPermission(ctx, agentID, userID, ConfigTypeFileWriter, numericID)
 	if err != nil {
 		return nil // fail-open
