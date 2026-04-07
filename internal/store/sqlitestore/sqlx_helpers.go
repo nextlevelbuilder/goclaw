@@ -7,6 +7,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // pkgSqlxDB is the package-level *sqlx.DB wrapping the same *sql.DB connection pool.
@@ -23,24 +25,7 @@ var pkgSqlxDB *sqlx.DB
 func initSqlx(db *sql.DB) {
 	pkgSqlxDB = sqlx.NewDb(db, "sqlite")
 	// Use json struct tags for column mapping with camelCase→snake_case conversion.
-	pkgSqlxDB.Mapper = reflectx.NewMapperFunc("json", camelToSnake)
-}
-
-// camelToSnake converts a camelCase string to snake_case.
-// Already-snake_case strings pass through unchanged.
-func camelToSnake(s string) string {
-	var result []byte
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' {
-			if i > 0 && s[i-1] >= 'a' && s[i-1] <= 'z' {
-				result = append(result, '_')
-			}
-			result = append(result, byte(r+32))
-		} else {
-			result = append(result, byte(r))
-		}
-	}
-	return string(result)
+	pkgSqlxDB.Mapper = reflectx.NewMapperFunc("json", store.CamelToSnake)
 }
 
 // SqlxDB returns the package-level *sqlx.DB for use in store methods.
