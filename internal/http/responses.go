@@ -62,14 +62,14 @@ func (h *ResponsesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Inject tenant, role, user, and locale into context for downstream stores/tools.
 	r = r.WithContext(enrichContext(r.Context(), r, auth))
+	locale := extractLocale(r)
 
 	// Limit request body size to prevent DoS
 	const maxRequestBodySize = 1 << 20 // 1MB
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 
 	var req responsesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"invalid JSON: %s"}`, err), http.StatusBadRequest)
+	if !bindJSON(w, r, locale, &req) {
 		return
 	}
 

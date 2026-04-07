@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -68,8 +67,7 @@ func (h *MemoryHandler) handlePutDocument(w http.ResponseWriter, r *http.Request
 		Content string `json:"content"`
 		UserID  string `json:"user_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 
@@ -125,8 +123,7 @@ func (h *MemoryHandler) handleIndexDocument(w http.ResponseWriter, r *http.Reque
 		Path   string `json:"path"`
 		UserID string `json:"user_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.Path == "" {
@@ -143,12 +140,15 @@ func (h *MemoryHandler) handleIndexDocument(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *MemoryHandler) handleIndexAll(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
 	agentID := r.PathValue("agentID")
 
 	var body struct {
 		UserID string `json:"user_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&body)
+	if !bindJSON(w, r, locale, &body) {
+		return
+	}
 	if body.UserID == "" {
 		body.UserID = extractUserID(r)
 	}
@@ -171,8 +171,7 @@ func (h *MemoryHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		MaxResults int     `json:"max_results"`
 		MinScore   float64 `json:"min_score"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidJSON)})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.Query == "" {

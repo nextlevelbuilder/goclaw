@@ -53,6 +53,7 @@ func (h *V3FlagsHandler) handleGetFlags(w http.ResponseWriter, r *http.Request) 
 
 // handleToggleFlags updates specific v3 flags. Accepts partial updates.
 func (h *V3FlagsHandler) handleToggleFlags(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
 	agentID, err := uuid.Parse(r.PathValue("agentID"))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent ID"})
@@ -61,8 +62,7 @@ func (h *V3FlagsHandler) handleToggleFlags(w http.ResponseWriter, r *http.Reques
 
 	// Parse request body as map of flag key → bool.
 	var body map[string]bool
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body — expected {\"flag_key\": true/false}"})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 

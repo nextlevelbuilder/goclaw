@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -132,6 +131,7 @@ func (h *EvolutionHandler) handleListSuggestions(w http.ResponseWriter, r *http.
 
 // handleUpdateSuggestion updates a suggestion's status (approve/reject/rollback).
 func (h *EvolutionHandler) handleUpdateSuggestion(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
 	agentID, err := uuid.Parse(r.PathValue("agentID"))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid agent ID"})
@@ -159,8 +159,7 @@ func (h *EvolutionHandler) handleUpdateSuggestion(w http.ResponseWriter, r *http
 		Status     string `json:"status"`
 		ReviewedBy string `json:"reviewed_by"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 

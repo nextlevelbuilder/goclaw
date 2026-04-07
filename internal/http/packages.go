@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"net/http"
 	"regexp"
 
@@ -56,7 +55,10 @@ func parseAndValidatePackage(w http.ResponseWriter, r *http.Request) string {
 	var body struct {
 		Package string `json:"package"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Package == "" {
+	if !bindJSON(w, r, extractLocale(r), &body) {
+		return ""
+	}
+	if body.Package == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "package required"})
 		return ""
 	}

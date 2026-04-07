@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -108,6 +107,7 @@ func (h *VaultHandler) handleGetDocument(w http.ResponseWriter, r *http.Request)
 
 // handleSearch runs hybrid FTS+vector search on vault documents.
 func (h *VaultHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
 	tenantID := store.TenantIDFromContext(r.Context())
 	agentID := r.PathValue("agentID")
 
@@ -117,8 +117,7 @@ func (h *VaultHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		DocTypes   []string `json:"doc_types"`
 		MaxResults int      `json:"max_results"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.Query == "" {

@@ -1,7 +1,6 @@
 package http
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -54,6 +53,7 @@ func (h *EpisodicHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 // handleSearch runs hybrid search on episodic summaries.
 func (h *EpisodicHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
+	locale := extractLocale(r)
 	agentID := r.PathValue("agentID")
 
 	var body struct {
@@ -62,8 +62,7 @@ func (h *EpisodicHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		MaxResults int     `json:"max_results"`
 		MinScore   float64 `json:"min_score"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if body.Query == "" {

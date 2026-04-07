@@ -85,9 +85,9 @@ func (h *SecureCLIHandler) handleGetUserCredentials(w http.ResponseWriter, r *ht
 }
 
 func (h *SecureCLIHandler) handleSetUserCredentials(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
 	binaryID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		locale := store.LocaleFromContext(r.Context())
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidID)})
 		return
 	}
@@ -100,8 +100,7 @@ func (h *SecureCLIHandler) handleSetUserCredentials(w http.ResponseWriter, r *ht
 	var body struct {
 		Env json.RawMessage `json:"env"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+	if !bindJSON(w, r, locale, &body) {
 		return
 	}
 	if len(body.Env) == 0 {
