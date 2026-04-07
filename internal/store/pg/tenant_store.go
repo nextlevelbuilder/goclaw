@@ -48,37 +48,36 @@ func (s *PGTenantStore) CreateTenant(ctx context.Context, tenant *store.TenantDa
 }
 
 func (s *PGTenantStore) GetTenant(ctx context.Context, id uuid.UUID) (*store.TenantData, error) {
-	row := s.db.QueryRowContext(ctx,
+	var d store.TenantData
+	err := pkgSqlxDB.GetContext(ctx, &d,
 		`SELECT id, name, slug, status, settings, created_at, updated_at
 		 FROM tenants WHERE id = $1`, id)
-	return scanTenantRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
 }
 
 func (s *PGTenantStore) GetTenantBySlug(ctx context.Context, slug string) (*store.TenantData, error) {
-	row := s.db.QueryRowContext(ctx,
+	var d store.TenantData
+	err := pkgSqlxDB.GetContext(ctx, &d,
 		`SELECT id, name, slug, status, settings, created_at, updated_at
 		 FROM tenants WHERE slug = $1`, slug)
-	return scanTenantRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
 }
 
 func (s *PGTenantStore) ListTenants(ctx context.Context) ([]store.TenantData, error) {
-	rows, err := s.db.QueryContext(ctx,
+	var tenants []store.TenantData
+	err := pkgSqlxDB.SelectContext(ctx, &tenants,
 		`SELECT id, name, slug, status, settings, created_at, updated_at
 		 FROM tenants ORDER BY created_at`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var tenants []store.TenantData
-	for rows.Next() {
-		d, err := scanTenantRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		tenants = append(tenants, *d)
-	}
-	return tenants, rows.Err()
+	return tenants, nil
 }
 
 func (s *PGTenantStore) UpdateTenant(ctx context.Context, id uuid.UUID, updates map[string]any) error {
@@ -101,11 +100,11 @@ func (s *PGTenantStore) AddUser(ctx context.Context, tenantID uuid.UUID, userID,
 }
 
 func (s *PGTenantStore) GetTenantUser(ctx context.Context, id uuid.UUID) (*store.TenantUserData, error) {
-	row := s.db.QueryRowContext(ctx,
+	var d store.TenantUserData
+	err := pkgSqlxDB.GetContext(ctx, &d,
 		`SELECT id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at
 		 FROM tenant_users WHERE id = $1`, id)
-	var d store.TenantUserData
-	if err := row.Scan(&d.ID, &d.TenantID, &d.UserID, &d.DisplayName, &d.Role, &d.Metadata, &d.CreatedAt, &d.UpdatedAt); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	return &d, nil
@@ -154,25 +153,25 @@ func (s *PGTenantStore) GetUserRole(ctx context.Context, tenantID uuid.UUID, use
 }
 
 func (s *PGTenantStore) ListUsers(ctx context.Context, tenantID uuid.UUID) ([]store.TenantUserData, error) {
-	rows, err := s.db.QueryContext(ctx,
+	var result []store.TenantUserData
+	err := pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at
 		 FROM tenant_users WHERE tenant_id = $1 ORDER BY created_at`, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanTenantUserRows(rows)
+	return result, nil
 }
 
 func (s *PGTenantStore) ListUserTenants(ctx context.Context, userID string) ([]store.TenantUserData, error) {
-	rows, err := s.db.QueryContext(ctx,
+	var result []store.TenantUserData
+	err := pkgSqlxDB.SelectContext(ctx, &result,
 		`SELECT id, tenant_id, user_id, display_name, role, metadata, created_at, updated_at
 		 FROM tenant_users WHERE user_id = $1 ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanTenantUserRows(rows)
+	return result, nil
 }
 
 func (s *PGTenantStore) ResolveUserTenant(ctx context.Context, userID string) (uuid.UUID, error) {
@@ -188,42 +187,4 @@ func (s *PGTenantStore) ResolveUserTenant(ctx context.Context, userID string) (u
 		return uuid.Nil, err
 	}
 	return tenantID, nil
-}
-
-// ============================================================
-// Scan helpers
-// ============================================================
-
-func scanTenantRow(row *sql.Row) (*store.TenantData, error) {
-	var d store.TenantData
-	err := row.Scan(&d.ID, &d.Name, &d.Slug, &d.Status, &d.Settings, &d.CreatedAt, &d.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &d, nil
-}
-
-type tenantRowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanTenantRows(row tenantRowScanner) (*store.TenantData, error) {
-	var d store.TenantData
-	err := row.Scan(&d.ID, &d.Name, &d.Slug, &d.Status, &d.Settings, &d.CreatedAt, &d.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &d, nil
-}
-
-func scanTenantUserRows(rows *sql.Rows) ([]store.TenantUserData, error) {
-	var result []store.TenantUserData
-	for rows.Next() {
-		var d store.TenantUserData
-		if err := rows.Scan(&d.ID, &d.TenantID, &d.UserID, &d.DisplayName, &d.Role, &d.Metadata, &d.CreatedAt, &d.UpdatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, d)
-	}
-	return result, rows.Err()
 }

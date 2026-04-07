@@ -91,24 +91,14 @@ func (s *PGSkillStore) ListAgentGrants(ctx context.Context, agentID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx,
+	var result []SkillGrantInfo
+	err = pkgSqlxDB.SelectContext(ctx, &result,
 		"SELECT skill_id, pinned_version, granted_by FROM skill_agent_grants WHERE agent_id = $1"+tClause,
 		append([]any{agentID}, tArgs...)...)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var result []SkillGrantInfo
-	for rows.Next() {
-		var g SkillGrantInfo
-		if err := rows.Scan(&g.SkillID, &g.PinnedVersion, &g.GrantedBy); err != nil {
-			slog.Warn("skill_grants: scan error in ListAgentGrants", "error", err)
-			continue
-		}
-		result = append(result, g)
-	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // GrantToUser grants a skill to a user (for internal visibility skills).
