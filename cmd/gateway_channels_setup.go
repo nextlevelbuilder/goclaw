@@ -68,9 +68,12 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 	}
 
 	if cfg.Channels.WhatsApp.Enabled {
-		if cfg.Channels.WhatsApp.BridgeURL == "" {
-			recordMissingConfig(channels.TypeWhatsApp, "Set channels.whatsapp.bridge_url in config.")
-		} else if wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, nil); err != nil {
+		waDialect := "pgx"
+		if strings.Contains(fmt.Sprintf("%T", pgStores.DB.Driver()), "sqlite") {
+			waDialect = "sqlite3"
+		}
+		wa, err := whatsapp.New(cfg.Channels.WhatsApp, msgBus, pgStores.Pairing, pgStores.DB, pgStores.PendingMessages, waDialect)
+		if err != nil {
 			channelMgr.RecordFailure(channels.TypeWhatsApp, "", err)
 			slog.Error("failed to initialize whatsapp channel", "error", err)
 		} else {
@@ -143,6 +146,7 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 		methods.NewChannelInstancesMethods(pgStores.ChannelInstances, msgBus, msgBus).Register(server.Router())
 		zalomethods.NewQRMethods(pgStores.ChannelInstances, msgBus).Register(server.Router())
 		zalomethods.NewContactsMethods(pgStores.ChannelInstances).Register(server.Router())
+		whatsapp.NewQRMethods(pgStores.ChannelInstances, channelMgr).Register(server.Router())
 	}
 
 	// Register agent links WS RPC methods

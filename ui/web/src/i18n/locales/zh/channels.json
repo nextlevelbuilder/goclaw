@@ -213,7 +213,6 @@
     "encrypt_key": { "label": "加密密钥", "help": "用于Webhook模式" },
     "verification_token": { "label": "验证Token", "help": "用于Webhook模式" },
     "webhook_secret": { "label": "Webhook Secret" },
-    "bridge_url": { "label": "Bridge URL" },
     "api_server": { "label": "API 服务器 URL", "help": "自定义 Telegram Bot API 服务器用于大文件上传（最大 2GB）。留空使用默认服务器。" },
     "proxy": { "label": "HTTP 代理", "help": "通过 HTTP 代理路由Bot流量" },
     "dm_policy": { "label": "私聊策略" },
@@ -331,6 +330,10 @@
     "zaloPersonal": {
       "createLabel": "创建并认证",
       "formBanner": "创建后，您将通过二维码进行认证并配置允许的用户。"
+    },
+    "whatsapp": {
+      "createLabel": "创建并扫码",
+      "formBanner": "创建后，请用 WhatsApp 扫描二维码完成认证。"
     }
   },
   "fallback": {
@@ -379,5 +382,21 @@
     "retry": "重试",
     "close": "关闭",
     "skip": "跳过"
+  },
+  "whatsapp": {
+    "loginSuccessLoading": "✅ WhatsApp 已连接！正在加载 channel...",
+    "waitingForQr": "正在等待二维码...",
+    "scanHint": "打开 WhatsApp → 点击【您】→【已连接的设备】→【连接设备】",
+    "initializing": "初始化中...",
+    "skip": "跳过",
+    "retry": "重试",
+    "close": "关闭",
+    "reauthTitle": "连接 WhatsApp — {{name}}",
+    "reauthDescription": "使用 WhatsApp 扫描二维码以连接设备。",
+    "alreadyLinked": "✅ 设备已连接",
+    "alreadyLinkedDetail": "WhatsApp 已连接。如需连接其他设备，请点击【重新连接】——这将退出当前会话。",
+    "relinkDevice": "重新连接",
+    "connectedSuccess": "✅ WhatsApp 连接成功！",
+    "tabQrCode": "二维码"
   }
 }

@@ -223,7 +223,6 @@
       "help": "For webhook mode"
     },
     "webhook_secret": { "label": "Webhook Secret" },
-    "bridge_url": { "label": "Bridge URL" },
     "api_server": {
       "label": "API Server URL",
       "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default."
@@ -416,6 +415,10 @@
     "zaloPersonal": {
       "createLabel": "Create & Authenticate",
       "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
+    },
+    "whatsapp": {
+      "createLabel": "Create & Scan QR",
+      "formBanner": "After creating, scan the QR code with WhatsApp to authenticate."
     }
   },
   "fallback": {
@@ -464,5 +467,21 @@
     "retry": "Retry",
     "close": "Close",
     "skip": "Skip"
+  },
+  "whatsapp": {
+    "loginSuccessLoading": "✅ WhatsApp connected! Loading channel...",
+    "waitingForQr": "Waiting for QR code...",
+    "scanHint": "Open WhatsApp → tap You → Linked Devices → Link a Device",
+    "initializing": "Initializing...",
+    "skip": "Skip",
+    "retry": "Retry",
+    "close": "Close",
+    "reauthTitle": "Link WhatsApp — {{name}}",
+    "reauthDescription": "Scan the QR code with WhatsApp to link your device.",
+    "alreadyLinked": "✅ Device already linked",
+    "alreadyLinkedDetail": "WhatsApp is connected. To link a different device, click Re-link — this will log out the current session.",
+    "relinkDevice": "Re-link Device",
+    "connectedSuccess": "✅ WhatsApp connected successfully!",
+    "tabQrCode": "QR Code"
   }
 }
