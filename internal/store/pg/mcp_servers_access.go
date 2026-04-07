@@ -53,7 +53,11 @@ func (s *PGMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid.UUI
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, server_id, agent_id, enabled, tool_allow, tool_deny, config_overrides, granted_by, created_at
+		`SELECT id, server_id, agent_id, enabled,
+		 COALESCE(tool_allow, 'null'::jsonb) AS tool_allow,
+		 COALESCE(tool_deny, 'null'::jsonb) AS tool_deny,
+		 COALESCE(config_overrides, 'null'::jsonb) AS config_overrides,
+		 granted_by, created_at
 		 FROM mcp_agent_grants WHERE agent_id = $1`+tClause,
 		append([]any{agentID}, tArgs...)...)
 	if err != nil {

@@ -17,6 +17,10 @@ import (
 // Phase 2+ will use this for Get/Select/StructScan migrations.
 var pkgSqlxDB *sqlx.DB
 
+// InitSqlx is the exported variant of initSqlx, intended for use in integration tests
+// that construct stores directly (e.g. pg.NewPGTeamStore) rather than via NewPGStores.
+func InitSqlx(db *sql.DB) { initSqlx(db) }
+
 // initSqlx wraps an existing *sql.DB with sqlx and configures the json tag mapper.
 // The returned *sqlx.DB shares the same connection pool — no new connections are created.
 func initSqlx(db *sql.DB) {
