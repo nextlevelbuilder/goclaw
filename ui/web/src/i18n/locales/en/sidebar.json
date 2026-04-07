@@ -23,6 +23,7 @@
     "builtinTools": "Built-in Tools",
     "mcpServers": "MCP Servers",
     "memory": "Memory",
+    "vault": "Vault",
     "knowledgeGraph": "Knowledge Graph",
     "traces": "Traces",
     "realtimeEvents": "Realtime Events",

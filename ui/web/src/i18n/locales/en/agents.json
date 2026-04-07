@@ -110,7 +110,8 @@
       "links": "Links",
       "skills": "Skills",
       "instances": "Instances",
-      "permissions": "Permissions"
+      "permissions": "Permissions",
+      "evolution": "Evolution"
     },
     "summonFailed": "Summon Failed",
     "evolving": "Evolving",
@@ -123,7 +124,51 @@
     "skills": "Skills",
     "evolution": "Evolution",
     "capabilities": "Capabilities",
-    "llmSeesAs": "LLM sees this as"
+    "llmSeesAs": "LLM sees this as",
+    "v3": {
+      "title": "V3 Features",
+      "pipeline": "V3 Pipeline",
+      "pipelineHint": "Use new 8-stage pipeline instead of legacy loop",
+      "pipelineActiveInfo": "Agent is using the new v3 pipeline. Toggle off to revert to v2 behavior.",
+      "memory": "V3 Memory",
+      "memoryHint": "Enable episodic memory and L0 auto-injection",
+      "retrieval": "V3 Retrieval",
+      "retrievalHint": "Enable new retrieval pipeline"
+    },
+    "orchestration": {
+      "title": "Orchestration",
+      "mode": "Mode",
+      "delegateTargets": "Delegate Targets",
+      "noDelegates": "No delegate targets configured. Agent uses self-clone (spawn) mode.",
+      "team": "Team"
+    },
+    "evolution": {
+      "metricsLabel": "Evolution Metrics",
+      "metricsHint": "Record tool effectiveness, retrieval quality, and response feedback",
+      "suggestionsLabel": "Evolution Suggestions",
+      "suggestionsHint": "Generate data-driven improvement suggestions from recorded metrics",
+      "toolSuccess": "Tool Success Rate",
+      "retrievalQuality": "Retrieval Quality",
+      "feedback": "Feedback",
+      "noMetrics": "No metrics recorded yet. Metrics will appear as the agent handles requests.",
+      "noSuggestions": "No suggestions generated yet. Suggestions are created by the daily analysis cron.",
+      "suggestions": "Suggestions",
+      "guardrails": "Adaptation Guardrails",
+      "maxDelta": "Max delta / cycle",
+      "minDataPoints": "Min data points",
+      "rollbackDrop": "Rollback on drop",
+      "lockedParams": "Locked parameters",
+      "timeRange": "Time range",
+      "approve": "Approve",
+      "reject": "Reject",
+      "rollback": "Rollback",
+      "confirmApprove": "Apply this suggestion to the agent?",
+      "confirmReject": "Reject this suggestion?",
+      "confirmRollback": "Revert this applied suggestion?",
+      "confirmDescription": "This action will update the suggestion status.",
+      "notEnabled": "Evolution not enabled",
+      "notEnabledHint": "Enable 'Evolution Metrics' in the Evolution section of the Agent tab to start recording metrics."
+    }
   },
   "general": {
     "selfEvolution": "Self-Evolution",

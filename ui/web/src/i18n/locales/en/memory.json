@@ -214,5 +214,26 @@
     "allIndexFailed": "Failed to index all",
     "searchFailed": "Search failed",
     "docLoadFailed": "Failed to load document"
+  },
+  "tabs": {
+    "documents": "Documents",
+    "episodic": "Episodic Memory"
+  },
+  "episodic": {
+    "noData": "No episodic memories yet",
+    "noDataHint": "Summaries are generated automatically from agent sessions",
+    "selectAgent": "Select an agent to view episodic memories",
+    "searchPlaceholder": "Search episodic memory...",
+    "clearSearch": "Clear",
+    "results": "results",
+    "turns": "turns",
+    "tokens": "tokens",
+    "expand": "Show full summary",
+    "collapse": "Hide summary",
+    "source": {
+      "session": "Session",
+      "v2_daily": "Daily",
+      "manual": "Manual"
+    }
   }
 }

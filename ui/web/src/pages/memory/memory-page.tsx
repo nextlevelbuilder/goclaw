@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, RefreshCw, Search, Database } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,7 @@ import { MemoryDocumentsTable } from "./memory-documents-table";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useEmbeddingStatus } from "@/hooks/use-embedding-status";
+import { EpisodicTab } from "./episodic-tab";
 import type { MemoryDocument } from "@/types/memory";
 
 export function MemoryPage() {
@@ -33,6 +35,7 @@ export function MemoryPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [indexAllLoading, setIndexAllLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("documents");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -137,75 +140,86 @@ export function MemoryPage() {
         }
       />
 
-      {/* Filters */}
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <div className="grid gap-1.5">
-          <Label htmlFor="mem-agent" className="text-xs">{t("filters.agent")}</Label>
-          <select
-            id="mem-agent"
-            value={agentId}
-            onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); setPage(1); }}
-            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
-          >
-            <option value="">{t("filters.allAgents")}</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.display_name || a.agent_key}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="mem-scope" className="text-xs">{t("filters.scope")}</Label>
-          <select
-            id="mem-scope"
-            value={userIdFilter}
-            onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
-            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm min-w-[180px]"
-          >
-            <option value="">{t("filters.allScope")}</option>
-            {userIds.map((uid) => (
-              <option key={uid} value={uid}>
-                {formatUserLabel(uid, resolveContact)}
-              </option>
-            ))}
-          </select>
-        </div>
-        {agentId && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleIndexAll}
-            disabled={indexAllLoading}
-            className="h-9 gap-1"
-          >
-            <Database className="h-3.5 w-3.5" />
-            {indexAllLoading ? t("indexing") : t("indexAll")}
-          </Button>
-        )}
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+        <TabsList>
+          <TabsTrigger value="documents">{t("tabs.documents")}</TabsTrigger>
+          <TabsTrigger value="episodic">{t("tabs.episodic")}</TabsTrigger>
+        </TabsList>
 
-      {/* Document table */}
-      <div className="mt-4">
-        <MemoryDocumentsTable
-          documents={documents}
-          paginatedDocs={paginatedDocs}
-          loading={showSkeleton}
-          agentId={agentId}
-          agentWorkspace={selectedAgent?.workspace}
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          totalPages={totalPages}
-          resolveContact={resolveContact}
-          agentMap={agentMap}
-          onViewDoc={setViewDoc}
-          onDeleteTarget={setDeleteTarget}
-          onReindex={handleReindex}
-          onPageChange={setPage}
-          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
-        />
-      </div>
+        <TabsContent value="documents" className="mt-4 space-y-4">
+          {/* Filters */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="mem-agent" className="text-xs">{t("filters.agent")}</Label>
+              <select
+                id="mem-agent"
+                value={agentId}
+                onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); setPage(1); }}
+                className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
+              >
+                <option value="">{t("filters.allAgents")}</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.display_name || a.agent_key}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="mem-scope" className="text-xs">{t("filters.scope")}</Label>
+              <select
+                id="mem-scope"
+                value={userIdFilter}
+                onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
+                className="h-9 rounded-md border bg-background px-3 text-base md:text-sm min-w-[180px]"
+              >
+                <option value="">{t("filters.allScope")}</option>
+                {userIds.map((uid) => (
+                  <option key={uid} value={uid}>
+                    {formatUserLabel(uid, resolveContact)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {agentId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleIndexAll}
+                disabled={indexAllLoading}
+                className="h-9 gap-1"
+              >
+                <Database className="h-3.5 w-3.5" />
+                {indexAllLoading ? t("indexing") : t("indexAll")}
+              </Button>
+            )}
+          </div>
+
+          {/* Document table */}
+          <MemoryDocumentsTable
+            documents={documents}
+            paginatedDocs={paginatedDocs}
+            loading={showSkeleton}
+            agentId={agentId}
+            agentWorkspace={selectedAgent?.workspace}
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            totalPages={totalPages}
+            resolveContact={resolveContact}
+            agentMap={agentMap}
+            onViewDoc={setViewDoc}
+            onDeleteTarget={setDeleteTarget}
+            onReindex={handleReindex}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+          />
+        </TabsContent>
+
+        <TabsContent value="episodic" className="mt-4">
+          <EpisodicTab agentId={agentId} />
+        </TabsContent>
+      </Tabs>
 
       {/* Dialogs */}
       <MemoryDocumentDialog

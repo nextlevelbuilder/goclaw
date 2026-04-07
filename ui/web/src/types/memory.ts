@@ -33,3 +33,28 @@ export interface MemorySearchResult {
   snippet: string;
   scope?: string;
 }
+
+/** Tier 2 episodic memory summary. */
+export interface EpisodicSummary {
+  id: string;
+  agent_id: string;
+  user_id: string;
+  session_key: string;
+  summary: string;
+  key_topics: string[];
+  l0_abstract: string;
+  source_type: "session" | "v2_daily" | "manual";
+  turn_count: number;
+  token_count: number;
+  created_at: string;
+  expires_at: string | null;
+}
+
+/** Episodic search result. */
+export interface EpisodicSearchResult {
+  episodic_id: string;
+  l0_abstract: string;
+  score: number;
+  created_at: string;
+  session_key: string;
+}

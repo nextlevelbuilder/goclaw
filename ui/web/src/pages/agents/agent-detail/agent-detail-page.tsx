@@ -10,6 +10,7 @@ import { AgentOverviewTab } from "./agent-overview-tab";
 import { AgentFilesTab } from "./agent-files-tab";
 import { AgentInstancesTab } from "./agent-instances-tab";
 import { AgentPermissionsTab } from "./agent-permissions-tab";
+import { AgentEvolutionTab } from "./evolution-tab/agent-evolution-tab";
 import { AgentAdvancedDialog } from "./agent-advanced-dialog";
 import { HeartbeatConfigDialog } from "./heartbeat-config-dialog";
 import { SummoningModal } from "../summoning-modal";
@@ -69,6 +70,7 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
               <TabsTrigger value="agent">{t("detail.tabs.agent")}</TabsTrigger>
               <TabsTrigger value="files">{t("detail.tabs.files")}</TabsTrigger>
               <TabsTrigger value="permissions">{t("detail.tabs.permissions")}</TabsTrigger>
+              <TabsTrigger value="evolution">{t("detail.tabs.evolution")}</TabsTrigger>
               {agent.agent_type === "predefined" && (
                 <TabsTrigger value="instances">{t("detail.tabs.instances")}</TabsTrigger>
               )}
@@ -98,6 +100,13 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
 
             <TabsContent value="permissions" className="mt-4">
               <AgentPermissionsTab agentId={agentId} />
+            </TabsContent>
+
+            <TabsContent value="evolution" className="mt-4">
+              <AgentEvolutionTab
+                agentId={agentId}
+                agentOtherConfig={agent.other_config as Record<string, unknown> | undefined}
+              />
             </TabsContent>
 
             {agent.agent_type === "predefined" && (

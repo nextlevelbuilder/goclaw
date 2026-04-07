@@ -71,6 +71,16 @@ export const queryKeys = {
     all: ["memory"] as const,
     list: (params: Record<string, unknown>) => ["memory", params] as const,
   },
+  v3Flags: {
+    detail: (agentId: string) => ["v3-flags", agentId] as const,
+  },
+  orchestration: {
+    detail: (agentId: string) => ["orchestration", agentId] as const,
+  },
+  evolution: {
+    metrics: (agentId: string, params: Record<string, unknown>) => ["evolution", "metrics", agentId, params] as const,
+    suggestions: (agentId: string, params: Record<string, unknown>) => ["evolution", "suggestions", agentId, params] as const,
+  },
   packages: {
     all: ["packages"] as const,
     runtimes: ["packages", "runtimes"] as const,

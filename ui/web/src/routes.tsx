@@ -84,6 +84,9 @@ const PendingMessagesPage = lazyWithRetry(() =>
 const MemoryPage = lazyWithRetry(() =>
   import("@/pages/memory/memory-page").then((m) => ({ default: m.MemoryPage })),
 );
+const VaultPage = lazyWithRetry(() =>
+  import("@/pages/vault/vault-page").then((m) => ({ default: m.VaultPage })),
+);
 const KnowledgeGraphPage = lazyWithRetry(() =>
   import("@/pages/knowledge-graph/knowledge-graph-page").then((m) => ({ default: m.KnowledgeGraphPage })),
 );
@@ -193,6 +196,7 @@ export function AppRoutes() {
           <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
           <Route path={ROUTES.PENDING_MESSAGES} element={<PendingMessagesPage />} />
           <Route path={ROUTES.MEMORY} element={<MemoryPage />} />
+          <Route path={ROUTES.VAULT} element={<VaultPage />} />
           <Route path={ROUTES.KNOWLEDGE_GRAPH} element={<KnowledgeGraphPage />} />
         </Route>
 

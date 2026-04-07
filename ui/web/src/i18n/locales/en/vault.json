@@ -1,0 +1,36 @@
+{
+  "title": "Knowledge Vault",
+  "description": "Document registry with wikilinks and semantic search",
+  "search": "Search",
+  "searchPlaceholder": "Search documents...",
+  "filterAgent": "Agent",
+  "allAgents": "All agents",
+  "noDocuments": "No documents in vault",
+  "noResults": "No search results",
+  "searchFailed": "Search failed",
+  "columns": {
+    "title": "Title",
+    "path": "Path",
+    "type": "Type",
+    "scope": "Scope",
+    "updated": "Updated"
+  },
+  "detail": {
+    "metadata": "Metadata",
+    "outlinks": "Outgoing Links",
+    "backlinks": "Backlinks",
+    "noLinks": "No links"
+  },
+  "scope": {
+    "personal": "Personal",
+    "team": "Team",
+    "shared": "Shared"
+  },
+  "type": {
+    "context": "Context",
+    "memory": "Memory",
+    "note": "Note",
+    "skill": "Skill",
+    "episodic": "Episodic"
+  }
+}

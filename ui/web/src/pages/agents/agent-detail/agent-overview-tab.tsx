@@ -8,6 +8,8 @@ import { PersonalitySection } from "./overview-sections/personality-section";
 import { ModelBudgetSection } from "./overview-sections/model-budget-section";
 import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
+import { V3SettingsSection } from "./overview-sections/v3-settings-section";
+import { OrchestrationSection } from "./overview-sections/orchestration-section";
 import { CapabilitiesSection } from "./overview-sections/capabilities-section";
 import { ChatGPTOAuthRoutingSummarySection } from "./overview-sections/chatgpt-oauth-routing-summary-section";
 import { HeartbeatCard } from "./overview-sections/heartbeat-card";
@@ -148,6 +150,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
 
       {agent.agent_type === "predefined" && (
         <EvolutionSection
+          agentId={agent.id}
           selfEvolve={selfEvolve}
           onSelfEvolveChange={setSelfEvolve}
           skillEvolve={skillEvolve}
@@ -156,6 +159,9 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
           onSkillNudgeIntervalChange={setSkillNudgeInterval}
         />
       )}
+
+      <V3SettingsSection agentId={agent.id} />
+      <OrchestrationSection agentId={agent.id} />
 
       <CapabilitiesSection
         subEnabled={subEnabled}
