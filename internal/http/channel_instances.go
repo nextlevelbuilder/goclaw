@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -172,7 +173,7 @@ func (h *ChannelInstancesHandler) handleCreate(w http.ResponseWriter, r *http.Re
 		ChannelType: body.ChannelType,
 		AgentID:     agentID,
 		Credentials: body.Credentials,
-		Config:      body.Config,
+		Config:      channels.CoerceStringBools(body.Config),
 		Enabled:     enabled,
 		CreatedBy:   userID,
 	}
@@ -221,6 +222,13 @@ func (h *ChannelInstancesHandler) handleUpdate(w http.ResponseWriter, r *http.Re
 
 	// Allowlist: only permit known channel instance columns.
 	updates = filterAllowedKeys(updates, channelInstanceAllowedFields)
+
+	// Normalize config: coerce string bools ("true"→true, "inherit"→remove) before saving.
+	if cfg, ok := updates["config"]; ok {
+		if raw, err := json.Marshal(cfg); err == nil {
+			updates["config"] = json.RawMessage(channels.CoerceStringBools(raw))
+		}
+	}
 
 	if err := h.store.Update(r.Context(), id, updates); err != nil {
 		slog.Error("channel_instances.update", "error", err)
