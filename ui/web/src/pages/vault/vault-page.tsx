@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, FileArchive } from "lucide-react";
+import { Search, FileArchive, TableProperties, GitGraph } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
-import { useVaultDocuments } from "./hooks/use-vault";
+import { useVaultDocuments, useVaultAllLinks } from "./hooks/use-vault";
 import { VaultDocumentsTable } from "./vault-documents-table";
 import { VaultDetailDialog } from "./vault-detail-dialog";
 import { VaultSearchDialog } from "./vault-search-dialog";
 import type { VaultDocument } from "@/types/vault";
+
+const VaultGraphView = lazy(() =>
+  import("./vault-graph-view").then((m) => ({ default: m.VaultGraphView })),
+);
 
 export function VaultPage() {
   const { t } = useTranslation("vault");
@@ -16,8 +21,10 @@ export function VaultPage() {
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedDoc, setSelectedDoc] = useState<VaultDocument | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "graph">("table");
 
   const { documents, loading } = useVaultDocuments(selectedAgent, { limit: 50 });
+  const { links } = useVaultAllLinks(selectedAgent, viewMode === "graph" ? documents : []);
 
   return (
     <div className="p-3 sm:p-4 space-y-4">
@@ -30,14 +37,46 @@ export function VaultPage() {
             <p className="text-xs text-muted-foreground">{t("description")}</p>
           </div>
         </div>
-        <Button
-          size="sm" variant="outline"
-          onClick={() => setSearchOpen(true)}
-          disabled={!selectedAgent}
-        >
-          <Search className="h-4 w-4 mr-1" />
-          {t("search")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm" variant="outline"
+            onClick={() => setSearchOpen(true)}
+            disabled={!selectedAgent}
+          >
+            <Search className="h-4 w-4 mr-1" />
+            {t("search")}
+          </Button>
+          {/* Table / Graph toggle */}
+          <TooltipProvider>
+            <div className="flex items-center gap-0.5 rounded-md border p-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={viewMode === "table" ? "default" : "ghost"}
+                    size="xs" className="h-7 w-7 p-0"
+                    onClick={() => setViewMode("table")}
+                  >
+                    <TableProperties className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("viewTable", "Table")}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={viewMode === "graph" ? "default" : "ghost"}
+                    size="xs" className="h-7 w-7 p-0"
+                    onClick={() => setViewMode("graph")}
+                    disabled={!selectedAgent}
+                  >
+                    <GitGraph className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t("viewGraph", "Graph")}</TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+        </div>
       </div>
 
       {/* Agent filter */}
@@ -57,12 +96,22 @@ export function VaultPage() {
         </select>
       </div>
 
-      {/* Documents table */}
-      <VaultDocumentsTable
-        documents={documents}
-        loading={loading}
-        onSelect={setSelectedDoc}
-      />
+      {/* Content: Table or Graph */}
+      {viewMode === "table" ? (
+        <VaultDocumentsTable
+          documents={documents}
+          loading={loading}
+          onSelect={setSelectedDoc}
+        />
+      ) : (
+        <Suspense fallback={<div className="h-[400px] animate-pulse rounded-md bg-muted" />}>
+          <VaultGraphView
+            documents={documents}
+            links={links}
+            onNodeClick={setSelectedDoc}
+          />
+        </Suspense>
+      )}
 
       {/* Detail dialog */}
       <VaultDetailDialog

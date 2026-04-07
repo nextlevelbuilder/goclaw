@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect, useRef, useMemo, memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
-
-// Stable plugin arrays — avoids new references on every render
-const remarkPlugins = [remarkGfm];
-const rehypePlugins = [rehypeHighlight];
+import rehypeKatex from "rehype-katex";
+import remarkWikilinks from "@/lib/remark-wikilinks";
+import remarkCallouts from "@/lib/remark-callouts";
 import { toFileUrl, toDownloadUrl } from "@/lib/file-helpers";
 import { Download, FileText } from "lucide-react";
 import { ImageLightbox } from "./image-lightbox";
@@ -18,10 +18,18 @@ import {
 } from "@/components/ui/dialog";
 import { CodeBlock } from "./markdown-code-block";
 import { CachedMarkdownImg } from "./markdown-cached-img";
+import { WikilinkPill } from "./markdown-wikilink";
+import { CalloutBlock } from "./markdown-callout-block";
+import { MermaidBlock } from "./markdown-mermaid-block";
+
+// Stable plugin arrays — avoids new references on every render
+const remarkPlugins = [remarkGfm, remarkMath, remarkWikilinks, remarkCallouts];
+const rehypePlugins = [rehypeHighlight, rehypeKatex];
 
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  onWikilinkClick?: (target: string) => void;
 }
 
 /** Common file extensions for generated/local files */
@@ -54,7 +62,7 @@ function fileNameFromHref(href: string): string {
   return segments[segments.length - 1] ?? "file";
 }
 
-export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className }: MarkdownRendererProps) {
+export const MarkdownRenderer = memo(function MarkdownRenderer({ content, className, onWikilinkClick }: MarkdownRendererProps) {
   const gallery = useChatImageGallery();
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   // Use conversation-wide gallery if available (has images), else fall back to local lightbox
@@ -101,11 +109,14 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
 
   // Stable components config — only recreated when token/callbacks change.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const components = useMemo((): Components => ({
+  const components = useMemo((): Components & Record<string, any> => ({
     pre({ children }) {
       return <>{children}</>;
     },
     code({ className, children, node, ...props }: any) {
+      if (className?.includes("language-mermaid")) {
+        return <MermaidBlock code={String(children).replace(/\n$/, "")} />;
+      }
       const isBlock = !!className || node?.position?.start.line !== node?.position?.end.line || String(children).includes("\n");
       if (isBlock) {
         return <CodeBlock className={className}>{children}</CodeBlock>;
@@ -115,6 +126,15 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
           {children}
         </code>
       );
+    },
+    wikilink({ node, ...props }: any) {
+      const target = node?.properties?.target ?? props?.target ?? "";
+      return <WikilinkPill target={target} onClick={onWikilinkClick} />;
+    },
+    callout({ node, children, ...props }: any) {
+      const calloutType = node?.properties?.calloutType ?? props?.calloutType;
+      const calloutTitle = node?.properties?.calloutTitle ?? props?.calloutTitle;
+      return <CalloutBlock calloutType={calloutType} calloutTitle={calloutTitle}>{children}</CalloutBlock>;
     },
     a({ href, children }: any) {
       if (isFileLink(href)) {
@@ -185,7 +205,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, classN
       }
       return <input type={type} {...props} />;
     },
-  }), [openLightbox, handleFileClick]);
+  }), [openLightbox, handleFileClick, onWikilinkClick]);
 
   return (
     <div className={`md-render prose dark:prose-invert max-w-none break-words ${className ?? ""}`}>

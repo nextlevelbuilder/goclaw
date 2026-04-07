@@ -53,6 +53,47 @@ export function useVaultSearch(agentId: string) {
   return { search, invalidate };
 }
 
+/** Fetch all links for a set of vault documents (for graph view). */
+export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
+  const http = useHttp();
+
+  const docIds = useMemo(() => documents.map((d) => d.id), [documents]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: [VAULT_KEY, "all-links", agentId, docIds.length],
+    queryFn: async () => {
+      if (docIds.length === 0) return [];
+      // Fetch outlinks for all docs in parallel (batch of 10)
+      const allLinks: VaultLink[] = [];
+      const batchSize = 10;
+      for (let i = 0; i < docIds.length; i += batchSize) {
+        const batch = docIds.slice(i, i + batchSize);
+        const results = await Promise.all(
+          batch.map((id) =>
+            http.get<{ outlinks: VaultLink[]; backlinks: VaultLink[] }>(
+              `/v1/agents/${agentId}/vault/documents/${id}/links`,
+            ).catch(() => ({ outlinks: [], backlinks: [] })),
+          ),
+        );
+        for (const r of results) {
+          allLinks.push(...r.outlinks);
+        }
+      }
+      // Deduplicate by link id
+      const seen = new Set<string>();
+      return allLinks.filter((l) => {
+        if (seen.has(l.id)) return false;
+        seen.add(l.id);
+        return true;
+      });
+    },
+    enabled: !!agentId && docIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  return { links: data ?? [], loading: isLoading };
+}
+
 /** Get links (outlinks + backlinks) for a vault document. */
 export function useVaultLinks(agentId: string, docId: string | null) {
   const http = useHttp();

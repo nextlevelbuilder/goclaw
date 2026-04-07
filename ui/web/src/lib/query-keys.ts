@@ -97,6 +97,15 @@ export const queryKeys = {
     detail: (tenantId: string) => ["tenants", tenantId] as const,
     users: (tenantId: string) => ["tenants", tenantId, "users"] as const,
   },
+  vault: {
+    all: ["vault"] as const,
+    docs: (params: Record<string, unknown>) => ["vault", "docs", params] as const,
+    links: (agentId: string, docId: string) => ["vault", "links", agentId, docId] as const,
+  },
+  episodic: {
+    all: ["episodic"] as const,
+    list: (agentId: string, params: Record<string, unknown>) => ["episodic", agentId, params] as const,
+  },
   kg: {
     all: ["kg"] as const,
     list: (params: Record<string, unknown>) => ["kg", params] as const,
