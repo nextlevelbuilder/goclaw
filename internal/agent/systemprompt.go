@@ -88,6 +88,10 @@ type SystemPromptConfig struct {
 	// Bootstrap mode: BOOTSTRAP.md is present — slim prompt with only write_file tool.
 	// Skips skills, MCP, team workspace, spawn, sandbox, self-evolve, recency reminders.
 	IsBootstrap bool
+
+	// Delegation targets from agent_links — shown in "## Delegation Targets" section.
+	DelegateTargets []DelegateTargetEntry
+	OrchMode        OrchestrationMode
 }
 
 // coreToolSummaries maps tool names to one-line descriptions.
@@ -269,6 +273,14 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 6.4. ## Team Members — inject roster so agent knows who to assign tasks to
 	if !cfg.IsBootstrap && cfg.IsTeamContext && len(cfg.TeamMembers) > 0 {
 		lines = append(lines, buildTeamMembersSection(cfg.TeamMembers, cfg.TeamGuidance)...)
+	}
+
+	// 6.45. ## Delegation Targets — from agent_links (ModeDelegate or ModeTeam with targets)
+	if !cfg.IsBootstrap && len(cfg.DelegateTargets) > 0 && cfg.OrchMode != ModeSpawn {
+		lines = append(lines, buildOrchestrationSection(OrchestrationSectionData{
+			Mode:            cfg.OrchMode,
+			DelegateTargets: cfg.DelegateTargets,
+		})...)
 	}
 
 	// 6.5 ## Sandbox (matching TS sandboxInfo section) — skip during bootstrap

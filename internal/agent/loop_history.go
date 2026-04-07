@@ -298,6 +298,8 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		ProviderType:           providerTypeOf(l.provider),
 		CredentialCLIContext:   l.buildCredentialCLIContext(ctx),
 		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
+		DelegateTargets:        l.delegateTargets,
+		OrchMode:               l.orchMode,
 	})
 
 	messages = append(messages, providers.Message{
