@@ -134,22 +134,47 @@ func TestCreate(t *testing.T) {
 		_ = mb
 	})
 
-	t.Run("RequiresSearchGate", func(t *testing.T) {
+	t.Run("AutoSearchCreateAllowed", func(t *testing.T) {
 		_, tool, _, _, ctx := newTestTeamSetup()
-		// ptd exists but HasListed=false
+		// ptd exists, HasListed=false, no similar tasks in store → auto-search passes.
 		ptd := NewPendingTeamDispatch()
 		ctx = WithPendingTeamDispatch(ctx, ptd)
 
 		result := tool.Execute(ctx, map[string]any{
 			"action":   "create",
-			"subject":  "Test task",
+			"subject":  "New unique task",
+			"assignee": "member-agent",
+		})
+		if result.IsError {
+			t.Fatalf("expected success with auto-search (no dupes), got error: %s", result.ForLLM)
+		}
+		if !strings.Contains(result.ForLLM, "Task created") {
+			t.Errorf("expected 'Task created', got: %s", result.ForLLM)
+		}
+	})
+
+	t.Run("AutoSearchBlocksDuplicate", func(t *testing.T) {
+		mb, tool, _, _, ctx := newTestTeamSetup()
+		// Seed an existing active task with a similar subject.
+		mb.taskStore.CreateTask(ctx, &store.TeamTaskData{
+			TeamID:  testTeamID,
+			Subject: "Setup Meeting 10:30",
+			Status:  "pending",
+		})
+
+		ptd := NewPendingTeamDispatch()
+		ctx = WithPendingTeamDispatch(ctx, ptd)
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":   "create",
+			"subject":  "Setup Meeting 10:30",
 			"assignee": "member-agent",
 		})
 		if !result.IsError {
-			t.Fatal("expected error when list gate not passed")
+			t.Fatal("expected error when similar active task exists")
 		}
-		if !strings.Contains(result.ForLLM, "check existing tasks") {
-			t.Errorf("expected gate message, got: %s", result.ForLLM)
+		if !strings.Contains(result.ForLLM, "Similar tasks already exist") {
+			t.Errorf("expected duplicate warning, got: %s", result.ForLLM)
 		}
 	})
 

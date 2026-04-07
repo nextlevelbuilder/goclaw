@@ -46,14 +46,35 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		return ErrorResult(err.Error())
 	}
 
-	// Gate: must list tasks before creating to prevent duplicates in concurrent group chat.
-	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
-		return ErrorResult("You must check existing tasks first. Call team_tasks(action=\"search\", query=\"<keywords>\") to check for similar tasks before creating — this saves tokens vs listing all. Alternatively use action=\"list\" to see the full board.")
-	}
-
 	subject, _ := args["subject"].(string)
 	if subject == "" {
 		return ErrorResult("subject is required for create action")
+	}
+
+	// Auto-dedup: if list/search wasn't called first, automatically search for similar active tasks.
+	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
+		chatID := ToolChatIDFromCtx(ctx)
+		lock := getTeamCreateLock(team.ID.String(), chatID)
+		lock.Lock()
+		ptd.SetTeamLock(lock)
+		ptd.MarkListed()
+
+		filterUserID := ""
+		ch := ToolChannelFromCtx(ctx)
+		if ch != ChannelTeammate && ch != ChannelSystem {
+			filterUserID = store.UserIDFromContext(ctx)
+		}
+		existing, _ := t.manager.Store().SearchTasks(ctx, team.ID, subject, 5, filterUserID)
+		var active []string
+		for _, et := range existing {
+			s := string(et.Status)
+			if s == "pending" || s == "in_progress" || s == "blocked" || s == "in_review" {
+				active = append(active, fmt.Sprintf("- #%s: %s [%s]", et.ID.String()[:8], et.Subject, s))
+			}
+		}
+		if len(active) > 0 {
+			return ErrorResult(fmt.Sprintf("Similar tasks already exist:\n%s\n\nUse team_tasks(action=\"get\", task_id=\"...\") to inspect, or re-submit create if this is truly new.", strings.Join(active, "\n")))
+		}
 	}
 
 	description, _ := args["description"].(string)
