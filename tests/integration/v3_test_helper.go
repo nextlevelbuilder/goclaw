@@ -105,6 +105,13 @@ func seedTenantAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) {
 		db.Exec("DELETE FROM agent_team_members WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM agent_teams WHERE tenant_id = $1", tenantID)
 
+		// Episodic
+		db.Exec("DELETE FROM episodic_summaries WHERE tenant_id = $1", tenantID)
+
+		// Cron
+		db.Exec("DELETE FROM cron_run_logs WHERE job_id IN (SELECT id FROM cron_jobs WHERE tenant_id = $1)", tenantID)
+		db.Exec("DELETE FROM cron_jobs WHERE tenant_id = $1", tenantID)
+
 		// Knowledge stores
 		db.Exec("DELETE FROM vault_links WHERE tenant_id = $1", tenantID)
 		db.Exec("DELETE FROM vault_documents WHERE tenant_id = $1", tenantID)
