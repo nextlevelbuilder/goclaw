@@ -203,6 +203,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setIsRunning(false); runIdRef.current = null;
           const hadTools = toolStreamRef.current.length > 0;
           const streamed = streamRef.current;
+          const thinking = thinkingRef.current || undefined;
           setStreamText(null); setThinkingText(null); setToolStream([]);
           streamRef.current = ""; thinkingRef.current = ""; toolStreamRef.current = [];
           activityRef.current = null; setActivity(null);
@@ -212,7 +213,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
             ? rawMedia.map((m) => ({ path: toFileUrl(m.path), mimeType: m.content_type ?? "application/octet-stream", fileName: m.path.split("?")[0]?.split("/").pop() ?? "file", size: m.size, kind: mediaKindFromMime(m.content_type ?? "") }))
             : undefined;
           if (streamed && !hadTools) {
-            setMessages((prev) => [...prev, { role: "assistant", content: streamed, timestamp: Date.now(), mediaItems }]);
+            setMessages((prev) => [...prev, { role: "assistant", content: streamed, thinking, timestamp: Date.now(), mediaItems }]);
           } else { loadHistory(mediaItems); }
           break;
         }

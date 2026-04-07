@@ -518,6 +518,7 @@ type RunRequest struct {
 // RunResult is the output of a completed agent run.
 type RunResult struct {
 	Content        string           `json:"content"`
+	Thinking       string           `json:"thinking,omitempty"`       // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
 	RunID          string           `json:"runId"`
 	Iterations     int              `json:"iterations"`
 	Usage          *providers.Usage `json:"usage,omitempty"`

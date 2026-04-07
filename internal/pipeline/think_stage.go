@@ -95,7 +95,16 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		resp.ToolCalls = s.deps.UniqueToolCallIDs(resp.ToolCalls, state.RunID, state.Iteration)
 	}
 
-	// 8. Append assistant response with full passback fields (reasoning, phase, raw content).
+	// 8. Flow control + message append.
+	// Final answer (no tool calls): FinalizeStage builds the definitive assistant
+	// message with sanitization + MediaRefs, so skip AppendPending here to avoid
+	// a duplicate. Matches v2 behavior where loop breaks before appending.
+	if len(resp.ToolCalls) == 0 {
+		s.result = BreakLoop
+		return nil
+	}
+
+	// Tool iteration: append assistant message for LLM context continuity.
 	assistantMsg := providers.Message{
 		Role:                "assistant",
 		Content:             resp.Content,
@@ -106,15 +115,10 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	}
 	state.Messages.AppendPending(assistantMsg)
 
-	// 9. Emit block.reply for intermediate assistant content during tool iterations.
+	// Emit block.reply for intermediate assistant content during tool iterations.
 	// Non-streaming channels (Zalo, Discord, WhatsApp) need this for delivery.
-	if len(resp.ToolCalls) > 0 && resp.Content != "" && s.deps.EmitBlockReply != nil {
+	if resp.Content != "" && s.deps.EmitBlockReply != nil {
 		s.deps.EmitBlockReply(resp.Content)
-	}
-
-	// 10. Flow control: no tool calls = final answer -> BreakLoop
-	if len(resp.ToolCalls) == 0 {
-		s.result = BreakLoop
 	}
 
 	return nil

@@ -250,7 +250,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		if provider != nil {
 			opts = append(opts, withProvider(provider.Name()))
 		}
-		spanID := l.emitLLMSpanStart(ctx, start, state.Iteration, chatReq.Messages, opts...)
+		spanID := l.emitLLMSpanStart(ctx, start, state.Iteration+1, chatReq.Messages, opts...)
 
 		var resp *providers.ChatResponse
 		var err error

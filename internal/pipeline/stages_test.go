@@ -65,10 +65,10 @@ func TestThinkStage_NoToolCalls_ReturnsBreakLoop(t *testing.T) {
 	if stage.Result() != BreakLoop {
 		t.Errorf("Result() = %v, want BreakLoop", stage.Result())
 	}
-	// assistant message appended
+	// Final answer skips AppendPending (FinalizeStage builds the definitive message).
 	pending := state.Messages.Pending()
-	if len(pending) != 1 || pending[0].Role != "assistant" {
-		t.Errorf("pending = %v, want 1 assistant message", pending)
+	if len(pending) != 0 {
+		t.Errorf("pending = %v, want empty (FinalizeStage builds the definitive message)", pending)
 	}
 }
 

@@ -209,6 +209,7 @@ func (l *Loop) finalizeRun(
 
 	return &RunResult{
 		Content:        rs.finalContent,
+		Thinking:       rs.finalThinking,
 		RunID:          req.RunID,
 		Iterations:     rs.iteration,
 		Usage:          &rs.totalUsage,

@@ -304,6 +304,9 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 			"content": result.Content,
 			"usage":   result.Usage,
 		}
+		if result.Thinking != "" {
+			resp["thinking"] = result.Thinking
+		}
 		if len(result.Media) > 0 {
 			resp["media"] = result.Media
 		}

@@ -211,6 +211,9 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusCompleted)
 		}
 		completedPayload := map[string]any{"content": result.Content}
+		if result.Thinking != "" {
+			completedPayload["thinking"] = result.Thinking
+		}
 		if result != nil && result.Usage != nil {
 			completedPayload["usage"] = map[string]any{
 				"prompt_tokens":         result.Usage.PromptTokens,
@@ -294,6 +297,9 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	}
 
 	completedPayload := map[string]any{"content": result.Content}
+	if result.Thinking != "" {
+		completedPayload["thinking"] = result.Thinking
+	}
 	if result.Usage != nil {
 		completedPayload["usage"] = map[string]any{
 			"prompt_tokens":         result.Usage.PromptTokens,
