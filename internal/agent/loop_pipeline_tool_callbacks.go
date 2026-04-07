@@ -140,6 +140,7 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 	state.Tool.Deliverables = bridgeRS.deliverables
 	state.Evolution.BootstrapWrite = bridgeRS.bootstrapWriteDetected
 	state.Evolution.TeamTaskSpawns = bridgeRS.teamTaskSpawns
+	state.Evolution.TeamTaskCreates = bridgeRS.teamTaskCreates
 	// Sync media results from v2 processToolResult → v3 pipeline state.
 	// Without this, MEDIA: paths from tool results never reach FinalizeStage.
 	if len(bridgeRS.mediaResults) > 0 {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -358,6 +359,21 @@ func (l *Loop) makeUpdateMetadata(req *RunRequest) func(ctx context.Context, ses
 		// FlushMessages already ran, so all pending messages are in the cache.
 		l.sessions.Save(ctx, sessionKey)
 		return nil
+	}
+}
+
+func (l *Loop) makeSkillPostscript() func(ctx context.Context, content string, totalToolCalls int) string {
+	if !l.skillEvolve || l.skillNudgeInterval <= 0 {
+		return nil // disabled — FinalizeStage skips
+	}
+	var sent bool
+	return func(ctx context.Context, content string, totalToolCalls int) string {
+		if sent || totalToolCalls < l.skillNudgeInterval || IsSilentReply(content) {
+			return content
+		}
+		sent = true
+		locale := store.LocaleFromContext(ctx)
+		return content + "\n\n---\n_" + i18n.T(locale, i18n.MsgSkillNudgePostscript) + "_"
 	}
 }
 

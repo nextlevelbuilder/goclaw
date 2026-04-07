@@ -30,6 +30,11 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 		state.Observe.FinalContent = s.deps.SanitizeContent(state.Observe.FinalContent)
 	}
 
+	// 1b. Skill evolution postscript (matching v2 loop_finalize.go:52-57).
+	if s.deps.SkillPostscript != nil && state.Observe.FinalContent != "" {
+		state.Observe.FinalContent = s.deps.SkillPostscript(ctx, state.Observe.FinalContent, state.Tool.TotalToolCalls)
+	}
+
 	// 2. NO_REPLY detection: save to session for context but mark as silent.
 	// Must run BEFORE session flush so the agent message is persisted even if suppressed.
 	isSilent := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
