@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR #730 — fix(chat): first conversation click</title>
+<style>
+:root { --bg: #0d0d0d; --fg: #e8e4df; --card: #1a1714; --border: #2d2923; --accent: #ef4444; --muted: #6b6560; }
+.light { --bg: #f8f6f3; --fg: #1a1714; --card: #ffffff; --border: #e5e0da; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--fg); padding: 2rem; }
+.theme-toggle { position: fixed; top: 1rem; right: 1rem; background: var(--card); border: 1px solid var(--border); color: var(--fg); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; z-index: 100; }
+h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.subtitle { color: var(--muted); margin-bottom: 2rem; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.summary-card h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
+.env { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 2rem; font-size: 0.85rem; color: var(--muted); }
+.comparison { margin-bottom: 3rem; }
+.comparison h2 { font-size: 1.1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.col-header { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+.col-header.before { color: var(--muted); }
+.col-header.after { color: var(--accent); }
+.grid img { width: 100%; border: 1px solid var(--border); border-radius: 6px; }
+.desc { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('light'); this.textContent = document.documentElement.classList.contains('light') ? '● Dark' : '○ Light'">○ Light</button>
+
+<h1>fix(chat): load message history on first conversation click</h1>
+<p class="subtitle">PR #730 — Closes #729</p>
+
+<div class="summary">
+  <div class="summary-card">
+    <h3>Bug</h3>
+    <p>First conversation click from clean state shows empty placeholder instead of messages</p>
+  </div>
+  <div class="summary-card">
+    <h3>Root Cause</h3>
+    <p><code>skipNextHistoryRef</code> unconditionally set on empty→non-empty transition, skipping <code>loadHistory()</code></p>
+  </div>
+  <div class="summary-card">
+    <h3>Fix</h3>
+    <p>Guard skip with <code>expectingRunRef.current</code> — only active during new-chat send flow</p>
+  </div>
+</div>
+
+<div class="env">
+  Same instance (claw:3000 backend), same user (kai/Master), same agent (glm thục bô), same conversation (Chat a95c8ffa), light theme. Callout borders mark the review area.
+</div>
+
+<div class="comparison">
+  <h2>Chat — First Click from Clean State</h2>
+  <div class="grid">
+    <div>
+      <div class="col-header before">BEFORE</div>
+      <img src="before-chat-first-click.png" alt="Before: empty placeholder on first click">
+      <p class="desc">Before: Clicking "Chat a95c8ffa" from initial state — conversation highlighted but main area shows "Start a conversation" placeholder. Messages never load.</p>
+    </div>
+    <div>
+      <div class="col-header after">AFTER</div>
+      <img src="after-chat-first-click.png" alt="After: messages load on first click">
+      <p class="desc">After: Same click — conversation messages load immediately. The 5-message history is displayed correctly on first click.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
