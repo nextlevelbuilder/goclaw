@@ -59,6 +59,10 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 			return nil, fmt.Errorf("setup %s: %w", stage.Name(), err)
 		}
 	}
+	// Propagate enriched context from setup stages (ContextStage injects agent/user/workspace values).
+	if state.Ctx != nil {
+		ctx = state.Ctx
+	}
 
 	// 2. Iteration loop
 	for state.Iteration = 0; state.Iteration < p.Deps.Config.MaxIterations; state.Iteration++ {

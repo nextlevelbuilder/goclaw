@@ -25,10 +25,18 @@ type PipelineDeps struct {
 	// Callback captures agent/tenant context via closure.
 	AutoInject func(ctx context.Context, userMessage, userID string) (string, error)
 
+	// InjectContext sets up agent/tenant/user/workspace/tool context values.
+	// Wraps injectContext() for v3 pipeline. Called once at ContextStage start.
+	InjectContext func(ctx context.Context, input *RunInput) (context.Context, error)
+
+	// LoadSessionHistory loads persisted session history + summary from store.
+	// Called before BuildMessages in ContextStage.
+	LoadSessionHistory func(ctx context.Context, sessionKey string) ([]providers.Message, string)
+
 	// Context callbacks (ContextStage)
 	ResolveWorkspace func(ctx context.Context, input *RunInput) (*workspace.WorkspaceContext, error)
 	LoadContextFiles func(ctx context.Context, userID string) ([]bootstrap.ContextFile, bool) // files, hadBootstrap
-	BuildMessages    func(ctx context.Context, input *RunInput, history []providers.Message) ([]providers.Message, error)
+	BuildMessages    func(ctx context.Context, input *RunInput, history []providers.Message, summary string) ([]providers.Message, error)
 	EnrichMedia      func(ctx context.Context, input *RunInput) error
 	InjectReminders  func(ctx context.Context, input *RunInput, msgs []providers.Message) []providers.Message
 

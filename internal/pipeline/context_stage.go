@@ -23,6 +23,17 @@ func (s *ContextStage) Name() string { return "context" }
 
 // Execute populates RunState with workspace, context files, system prompt, and overhead tokens.
 func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
+	// 0. Inject context values (agent/tenant/user/workspace scoping, input guard, truncation).
+	// Wraps injectContext() for v3 pipeline — called once before all other context setup.
+	if s.deps.InjectContext != nil {
+		enrichedCtx, err := s.deps.InjectContext(ctx, state.Input)
+		if err != nil {
+			return fmt.Errorf("inject context: %w", err)
+		}
+		ctx = enrichedCtx
+		state.Ctx = ctx
+	}
+
 	// 1. Resolve workspace
 	if s.deps.ResolveWorkspace != nil {
 		ws, err := s.deps.ResolveWorkspace(ctx, state.Input)
@@ -39,9 +50,18 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		state.Context.HadBootstrap = hadBootstrap
 	}
 
-	// 3. Build system prompt + history via callback (wraps buildMessages)
+	// 3. Load session history + summary before BuildMessages.
+	if s.deps.LoadSessionHistory != nil && state.Input.SessionKey != "" {
+		history, summary := s.deps.LoadSessionHistory(ctx, state.Input.SessionKey)
+		if len(history) > 0 {
+			state.Messages.SetHistory(history)
+		}
+		state.Context.Summary = summary
+	}
+
+	// 4. Build system prompt + history via callback (wraps buildMessages)
 	if s.deps.BuildMessages != nil {
-		msgs, err := s.deps.BuildMessages(ctx, state.Input, state.Messages.History())
+		msgs, err := s.deps.BuildMessages(ctx, state.Input, state.Messages.History(), state.Context.Summary)
 		if err != nil {
 			return fmt.Errorf("build messages: %w", err)
 		}
@@ -53,32 +73,31 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		}
 	}
 
-	// 4. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead)
+	// 5. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead)
 	if s.deps.TokenCounter != nil {
 		system := state.Messages.System()
 		overhead := s.deps.TokenCounter.CountMessages(state.Model, []providers.Message{system})
 		state.Context.OverheadTokens = overhead
 	}
 
-	// 5. Enrich input media (resolve refs, inline descriptions)
+	// 6. Enrich input media (resolve refs, inline descriptions)
 	if s.deps.EnrichMedia != nil {
 		if err := s.deps.EnrichMedia(ctx, state.Input); err != nil {
 			return fmt.Errorf("enrich media: %w", err)
 		}
 	}
 
-	// 6. Inject team task reminders into messages
+	// 7. Inject team task reminders into messages
 	if s.deps.InjectReminders != nil {
 		updated := s.deps.InjectReminders(ctx, state.Input, state.Messages.History())
 		state.Messages.SetHistory(updated)
 	}
 
-	// 7. Auto-inject L0 memory context into system prompt (gated on v3 retrieval flag)
+	// 8. Auto-inject L0 memory context into system prompt (gated on v3 retrieval flag)
 	if s.deps.Config.V3RetrievalEnabled && s.deps.AutoInject != nil && state.Input.Message != "" {
 		section, err := s.deps.AutoInject(ctx, state.Input.Message, state.Input.UserID)
 		if err == nil && section != "" {
 			state.Context.MemorySection = section
-			// Append memory section to system prompt
 			sys := state.Messages.System()
 			sys.Content += "\n\n" + section
 			state.Messages.SetSystem(sys)

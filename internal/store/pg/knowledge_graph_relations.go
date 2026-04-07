@@ -75,7 +75,7 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
 		       confidence, properties, created_at
 		FROM kg_relations
-		WHERE agent_id = $1
+		WHERE agent_id = $1 AND valid_until IS NULL
 		  AND (source_entity_id = $2 OR target_entity_id = $2)` + tc + `
 		ORDER BY created_at DESC`
 		args = append([]any{aid, eid}, tcArgs...)
@@ -87,7 +87,7 @@ func (s *PGKnowledgeGraphStore) ListRelations(ctx context.Context, agentID, user
 		q = `SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,
 		       confidence, properties, created_at
 		FROM kg_relations
-		WHERE agent_id = $1 AND user_id = $2
+		WHERE agent_id = $1 AND user_id = $2 AND valid_until IS NULL
 		  AND (source_entity_id = $3 OR target_entity_id = $3)` + tc + `
 		ORDER BY created_at DESC`
 		args = append([]any{aid, userID, eid}, tcArgs...)
@@ -106,7 +106,7 @@ func (s *PGKnowledgeGraphStore) ListAllRelations(ctx context.Context, agentID, u
 	if limit <= 0 {
 		limit = 200
 	}
-	where := "agent_id = $1"
+	where := "agent_id = $1 AND valid_until IS NULL"
 	args := []any{aid}
 	idx := 2
 	if !store.IsSharedKG(ctx) && userID != "" {
@@ -295,18 +295,18 @@ func (s *PGKnowledgeGraphStore) Stats(ctx context.Context, agentID, userID strin
 	args = append(args, tcArgs...)
 
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+tenantFilter, args...,
+		`SELECT COUNT(*) FROM kg_entities WHERE agent_id = $1 AND valid_until IS NULL`+userFilter+tenantFilter, args...,
 	).Scan(&stats.EntityCount); err != nil {
 		return nil, err
 	}
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1`+userFilter+tenantFilter, args...,
+		`SELECT COUNT(*) FROM kg_relations WHERE agent_id = $1 AND valid_until IS NULL`+userFilter+tenantFilter, args...,
 	).Scan(&stats.RelationCount); err != nil {
 		return nil, err
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT entity_type, COUNT(*) FROM kg_entities WHERE agent_id = $1`+userFilter+tenantFilter+` GROUP BY entity_type`, args...,
+		`SELECT entity_type, COUNT(*) FROM kg_entities WHERE agent_id = $1 AND valid_until IS NULL`+userFilter+tenantFilter+` GROUP BY entity_type`, args...,
 	)
 	if err != nil {
 		return nil, err

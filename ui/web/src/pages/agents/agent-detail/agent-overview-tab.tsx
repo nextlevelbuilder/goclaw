@@ -84,7 +84,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         emoji: emoji.trim() || null,
         self_evolve: selfEvolve,
         skill_evolve: skillEvolve,
-        skill_nudge_interval: skillEvolve ? skillNudgeInterval : null,
+        skill_nudge_interval: skillEvolve ? skillNudgeInterval : 15,
       };
       // When the provider changes, clear stale pool routing config so it
       // doesn't reference members from the previous provider's pool.
@@ -138,16 +138,6 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         </p>
       )}
 
-      {/* Memory — always visible, per-agent overrides */}
-      <MemorySection
-        value={mem}
-        onChange={setMem}
-      />
-
-      <HeartbeatCard heartbeat={heartbeat} />
-
-      <SkillsSection agentId={agent.id} />
-
       {agent.agent_type === "predefined" && (
         <EvolutionSection
           agentId={agent.id}
@@ -161,6 +151,17 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
       )}
 
       <V3SettingsSection agentId={agent.id} />
+
+      {/* Memory — always visible, per-agent overrides */}
+      <MemorySection
+        value={mem}
+        onChange={setMem}
+      />
+
+      <HeartbeatCard heartbeat={heartbeat} />
+
+      <SkillsSection agentId={agent.id} />
+
       <OrchestrationSection agentId={agent.id} />
 
       <CapabilitiesSection

@@ -177,11 +177,11 @@ export function TracesPage() {
             <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
+                  <th className="px-4 py-3 text-left font-medium max-w-[40%]">{t("columns.name")}</th>
                   <th className="px-3 py-3 text-center font-medium w-10"></th>
-                  <th className="px-4 py-3 text-left font-medium">{t("columns.tokens")}</th>
-                  <th className="px-4 py-3 text-center font-medium">{t("columns.spans")}</th>
-                  <th className="px-4 py-3 text-right font-medium">{t("columns.time")}</th>
+                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">{t("columns.tokens")}</th>
+                  <th className="px-4 py-3 text-center font-medium whitespace-nowrap">{t("columns.spans")}</th>
+                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">{t("columns.time")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,7 +197,7 @@ export function TracesPage() {
                       className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
                       onClick={() => setSelectedTraceId(trace.id)}
                     >
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5 max-w-[300px] lg:max-w-[400px]">
                         <div className="flex items-center gap-1.5 text-sm font-medium min-w-0">
                           {trace.parent_trace_id && (
                             <GitFork className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -244,7 +244,7 @@ export function TracesPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">
+                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                         <div>{formatTokens(trace.total_input_tokens)} / {formatTokens(trace.total_output_tokens)}</div>
                         {(trace.metadata?.total_cache_read_tokens ?? 0) > 0 && (
                           <div className="text-xs text-green-400">

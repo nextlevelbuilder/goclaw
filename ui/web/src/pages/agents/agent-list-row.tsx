@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
 import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
+import { useAgentVersion } from "./hooks/use-agent-version";
 
 interface AgentListRowProps {
   agent: AgentData;
@@ -20,6 +21,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
   const selfEvolve = agent.agent_type === "predefined" && Boolean(agent.self_evolve);
   const emoji = agent.emoji ?? "";
   const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
+  const version = useAgentVersion(agent.id);
 
   return (
     <button
@@ -61,9 +63,21 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
         {[agent.provider, agent.model].filter(Boolean).join(" / ")}
       </div>
 
-      {/* Type + evolve */}
+      {/* Version + evolve */}
       <div className="hidden shrink-0 items-center gap-1 lg:flex">
-        <Badge variant="outline" className="text-[11px]">{agent.agent_type}</Badge>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className={`text-[11px] ${version === "v3" ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" : ""}`}
+            >
+              {version}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[260px] text-xs">
+            {version === "v3" ? t("card.v3Tooltip") : t("card.v2Tooltip")}
+          </TooltipContent>
+        </Tooltip>
         {selfEvolve && (
           <Tooltip>
             <TooltipTrigger asChild>

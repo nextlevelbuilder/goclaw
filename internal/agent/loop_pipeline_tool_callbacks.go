@@ -31,10 +31,15 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
 		})
 
-		toolStart := time.Now()
+		// Emit tool span start (matching runLoop tracing behavior).
+		toolStart := time.Now().UTC()
+		toolSpanID := l.emitToolSpanStart(ctx, toolStart, tc.Name, tc.ID, string(argsJSON))
+
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 		toolDuration := time.Since(toolStart)
+
+		l.emitToolSpanEnd(ctx, toolSpanID, toolStart, result)
 
 		// v3 evolution metrics: record tool execution non-blocking (best-effort).
 		l.recordToolMetric(ctx, req.SessionKey, registryName, !result.IsError, toolDuration)
@@ -56,14 +61,23 @@ type toolRawResult struct {
 }
 
 // makeExecuteToolRaw wraps tool I/O only (parallel-safe, no state mutation).
-// Returns tool message + toolRawResult (with timing) as opaque raw data for ProcessToolResult.
+// Returns tool message + toolRawResult (with timing + spanID) as opaque raw data for ProcessToolResult.
 func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 	return func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 		registryName := l.resolveToolCallName(tc.Name)
-		start := time.Now()
+		argsJSON, _ := json.Marshal(tc.Arguments)
+
+		// Emit tool span start (goroutine-safe: channel send only).
+		start := time.Now().UTC()
+		spanID := l.emitToolSpanStart(ctx, start, tc.Name, tc.ID, string(argsJSON))
+
 		result := l.tools.ExecuteWithContext(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, nil)
 		dur := time.Since(start)
+
+		// Emit tool span end inside goroutine to prevent orphaned spans on ctx cancellation.
+		l.emitToolSpanEnd(ctx, spanID, start, result)
+
 		msg := providers.Message{
 			Role:       "tool",
 			Content:    result.ForLLM,

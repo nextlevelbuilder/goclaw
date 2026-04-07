@@ -51,7 +51,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				ARRAY[e.id::text] AS path,
 				''::text AS via
 			FROM kg_entities e
-			WHERE e.id = $1 AND e.agent_id = $2%s
+			WHERE e.id = $1 AND e.agent_id = $2 AND e.valid_until IS NULL%s
 
 			UNION ALL
 
@@ -67,8 +67,8 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 					ELSE '~' || r.relation_type
 				END
 			FROM paths p
-			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.agent_id = $2
-			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.agent_id = $2
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.agent_id = $2 AND r.valid_until IS NULL
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.agent_id = $2 AND e.valid_until IS NULL
 			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
 		)
@@ -99,7 +99,7 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 				ARRAY[e.id::text] AS path,
 				''::text AS via
 			FROM kg_entities e
-			WHERE e.id = $1 AND e.agent_id = $2 AND e.user_id = $3%s
+			WHERE e.id = $1 AND e.agent_id = $2 AND e.user_id = $3 AND e.valid_until IS NULL%s
 
 			UNION ALL
 
@@ -115,8 +115,8 @@ func (s *PGKnowledgeGraphStore) Traverse(ctx context.Context, agentID, userID, s
 					ELSE '~' || r.relation_type
 				END
 			FROM paths p
-			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.user_id = $3
-			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.user_id = $3
+			JOIN kg_relations r ON (r.source_entity_id = p.id OR r.target_entity_id = p.id) AND r.user_id = $3 AND r.valid_until IS NULL
+			JOIN kg_entities  e ON e.id = (CASE WHEN r.source_entity_id = p.id THEN r.target_entity_id ELSE r.source_entity_id END) AND e.user_id = $3 AND e.valid_until IS NULL
 			WHERE p.depth < $%d
 			  AND NOT e.id::text = ANY(p.path)
 		)

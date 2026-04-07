@@ -12,6 +12,7 @@ type ContextState struct {
 	SkillsSummary  string
 	TeamContext    string // team workspace context injected for team runs
 	MemorySection  string // L0 auto-injected memory context for system prompt
+	Summary        string // session summary for context continuity
 	HadBootstrap   bool
 	OverheadTokens int // system prompt + context files (accurate via TokenCounter)
 }

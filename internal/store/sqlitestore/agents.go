@@ -133,6 +133,11 @@ func (s *SQLiteAgentStore) Update(ctx context.Context, id uuid.UUID, updates map
 		return nil
 	}
 
+	// Coerce NOT NULL int columns: null → default to prevent constraint violations.
+	if v, ok := updates["skill_nudge_interval"]; ok && v == nil {
+		updates["skill_nudge_interval"] = 0
+	}
+
 	// Unset existing default before setting a new one (scoped to same tenant).
 	if v, ok := updates["is_default"]; ok {
 		if isDefault, _ := v.(bool); isDefault {

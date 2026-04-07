@@ -26,7 +26,7 @@ export function EvolutionSection({
 
   return (
     <section className="space-y-4 rounded-lg border p-3 sm:p-4">
-      <h3 className="text-sm font-medium">{t("detail.evolution")}</h3>
+      <h3 className="text-sm font-medium">{t("detail.evolution.title")}</h3>
 
       {/* Self-Evolve */}
       <div className="space-y-2">

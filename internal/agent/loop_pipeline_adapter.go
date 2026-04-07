@@ -47,7 +47,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 	cb := l.pipelineCallbacks(req, bridgeRS)
 
 	return pipeline.PipelineDeps{
-		TokenCounter: tokencount.NewFallbackCounter(),
+		TokenCounter: tokencount.NewTiktokenCounter(),
 		Config: pipeline.PipelineConfig{
 			MaxIterations:      maxIter,
 			MaxToolCalls:       l.maxToolCalls,
@@ -67,6 +67,10 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		// V3 auto-inject: episodic memory L0 injection into system prompt.
 		// Captures agent/tenant context via closure for store scoping.
 		AutoInject: l.makeAutoInjectCallback(req),
+
+		// Context injection + session history
+		InjectContext:      cb.injectContext,
+		LoadSessionHistory: cb.loadSessionHistory,
 
 		// Context callbacks
 		ResolveWorkspace: cb.resolveWorkspace,

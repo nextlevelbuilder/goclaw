@@ -1115,7 +1115,7 @@ func TestContextStage_LoadContextFiles(t *testing.T) {
 func TestContextStage_BuildMessages(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
-		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message) ([]providers.Message, error) {
+		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message, _ string) ([]providers.Message, error) {
 			return []providers.Message{
 				{Role: "system", Content: "system prompt"},
 				{Role: "user", Content: "history msg"},
@@ -1142,7 +1142,7 @@ func TestContextStage_BuildMessages(t *testing.T) {
 func TestContextStage_BuildMessages_ErrorPropagates(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
-		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message) ([]providers.Message, error) {
+		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message, _ string) ([]providers.Message, error) {
 			return nil, errors.New("build failed")
 		},
 	}

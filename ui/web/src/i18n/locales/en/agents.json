@@ -46,12 +46,28 @@
     "summonFailed": "Failed",
     "resummon": "Resummon",
     "delete": "Delete",
-    "predefinedTooltip": "Shared context files (SOUL.md, IDENTITY.md, AGENTS.md) with per-user USER.md instances.",
-    "openTooltip": "Each user gets their own full set of context files.",
+    "v2Tooltip": "Legacy agent pipeline. Upgrade to v3 for episodic memory, metrics, and improved retrieval.",
+    "v3Tooltip": "New 8-stage pipeline with episodic memory, evolution metrics, and improved retrieval.",
+    "versionInfo": "What's new in v3?",
     "evolving": "Evolving",
     "static": "Static",
     "evolvingTooltip": "Agent can self-evolve its communication style (SOUL.md). Identity and workflow stay fixed.",
     "staticTooltip": "Agent style is static. Enable Self-Evolution in settings to allow style adaptation."
+  },
+  "v3Info": {
+    "title": "Agent v3 Features",
+    "subtitle": "Key improvements over v2 pipeline",
+    "pipeline": "8-Stage Pipeline",
+    "pipelineDesc": "Structured think → act → observe loop with dedicated stages for context assembly, tool execution, and response generation.",
+    "memory": "Episodic Memory",
+    "memoryDesc": "Auto-summarizes conversations into L0 abstracts with key topics. Injected into future sessions for long-term continuity.",
+    "retrieval": "Improved Retrieval",
+    "retrievalDesc": "New retrieval pipeline with BM25 + vector search for more relevant context injection from knowledge base and memories.",
+    "metrics": "Evolution Metrics",
+    "metricsDesc": "Records tool success rates, retrieval quality, and user feedback to measure agent effectiveness over time.",
+    "suggestions": "Data-Driven Suggestions",
+    "suggestionsDesc": "Generates improvement suggestions from recorded metrics. Review, approve, or reject changes with one click.",
+    "note": "v3 features are opt-in per agent. Enable them in the V3 Features section on the agent overview page."
   },
   "delete": {
     "title": "Delete Agent",
@@ -122,7 +138,6 @@
     "personality": "Agent Personality",
     "modelBudget": "Model & Budget",
     "skills": "Skills",
-    "evolution": "Evolution",
     "capabilities": "Capabilities",
     "llmSeesAs": "LLM sees this as",
     "v3": {
@@ -143,6 +158,7 @@
       "team": "Team"
     },
     "evolution": {
+      "title": "Evolution",
       "metricsLabel": "Evolution Metrics",
       "metricsHint": "Record tool effectiveness, retrieval quality, and response feedback",
       "suggestionsLabel": "Evolution Suggestions",

@@ -121,7 +121,7 @@
     "personality": "Cá tính Agent",
     "modelBudget": "Mô hình & Ngân sách",
     "skills": "Kỹ năng",
-    "evolution": "Tiến hóa",
+    "evolution": { "title": "Tiến hóa" },
     "capabilities": "Khả năng",
     "llmSeesAs": "LLM nhìn thấy đây là"
   },

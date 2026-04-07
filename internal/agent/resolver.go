@@ -364,7 +364,10 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			dataDir = config.TenantDataDir(deps.DataDir, ag.TenantID, tenantSlug)
 		}
 
-		// v3 feature flags (from other_config JSONB)
+		// v3 feature flags (from other_config JSONB).
+		// NOTE: flags are immutable per-Loop — changes via admin API take effect on next session only.
+		// In-flight loops continue with the flags set at creation. This is by design:
+		// CacheKindAgent invalidation destroys the old Loop, and the next request creates a new one.
 		v3f := ag.ParseV3Flags()
 
 		// v3 orchestration mode: resolve from team membership + agent links

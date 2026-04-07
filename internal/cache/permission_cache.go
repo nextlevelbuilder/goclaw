@@ -18,38 +18,25 @@ type agentAccessEntry struct {
 // PermissionCache provides short-TTL caching for hot permission lookups.
 // Uses InMemoryCache[V] caches with pubsub invalidation.
 type PermissionCache struct {
-	tenantResolve *InMemoryCache[uuid.UUID]
-	tenantRole    *InMemoryCache[string]
-	agentAccess   *InMemoryCache[agentAccessEntry]
-	teamAccess    *InMemoryCache[bool]
+	tenantRole  *InMemoryCache[string]
+	agentAccess *InMemoryCache[agentAccessEntry]
+	teamAccess  *InMemoryCache[bool]
 }
 
 // NewPermissionCache creates a new permission cache.
 func NewPermissionCache() *PermissionCache {
 	return &PermissionCache{
-		tenantResolve: NewInMemoryCache[uuid.UUID](),
-		tenantRole:    NewInMemoryCache[string](),
-		agentAccess:   NewInMemoryCache[agentAccessEntry](),
-		teamAccess:    NewInMemoryCache[bool](),
+		tenantRole:  NewInMemoryCache[string](),
+		agentAccess: NewInMemoryCache[agentAccessEntry](),
+		teamAccess:  NewInMemoryCache[bool](),
 	}
 }
 
 const (
-	tenantResolveTTL = 60 * time.Second
-	tenantRoleTTL    = 30 * time.Second
-	agentAccessTTL   = 30 * time.Second
-	teamAccessTTL    = 30 * time.Second
+	tenantRoleTTL  = 30 * time.Second
+	agentAccessTTL = 30 * time.Second
+	teamAccessTTL  = 30 * time.Second
 )
-
-// --- Tenant Resolution ---
-
-func (pc *PermissionCache) GetTenantResolve(ctx context.Context, userID string) (uuid.UUID, bool) {
-	return pc.tenantResolve.Get(ctx, userID)
-}
-
-func (pc *PermissionCache) SetTenantResolve(ctx context.Context, userID string, tenantID uuid.UUID) {
-	pc.tenantResolve.Set(ctx, userID, tenantID, tenantResolveTTL)
-}
 
 // --- Tenant Role ---
 
@@ -93,16 +80,10 @@ func (pc *PermissionCache) HandleInvalidation(p bus.CacheInvalidatePayload) {
 	ctx := context.Background()
 	switch p.Kind {
 	case bus.CacheKindTenantUsers:
-		// Key is userID — invalidate resolve + all tenant roles for this user.
+		// Key is userID — invalidate all tenant roles.
 		// Can't efficiently delete all tenantRole entries for a user by prefix,
 		// so clear all tenant roles (short TTL makes this acceptable).
-		if p.Key != "" {
-			pc.tenantResolve.Delete(ctx, p.Key)
-			pc.tenantRole.Clear(ctx)
-		} else {
-			pc.tenantResolve.Clear(ctx)
-			pc.tenantRole.Clear(ctx)
-		}
+		pc.tenantRole.Clear(ctx)
 	case bus.CacheKindAgentAccess:
 		// Key is agentID — delete all access entries for this agent.
 		if p.Key != "" {

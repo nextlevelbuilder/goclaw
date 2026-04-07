@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
@@ -14,6 +15,8 @@ import (
 // Each callback bridges a pipeline.PipelineDeps function to an existing Loop method.
 func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCallbackSet {
 	return pipelineCallbackSet{
+		injectContext:      l.makeInjectContext(req),
+		loadSessionHistory: l.makeLoadSessionHistory(),
 		resolveWorkspace:   l.makeResolveWorkspace(req),
 		loadContextFiles:   l.makeLoadContextFiles(),
 		buildMessages:      l.makeBuildMessages(),
@@ -38,9 +41,11 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 
 // pipelineCallbackSet groups all typed callbacks for PipelineDeps.
 type pipelineCallbackSet struct {
+	injectContext      func(ctx context.Context, input *pipeline.RunInput) (context.Context, error)
+	loadSessionHistory func(ctx context.Context, sessionKey string) ([]providers.Message, string)
 	resolveWorkspace   func(ctx context.Context, input *pipeline.RunInput) (*workspace.WorkspaceContext, error)
 	loadContextFiles   func(ctx context.Context, userID string) ([]bootstrap.ContextFile, bool)
-	buildMessages      func(ctx context.Context, input *pipeline.RunInput, history []providers.Message) ([]providers.Message, error)
+	buildMessages      func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error)
 	enrichMedia        func(ctx context.Context, input *pipeline.RunInput) error
 	injectReminders    func(ctx context.Context, input *pipeline.RunInput, msgs []providers.Message) []providers.Message
 	buildFilteredTools func(state *pipeline.RunState) ([]providers.ToolDefinition, error)
@@ -93,15 +98,42 @@ func (l *Loop) makeLoadContextFiles() func(ctx context.Context, userID string) (
 	}
 }
 
-func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.RunInput, history []providers.Message) ([]providers.Message, error) {
-	return func(ctx context.Context, input *pipeline.RunInput, history []providers.Message) ([]providers.Message, error) {
-		summary := "" // summarization handled separately
+func (l *Loop) makeBuildMessages() func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
+	return func(ctx context.Context, input *pipeline.RunInput, history []providers.Message, summary string) ([]providers.Message, error) {
 		msgs, _ := l.buildMessages(ctx, history, summary,
 			input.Message, input.ExtraSystemPrompt,
 			input.SessionKey, input.Channel, input.ChannelType,
 			input.ChatTitle, input.PeerKind, input.UserID,
 			input.HistoryLimit, input.SkillFilter, input.LightContext)
 		return msgs, nil
+	}
+}
+
+// makeInjectContext wraps injectContext() for the v3 pipeline.
+// Reuses the existing injectContext() to avoid logic duplication.
+// NOTE: injectContext() and this callback must stay in sync when new context values are added.
+func (l *Loop) makeInjectContext(req *RunRequest) func(ctx context.Context, input *pipeline.RunInput) (context.Context, error) {
+	return func(ctx context.Context, input *pipeline.RunInput) (context.Context, error) {
+		result, err := l.injectContext(ctx, req)
+		if err != nil {
+			return ctx, err
+		}
+		// Sync message truncation from req back to pipeline input.
+		input.Message = req.Message
+		// Cache context window on session (first run only, matching runLoop behavior).
+		if l.sessions.GetContextWindow(result.ctx, req.SessionKey) <= 0 {
+			l.sessions.SetContextWindow(result.ctx, req.SessionKey, l.contextWindow)
+		}
+		return result.ctx, nil
+	}
+}
+
+// makeLoadSessionHistory loads session history + summary before BuildMessages.
+func (l *Loop) makeLoadSessionHistory() func(ctx context.Context, sessionKey string) ([]providers.Message, string) {
+	return func(ctx context.Context, sessionKey string) ([]providers.Message, string) {
+		history := l.sessions.GetHistory(ctx, sessionKey)
+		summary := l.sessions.GetSummary(ctx, sessionKey)
+		return history, summary
 	}
 }
 
@@ -142,15 +174,32 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 func (l *Loop) makeCallLLM(req *RunRequest) func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
 	return func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
 		provider := state.Provider
+
+		// Emit LLM span start (matching runLoop tracing behavior).
+		start := time.Now().UTC()
+		var opts []spanOption
+		if state.Model != "" {
+			opts = append(opts, withModel(state.Model))
+		}
+		if provider != nil {
+			opts = append(opts, withProvider(provider.Name()))
+		}
+		spanID := l.emitLLMSpanStart(ctx, start, state.Iteration, chatReq.Messages, opts...)
+
+		var resp *providers.ChatResponse
+		var err error
 		if req.Stream {
-			return provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
-				// Streaming chunks emitted via existing event system
+			resp, err = provider.ChatStream(ctx, chatReq, func(chunk providers.StreamChunk) {
 				if l.onEvent != nil {
 					l.onEvent(AgentEvent{Type: "chunk", Payload: chunk})
 				}
 			})
+		} else {
+			resp, err = provider.Chat(ctx, chatReq)
 		}
-		return provider.Chat(ctx, chatReq)
+
+		l.emitLLMSpanEnd(ctx, spanID, start, resp, err, opts...)
+		return resp, err
 	}
 }
 

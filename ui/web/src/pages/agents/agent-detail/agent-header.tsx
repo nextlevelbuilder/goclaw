@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,6 +9,8 @@ import type { HeartbeatConfig } from "@/pages/agents/hooks/use-agent-heartbeat";
 import { useCountdown } from "@/hooks/use-countdown";
 import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting } from "./agent-display-utils";
 import { cn } from "@/lib/utils";
+import { useAgentVersion } from "../hooks/use-agent-version";
+import { AgentV3InfoModal } from "../agent-v3-info-modal";
 
 interface AgentHeaderProps {
   agent: AgentData;
@@ -26,6 +29,8 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
   const title = agentDisplayName(agent, t("card.unnamedAgent"));
   const keyDisplay = agentKeyDisplay(agent.agent_key);
   const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
+  const version = useAgentVersion(agent.id);
+  const [v3InfoOpen, setV3InfoOpen] = useState(false);
 
   const hbConfigured = heartbeat != null;
   const hbEnabled = heartbeat?.enabled ?? false;
@@ -71,13 +76,16 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge variant="outline" className="text-[10px]">
-                  <span className="hidden sm:inline">{agent.agent_type}</span>
-                  <span className="sm:hidden">{agent.agent_type === "predefined" ? "P" : "O"}</span>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] cursor-pointer ${version === "v3" ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" : ""}`}
+                  onClick={() => setV3InfoOpen(true)}
+                >
+                  {version}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[260px] text-xs">
-                {agent.agent_type === "predefined" ? t("card.predefinedTooltip") : t("card.openTooltip")}
+                {version === "v3" ? t("card.v3Tooltip") : t("card.v2Tooltip")}
               </TooltipContent>
             </Tooltip>
             {agent.agent_type === "predefined" && (
@@ -147,6 +155,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
           <span className="hidden sm:inline">{t("delete.title")}</span>
         </Button>
       </div>
+      <AgentV3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
     </TooltipProvider>
   );
 }

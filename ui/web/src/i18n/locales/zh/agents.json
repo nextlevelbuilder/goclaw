@@ -121,7 +121,7 @@
     "personality": "Agent个性",
     "modelBudget": "模型与预算",
     "skills": "技能",
-    "evolution": "进化",
+    "evolution": { "title": "进化" },
     "capabilities": "能力",
     "llmSeesAs": "LLM会看到这个为"
   },

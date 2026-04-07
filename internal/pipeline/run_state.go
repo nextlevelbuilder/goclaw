@@ -1,6 +1,8 @@
 package pipeline
 
 import (
+	"context"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
@@ -14,6 +16,10 @@ type RunState struct {
 	Workspace *workspace.WorkspaceContext
 	Model     string
 	Provider  providers.Provider
+
+	// Ctx holds enriched context from ContextStage (agent/user/workspace values).
+	// Pipeline.Run uses this for all stages after setup completes.
+	Ctx context.Context
 
 	// Message buffer (read/write by multiple stages)
 	Messages *MessageBuffer

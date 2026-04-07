@@ -199,9 +199,13 @@ func (s *PGAgentStore) GetByID(ctx context.Context, id uuid.UUID) (*store.AgentD
 }
 
 func (s *PGAgentStore) Update(ctx context.Context, id uuid.UUID, updates map[string]any) error {
-	// Add soft-delete guard to WHERE clause
 	if len(updates) == 0 {
 		return nil
+	}
+
+	// Coerce NOT NULL int columns: null → default to prevent constraint violations.
+	if v, ok := updates["skill_nudge_interval"]; ok && v == nil {
+		updates["skill_nudge_interval"] = 0
 	}
 
 	// If setting this agent as default, unset any existing default first (scoped to same tenant).

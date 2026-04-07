@@ -140,38 +140,33 @@ export function MemoryPage() {
         }
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-        <TabsList>
-          <TabsTrigger value="documents">{t("tabs.documents")}</TabsTrigger>
-          <TabsTrigger value="episodic">{t("tabs.episodic")}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="documents" className="mt-4 space-y-4">
-          {/* Filters */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="mem-agent" className="text-xs">{t("filters.agent")}</Label>
-              <select
-                id="mem-agent"
-                value={agentId}
-                onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); setPage(1); }}
-                className="h-9 rounded-md border bg-background px-3 text-base md:text-sm"
-              >
-                <option value="">{t("filters.allAgents")}</option>
-                {agents.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.display_name || a.agent_key}
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* Shared agent filter */}
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor="mem-agent" className="text-xs">{t("filters.agent")}</Label>
+          <select
+            id="mem-agent"
+            value={agentId}
+            onChange={(e) => { setAgentId(e.target.value); setUserIdFilter(""); setPage(1); }}
+            className="h-9 rounded-md border bg-background px-3 text-base md:text-sm cursor-pointer"
+          >
+            <option value="">{t("filters.allAgents")}</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.display_name || a.agent_key}
+              </option>
+            ))}
+          </select>
+        </div>
+        {activeTab === "documents" && (
+          <>
             <div className="grid gap-1.5">
               <Label htmlFor="mem-scope" className="text-xs">{t("filters.scope")}</Label>
               <select
                 id="mem-scope"
                 value={userIdFilter}
                 onChange={(e) => { setUserIdFilter(e.target.value); setPage(1); }}
-                className="h-9 rounded-md border bg-background px-3 text-base md:text-sm min-w-[180px]"
+                className="h-9 rounded-md border bg-background px-3 text-base md:text-sm min-w-[180px] cursor-pointer"
               >
                 <option value="">{t("filters.allScope")}</option>
                 {userIds.map((uid) => (
@@ -193,7 +188,17 @@ export function MemoryPage() {
                 {indexAllLoading ? t("indexing") : t("indexAll")}
               </Button>
             )}
-          </div>
+          </>
+        )}
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+        <TabsList>
+          <TabsTrigger value="documents">{t("tabs.documents")}</TabsTrigger>
+          <TabsTrigger value="episodic">{t("tabs.episodic")}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="documents" className="mt-4 space-y-4">
 
           {/* Document table */}
           <MemoryDocumentsTable

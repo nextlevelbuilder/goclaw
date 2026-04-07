@@ -379,3 +379,113 @@ func TestStoreKG_UserScopeIsolation(t *testing.T) {
 
 	_ = uuid.Nil // imported for compile
 }
+
+// TestStoreKG_TemporalFilter verifies that expired entities (valid_until IS NOT NULL)
+// are excluded from ListEntities, SearchEntities, ListRelations, and Stats.
+func TestStoreKG_TemporalFilter(t *testing.T) {
+	db := testDB(t)
+	tenantID, agentID := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	s := newKGStore(t)
+
+	aid := agentID.String()
+	uid := "kgtemporal-" + agentID.String()[:8]
+
+	// Create 2 entities: one current, one expired.
+	current := makeEntity(aid, uid, "CurrentFact", "concept")
+	expired := makeEntity(aid, uid, "ExpiredFact", "concept")
+
+	if err := s.UpsertEntity(ctx, current); err != nil {
+		t.Fatalf("UpsertEntity current: %v", err)
+	}
+	if err := s.UpsertEntity(ctx, expired); err != nil {
+		t.Fatalf("UpsertEntity expired: %v", err)
+	}
+
+	// Manually expire the second entity via raw SQL.
+	_, err := db.Exec(
+		`UPDATE kg_entities SET valid_until = NOW() WHERE agent_id = $1 AND user_id = $2 AND name = 'ExpiredFact'`,
+		agentID, uid)
+	if err != nil {
+		t.Fatalf("expire entity: %v", err)
+	}
+
+	// ListEntities should return only the current entity.
+	entities, err := s.ListEntities(ctx, aid, uid, store.EntityListOptions{Limit: 50})
+	if err != nil {
+		t.Fatalf("ListEntities: %v", err)
+	}
+	for _, e := range entities {
+		if e.Name == "ExpiredFact" {
+			t.Error("ListEntities returned expired entity — temporal filter missing")
+		}
+	}
+	if len(entities) == 0 {
+		t.Error("ListEntities returned 0 entities, expected at least CurrentFact")
+	}
+
+	// SearchEntities should also exclude expired.
+	searchResults, err := s.SearchEntities(ctx, aid, uid, "Fact", 10)
+	if err != nil {
+		t.Fatalf("SearchEntities: %v", err)
+	}
+	for _, e := range searchResults {
+		if e.Name == "ExpiredFact" {
+			t.Error("SearchEntities returned expired entity — temporal filter missing")
+		}
+	}
+
+	// Stats should count only current entities.
+	stats, err := s.Stats(ctx, aid, uid)
+	if err != nil {
+		t.Fatalf("GetStats: %v", err)
+	}
+	if stats.EntityCount != 1 {
+		t.Errorf("Stats.EntityCount = %d, want 1 (only current)", stats.EntityCount)
+	}
+
+	// Create a relation between two entities, then expire it.
+	currentEntities, _ := s.ListEntities(ctx, aid, uid, store.EntityListOptions{Limit: 10})
+	if len(currentEntities) < 1 {
+		t.Skip("no entities to create relation")
+	}
+
+	// Create a second current entity for relation test.
+	other := makeEntity(aid, uid, "OtherFact", "concept")
+	if err := s.UpsertEntity(ctx, other); err != nil {
+		t.Fatalf("UpsertEntity other: %v", err)
+	}
+	otherEntities, _ := s.ListEntities(ctx, aid, uid, store.EntityListOptions{Limit: 10})
+	if len(otherEntities) < 2 {
+		t.Skip("need 2 entities for relation test")
+	}
+
+	rel := &store.Relation{
+		AgentID:        aid,
+		UserID:         uid,
+		SourceEntityID: otherEntities[0].ID,
+		TargetEntityID: otherEntities[1].ID,
+		RelationType:   "related_to",
+		Confidence:     0.8,
+	}
+	if err := s.UpsertRelation(ctx, rel); err != nil {
+		t.Fatalf("UpsertRelation: %v", err)
+	}
+
+	// Expire the relation.
+	_, err = db.Exec(
+		`UPDATE kg_relations SET valid_until = NOW() WHERE agent_id = $1 AND user_id = $2`,
+		agentID, uid)
+	if err != nil {
+		t.Fatalf("expire relation: %v", err)
+	}
+
+	// ListRelations should return 0 (all expired).
+	rels, err := s.ListRelations(ctx, aid, uid, otherEntities[0].ID)
+	if err != nil {
+		t.Fatalf("ListRelations: %v", err)
+	}
+	if len(rels) != 0 {
+		t.Errorf("ListRelations returned %d expired relations, want 0", len(rels))
+	}
+}

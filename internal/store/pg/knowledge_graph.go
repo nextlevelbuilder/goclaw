@@ -127,8 +127,9 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 		limit = 50
 	}
 
-	// Build dynamic WHERE clause: always filter by agent_id, optionally by user_id and entity_type
-	where := "agent_id = $1"
+	// Build dynamic WHERE clause: always filter by agent_id, optionally by user_id and entity_type.
+	// Default to current facts only (valid_until IS NULL) — expired entities excluded.
+	where := "agent_id = $1 AND valid_until IS NULL"
 	args := []any{aid}
 	idx := 2
 	if !store.IsSharedKG(ctx) && userID != "" {
@@ -222,7 +223,7 @@ type scoredEntity struct {
 }
 
 func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID uuid.UUID, userID, query string, limit int, shared bool) ([]scoredEntity, error) {
-	where := "agent_id = $1 AND tsv @@ plainto_tsquery('simple', $2)"
+	where := "agent_id = $1 AND valid_until IS NULL AND tsv @@ plainto_tsquery('simple', $2)"
 	args := []any{agentID, query}
 	idx := 3
 	if !shared && userID != "" {
@@ -278,7 +279,7 @@ func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID u
 func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedding []float32, agentID uuid.UUID, userID string, limit int, shared bool) ([]scoredEntity, error) {
 	vecStr := vectorToString(embedding)
 
-	where := "agent_id = $1 AND embedding IS NOT NULL"
+	where := "agent_id = $1 AND valid_until IS NULL AND embedding IS NOT NULL"
 	args := []any{agentID}
 	idx := 2
 	if !shared && userID != "" {
