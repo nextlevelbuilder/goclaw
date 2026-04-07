@@ -2,7 +2,6 @@ package pg
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -13,6 +12,7 @@ import (
 // ListEntitiesTemporal queries entities with temporal awareness.
 // AsOf=nil: current facts only (valid_until IS NULL). AsOf set: facts valid at that time.
 func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentID, userID string, opts store.EntityListOptions, temporal store.TemporalQueryOptions) ([]store.Entity, error) {
+	aid := mustParseUUID(agentID)
 	limit := opts.Limit
 	if limit <= 0 {
 		limit = 100
@@ -21,7 +21,7 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 	q := `SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 	             properties, source_id, confidence, created_at, updated_at, valid_from, valid_until
 	      FROM kg_entities WHERE agent_id = $1 AND user_id = $2`
-	args := []any{agentID, userID}
+	args := []any{aid, userID}
 	argN := 3
 
 	if opts.EntityType != "" {
@@ -41,28 +41,34 @@ func (s *PGKnowledgeGraphStore) ListEntitiesTemporal(ctx context.Context, agentI
 		}
 	}
 
+	// Tenant scope
+	tc, tcArgs, _, err := scopeClause(ctx, argN)
+	if err != nil {
+		return nil, err
+	}
+	if tc != "" {
+		q += tc
+		args = append(args, tcArgs...)
+		argN += len(tcArgs)
+	}
+
 	q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argN, argN+1)
 	args = append(args, limit, opts.Offset)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var tRows []entityTemporalRow
+	if err := pkgSqlxDB.SelectContext(ctx, &tRows, q, args...); err != nil {
 		return nil, fmt.Errorf("list entities temporal: %w", err)
 	}
-	defer rows.Close()
-
-	var entities []store.Entity
-	for rows.Next() {
-		e, err := scanEntityTemporal(rows)
-		if err != nil {
-			return nil, err
-		}
-		entities = append(entities, *e)
+	entities := make([]store.Entity, len(tRows))
+	for i := range tRows {
+		entities[i] = tRows[i].toEntity()
 	}
-	return entities, rows.Err()
+	return entities, nil
 }
 
 // SupersedeEntity atomically expires the old entity and inserts a replacement.
 func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.Entity, replacement *store.Entity) error {
+	aid := mustParseUUID(old.AgentID)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("supersede begin tx: %w", err)
@@ -70,12 +76,20 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 	defer tx.Rollback()
 
 	now := time.Now().UTC()
+	tid := tenantIDForInsert(ctx)
+
+	// Tenant scope for UPDATE
+	tc, tcArgs, _, err := scopeClause(ctx, 6)
+	if err != nil {
+		return err
+	}
 
 	// Expire old entity
+	expireArgs := append([]any{now, now, aid, old.UserID, old.ExternalID}, tcArgs...)
 	_, err = tx.ExecContext(ctx, `
 		UPDATE kg_entities SET valid_until = $1, updated_at = $2
-		WHERE agent_id = $3 AND user_id = $4 AND external_id = $5 AND valid_until IS NULL`,
-		now, now, old.AgentID, old.UserID, old.ExternalID)
+		WHERE agent_id = $3 AND user_id = $4 AND external_id = $5 AND valid_until IS NULL`+tc,
+		expireArgs...)
 	if err != nil {
 		return fmt.Errorf("supersede expire old: %w", err)
 	}
@@ -84,11 +98,11 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 	props, _ := json.Marshal(replacement.Properties)
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO kg_entities (id, agent_id, user_id, external_id, name, entity_type,
-		    description, properties, source_id, confidence, created_at, updated_at, valid_from)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)`,
-		replacement.AgentID, replacement.UserID, replacement.ExternalID,
+		    description, properties, source_id, confidence, tenant_id, created_at, updated_at, valid_from)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, $12)`,
+		aid, replacement.UserID, replacement.ExternalID,
 		replacement.Name, replacement.EntityType, replacement.Description,
-		props, replacement.SourceID, replacement.Confidence, now, now)
+		props, replacement.SourceID, replacement.Confidence, tid, now, now)
 	if err != nil {
 		return fmt.Errorf("supersede insert new: %w", err)
 	}
@@ -96,22 +110,3 @@ func (s *PGKnowledgeGraphStore) SupersedeEntity(ctx context.Context, old *store.
 	return tx.Commit()
 }
 
-// scanEntityTemporal scans a row including valid_from/valid_until columns.
-// CreatedAt/UpdatedAt are TIMESTAMPTZ in DB but int64 (UnixMilli) in struct.
-func scanEntityTemporal(rows *sql.Rows) (*store.Entity, error) {
-	var e store.Entity
-	var props json.RawMessage
-	var createdAt, updatedAt time.Time
-	err := rows.Scan(&e.ID, &e.AgentID, &e.UserID, &e.ExternalID, &e.Name,
-		&e.EntityType, &e.Description, &props, &e.SourceID, &e.Confidence,
-		&createdAt, &updatedAt, &e.ValidFrom, &e.ValidUntil)
-	if err != nil {
-		return nil, err
-	}
-	e.CreatedAt = createdAt.UnixMilli()
-	e.UpdatedAt = updatedAt.UnixMilli()
-	if props != nil {
-		_ = json.Unmarshal(props, &e.Properties)
-	}
-	return &e, nil
-}

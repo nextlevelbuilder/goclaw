@@ -12,7 +12,9 @@ import (
 
 func newKGStore(t *testing.T) *pg.PGKnowledgeGraphStore {
 	t.Helper()
-	s := pg.NewPGKnowledgeGraphStore(testDB(t))
+	db := testDB(t)
+	pg.InitSqlx(db)
+	s := pg.NewPGKnowledgeGraphStore(db)
 	s.SetEmbeddingProvider(newMockEmbedProvider())
 	return s
 }

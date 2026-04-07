@@ -1,10 +1,10 @@
 package pg
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
-	"cmp"
 	"fmt"
 	"slices"
 	"time"
@@ -68,31 +68,38 @@ func (s *PGKnowledgeGraphStore) GetEntity(ctx context.Context, agentID, userID, 
 	aid := mustParseUUID(agentID)
 	eid := mustParseUUID(entityID)
 
+	var row entityRow
 	if store.IsSharedKG(ctx) {
 		tc, tcArgs, _, err := scopeClause(ctx, 3)
 		if err != nil {
 			return nil, err
 		}
-		row := s.db.QueryRowContext(ctx, `
+		err = pkgSqlxDB.GetContext(ctx, &row, `
 			SELECT id, agent_id, user_id, external_id, name, entity_type, description,
 			       properties, source_id, confidence, created_at, updated_at
 			FROM kg_entities WHERE id = $1 AND agent_id = $2`+tc,
 			append([]any{eid, aid}, tcArgs...)...,
 		)
-		return scanEntity(row)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		tc, tcArgs, _, err := scopeClause(ctx, 4)
+		if err != nil {
+			return nil, err
+		}
+		err = pkgSqlxDB.GetContext(ctx, &row, `
+			SELECT id, agent_id, user_id, external_id, name, entity_type, description,
+			       properties, source_id, confidence, created_at, updated_at
+			FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
+			append([]any{eid, aid, userID}, tcArgs...)...,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	tc, tcArgs, _, err := scopeClause(ctx, 4)
-	if err != nil {
-		return nil, err
-	}
-	row := s.db.QueryRowContext(ctx, `
-		SELECT id, agent_id, user_id, external_id, name, entity_type, description,
-		       properties, source_id, confidence, created_at, updated_at
-		FROM kg_entities WHERE id = $1 AND agent_id = $2 AND user_id = $3`+tc,
-		append([]any{eid, aid, userID}, tcArgs...)...,
-	)
-	return scanEntity(row)
+	e := row.toEntity()
+	return &e, nil
 }
 
 func (s *PGKnowledgeGraphStore) DeleteEntity(ctx context.Context, agentID, userID, entityID string) error {
@@ -158,12 +165,15 @@ func (s *PGKnowledgeGraphStore) ListEntities(ctx context.Context, agentID, userI
 		FROM kg_entities WHERE %s
 		ORDER BY updated_at DESC LIMIT $%d OFFSET $%d`, where, idx, idx+1)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
+	var rows []entityRow
+	if err = pkgSqlxDB.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanEntities(rows)
+	entities := make([]store.Entity, len(rows))
+	for i := range rows {
+		entities[i] = rows[i].toEntity()
+	}
+	return entities, nil
 }
 
 func (s *PGKnowledgeGraphStore) SearchEntities(ctx context.Context, agentID, userID, query string, limit int) ([]store.Entity, error) {
@@ -249,31 +259,15 @@ func (s *PGKnowledgeGraphStore) ftsSearchEntities(ctx context.Context, agentID u
 		WHERE %s
 		ORDER BY score DESC LIMIT $%d`, idx, where, idx+1)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var sRows []scoredEntityRow
+	if err = pkgSqlxDB.SelectContext(ctx, &sRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var results []scoredEntity
-	for rows.Next() {
-		var e store.Entity
-		var props []byte
-		var createdAt, updatedAt time.Time
-		var score float64
-		if err := rows.Scan(
-			&e.ID, &e.AgentID, &e.UserID, &e.ExternalID, &e.Name, &e.EntityType,
-			&e.Description, &props, &e.SourceID, &e.Confidence, &createdAt, &updatedAt,
-			&score,
-		); err != nil {
-			continue
-		}
-		json.Unmarshal(props, &e.Properties) //nolint:errcheck
-		e.CreatedAt = createdAt.UnixMilli()
-		e.UpdatedAt = updatedAt.UnixMilli()
-		results = append(results, scoredEntity{Entity: e, Score: score})
+	results := make([]scoredEntity, len(sRows))
+	for i := range sRows {
+		results[i] = scoredEntity{Entity: sRows[i].toEntity(), Score: sRows[i].Score}
 	}
-	return results, rows.Err()
+	return results, nil
 }
 
 func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedding []float32, agentID uuid.UUID, userID string, limit int, shared bool) ([]scoredEntity, error) {
@@ -305,31 +299,15 @@ func (s *PGKnowledgeGraphStore) vectorSearchEntities(ctx context.Context, embedd
 		WHERE %s
 		ORDER BY embedding <=> $%d::vector LIMIT $%d`, idx, where, idx, idx+1)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var sRows []scoredEntityRow
+	if err = pkgSqlxDB.SelectContext(ctx, &sRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var results []scoredEntity
-	for rows.Next() {
-		var e store.Entity
-		var props []byte
-		var createdAt, updatedAt time.Time
-		var score float64
-		if err := rows.Scan(
-			&e.ID, &e.AgentID, &e.UserID, &e.ExternalID, &e.Name, &e.EntityType,
-			&e.Description, &props, &e.SourceID, &e.Confidence, &createdAt, &updatedAt,
-			&score,
-		); err != nil {
-			continue
-		}
-		json.Unmarshal(props, &e.Properties) //nolint:errcheck
-		e.CreatedAt = createdAt.UnixMilli()
-		e.UpdatedAt = updatedAt.UnixMilli()
-		results = append(results, scoredEntity{Entity: e, Score: score})
+	results := make([]scoredEntity, len(sRows))
+	for i := range sRows {
+		results[i] = scoredEntity{Entity: sRows[i].toEntity(), Score: sRows[i].Score}
 	}
-	return results, rows.Err()
+	return results, nil
 }
 
 // hybridMergeEntities combines ILIKE and vector results with weighted scoring.

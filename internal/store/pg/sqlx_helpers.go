@@ -34,6 +34,12 @@ func SqlxDB() *sqlx.DB {
 	return pkgSqlxDB
 }
 
+// sqlxTx wraps an existing *sql.Tx with sqlx, sharing the same mapper as pkgSqlxDB.
+// This allows using SelectContext/GetContext on transactions that were started with *sql.DB.
+func sqlxTx(tx *sql.Tx) *sqlx.Tx {
+	return &sqlx.Tx{Tx: tx, Mapper: pkgSqlxDB.Mapper}
+}
+
 // --- UUIDArray: pq.Array-compatible scanner for []uuid.UUID ---
 
 // UUIDArray wraps []uuid.UUID for pq.Array compatibility with sqlx StructScan.

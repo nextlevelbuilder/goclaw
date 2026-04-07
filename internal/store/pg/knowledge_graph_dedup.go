@@ -3,7 +3,6 @@ package pg
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -130,21 +129,15 @@ func (s *PGKnowledgeGraphStore) knnNeighbors(ctx context.Context, agentID uuid.U
 		ORDER BY embedding <=> $%d::vector
 		LIMIT $%d`, idx, where, idx, idx+1)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var nRows []knnNeighborRow
+	if err = pkgSqlxDB.SelectContext(ctx, &nRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var results []knnNeighbor
-	for rows.Next() {
-		var n knnNeighbor
-		if err := rows.Scan(&n.id, &n.name, &n.confidence, &n.similarity); err != nil {
-			continue
-		}
-		results = append(results, n)
+	results := make([]knnNeighbor, len(nRows))
+	for i, r := range nRows {
+		results[i] = knnNeighbor{id: r.ID, name: r.Name, confidence: r.Confidence, similarity: r.Similarity}
 	}
-	return results, rows.Err()
+	return results, nil
 }
 
 func (s *PGKnowledgeGraphStore) insertDedupCandidate(ctx context.Context, agentID uuid.UUID, userID, entityAID, entityBID string, similarity float64) error {
@@ -236,7 +229,7 @@ func (s *PGKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, use
 			INSERT INTO kg_dedup_candidates (id, tenant_id, agent_id, user_id, entity_a_id, entity_b_id, similarity, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (entity_a_id, entity_b_id) DO NOTHING`,
-			uuid.Must(uuid.NewV7()), tid, aid, userID, aUUID, bUUID, sim, time.Now().Unix(),
+			uuid.Must(uuid.NewV7()), tid, aid, userID, aUUID, bUUID, sim, time.Now(),
 		); err != nil {
 			slog.Warn("kg.scan_duplicates: insert candidate failed", "error", err)
 			continue
@@ -375,10 +368,16 @@ func (s *PGKnowledgeGraphStore) ListDedupCandidates(ctx context.Context, agentID
 
 	q := fmt.Sprintf(`
 		SELECT c.id, c.similarity, c.status, c.created_at,
-		       a.id, a.agent_id, a.user_id, a.external_id, a.name, a.entity_type,
-		       a.description, a.properties, a.source_id, a.confidence, a.created_at, a.updated_at,
-		       b.id, b.agent_id, b.user_id, b.external_id, b.name, b.entity_type,
-		       b.description, b.properties, b.source_id, b.confidence, b.created_at, b.updated_at
+		       a.id AS a_id, a.agent_id AS a_agent_id, a.user_id AS a_user_id,
+		       a.external_id AS a_external_id, a.name AS a_entity_name, a.entity_type AS a_entity_type,
+		       a.description AS a_description, a.properties AS a_properties,
+		       a.source_id AS a_source_id, a.confidence AS a_confidence,
+		       a.created_at AS a_created_at, a.updated_at AS a_updated_at,
+		       b.id AS b_id, b.agent_id AS b_agent_id, b.user_id AS b_user_id,
+		       b.external_id AS b_external_id, b.name AS b_entity_name, b.entity_type AS b_entity_type,
+		       b.description AS b_description, b.properties AS b_properties,
+		       b.source_id AS b_source_id, b.confidence AS b_confidence,
+		       b.created_at AS b_created_at, b.updated_at AS b_updated_at
 		FROM kg_dedup_candidates c
 		JOIN kg_entities a ON c.entity_a_id = a.id
 		JOIN kg_entities b ON c.entity_b_id = b.id
@@ -386,39 +385,15 @@ func (s *PGKnowledgeGraphStore) ListDedupCandidates(ctx context.Context, agentID
 		ORDER BY c.similarity DESC, c.created_at DESC
 		LIMIT $%d`, where, idx)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
+	var dRows []dedupCandidateRow
+	if err = pkgSqlxDB.SelectContext(ctx, &dRows, q, args...); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var results []store.DedupCandidate
-	for rows.Next() {
-		var dc store.DedupCandidate
-		var propsA, propsB []byte
-		var caA, uaA, caB, uaB time.Time
-		var createdAt time.Time
-		if err := rows.Scan(
-			&dc.ID, &dc.Similarity, &dc.Status, &createdAt,
-			&dc.EntityA.ID, &dc.EntityA.AgentID, &dc.EntityA.UserID, &dc.EntityA.ExternalID,
-			&dc.EntityA.Name, &dc.EntityA.EntityType, &dc.EntityA.Description, &propsA,
-			&dc.EntityA.SourceID, &dc.EntityA.Confidence, &caA, &uaA,
-			&dc.EntityB.ID, &dc.EntityB.AgentID, &dc.EntityB.UserID, &dc.EntityB.ExternalID,
-			&dc.EntityB.Name, &dc.EntityB.EntityType, &dc.EntityB.Description, &propsB,
-			&dc.EntityB.SourceID, &dc.EntityB.Confidence, &caB, &uaB,
-		); err != nil {
-			continue
-		}
-		json.Unmarshal(propsA, &dc.EntityA.Properties) //nolint:errcheck
-		json.Unmarshal(propsB, &dc.EntityB.Properties) //nolint:errcheck
-		dc.EntityA.CreatedAt = caA.UnixMilli()
-		dc.EntityA.UpdatedAt = uaA.UnixMilli()
-		dc.EntityB.CreatedAt = caB.UnixMilli()
-		dc.EntityB.UpdatedAt = uaB.UnixMilli()
-		dc.CreatedAt = createdAt.Unix()
-		results = append(results, dc)
+	results := make([]store.DedupCandidate, len(dRows))
+	for i := range dRows {
+		results[i] = dRows[i].toDedupCandidate()
 	}
-	return results, rows.Err()
+	return results, nil
 }
 
 // DismissCandidate marks a dedup candidate as dismissed.

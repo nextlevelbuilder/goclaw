@@ -217,22 +217,20 @@ func ExportKGEntities(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]sto
 
 	for {
 		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
-		rows, err := db.QueryContext(ctx,
+		var eRows []entityRow
+		if err := pkgSqlxDB.SelectContext(ctx, &eRows,
 			"SELECT id, agent_id, user_id, external_id, name, entity_type, description,"+
 				" properties, source_id, confidence, created_at, updated_at"+
 				" FROM kg_entities WHERE agent_id = $1"+tc+
 				" AND id > $"+itoa(cursorParam)+
 				" ORDER BY id LIMIT $"+itoa(limitParam),
 			args...,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, err
 		}
-
-		batch, scanErr := scanEntities(rows)
-		rows.Close()
-		if scanErr != nil {
-			return nil, scanErr
+		batch := make([]store.Entity, len(eRows))
+		for i := range eRows {
+			batch[i] = eRows[i].toEntity()
 		}
 		result = append(result, batch...)
 		if len(batch) < exportBatchSize {
@@ -262,22 +260,20 @@ func ExportKGRelations(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]st
 
 	for {
 		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
-		rows, err := db.QueryContext(ctx,
+		var rRows []relationRow
+		if err := pkgSqlxDB.SelectContext(ctx, &rRows,
 			"SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,"+
 				" confidence, properties, created_at"+
 				" FROM kg_relations WHERE agent_id = $1"+tc+
 				" AND id > $"+itoa(cursorParam)+
 				" ORDER BY id LIMIT $"+itoa(limitParam),
 			args...,
-		)
-		if err != nil {
+		); err != nil {
 			return nil, err
 		}
-
-		batch, scanErr := scanRelations(rows)
-		rows.Close()
-		if scanErr != nil {
-			return nil, scanErr
+		batch := make([]store.Relation, len(rRows))
+		for i := range rRows {
+			batch[i] = rRows[i].toRelation()
 		}
 		result = append(result, batch...)
 		if len(batch) < exportBatchSize {
