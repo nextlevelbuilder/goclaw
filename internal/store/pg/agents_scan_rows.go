@@ -2,6 +2,7 @@ package pg
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -29,7 +30,7 @@ type agentShareRow struct {
 	UserID    string    `db:"user_id"`
 	Role      string    `db:"role"`
 	GrantedBy string    `db:"granted_by"`
-	CreatedAt string    `db:"created_at"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 func (r agentShareRow) toAgentShareData() store.AgentShareData {
@@ -39,8 +40,7 @@ func (r agentShareRow) toAgentShareData() store.AgentShareData {
 	d.UserID = r.UserID
 	d.Role = r.Role
 	d.GrantedBy = r.GrantedBy
-	// CreatedAt stored as string from DB; BaseModel.CreatedAt is time.Time — keep zero value,
-	// callers typically don't use CreatedAt from ListShares.
+	d.CreatedAt = r.CreatedAt
 	return d
 }
 

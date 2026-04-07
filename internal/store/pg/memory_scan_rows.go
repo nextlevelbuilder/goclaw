@@ -1,9 +1,9 @@
 package pg
 
 import (
-	"encoding/json"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -100,7 +100,7 @@ func (r *scoredChunkRow) toScoredChunk() scoredChunk {
 }
 
 // episodicSummaryRow is an sqlx scan struct for episodic_summaries SELECT queries.
-// Handles jsonb key_topics as json.RawMessage.
+// Handles TEXT[] key_topics via pq.StringArray.
 type episodicSummaryRow struct {
 	ID         string          `db:"id"`
 	TenantID   string          `db:"tenant_id"`
@@ -108,7 +108,7 @@ type episodicSummaryRow struct {
 	UserID     string          `db:"user_id"`
 	SessionKey string          `db:"session_key"`
 	Summary    string          `db:"summary"`
-	KeyTopics  json.RawMessage `db:"key_topics"`
+	KeyTopics  pq.StringArray `db:"key_topics"`
 	TurnCount  int             `db:"turn_count"`
 	TokenCount int             `db:"token_count"`
 	L0Abstract string          `db:"l0_abstract"`
@@ -134,9 +134,7 @@ func (r *episodicSummaryRow) toEpisodicSummary() store.EpisodicSummary {
 	_ = ep.ID.Scan(r.ID)
 	_ = ep.TenantID.Scan(r.TenantID)
 	_ = ep.AgentID.Scan(r.AgentID)
-	if len(r.KeyTopics) > 0 {
-		_ = json.Unmarshal(r.KeyTopics, &ep.KeyTopics)
-	}
+	ep.KeyTopics = []string(r.KeyTopics)
 	return ep
 }
 

@@ -244,7 +244,7 @@ func (s *PGVaultStore) Search(ctx context.Context, opts store.VaultSearchOptions
 
 func (s *PGVaultStore) ftsSearch(ctx context.Context, query string, tenantID, agentID uuid.UUID, scope string, docTypes []string, limit int) ([]store.VaultSearchResult, error) {
 	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at,
-			ts_rank(tsv, plainto_tsquery('simple', $1)) AS rank
+			ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
 		FROM vault_documents
 		WHERE tenant_id = $2 AND agent_id = $3 AND tsv @@ plainto_tsquery('simple', $1)`
 	args := []any{query, tenantID, agentID}
