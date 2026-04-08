@@ -297,6 +297,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		IsBootstrap:            hadBootstrap && l.agentType != store.AgentTypePredefined,
 		DelegateTargets:        l.delegateTargets,
 		OrchMode:               l.orchMode,
+		ProviderContribution:   l.providerContribution(),
 	})
 
 	messages = append(messages, providers.Message{

@@ -26,6 +26,15 @@ func providerTypeOf(p providers.Provider) string {
 	return p.Name()
 }
 
+// providerContribution returns the provider's prompt contribution via type assertion.
+// Returns nil for providers that don't implement PromptContributor.
+func (l *Loop) providerContribution() *providers.PromptContribution {
+	if pc, ok := l.provider.(providers.PromptContributor); ok {
+		return pc.PromptContribution()
+	}
+	return nil
+}
+
 // PromptMode controls which system prompt sections are included.
 // Matches TS PromptMode type in system-prompt.ts.
 type PromptMode string
@@ -130,6 +139,20 @@ type SystemPromptConfig struct {
 	// Delegation targets from agent_links — shown in "## Delegation Targets" section.
 	DelegateTargets []DelegateTargetEntry
 	OrchMode        OrchestrationMode
+
+	// Provider-specific prompt customizations (nil = defaults).
+	ProviderContribution *providers.PromptContribution
+}
+
+// sectionContent returns override content if provider contribution has one,
+// otherwise calls the default builder function.
+func (cfg SystemPromptConfig) sectionContent(id string, defaultFn func() []string) []string {
+	if cfg.ProviderContribution != nil {
+		if override, ok := cfg.ProviderContribution.SectionOverrides[id]; ok {
+			return []string{override}
+		}
+	}
+	return defaultFn()
 }
 
 // coreToolSummaries maps tool names to one-line descriptions.
@@ -266,9 +289,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 2. ## Tooling
 	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.ShellDenyGroups)...)
 
-	// 2.1. ## Execution Bias — full + task mode (skip bootstrap/minimal)
+	// 2.1. ## Execution Bias — full + task mode (overridable by provider)
 	if (isFull || isTask) && !cfg.IsBootstrap {
-		lines = append(lines, buildExecutionBiasSection()...)
+		lines = append(lines, cfg.sectionContent(providers.SectionIDExecutionBias, buildExecutionBiasSection)...)
 	}
 
 	// 2.3. ## Tool Call Style — full mode only (verbose, dropped in task/minimal)
@@ -371,9 +394,18 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildProjectContextSection(stableFiles, cfg.AgentType)...)
 	}
 
+	// Provider StablePrefix — injected before boundary (e.g. reasoning format for GPT)
+	if cfg.ProviderContribution != nil && cfg.ProviderContribution.StablePrefix != "" {
+		lines = append(lines, cfg.ProviderContribution.StablePrefix, "")
+	}
+
 	// ── CACHE BOUNDARY ── stable config above, dynamic per-turn/per-user below.
-	// Anthropic provider splits at this marker into 2 system blocks for prompt caching.
 	lines = append(lines, CacheBoundaryMarker, "")
+
+	// Provider DynamicSuffix — injected after boundary
+	if cfg.ProviderContribution != nil && cfg.ProviderContribution.DynamicSuffix != "" {
+		lines = append(lines, cfg.ProviderContribution.DynamicSuffix, "")
+	}
 
 	// 8. Time (below boundary — date changes don't bust the stable cache)
 	lines = append(lines, buildTimeSection()...)
