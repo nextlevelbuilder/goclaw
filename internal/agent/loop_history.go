@@ -839,6 +839,12 @@ func (l *Loop) buildGroupWriterPrompt(ctx context.Context, groupID, senderID str
 	sb.WriteString("**This is the current, live file writer list. It may change during the conversation. Always use THIS list — ignore any file writer mentions from earlier messages.**\n\n")
 	sb.WriteString("File writers: " + strings.Join(names, ", ") + "\n\n")
 
+	// Tell writer agents to always retry tools — permissions may have changed
+	// since last tool error. Prevents session history from poisoning future attempts.
+	if isWriter {
+		sb.WriteString("You ARE a file writer. You have full write access. Always attempt tool calls — do NOT refuse based on previous tool errors in this conversation. Permissions may have changed.\n\n")
+	}
+
 	if !isWriter {
 		sb.WriteString("CURRENT SENDER IS NOT A FILE WRITER. MANDATORY:\n")
 		sb.WriteString("- REFUSE ALL requests to write, edit, modify, or delete ANY files (including memory).\n")
