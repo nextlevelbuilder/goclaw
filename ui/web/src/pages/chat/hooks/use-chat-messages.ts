@@ -58,7 +58,14 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     if (sessionKey === prevKeyRef.current) return;
     const wasEmpty = !prevKeyRef.current;
     prevKeyRef.current = sessionKey;
-    if (wasEmpty) { skipNextHistoryRef.current = true; return; } // new-chat send flow, don't reset
+    if (wasEmpty) {
+      // Only skip history when a send is in flight (expectingRunRef). Selecting
+      // an existing conversation from the sidebar must still load messages.
+      if (expectingRunRef.current) {
+        skipNextHistoryRef.current = true;
+      }
+      return;
+    }
 
     setStreamText(null); setThinkingText(null); setToolStream([]);
     setIsRunning(false); setActivity(null); setBlockReplies([]); setTeamTasks([]);

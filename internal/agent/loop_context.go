@@ -41,6 +41,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if req.UserID != "" {
 		ctx = store.WithUserID(ctx, req.UserID)
 	}
+	// Resolve merged tenant user identity for credential lookups.
+	// Keeps UserID unchanged (session/workspace scoping) but sets a separate
+	// CredentialUserID for SecureCLI, MCP, and other per-user features.
+	if l.userResolver != nil && req.UserID != "" {
+		credUserID := l.resolveCredentialUserID(ctx, *req)
+		if credUserID != "" && credUserID != req.UserID {
+			ctx = store.WithCredentialUserID(ctx, credUserID)
+		}
+	}
 	// Inject agent type into context for interceptor routing
 	if l.agentType != "" {
 		ctx = store.WithAgentType(ctx, l.agentType)
@@ -237,11 +246,14 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	if l.provider != nil {
 		providerName = l.provider.Name()
 	}
+	// Extract resolved credential user ID (set earlier via WithCredentialUserID, empty if not resolved).
+	credUserID, _ := ctx.Value(store.CredentialUserIDKey).(string)
 	rc := &store.RunContext{
 		AgentID:             l.agentUUID,
 		AgentKey:            l.id,
 		TenantID:            l.tenantID,
 		UserID:              req.UserID,
+		CredentialUserID:    credUserID,
 		AgentType:           l.agentType,
 		SenderID:            req.SenderID,
 		SelfEvolve:          l.selfEvolve,

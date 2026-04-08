@@ -184,6 +184,9 @@ type Loop struct {
 
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	memStore store.MemoryStore
+
+	// User identity resolver: maps channel contacts to merged tenant users for credential lookups.
+	userResolver UserIdentityResolver
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -321,6 +324,9 @@ type LoopConfig struct {
 	MCPStore        store.MCPServerStore  // for credential lookup
 	MCPPool         *mcpbridge.Pool       // user-keyed connection pool
 	MCPUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
+
+	// User identity resolver for credential lookups (maps channel contacts → tenant users)
+	UserResolver UserIdentityResolver
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -419,6 +425,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		mcpStore:               cfg.MCPStore,
 		mcpPool:                cfg.MCPPool,
 		mcpUserCredSrvs:        cfg.MCPUserCredSrvs,
+		userResolver:           cfg.UserResolver,
 	}
 }
 

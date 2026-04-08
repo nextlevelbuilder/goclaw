@@ -213,7 +213,6 @@
     "encrypt_key": { "label": "Khóa mã hóa", "help": "Cho chế độ webhook" },
     "verification_token": { "label": "Token xác minh", "help": "Cho chế độ webhook" },
     "webhook_secret": { "label": "Webhook Secret" },
-    "bridge_url": { "label": "URL Bridge" },
     "api_server": { "label": "URL máy chủ API", "help": "Máy chủ API Bot Telegram tùy chỉnh cho tải file lớn (lên đến 2GB). Để trống cho mặc định." },
     "proxy": { "label": "Proxy HTTP", "help": "Định tuyến lưu lượng bot qua proxy HTTP" },
     "dm_policy": { "label": "Chính sách DM" },
@@ -331,6 +330,10 @@
     "zaloPersonal": {
       "createLabel": "Tạo & Xác thực",
       "formBanner": "Sau khi tạo, bạn sẽ xác thực bằng mã QR và cấu hình người dùng được phép."
+    },
+    "whatsapp": {
+      "createLabel": "Tạo & Quét QR",
+      "formBanner": "Sau khi tạo, quét mã QR bằng WhatsApp để xác thực."
     }
   },
   "fallback": {
@@ -379,5 +382,21 @@
     "retry": "Thử lại",
     "close": "Đóng",
     "skip": "Bỏ qua"
+  },
+  "whatsapp": {
+    "loginSuccessLoading": "✅ Đã kết nối WhatsApp! Đang tải channel...",
+    "waitingForQr": "Đang chờ mã QR...",
+    "scanHint": "Mở WhatsApp → nhấn Bạn → Thiết bị đã liên kết → Liên kết thiết bị",
+    "initializing": "Đang khởi tạo...",
+    "skip": "Bỏ qua",
+    "retry": "Thử lại",
+    "close": "Đóng",
+    "reauthTitle": "Liên kết WhatsApp — {{name}}",
+    "reauthDescription": "Quét mã QR bằng WhatsApp để liên kết thiết bị.",
+    "alreadyLinked": "✅ Thiết bị đã được liên kết",
+    "alreadyLinkedDetail": "WhatsApp đã kết nối. Để liên kết thiết bị khác, nhấn Liên kết lại — thao tác này sẽ đăng xuất phiên hiện tại.",
+    "relinkDevice": "Liên kết lại",
+    "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
+    "tabQrCode": "Mã QR"
   }
 }

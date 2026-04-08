@@ -156,13 +156,13 @@ flowchart TD
 
 | Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal |
 |---------|----------|-------------|---------|-------|----------|---------|---------------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | External WS bridge | Long polling | Internal protocol |
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol |
 | DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes |
 | Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes |
 | Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- |
-| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | N/A (bridge) | 2,000 chars | 2,000 chars |
+| Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars |
 | Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | JSON messages | Images (5 MB) | -- |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- |
 | Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- |
 | Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- |
 | Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text |
@@ -430,15 +430,18 @@ Auto-enables when both bot_token and app_token are set.
 
 ## 9. WhatsApp
 
-The WhatsApp channel communicates through an external WebSocket bridge (e.g., whatsapp-web.js based). GoClaw does not implement the WhatsApp protocol directly.
+The WhatsApp channel connects directly to the WhatsApp network via the multi-device protocol. Authentication state is stored in the database (PostgreSQL standard, SQLite for desktop edition).
 
 ### Key Behaviors
 
-- **Bridge connection**: Connects to configurable `bridge_url` via WebSocket
-- **JSON format**: Messages sent/received as JSON objects
-- **Auto-reconnect**: Exponential backoff (1s → 30s max)
-- **DM and group support**: Group detection via `@g.us` suffix in chat ID
-- **Media handling**: Array of file paths from bridge protocol
+- **Direct connection**: In-process WhatsApp client (direct to WhatsApp servers, no external bridge)
+- **Database auth store**: Persists auth state, keys, and device info in the database
+- **QR code authentication**: Interactive QR code for initial pairing, served via WebSocket API
+- **Auto-reconnect**: Built-in reconnection with exponential backoff
+- **DM and group support**: Full group messaging with mention detection via JID format
+- **Media handling**: Direct media download/upload to WhatsApp servers with type detection
+- **Typing indicators**: Typing state managed per chat with auto-refresh
+- **Group mention gating**: Detects when bot is mentioned via LID (Local ID) and JID (standard format)
 
 ---
 
@@ -590,7 +593,10 @@ flowchart TD
 | `internal/channels/slack/format.go` | Markdown → Slack mrkdwn pipeline |
 | `internal/channels/slack/reactions.go` | Status emoji reactions on messages |
 | `internal/channels/slack/stream.go` | Streaming message updates via placeholder editing |
-| `internal/channels/whatsapp/whatsapp.go` | WhatsApp: external WS bridge |
+| `internal/channels/whatsapp/whatsapp.go` | WhatsApp: direct protocol client, QR auth, database persistence |
+| `internal/channels/whatsapp/factory.go` | Channel factory, database dialect detection |
+| `internal/channels/whatsapp/qr_methods.go` | QR code generation and authentication flow |
+| `internal/channels/whatsapp/format.go` | Message formatting (HTML-to-WhatsApp) |
 | `internal/channels/zalo/zalo.go` | Zalo OA: Bot API, long polling |
 | `internal/channels/zalo/personal/channel.go` | Zalo Personal: reverse-engineered protocol |
 | `internal/store/pg/pairing.go` | Pairing: code generation, approval, persistence (database-backed) |

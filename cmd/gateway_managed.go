@@ -165,6 +165,7 @@ func wireExtras(
 		ModelPricing:           appCfg.Telemetry.ModelPricing,
 		TracingStore:           stores.Tracing,
 		MemoryStore:            stores.Memory,
+		ContactStore:           stores.Contacts,
 		TenantStore:            stores.Tenants,
 		BuiltinToolTenantCfgs:  stores.BuiltinToolTenantCfgs,
 		SkillTenantCfgs:        stores.SkillTenantCfgs,

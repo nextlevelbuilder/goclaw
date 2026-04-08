@@ -361,7 +361,9 @@ func (t *ExecTool) lookupCredentialedBinary(ctx context.Context, command string)
 		agentIDPtr = &agentID
 	}
 	// Pass userID for per-user credential resolution (LEFT JOIN, zero extra queries).
-	userID := store.UserIDFromContext(ctx)
+	// Uses CredentialUserIDFromContext to pick up merged tenant user identity
+	// (falls back to UserIDFromContext when not set).
+	userID := store.CredentialUserIDFromContext(ctx)
 	cred, err := t.secureCLIStore.LookupByBinary(ctx, binary, agentIDPtr, userID)
 	if err != nil {
 		slog.Warn("secure_cli.lookup: query failed", "binary", binary, "agent_id", agentID, "error", err)
