@@ -338,10 +338,10 @@ func wireExtras(
 
 	// Wire delegate tool for inter-agent delegation via agent_links.
 	if stores.AgentLinks != nil && stores.Agents != nil {
-		delegateRunFn := func(ctx context.Context, req tools.DelegateRequest) (string, error) {
+		delegateRunFn := func(ctx context.Context, req tools.DelegateRequest) (tools.DelegateResult, error) {
 			loop, err := agentRouter.Get(ctx, req.ToAgentKey)
 			if err != nil {
-				return "", fmt.Errorf("target agent %q not found: %w", req.ToAgentKey, err)
+				return tools.DelegateResult{}, fmt.Errorf("target agent %q not found: %w", req.ToAgentKey, err)
 			}
 			sessionKey := fmt.Sprintf("delegate:%s:%s:%s",
 				req.FromAgentID.String()[:8], req.ToAgentKey, req.DelegationID)
@@ -361,9 +361,14 @@ func wireExtras(
 			}
 			result, err := loop.Run(delegateCtx, runReq)
 			if err != nil {
-				return "", err
+				return tools.DelegateResult{}, err
 			}
-			return result.Content, nil
+			// Convert agent.MediaResult -> bus.MediaFile for passthrough.
+			var media []bus.MediaFile
+			for _, mr := range result.Media {
+				media = append(media, bus.MediaFile{Path: mr.Path, MimeType: mr.ContentType})
+			}
+			return tools.DelegateResult{Content: result.Content, Media: media}, nil
 		}
 		delegateTool := tools.NewDelegateTool(stores.AgentLinks, stores.Agents, domainBus, delegateRunFn)
 		delegateTool.SetMsgBus(msgBus)

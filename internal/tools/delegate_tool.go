@@ -14,10 +14,16 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// DelegateResult carries the delegatee's response content and any media produced.
+type DelegateResult struct {
+	Content string
+	Media   []bus.MediaFile
+}
+
 // DelegateRunFunc dispatches a delegation to a target agent.
 // Injected by the gateway to avoid circular dependency with agent package.
-// Returns the delegatee's response content or error.
-type DelegateRunFunc func(ctx context.Context, req DelegateRequest) (string, error)
+// Returns the delegatee's response content + media, or error.
+type DelegateRunFunc func(ctx context.Context, req DelegateRequest) (DelegateResult, error)
 
 // DelegateRequest describes a delegation dispatch.
 type DelegateRequest struct {
@@ -162,7 +168,7 @@ func (t *DelegateTool) executeSyncMode(ctx context.Context, req DelegateRequest,
 	syncCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 
-	content, err := t.runFn(syncCtx, req)
+	dr, err := t.runFn(syncCtx, req)
 	if err != nil {
 		t.emitEvent(ctx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
 			DelegationID: req.DelegationID,
@@ -177,16 +183,19 @@ func (t *DelegateTool) executeSyncMode(ctx context.Context, req DelegateRequest,
 		DelegationID: req.DelegationID,
 		FromAgent:    req.FromAgentKey,
 		ToAgent:      req.ToAgentKey,
-		Content:      truncate(content, 500),
+		Content:      truncate(dr.Content, 500),
+		MediaCount:   len(dr.Media),
 	})
 
-	result, _ := json.Marshal(map[string]any{
+	resultJSON, _ := json.Marshal(map[string]any{
 		"delegation_id": req.DelegationID,
 		"agent":         req.ToAgentKey,
 		"status":        "completed",
-		"content":       content,
+		"content":       dr.Content,
 	})
-	return NewResult(string(result))
+	r := NewResult(string(resultJSON))
+	r.Media = dr.Media
+	return r
 }
 
 // executeAsyncMode spawns a goroutine and returns immediately.
@@ -196,7 +205,7 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest
 
 	go func() {
 		defer cancel()
-		content, err := t.runFn(bgCtx, req)
+		dr, err := t.runFn(bgCtx, req)
 		if err != nil {
 			t.emitEvent(bgCtx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
 				DelegationID: req.DelegationID,
@@ -205,16 +214,17 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest
 				Error:        err.Error(),
 			})
 			slog.Warn("delegate.async.failed", "to", req.ToAgentKey, "error", err)
-			t.announceToParent(req, fmt.Sprintf("[Delegation to %s failed: %v]", req.ToAgentKey, err))
+			t.announceToParent(req, fmt.Sprintf("[Delegation to %s failed: %v]", req.ToAgentKey, err), nil)
 			return
 		}
 		t.emitEvent(bgCtx, eventbus.EventDelegateCompleted, eventbus.DelegateCompletedPayload{
 			DelegationID: req.DelegationID,
 			FromAgent:    req.FromAgentKey,
 			ToAgent:      req.ToAgentKey,
-			Content:      truncate(content, 500),
+			Content:      truncate(dr.Content, 500),
+			MediaCount:   len(dr.Media),
 		})
-		t.announceToParent(req, fmt.Sprintf("[Delegation result from %s]\n\n%s", req.ToAgentKey, content))
+		t.announceToParent(req, fmt.Sprintf("[Delegation result from %s]\n\n%s", req.ToAgentKey, dr.Content), dr.Media)
 	}()
 
 	result, _ := json.Marshal(map[string]any{
@@ -228,7 +238,7 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, req DelegateRequest
 
 // announceToParent delivers the delegate result back to the parent agent's
 // conversation via msgBus, following the same pattern as subagent announce.
-func (t *DelegateTool) announceToParent(req DelegateRequest, content string) {
+func (t *DelegateTool) announceToParent(req DelegateRequest, content string, media []bus.MediaFile) {
 	if t.msgBus == nil || req.ChatID == "" {
 		return
 	}
@@ -238,6 +248,7 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string) {
 		SenderID: fmt.Sprintf("subagent:delegate:%s", req.DelegationID),
 		ChatID:   req.ChatID,
 		Content:  content,
+		Media:    media,
 		UserID:   req.UserID,
 		TenantID: tenantUUID,
 		Metadata: map[string]string{
@@ -247,6 +258,7 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string) {
 			"delegate_id":        req.DelegationID,
 			"delegate_from":      req.FromAgentKey,
 			"delegate_to":        req.ToAgentKey,
+			MetaParentAgent:      req.FromAgentKey,
 		},
 	})
 }

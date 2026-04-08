@@ -91,6 +91,7 @@ type DelegateCompletedPayload struct {
 	FromAgent    string
 	ToAgent      string
 	Content      string
+	MediaCount   int // number of media files produced by delegatee
 }
 
 // DelegateFailedPayload is emitted when a delegation fails.
