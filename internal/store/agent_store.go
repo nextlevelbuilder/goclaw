@@ -229,8 +229,13 @@ func (a *AgentData) ParseSelfEvolve() bool { return a.SelfEvolve }
 // ParseSkillEvolve returns whether the agent's skill learning loop is enabled.
 func (a *AgentData) ParseSkillEvolve() bool { return a.SkillEvolve }
 
+// validPromptModes is the set of allowed prompt_mode values.
+var validPromptModes = map[string]bool{
+	"full": true, "task": true, "minimal": true, "none": true,
+}
+
 // ParsePromptMode returns the configured prompt mode from OtherConfig JSONB.
-// Returns "" (defaults to "full") if not set.
+// Returns "" (defaults to "full") if not set or invalid.
 func (a *AgentData) ParsePromptMode() string {
 	if len(a.OtherConfig) == 0 {
 		return ""
@@ -246,6 +251,9 @@ func (a *AgentData) ParsePromptMode() string {
 	var mode string
 	if json.Unmarshal(raw, &mode) != nil {
 		return ""
+	}
+	if !validPromptModes[mode] {
+		return "" // invalid mode → default to full
 	}
 	return mode
 }
