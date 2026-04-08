@@ -1,6 +1,6 @@
 # 06 - Store Layer and Data Model
 
-The store layer abstracts all persistence behind Go interfaces backed by PostgreSQL. Each store interface has a PostgreSQL implementation wired at startup.
+The store layer abstracts all persistence behind Go interfaces. Each store interface has a PostgreSQL implementation (standard edition) or SQLite implementation (Lite desktop edition). Implementations are wired at startup based on `//go:build` tags and edition configuration.
 
 ---
 
@@ -8,9 +8,14 @@ The store layer abstracts all persistence behind Go interfaces backed by Postgre
 
 ```mermaid
 flowchart TD
-    START["Gateway Startup"] --> PG["PostgreSQL Backend"]
+    START["Gateway Startup"] --> CHOOSE{"Edition<br/>& Build Tag"}
+    
+    CHOOSE -->|Standard<br/>(PostgreSQL)| PG["PostgreSQL Backend"]
+    CHOOSE -->|Lite<br/>(-tags sqliteonly)| SQLite["SQLite Backend"]
 
     PG --> PG_STORES["PGSessionStore<br/>PGMemoryStore<br/>PGCronStore<br/>PGPairingStore<br/>PGSkillStore<br/>PGAgentStore<br/>PGProviderStore<br/>PGTracingStore<br/>PGMCPServerStore<br/>PGCustomToolStore<br/>PGChannelInstanceStore<br/>PGConfigSecretsStore<br/>PGTeamStore<br/>PGBuiltinToolStore<br/>PGPendingMessageStore<br/>PGKnowledgeGraphStore<br/>PGContactStore<br/>PGActivityStore<br/>PGSnapshotStore<br/>PGSecureCLIStore<br/>PGAPIKeyStore"]
+    
+    SQLite --> SQLITE_STORES["SQLiteActivityStore<br/>SQLiteEpisodicStore<br/>SQLiteEvolutionMetrics<br/>SQLiteEvolutionSuggestions<br/>SQLiteKnowledgeGraph<br/>SQLiteVaultStore<br/>SQLiteAgentLinks<br/>SQLiteSubagentTasks<br/>SQLiteSecureCLIStore"]
 ```
 
 ---
@@ -42,6 +47,22 @@ The `Stores` struct is the top-level container holding all PostgreSQL-backed sto
 | SnapshotStore | `PGSnapshotStore` | Hourly usage snapshots, cost aggregation, time series queries |
 | SecureCLIStore | `PGSecureCLIStore` | CLI binary configs with encrypted credential injection |
 | APIKeyStore | `PGAPIKeyStore` | Gateway API keys, scopes, expiration, revocation |
+
+### SQLite Parity (Lite Edition)
+
+**New in v3:** SQLite backend supports 9 additional stores for Lite desktop edition (`-tags sqliteonly`). Schema v9 adds 4 new tables. Text search uses LIKE (no FTS5). Vector features omitted.
+
+| Interface | Implementation | PostgreSQL vs SQLite |
+|-----------|---|---|
+| ActivityStore | `SQLiteActivityStore` | ✓ Parity |
+| EpisodicStore | `SQLiteEpisodicStore` | LIKE search (no tsvector), no vector embedding |
+| EvolutionMetrics | `SQLiteEvolutionMetrics` | ✓ Parity (json_extract instead of JSONB operator) |
+| EvolutionSuggestions | `SQLiteEvolutionSuggestions` | ✓ Parity |
+| KnowledgeGraphStore | `SQLiteKnowledgeGraph` | LIKE search, Go-side dedup (Jaro-Winkler), no vector embedding, recursive CTE for traversal, depth cap 5 |
+| VaultStore | `SQLiteVaultStore` | LIKE search (no tsvector), no vector embedding |
+| AgentLinksStore | `SQLiteAgentLinks` | LIKE search, no vector |
+| SubagentTasksStore | `SQLiteSubagentTasks` | ✓ Parity (json_set for metadata merge) |
+| SecureCLIStore | `SQLiteSecureCLIStore` | ✓ Parity + AES-256-GCM encryption mandatory (GOCLAW_KEY env var required) |
 
 ---
 
