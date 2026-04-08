@@ -609,28 +609,4 @@ func replaceIDX(s, replacement string) string {
 	return result.String()
 }
 
-// execMapUpdateWhereTenant is like execMapUpdateWhere but appends an AND tenant_id = $N filter.
-// Column names are validated to prevent SQL injection.
-func execMapUpdateWhereTenant(ctx context.Context, db *sql.DB, table string, updates map[string]any, id, tenantID uuid.UUID) error {
-	if len(updates) == 0 {
-		return nil
-	}
-	var setClauses []string
-	var args []any
-	i := 1
-	for col, val := range updates {
-		if !validColumnName.MatchString(col) {
-			slog.Warn("security.invalid_column_name", "table", table, "column", col)
-			return fmt.Errorf("invalid column name: %q", col)
-		}
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i))
-		args = append(args, val)
-		i++
-	}
-	// $i = id, $i+1 = tenantID
-	args = append(args, id, tenantID)
-	q := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d AND tenant_id = $%d",
-		table, joinStrings(setClauses, ", "), i, i+1)
-	_, err := db.ExecContext(ctx, q, args...)
-	return err
-}
+// execMapUpdateWhereTenant is now in helpers.go (delegates to base.BuildMapUpdateWhereTenant).
