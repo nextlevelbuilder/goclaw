@@ -9,6 +9,7 @@ import { ModelBudgetSection } from "./overview-sections/model-budget-section";
 import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
 import { EngineVersionSection } from "./overview-sections/engine-version-section";
+import { PromptSettingsSection } from "./overview-sections/prompt-settings-section";
 import { OrchestrationSection } from "./overview-sections/orchestration-section";
 import { CapabilitiesSection } from "./overview-sections/capabilities-section";
 import { ChatGPTOAuthRoutingSummarySection } from "./overview-sections/chatgpt-oauth-routing-summary-section";
@@ -149,6 +150,8 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
           onSkillNudgeIntervalChange={setSkillNudgeInterval}
         />
       )}
+
+      <PromptSettingsSection agent={agent} onUpdate={onUpdate} />
 
       <EngineVersionSection agentId={agent.id} />
 
