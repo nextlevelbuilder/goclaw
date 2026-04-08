@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -19,62 +19,19 @@ import (
 
 // announceEntry holds one teammate completion result waiting to be announced.
 type announceEntry struct {
-	MemberAgent        string // agent key (e.g. "researcher")
-	MemberDisplayName  string // display name (e.g. "Nhà Nghiên Cứu"), empty if not set
-	Content            string
-	Media              []agent.MediaResult
+	MemberAgent       string // agent key (e.g. "researcher")
+	MemberDisplayName string // display name (e.g. "Nhà Nghiên Cứu"), empty if not set
+	Content           string
+	Media             []agent.MediaResult
 }
 
-// announceQueueState tracks the per-session announce queue.
-// Producer-consumer: multiple goroutines add entries, one loops to drain+announce.
-type announceQueueState struct {
-	mu      sync.Mutex
-	running bool
-	entries []announceEntry
-}
+// teamAnnounceQueue uses BatchQueue for producer-consumer synchronization.
+var teamAnnounceQueue orch.BatchQueue[announceEntry]
 
-// announceQueues maps leadSessionKey → queue. Cleaned up when queue finishes.
-var announceQueues sync.Map
-
-func getOrCreateAnnounceQueue(key string) *announceQueueState {
-	v, _ := announceQueues.LoadOrStore(key, &announceQueueState{})
-	return v.(*announceQueueState)
-}
-
-// enqueueAnnounce adds a result to the queue. Returns (queue, isProcessor).
+// enqueueAnnounce adds a result to the queue. Returns isProcessor.
 // If isProcessor=true, the caller must run processAnnounceLoop.
-func enqueueAnnounce(key string, entry announceEntry) (*announceQueueState, bool) {
-	q := getOrCreateAnnounceQueue(key)
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.entries = append(q.entries, entry)
-	if q.running {
-		return q, false
-	}
-	q.running = true
-	return q, true
-}
-
-func (q *announceQueueState) drain() []announceEntry {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	out := q.entries
-	q.entries = nil
-	return out
-}
-
-// tryFinish atomically checks for pending entries and marks the queue idle.
-// Returns true if the processor should exit (no pending entries).
-// Prevents TOCTOU race between hasPending() and finish().
-func (q *announceQueueState) tryFinish(key string) bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.entries) > 0 {
-		return false // more work arrived — keep processing
-	}
-	q.running = false
-	announceQueues.Delete(key)
-	return true
+func enqueueAnnounce(key string, entry announceEntry) bool {
+	return teamAnnounceQueue.Enqueue(key, entry)
 }
 
 // announceRouting holds the shared routing info captured by the first goroutine.
@@ -98,7 +55,6 @@ type announceRouting struct {
 // Loops until queue is empty.
 func processAnnounceLoop(
 	ctx context.Context,
-	q *announceQueueState,
 	r announceRouting,
 	sched *scheduler.Scheduler,
 	msgBus *bus.MessageBus,
@@ -107,9 +63,9 @@ func processAnnounceLoop(
 	cfg *config.Config,
 ) {
 	for {
-		entries := q.drain()
+		entries := teamAnnounceQueue.Drain(r.LeadSessionKey)
 		if len(entries) == 0 {
-			if q.tryFinish(r.LeadSessionKey) {
+			if teamAnnounceQueue.TryFinish(r.LeadSessionKey) {
 				return
 			}
 			continue // entries arrived between drain and tryFinish
@@ -200,7 +156,6 @@ func processAnnounceLoop(
 }
 
 // memberLabel returns a display-friendly name for announce messages.
-// Uses "DisplayName (agent_key)" if display name is set, otherwise just agent_key.
 func memberLabel(e announceEntry) string {
 	if e.MemberDisplayName != "" {
 		return fmt.Sprintf("%s (%s)", e.MemberDisplayName, e.MemberAgent)

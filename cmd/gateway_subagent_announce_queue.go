@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -47,60 +47,17 @@ type subagentAnnounceRouting struct {
 	OutMeta          map[string]string
 }
 
-// subagentAnnounceQueue is a producer-consumer queue per parent session.
-// Multiple subagent goroutines enqueue entries; one processor drains and merges.
-type subagentAnnounceQueue struct {
-	mu      sync.Mutex
-	running bool
-	entries []subagentAnnounceEntry
-}
+// subagentAnnounceQueue uses BatchQueue for producer-consumer synchronization.
+var subagentAnnounceQueue orch.BatchQueue[subagentAnnounceEntry]
 
-// subagentAnnounceQueues maps sessionKey → queue. Cleaned up when queue finishes.
-var subagentAnnounceQueues sync.Map
-
-func getOrCreateSubagentAnnounceQueue(key string) *subagentAnnounceQueue {
-	v, _ := subagentAnnounceQueues.LoadOrStore(key, &subagentAnnounceQueue{})
-	return v.(*subagentAnnounceQueue)
-}
-
-// enqueueSubagentAnnounce adds a result to the queue. Returns (queue, isProcessor).
-// If isProcessor=true, the caller must run processSubagentAnnounceLoop.
-func enqueueSubagentAnnounce(key string, entry subagentAnnounceEntry) (*subagentAnnounceQueue, bool) {
-	q := getOrCreateSubagentAnnounceQueue(key)
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.entries = append(q.entries, entry)
-	if q.running {
-		return q, false
-	}
-	q.running = true
-	return q, true
-}
-
-func (q *subagentAnnounceQueue) drain() []subagentAnnounceEntry {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	out := q.entries
-	q.entries = nil
-	return out
-}
-
-// tryFinish atomically checks for pending entries and marks the queue idle.
-func (q *subagentAnnounceQueue) tryFinish(key string) bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.entries) > 0 {
-		return false
-	}
-	q.running = false
-	subagentAnnounceQueues.Delete(key)
-	return true
+// enqueueSubagentAnnounce adds a result to the queue. Returns isProcessor.
+func enqueueSubagentAnnounce(key string, entry subagentAnnounceEntry) bool {
+	return subagentAnnounceQueue.Enqueue(key, entry)
 }
 
 // processSubagentAnnounceLoop drains entries, builds merged announce, schedules to parent.
 func processSubagentAnnounceLoop(
 	ctx context.Context,
-	q *subagentAnnounceQueue,
 	r subagentAnnounceRouting,
 	roster tools.SubagentRoster,
 	subagentMgr *tools.SubagentManager,
@@ -116,14 +73,14 @@ func processSubagentAnnounceLoop(
 	for {
 		select {
 		case <-ctx.Done():
-			q.tryFinish(r.QueueKey)
+			subagentAnnounceQueue.TryFinish(r.QueueKey)
 			return
 		default:
 		}
 
-		entries := q.drain()
+		entries := subagentAnnounceQueue.Drain(r.QueueKey)
 		if len(entries) == 0 {
-			if q.tryFinish(r.QueueKey) {
+			if subagentAnnounceQueue.TryFinish(r.QueueKey) {
 				return
 			}
 			// Brief sleep to avoid tight spin when entries arrive between drain and tryFinish.

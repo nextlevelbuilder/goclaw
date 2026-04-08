@@ -127,7 +127,7 @@ func handleSubagentAnnounce(
 	}
 
 	// Enqueue into producer-consumer queue using tenant-scoped key from routing.
-	q, isProcessor := enqueueSubagentAnnounce(queueKey, entry)
+	isProcessor := enqueueSubagentAnnounce(queueKey, entry)
 	if isProcessor {
 		deps.BgWg.Add(1)
 		go func() {
@@ -137,7 +137,7 @@ func handleSubagentAnnounce(
 			// Fetch live roster for merged announce context.
 			roster := deps.SubagentMgr.RosterForParent(parentAgent)
 
-			processSubagentAnnounceLoop(ctx, q, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
+			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
 		}()
 	}
 
@@ -401,7 +401,7 @@ func handleTeammateMessage(
 			Content:           announceContent,
 			Media:             announceMedia,
 		}
-		q, isProcessor := enqueueAnnounce(leadSessionKey, entry)
+		isProcessor := enqueueAnnounce(leadSessionKey, entry)
 		if !isProcessor {
 			slog.Info("teammate announce: merged into pending batch",
 				"member", entry.MemberAgent, "session", leadSessionKey)
@@ -423,7 +423,7 @@ func handleTeammateMessage(
 			ParentRootSpanID: parentRootSpanID,
 			OutMeta:          outMeta,
 		}
-		processAnnounceLoop(ctx, q, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
+		processAnnounceLoop(ctx, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
 	}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 
 	return true
