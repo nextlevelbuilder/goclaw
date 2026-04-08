@@ -262,3 +262,4 @@ func wireChannelEventSubscribers(
 		})
 	}
 }
+

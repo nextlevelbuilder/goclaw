@@ -16,7 +16,61 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// makeDelegateAnnounceCallback returns the batch callback used by tools.NewAnnounceQueue.
+// Extracted from runGateway to keep the main function concise.
+func makeDelegateAnnounceCallback(
+	subagentMgr *tools.SubagentManager,
+	msgBus *bus.MessageBus,
+) func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
+	return func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
+		roster := subagentMgr.RosterForParent(meta.ParentAgent)
+		content := tools.FormatBatchedAnnounce(items, roster)
+		senderID := fmt.Sprintf("subagent:batch-%d", len(items))
+		label := items[0].Label
+		if len(items) > 1 {
+			label = fmt.Sprintf("%d tasks", len(items))
+		}
+		batchMeta := map[string]string{
+			tools.MetaOriginChannel:    meta.OriginChannel,
+			tools.MetaOriginPeerKind:   meta.OriginPeerKind,
+			tools.MetaParentAgent:      meta.ParentAgent,
+			tools.MetaSubagentLabel:    label,
+			tools.MetaOriginTraceID:    meta.OriginTraceID,
+			tools.MetaOriginRootSpanID: meta.OriginRootSpanID,
+		}
+		if meta.OriginLocalKey != "" {
+			batchMeta[tools.MetaOriginLocalKey] = meta.OriginLocalKey
+		}
+		if meta.OriginSessionKey != "" {
+			batchMeta[tools.MetaOriginSessionKey] = meta.OriginSessionKey
+		}
+		// Collect media from all items in the batch.
+		var batchMedia []bus.MediaFile
+		for _, item := range items {
+			batchMedia = append(batchMedia, item.Media...)
+		}
+		// Notify clients that leader is processing team results
+		// (bridges UI gap between last task.completed and announce run.started).
+		bus.BroadcastForTenant(msgBus, protocol.EventTeamLeaderProcessing, meta.OriginTenantID, map[string]any{
+			"agentId": meta.ParentAgent,
+			"tasks":   len(items),
+		})
+
+		msgBus.PublishInbound(bus.InboundMessage{
+			Channel:  "system",
+			SenderID: senderID,
+			ChatID:   meta.OriginChatID,
+			Content:  content,
+			UserID:   meta.OriginUserID,
+			TenantID: meta.OriginTenantID,
+			Metadata: batchMeta,
+			Media:    batchMedia,
+		})
+	}
+}
 
 // subagentAnnounceEntry holds one subagent completion result waiting to be announced.
 type subagentAnnounceEntry struct {
