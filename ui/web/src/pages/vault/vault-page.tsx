@@ -40,14 +40,25 @@ export function VaultPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-            disabled={!selectedAgent}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            {t("create")}
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    size="sm"
+                    onClick={() => setCreateOpen(true)}
+                    disabled={!selectedAgent}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {t("create")}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!selectedAgent && (
+                <TooltipContent>{t("selectAgentFirst", "Select an agent first")}</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <Button
             size="sm" variant="outline"
             onClick={() => setSearchOpen(true)}

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { MarkdownRenderer } from "@/components/shared/markdown-renderer";
 import { useVaultLinks, useVaultFileContent, useUpdateDocument, useDeleteDocument } from "./hooks/use-vault";
 import { VaultLinkDialog } from "./vault-link-dialog";
 import {
@@ -83,7 +84,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!saving) { cancelEdit(); onOpenChange(v); } }}>
-        <DialogContent className="sm:max-w-lg max-sm:inset-0 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-sm:inset-0 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-start justify-between gap-2 pr-6">
               <DialogTitle className="truncate flex-1">
@@ -141,13 +142,13 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
               {t("detail.contentPreview")}
             </button>
             {previewOpen && (
-              <div className="rounded-md border bg-muted/50 p-3 max-h-[200px] overflow-y-auto">
+              <div className="rounded-md border bg-muted/50 p-3 max-h-[300px] overflow-y-auto">
                 {contentLoading ? (
                   <div className="h-[60px] animate-pulse rounded bg-muted" />
                 ) : contentError ? (
                   <p className="text-xs text-muted-foreground italic">{t("detail.fileNotFound")}</p>
                 ) : fileContent ? (
-                  <pre className="text-xs whitespace-pre-wrap break-words font-mono">{fileContent}</pre>
+                  <MarkdownRenderer content={fileContent} className="text-sm" />
                 ) : (
                   <p className="text-xs text-muted-foreground italic">{t("detail.emptyContent")}</p>
                 )}
