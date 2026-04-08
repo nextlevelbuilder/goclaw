@@ -609,4 +609,3 @@ func replaceIDX(s, replacement string) string {
 	return result.String()
 }
 
-// execMapUpdateWhereTenant is now in helpers.go (delegates to base.BuildMapUpdateWhereTenant).

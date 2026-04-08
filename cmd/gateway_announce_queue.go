@@ -114,7 +114,6 @@ func processAnnounceLoop(
 
 		// Inject post-turn tracker (leader may create new tasks during announce).
 		ptd := tools.NewPendingTeamDispatch()
-		defer ptd.ReleaseTeamLock() // ensure lock released even on panic
 		schedCtx := tools.WithPendingTeamDispatch(ctx, ptd)
 		outCh := sched.Schedule(schedCtx, scheduler.LaneSubagent, req)
 		outcome := <-outCh
