@@ -295,9 +295,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, cfg.sectionContent(providers.SectionIDExecutionBias, buildExecutionBiasSection)...)
 	}
 
-	// 2.3. ## Tool Call Style — full mode only (verbose, dropped in task/minimal)
+	// 2.3. ## Tool Call Style — full mode only (overridable by provider)
 	if isFull && !cfg.IsBootstrap {
-		lines = append(lines, buildToolCallStyleSection()...)
+		lines = append(lines, cfg.sectionContent(providers.SectionIDToolCallStyle, buildToolCallStyleSection)...)
 	}
 
 	// 2.5. Credentialed CLI context — full mode only
