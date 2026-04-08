@@ -187,10 +187,6 @@
     "engine": {
       "title": "Phiên Bản Engine",
       "learnMore": "Tìm hiểu thêm",
-      "classicLabel": "Cổ Điển",
-      "classicDesc": "Vòng lặp agent đã kiểm chứng với thực thi đơn lượt",
-      "nextGenLabel": "Thế Hệ Mới",
-      "nextGenDesc": "Pipeline 8 giai đoạn với bộ nhớ, truy xuất và điều phối",
       "pipelineTitle": "Pipeline",
       "pipelineHint": "Vòng lặp thực thi 8 giai đoạn có cấu trúc",
       "memoryTitle": "Bộ Nhớ",

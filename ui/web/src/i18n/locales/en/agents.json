@@ -198,10 +198,6 @@
     "engine": {
       "title": "Engine Version",
       "learnMore": "Learn more",
-      "classicLabel": "Classic",
-      "classicDesc": "Proven agent loop with single-pass execution",
-      "nextGenLabel": "Next-Gen",
-      "nextGenDesc": "8-stage pipeline with memory, retrieval, and orchestration",
       "pipelineTitle": "Pipeline",
       "pipelineHint": "8-stage structured execution loop",
       "memoryTitle": "Memory",

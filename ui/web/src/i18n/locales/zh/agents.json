@@ -187,10 +187,6 @@
     "engine": {
       "title": "引擎版本",
       "learnMore": "了解更多",
-      "classicLabel": "经典",
-      "classicDesc": "经过验证的单次执行 Agent 循环",
-      "nextGenLabel": "新一代",
-      "nextGenDesc": "8阶段流水线，支持记忆、检索和编排",
       "pipelineTitle": "流水线",
       "pipelineHint": "8阶段结构化执行循环",
       "memoryTitle": "记忆",
