@@ -1,0 +1,9 @@
+{
+  "tools": {
+    "marketplace": {
+      "enabled": true,
+      "api_base": "https://hub-api.vibery.app/v1",
+      "api_key": "your-hub-api-key-here"
+    }
+  }
+}

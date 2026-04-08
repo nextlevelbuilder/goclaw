@@ -140,6 +140,8 @@ func setupToolRegistry(
 	toolsReg.Register(tools.NewCreateAudioTool(providerRegistry,
 		cfg.Tts.ElevenLabs.APIKey, cfg.Tts.ElevenLabs.BaseURL))
 
+	// Marketplace tools registered in gateway.go where pgStores is available
+
 	// TTS (text-to-speech) system — always create TtsTool so config reload can populate it later
 	ttsMgr := setupTTS(cfg)
 	if ttsMgr == nil {

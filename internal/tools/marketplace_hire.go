@@ -1,0 +1,388 @@
+package tools
+
+import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
+	"mime/multipart"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/registry"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+// MarketplaceHireTool downloads and installs agent teams from the GoClaw Hub marketplace.
+type MarketplaceHireTool struct {
+	client         *registry.Client
+	gatewayURL     string // e.g. http://localhost:18790
+	gatewayToken   string
+	hubFrontendURL string // e.g. https://hub.vibery.app
+	teams          store.TeamCRUDStore
+}
+
+// NewMarketplaceHireTool creates a new marketplace hire tool.
+func NewMarketplaceHireTool(client *registry.Client, gatewayURL, gatewayToken, hubFrontendURL string, teams store.TeamCRUDStore) *MarketplaceHireTool {
+	return &MarketplaceHireTool{
+		client:         client,
+		gatewayURL:     gatewayURL,
+		gatewayToken:   gatewayToken,
+		hubFrontendURL: hubFrontendURL,
+		teams:          teams,
+	}
+}
+
+func (t *MarketplaceHireTool) Name() string {
+	return "marketplace_hire"
+}
+
+func (t *MarketplaceHireTool) Description() string {
+	return "Hire (download and install) an agent team from GoClaw Hub marketplace. This will download the team and import it into your GoClaw instance. Use this when the user wants to hire, install, or get a specific team."
+}
+
+func (t *MarketplaceHireTool) Parameters() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"slug": map[string]any{
+				"type":        "string",
+				"description": "The team slug from search results (e.g., 'content-squad')",
+			},
+		},
+		"required": []string{"slug"},
+	}
+}
+
+func (t *MarketplaceHireTool) Execute(ctx context.Context, args map[string]any) *Result {
+	slug, _ := args["slug"].(string)
+	if slug == "" {
+		return ErrorResult("slug is required")
+	}
+	// S6: Validate slug format to prevent path traversal
+	for _, c := range slug {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') {
+			return ErrorResult("invalid slug: must contain only lowercase letters, digits, and hyphens")
+		}
+	}
+
+	// Get listing details
+	listing, err := t.client.GetListing(ctx, slug)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to get team details: %v", err))
+	}
+
+	// Check if paid listing — can't download without purchase
+	if listing.PriceCents > 0 {
+		buyURL := t.hubFrontendURL
+		if buyURL == "" {
+			// Fallback: derive frontend URL from API URL
+			buyURL = strings.TrimSuffix(t.client.BaseURL, "/v1")
+			buyURL = strings.TrimSuffix(buyURL, "/")
+			buyURL = strings.Replace(buyURL, "hub-api.", "hub.", 1)
+			buyURL = strings.Replace(buyURL, ":9401", ":9402", 1)
+		}
+
+		price := fmt.Sprintf("$%.2f", float64(listing.PriceCents)/100)
+		if listing.PriceCents%100 == 0 {
+			price = fmt.Sprintf("$%d", listing.PriceCents/100)
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("**%s** costs %s (one-time purchase).\n\n", listing.Title, price))
+		sb.WriteString(fmt.Sprintf("Purchase it here: %s/listing/%s\n\n", buyURL, listing.Slug))
+		sb.WriteString("After purchasing, say \"hire " + listing.Slug + "\" again and I'll install it for you.")
+		return NewResult(sb.String())
+	}
+
+	// Download bundle via Go HTTP client
+	dlDir := "/app/workspace/marketplace"
+	if d := os.Getenv("GOCLAW_WORKSPACE_DIR"); d != "" {
+		dlDir = filepath.Join(d, "marketplace")
+	}
+	if _, err := os.Stat(dlDir); err != nil {
+		dlDir = filepath.Join(os.TempDir(), "marketplace")
+	}
+	os.MkdirAll(dlDir, 0755)
+	os.Chmod(dlDir, 0755)
+
+	filename := fmt.Sprintf("goclaw-team-%s.tar.gz", slug)
+	bundlePath := filepath.Join(dlDir, filename)
+	os.Remove(bundlePath) // clean any stale file
+
+	dlURL := t.client.BaseURL + "/registry/download/" + slug
+
+	// S3: Validate URL before requesting
+	if err := validateExternalURL(dlURL); err != nil {
+		return ErrorResult(fmt.Sprintf("Invalid download URL: %v", err))
+	}
+
+	dlReq, err := http.NewRequestWithContext(ctx, "GET", dlURL, nil)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create download request: %v", err))
+	}
+	dlReq.Header.Set("X-Registry-Key", t.client.APIKey)
+
+	dlClient := &http.Client{Timeout: 60 * time.Second}
+	dlResp, err := dlClient.Do(dlReq)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to download team '%s': %v", listing.Title, err))
+	}
+	defer dlResp.Body.Close()
+
+	if dlResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(dlResp.Body)
+		return ErrorResult(fmt.Sprintf("Download failed for '%s': HTTP %d: %s", listing.Title, dlResp.StatusCode, strings.TrimSpace(string(body))))
+	}
+
+	outFile, err := os.Create(bundlePath)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create file: %v", err))
+	}
+	// S8: Limit download size to 100MB
+	written, err := io.Copy(outFile, io.LimitReader(dlResp.Body, 100*1024*1024))
+	outFile.Close()
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to write bundle: %v", err))
+	}
+	if written == 0 {
+		return ErrorResult(fmt.Sprintf("Download produced empty file for '%s'", listing.Title))
+	}
+
+	info, err := os.Stat(bundlePath)
+	if err != nil || info.Size() == 0 {
+		return ErrorResult(fmt.Sprintf("Download produced empty file for '%s'", listing.Title))
+	}
+
+	// Validate bundle is a valid gzip file
+	if err := validateBundle(bundlePath); err != nil {
+		return ErrorResult(fmt.Sprintf("Bundle validation failed for '%s': %v", listing.Title, err))
+	}
+
+	// Import into GoClaw by POSTing to the local team import endpoint
+	importResult, err := t.importBundle(bundlePath)
+	if err != nil {
+		// Download worked but import failed — still tell user about the download
+		var result strings.Builder
+		result.WriteString(fmt.Sprintf("Downloaded **%s** but import failed: %v\n\n", listing.Title, err))
+		result.WriteString(fmt.Sprintf("Bundle saved at: %s (%.1f KB)\n", bundlePath, float64(info.Size())/1024.0))
+		result.WriteString("You can import manually via the Teams page.\n")
+		return NewResult(result.String())
+	}
+
+	// Save Hub metadata to the team's settings for update tracking
+	if t.teams != nil {
+		if err := t.saveHubMetadata(ctx, slug); err != nil {
+			slog.Warn("marketplace: failed to save hub metadata", "slug", slug, "error", err)
+		}
+	}
+
+	slog.Info("marketplace: hired", "slug", slug, "title", listing.Title)
+
+	// Build success message
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("Successfully hired and imported: **%s**\n\n", listing.Title))
+
+	if listing.Tagline != "" {
+		result.WriteString(fmt.Sprintf("%s\n\n", listing.Tagline))
+	}
+
+	if len(listing.Agents) > 0 {
+		result.WriteString("**Team members now active:**\n")
+		for _, agent := range listing.Agents {
+			name := agent.DisplayName
+			if agent.Emoji != "" {
+				name = agent.Emoji + " " + name
+			}
+			if agent.Role != "" {
+				name += " (" + agent.Role + ")"
+			}
+			result.WriteString(fmt.Sprintf("- %s\n", name))
+		}
+		result.WriteString("\n")
+	}
+
+	if listing.CreatorName != "" {
+		result.WriteString(fmt.Sprintf("By: %s\n", listing.CreatorName))
+	}
+
+	if importResult != "" {
+		result.WriteString(fmt.Sprintf("\n%s\n", importResult))
+	}
+
+	result.WriteString("\nThe team is now available in your Teams page!\n")
+
+	// Clean up bundle file after successful import
+	os.Remove(bundlePath)
+
+	return NewResult(result.String())
+}
+
+// importBundle POSTs the tar.gz to GoClaw's own /v1/teams/import endpoint as multipart form.
+func (t *MarketplaceHireTool) importBundle(bundlePath string) (string, error) {
+	if t.gatewayURL == "" || t.gatewayToken == "" {
+		return "", fmt.Errorf("gateway URL or token not configured for auto-import")
+	}
+
+	f, err := os.Open(bundlePath)
+	if err != nil {
+		return "", fmt.Errorf("open bundle: %v", err)
+	}
+	defer f.Close()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", filepath.Base(bundlePath))
+	if err != nil {
+		return "", fmt.Errorf("create form file: %v", err)
+	}
+	if _, err := io.Copy(part, f); err != nil {
+		return "", fmt.Errorf("copy bundle to form: %v", err)
+	}
+	writer.Close()
+
+	importURL := t.gatewayURL + "/v1/teams/import"
+	req, err := http.NewRequest("POST", importURL, &body)
+	if err != nil {
+		return "", fmt.Errorf("create request: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+t.gatewayToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("import request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("import returned %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	return strings.TrimSpace(string(respBody)), nil
+}
+
+// validateExternalURL validates a URL for SSRF protection (S3).
+func validateExternalURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	isLocal := u.Hostname() == "localhost" || strings.HasPrefix(u.Hostname(), "127.0.0.1")
+	if u.Scheme != "https" && !isLocal {
+		return fmt.Errorf("URL must use HTTPS")
+	}
+	if !isLocal {
+		host := u.Hostname()
+		// Check literal IP
+		ip := net.ParseIP(host)
+		if ip != nil {
+			if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				return fmt.Errorf("URL resolves to private/internal address")
+			}
+		} else {
+			// Resolve hostname and check all IPs
+			ips, err := net.LookupHost(host)
+			if err == nil {
+				for _, ipStr := range ips {
+					resolved := net.ParseIP(ipStr)
+					if resolved != nil && (resolved.IsPrivate() || resolved.IsLoopback() || resolved.IsLinkLocalUnicast()) {
+						return fmt.Errorf("URL hostname resolves to private/internal address")
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// validateBundle validates that a file is a valid gzip archive and tar structure.
+func validateBundle(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("not a valid gzip file: %w", err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	count := 0
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("invalid tar entry: %w", err)
+		}
+		if strings.Contains(header.Name, "..") || filepath.IsAbs(header.Name) {
+			return fmt.Errorf("path traversal blocked: %s", header.Name)
+		}
+		if header.Typeflag == tar.TypeSymlink || header.Typeflag == tar.TypeLink {
+			return fmt.Errorf("symlinks not allowed: %s", header.Name)
+		}
+		count++
+		if count > 1000 {
+			return fmt.Errorf("too many files in bundle (max 1000)")
+		}
+	}
+	return nil
+}
+
+// saveHubMetadata saves hub_slug and hub_version into the most recently created team's settings.
+// Finds the team by listing teams and matching by name (most recent import), then updates via store.
+func (t *MarketplaceHireTool) saveHubMetadata(ctx context.Context, slug string) error {
+	if t.teams == nil {
+		return nil
+	}
+
+	teams, err := t.teams.ListTeams(ctx)
+	if err != nil {
+		return fmt.Errorf("list teams: %w", err)
+	}
+
+	// Find matching team: prefer one already tagged with this slug, else the most recent by name
+	var targetTeam *store.TeamData
+	for i := range teams {
+		var hs struct {
+			HubSlug string `json:"hub_slug"`
+		}
+		_ = json.Unmarshal(teams[i].Settings, &hs)
+		if hs.HubSlug == slug {
+			targetTeam = &teams[i]
+			break
+		}
+	}
+	// Fallback: pick the last team (most recently created) — it was just imported
+	if targetTeam == nil && len(teams) > 0 {
+		targetTeam = &teams[len(teams)-1]
+	}
+	if targetTeam == nil {
+		return fmt.Errorf("no team found to tag with hub metadata")
+	}
+
+	// Merge hub metadata into existing settings
+	settings := make(map[string]any)
+	_ = json.Unmarshal(targetTeam.Settings, &settings)
+	settings["hub_slug"] = slug
+	settings["hub_version"] = 1
+	newSettings, _ := json.Marshal(settings)
+
+	return t.teams.UpdateTeam(ctx, targetTeam.ID, map[string]any{
+		"settings": string(newSettings),
+	})
+}

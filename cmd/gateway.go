@@ -34,6 +34,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/registry"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -414,6 +415,39 @@ func runGateway() {
 	}
 	if secureCLIGrantH != nil {
 		server.SetSecureCLIGrantHandler(secureCLIGrantH)
+	}
+
+	// Marketplace integration (GoClaw Hub)
+	{
+		apiBase := cfg.Tools.Marketplace.APIBase
+		mktAPIKey := cfg.Tools.Marketplace.APIKey
+		if mktAPIKey == "" {
+			mktAPIKey = os.Getenv("GOCLAW_MARKETPLACE_API_KEY")
+		}
+		if mktAPIKey != "" && apiBase == "" {
+			slog.Warn("marketplace tools disabled: api_key set but api_base missing in config")
+		}
+		if mktAPIKey != "" && apiBase != "" {
+			mktClient := registry.NewClient(apiBase, mktAPIKey)
+			gwPort := cfg.Gateway.Port
+			if gwPort == 0 {
+				gwPort = 18790
+			}
+			gwURL := fmt.Sprintf("http://localhost:%d", gwPort)
+
+			// Use configured frontend base or empty string (tool will derive from API URL)
+			hubFrontendURL := cfg.Tools.Marketplace.FrontendBase
+
+			// Agent tools
+			toolsReg.Register(tools.NewMarketplaceSearchTool(mktClient))
+			toolsReg.Register(tools.NewMarketplaceHireTool(mktClient, gwURL, cfg.Gateway.Token, hubFrontendURL, pgStores.Teams))
+			toolsReg.Register(tools.NewMarketplaceCheckUpdatesTool(mktClient, pgStores.Teams))
+
+			// Install page handler
+			server.SetMarketplaceInstallHandler(httpapi.NewMarketplaceInstallHandler(mktAPIKey, cfg.Gateway.Token, gwPort, pgStores.Teams))
+
+			slog.Info("marketplace tools enabled", "api_base", apiBase, "auto_import", cfg.Gateway.Token != "")
+		}
 	}
 
 	// Activity audit log API

@@ -325,8 +325,8 @@ func (h *AgentsHandler) doTeamImport(ctx context.Context, r *http.Request, teamA
 		}
 	}
 
-	// First pass: import/find each agent
-	importedAgents := make(map[string]string) // agent_key → imported agent_key (may be deduplicated)
+	// First pass: import/find each agent (reuse existing agents by key)
+	importedAgents := make(map[string]string) // agent_key → imported agent_key
 
 	for _, agentKey := range agentKeys {
 		agArc, ok := teamArc.agentArcs[agentKey]
@@ -343,17 +343,48 @@ func (h *AgentsHandler) doTeamImport(ctx context.Context, r *http.Request, teamA
 			agArc.agentConfig["agent_key"] = raw
 		}
 
-		dedupedKey := h.dedupAgentKey(ctx, agentKey)
 		tenantID := store.TenantIDFromContext(ctx)
 		userID := store.UserIDFromContext(ctx)
-		ag := h.buildAgentFromArchive(agArc.agentConfig, dedupedKey, "", tenantID, userID)
+
+		// Check if agent already exists — reuse instead of creating duplicate
+		existing, _ := h.agents.GetByKey(ctx, agentKey)
+		if existing != nil {
+			slog.Info("team.import: agent already exists, updating", "key", agentKey)
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "agent", Status: "running", Detail: agentKey + " (update)"})
+			}
+
+			sections := map[string]bool{
+				"context_files":   true,
+				"memory":          true,
+				"knowledge_graph": true,
+				"cron":            true,
+				"user_profiles":   true,
+				"user_overrides":  true,
+				"workspace":       true,
+			}
+			if _, err := h.doMergeImport(ctx, existing, agArc, sections, progressFn); err != nil {
+				slog.Warn("team.import: merge agent data failed", "key", agentKey, "error", err)
+			}
+
+			importedAgents[agentKey] = agentKey
+			summary.AgentsAdded++
+			summary.AgentKeys = append(summary.AgentKeys, agentKey)
+
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "agent", Status: "done", Detail: agentKey})
+			}
+			continue
+		}
+
+		ag := h.buildAgentFromArchive(agArc.agentConfig, agentKey, "", tenantID, userID)
 
 		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "agent", Status: "running", Detail: dedupedKey})
+			progressFn(ProgressEvent{Phase: "agent", Status: "running", Detail: agentKey})
 		}
 
 		if err := h.agents.Create(ctx, ag); err != nil {
-			slog.Warn("team.import: create agent failed", "key", dedupedKey, "error", err)
+			slog.Warn("team.import: create agent failed", "key", agentKey, "error", err)
 			continue
 		}
 
@@ -367,15 +398,15 @@ func (h *AgentsHandler) doTeamImport(ctx context.Context, r *http.Request, teamA
 			"workspace":       true,
 		}
 		if _, err := h.doMergeImport(ctx, ag, agArc, sections, progressFn); err != nil {
-			slog.Warn("team.import: merge agent data failed", "key", dedupedKey, "error", err)
+			slog.Warn("team.import: merge agent data failed", "key", agentKey, "error", err)
 		}
 
-		importedAgents[agentKey] = dedupedKey
+		importedAgents[agentKey] = agentKey
 		summary.AgentsAdded++
-		summary.AgentKeys = append(summary.AgentKeys, dedupedKey)
+		summary.AgentKeys = append(summary.AgentKeys, agentKey)
 
 		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "agent", Status: "done", Detail: dedupedKey})
+			progressFn(ProgressEvent{Phase: "agent", Status: "done", Detail: agentKey})
 		}
 	}
 
