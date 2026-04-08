@@ -56,6 +56,11 @@
   "v3Info": {
     "title": "Điểm Mới Trong v3",
     "subtitle": "Cải tiến lớn so với kiến trúc v2",
+    "tabs": {
+      "core": "Lõi Engine",
+      "memory": "Bộ Nhớ & Tri Thức",
+      "orchestration": "Điều Phối"
+    },
     "features": {
       "pipeline": {
         "title": "Pipeline",
@@ -178,7 +183,21 @@
     "skills": "Kỹ năng",
     "evolution": { "title": "Tiến hóa" },
     "capabilities": "Khả năng",
-    "llmSeesAs": "LLM nhìn thấy đây là"
+    "llmSeesAs": "LLM nhìn thấy đây là",
+    "engine": {
+      "title": "Phiên Bản Engine",
+      "learnMore": "Tìm hiểu thêm",
+      "classicLabel": "Cổ Điển",
+      "classicDesc": "Vòng lặp agent đã kiểm chứng với thực thi đơn lượt",
+      "nextGenLabel": "Thế Hệ Mới",
+      "nextGenDesc": "Pipeline 8 giai đoạn với bộ nhớ, truy xuất và điều phối",
+      "pipelineTitle": "Pipeline",
+      "pipelineHint": "Vòng lặp thực thi 8 giai đoạn có cấu trúc",
+      "memoryTitle": "Bộ Nhớ",
+      "memoryHint": "Bộ nhớ episodic + tự động chèn L0",
+      "retrievalTitle": "Truy Xuất",
+      "retrievalHint": "Tải tri thức tiến dần L0/L1/L2"
+    }
   },
   "general": {
     "selfEvolution": "Tự tiến hóa",

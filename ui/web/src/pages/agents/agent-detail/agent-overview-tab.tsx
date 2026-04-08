@@ -8,7 +8,7 @@ import { PersonalitySection } from "./overview-sections/personality-section";
 import { ModelBudgetSection } from "./overview-sections/model-budget-section";
 import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
-import { V3SettingsSection } from "./overview-sections/v3-settings-section";
+import { EngineVersionSection } from "./overview-sections/engine-version-section";
 import { OrchestrationSection } from "./overview-sections/orchestration-section";
 import { CapabilitiesSection } from "./overview-sections/capabilities-section";
 import { ChatGPTOAuthRoutingSummarySection } from "./overview-sections/chatgpt-oauth-routing-summary-section";
@@ -150,7 +150,7 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
         />
       )}
 
-      <V3SettingsSection agentId={agent.id} />
+      <EngineVersionSection agentId={agent.id} />
 
       {/* Memory — always visible, per-agent overrides */}
       <MemorySection

@@ -33,5 +33,17 @@ export function useV3Flags(agentId: string) {
     [http, agentId, queryClient],
   );
 
-  return { flags: flags ?? null, loading: isLoading, toggleFlag };
+  const batchUpdate = useCallback(
+    async (updates: Partial<V3Flags>) => {
+      try {
+        await http.patch(`/v1/agents/${agentId}/v3-flags`, updates);
+        queryClient.invalidateQueries({ queryKey: queryKeys.v3Flags.detail(agentId) });
+      } catch {
+        toast.error("Failed to update flags");
+      }
+    },
+    [http, agentId, queryClient],
+  );
+
+  return { flags: flags ?? null, loading: isLoading, toggleFlag, batchUpdate };
 }

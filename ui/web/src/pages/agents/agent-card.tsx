@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { AgentData } from "@/types/agent";
 import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
 import { useAgentVersion } from "./hooks/use-agent-version";
-import { AgentV3InfoModal } from "./agent-v3-info-modal";
+import { V3InfoModal } from "@/components/agents/v3-info-modal/v3-info-modal";
 
 interface AgentCardProps {
   agent: AgentData;
@@ -86,7 +86,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
             <Badge
               variant="outline"
               className={`text-[11px] cursor-pointer ${version === "v3" ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" : ""}`}
-              onClick={(e) => { e.stopPropagation(); if (version === "v2") setV3InfoOpen(true); }}
+              onClick={(e) => { e.stopPropagation(); setV3InfoOpen(true); }}
             >
               {version}
             </Badge>
@@ -152,7 +152,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           </Button>
         )}
       </div>
-      <AgentV3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
+      <V3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
     </button>
   );
 }

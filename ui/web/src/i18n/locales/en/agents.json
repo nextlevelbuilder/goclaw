@@ -57,6 +57,11 @@
   "v3Info": {
     "title": "What's New in v3",
     "subtitle": "Major improvements over v2 architecture",
+    "tabs": {
+      "core": "Core Engine",
+      "memory": "Memory & Knowledge",
+      "orchestration": "Orchestration"
+    },
     "features": {
       "pipeline": {
         "title": "Pipeline",
@@ -189,6 +194,20 @@
       "memoryHint": "Enable episodic memory and L0 auto-injection",
       "retrieval": "V3 Retrieval",
       "retrievalHint": "Enable new retrieval pipeline"
+    },
+    "engine": {
+      "title": "Engine Version",
+      "learnMore": "Learn more",
+      "classicLabel": "Classic",
+      "classicDesc": "Proven agent loop with single-pass execution",
+      "nextGenLabel": "Next-Gen",
+      "nextGenDesc": "8-stage pipeline with memory, retrieval, and orchestration",
+      "pipelineTitle": "Pipeline",
+      "pipelineHint": "8-stage structured execution loop",
+      "memoryTitle": "Memory",
+      "memoryHint": "Episodic memory + L0 auto-injection",
+      "retrievalTitle": "Retrieval",
+      "retrievalHint": "Progressive L0/L1/L2 knowledge loading"
     },
     "orchestration": {
       "title": "Orchestration",

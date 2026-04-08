@@ -56,6 +56,11 @@
   "v3Info": {
     "title": "v3 新特性",
     "subtitle": "相比 v2 架构的重大改进",
+    "tabs": {
+      "core": "核心引擎",
+      "memory": "记忆与知识",
+      "orchestration": "编排"
+    },
     "features": {
       "pipeline": {
         "title": "流水线",
@@ -178,7 +183,21 @@
     "skills": "技能",
     "evolution": { "title": "进化" },
     "capabilities": "能力",
-    "llmSeesAs": "LLM会看到这个为"
+    "llmSeesAs": "LLM会看到这个为",
+    "engine": {
+      "title": "引擎版本",
+      "learnMore": "了解更多",
+      "classicLabel": "经典",
+      "classicDesc": "经过验证的单次执行 Agent 循环",
+      "nextGenLabel": "新一代",
+      "nextGenDesc": "8阶段流水线，支持记忆、检索和编排",
+      "pipelineTitle": "流水线",
+      "pipelineHint": "8阶段结构化执行循环",
+      "memoryTitle": "记忆",
+      "memoryHint": "情景记忆 + L0自动注入",
+      "retrievalTitle": "检索",
+      "retrievalHint": "L0/L1/L2渐进式知识加载"
+    }
   },
   "general": {
     "selfEvolution": "自我进化",

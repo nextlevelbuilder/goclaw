@@ -10,7 +10,7 @@ import { useCountdown } from "@/hooks/use-countdown";
 import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting } from "./agent-display-utils";
 import { cn } from "@/lib/utils";
 import { useAgentVersion } from "../hooks/use-agent-version";
-import { AgentV3InfoModal } from "../agent-v3-info-modal";
+import { V3InfoModal } from "@/components/agents/v3-info-modal/v3-info-modal";
 
 interface AgentHeaderProps {
   agent: AgentData;
@@ -155,7 +155,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
           <span className="hidden sm:inline">{t("delete.title")}</span>
         </Button>
       </div>
-      <AgentV3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
+      <V3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
     </TooltipProvider>
   );
 }
