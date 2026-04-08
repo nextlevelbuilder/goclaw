@@ -53,7 +53,7 @@ func (r *ToolFailureRule) Evaluate(_ context.Context, _ uuid.UUID, input Analysi
 			return &store.EvolutionSuggestion{
 				SuggestionType: store.SuggestToolOrder,
 				Suggestion:     fmt.Sprintf("Tool %q has %.0f%% failure rate — consider disabling or fixing", agg.ToolName, (1-agg.SuccessRate)*100),
-				Rationale:      fmt.Sprintf("%d calls, %.1f%% success rate, avg %dms", agg.CallCount, agg.SuccessRate*100, agg.AvgDuration.Milliseconds()),
+				Rationale:      fmt.Sprintf("%d calls, %.1f%% success rate, avg %.0fms", agg.CallCount, agg.SuccessRate*100, agg.AvgDurationMs),
 				Parameters:     marshalParams(map[string]any{"tool": agg.ToolName, "success_rate": agg.SuccessRate, "call_count": agg.CallCount}),
 			}, nil
 		}

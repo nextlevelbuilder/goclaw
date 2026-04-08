@@ -84,7 +84,7 @@ func (s *PGEvolutionMetricsStore) AggregateToolMetrics(ctx context.Context, agen
 		if err := rows.Scan(&a.ToolName, &a.CallCount, &a.SuccessRate, &avgMs); err != nil {
 			return nil, err
 		}
-		a.AvgDuration = time.Duration(avgMs) * time.Millisecond
+		a.AvgDurationMs = avgMs
 		aggs = append(aggs, a)
 	}
 	return aggs, rows.Err()

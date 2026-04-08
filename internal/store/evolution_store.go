@@ -31,18 +31,18 @@ type EvolutionMetric struct {
 
 // ToolAggregate summarizes per-tool metrics over a period.
 type ToolAggregate struct {
-	ToolName    string
-	CallCount   int
-	SuccessRate float64
-	AvgDuration time.Duration
+	ToolName      string  `json:"tool_name"`
+	CallCount     int     `json:"call_count"`
+	SuccessRate   float64 `json:"success_rate"`
+	AvgDurationMs float64 `json:"avg_duration_ms"` // milliseconds (not time.Duration — JSON-friendly)
 }
 
 // RetrievalAggregate summarizes per-source retrieval metrics.
 type RetrievalAggregate struct {
-	Source     string
-	QueryCount int
-	UsageRate  float64 // fraction of results used in reply
-	AvgScore   float64
+	Source     string  `json:"source"`
+	QueryCount int    `json:"query_count"`
+	UsageRate  float64 `json:"usage_rate"` // fraction of results used in reply
+	AvgScore   float64 `json:"avg_score"`
 }
 
 // EvolutionMetricsStore manages self-evolution metrics (Stage 1).

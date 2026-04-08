@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -48,7 +47,7 @@ func TestToolFailureRule(t *testing.T) {
 		wantNil bool
 	}{
 		{"below min calls -> skip", []store.ToolAggregate{{CallCount: 19, SuccessRate: 0.05}}, true},
-		{"high failure triggers", []store.ToolAggregate{{ToolName: "broken", CallCount: 30, SuccessRate: 0.05, AvgDuration: time.Second}}, false},
+		{"high failure triggers", []store.ToolAggregate{{ToolName: "broken", CallCount: 30, SuccessRate: 0.05, AvgDurationMs: 1000}}, false},
 		{"normal success no trigger", []store.ToolAggregate{{CallCount: 30, SuccessRate: 0.8}}, true},
 	}
 	for _, tt := range tests {
