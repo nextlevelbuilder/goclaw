@@ -182,8 +182,15 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 }
 
 // WebhookHandler returns the HTTP handler and path for mounting on the gateway mux.
+// DB instances get per-instance paths (e.g. /webhooks/teams/my-bot) to support
+// multi-bot deployments with different Azure Bot registrations.
+// Config-based channel (name == "teams") keeps the default path.
 func (c *Channel) WebhookHandler() (string, http.Handler) {
-	return c.cfg.WebhookPath, http.HandlerFunc(c.handleWebhook)
+	path := c.cfg.WebhookPath
+	if name := c.Name(); name != "" && name != channels.TypeTeams {
+		path = strings.TrimRight(path, "/") + "/" + name
+	}
+	return path, http.HandlerFunc(c.handleWebhook)
 }
 
 // BlockReplyEnabled returns the channel-level block_reply override.
