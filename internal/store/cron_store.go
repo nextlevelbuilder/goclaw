@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrCronJobNotFound    = errors.New("cron job not found")
-	ErrCronJobNoFutureRun = errors.New("cron job has no future run")
+	ErrCronJobNotFound      = errors.New("cron job not found")
+	ErrCronJobNoFutureRun   = errors.New("cron job has no future run")
+	ErrCronJobDuplicateName = errors.New("an active cron job with this name already exists")
 )
 
 // CronJob represents a scheduled job.

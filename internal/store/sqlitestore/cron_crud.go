@@ -77,6 +77,12 @@ func (s *SQLiteCronStore) AddJob(ctx context.Context, name string, schedule stor
 		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
 	)
 	if err != nil {
+		// Handle unique constraint violation (race condition with concurrent tool calls).
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") || strings.Contains(err.Error(), "idx_cron_jobs_unique_active_name") {
+			if existing := s.findJobByName(ctx, name, agentID, userID); existing != nil {
+				return existing, nil
+			}
+		}
 		return nil, fmt.Errorf("create cron job: %w", err)
 	}
 
@@ -426,10 +432,24 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 
 	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return store.ErrCronJobDuplicateName
+		}
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return store.ErrCronJobNotFound
+	}
+	return nil
+}
+
+// findJobByName returns the first enabled job matching name for the given agent+user scope.
+func (s *SQLiteCronStore) findJobByName(ctx context.Context, name, agentID, userID string) *store.CronJob {
+	jobs := s.ListJobs(ctx, false, agentID, userID)
+	for _, j := range jobs {
+		if j.Name == name {
+			return &j
+		}
 	}
 	return nil
 }

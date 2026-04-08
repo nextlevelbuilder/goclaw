@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -212,6 +213,10 @@ func execCronJobUpdateTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, updates 
 
 	res, err := tx.ExecContext(ctx, q, args...)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_cron_jobs_unique_active_name" {
+			return store.ErrCronJobDuplicateName
+		}
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {

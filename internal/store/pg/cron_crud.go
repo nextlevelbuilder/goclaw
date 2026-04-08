@@ -3,11 +3,13 @@ package pg
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -74,6 +76,13 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
 	)
 	if err != nil {
+		// Unique constraint violation (race condition) — return existing job instead of error.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "idx_cron_jobs_unique_active_name" {
+			if existing := s.findJobByName(ctx, name, agentID, userID); existing != nil {
+				return existing, nil
+			}
+		}
 		return nil, fmt.Errorf("create cron job: %w", err)
 	}
 
@@ -216,5 +225,16 @@ func (s *PGCronStore) EnableJob(ctx context.Context, jobID string, enabled bool)
 	}
 
 	s.InvalidateCache()
+	return nil
+}
+
+// findJobByName returns the first enabled job matching name for the given agent+user scope.
+func (s *PGCronStore) findJobByName(ctx context.Context, name, agentID, userID string) *store.CronJob {
+	jobs := s.ListJobs(ctx, false, agentID, userID)
+	for _, j := range jobs {
+		if j.Name == name {
+			return &j
+		}
+	}
 	return nil
 }

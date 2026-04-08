@@ -211,6 +211,19 @@ func (t *CronTool) handleAdd(ctx context.Context, args map[string]any, agentID, 
 		return ErrorResult("job.message is required")
 	}
 
+	// Dedup: return existing enabled job with same name for this agent+user.
+	existingJobs := t.cronStore.ListJobs(ctx, false, agentID, userID)
+	for _, ej := range existingJobs {
+		if ej.Name == name {
+			data, _ := json.MarshalIndent(map[string]any{
+				"existing": true,
+				"job":      ej,
+				"note":     fmt.Sprintf("cron job %q already exists (id: %s). Use 'update' action to modify it.", name, ej.ID),
+			}, "", "  ")
+			return NewResult(string(data))
+		}
+	}
+
 	// Parse schedule
 	schedule := store.CronSchedule{
 		Kind: stringFromMap(scheduleObj, "kind"),
