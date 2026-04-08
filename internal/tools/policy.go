@@ -53,6 +53,16 @@ func UnregisterToolGroup(name string) {
 	toolGroupsMu.Unlock()
 }
 
+// HasMCPGroup returns true if any MCP tools are registered (config or DB-backed).
+// Used by the agent resolver to inject "group:mcp" into AlsoAllow even when
+// there are no per-agent DB grants (i.e. config-based MCP servers only).
+func HasMCPGroup() bool {
+	toolGroupsMu.RLock()
+	defer toolGroupsMu.RUnlock()
+	members, ok := toolGroups["mcp"]
+	return ok && len(members) > 0
+}
+
 // Tool profiles define preset allow sets.
 var toolProfiles = map[string][]string{
 	"minimal":   {"session_status"},

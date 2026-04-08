@@ -266,7 +266,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// cross-agent tool leaks. Without cloning, MCP BridgeTools registered for
 		// one agent pollute the shared deps. Tools and become visible to ALL agents
 		// (even those without MCP grants), because FilterTools reads from registry.List().
-		hasMCPTools := false
+		hasMCPTools := tools.HasMCPGroup() // config-based MCP servers already registered globally
 		var mcpUserCredSrvs []store.MCPAccessInfo
 		if deps.MCPStore != nil {
 			if toolsReg == deps.Tools {

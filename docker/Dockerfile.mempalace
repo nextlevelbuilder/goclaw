@@ -1,0 +1,32 @@
+# MemPalace MCP sidecar — runs the MemPalace MCP server as an SSE endpoint.
+#
+# MemPalace depends on ChromaDB which requires native C/Rust extensions.
+# Alpine (musl) cannot build these, so this sidecar uses Debian-slim (glibc)
+# and exposes the stdio MCP server as SSE via supergateway.
+#
+# GoClaw connects to this sidecar via SSE transport on the Docker network.
+
+FROM python:3.12-slim
+
+# Install mempalace + supergateway (stdio→SSE bridge)
+RUN pip install --no-cache-dir mempalace && \
+    apt-get update && apt-get install -y --no-install-recommends nodejs npm wget && \
+    npm install -g supergateway && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /root/.cache
+
+RUN useradd -m -u 1000 mempalace
+USER mempalace
+
+RUN mkdir -p /home/mempalace/.mempalace/palace
+
+ENV MEMPALACE_PALACE_PATH=/home/mempalace/.mempalace/palace
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q --spider http://localhost:8000/healthz 2>/dev/null || exit 1
+
+# supergateway wraps the stdio MCP server into a streamable-http endpoint
+# --healthEndpoint provides a simple health check without opening an MCP session
+CMD ["supergateway", "--stdio", "python -m mempalace.mcp_server", "--port", "8000", "--outputTransport", "streamableHttp", "--healthEndpoint", "/healthz"]

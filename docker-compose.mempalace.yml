@@ -1,0 +1,64 @@
+# MemPalace overlay — adds AI memory palace with 19 MCP tools.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
+#     -f docker-compose.mempalace.yml up -d --build
+#
+# Or with Makefile:
+#   make up WITH_MEMPALACE=1
+#
+# MemPalace runs as a sidecar container (Debian-based, for ChromaDB compatibility)
+# and exposes its 19 MCP tools via SSE. GoClaw auto-connects on startup.
+#
+# Tools available to agents after enabling:
+#   mempalace__status, mempalace__search, mempalace__add_drawer,
+#   mempalace__list_wings, mempalace__list_rooms, mempalace__get_taxonomy,
+#   mempalace__check_duplicate, mempalace__delete_drawer,
+#   mempalace__kg_query, mempalace__kg_add, mempalace__kg_invalidate,
+#   mempalace__kg_timeline, mempalace__kg_stats,
+#   mempalace__traverse, mempalace__find_tunnels, mempalace__graph_stats,
+#   mempalace__get_aaak_spec, mempalace__diary_write, mempalace__diary_read
+#
+# All local, zero API calls. See docs/25-mempalace-integration.md for details.
+
+services:
+  mempalace:
+    build:
+      context: ${GOCLAW_DIR:-.}
+      dockerfile: docker/Dockerfile.mempalace
+    volumes:
+      - mempalace-data:/home/mempalace/.mempalace
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/healthz 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - goclaw-net
+    restart: unless-stopped
+
+  goclaw:
+    volumes:
+      # Mount init script for MCP config injection
+      - ./scripts/mempalace-init.sh:/app/scripts/mempalace-init.sh:ro
+    environment:
+      - MEMPALACE_SSE_URL=http://mempalace:8000/mcp
+    # Run init script to inject MCP config, then start normally.
+    # su-exec drops to goclaw user so config.json ownership is preserved.
+    entrypoint: ["/bin/sh", "-c", "su-exec goclaw sh /app/scripts/mempalace-init.sh; exec /app/docker-entrypoint.sh \"$@\"", "--"]
+    depends_on:
+      mempalace:
+        condition: service_healthy
+
+volumes:
+  mempalace-data:
