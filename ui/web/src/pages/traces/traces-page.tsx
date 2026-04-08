@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, GitFork, RefreshCw, Square, Bot, User, Users, Clock, Network, Globe, CheckCircle2, XCircle, Loader2, CircleDot, CircleDashed } from "lucide-react";
+import { Activity, GitFork, RefreshCw, Square, Bot, User, Users, Clock, Network, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -19,6 +19,7 @@ import { formatUserLabel } from "@/lib/format-user-label";
 import { useContactResolver } from "@/hooks/use-contact-resolver";
 import { useTraces, type TraceData } from "./hooks/use-traces";
 import { TraceDetailDialog } from "./trace-detail-dialog";
+import { StatusBadge } from "./trace-span-tree-node";
 import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useUiStore } from "@/stores/use-ui-store";
@@ -174,14 +175,14 @@ export function TracesPage() {
           />
         ) : (
           <div className="rounded-md border overflow-x-auto">
-            <table className="w-full min-w-[600px] text-sm">
+            <table className="w-full min-w-[700px] text-sm table-fixed">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left font-medium max-w-[40%]">{t("columns.name")}</th>
-                  <th className="px-3 py-3 text-center font-medium w-10"></th>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">{t("columns.tokens")}</th>
-                  <th className="px-4 py-3 text-center font-medium whitespace-nowrap">{t("columns.spans")}</th>
-                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">{t("columns.time")}</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("columns.name")}</th>
+                  <th className="px-4 py-3 text-center font-medium w-24 whitespace-nowrap">{t("columns.status")}</th>
+                  <th className="px-4 py-3 text-right font-medium w-28 whitespace-nowrap">{t("columns.tokens")}</th>
+                  <th className="px-4 py-3 text-center font-medium w-16 whitespace-nowrap">{t("columns.spans")}</th>
+                  <th className="px-4 py-3 text-right font-medium w-36 whitespace-nowrap">{t("columns.time")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,7 +198,7 @@ export function TracesPage() {
                       className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
                       onClick={() => setSelectedTraceId(trace.id)}
                     >
-                      <td className="px-4 py-2.5 max-w-[300px] lg:max-w-[400px]">
+                      <td className="px-4 py-2.5 overflow-hidden">
                         <div className="flex items-center gap-1.5 text-sm font-medium min-w-0">
                           {trace.parent_trace_id && (
                             <GitFork className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -210,7 +211,7 @@ export function TracesPage() {
                             </>
                           )}
                         </div>
-                        <div className="mt-0.5 flex items-center gap-1">
+                        <div className="mt-0.5 flex items-center gap-1 min-w-0 overflow-hidden">
                           <Badge variant="outline" className="shrink-0 gap-0.5 text-[10px] px-1.5 py-0">
                             <SourceIcon className="h-2.5 w-2.5" />
                             {t(`source.${source.type}`)}
@@ -228,9 +229,9 @@ export function TracesPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-4 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <StatusIcon status={trace.status} />
+                          <StatusBadge status={trace.status} />
                           {(trace.status === "running") && (
                             <Button
                               variant="destructive"
@@ -287,20 +288,4 @@ export function TracesPage() {
       )}
     </div>
   );
-}
-
-function StatusIcon({ status }: { status: string }) {
-  if (status === "ok" || status === "success" || status === "completed") {
-    return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-  }
-  if (status === "error" || status === "failed") {
-    return <XCircle className="h-4 w-4 text-destructive" />;
-  }
-  if (status === "running") {
-    return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />;
-  }
-  if (status === "pending") {
-    return <CircleDashed className="h-4 w-4 text-muted-foreground" />;
-  }
-  return <CircleDot className="h-4 w-4 text-muted-foreground" />;
 }

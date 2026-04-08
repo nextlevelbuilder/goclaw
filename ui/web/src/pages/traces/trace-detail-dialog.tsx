@@ -75,7 +75,7 @@ export function TraceDetailDialog({ traceId, onClose, getTrace, onNavigateTrace,
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-h-[85vh] w-[95vw] flex flex-col sm:max-w-6xl">
+      <DialogContent className="max-h-[85vh] w-[95vw] flex flex-col sm:max-w-6xl" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 pr-8">
             {t("detail.title")}
