@@ -429,6 +429,9 @@ func (h *StorageHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Invalidate cached size for this tenant after successful deletion.
+	h.sizeCache.Delete(delBase)
+
 	slog.Info("storage.deleted", "path", relPath)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
@@ -630,6 +633,9 @@ func (h *StorageHandler) handleMove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "failed to move file")})
 		return
 	}
+
+	// Invalidate cached size for this tenant after successful move.
+	h.sizeCache.Delete(base)
 
 	slog.Info("storage.moved", "from", fromRel, "to", toRel)
 	writeJSON(w, http.StatusOK, map[string]any{

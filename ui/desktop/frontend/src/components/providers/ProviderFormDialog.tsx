@@ -23,6 +23,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider, onSubmit }: P
   const { register, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<ProviderFormData>({
     resolver: zodResolver(providerFormSchema),
     mode: 'onChange',
+    defaultValues: { providerType: '', displayName: '', apiBase: '', apiKey: '', enabled: true },
   })
 
   // Reset form when dialog opens

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -20,7 +22,7 @@ func ExportTeamByID(ctx context.Context, db *sql.DB, teamID uuid.UUID) (*TeamExp
 			" FROM agent_teams WHERE id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	).Scan(&t.Name, &t.Description, &t.Status, &t.Settings)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -38,25 +40,34 @@ func GetTeamMemberAgents(ctx context.Context, db *sql.DB, teamID uuid.UUID) ([]s
 	if err != nil {
 		return nil, err
 	}
-	var rows []teamMemberAgentRow
-	if err := pkgSqlxDB.SelectContext(ctx, &rows,
+	rows, err := db.QueryContext(ctx,
 		"SELECT a.id, a.agent_key"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
-	out := make([]struct {
+	defer rows.Close()
+
+	var out []struct {
 		ID       uuid.UUID
 		AgentKey string
-	}, len(rows))
-	for i, r := range rows {
-		out[i].ID = r.ID
-		out[i].AgentKey = r.AgentKey
 	}
-	return out, nil
+	for rows.Next() {
+		var item struct {
+			ID       uuid.UUID
+			AgentKey string
+		}
+		if err := rows.Scan(&item.ID, &item.AgentKey); err != nil {
+			slog.Warn("export.team.member_agents.scan", "error", err)
+			continue
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
 }
 
 // ExportTeamLinksForTeam returns agent_links where both source and target are members of the team.
@@ -65,9 +76,8 @@ func ExportTeamLinksForTeam(ctx context.Context, db *sql.DB, teamID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	var out []AgentLinkExport
-	err = pkgSqlxDB.SelectContext(ctx, &out,
-		"SELECT sa.agent_key AS source_agent_key, ta.agent_key AS target_agent_key, l.direction, COALESCE(l.description,'') AS description"+
+	rows, err := db.QueryContext(ctx,
+		"SELECT sa.agent_key, ta.agent_key, l.direction, COALESCE(l.description,'')"+
 			" FROM agent_links l"+
 			" JOIN agents sa ON sa.id = l.source_agent_id"+
 			" JOIN agents ta ON ta.id = l.target_agent_id"+
@@ -75,7 +85,21 @@ func ExportTeamLinksForTeam(ctx context.Context, db *sql.DB, teamID uuid.UUID) (
 			" AND l.target_agent_id IN (SELECT agent_id FROM agent_team_members WHERE team_id = $1)"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	)
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AgentLinkExport
+	for rows.Next() {
+		var l AgentLinkExport
+		if err := rows.Scan(&l.SourceAgentKey, &l.TargetAgentKey, &l.Direction, &l.Description); err != nil {
+			slog.Warn("export.team.links.scan", "error", err)
+			continue
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }
 
 // ExportTeamPreviewCountsByID returns task/member/link counts for a team by team_id.
@@ -104,15 +128,28 @@ func ExportTeamMembersNonLead(ctx context.Context, db *sql.DB, teamID uuid.UUID,
 	if err != nil {
 		return nil, err
 	}
-	var out []TeamMemberExport
-	err = pkgSqlxDB.SelectContext(ctx, &out,
+	rows, err := db.QueryContext(ctx,
 		"SELECT a.agent_key, m.role"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1 AND m.agent_id != $2"+tc,
 		append([]any{teamID, leadAgentID}, tcArgs...)...,
 	)
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []TeamMemberExport
+	for rows.Next() {
+		var m TeamMemberExport
+		if err := rows.Scan(&m.AgentKey, &m.Role); err != nil {
+			slog.Warn("export.team.members_non_lead.scan", "error", err)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // ExportTeamLeadAgentID returns the lead agent_id for a team, or uuid.Nil if not found.
@@ -126,7 +163,7 @@ func ExportTeamLeadAgentID(ctx context.Context, db *sql.DB, teamID uuid.UUID) (u
 		"SELECT lead_agent_id FROM agent_teams WHERE id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	).Scan(&leadID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return uuid.Nil, nil
 	}
 	return leadID, err
@@ -143,7 +180,7 @@ func ExportTeamAgentBasicInfo(ctx context.Context, db *sql.DB, agentID uuid.UUID
 		"SELECT agent_key FROM agents WHERE id = $1"+tc,
 		append([]any{agentID}, tcArgs...)...,
 	).Scan(&agentKey)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return agentKey, err
@@ -155,15 +192,28 @@ func ExportTeamMembersAll(ctx context.Context, db *sql.DB, teamID uuid.UUID) ([]
 	if err != nil {
 		return nil, err
 	}
-	var out []TeamMemberExport
-	err = pkgSqlxDB.SelectContext(ctx, &out,
+	rows, err := db.QueryContext(ctx,
 		"SELECT a.agent_key, m.role"+
 			" FROM agent_team_members m"+
 			" JOIN agents a ON a.id = m.agent_id"+
 			" WHERE m.team_id = $1"+tc,
 		append([]any{teamID}, tcArgs...)...,
 	)
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []TeamMemberExport
+	for rows.Next() {
+		var m TeamMemberExport
+		if err := rows.Scan(&m.AgentKey, &m.Role); err != nil {
+			slog.Warn("export.team.all_members.scan", "error", err)
+			continue
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // exportTeamAgentFullData returns a fully-serializable agent config for team export.

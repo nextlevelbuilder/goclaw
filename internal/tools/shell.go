@@ -31,30 +31,31 @@ func DefaultDenyPatterns() []*regexp.Regexp {
 
 // ExecTool executes shell commands, optionally inside a sandbox container.
 type ExecTool struct {
-	workspace       string
+	workspace        string
 	timeout          time.Duration
-	pathDenyPatterns []*regexp.Regexp     // always-on path-based denials (DenyPaths)
-	denyExemptions   []string             // substrings that exempt a command from deny
+	pathDenyPatterns []*regexp.Regexp // always-on path-based denials (DenyPaths)
+	pathDenyRoots    []string         // raw deny roots for nested workspace exemptions
+	denyExemptions   []string         // substrings that exempt a command from deny
 	restrict         bool
 	sandboxMgr       sandbox.Manager      // nil = no sandbox, execute on host
 	approvalMgr      *ExecApprovalManager // nil = no approval needed
 	agentID          string               // for approval request context
-	secureCLIStore   store.SecureCLIStore  // nil = no credentialed exec
+	secureCLIStore   store.SecureCLIStore // nil = no credentialed exec
 }
 
 // NewExecTool creates an exec tool that runs commands directly on the host.
 func NewExecTool(workspace string, restrict bool) *ExecTool {
 	return &ExecTool{
 		workspace: workspace,
-		timeout:    60 * time.Second,
-		restrict:   restrict,
+		timeout:   60 * time.Second,
+		restrict:  restrict,
 	}
 }
 
 // NewSandboxedExecTool creates an exec tool that routes commands through a sandbox container.
 func NewSandboxedExecTool(workspace string, restrict bool, mgr sandbox.Manager) *ExecTool {
 	return &ExecTool{
-		workspace: workspace,
+		workspace:  workspace,
 		timeout:    300 * time.Second, // sandbox allows longer timeout
 		restrict:   restrict,
 		sandboxMgr: mgr,
@@ -70,6 +71,7 @@ func (t *ExecTool) DenyPaths(paths ...string) {
 	for _, p := range paths {
 		escaped := regexp.QuoteMeta(p)
 		t.pathDenyPatterns = append(t.pathDenyPatterns, regexp.MustCompile(escaped))
+		t.pathDenyRoots = append(t.pathDenyRoots, p)
 	}
 }
 
@@ -155,8 +157,15 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	allPatterns := make([]*regexp.Regexp, 0, len(groupPatterns)+len(t.pathDenyPatterns))
 	allPatterns = append(allPatterns, groupPatterns...)
 	allPatterns = append(allPatterns, t.pathDenyPatterns...)
+	exemptions := append([]string{}, t.denyExemptions...)
+	exemptions = append(exemptions, t.dynamicPathExemptions(ctx)...)
 
 	// Check for dangerous commands (applies to both host and sandbox).
+	wordFields := parseExecCommandWords(normalizedCommand)
+	pathBaseDir := ToolWorkspaceFromCtx(ctx)
+	if pathBaseDir == "" {
+		pathBaseDir = t.workspace
+	}
 	for _, pattern := range allPatterns {
 		if pattern.MatchString(normalizedCommand) {
 			// Check if exemption applies. Only exempt if EVERY field that
@@ -167,23 +176,20 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 			// path traversal ("..") to prevent exemption escape.
 			exempt := false
 			trimmed := strings.TrimSpace(normalizedCommand)
-			fields := strings.Fields(trimmed)
+			fields := wordFields
+			if len(fields) == 0 {
+				fields = strings.Fields(trimmed)
+			}
 			matchingFields := 0
 			exemptFields := 0
 			for _, field := range fields {
-				clean := strings.Trim(field, `"'`)
+				clean := strings.TrimSpace(field)
 				if !pattern.MatchString(clean) {
 					continue // field doesn't trigger this deny pattern
 				}
 				matchingFields++
-				if strings.Contains(clean, "..") {
-					continue // path traversal — never exempt
-				}
-				for _, ex := range t.denyExemptions {
-					if strings.HasPrefix(clean, ex) {
-						exemptFields++
-						break
-					}
+				if matchesAnyPathExemption(clean, exemptions, pathBaseDir) {
+					exemptFields++
 				}
 			}
 			// Exempt only if at least one field matched AND all matched fields are exempt.
@@ -328,7 +334,7 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 	}
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return ErrorResult(fmt.Sprintf("command timed out after %s", t.timeout))
 		}
 		if result == "" {

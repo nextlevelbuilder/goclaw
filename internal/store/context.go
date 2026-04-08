@@ -39,6 +39,9 @@ const (
 	TenantSlugKey contextKey = "goclaw_tenant_slug"
 	// RoleKey is the context key for the caller's permission role (e.g. "admin", "operator", "viewer").
 	RoleKey contextKey = "goclaw_role"
+	// CredentialUserIDKey holds the resolved tenant user identity for credential lookups.
+	// Falls back to UserIDFromContext if not set.
+	CredentialUserIDKey contextKey = "goclaw_credential_user_id"
 )
 
 // WithShellDenyGroups returns a new context with shell deny group overrides.
@@ -71,6 +74,23 @@ func UserIDFromContext(ctx context.Context) string {
 		return rc.UserID
 	}
 	return ""
+}
+
+// WithCredentialUserID returns a new context with the resolved tenant user identity for credential lookups.
+func WithCredentialUserID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, CredentialUserIDKey, id)
+}
+
+// CredentialUserIDFromContext returns the resolved identity for credential lookups.
+// Falls back to RunContext.CredentialUserID, then UserIDFromContext.
+func CredentialUserIDFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(CredentialUserIDKey).(string); ok && v != "" {
+		return v
+	}
+	if rc := RunContextFromCtx(ctx); rc != nil && rc.CredentialUserID != "" {
+		return rc.CredentialUserID
+	}
+	return UserIDFromContext(ctx)
 }
 
 // WithAgentID returns a new context with the given agent UUID.

@@ -25,6 +25,7 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
   const { register, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<AgentFormData>({
     resolver: zodResolver(agentFormSchema),
     mode: 'onChange',
+    defaultValues: { displayName: '', emoji: '🦊', agentKey: '', providerName: '', model: '', description: '', isDefault: false },
   })
 
   // UI-only state (not form data)

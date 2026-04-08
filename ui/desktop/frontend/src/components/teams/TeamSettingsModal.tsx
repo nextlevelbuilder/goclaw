@@ -35,6 +35,7 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
   const { watch, setValue, reset, handleSubmit, formState: { isSubmitting } } = useForm<TeamSettingsFormData>({
     resolver: zodResolver(teamSettingsSchema),
     mode: 'onChange',
+    defaultValues: { name: '', description: '', notify: { dispatched: true, progress: true, failed: true, completed: true, new_task: true }, notifyMode: 'direct' },
   })
 
   useEffect(() => {

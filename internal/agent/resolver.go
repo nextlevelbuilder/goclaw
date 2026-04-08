@@ -97,6 +97,9 @@ type ResolverDeps struct {
 	// V3 evolution metrics store
 	EvolutionMetricsStore store.EvolutionMetricsStore
 
+	// Contact store for user identity resolution (channel contacts → tenant users)
+	ContactStore store.ContactStore
+
 	// Tenant store for workspace path resolution
 	TenantStore store.TenantStore
 
@@ -465,6 +468,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			OrchMode:               orchMode,
 			DelegateTargets:        delegateTargets,
 			EvolutionMetricsStore:  evoMetricsStore,
+			UserResolver:           newContactResolver(deps.ContactStore),
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)

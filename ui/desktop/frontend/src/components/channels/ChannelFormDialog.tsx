@@ -25,6 +25,7 @@ export function ChannelFormDialog({ open, onOpenChange, agents, telegramExists, 
   const { handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<ChannelFormData>({
     resolver: zodResolver(channelFormSchema),
     mode: 'onChange',
+    defaultValues: { displayName: '', channelType: '', agentId: '', enabled: true, credentials: {} },
   })
 
   const channelType = watch('channelType')

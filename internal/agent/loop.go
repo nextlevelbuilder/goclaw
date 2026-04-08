@@ -228,8 +228,9 @@ func (l *Loop) runLoop(ctx context.Context, req RunRequest) (result *RunResult, 
 		var allowedTools map[string]bool
 		// Resolve per-user MCP tools (servers requiring user credentials).
 		// Must run before buildFilteredTools so tools are in the Registry for policy filtering.
-		if req.UserID != "" {
-			l.getUserMCPTools(iterCtx, req.UserID)
+		// Uses resolved credential user ID so merged tenant users get correct MCP creds.
+		if mcpUserID := store.CredentialUserIDFromContext(iterCtx); mcpUserID != "" {
+			l.getUserMCPTools(iterCtx, mcpUserID)
 		}
 		toolDefs, allowedTools, messages = l.buildFilteredTools(&req, hadBootstrap, rs.iteration, maxIter, messages)
 

@@ -200,6 +200,9 @@ type Loop struct {
 
 	// v3 evolution metrics store (nil = disabled)
 	evolutionMetricsStore store.EvolutionMetricsStore
+
+	// User identity resolver: maps channel contacts to merged tenant users for credential lookups.
+	userResolver UserIdentityResolver
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -351,6 +354,9 @@ type LoopConfig struct {
 
 	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
 	EvolutionMetricsStore store.EvolutionMetricsStore
+
+	// User identity resolver for credential lookups (maps channel contacts → tenant users)
+	UserResolver UserIdentityResolver
 }
 
 const defaultMaxTokens = config.DefaultMaxTokens
@@ -457,6 +463,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		orchMode:               cfg.OrchMode,
 		delegateTargets:        cfg.DelegateTargets,
 		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
+		userResolver:           cfg.UserResolver,
 	}
 }
 

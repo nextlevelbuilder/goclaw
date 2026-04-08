@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -71,7 +72,7 @@ func TestStreamChat_CancelledContext(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from cancelled context, got nil")
 	}
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		// Accept either context.Canceled or context.DeadlineExceeded; the HTTP
 		// layer may wrap the error, so we check ctx.Err() as fallback.
 		if ctx.Err() == nil {

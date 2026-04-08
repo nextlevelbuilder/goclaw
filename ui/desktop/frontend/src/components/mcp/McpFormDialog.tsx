@@ -26,6 +26,7 @@ export function McpFormDialog({ open, onOpenChange, server, onSubmit, onTest }: 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<MCPFormData>({
     resolver: zodResolver(mcpFormSchema),
     mode: 'onChange',
+    defaultValues: { name: '', displayName: '', transport: 'stdio', command: '', args: '', url: '', headers: {}, env: {}, toolPrefix: '', timeoutSec: 30, enabled: true },
   })
 
   // Test connection state (UI-only, not form data)

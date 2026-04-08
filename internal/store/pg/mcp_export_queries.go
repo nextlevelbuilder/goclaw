@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"log/slog"
 
 	"github.com/google/uuid"
 )
@@ -11,32 +13,32 @@ import (
 // MCPServerExport holds portable MCP server metadata.
 // Sensitive fields (api_key, env, headers) are intentionally excluded.
 type MCPServerExport struct {
-	Name        string          `json:"name" db:"name"`
-	DisplayName string          `json:"display_name,omitempty" db:"display_name"`
-	Transport   string          `json:"transport" db:"transport"`
-	Command     string          `json:"command,omitempty" db:"command"`
-	Args        json.RawMessage `json:"args,omitempty" db:"args"`
-	URL         string          `json:"url,omitempty" db:"url"`
-	ToolPrefix  string          `json:"tool_prefix,omitempty" db:"tool_prefix"`
-	TimeoutSec  int             `json:"timeout_sec" db:"timeout_sec"`
-	Settings    json.RawMessage `json:"settings,omitempty" db:"settings"`
-	Enabled     bool            `json:"enabled" db:"enabled"`
+	Name        string          `json:"name"`
+	DisplayName string          `json:"display_name,omitempty"`
+	Transport   string          `json:"transport"`
+	Command     string          `json:"command,omitempty"`
+	Args        json.RawMessage `json:"args,omitempty"`
+	URL         string          `json:"url,omitempty"`
+	ToolPrefix  string          `json:"tool_prefix,omitempty"`
+	TimeoutSec  int             `json:"timeout_sec"`
+	Settings    json.RawMessage `json:"settings,omitempty"`
+	Enabled     bool            `json:"enabled"`
 }
 
 // MCPGrantWithKey references an MCP agent grant by server_name and agent_key (portable).
 type MCPGrantWithKey struct {
-	ServerName      string          `json:"server_name" db:"server_name"`
-	AgentKey        string          `json:"agent_key" db:"agent_key"`
-	Enabled         bool            `json:"enabled" db:"enabled"`
-	ToolAllow       json.RawMessage `json:"tool_allow,omitempty" db:"tool_allow"`
-	ToolDeny        json.RawMessage `json:"tool_deny,omitempty" db:"tool_deny"`
-	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty" db:"config_overrides"`
+	ServerName      string          `json:"server_name"`
+	AgentKey        string          `json:"agent_key"`
+	Enabled         bool            `json:"enabled"`
+	ToolAllow       json.RawMessage `json:"tool_allow,omitempty"`
+	ToolDeny        json.RawMessage `json:"tool_deny,omitempty"`
+	ConfigOverrides json.RawMessage `json:"config_overrides,omitempty"`
 }
 
 // MCPExportPreview holds lightweight counts for the export preview endpoint.
 type MCPExportPreview struct {
-	Servers     int `json:"servers" db:"servers"`
-	AgentGrants int `json:"agent_grants" db:"agent_grants"`
+	Servers     int `json:"servers"`
+	AgentGrants int `json:"agent_grants"`
 }
 
 // ExportMCPServers returns all MCP servers scoped to the current tenant.
@@ -46,16 +48,43 @@ func ExportMCPServers(ctx context.Context, db *sql.DB) ([]MCPServerExport, error
 	if err != nil {
 		return nil, err
 	}
-	var result []MCPServerExport
-	err = pkgSqlxDB.SelectContext(ctx, &result,
-		"SELECT name, COALESCE(display_name,'') AS display_name, transport,"+
-			" COALESCE(command,'') AS command, args, COALESCE(url,'') AS url,"+
-			" COALESCE(tool_prefix,'') AS tool_prefix, timeout_sec, settings, enabled"+
+	rows, err := db.QueryContext(ctx,
+		"SELECT name, COALESCE(display_name,''), transport,"+
+			" COALESCE(command,''), args, COALESCE(url,''),"+
+			" COALESCE(tool_prefix,''), timeout_sec, settings, enabled"+
 			" FROM mcp_servers WHERE 1=1"+tc+
 			" ORDER BY name",
 		tcArgs...,
 	)
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []MCPServerExport
+	for rows.Next() {
+		var (
+			srv      MCPServerExport
+			argsRaw  []byte
+			settings []byte
+		)
+		if err := rows.Scan(
+			&srv.Name, &srv.DisplayName, &srv.Transport,
+			&srv.Command, &argsRaw, &srv.URL,
+			&srv.ToolPrefix, &srv.TimeoutSec, &settings, &srv.Enabled,
+		); err != nil {
+			slog.Warn("mcp_export.servers.scan", "error", err)
+			continue
+		}
+		if len(argsRaw) > 0 {
+			srv.Args = json.RawMessage(argsRaw)
+		}
+		if len(settings) > 0 {
+			srv.Settings = json.RawMessage(settings)
+		}
+		result = append(result, srv)
+	}
+	return result, rows.Err()
 }
 
 // ExportMCPGrantsWithKeys returns all MCP agent grants with server_name and agent_key resolved.
@@ -64,9 +93,8 @@ func ExportMCPGrantsWithKeys(ctx context.Context, db *sql.DB) ([]MCPGrantWithKey
 	if err != nil {
 		return nil, err
 	}
-	var result []MCPGrantWithKey
-	err = pkgSqlxDB.SelectContext(ctx, &result,
-		"SELECT s.name AS server_name, a.agent_key, g.enabled, g.tool_allow, g.tool_deny, g.config_overrides"+
+	rows, err := db.QueryContext(ctx,
+		"SELECT s.name, a.agent_key, g.enabled, g.tool_allow, g.tool_deny, g.config_overrides"+
 			" FROM mcp_agent_grants g"+
 			" JOIN mcp_servers s ON s.id = g.server_id"+
 			" JOIN agents a ON a.id = g.agent_id"+
@@ -74,7 +102,38 @@ func ExportMCPGrantsWithKeys(ctx context.Context, db *sql.DB) ([]MCPGrantWithKey
 			" ORDER BY s.name, a.agent_key",
 		tcArgs...,
 	)
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []MCPGrantWithKey
+	for rows.Next() {
+		var (
+			g               MCPGrantWithKey
+			toolAllow       []byte
+			toolDeny        []byte
+			configOverrides []byte
+		)
+		if err := rows.Scan(
+			&g.ServerName, &g.AgentKey, &g.Enabled,
+			&toolAllow, &toolDeny, &configOverrides,
+		); err != nil {
+			slog.Warn("mcp_export.grants.scan", "error", err)
+			continue
+		}
+		if len(toolAllow) > 0 {
+			g.ToolAllow = json.RawMessage(toolAllow)
+		}
+		if len(toolDeny) > 0 {
+			g.ToolDeny = json.RawMessage(toolDeny)
+		}
+		if len(configOverrides) > 0 {
+			g.ConfigOverrides = json.RawMessage(configOverrides)
+		}
+		result = append(result, g)
+	}
+	return result, rows.Err()
 }
 
 // ExportMCPPreview returns aggregate counts for MCP export preview.
@@ -118,7 +177,7 @@ func ImportMCPServer(ctx context.Context, db *sql.DB, srv MCPServerExport, creat
 	if err == nil {
 		return existing, false, nil // already exists — return existing ID
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return uuid.Nil, false, err
 	}
 
