@@ -407,7 +407,6 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,
 			IsTeamLead:             isTeamLead,
-			V3PipelineEnabled:     v3f.PipelineEnabled,
 			V3MemoryEnabled:       v3f.MemoryEnabled,
 			V3RetrievalEnabled:    v3f.RetrievalEnabled,
 			AutoInjector:          deps.AutoInjector,

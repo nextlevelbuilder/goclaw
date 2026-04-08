@@ -88,7 +88,6 @@ type Loop struct {
 	sandboxCfg   *sandbox.Config
 
 	// v3 feature flags (from agent other_config JSONB)
-	v3PipelineEnabled  bool
 	v3MemoryEnabled    bool
 	v3RetrievalEnabled bool
 	autoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
@@ -243,7 +242,6 @@ type LoopConfig struct {
 	WorkspaceSharing *store.WorkspaceSharingConfig
 
 	// V3 feature flags (from agent other_config JSONB)
-	V3PipelineEnabled  bool
 	V3MemoryEnabled    bool
 	V3RetrievalEnabled bool
 	AutoInjector       memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
@@ -406,7 +404,6 @@ func NewLoop(cfg LoopConfig) *Loop {
 		workspace:              cfg.Workspace,
 		dataDir:                cfg.DataDir,
 		workspaceSharing:       cfg.WorkspaceSharing,
-		v3PipelineEnabled:      cfg.V3PipelineEnabled,
 		v3MemoryEnabled:        cfg.V3MemoryEnabled,
 		v3RetrievalEnabled:     cfg.V3RetrievalEnabled,
 		autoInjector:           cfg.AutoInjector,

@@ -186,9 +186,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	}
 
 	// V3 workspace: resolve once, set immutable context.
-	// Enabled per-agent via settings JSONB: {"v3_pipeline_enabled": true}
-	// v2 code path above runs unconditionally — v3 adds new context key alongside.
-	if l.v3PipelineEnabled {
+	{
 		var teamIDPtr *string
 		if req.TeamID != "" {
 			teamIDPtr = &req.TeamID
@@ -214,7 +212,7 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 			BaseDir:   l.dataDir,
 		})
 		if wsErr != nil {
-			slog.Warn("v3 workspace resolution failed, falling back to v2", "err", wsErr)
+			slog.Warn("workspace resolution failed", "err", wsErr)
 		} else {
 			ctx = workspace.WithContext(ctx, wc)
 		}
