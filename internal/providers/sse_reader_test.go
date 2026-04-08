@@ -120,3 +120,91 @@ func TestSSEReader_EventTypeTracking(t *testing.T) {
 		t.Errorf("eventType = %q, want content_block_delta", sc.EventType())
 	}
 }
+
+func TestSSEReader_EmptyData(t *testing.T) {
+	input := "data: \n"
+	sc := NewSSEScanner(strings.NewReader(input))
+	if !sc.Next() {
+		t.Fatal("expected Next to return true for empty data")
+	}
+	if sc.Data() != "" {
+		t.Errorf("data = %q, want empty string", sc.Data())
+	}
+}
+
+func TestSSEReader_ScannerError(t *testing.T) {
+	input := "data: valid\n"
+	r := strings.NewReader(input)
+	sc := NewSSEScanner(r)
+	if !sc.Next() {
+		t.Fatal("expected first Next to succeed")
+	}
+	if sc.Data() != "valid" {
+		t.Errorf("data = %q, want \"valid\"", sc.Data())
+	}
+	// After valid data, next call should return false (EOF)
+	if sc.Next() {
+		t.Error("expected Next to return false at EOF")
+	}
+	if sc.Err() != nil {
+		t.Errorf("expected no error at EOF, got: %v", sc.Err())
+	}
+}
+
+func TestSSEReader_EventTypePersistence(t *testing.T) {
+	input := "event: message_start\ndata: line1\ndata: line2\n\nevent: new_event\ndata: line3\n"
+	sc := NewSSEScanner(strings.NewReader(input))
+
+	// First data block: should have event type "message_start"
+	if !sc.Next() {
+		t.Fatal("expected first Next")
+	}
+	if sc.EventType() != "message_start" {
+		t.Errorf("first eventType = %q, want message_start", sc.EventType())
+	}
+	if sc.Data() != "line1" {
+		t.Errorf("first data = %q, want line1", sc.Data())
+	}
+
+	// Second data line: event type should persist
+	if !sc.Next() {
+		t.Fatal("expected second Next")
+	}
+	if sc.EventType() != "message_start" {
+		t.Errorf("second eventType = %q, want message_start", sc.EventType())
+	}
+	if sc.Data() != "line2" {
+		t.Errorf("second data = %q, want line2", sc.Data())
+	}
+
+	// After new event line: event type should change
+	if !sc.Next() {
+		t.Fatal("expected third Next")
+	}
+	if sc.EventType() != "new_event" {
+		t.Errorf("third eventType = %q, want new_event", sc.EventType())
+	}
+	if sc.Data() != "line3" {
+		t.Errorf("third data = %q, want line3", sc.Data())
+	}
+}
+
+func TestSSEReader_NoDataAfterDone(t *testing.T) {
+	input := "data: valid\ndata: [DONE]\ndata: ignored\n"
+	sc := NewSSEScanner(strings.NewReader(input))
+
+	if !sc.Next() {
+		t.Fatal("expected first Next")
+	}
+	if sc.Data() != "valid" {
+		t.Errorf("first data = %q, want valid", sc.Data())
+	}
+
+	// Next should hit [DONE] and return false
+	if sc.Next() {
+		t.Error("expected Next to return false after [DONE]")
+	}
+	if sc.Err() != nil {
+		t.Errorf("expected no error after [DONE], got: %v", sc.Err())
+	}
+}
