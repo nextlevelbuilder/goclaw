@@ -255,7 +255,7 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string, med
 			"origin_channel":     req.Channel,
 			"origin_peer_kind":   req.PeerKind,
 			"origin_session_key": req.SessionKey,
-			"delegate_id":        req.DelegationID,
+			"delegation_id":      req.DelegationID,
 			"delegate_from":      req.FromAgentKey,
 			"delegate_to":        req.ToAgentKey,
 			MetaParentAgent:      req.FromAgentKey,

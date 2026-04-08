@@ -25,13 +25,6 @@ func CaptureFromRunResult(r *agent.RunResult, runtime time.Duration) ChildResult
 	if r == nil {
 		return ChildResult{Status: "failed", Runtime: runtime}
 	}
-	media := make([]bus.MediaFile, 0, len(r.Media))
-	for _, m := range r.Media {
-		media = append(media, bus.MediaFile{
-			Path:     m.Path,
-			MimeType: m.ContentType,
-		})
-	}
 	var inTok, outTok int64
 	if r.Usage != nil {
 		inTok = int64(r.Usage.PromptTokens)
@@ -39,7 +32,7 @@ func CaptureFromRunResult(r *agent.RunResult, runtime time.Duration) ChildResult
 	}
 	return ChildResult{
 		Content:      r.Content,
-		Media:        media,
+		Media:        MediaResultToBusFiles(r.Media),
 		InputTokens:  inTok,
 		OutputTokens: outTok,
 		Runtime:      runtime,
@@ -55,10 +48,7 @@ func CaptureFromPipelineResult(r *plpkg.RunResult, runtime time.Duration) ChildR
 	}
 	media := make([]bus.MediaFile, 0, len(r.MediaResults))
 	for _, m := range r.MediaResults {
-		media = append(media, bus.MediaFile{
-			Path:     m.Path,
-			MimeType: m.ContentType,
-		})
+		media = append(media, bus.MediaFile{Path: m.Path, MimeType: m.ContentType})
 	}
 	return ChildResult{
 		Content:      r.Content,

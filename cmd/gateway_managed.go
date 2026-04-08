@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
@@ -364,12 +365,8 @@ func wireExtras(
 			if err != nil {
 				return tools.DelegateResult{}, err
 			}
-			// Convert agent.MediaResult -> bus.MediaFile for passthrough.
-			var media []bus.MediaFile
-			for _, mr := range result.Media {
-				media = append(media, bus.MediaFile{Path: mr.Path, MimeType: mr.ContentType})
-			}
-			return tools.DelegateResult{Content: result.Content, Media: media}, nil
+			cr := orchestration.CaptureFromRunResult(result, 0)
+			return tools.DelegateResult{Content: cr.Content, Media: cr.Media}, nil
 		}
 		delegateTool := tools.NewDelegateTool(stores.AgentLinks, stores.Agents, domainBus, delegateRunFn)
 		delegateTool.SetMsgBus(msgBus)
