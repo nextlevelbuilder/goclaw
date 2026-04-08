@@ -112,6 +112,12 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		TenantHint  string `json:"tenant_hint"`  // optional tenant slug for browser pairing multi-tenant
 		TenantID    string `json:"tenant_id"`    // cross-tenant admin: narrow scope to specific tenant (UUID or slug)
 		TenantScope string `json:"tenant_scope"` // deprecated: alias for tenant_id (backward compat)
+		// Node-host fields
+		Mode        string   `json:"mode"`
+		Role        string   `json:"role"`
+		InstanceID  string   `json:"instanceId"`
+		DisplayName string   `json:"clientDisplayName"`
+		Commands    []string `json:"commands"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -121,6 +127,12 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 	client.locale = i18n.Normalize(params.Locale)
 
 	configToken := r.server.cfg.Gateway.Token
+
+	// Helper: send connect response and register node if applicable.
+	sendAndRegisterNode := func(reqID string) {
+		r.sendConnectResponse(ctx, client, reqID)
+		r.registerNodeIfApplicable(client, params.Mode, params.InstanceID, params.DisplayName, params.Commands)
+	}
 
 	// Path 1: Valid gateway token → admin (constant-time comparison)
 	if configToken != "" && subtle.ConstantTimeCompare([]byte(params.Token), []byte(configToken)) == 1 {
@@ -157,7 +169,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			}
 			client.tenantID = tid
 		}
-		r.sendConnectResponse(ctx, client, req.ID)
+		sendAndRegisterNode(req.ID)
 		return
 	}
 
@@ -207,7 +219,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 					"tenant_id", client.tenantID.String(),
 				)
 			}
-			r.sendConnectResponse(ctx, client, req.ID)
+			sendAndRegisterNode(req.ID)
 			return
 		}
 	}
@@ -218,7 +230,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		client.authenticated = true
 		client.userID = params.UserID
 		client.tenantID = store.MasterTenantID
-		r.sendConnectResponse(ctx, client, req.ID)
+		sendAndRegisterNode(req.ID)
 		return
 	}
 
@@ -250,7 +262,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			}
 			client.tenantID = tid
 			slog.Info("browser pairing authenticated", "sender_id", params.SenderID, "client", client.id, "tenant_id", client.tenantID)
-			r.sendConnectResponse(ctx, client, req.ID)
+			sendAndRegisterNode(req.ID)
 			return
 		}
 	}
@@ -289,7 +301,25 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		return
 	}
 	client.tenantID = tid
-	r.sendConnectResponse(ctx, client, req.ID)
+	sendAndRegisterNode(req.ID)
+}
+
+// registerNodeIfApplicable checks if this connect is from a node-host and registers it.
+// Only admin/owner roles may register as nodes to prevent unauthorized command execution.
+func (r *MethodRouter) registerNodeIfApplicable(client *Client, mode, instanceID, displayName string, commands []string) {
+	if mode != "node" || r.server.nodeRegistry == nil {
+		return
+	}
+	if !permissions.HasMinRole(client.role, permissions.RoleAdmin) {
+		slog.Warn("security.node_registration_denied", "role", client.role, "client", client.id)
+		return
+	}
+	nodeID := instanceID
+	if nodeID == "" {
+		nodeID = client.id
+	}
+	r.server.nodeRegistry.Register(client, nodeID, displayName, commands)
+	slog.Info("node-host registered", "nodeId", nodeID, "displayName", displayName, "commands", commands, "client", client.id)
 }
 
 func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, reqID string) {

@@ -51,6 +51,9 @@ endif
 ifdef WITH_CLAUDE_CLI
 COMPOSE_EXTRA += -f docker-compose.claude-cli.yml
 endif
+ifdef WITH_NODE
+COMPOSE_EXTRA += -f docker-compose.node.yml
+endif
 COMPOSE = $(COMPOSE_BASE) $(COMPOSE_EXTRA)
 UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml
 

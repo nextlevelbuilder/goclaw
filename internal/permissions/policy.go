@@ -157,6 +157,10 @@ func MethodScopes(method string) []Scope {
 
 func isAdminMethod(method string) bool {
 	adminMethods := []string{
+		protocol.MethodNodeInvokeResult,
+		protocol.MethodNodeEvent,
+		protocol.MethodNodeList,
+		protocol.MethodNodeExec,
 		protocol.MethodConfigApply,
 		protocol.MethodConfigPatch,
 		protocol.MethodAgentsCreate,

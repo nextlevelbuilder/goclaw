@@ -165,6 +165,14 @@ const (
 	MethodAPIKeysRevoke = "api_keys.revoke"
 )
 
+// Node-host remote execution
+const (
+	MethodNodeInvokeResult = "node.invoke.result"
+	MethodNodeEvent        = "node.event"
+	MethodNodeList         = "node.list"
+	MethodNodeExec         = "node.exec"
+)
+
 // Phase 3+ - NICE TO HAVE methods
 const (
 	MethodLogsTail = "logs.tail"

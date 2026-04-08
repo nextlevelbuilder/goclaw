@@ -65,9 +65,16 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	// Phase 3: Live log tailing
 	methods.NewLogsMethods(logTee).Register(router)
 
+	// Node-host remote execution dispatch
+	nodeRegistry := gateway.NewNodeRegistry()
+	nodeDispatcher := gateway.NewNodeDispatcher(nodeRegistry)
+	server.SetNodeDispatcher(nodeDispatcher)
+	methods.NewNodeMethods(nodeDispatcher, msgBus).Register(router)
+
 	slog.Info("registered all RPC methods",
 		"phase1", []string{"chat", "agents", "sessions", "config"},
 		"phase2", []string{"skills", "cron", "heartbeat", "pairing", "usage", "exec_approval", "send"},
+		"node", []string{"node.invoke.result", "node.event", "node.list"},
 	)
 
 	return pairingMethods, heartbeatMethods, chatMethods

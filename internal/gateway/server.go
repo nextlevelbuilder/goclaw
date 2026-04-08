@@ -64,8 +64,10 @@ type Server struct {
 	db             interface{ PingContext(context.Context) error } // for health check DB ping
 	updateChecker  *UpdateChecker
 
-	logTee   *LogTee                  // optional; auto-unsubscribes clients on disconnect
-	postTurn tools.PostTurnProcessor // optional; for team task dispatch in HTTP API paths
+	logTee         *LogTee                  // optional; auto-unsubscribes clients on disconnect
+	postTurn       tools.PostTurnProcessor // optional; for team task dispatch in HTTP API paths
+	nodeRegistry   *NodeRegistry           // tracks connected node-host instances
+	nodeDispatcher *NodeDispatcher          // dispatches commands to nodes
 
 	httpServer *http.Server
 	mux        *http.ServeMux
@@ -587,6 +589,10 @@ func (s *Server) unregisterClient(c *Client) {
 	if s.logTee != nil {
 		s.logTee.Unsubscribe(c.id)
 	}
+	// Clean up node registration if this was a node-host client.
+	if s.nodeRegistry != nil {
+		s.nodeRegistry.Unregister(c.id)
+	}
 	slog.Info("client disconnected", "id", c.id)
 }
 
@@ -594,6 +600,15 @@ func (s *Server) unregisterClient(c *Client) {
 func (s *Server) SetLogTee(lt *LogTee) {
 	s.logTee = lt
 }
+
+// SetNodeDispatcher attaches the node registry and dispatcher for remote execution.
+func (s *Server) SetNodeDispatcher(d *NodeDispatcher) {
+	s.nodeDispatcher = d
+	s.nodeRegistry = d.Registry()
+}
+
+// NodeDispatcher returns the node dispatcher (nil if not configured).
+func (s *Server) NodeDispatcher() *NodeDispatcher { return s.nodeDispatcher }
 
 // StartTestServer creates a listener on :0 (random port) and returns the
 // actual address and a start function. Used for integration tests.

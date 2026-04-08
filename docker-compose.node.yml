@@ -1,0 +1,51 @@
+# Node-host overlay — remote command execution sidecar.
+#
+# The node-host connects to the gateway via WebSocket and executes
+# system.run commands on behalf of agents. Uses the same image as the gateway.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.node.yml up -d
+#   # or: make up WITH_NODE=1
+#
+# Scale to multiple nodes:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.node.yml up -d --scale goclaw-node=3
+
+services:
+  goclaw-node:
+    image: ghcr.io/nextlevelbuilder/goclaw:latest
+    build:
+      context: ${GOCLAW_DIR:-.}
+      dockerfile: Dockerfile
+      args:
+        VERSION: "${GOCLAW_VERSION:-dev}"
+    command: ["node", "run", "--host", "goclaw", "--port", "18790"]
+    environment:
+      - GOCLAW_GATEWAY_TOKEN=${GOCLAW_GATEWAY_TOKEN:-}
+      - GOCLAW_GATEWAY_PASSWORD=${GOCLAW_GATEWAY_PASSWORD:-}
+      - GOCLAW_STATE_DIR=/app/data/node-state
+    volumes:
+      - goclaw-data:/app/data
+    depends_on:
+      goclaw:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+          pids: 100
+    networks:
+      - goclaw-net
+    restart: unless-stopped
+
+# Uses goclaw-data volume from base docker-compose.yml (already goclaw-owned).

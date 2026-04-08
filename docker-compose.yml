@@ -21,6 +21,7 @@
 #
 # With OTel tracing:  add -f docker-compose.otel.yml
 # With Claude CLI:    add -f docker-compose.claude-cli.yml
+# With node-host:     add -f docker-compose.node.yml (or: make up WITH_NODE=1)
 
 services:
   goclaw:
