@@ -30,6 +30,9 @@ type PromptConfig struct {
 	OrchestrationData  OrchestrationSectionData
 	ExtraPrompt        string
 
+	// Prompt mode: full, task, minimal, none
+	Mode PromptMode
+
 	// Provider variant (selects template file)
 	ProviderVariant string // "" = default, "codex", "dashscope"
 }

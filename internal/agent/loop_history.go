@@ -109,11 +109,8 @@ func (l *Loop) buildMCPToolDescs(toolNames []string) map[string]string {
 func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, summary, userMessage, extraSystemPrompt, sessionKey, channel, channelType, chatTitle, peerKind, userID string, historyLimit int, skillFilter []string, lightContext bool) ([]providers.Message, bool) {
 	var messages []providers.Message
 
-	// Build full system prompt using the new builder (matching TS buildAgentSystemPrompt)
-	mode := PromptFull
-	if bootstrap.IsSubagentSession(sessionKey) || bootstrap.IsCronSession(sessionKey) || bootstrap.IsHeartbeatSession(sessionKey) {
-		mode = PromptMinimal
-	}
+	// Build system prompt — 3-layer mode resolution: runtime > auto-detect > config
+	mode := resolvePromptMode("", sessionKey, l.promptMode)
 
 	_, hasSpawn := l.tools.Get("spawn")
 	_, hasTeamTools := l.tools.Get("team_tasks")

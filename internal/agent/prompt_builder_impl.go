@@ -23,8 +23,12 @@ func NewBridgePromptBuilder() PromptBuilder {
 // Build converts PromptConfig into a SystemPromptConfig and delegates to BuildSystemPrompt.
 func (b *BridgePromptBuilder) Build(cfg PromptConfig) (string, error) {
 	// Map PromptConfig toggles + data to existing SystemPromptConfig fields.
+	mode := cfg.Mode
+	if mode == "" {
+		mode = PromptFull
+	}
 	spc := SystemPromptConfig{
-		Mode: PromptFull,
+		Mode: mode,
 	}
 
 	if cfg.Identity {

@@ -229,6 +229,27 @@ func (a *AgentData) ParseSelfEvolve() bool { return a.SelfEvolve }
 // ParseSkillEvolve returns whether the agent's skill learning loop is enabled.
 func (a *AgentData) ParseSkillEvolve() bool { return a.SkillEvolve }
 
+// ParsePromptMode returns the configured prompt mode from OtherConfig JSONB.
+// Returns "" (defaults to "full") if not set.
+func (a *AgentData) ParsePromptMode() string {
+	if len(a.OtherConfig) == 0 {
+		return ""
+	}
+	var bag map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &bag) != nil {
+		return ""
+	}
+	raw, ok := bag["prompt_mode"]
+	if !ok {
+		return ""
+	}
+	var mode string
+	if json.Unmarshal(raw, &mode) != nil {
+		return ""
+	}
+	return mode
+}
+
 // ParseSkillNudgeInterval returns the tool-call interval for skill creation reminders.
 // Returns 15 (default) when column is 0 (unset).
 func (a *AgentData) ParseSkillNudgeInterval() int {
