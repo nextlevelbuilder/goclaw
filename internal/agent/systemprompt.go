@@ -35,6 +35,10 @@ const (
 	PromptMinimal PromptMode = "minimal" // subagent/cron — reduced sections
 )
 
+// CacheBoundaryMarker separates stable (agent config) from dynamic (per-turn) prompt content.
+// Anthropic provider splits at this marker into 2 system blocks: stable gets cache_control, dynamic doesn't.
+const CacheBoundaryMarker = "<!-- GOCLAW_CACHE_BOUNDARY -->"
+
 // SystemPromptConfig holds all inputs for system prompt construction.
 // Matches the params of TS buildAgentSystemPrompt().
 type SystemPromptConfig struct {
@@ -293,7 +297,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildUserIdentitySection(cfg.OwnerIDs)...)
 	}
 
-	// 8. Time
+	// Cache boundary: everything above is stable per-agent config, below is dynamic per-turn.
+	// Anthropic provider splits at this marker into 2 system blocks for prompt caching.
+	lines = append(lines, CacheBoundaryMarker, "")
+
+	// 8. Time (below boundary — date changes don't bust the stable cache)
 	lines = append(lines, buildTimeSection()...)
 
 	// 9.5. Channel formatting hints (e.g. Zalo → plain text)
@@ -370,7 +378,10 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		"",
 	}
 
-	for _, name := range toolNames {
+	// Sort tool names for deterministic output — critical for prompt caching.
+	sortedTools := slices.Clone(toolNames)
+	slices.Sort(sortedTools)
+	for _, name := range sortedTools {
 		// Skip MCP tools — they get their own section with real descriptions.
 		if strings.HasPrefix(name, "mcp_") && name != "mcp_tool_search" {
 			continue
