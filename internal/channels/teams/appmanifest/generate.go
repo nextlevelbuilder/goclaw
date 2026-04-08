@@ -16,8 +16,8 @@ var defaultColorIcon []byte
 var defaultOutlineIcon []byte
 
 const (
-	schemaURL       = "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json"
-	manifestVersion = "1.19"
+	schemaURL       = "https://developer.microsoft.com/en-us/json-schemas/teams/v1.21/MicrosoftTeams.schema.json"
+	manifestVersion = "1.21"
 	maxNameShort    = 30
 	maxNameFull     = 100
 	maxDescShort    = 80
@@ -55,10 +55,9 @@ type Manifest struct {
 	Description     DescField  `json:"description"`
 	Developer       DevField   `json:"developer"`
 	Icons           IconsField `json:"icons"`
-	AccentColor     string     `json:"accentColor"`
-	Bots            []BotEntry `json:"bots"`
-	Permissions     []string   `json:"permissions"`
-	ValidDomains    []string   `json:"validDomains"`
+	AccentColor  string     `json:"accentColor"`
+	Bots         []BotEntry `json:"bots"`
+	ValidDomains []string   `json:"validDomains"`
 }
 
 // NameField represents the name section of manifest.
@@ -83,9 +82,12 @@ type DevField struct {
 
 // BotEntry represents a bot entry in manifest.
 type BotEntry struct {
-	BotID  string     `json:"botId"`
-	Scopes []string   `json:"scopes"`
-	Cmds   []struct{} `json:"commandLists,omitempty"`
+	BotID              string   `json:"botId"`
+	Scopes             []string `json:"scopes"`
+	IsNotificationOnly bool     `json:"isNotificationOnly"`
+	SupportsCalling    bool     `json:"supportsCalling"`
+	SupportsVideo      bool     `json:"supportsVideo"`
+	SupportsFiles      bool     `json:"supportsFiles"`
 }
 
 // IconsField represents the icons section of manifest.
@@ -118,10 +120,13 @@ func GenerateZIP(opts Options) ([]byte, error) {
 		Icons:       IconsField{Color: "color.png", Outline: "outline.png"},
 		AccentColor: opts.AccentColor,
 		Bots: []BotEntry{{
-			BotID:  opts.BotID,
-			Scopes: opts.Scopes,
+			BotID:              opts.BotID,
+			Scopes:             opts.Scopes,
+			IsNotificationOnly: false,
+			SupportsCalling:    false,
+			SupportsVideo:      false,
+			SupportsFiles:      false,
 		}},
-		Permissions:  []string{"identity", "messageTeamMembers"},
 		ValidDomains: []string{},
 	}
 

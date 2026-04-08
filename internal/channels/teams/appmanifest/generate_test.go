@@ -485,13 +485,9 @@ func TestGenerateZIPManifestSchema(t *testing.T) {
 		t.Errorf("Bots[0].BotID = %q, want %q", m.Bots[0].BotID, opts.BotID)
 	}
 
-	// Verify permissions
-	if len(m.Permissions) == 0 {
-		t.Error("Permissions array is empty")
-	}
-	expectedPerms := []string{"identity", "messageTeamMembers"}
-	if !stringSliceEqual(m.Permissions, expectedPerms) {
-		t.Errorf("Permissions = %v, want %v", m.Permissions, expectedPerms)
+	// Verify bot properties
+	if m.Bots[0].IsNotificationOnly {
+		t.Error("Bots[0].IsNotificationOnly should be false")
 	}
 
 	// Verify icons
