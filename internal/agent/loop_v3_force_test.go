@@ -12,7 +12,7 @@ import (
 // This test is a compile-time guard: if someone re-adds runLoop, the method
 // set assertion will break, forcing a conscious review.
 func TestRunLoop_Removed(t *testing.T) {
-	loopType := reflect.TypeOf(&Loop{})
+	loopType := reflect.TypeFor[*Loop]()
 	if _, found := loopType.MethodByName("runLoop"); found {
 		t.Fatal("runLoop method still exists on *Loop — v2 code should be deleted")
 	}
@@ -21,7 +21,7 @@ func TestRunLoop_Removed(t *testing.T) {
 // TestV3Pipeline_AlwaysEnabled verifies that LoopConfig no longer has
 // a V3PipelineEnabled field (all agents use v3 pipeline unconditionally).
 func TestV3Pipeline_AlwaysEnabled(t *testing.T) {
-	cfgType := reflect.TypeOf(LoopConfig{})
+	cfgType := reflect.TypeFor[LoopConfig]()
 	if _, found := cfgType.FieldByName("V3PipelineEnabled"); found {
 		t.Fatal("LoopConfig still has V3PipelineEnabled — should be removed")
 	}

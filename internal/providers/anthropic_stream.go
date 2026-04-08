@@ -32,7 +32,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	var currentBlockType string
 	// Track thinking token count by accumulated chunk size
 	thinkingChars := 0
-	var thinkingSignature string
+	var thinkingSignature strings.Builder
 
 	sse := NewSSEScanner(respBody)
 	for sse.Next() {
@@ -91,7 +91,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 						toolCallJSON[idx] += ev.Delta.PartialJSON
 					}
 				case "signature_delta":
-					thinkingSignature += ev.Delta.Signature
+					thinkingSignature.WriteString(ev.Delta.Signature)
 				}
 			}
 
@@ -168,7 +168,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 		}
 	}
 
-	result.ThinkingSignature = thinkingSignature
+	result.ThinkingSignature = thinkingSignature.String()
 
 	if onChunk != nil {
 		onChunk(StreamChunk{Done: true})

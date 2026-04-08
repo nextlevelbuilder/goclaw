@@ -541,7 +541,7 @@ type MediaResult struct {
 	AsVoice     bool   `json:"as_voice,omitempty"`     // send as voice message (Telegram OGG)
 }
 
-// runState encapsulates all mutable state for a single runLoop execution.
+// runState encapsulates all mutable state for a single agent run.
 // Grouping these fields enables extracting loop sub-operations into methods
 // on *runState without passing 20+ individual variables.
 type runState struct {

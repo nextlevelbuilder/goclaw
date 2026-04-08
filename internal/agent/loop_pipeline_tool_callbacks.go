@@ -31,7 +31,7 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
 		})
 
-		// Emit tool span start (matching runLoop tracing behavior).
+		// Emit tool span start for tracing.
 		toolStart := time.Now().UTC()
 		toolSpanID := l.emitToolSpanStart(ctx, toolStart, tc.Name, tc.ID, string(argsJSON))
 

@@ -1,7 +1,7 @@
 // Package pipeline provides a pluggable stage-based agent execution pipeline.
-// Replaces the monolithic runLoop() in internal/agent with discrete, testable stages.
+// All agent runs use this pipeline (v3 architecture).
 //
-// V3 design: Phase 2 — pipeline loop.
+// 8-stage loop: context → history → prompt → think → act → observe → memory → summarize.
 package pipeline
 
 import "context"

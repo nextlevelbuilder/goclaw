@@ -88,7 +88,7 @@ func TestBatchQueue_ConcurrentEnqueue(t *testing.T) {
 	processors := 0
 	var mu sync.Mutex
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(v int) {
 			defer wg.Done()

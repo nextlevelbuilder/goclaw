@@ -143,7 +143,7 @@ func (l *Loop) makeInjectContext(req *RunRequest) func(ctx context.Context, inpu
 		}
 		// Sync message truncation from req back to pipeline input.
 		input.Message = req.Message
-		// Cache context window on session (first run only, matching runLoop behavior).
+		// Cache context window on session (first run only).
 		if l.sessions.GetContextWindow(result.ctx, req.SessionKey) <= 0 {
 			l.sessions.SetContextWindow(result.ctx, req.SessionKey, l.contextWindow)
 		}
@@ -242,7 +242,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			chatReq.Options[providers.OptThinkingLevel] = effort
 		}
 
-		// Emit LLM span start (matching runLoop tracing behavior).
+		// Emit LLM span start for tracing.
 		start := time.Now().UTC()
 		var opts []spanOption
 		if state.Model != "" {
