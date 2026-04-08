@@ -22,6 +22,10 @@ type episodicWorker struct {
 
 // Handle processes a session.completed event into an episodic summary.
 func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent) error {
+	slog.Debug("episodic: received session.completed",
+		"agent", event.AgentID, "user", event.UserID,
+		"source", event.SourceID, "payload_type", fmt.Sprintf("%T", event.Payload))
+
 	payload, ok := event.Payload.(*eventbus.SessionCompletedPayload)
 	if !ok {
 		return fmt.Errorf("episodic: unexpected payload type %T", event.Payload)
@@ -47,9 +51,11 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		}
 	}
 	if summary == "" {
-		slog.Debug("episodic: no summary available", "session", payload.SessionKey)
+		slog.Warn("episodic: no summary available, skipping", "session", payload.SessionKey,
+			"compaction_summary_empty", payload.Summary == "", "provider_nil", w.provider == nil)
 		return nil
 	}
+	slog.Debug("episodic: creating summary", "session", payload.SessionKey, "summary_len", len(summary))
 
 	// Create episodic summary
 	l0 := generateL0Abstract(summary)
