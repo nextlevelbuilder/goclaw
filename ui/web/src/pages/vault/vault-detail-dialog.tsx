@@ -84,7 +84,7 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!saving) { cancelEdit(); onOpenChange(v); } }}>
-        <DialogContent className="sm:max-w-2xl max-sm:inset-0 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-sm:inset-0 max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader>
             <div className="flex items-start justify-between gap-2 pr-6">
               <DialogTitle className="truncate flex-1">
@@ -142,13 +142,13 @@ export function VaultDetailDialog({ doc, open, onOpenChange, onDeleted }: Props)
               {t("detail.contentPreview")}
             </button>
             {previewOpen && (
-              <div className="rounded-md border bg-muted/50 p-3 max-h-[300px] overflow-y-auto">
+              <div className="rounded-md border bg-muted/50 p-3 max-h-[400px] overflow-y-auto overflow-x-hidden min-w-0">
                 {contentLoading ? (
                   <div className="h-[60px] animate-pulse rounded bg-muted" />
                 ) : contentError ? (
                   <p className="text-xs text-muted-foreground italic">{t("detail.fileNotFound")}</p>
                 ) : fileContent ? (
-                  <MarkdownRenderer content={fileContent} className="text-sm" />
+                  <MarkdownRenderer content={fileContent} className="text-xs [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_p]:text-xs [&_li]:text-xs [&_code]:text-xs [&_pre]:overflow-x-auto [&_pre]:max-w-full [&_img]:max-w-full" />
                 ) : (
                   <p className="text-xs text-muted-foreground italic">{t("detail.emptyContent")}</p>
                 )}
