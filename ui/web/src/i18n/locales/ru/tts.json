@@ -1,0 +1,71 @@
+{
+  "title": "Синтез речи",
+  "description": "Настройка TTS провайдеров и автоприменение",
+  "save": "Сохранить",
+  "saving": "Сохранение...",
+  "saveChanges": "Сохранить изменения",
+  "status": {
+    "title": "Статус",
+    "configured": "Настроен",
+    "disabled": "Отключён",
+    "noProvider": "TTS провайдер не настроен",
+    "activeProvider": "Основной провайдер: {{provider}}, Авто: {{auto}}"
+  },
+  "general": {
+    "title": "Общие настройки",
+    "primaryProvider": "Основной провайдер",
+    "autoApplyMode": "Режим автоприменения",
+    "replyMode": "Режим ответа",
+    "maxTextLength": "Макс. длина текста",
+    "timeout": "Таймаут (мс)"
+  },
+  "providers": {
+    "none": "Нет (отключено)",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge (бесплатный)",
+    "minimax": "MiniMax"
+  },
+  "autoModes": {
+    "off": "Выкл",
+    "offDesc": "Агент может использовать TTS инструмент вручную",
+    "always": "Всегда",
+    "alwaysDesc": "Все ответы получают аудио",
+    "inbound": "Входящие",
+    "inboundDesc": "Только когда пользователь отправляет голос/аудио",
+    "tagged": "С тегом",
+    "taggedDesc": "Только когда ответ содержит тег [[tts]]"
+  },
+  "replyModes": {
+    "final": "Только финальный",
+    "finalDesc": "Только финальные ответы",
+    "all": "Все",
+    "allDesc": "Все ответы включая инструменты/блок"
+  },
+  "providerSettings": "Настройки {{provider}}",
+  "openai": {
+    "apiKey": "API-ключ",
+    "apiBase": "API Base URL",
+    "model": "Модель",
+    "voice": "Голос"
+  },
+  "elevenlabs": {
+    "apiKey": "API-ключ",
+    "baseUrl": "Base URL",
+    "voiceId": "Voice ID",
+    "modelId": "Model ID"
+  },
+  "edge": {
+    "voice": "Голос",
+    "speechRate": "Скорость речи",
+    "hint": "Edge TTS бесплатен и не требует API-ключа. Установите: pip install edge-tts"
+  },
+  "minimax": {
+    "apiKey": "API-ключ",
+    "groupId": "Group ID *",
+    "groupIdPlaceholder": "Требуется для MiniMax",
+    "apiBase": "API Base",
+    "model": "Модель",
+    "voiceId": "Voice ID"
+  }
+}

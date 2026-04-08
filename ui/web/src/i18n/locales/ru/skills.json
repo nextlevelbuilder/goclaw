@@ -1,0 +1,123 @@
+{
+  "title": "Скиллы",
+  "description": "Управление скиллами и возможностями агентов",
+  "searchPlaceholder": "Поиск скиллов...",
+  "emptyTitle": "Нет скиллов",
+  "emptyDescription": "Скиллы ещё не зарегистрированы.",
+  "noMatchTitle": "Скиллы не найдены",
+  "noMatchDescription": "Попробуйте другой поисковый запрос.",
+  "columns": {
+    "name": "Имя",
+    "description": "Описание",
+    "source": "Источник",
+    "author": "Автор",
+    "visibility": "Видимость",
+    "status": "Статус",
+    "actions": "Действия"
+  },
+  "noDescription": "Нет описания",
+  "visibility": {
+    "clickToCycle": "Нажмите для изменения видимости"
+  },
+  "delete": {
+    "title": "Удалить скилл",
+    "description": "Вы уверены, что хотите удалить \"{{name}}\"? Это действие нельзя отменить.",
+    "confirmLabel": "Удалить"
+  },
+  "upload": {
+    "title": "Загрузить скиллы",
+    "description": "Загрузите ZIP-файлы, содержащие SKILL.md с YAML frontmatter (name, description, slug).",
+    "button": "Загрузить",
+    "uploading": "Загрузка...",
+    "dropOrClick": "Нажмите или перетащите .zip файлы",
+    "dropHere": "Перетащите .zip файлы сюда",
+    "onlyZip": "Принимаются только .zip файлы",
+    "cancel": "Отмена",
+    "done": "Готово",
+    "tooLarge": "Файл превышает лимит 20МБ",
+    "invalidZip": "Неверный ZIP файл",
+    "noSkillMd": "ZIP должен содержать SKILL.md в корне",
+    "emptySkillMd": "SKILL.md пуст",
+    "noFrontmatter": "SKILL.md не содержит YAML frontmatter",
+    "nameRequired": "name обязателен в frontmatter SKILL.md",
+    "invalidSlug": "Неверный формат slug",
+    "failed": "Ошибка загрузки",
+    "validating": "Валидация...",
+    "validCount": "{{valid}} из {{total}} валидны",
+    "uploadCount": "Загрузить ({{count}})",
+    "successCount": "{{success}} из {{total}} успешно загружено",
+    "remove": "Удалить файл"
+  },
+  "edit": {
+    "title": "Редактировать скилл",
+    "name": "Имя",
+    "description": "Описание",
+    "visibility": "Видимость",
+    "tags": "Теги",
+    "addTag": "Добавить тег...",
+    "add": "Добавить",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "privateOption": "Приватный (только владелец)",
+    "internalOption": "Внутренний (предоставленные агенты/пользователи)",
+    "publicOption": "Публичный (все агенты)"
+  },
+  "system": "Система",
+  "tabs": {
+    "core": "Основные",
+    "custom": "Пользовательские"
+  },
+  "toggle": {
+    "enable": "Включить скилл",
+    "disable": "Отключить скилл",
+    "disabled": "Отключён"
+  },
+  "tenant": {
+    "enabled": "Включён",
+    "disabled": "Отключён",
+    "default": "По умолчанию",
+    "overrideHint": "Переопределение для этого скилла на уровне тенанта",
+    "resetDefault": "Сбросить на умолчание"
+  },
+  "deps": {
+    "rescan": "Пересканировать зависимости",
+    "rescanning": "Сканирование...",
+    "rescanSuccess": "Обновлено {{count}} скиллов",
+    "missing": "Отсутствуют: {{deps}}",
+    "install": "Установить зависимости",
+    "installing": "Установка...",
+    "installSuccess": "Зависимости успешно установлены",
+    "installPartial": "Некоторые зависимости не удалось установить",
+    "installItem": "Установить",
+    "itemSuccess": "Установлено",
+    "itemError": "Ошибка",
+    "missingTitle": "Отсутствующие зависимости",
+    "systemLabel": "Система",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "Активен",
+    "statusArchived": "Отсутствуют зависимости",
+    "runtimeMissing": "Отсутствуют runtime-пререквизиты",
+    "runtimeMissingDesc": "Основные скиллы требуют Python и/или Node.js рантаймы внутри контейнера GoClaw. Host-установленные рантаймы здесь не используются. Если вы используете опубликованный latest образ, отсутствующие рантаймы могут быть ожидаемы.",
+    "runtimeMissingAction": "Откройте Пакеты для проверки или установки рантаймов в этом контейнере.",
+    "runtimeRequired": "Сначала установите container runtime"
+  },
+  "detail": {
+    "title": "Детали скилла",
+    "content": "Содержимое",
+    "files": "Файлы",
+    "version": "Версия:",
+    "current": "(текущая)",
+    "noContent": "Контент недоступен."
+  },
+  "toast": {
+    "updated": "Скилл обновлён",
+    "updateFailed": "Не удалось обновить скилл",
+    "deleted": "Скилл удалён",
+    "deleteFailed": "Не удалось удалить скилл",
+    "rescanUpdated": "{{count}} скилл(ов) обновлено",
+    "rescanNoChanges": "Все скиллы актуальны",
+    "rescanFailed": "Не удалось пересканировать зависимости"
+  }
+}

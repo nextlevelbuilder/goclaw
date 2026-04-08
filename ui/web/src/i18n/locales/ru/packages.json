@@ -1,0 +1,47 @@
+{
+  "title": "Рантаймы и пакеты",
+  "description": "Управление рантаймами и установленными пакетами внутри активного контейнера GoClaw",
+  "runtimes": {
+    "title": "Рантаймы",
+    "scopeTitle": "Статус контейнерных рантаймов",
+    "scopeDesc": "Эти проверки выполняются внутри активного контейнера GoClaw. Host-установленные рантаймы, изменения профиля шелла и nvm-управляемые бинарники здесь не используются.",
+    "minimalImageHint": "Опубликованный latest образ минимальный, поэтому отсутствие Python или Node рантаймов может быть ожидаемым. Используйте образ python, node или full variant, пересоберите с ENABLE_PYTHON=true / ENABLE_NODE=true / ENABLE_FULL_SKILLS=true, или установите рантаймы вручную в этом контейнере.",
+    "available": "Доступен",
+    "missing": "Отсутствует",
+    "missingInContainer": "Отсутствует в контейнере"
+  },
+  "system": {
+    "title": "Системные пакеты",
+    "placeholder": "Имя пакета (напр. github-cli)"
+  },
+  "pip": {
+    "title": "Python пакеты",
+    "placeholder": "Имя пакета (напр. pandas)"
+  },
+  "npm": {
+    "title": "Node пакеты",
+    "placeholder": "Имя пакета (напр. typescript)"
+  },
+  "actions": {
+    "install": "Установить",
+    "uninstall": "Удалить",
+    "installing": "Установка...",
+    "uninstalling": "Удаление..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} успешно установлен",
+    "installError": "Не удалось установить {{name}}",
+    "uninstallSuccess": "{{name}} успешно удалён",
+    "uninstallError": "Не удалось удалить {{name}}"
+  },
+  "confirmUninstall": {
+    "title": "Подтвердить удаление",
+    "description": "Вы уверены, что хотите удалить {{name}}? Это действие нельзя отменить."
+  },
+  "table": {
+    "name": "Имя",
+    "version": "Версия",
+    "actions": "Действия",
+    "empty": "Пакеты не установлены"
+  }
+}

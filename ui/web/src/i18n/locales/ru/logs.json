@@ -1,0 +1,15 @@
+{
+  "title": "Логи",
+  "description": "Живой tail логов",
+  "descriptionLive": "Живой tail на уровне {{level}}",
+  "live": "Живой",
+  "start": "Старт",
+  "stop": "Стоп",
+  "clear": "Очистить",
+  "filterPlaceholder": "Фильтр логов...",
+  "logLevelTitle": "Уровень логов",
+  "emptyWaiting": "Ожидание логов...",
+  "emptyFilter": "Логи не соответствуют фильтру.",
+  "emptyStart": "Нажмите \"Старт\" для начала стрима логов.",
+  "count": "{{filtered}}/{{total}}"
+}

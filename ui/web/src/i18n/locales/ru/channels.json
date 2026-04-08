@@ -1,0 +1,487 @@
+{
+  "title": "Каналы",
+  "description": "Управление экземплярами каналов",
+  "statusDescription": "Статус канала связи",
+  "addChannel": "Добавить канал",
+  "refresh": "Обновить",
+  "searchPlaceholder": "Поиск каналов...",
+  "emptyTitle": "Нет каналов",
+  "emptyDescription": "Добавьте свой первый экземпляр канала, чтобы начать работу.",
+  "emptyStatusDescription": "Каналы связи не настроены.",
+  "noMatchTitle": "Каналы не найдены",
+  "noMatchDescription": "Попробуйте другой поисковый запрос.",
+  "columns": {
+    "name": "Имя",
+    "type": "Тип",
+    "agent": "Агент",
+    "status": "Статус",
+    "enabled": "Включён",
+    "actions": "Действия"
+  },
+  "status": {
+    "running": "Работает",
+    "stopped": "Остановлен",
+    "checking": "Проверка",
+    "degraded": "Деградирован",
+    "starting": "Запуск",
+    "registered": "Настроен",
+    "failed": "Ошибка"
+  },
+  "enabled": "Включён",
+  "disabled": "Отключён",
+  "actions": {
+    "reauthenticate": "Повторно авторизоваться",
+    "authenticate": "Авторизуйтесь для запуска канала",
+    "reauthShort": "Перактор.",
+    "openCredentials": "Открыть учётные данные",
+    "openAdvanced": "Открыть дополнительно",
+    "inspect": "Проверить проблему"
+  },
+  "list": {
+    "failureStreak": "{{count}} ошибок подряд",
+    "openChannelDetail": "Откройте детали канала для последнего диагноза",
+    "nextStep": "Следующий шаг"
+  },
+  "failureKind": {
+    "auth": "Авторизация",
+    "config": "Конфиг",
+    "network": "Сеть",
+    "unknown": "Внимание"
+  },
+  "delete": {
+    "title": "Удалить экземпляр канала",
+    "description": "Вы уверены, что хотите удалить \"{{name}}\"? Это действие нельзя отменить.",
+    "confirmLabel": "Удалить"
+  },
+  "form": {
+    "createTitle": "Создать экземпляр канала",
+    "editTitle": "Редактировать экземпляр канала",
+    "key": "Ключ *",
+    "keyPlaceholder": "my-telegram-bot",
+    "keyHint": "Уникальный slug, используемый как идентификатор канала",
+    "displayName": "Отображаемое имя",
+    "displayNamePlaceholder": "Бот продаж",
+    "channelType": "Тип канала *",
+    "agent": "Агент *",
+    "selectAgent": "Выберите агента",
+    "credentials": "Учётные данные",
+    "credentialsHint": "(оставьте пустым для сохранения текущих)",
+    "credentialsEncrypted": "Зашифрованы на сервере. Никогда не возвращаются в API-ответах.",
+    "configuration": "Конфигурация",
+    "enabled": "Включён",
+    "cancel": "Отмена",
+    "create": "Создать",
+    "update": "Обновить",
+    "saving": "Сохранение...",
+    "step": "Шаг {{current}} из {{total}}",
+    "authenticate": "Авторизация — {{label}}",
+    "configure": "Настройка — {{label}}",
+    "skip": "Пропустить",
+    "done": "Готово",
+    "errors": {
+      "keyRequired": "Ключ обязателен",
+      "keySlug": "Ключ должен быть валидным slug (только строчные буквы, цифры, дефисы)",
+      "agentRequired": "Агент обязателен",
+      "requiredFields": "Обязательные: {{fields}}",
+      "failedSave": "Не удалось сохранить",
+      "failedSaveConfig": "Не удалось сохранить конфигурацию"
+    },
+    "authStatus": {
+      "authenticated": "Авторизован",
+      "notAuthenticated": "Не авторизован",
+      "useQrHint": "— Используйте кнопку QR-входа из таблицы каналов"
+    }
+  },
+  "detail": {
+    "agent": "Агент: {{name}}",
+    "lastChecked": "Последняя проверка: {{value}}",
+    "checkedRelative": "Проверено {{value}}",
+    "advanced": "Дополнительно",
+    "advancedTitle": "Дополнительные настройки",
+    "policies": "Политики",
+    "policiesDesc": "Политики обработки сообщений",
+    "network": "Сеть",
+    "networkDesc": "Конфигурация сервера и прокси",
+    "limits": "Лимиты",
+    "limitsDesc": "Ограничения сообщений и медиа",
+    "streaming": "Стриминг",
+    "streamingDesc": "Опции стриминга сообщений в реальном времени",
+    "behavior": "Поведение",
+    "behaviorDesc": "Конфигурация поведения ответов",
+    "accessControl": "Контроль доступа",
+    "accessControlDesc": "Ограничения доступа пользователей",
+    "reviewDiagnostics": "Проверьте последний диагноз этого канала перед изменением настроек.",
+    "whatHappened": "Что произошло",
+    "recommendedAction": "Рекомендуемое действие",
+    "technicalDetail": "Техническая деталь",
+    "tabs": {
+      "general": "Общие",
+      "config": "Конфиг",
+      "credentials": "Учётные данные",
+      "groups": "Группы",
+      "managers": "Менеджеры"
+    },
+    "general": {
+      "identity": "Идентичность",
+      "name": "Имя",
+      "nameHint": "Уникальный slug (только чтение)",
+      "channelType": "Тип канала",
+      "displayName": "Отображаемое имя",
+      "displayNamePlaceholder": "Понятное имя",
+      "agent": "Агент",
+      "selectAgent": "Выберите агента",
+      "enabled": "Включён",
+      "saved": "Сохранено",
+      "saveChanges": "Сохранить изменения",
+      "saving": "Сохранение..."
+    },
+    "credentials": {
+      "hint": "Оставьте поля пустыми для сохранения текущих значений. Учётные данные зашифрованы на сервере и никогда не возвращаются в API-ответах.",
+      "noSchema": "Нет схемы учётных данных для этого типа канала.",
+      "noCredentials": "Нет учётных данных для обновления",
+      "failedSave": "Не удалось сохранить",
+      "saved": "Сохранено",
+      "updateCredentials": "Обновить учётные данные",
+      "saving": "Сохранение..."
+    },
+    "config": {
+      "noSchema": "Нет схемы конфигурации для этого типа канала.",
+      "saved": "Сохранено",
+      "saveConfig": "Сохранить конфиг",
+      "saving": "Сохранение...",
+      "webhookUrlLabel": "Установите это как URL запросов событий вашего Lark приложения:",
+      "copyPath": "Копировать путь"
+    },
+    "groups": {
+      "saved": "Сохранено",
+      "saveGroups": "Сохранить группы",
+      "saving": "Сохранение..."
+    },
+    "timeline": {
+      "title": "Хронология",
+      "firstFailed": "Первая ошибка",
+      "lastChecked": "Последняя проверка",
+      "failures": "Ошибки",
+      "failureStreak": "{{count}} подряд",
+      "failureTotal": "{{count}} всего",
+      "lastHealthy": "Последнее здоровье",
+      "noData": "Записей проверок канала пока нет."
+    },
+    "managers": {
+      "description": "Управление пользователями с правами менеджера в групповых чатах.",
+      "groups": "Группы",
+      "noManagerGroups": "Нет групп менеджеров",
+      "noManagerGroupsHint": "Используйте форму ниже для добавления менеджера в группу.",
+      "loadingManagers": "Загрузка менеджеров...",
+      "noManagers": "Нет менеджеров в этой группе.",
+      "managersCount": "{{count}} менеджер",
+      "managersCountPlural": "{{count}} менеджеров",
+      "searchContacts": "Поиск контактов...",
+      "noResults": "Контакты не найдены",
+      "columns": {
+        "userId": "ID пользователя",
+        "name": "Имя",
+        "username": "Username"
+      },
+      "addForm": {
+        "title": "Добавить менеджера в новую группу",
+        "hint": "Добавьте менеджера в группу, которая не появляется в списке выше.",
+        "groupId": "ID группы *",
+        "groupIdPlaceholder": "напр. group:telegram:-100123456",
+        "userId": "ID пользователя *",
+        "userIdPlaceholder": "Поиск или ввод ID пользователя",
+        "displayName": "Отображаемое имя",
+        "username": "Username",
+        "optional": "Опционально",
+        "usernameWithout": "Опционально (без @)",
+        "adding": "Добавление...",
+        "addManager": "Добавить менеджера",
+        "add": "Добавить",
+        "errors": {
+          "groupUserRequired": "ID группы и ID пользователя обязательны",
+          "failedAdd": "Не удалось добавить менеджера"
+        }
+      }
+    }
+  },
+  "fieldConfig": {
+    "token": { "label": "Токен бота", "help": "От @BotFather" },
+    "bot_token": { "label": "Токен бота" },
+    "app_token": {
+      "label": "Токен приложения",
+      "help": "Токен приложения с областью connections:write (требуется для Socket Mode)"
+    },
+    "user_token": {
+      "label": "Токен пользователя (опционально)",
+      "help": "Опционально: User OAuth Token для кастомной идентичности бота. Оставьте пустым для использования идентичности бота по умолчанию."
+    },
+    "app_id": { "label": "App ID" },
+    "app_secret": { "label": "App Secret" },
+    "encrypt_key": { "label": "Ключ шифрования", "help": "Для режима webhook" },
+    "verification_token": {
+      "label": "Токен верификации",
+      "help": "Для режима webhook"
+    },
+    "webhook_secret": { "label": "Webhook секрет" },
+    "api_server": {
+      "label": "URL API сервера",
+      "help": "Кастомный Telegram Bot API сервер для загрузки больших файлов (до 2ГБ). Оставьте пустым для умолчания."
+    },
+    "proxy": {
+      "label": "HTTP прокси",
+      "help": "Маршрутизировать трафик бота через HTTP прокси"
+    },
+    "dm_policy": { "label": "Политика ЛС" },
+    "group_policy": { "label": "Политика группы" },
+    "require_mention": {
+      "label": "Требовать @mention в группах",
+      "disabledHint": "Мультибот-режим всегда слушает все сообщения"
+    },
+    "mention_mode": {
+      "label": "Поведение ответа в группах",
+      "help": "Как бот решает, когда отвечать в группах с несколькими ботами."
+    },
+    "history_limit": {
+      "label": "Лимит истории группы",
+      "help": "Макс. ожидающих сообщений группы для контекста (0 = отключено)"
+    },
+    "dm_stream": {
+      "label": "Стриминг в ЛС",
+      "help": "Стримить ответ прогрессивно в ЛС"
+    },
+    "group_stream": {
+      "label": "Стриминг в группах",
+      "help": "Стримить ответ прогрессивно в группах"
+    },
+    "draft_transport": {
+      "label": "Предпросмотр черновика",
+      "help": "Использовать скрытый предпросмотр черновика для стрима ответов в ЛС — без уведомлений при редактировании (требует Стриминг в ЛС)"
+    },
+    "reasoning_stream": {
+      "label": "Показывать рассуждения",
+      "help": "Отображать мышление AI как отдельное сообщение перед ответом (требует стриминг)"
+    },
+    "reaction_level": { "label": "Уровень реакций" },
+    "media_max_mb": { "label": "Макс. размер медиа (МБ)" },
+    "link_preview": { "label": "Предпросмотр ссылок" },
+    "allow_from": { "label": "Разрешённые пользователи" },
+    "block_reply": {
+      "label": "Блокировать ответ",
+      "help": "Доставлять промежуточный текст во время итераций инструментов"
+    },
+    "domain": { "label": "Домен" },
+    "connection_mode": {
+      "label": "Режим подключения",
+      "help": "WebSocket не требует публичного IP — только исходящее подключение"
+    },
+    "webhook_port": {
+      "label": "Webhook порт",
+      "help": "0 = использовать основной порт шлюза (рекомендуется)"
+    },
+    "webhook_path": {
+      "label": "Webhook путь",
+      "help": "Путь на основном сервере для событий Lark"
+    },
+    "webhook_url": { "label": "Webhook URL" },
+    "topic_session_mode": {
+      "label": "Режим сессии топика",
+      "help": "Использовать thread root_id для изоляции сессии"
+    },
+    "render_mode": { "label": "Режим рендеринга" },
+    "text_chunk_limit": {
+      "label": "Лимит чанка текста",
+      "help": "Макс. символов на сообщение"
+    },
+    "group_allow_from": {
+      "label": "Разрешённые пользователи группы",
+      "help": "Отдельный allowlist для отправителей группы"
+    },
+    "native_stream": {
+      "label": "Нативный стриминг (Agents & AI Apps)",
+      "help": "Использовать Slack ChatStreamer API для нативного стриминга. Fallback на edit-in-place если недоступен."
+    },
+    "debounce_delay": {
+      "label": "Задержка debounce (мс)",
+      "help": "Миллисекунды ожидания перед отправкой быстрых сообщений. Установите 0 для отключения."
+    },
+    "thread_ttl": {
+      "label": "TTL участия в тредах (часы)",
+      "help": "Часы перед тем как бот перестаёт автоматически отвечать в тредах, где участвовал. 0 = всегда требуется @mention."
+    },
+    "skills": {
+      "label": "Фильтр скиллов",
+      "help": "Ограничить доступные скиллы для этой группы"
+    },
+    "tools": {
+      "label": "Allowlist инструментов",
+      "help": "Ограничить, какие инструменты агент может использовать в этой группе"
+    },
+    "system_prompt": { "label": "Системный промпт" }
+  },
+  "fieldOptions": {
+    "block_reply": {
+      "inherit": "Наследовать от шлюза",
+      "true": "Включено",
+      "false": "Отключено"
+    },
+    "dm_policy": {
+      "pairing": "Сопряжение (требуется код)",
+      "open": "Открыто (принимать все)",
+      "allowlist": "Только allowlist",
+      "disabled": "Отключено"
+    },
+    "group_policy": {
+      "open": "Открыто (принимать все)",
+      "pairing": "Сопряжение (требуется одобрение)",
+      "allowlist": "Только allowlist",
+      "disabled": "Отключено"
+    },
+    "mention_mode": {
+      "strict": "По умолчанию (следует настройке @mention)",
+      "yield": "Мультибот (отвечает пока другой бот не @mentioned)"
+    },
+    "reaction_level": {
+      "off": "Выкл",
+      "minimal": "Минимум",
+      "full": "Полный"
+    },
+    "domain": {
+      "lark": "Lark (Global)",
+      "feishu": "Feishu (China)"
+    },
+    "connection_mode": {
+      "webhook": "Webhook",
+      "websocket": "WebSocket (рекомендуется)"
+    },
+    "topic_session_mode": {
+      "disabled": "Отключено",
+      "enabled": "Включено"
+    },
+    "render_mode": {
+      "auto": "Авто",
+      "raw": "Raw",
+      "card": "Карточка"
+    }
+  },
+  "groupOverrides": {
+    "title": "Переопределения группы и топика",
+    "hint": "Переопределить умолчания канала для конкретного группового чата или форум-топика. Используйте \"*\" как ID группы для подстановочных умолчаний.",
+    "groupLabel": "Группа: {{id}}",
+    "groupWildcard": "* (подстановка)",
+    "addGroupPlaceholder": "Chat ID (напр. -100123456) или *",
+    "addGroup": "Добавить группу",
+    "knownGroups": "Известные группы",
+    "topicOverrides": "Переопределения топика",
+    "topicLabel": "Топик: {{id}}",
+    "addTopicPlaceholder": "ID треда топика",
+    "addTopic": "Добавить топик",
+    "fieldConfig": {
+      "dm_stream": {
+        "label": "Стриминг в ЛС",
+        "help": "Стримить ответ прогрессивно в ЛС"
+      },
+      "group_stream": {
+        "label": "Стриминг в группах",
+        "help": "Стримить ответ прогрессивно в группах"
+      },
+      "draft_transport": {
+        "label": "Предпросмотр черновика",
+        "help": "Использовать скрытый предпросмотр черновика для стрима ответов в ЛС — без уведомлений при редактировании (требует Стриминг в ЛС)"
+      },
+      "reasoning_stream": {
+        "label": "Показывать рассуждения",
+        "help": "Отображать мышление AI как отдельное сообщение перед ответом (требует стриминг)"
+      }
+    },
+    "fields": {
+      "groupPolicy": "Политика группы",
+      "requireMention": "Требовать @mention",
+      "enabled": "Включён",
+      "allowedUsers": "Разрешённые пользователи",
+      "allowedUsersPlaceholder": "Один ID пользователя на строку или через запятую",
+      "skillsFilter": "Фильтр скиллов",
+      "skillsPlaceholder": "Одно имя скилла на строку (пусто = наследовать)",
+      "toolAllow": "Разрешить инструменты",
+      "toolAllowPlaceholder": "Выберите разрешённые инструменты (пусто = наследовать все)...",
+      "toolAllowHint": "Ограничить доступные инструменты в этой группе. Поддерживает имена групп как \"group:web\", \"group:fs\". Пусто = наследовать все.",
+      "systemPrompt": "Системный промпт",
+      "systemPromptPlaceholder": "Дополнительный системный промпт для этой группы/топика",
+      "inherit": "Наследовать (умолчание канала)",
+      "yes": "Да",
+      "no": "Нет"
+    }
+  },
+  "wizard": {
+    "zaloPersonal": {
+      "createLabel": "Создать и авторизовать",
+      "formBanner": "После создания вы авторизуетесь через QR-код и настроите разрешённых пользователей."
+    },
+    "whatsapp": {
+      "createLabel": "Создать и сканировать QR",
+      "formBanner": "После создания отсканируйте QR-код WhatsApp для авторизации."
+    }
+  },
+  "fallback": {
+    "authRequiredSummary": "Требуется авторизация",
+    "authRequiredDetail": "Экземпляр канала включён, но требует входа перед подключением.",
+    "authRequiredHeadline": "Переподключите сессию канала",
+    "authRequiredHint": "Авторизуйте этот канал снова для восстановления текущей сессии.",
+    "missingCredentialsSummary": "Отсутствуют учётные данные",
+    "missingCredentialsDetail": "Экземпляр канала включён, но обязательные учётные данные неполные.",
+    "missingCredentialsHeadline": "Заполните обязательные учётные данные",
+    "missingCredentialsHint": "Откройте учётные данные и заполните отсутствующие или невалидные значения для этого канала."
+  },
+  "scopes": {
+    "title": "Требуемые разрешения API",
+    "description": "Ваше Lark/Feishu приложение должно иметь эти области, включённые в Developer Console. Опубликуйте новую версию приложения после добавления разрешений.",
+    "publishReminder": "После добавления областей установите Диапазон контактов в \"Все участники\" и опубликуйте новую версию приложения для применения изменений."
+  },
+  "toast": {
+    "created": "Канал создан",
+    "createdDesc": "{{name}} добавлен",
+    "updated": "Канал обновлён",
+    "deleted": "Канал удалён",
+    "failedCreate": "Не удалось создать канал",
+    "failedUpdate": "Не удалось обновить канал",
+    "failedDelete": "Не удалось удалить канал"
+  },
+  "zalo": {
+    "allowedUsers": "Разрешённые пользователи",
+    "loadContacts": "Загрузить контакты",
+    "loading": "Загрузка...",
+    "searchContacts": "Поиск контактов...",
+    "friends": "Друзья",
+    "groups": "Группы",
+    "membersCount": "{{count}} участников",
+    "noContacts": "Контакты не найдены",
+    "noContactsMatch": "Контакты не соответствуют \"{{search}}\"",
+    "addManualPlaceholder": "Добавить ID вручную",
+    "add": "Добавить",
+    "zaloIdsHint": "ID пользователей Zalo или ID групп",
+    "completeQrLogin": "Завершите QR-вход для загрузки контактов",
+    "loginQr": "Вход по QR — {{name}}",
+    "loginSuccessful": "Вход успешен! Канал запускается...",
+    "generatingQr": "Генерация QR-кода...",
+    "scanHint": "Отсканируйте через приложение Zalo (истекает через ~100с)",
+    "loginSuccessLoading": "Вход успешен! Загрузка контактов...",
+    "retry": "Повторить",
+    "close": "Закрыть",
+    "skip": "Пропустить"
+  },
+  "whatsapp": {
+    "loginSuccessLoading": "✅ WhatsApp подключён! Загрузка канала...",
+    "waitingForQr": "Ожидание QR-кода...",
+    "scanHint": "Откройте WhatsApp → нажмите Вы → Связанные устройства → Привязать устройство",
+    "initializing": "Инициализация...",
+    "skip": "Пропустить",
+    "retry": "Повторить",
+    "close": "Закрыть",
+    "reauthTitle": "Привязать WhatsApp — {{name}}",
+    "reauthDescription": "Отсканируйте QR-код WhatsApp для привязки устройства.",
+    "alreadyLinked": "✅ Устройство уже привязано",
+    "alreadyLinkedDetail": "WhatsApp подключён. Для привязки другого устройства нажмите Перезвязать — это выйдет из текущей сессии.",
+    "relinkDevice": "Перезвязать устройство",
+    "connectedSuccess": "✅ WhatsApp успешно подключён!",
+    "tabQrCode": "QR-код"
+  }
+}

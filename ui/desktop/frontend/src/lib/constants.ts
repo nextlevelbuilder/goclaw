@@ -3,6 +3,7 @@ export const LANGUAGES = [
   { value: 'en', label: 'EN', flag: '🇺🇸' },
   { value: 'vi', label: 'VI', flag: '🇻🇳' },
   { value: 'zh', label: 'ZH', flag: '🇨🇳' },
+  { value: 'ru', label: 'RU', flag: '🇷🇺' },
 ] as const
 
 // Fallback timezone list if Intl.supportedValuesOf is unavailable

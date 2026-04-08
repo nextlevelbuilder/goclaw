@@ -1,0 +1,157 @@
+{
+  "title": "Каналы",
+  "description": "Подключите мессенджеры к вашим агентам",
+  "addChannel": "Добавить канал",
+  "atLimit": "Lite-версия: макс. 1 Telegram + 1 Discord.",
+  "emptyTitle": "Нет каналов",
+  "emptyDesc": "Подключите Telegram или Discord для общения с агентами из мессенджеров.",
+  "status": {
+    "running": "Работает",
+    "stopped": "Остановлен",
+    "disabled": "Отключён",
+    "degraded": "Нестабильно",
+    "starting": "Запуск",
+    "registered": "Настроен",
+    "failed": "Ошибка"
+  },
+  "channelTypes": {
+    "telegram": "Telegram",
+    "discord": "Discord"
+  },
+  "form": {
+    "createTitle": "Добавить канал",
+    "displayName": "Отображаемое имя",
+    "displayNamePlaceholder": "Мой Telegram-бот",
+    "channelType": "Тип канала",
+    "selectType": "Выберите тип",
+    "agent": "Агент",
+    "selectAgent": "Выбрать агента",
+    "enabled": "Включён",
+    "credentials": "Учётные данные",
+    "credentialsHint": "(оставьте пустым, чтобы сохранить текущие)",
+    "configuration": "Конфигурация",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "create": "Создать",
+    "saving": "Сохранение...",
+    "errors": {
+      "agentRequired": "Агент обязателен",
+      "typeRequired": "Тип канала обязателен",
+      "tokenRequired": "Токен бота обязателен"
+    }
+  },
+  "detail": {
+    "back": "Назад",
+    "lastChecked": "Последняя проверка: {{value}}",
+    "tabs": {
+      "general": "Общие",
+      "credentials": "Учётные данные",
+      "managers": "Менеджеры",
+      "advanced": "Дополнительно"
+    },
+    "general": {
+      "identity": "Идентичность",
+      "name": "Имя",
+      "nameHint": "Только для чтения, slug-идентификатор",
+      "channelType": "Тип канала",
+      "displayName": "Отображаемое имя",
+      "displayNamePlaceholder": "Введите отображаемое имя",
+      "agent": "Агент",
+      "selectAgent": "Выбрать агента",
+      "enabled": "Включён",
+      "saveChanges": "Сохранить изменения",
+      "saving": "Сохранение..."
+    },
+    "policies": "Политики",
+    "credentials": {
+      "hint": "Оставьте поля пустыми, чтобы сохранить текущие значения. Учётные данные зашифрованы.",
+      "updateCredentials": "Обновить учётные данные",
+      "saving": "Сохранение...",
+      "saved": "Учётные данные обновлены"
+    },
+    "managers": {
+      "description": "Назначьте пользователей менеджерами групп каналов. Менеджеры могут модерировать беседы.",
+      "groups": "Группы",
+      "noManagerGroups": "Пока нет групп менеджеров",
+      "noManagerGroupsHint": "Группы появятся здесь, когда пользователи начнут взаимодействовать с ботом в групповых чатах.",
+      "loadingManagers": "Загрузка менеджеров...",
+      "noManagers": "В этой группе нет менеджеров",
+      "managersCount": "{{count}} менеджер",
+      "managersCountPlural": "{{count}} менеджеров",
+      "columns": {
+        "userId": "ID пользователя",
+        "name": "Имя",
+        "username": "Username"
+      },
+      "addForm": {
+        "title": "Добавить менеджера",
+        "hint": "Введите данные группы и пользователя для добавления менеджера",
+        "groupId": "ID группы",
+        "groupIdPlaceholder": "напр. group:telegram:-100123456",
+        "userId": "ID пользователя",
+        "userIdPlaceholder": "Поиск или ввод ID",
+        "addManager": "Добавить менеджера",
+        "add": "Добавить",
+        "errors": {
+          "groupUserRequired": "ID группы и ID пользователя обязательны",
+          "failedAdd": "Не удалось добавить менеджера"
+        }
+      }
+    },
+    "advanced": "Дополнительно",
+    "advancedTitle": "Дополнительные настройки",
+    "network": "Сеть",
+    "networkDesc": "Конфигурация API-сервера и прокси",
+    "limits": "Лимиты",
+    "limitsDesc": "Лимиты сообщений и медиа",
+    "streaming": "Потоковая передача",
+    "streamingDesc": "Прогрессивная доставка ответов",
+    "behavior": "Поведение",
+    "behaviorDesc": "Реакции, превью и режим ответов",
+    "accessControl": "Контроль доступа",
+    "accessControlDesc": "Ограничения списка разрешённых пользователей",
+    "saveConfig": "Сохранить",
+    "noAdvanced": "Нет дополнительных настроек для этого типа канала."
+  },
+  "pairing": {
+    "title": "Сопряжённые устройства",
+    "pending": "Ожидающие запросы ({{count}})",
+    "paired": "Сопряжённые устройства ({{count}})",
+    "empty": "Нет сопряжённых устройств",
+    "emptyDesc": "Устройства появятся здесь, когда пользователи напишут боту и потребуется подтверждение.",
+    "sender": "Отправитель: ",
+    "chat": "Чат: ",
+    "code": "Код",
+    "approve": "Одобрить",
+    "deny": "Отклонить",
+    "revoke": "Отозвать",
+    "confirmApprove": {
+      "title": "Одобрить сопряжение",
+      "description": "Одобрить {{channel}}:{{senderId}} (код: {{code}})? Это устройство сможет взаимодействовать с агентами.",
+      "confirmLabel": "Одобрить"
+    },
+    "confirmDeny": {
+      "title": "Отклонить сопряжение",
+      "description": "Отклонить {{channel}}:{{senderId}} (код: {{code}})? Запрос будет удалён.",
+      "confirmLabel": "Отклонить"
+    },
+    "confirmRevoke": {
+      "title": "Отозвать устройство",
+      "description": "Отозвать {{channel}}:{{senderId}}? Устройству потребуется повторное сопряжение.",
+      "confirmLabel": "Отозвать"
+    }
+  },
+  "toast": {
+    "created": "Канал создан",
+    "updated": "Канал обновлён",
+    "deleted": "Канал удалён",
+    "failedCreate": "Не удалось создать канал",
+    "failedUpdate": "Не удалось обновить канал",
+    "failedDelete": "Не удалось удалить канал"
+  },
+  "delete": {
+    "title": "Удалить канал",
+    "description": "Удалить {{name}}? Это нельзя отменить.",
+    "confirmLabel": "Удалить"
+  }
+}
