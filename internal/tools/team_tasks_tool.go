@@ -28,8 +28,8 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 		"type": "object",
 		"properties": map[string]any{
 			"action": map[string]any{
-				"type": "string",
-				"enum": t.policy.AllowedActions(),
+				"type":        "string",
+				"enum":        t.policy.AllowedActions(),
 				"description": t.buildActionDescription(),
 			},
 			"task_id": map[string]any{
@@ -105,15 +105,16 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 // buildActionDescription returns the action parameter description based on policy.
 // Includes per-action param guide so models know which params to send.
 func (t *TeamTasksTool) buildActionDescription() string {
-	base := "Available actions: " + strings.Join(t.policy.AllowedActions(), ", ") + "."
+	var base strings.Builder
+	base.WriteString("Available actions: " + strings.Join(t.policy.AllowedActions(), ", ") + ".")
 	if t.policy.IsAllowed("ask_user") {
-		base += " ask_user: set a periodic reminder. clear_ask_user: cancel reminder."
+		base.WriteString(" ask_user: set a periodic reminder. clear_ask_user: cancel reminder.")
 	}
 	if t.policy.IsAllowed("retry") {
-		base += " retry: re-dispatch a stale/failed task."
+		base.WriteString(" retry: re-dispatch a stale/failed task.")
 	}
 	// Per-action param guide — only list actions allowed by policy.
-	base += "\n\nParams per action (only send listed params):\n"
+	base.WriteString("\n\nParams per action (only send listed params):\n")
 	guide := map[string]string{
 		"list":           "- list: status?, page?\n",
 		"get":            "- get: task_id\n",
@@ -135,10 +136,10 @@ func (t *TeamTasksTool) buildActionDescription() string {
 	}
 	for _, action := range t.policy.AllowedActions() {
 		if line, ok := guide[action]; ok {
-			base += line
+			base.WriteString(line)
 		}
 	}
-	return base
+	return base.String()
 }
 
 func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Result {

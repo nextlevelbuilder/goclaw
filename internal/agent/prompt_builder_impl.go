@@ -115,20 +115,20 @@ func (b *BridgePromptBuilder) Build(cfg PromptConfig) (string, error) {
 
 // formatMemorySection renders L0 memory summaries for prompt injection.
 func formatMemorySection(data MemorySectionData) string {
-	section := "## Memory Context\n\nRelevant memories from past sessions:\n"
+	var section strings.Builder
+	section.WriteString("## Memory Context\n\nRelevant memories from past sessions:\n")
 	for _, s := range data.L0Summaries {
-		section += "- " + s.Summary
+		section.WriteString("- " + s.Summary)
 		if s.ID != "" {
-			section += " [use memory_search(\"" + s.ID + "\") for details]"
+			section.WriteString(" [use memory_search(\"" + s.ID + "\") for details]")
 		}
-		section += "\n"
+		section.WriteString("\n")
 	}
 	if data.HasSearch {
-		section += "\nUse `memory_search` for detailed retrieval."
+		section.WriteString("\nUse `memory_search` for detailed retrieval.")
 	}
 	if data.HasKG {
-		section += " Use `knowledge_graph_search` for relationship queries."
+		section.WriteString(" Use `knowledge_graph_search` for relationship queries.")
 	}
-	return section
+	return section.String()
 }
-

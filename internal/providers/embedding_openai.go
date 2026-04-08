@@ -59,10 +59,7 @@ func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([]
 
 	// Process in batches of embeddingBatchSize
 	for start := 0; start < len(texts); start += embeddingBatchSize {
-		end := start + embeddingBatchSize
-		if end > len(texts) {
-			end = len(texts)
-		}
+		end := min(start+embeddingBatchSize, len(texts))
 
 		embeddings, err := p.embedBatch(ctx, texts[start:end])
 		if err != nil {
@@ -142,8 +139,8 @@ func (p *OpenAIEmbeddingProvider) embedBatch(ctx context.Context, texts []string
 // --- Embedding API response types ---
 
 type embeddingResponse struct {
-	Data  []embeddingData  `json:"data"`
-	Usage *embeddingUsage  `json:"usage,omitempty"`
+	Data  []embeddingData `json:"data"`
+	Usage *embeddingUsage `json:"usage,omitempty"`
 }
 
 type embeddingData struct {

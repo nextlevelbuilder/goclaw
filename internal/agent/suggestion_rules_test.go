@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -93,5 +96,37 @@ func TestRepeatedToolRule(t *testing.T) {
 				t.Errorf("expected SuggestSkillAdd, got %q", sg.SuggestionType)
 			}
 		})
+	}
+}
+
+func TestRepeatedToolRule_IncludesSkillDraft(t *testing.T) {
+	rule := &RepeatedToolRule{}
+	sg, err := rule.Evaluate(context.Background(), uuid.New(), AnalysisInput{
+		ToolAggs: []store.ToolAggregate{{ToolName: "web_search", CallCount: 200, SuccessRate: 0.9}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sg == nil {
+		t.Fatal("expected suggestion, got nil")
+	}
+
+	var params map[string]any
+	if err := json.Unmarshal(sg.Parameters, &params); err != nil {
+		t.Fatalf("failed to parse parameters: %v", err)
+	}
+
+	draft, ok := params["skill_draft"].(string)
+	if !ok || draft == "" {
+		t.Fatal("parameters missing skill_draft field")
+	}
+
+	// Verify draft is parseable SKILL.md
+	name, _, _, _ := skills.ParseSkillFrontmatter(draft)
+	if name == "" {
+		t.Error("skill_draft has invalid frontmatter (missing name)")
+	}
+	if !strings.Contains(draft, "web_search") {
+		t.Error("skill_draft missing tool name")
 	}
 }

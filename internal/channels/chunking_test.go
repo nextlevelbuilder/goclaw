@@ -274,11 +274,11 @@ func TestHasFencePrefix_ValidPrefix(t *testing.T) {
 		{"```javascript", true},
 		{"```", true},
 		{"```go\ncode", true},
-		{"`` text", false},         // Only 2 backticks
-		{"`text", false},           // Only 1 backtick
-		{"text```", false},         // ``` not at start
-		{"", false},                // Empty string
-		{"  ```text", false},       // ``` not at position 0
+		{"`` text", false},   // Only 2 backticks
+		{"`text", false},     // Only 1 backtick
+		{"text```", false},   // ``` not at start
+		{"", false},          // Empty string
+		{"  ```text", false}, // ``` not at position 0
 	}
 
 	for _, tt := range tests {
@@ -452,7 +452,7 @@ func TestChunkMarkdown_VerySmallMaxLen(t *testing.T) {
 func TestChunkMarkdown_LargeText(t *testing.T) {
 	// Generate large text with clear boundaries
 	var sb strings.Builder
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		sb.WriteString("This is paragraph number ")
 		sb.WriteString(string(rune(i)))
 		sb.WriteString("\n\n")
@@ -534,19 +534,4 @@ func TestChunkMarkdown_EmptyLines(t *testing.T) {
 	if !strings.Contains(fullText, "text") || !strings.Contains(fullText, "more text") {
 		t.Fatal("content was lost with multiple empty lines")
 	}
-}
-
-// Utility functions for tests
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

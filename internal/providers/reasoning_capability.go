@@ -1,5 +1,7 @@
 package providers
 
+import "slices"
+
 import "strings"
 
 // ReasoningCapability describes the supported reasoning levels for a model.
@@ -14,12 +16,7 @@ func (c *ReasoningCapability) Supports(level string) bool {
 	if c == nil || level == "" {
 		return false
 	}
-	for _, supported := range c.Levels {
-		if supported == level {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Levels, level)
 }
 
 type reasoningCapabilityEntry struct {

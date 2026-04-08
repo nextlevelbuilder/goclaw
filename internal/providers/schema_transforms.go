@@ -1,5 +1,7 @@
 package providers
 
+import "maps"
+
 import "slices"
 
 // ---------------------------------------------------------------------------
@@ -20,18 +22,14 @@ func flattenUnions(schema map[string]any, depth int) map[string]any {
 		if flattened, ok := flattenLiterals(variants); ok {
 			merged := make(map[string]any)
 			copyMeta(schema, merged)
-			for k, v := range flattened {
-				merged[k] = v
-			}
+			maps.Copy(merged, flattened)
 			return flattenUnions(merged, depth+1)
 		}
 		// Try object merge: all variants are objects → merge properties.
 		if merged, ok := mergeObjectVariants(variants); ok {
 			result := make(map[string]any)
 			copyMeta(schema, result)
-			for k, v := range merged {
-				result[k] = v
-			}
+			maps.Copy(result, merged)
 			return flattenUnions(result, depth+1)
 		}
 	}

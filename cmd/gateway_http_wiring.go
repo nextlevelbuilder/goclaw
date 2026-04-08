@@ -160,7 +160,11 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 	// V3: Evolution metrics + suggestions API
 	if d.pgStores != nil && d.pgStores.EvolutionMetrics != nil && d.pgStores.EvolutionSuggestions != nil {
-		d.server.SetEvolutionHandler(httpapi.NewEvolutionHandler(d.pgStores.EvolutionMetrics, d.pgStores.EvolutionSuggestions))
+		var evoOpts []httpapi.EvolutionHandlerOpt
+		if manageStore, ok := d.pgStores.Skills.(store.SkillManageStore); ok && d.skillsLoader != nil {
+			evoOpts = append(evoOpts, httpapi.WithSkillCreation(manageStore, d.skillsLoader, d.dataDir))
+		}
+		d.server.SetEvolutionHandler(httpapi.NewEvolutionHandler(d.pgStores.EvolutionMetrics, d.pgStores.EvolutionSuggestions, evoOpts...))
 	}
 
 	// V3: Knowledge Vault document API

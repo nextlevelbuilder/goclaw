@@ -154,7 +154,7 @@ func TestShouldProbeInterval(t *testing.T) {
 	}
 
 	// Advance past minProbeInterval - allowed
-	now = now.Add(11 * time.Second) // total 31s from start
+	now = now.Add(11 * time.Second)                 // total 31s from start
 	tracker.nowFn = func() time.Time { return now } // Update closure
 	if !tracker.ShouldProbe(key) {
 		t.Error("probe after minProbeInterval should be allowed")
@@ -217,15 +217,13 @@ func TestShouldProbeAtomicity(t *testing.T) {
 
 	// Launch multiple goroutines that all call ShouldProbe at approximately the same time
 	wg := sync.WaitGroup{}
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			result := tracker.ShouldProbe(key)
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -278,9 +276,9 @@ func TestOverloadEscalation(t *testing.T) {
 	key := "openai:gpt-4"
 
 	// Record 5 failures (at cap)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tracker.RecordFailure(key, FailoverOverloaded)
-		now = now.Add(1 * time.Second) // Increment time to allow new failures
+		now = now.Add(1 * time.Second)                  // Increment time to allow new failures
 		tracker.nowFn = func() time.Time { return now } // Update closure
 	}
 
@@ -324,10 +322,10 @@ func TestMaxKeyEviction(t *testing.T) {
 	tracker.nowFn = func() time.Time { return now }
 
 	// Add keys up to max
-	for i := 0; i < maxKeys; i++ {
+	for i := range maxKeys {
 		key := CooldownKey("openai", "model-"+string(rune(i)))
 		tracker.RecordFailure(key, FailoverTimeout)
-		now = now.Add(1 * time.Second) // Increment to make createdAt different
+		now = now.Add(1 * time.Second)                  // Increment to make createdAt different
 		tracker.nowFn = func() time.Time { return now } // Update closure
 	}
 
@@ -369,7 +367,7 @@ func TestTTLCleanup(t *testing.T) {
 	tracker.RecordFailure(key1, FailoverTimeout)
 
 	// Add a fresh entry (will trigger cleanup during next RecordFailure)
-	now = now.Add(25 * time.Hour) // Past TTL (24h)
+	now = now.Add(25 * time.Hour)                   // Past TTL (24h)
 	tracker.nowFn = func() time.Time { return now } // Update closure
 	key2 := CooldownKey("openai", "new-model")
 	tracker.RecordFailure(key2, FailoverTimeout)
@@ -399,7 +397,7 @@ func TestConcurrentAccess(t *testing.T) {
 	wg := sync.WaitGroup{}
 
 	// Concurrent RecordFailure and IsAvailable
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		for _, key := range keys {
 			wg.Add(1)
 			go func(k string) {

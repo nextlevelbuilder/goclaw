@@ -259,6 +259,7 @@ func runGateway() {
 		providerRegistry: providerRegistry,
 		agentRouter:      agentRouter,
 		toolsReg:         toolsReg,
+		skillsLoader:     skillsLoader,
 		workspace:        workspace,
 		dataDir:          dataDir,
 	}

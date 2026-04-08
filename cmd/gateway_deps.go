@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -22,6 +23,7 @@ type gatewayDeps struct {
 	channelMgr       *channels.Manager
 	agentRouter      *agent.Router
 	toolsReg         *tools.Registry
+	skillsLoader     *skills.Loader // optional: enables skill creation in evolution approval
 	workspace        string
 	dataDir          string
 }

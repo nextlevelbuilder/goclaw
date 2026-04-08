@@ -34,14 +34,8 @@ func ExtractWikilinks(content string) []WikilinkMatch {
 		}
 
 		// Build context: ~25 chars before and after the link
-		start := m[0] - 25
-		if start < 0 {
-			start = 0
-		}
-		end := m[1] + 25
-		if end > len(content) {
-			end = len(content)
-		}
+		start := max(m[0]-25, 0)
+		end := min(m[1]+25, len(content))
 		ctx := content[start:end]
 
 		result = append(result, WikilinkMatch{

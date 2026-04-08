@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"slices"
 
@@ -15,9 +16,9 @@ import (
 // AdaptationGuardrails controls auto-adaptation safety limits.
 // Stored in agent other_config JSONB under "evolution_guardrails".
 type AdaptationGuardrails struct {
-	MaxDeltaPerCycle float64  `json:"max_delta_per_cycle"` // max parameter change per cycle (default 0.1)
-	MinDataPoints    int      `json:"min_data_points"`     // min metrics before applying (default 100)
-	RollbackOnDrop   float64  `json:"rollback_on_drop_pct"` // quality drop % triggering rollback (default 20.0)
+	MaxDeltaPerCycle float64  `json:"max_delta_per_cycle"`     // max parameter change per cycle (default 0.1)
+	MinDataPoints    int      `json:"min_data_points"`         // min metrics before applying (default 100)
+	RollbackOnDrop   float64  `json:"rollback_on_drop_pct"`    // quality drop % triggering rollback (default 20.0)
 	LockedParams     []string `json:"locked_params,omitempty"` // params that cannot be auto-changed
 }
 
@@ -165,9 +166,7 @@ func RollbackSuggestion(ctx context.Context, agentStore store.AgentStore, sugSto
 	}
 
 	// Restore each baseline parameter.
-	for key, val := range baseline {
-		otherConfig[key] = val
-	}
+	maps.Copy(otherConfig, baseline)
 
 	configJSON, _ := json.Marshal(otherConfig)
 	if err := agentStore.Update(ctx, sg.AgentID, map[string]any{

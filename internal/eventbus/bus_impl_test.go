@@ -20,8 +20,7 @@ func newTestBus() DomainEventBus {
 
 func TestPublishSubscribe(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var received atomic.Int32
@@ -42,8 +41,7 @@ func TestPublishSubscribe(t *testing.T) {
 
 func TestMultipleHandlers(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var h1, h2 atomic.Int32
@@ -67,8 +65,7 @@ func TestMultipleHandlers(t *testing.T) {
 
 func TestUnsubscribe(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var count atomic.Int32
@@ -92,8 +89,7 @@ func TestUnsubscribe(t *testing.T) {
 
 func TestDedupBySourceID(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var count atomic.Int32
@@ -116,8 +112,7 @@ func TestDedupBySourceID(t *testing.T) {
 
 func TestRetryOnError(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var attempts atomic.Int32
@@ -140,8 +135,7 @@ func TestRetryOnError(t *testing.T) {
 
 func TestDrainFlushes(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var count atomic.Int32
@@ -166,8 +160,7 @@ func TestDrainFlushes(t *testing.T) {
 
 func TestPublishAfterDrain(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var count atomic.Int32
@@ -189,8 +182,7 @@ func TestPublishAfterDrain(t *testing.T) {
 
 func TestEmptySourceIDNeverDeduped(t *testing.T) {
 	bus := newTestBus()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bus.Start(ctx)
 
 	var count atomic.Int32

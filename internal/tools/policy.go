@@ -483,13 +483,7 @@ func filterByCapability(names []string, denyCaps []ToolCapability, reg *Registry
 	out := make([]string, 0, len(names))
 	for _, name := range names {
 		meta := reg.GetMetadata(name)
-		denied := false
-		for _, denyCap := range denyCaps {
-			if meta.HasCapability(denyCap) {
-				denied = true
-				break
-			}
-		}
+		denied := slices.ContainsFunc(denyCaps, meta.HasCapability)
 		if !denied {
 			out = append(out, name)
 		}

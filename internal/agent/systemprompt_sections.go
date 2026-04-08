@@ -466,11 +466,11 @@ func extractSOULEcho(files []bootstrap.ContextFile) string {
 // extractMarkdownSection returns the body of a ## heading section, trimmed to ~200 chars.
 func extractMarkdownSection(content, heading string) string {
 	marker := "## " + heading
-	idx := strings.Index(content, marker)
-	if idx < 0 {
+	_, after, ok := strings.Cut(content, marker)
+	if !ok {
 		return ""
 	}
-	body := content[idx+len(marker):]
+	body := after
 	// Find next heading or end.
 	if next := strings.Index(body, "\n## "); next >= 0 {
 		body = body[:next]

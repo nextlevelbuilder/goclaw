@@ -74,7 +74,11 @@ func (r *RepeatedToolRule) Evaluate(_ context.Context, _ uuid.UUID, input Analys
 				SuggestionType: store.SuggestSkillAdd,
 				Suggestion:     fmt.Sprintf("Tool %q called %d times this week — consider creating a skill to encapsulate this pattern", agg.ToolName, agg.CallCount),
 				Rationale:      fmt.Sprintf("High-frequency successful tool (%d calls, %.0f%% success)", agg.CallCount, agg.SuccessRate*100),
-				Parameters:     marshalParams(map[string]any{"tool": agg.ToolName, "call_count": agg.CallCount}),
+				Parameters: marshalParams(map[string]any{
+					"tool":        agg.ToolName,
+					"call_count":  agg.CallCount,
+					"skill_draft": GenerateSkillDraft(agg.ToolName, agg.CallCount, agg.SuccessRate),
+				}),
 			}, nil
 		}
 	}

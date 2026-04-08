@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -15,10 +16,32 @@ import (
 type EvolutionHandler struct {
 	metrics     store.EvolutionMetricsStore
 	suggestions store.EvolutionSuggestionStore
+
+	// Optional: skill creation on SuggestSkillAdd approval.
+	// Nil-safe — skill creation disabled if any is nil.
+	skillStore  store.SkillManageStore
+	skillLoader *skills.Loader
+	dataDir     string
 }
 
-func NewEvolutionHandler(m store.EvolutionMetricsStore, s store.EvolutionSuggestionStore) *EvolutionHandler {
-	return &EvolutionHandler{metrics: m, suggestions: s}
+// EvolutionHandlerOpt configures optional EvolutionHandler dependencies.
+type EvolutionHandlerOpt func(*EvolutionHandler)
+
+// WithSkillCreation enables skill creation when approving skill_add suggestions.
+func WithSkillCreation(ss store.SkillManageStore, loader *skills.Loader, dataDir string) EvolutionHandlerOpt {
+	return func(h *EvolutionHandler) {
+		h.skillStore = ss
+		h.skillLoader = loader
+		h.dataDir = dataDir
+	}
+}
+
+func NewEvolutionHandler(m store.EvolutionMetricsStore, s store.EvolutionSuggestionStore, opts ...EvolutionHandlerOpt) *EvolutionHandler {
+	h := &EvolutionHandler{metrics: m, suggestions: s}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *EvolutionHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -158,6 +181,7 @@ func (h *EvolutionHandler) handleUpdateSuggestion(w http.ResponseWriter, r *http
 	var body struct {
 		Status     string `json:"status"`
 		ReviewedBy string `json:"reviewed_by"`
+		SkillDraft string `json:"skill_draft,omitempty"` // override draft content for skill_add approval
 	}
 	if !bindJSON(w, r, locale, &body) {
 		return
@@ -176,6 +200,16 @@ func (h *EvolutionHandler) handleUpdateSuggestion(w http.ResponseWriter, r *http
 	reviewedBy := body.ReviewedBy
 	if reviewedBy == "" {
 		reviewedBy = store.UserIDFromContext(r.Context())
+	}
+
+	// Skill creation on approval of skill_add suggestions.
+	if body.Status == "approved" && existing.SuggestionType == store.SuggestSkillAdd {
+		if err := h.applySkillDraft(r.Context(), *existing, body.SkillDraft, reviewedBy); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "action": "skill_created"})
+		return
 	}
 
 	if err := h.suggestions.UpdateSuggestionStatus(r.Context(), suggestionID, body.Status, reviewedBy); err != nil {

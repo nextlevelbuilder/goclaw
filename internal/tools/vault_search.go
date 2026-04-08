@@ -79,7 +79,7 @@ func (t *VaultSearchTool) Execute(ctx context.Context, args map[string]any) *Res
 		opts.Scope = scope
 	}
 	if types, ok := args["types"].(string); ok && types != "" {
-		for _, t := range strings.Split(types, ",") {
+		for t := range strings.SplitSeq(types, ",") {
 			opts.DocTypes = append(opts.DocTypes, strings.TrimSpace(t))
 		}
 	}

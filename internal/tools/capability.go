@@ -1,13 +1,15 @@
 package tools
 
+import "slices"
+
 // ToolCapability describes what a tool can do.
 type ToolCapability string
 
 const (
 	CapReadOnly   ToolCapability = "read-only"   // no side effects
-	CapMutating   ToolCapability = "mutating"     // modifies state
-	CapAsync      ToolCapability = "async"        // returns immediately
-	CapMCPBridged ToolCapability = "mcp-bridged"  // proxied to external MCP server
+	CapMutating   ToolCapability = "mutating"    // modifies state
+	CapAsync      ToolCapability = "async"       // returns immediately
+	CapMCPBridged ToolCapability = "mcp-bridged" // proxied to external MCP server
 )
 
 // ToolMetadata describes a tool's capabilities and requirements.
@@ -21,12 +23,7 @@ type ToolMetadata struct {
 
 // HasCapability checks if metadata includes a specific capability.
 func (m ToolMetadata) HasCapability(cap ToolCapability) bool {
-	for _, c := range m.Capabilities {
-		if c == cap {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.Capabilities, cap)
 }
 
 // IsMutating returns true if the tool modifies state.

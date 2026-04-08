@@ -40,7 +40,7 @@ type UnifiedSearchResult struct {
 	ID      string
 	Title   string
 	Path    string
-	Source  string  // "vault", "episodic", "kg"
+	Source  string // "vault", "episodic", "kg"
 	Score   float64
 	DocType string
 	Snippet string
@@ -48,8 +48,8 @@ type UnifiedSearchResult struct {
 
 // VaultSearchService coordinates fan-out search across all registered stores.
 type VaultSearchService struct {
-	vaultStore    store.VaultStore    // may be nil if vault disabled
-	episodicStore store.EpisodicStore // may be nil
+	vaultStore    store.VaultStore          // may be nil if vault disabled
+	episodicStore store.EpisodicStore       // may be nil
 	kgStore       store.KnowledgeGraphStore // may be nil
 }
 
@@ -77,9 +77,7 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 
 	// Fan-out: vault
 	if s.vaultStore != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			results, err := s.vaultStore.Search(ctx, store.VaultSearchOptions{
 				Query:      opts.Query,
 				AgentID:    opts.AgentID,
@@ -107,14 +105,12 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 			mu.Lock()
 			vaultResults = converted
 			mu.Unlock()
-		}()
+		})
 	}
 
 	// Fan-out: episodic
 	if s.episodicStore != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			results, err := s.episodicStore.Search(ctx, opts.Query, opts.AgentID, opts.UserID, store.EpisodicSearchOptions{
 				MaxResults: opts.MaxResults * 2,
 				MinScore:   opts.MinScore,
@@ -137,14 +133,12 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 			mu.Lock()
 			episodicResults = converted
 			mu.Unlock()
-		}()
+		})
 	}
 
 	// Fan-out: knowledge graph
 	if s.kgStore != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			entities, err := s.kgStore.SearchEntities(ctx, opts.AgentID, opts.UserID, opts.Query, opts.MaxResults*2)
 			if err != nil {
 				return
@@ -164,7 +158,7 @@ func (s *VaultSearchService) Search(ctx context.Context, opts UnifiedSearchOptio
 			mu.Lock()
 			kgResults = converted
 			mu.Unlock()
-		}()
+		})
 	}
 
 	wg.Wait()
