@@ -39,6 +39,7 @@ type Options struct {
 	PrivacyURL      string   // optional — default "https://goclaw.dev/privacy"
 	TermsURL        string   // optional — default "https://goclaw.dev/terms"
 	Version         string   // optional — default "1.0.0"
+	AccentColor     string   // optional — default "#4B53BC"
 	Scopes          []string // optional — default ["personal","team","groupChat"]
 	ColorIcon       []byte   // optional — custom 192x192 PNG
 	OutlineIcon     []byte   // optional — custom 32x32 PNG
@@ -53,10 +54,11 @@ type Manifest struct {
 	Name            NameField  `json:"name"`
 	Description     DescField  `json:"description"`
 	Developer       DevField   `json:"developer"`
+	Icons           IconsField `json:"icons"`
+	AccentColor     string     `json:"accentColor"`
 	Bots            []BotEntry `json:"bots"`
 	Permissions     []string   `json:"permissions"`
 	ValidDomains    []string   `json:"validDomains"`
-	Icons           IconsField `json:"icons"`
 }
 
 // NameField represents the name section of manifest.
@@ -113,13 +115,14 @@ func GenerateZIP(opts Options) ([]byte, error) {
 			PrivacyURL: opts.PrivacyURL,
 			TermsURL:   opts.TermsURL,
 		},
+		Icons:       IconsField{Color: "color.png", Outline: "outline.png"},
+		AccentColor: opts.AccentColor,
 		Bots: []BotEntry{{
 			BotID:  opts.BotID,
 			Scopes: opts.Scopes,
 		}},
 		Permissions:  []string{"identity", "messageTeamMembers"},
 		ValidDomains: []string{},
-		Icons:        IconsField{Color: "color.png", Outline: "outline.png"},
 	}
 
 	manifestJSON, err := json.MarshalIndent(m, "", "  ")
@@ -213,6 +216,9 @@ func applyDefaults(opts *Options) {
 	}
 	if opts.TermsURL == "" {
 		opts.TermsURL = "https://goclaw.dev/terms"
+	}
+	if opts.AccentColor == "" {
+		opts.AccentColor = "#4B53BC"
 	}
 	if opts.Version == "" {
 		opts.Version = "1.0.0"
