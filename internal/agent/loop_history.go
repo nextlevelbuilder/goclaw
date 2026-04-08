@@ -255,6 +255,15 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		contextFiles = filtered
 	}
 
+	// Filter unnecessary context files for team-dispatched member sessions.
+	// Member agents processing delegated tasks don't need user profile (USER.md),
+	// predefined user rules (USER_PREDEFINED.md), or monitoring files (HEARTBEAT.md).
+	// Persona (SOUL.md, IDENTITY.md), behavioral rules (AGENTS.md), team context
+	// (TEAM.md), and memory are preserved.
+	if isTeamDispatch {
+		contextFiles = bootstrap.FilterContextFilesForTeamSession(contextFiles)
+	}
+
 	// Resolve team members so agent knows who to assign tasks to.
 	// Only resolve when team context is active — avoids unnecessary DB query for member-only inbound chats.
 	var teamMembers []store.TeamMemberData
@@ -279,6 +288,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
 		IsTeamContext:          injectTeamContext,
+		IsTeamLead:             l.isTeamLead,
 		TeamWorkspace:          tools.ToolTeamWorkspaceFromCtx(ctx),
 		TeamMembers:            teamMembers,
 		TeamGuidance:           teamGuidance(edition.Current().TeamFullMode),
