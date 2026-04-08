@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Network, Trash2, Search, GitFork, Sparkles, RefreshCw, LayoutGrid, Share2, Merge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,24 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
   const { stats } = useKGStats(agentId, userId);
   const graphData = useKGGraph(agentId, userId);
   const showSkeleton = useDeferredLoading(loading && entities.length === 0);
+
+  // Filter graph data by search query (client-side)
+  const filteredGraphData = useMemo(() => {
+    if (!appliedQuery) return graphData;
+    const q = appliedQuery.toLowerCase();
+    const matchedIds = new Set<string>();
+    const matched = graphData.entities.filter((e) => {
+      const hit = e.name.toLowerCase().includes(q)
+        || e.entity_type.toLowerCase().includes(q)
+        || (e.description ?? "").toLowerCase().includes(q);
+      if (hit) matchedIds.add(e.id);
+      return hit;
+    });
+    const relations = graphData.relations.filter(
+      (r) => matchedIds.has(r.source_entity_id) && matchedIds.has(r.target_entity_id),
+    );
+    return { entities: matched, relations };
+  }, [graphData, appliedQuery]);
 
   const handleSearch = () => setAppliedQuery(searchQuery.trim());
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -130,8 +148,8 @@ export function KGEntitiesTab({ agentId, userId }: KGEntitiesTabProps) {
       <div className="min-h-0 flex-1">
       {viewMode === "graph" ? (
         <KGGraphView
-          entities={graphData.entities}
-          relations={graphData.relations}
+          entities={filteredGraphData.entities}
+          relations={filteredGraphData.relations}
           onEntityClick={setViewEntity}
         />
       ) : showSkeleton ? (
