@@ -20,6 +20,7 @@ type vaultDocRow struct {
 	Title       string    `db:"title"`
 	DocType     string    `db:"doc_type"`
 	ContentHash string    `db:"content_hash"`
+	Summary     string    `db:"summary"`
 	MetaJSON    []byte    `db:"metadata"`
 	CreatedAt   time.Time `db:"created_at"`
 	UpdatedAt   time.Time `db:"updated_at"`
@@ -36,6 +37,7 @@ func (r *vaultDocRow) toVaultDocument() store.VaultDocument {
 		Title:       r.Title,
 		DocType:     r.DocType,
 		ContentHash: r.ContentHash,
+		Summary:     r.Summary,
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 	}

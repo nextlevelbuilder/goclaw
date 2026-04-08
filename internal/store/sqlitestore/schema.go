@@ -15,7 +15,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 9
+const SchemaVersion = 10
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -241,6 +241,7 @@ CREATE TABLE IF NOT EXISTS vault_documents (
     title        TEXT NOT NULL DEFAULT '',
     doc_type     TEXT NOT NULL DEFAULT 'note',
     content_hash TEXT NOT NULL DEFAULT '',
+    summary      TEXT NOT NULL DEFAULT '',
     metadata     TEXT DEFAULT '{}',
     created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -262,6 +263,9 @@ CREATE TABLE IF NOT EXISTS vault_links (
 );
 CREATE INDEX IF NOT EXISTS idx_vault_links_from ON vault_links(from_doc_id);
 CREATE INDEX IF NOT EXISTS idx_vault_links_to ON vault_links(to_doc_id);`,
+
+	// Version 9 → 10: add summary column to vault_documents.
+	9: `ALTER TABLE vault_documents ADD COLUMN summary TEXT NOT NULL DEFAULT '';`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.

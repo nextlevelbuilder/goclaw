@@ -15,6 +15,7 @@ type VaultDocument struct {
 	Title       string         `json:"title" db:"title"`
 	DocType     string         `json:"doc_type" db:"doc_type"`       // context, memory, note, skill, episodic
 	ContentHash string         `json:"content_hash" db:"content_hash"` // SHA-256 hex digest
+	Summary     string         `json:"summary" db:"summary"`           // LLM-generated summary for richer embedding/search
 	Metadata    map[string]any `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt   time.Time      `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at" db:"updated_at"`

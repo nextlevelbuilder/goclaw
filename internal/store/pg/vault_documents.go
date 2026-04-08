@@ -44,7 +44,11 @@ func (s *PGVaultStore) UpsertDocument(ctx context.Context, doc *store.VaultDocum
 	id := uuid.Must(uuid.NewV7())
 	var embStr *string
 	if s.embProvider != nil && doc.Title != "" {
+		// Embed title + path + summary for richer vector search.
 		embedText := doc.Title + " " + doc.Path
+		if doc.Summary != "" {
+			embedText += " " + doc.Summary
+		}
 		vecs, embErr := s.embProvider.Embed(ctx, []string{embedText})
 		if embErr == nil && len(vecs) > 0 {
 			v := vectorToString(vecs[0])
@@ -55,19 +59,20 @@ func (s *PGVaultStore) UpsertDocument(ctx context.Context, doc *store.VaultDocum
 	var actualID uuid.UUID
 	err = s.db.QueryRowContext(ctx, `
 		INSERT INTO vault_documents
-			(id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, embedding, metadata, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+			(id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, summary, embedding, metadata, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
 		ON CONFLICT (agent_id, scope, path) DO UPDATE SET
 			title        = EXCLUDED.title,
 			doc_type     = EXCLUDED.doc_type,
 			content_hash = EXCLUDED.content_hash,
+			summary      = EXCLUDED.summary,
 			embedding    = COALESCE(EXCLUDED.embedding, vault_documents.embedding),
 			metadata     = EXCLUDED.metadata,
 			tenant_id    = EXCLUDED.tenant_id,
 			updated_at   = EXCLUDED.updated_at
 		RETURNING id`,
 		id, tid, aid, doc.Scope, doc.Path, doc.Title, doc.DocType,
-		doc.ContentHash, embStr, meta, now,
+		doc.ContentHash, doc.Summary, embStr, meta, now,
 	).Scan(&actualID)
 	if err != nil {
 		return fmt.Errorf("vault upsert document: %w", err)
@@ -85,12 +90,12 @@ func (s *PGVaultStore) GetDocument(ctx context.Context, tenantID, agentID, path 
 	var tID, aID uuid.UUID
 	var meta []byte
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+		SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents
 		WHERE tenant_id = $1 AND agent_id = $2 AND path = $3`,
 		tid, aid, path,
 	).Scan(&id, &tID, &aID, &doc.Scope, &doc.Path, &doc.Title, &doc.DocType,
-		&doc.ContentHash, &meta, &doc.CreatedAt, &doc.UpdatedAt)
+		&doc.ContentHash, &doc.Summary, &meta, &doc.CreatedAt, &doc.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -109,10 +114,10 @@ func (s *PGVaultStore) GetDocumentByID(ctx context.Context, tenantID, id string)
 	var docID, tID, aID uuid.UUID
 	var meta []byte
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+		SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents WHERE id = $1 AND tenant_id = $2`, uid, tid,
 	).Scan(&docID, &tID, &aID, &doc.Scope, &doc.Path, &doc.Title, &doc.DocType,
-		&doc.ContentHash, &meta, &doc.CreatedAt, &doc.UpdatedAt)
+		&doc.ContentHash, &doc.Summary, &meta, &doc.CreatedAt, &doc.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +142,7 @@ func (s *PGVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID, pa
 func (s *PGVaultStore) ListDocuments(ctx context.Context, tenantID, agentID string, opts store.VaultListOptions) ([]store.VaultDocument, error) {
 	tid := mustParseUUID(tenantID)
 
-	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at
 		FROM vault_documents WHERE tenant_id = $1`
 	args := []any{tid}
 	p := 2
@@ -243,7 +248,7 @@ func (s *PGVaultStore) Search(ctx context.Context, opts store.VaultSearchOptions
 }
 
 func (s *PGVaultStore) ftsSearch(ctx context.Context, query string, tenantID, agentID uuid.UUID, scope string, docTypes []string, limit int) ([]store.VaultSearchResult, error) {
-	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at,
+	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at,
 			ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
 		FROM vault_documents
 		WHERE tenant_id = $2 AND agent_id = $3 AND tsv @@ plainto_tsquery('simple', $1)`
@@ -273,7 +278,7 @@ func (s *PGVaultStore) ftsSearch(ctx context.Context, query string, tenantID, ag
 
 func (s *PGVaultStore) vectorSearch(ctx context.Context, embedding []float32, tenantID, agentID uuid.UUID, scope string, docTypes []string, limit int) ([]store.VaultSearchResult, error) {
 	vecStr := vectorToString(embedding)
-	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at,
+	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, summary, metadata, created_at, updated_at,
 			1 - (embedding <=> $1) AS score
 		FROM vault_documents
 		WHERE tenant_id = $2 AND agent_id = $3 AND embedding IS NOT NULL`
