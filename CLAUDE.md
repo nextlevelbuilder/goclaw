@@ -41,24 +41,28 @@ internal/
 ├── media/                    Media handling utilities
 ├── memory/                   Memory system (pgvector)
 ├── oauth/                    OAuth authentication
+├── orchestration/            Orchestration primitives: BatchQueue[T] generic, ChildResult, media conversion (v3)
 ├── permissions/              RBAC (admin/operator/viewer)
-├── pipeline/                 8-stage agent pipeline (context→history→prompt→think→act→observe→memory→summarize) (v3)
+├── pipeline/                 8-stage agent pipeline (context→history→prompt→think→act→observe→memory→summarize)
 ├── providers/                LLM providers: Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI)
-├── providerresolve/          Provider adapter + model registry with forward-compat resolver (v3)
-├── sandbox/                  Docker-based code sandbox
+├── providerresolve/          Provider adapter + model registry with forward-compat resolver
+├── sandbox/                  Docker-based code execution sandbox
 ├── scheduler/                Lane-based concurrency (main/subagent/cron)
 ├── sessions/                 Session management
 ├── skills/                   SKILL.md loader + BM25 search
-├── store/                    Store interfaces + pg/ (PostgreSQL) implementations, sqlx migrations
+├── store/                    Store interfaces + implementations (PostgreSQL, SQLite)
+│   ├── base/                 Shared store abstractions: Dialect interface, helpers (NilStr, BuildMapUpdate, BuildScopeClause)
+│   ├── pg/                   PostgreSQL implementations (database/sql + pgx/v5)
+│   └── sqlitestore/          SQLite implementations (modernc.org/sqlite)
 ├── tasks/                    Task management
-├── tokencount/               tiktoken BPE token counting (v3)
-├── tools/                    Tool registry, filesystem, exec, web, memory, subagent, MCP bridge, delegate (v3)
+├── tokencount/               tiktoken BPE token counting
+├── tools/                    Tool registry, filesystem, exec, web, memory, subagent, MCP bridge, delegate
 ├── tracing/                  LLM call tracing + optional OTel export (build-tag gated)
 ├── tts/                      Text-to-Speech (OpenAI, ElevenLabs, Edge, MiniMax)
 ├── updater/                  Desktop auto-update checker (Lite edition)
 ├── upgrade/                  Database schema version tracking
-├── vault/                    Knowledge Vault with wikilinks, hybrid search, FS sync (v3)
-├── workspace/                WorkspaceContext resolver for 6 scenarios (v3)
+├── vault/                    Knowledge Vault with wikilinks, hybrid search, FS sync
+├── workspace/                WorkspaceContext resolver for 6 scenarios
 pkg/protocol/                 Wire types (frames, methods, errors, events)
 pkg/browser/                  Browser automation (Rod + CDP)
 migrations/                   PostgreSQL migration files
@@ -68,20 +72,19 @@ ui/desktop/                   Wails v2 desktop app (React frontend + embedded ga
 
 ## Key Patterns
 
-- **Store layer:** Interface-based (`store.SessionStore`, `store.AgentStore`, etc.) with pg/ (PostgreSQL) implementations. Uses `database/sql` + `pgx/v5/stdlib` + sqlx (v3), raw SQL, `execMapUpdate()` helper in `pg/helpers.go`
+- **Store layer:** Interface-based (`store.SessionStore`, `store.AgentStore`, etc.) with shared Dialect pattern in `store/base/`. PostgreSQL (`pg/`) and SQLite (`sqlitestore/`) implementations use `database/sql` + `pgx/v5/stdlib` + sqlx, raw SQL, `BuildMapUpdate()` and `BuildScopeClause()` helpers
 - **Agent types:** `open` (per-user context, 7 files) vs `predefined` (shared context + USER.md per-user)
 - **Context files:** `agent_context_files` (agent-level) + `user_context_files` (per-user), routed via `ContextFileInterceptor`
-- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter (v3) enables pluggable implementations with ModelRegistry forward-compat resolver
-- **Agent loop (v2):** `RunRequest` → think→act→observe → `RunResult`. Events: `run.started`, `run.completed`, `chunk`, `tool.call`, `tool.result`. Auto-summarization at >85% context (token-based only)
-- **Pipeline (v3):** 8-stage loop (context→history→prompt→think→act→observe→memory→summarize) with pluggable callbacks, dual-mode gate via `v3_pipeline_enabled` flag
-- **DomainEventBus (v3):** Typed events with worker pool, dedup, retry. Used by consolidation pipeline and memory workers
-- **3-tier memory (v3):** Working (conversation) → Episodic (session summaries) → Semantic (KG). Progressive loading L0/L1/L2 with auto-inject for L0
-- **Knowledge Vault (v3):** Document registry + [[wikilinks]] + hybrid search, query layer above existing stores, FS sync, unified search
-- **Context propagation:** `store.WithAgentType(ctx)`, `store.WithUserID(ctx)`, `store.WithAgentID(ctx)`, `store.WithLocale(ctx)`, `store.WithTenantID(ctx)` (v3)
-- **Request middleware (v3):** Composable chain (cache, service tier, request guards), zero-alloc fast path for hot operations
-- **Self-evolution (v3):** Metrics → suggestions → auto-adapt. 3 progressive stages: metrics collection, suggestion analysis, guardrail-protected apply/rollback
-- **Orchestration (v3):** Delegate tool for inter-agent task delegation with agent_links, 3 delegation modes (auto/explicit/manual), token-aware work distribution
-- **WebSocket protocol (v3):** Frame types `req`/`res`/`event`. First request must be `connect`
+- **Providers:** Anthropic (native HTTP+SSE), OpenAI-compat (HTTP+SSE), DashScope (Alibaba Qwen), Claude CLI (stdio+MCP bridge), ACP (Anthropic Console Proxy), Codex (OpenAI). All use `RetryDo()` for retries. Loads from `llm_providers` table with encrypted API keys. ProviderAdapter enables pluggable implementations with ModelRegistry forward-compat resolver. Shared SSEScanner in `providers/sse_reader.go` for streaming providers
+- **Pipeline:** 8-stage loop (context→history→prompt→think→act→observe→memory→summarize) with pluggable callbacks, always-on execution path
+- **DomainEventBus:** Typed events with worker pool, dedup, retry. Used by consolidation pipeline and memory workers
+- **3-tier memory:** Working (conversation) → Episodic (session summaries) → Semantic (KG). Progressive loading L0/L1/L2 with auto-inject for L0
+- **Knowledge Vault:** Document registry + [[wikilinks]] + hybrid search, query layer above existing stores, FS sync, unified search
+- **Context propagation:** `store.WithAgentType(ctx)`, `store.WithUserID(ctx)`, `store.WithAgentID(ctx)`, `store.WithLocale(ctx)`, `store.WithTenantID(ctx)`
+- **Request middleware:** Composable chain (cache, service tier, request guards), zero-alloc fast path for hot operations
+- **Self-evolution:** Metrics → suggestions → auto-adapt. 3 progressive stages: metrics collection, suggestion analysis, guardrail-protected apply/rollback
+- **Orchestration:** Delegate tool for inter-agent task delegation with agent_links, 3 delegation modes (auto/explicit/manual), token-aware work distribution. BatchQueue[T] generic for result aggregation
+- **WebSocket protocol:** Frame types `req`/`res`/`event`. First request must be `connect`
 - **Config:** JSON5 at `GOCLAW_CONFIG` env. Secrets in `.env.local` or env vars, never in config.json
 - **Security:** Rate limiting, input guard (detection-only), CORS, shell deny patterns, SSRF protection, path traversal prevention, AES-256-GCM encryption. All security logs: `slog.Warn("security.*")`
 - **Telegram formatting:** LLM output → `SanitizeAssistantContent()` → `markdownToTelegramHTML()` → `chunkHTML()` → `sendHTML()`. Tables rendered as ASCII in `<pre>` tags

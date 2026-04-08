@@ -32,6 +32,17 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
 
 ## [Unreleased]
 
+### Refactored
+
+#### V3 Architecture Refactor — Phase 6 Completion (2026-04-08)
+- **Store unification**: Created `internal/store/base/` with shared Dialect interface, common helpers (NilStr, BuildMapUpdate, BuildScopeClause, execMapUpdate, etc.). PostgreSQL (`pg/`) and SQLite (`sqlitestore/`) now use base/ abstractions via type aliases, eliminating code duplication
+- **Orchestration module**: New `internal/orchestration/` with orchestration primitives: BatchQueue[T] generic for result aggregation, ChildResult structure for capturing child agent outputs, media conversion helpers
+- **Forced V3 pipeline**: Deleted legacy v2 `runLoop()` (~745 LOC). Removed `v3PipelineEnabled` conditional flag — all agents now always execute the unified 8-stage pipeline (context→history→prompt→think→act→observe→memory→summarize)
+- **Gateway decomposition**: Split monolithic gateway.go (1295 LOC → 476 LOC) into focused modules: gateway_deps.go, gateway_http_wiring.go, gateway_events.go, gateway_lifecycle.go, gateway_tools_wiring.go for better maintainability
+- **SSE extraction**: Created shared SSEScanner in `providers/sse_reader.go` — unified streaming implementation used by OpenAI, Codex, and Anthropic streaming providers, eliminating provider-level duplication
+- **UI cleanup**: Removed v2/v3 toggle from web UI settings since v3 is now the only execution path
+- **Build compatibility**: All builds (PostgreSQL standard + SQLite desktop) compile cleanly. Dual-DB store pattern enables seamless database backend switching
+
 ### Added
 
 #### WhatsApp Native Protocol Integration (2026-04-06)

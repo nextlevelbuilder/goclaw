@@ -97,16 +97,18 @@ flowchart TD
 
 | Module | Description |
 |--------|-------------|
-| `internal/gateway/` | WebSocket + HTTP server, client handling, method router |
+| `internal/gateway/` | WebSocket + HTTP server, client handling, method router. Decomposed: gateway_deps, gateway_http_wiring, gateway_events, gateway_lifecycle, gateway_tools_wiring |
 | `internal/gateway/methods/` | RPC method handlers: chat, agents, teams, delegations, sessions, config, skills, cron, pairing, exec approval, usage, send |
 | `internal/agent/` | Agent loop (think, act, observe), router, resolver, system prompt builder, sanitization, pruning, tracing, memory flush, DELEGATION.md + TEAM.md injection |
-| `internal/providers/` | LLM providers: Anthropic (native HTTP + SSE), OpenAI-compatible (HTTP + SSE, 12+ providers), DashScope (Qwen), ACP (JSON-RPC 2.0 subprocess), Claude CLI, Codex, extended thinking support, retry logic |
+| `internal/providers/` | LLM providers: Anthropic (native HTTP + SSE), OpenAI-compatible (HTTP + SSE, 12+ providers), DashScope (Qwen), ACP (JSON-RPC 2.0 subprocess), Claude CLI, Codex, extended thinking support, retry logic. Shared SSEScanner in providers/sse_reader.go |
 | `internal/providers/acp/` | ACP protocol implementation: ProcessPool (subprocess lifecycle), ToolBridge (fs/terminal), session management |
 | `internal/tools/` | Tool registry, filesystem ops, exec/shell, policy engine, subagent, delegation manager, team tools, context file + memory interceptors, credential scrubbing, rate limiting, PathDenyable |
 | `internal/tools/dynamic_loader.go` | Custom tool loader: LoadGlobal (startup), LoadForAgent (per-agent clone), ReloadGlobal (cache invalidation) |
 | `internal/tools/dynamic_tool.go` | Custom tool executor: command template rendering, shell escaping, encrypted env vars |
-| `internal/store/` | Store interfaces: SessionStore, AgentStore, ProviderStore, SkillStore, MemoryStore, CronStore, PairingStore, TracingStore, MCPServerStore, TeamStore, ChannelInstanceStore, ConfigSecretsStore |
+| `internal/store/` | Store interfaces: SessionStore, AgentStore, ProviderStore, SkillStore, MemoryStore, CronStore, PairingStore, TracingStore, MCPServerStore, TeamStore, ChannelInstanceStore, ConfigSecretsStore. Dual-DB support via Dialect pattern |
+| `internal/store/base/` | Shared store abstractions: Dialect interface, NilStr, BuildMapUpdate, BuildScopeClause, and other common helpers for both PostgreSQL and SQLite |
 | `internal/store/pg/` | PostgreSQL implementations (`database/sql` + `pgx/v5`) |
+| `internal/store/sqlitestore/` | SQLite implementations (`modernc.org/sqlite`) for desktop edition |
 | `internal/bootstrap/` | System prompt files (AGENTS.md, SOUL.md, TOOLS.md, IDENTITY.md, USER.md, BOOTSTRAP.md) + seeding + truncation |
 | `internal/config/` | Config loading (JSON5) + env var overlay |
 | `internal/skills/` | SKILL.md loader (5-tier hierarchy) + BM25 search + hot-reload via fsnotify |
@@ -132,13 +134,14 @@ flowchart TD
 | `internal/sessions/` | Session management and lifecycle |
 | `internal/tasks/` | Task management system |
 | `internal/upgrade/` | Database schema version tracking and migrations |
-| `internal/pipeline/` | **[V3]** 8-stage pluggable agent pipeline (context → history → prompt → think → act → observe → memory → summarize) |
-| `internal/eventbus/` | **[V3]** DomainEventBus: typed event publishing, worker pool, dedup, retry, used by consolidation workers |
-| `internal/consolidation/` | **[V3]** Memory consolidation workers: episodic (recent facts), semantic (embeddings), dreaming (synthesis), dedup |
-| `internal/tokencount/` | **[V3]** Token counting: tiktoken BPE counter with fallback, used by pipeline for context tracking |
-| `internal/workspace/` | **[V3]** Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
-| `internal/vault/` | **[V3]** Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
-| `internal/channels/whatsapp/` | **[V3]** Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
+| `internal/pipeline/` | 8-stage pluggable agent pipeline (context → history → prompt → think → act → observe → memory → summarize) |
+| `internal/orchestration/` | Orchestration primitives: BatchQueue[T] generic for result aggregation, ChildResult capture, media conversion helpers |
+| `internal/eventbus/` | DomainEventBus: typed event publishing, worker pool, dedup, retry, used by consolidation workers |
+| `internal/consolidation/` | Memory consolidation workers: episodic (recent facts), semantic (embeddings), dreaming (synthesis), dedup |
+| `internal/tokencount/` | Token counting: tiktoken BPE counter with fallback, used by pipeline for context tracking |
+| `internal/workspace/` | Workspace context resolver: 6 scenarios (agent default, team lead, team member, dispatch, subagent, cron) |
+| `internal/vault/` | Knowledge Vault: wikilinks (semantic mesh), hybrid search (BM25+vector), filesystem sync, L0 auto-injection |
+| `internal/channels/whatsapp/` | Native WhatsApp channel via whatsmeow (replaces WhatsApp API), QR auth, media handling |
 
 ---
 
