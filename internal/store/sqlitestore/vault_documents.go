@@ -1,0 +1,251 @@
+//go:build sqlite || sqliteonly
+
+package sqlitestore
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+// SQLiteVaultStore implements store.VaultStore backed by SQLite.
+type SQLiteVaultStore struct {
+	db *sql.DB
+}
+
+// NewSQLiteVaultStore creates a new SQLite-backed vault store.
+func NewSQLiteVaultStore(db *sql.DB) *SQLiteVaultStore {
+	return &SQLiteVaultStore{db: db}
+}
+
+func (s *SQLiteVaultStore) SetEmbeddingProvider(_ store.EmbeddingProvider) {} // no-op
+func (s *SQLiteVaultStore) Close() error                                   { return nil }
+
+// UpsertDocument inserts or updates a vault document.
+// Uses ON CONFLICT DO UPDATE (never INSERT OR REPLACE — preserves FK cascades to vault_links).
+func (s *SQLiteVaultStore) UpsertDocument(ctx context.Context, doc *store.VaultDocument) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	id := uuid.Must(uuid.NewV7()).String()
+
+	meta, err := json.Marshal(doc.Metadata)
+	if err != nil {
+		meta = []byte("{}")
+	}
+
+	// ON CONFLICT(agent_id, scope, path) DO UPDATE — preserves created_at and FK children
+	err = s.db.QueryRowContext(ctx, `
+		INSERT INTO vault_documents
+			(id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (agent_id, scope, path) DO UPDATE SET
+			title        = excluded.title,
+			doc_type     = excluded.doc_type,
+			content_hash = excluded.content_hash,
+			metadata     = excluded.metadata,
+			tenant_id    = excluded.tenant_id,
+			updated_at   = excluded.updated_at
+		RETURNING id`,
+		id, doc.TenantID, doc.AgentID, doc.Scope, doc.Path, doc.Title, doc.DocType,
+		doc.ContentHash, string(meta), now, now,
+	).Scan(&doc.ID)
+	if err != nil {
+		return fmt.Errorf("vault upsert document: %w", err)
+	}
+	return nil
+}
+
+// GetDocument retrieves a vault document by tenant, agent, and path.
+func (s *SQLiteVaultStore) GetDocument(ctx context.Context, tenantID, agentID, path string) (*store.VaultDocument, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+		FROM vault_documents
+		WHERE tenant_id = ? AND agent_id = ? AND path = ?`, tenantID, agentID, path)
+	return scanVaultDoc(row)
+}
+
+// GetDocumentByID retrieves a vault document by ID with tenant isolation.
+func (s *SQLiteVaultStore) GetDocumentByID(ctx context.Context, tenantID, id string) (*store.VaultDocument, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+		FROM vault_documents WHERE id = ? AND tenant_id = ?`, id, tenantID)
+	return scanVaultDoc(row)
+}
+
+// DeleteDocument removes a vault document (FK cascades delete vault_links).
+func (s *SQLiteVaultStore) DeleteDocument(ctx context.Context, tenantID, agentID, path string) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM vault_documents WHERE tenant_id = ? AND agent_id = ? AND path = ?`,
+		tenantID, agentID, path)
+	return err
+}
+
+// ListDocuments returns vault documents with optional scope/type filters.
+func (s *SQLiteVaultStore) ListDocuments(ctx context.Context, tenantID, agentID string, opts store.VaultListOptions) ([]store.VaultDocument, error) {
+	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+		FROM vault_documents WHERE tenant_id = ?`
+	args := []any{tenantID}
+
+	if agentID != "" {
+		q += " AND agent_id = ?"
+		args = append(args, agentID)
+	}
+	if opts.Scope != "" {
+		q += " AND scope = ?"
+		args = append(args, opts.Scope)
+	}
+	if len(opts.DocTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(opts.DocTypes)-1) + "?"
+		q += " AND doc_type IN (" + placeholders + ")"
+		for _, dt := range opts.DocTypes {
+			args = append(args, dt)
+		}
+	}
+
+	q += " ORDER BY updated_at DESC"
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	q += " LIMIT ?"
+	args = append(args, limit)
+	if opts.Offset > 0 {
+		q += " OFFSET ?"
+		args = append(args, opts.Offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []store.VaultDocument
+	for rows.Next() {
+		doc, scanErr := scanVaultDocRow(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		docs = append(docs, *doc)
+	}
+	return docs, rows.Err()
+}
+
+// UpdateHash updates the content hash for a vault document.
+func (s *SQLiteVaultStore) UpdateHash(ctx context.Context, tenantID, id, newHash string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE vault_documents SET content_hash = ?, updated_at = ? WHERE id = ? AND tenant_id = ?`,
+		newHash, now, id, tenantID)
+	return err
+}
+
+// Search performs LIKE-based search on vault documents (no FTS/vector in lite).
+func (s *SQLiteVaultStore) Search(ctx context.Context, opts store.VaultSearchOptions) ([]store.VaultSearchResult, error) {
+	query := opts.Query
+	if len(query) > 500 {
+		query = query[:500] // F10: query length cap
+	}
+	if query == "" {
+		return nil, nil
+	}
+
+	pattern := "%" + escapeLike(query) + "%"
+	maxResults := opts.MaxResults
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+
+	q := `SELECT id, tenant_id, agent_id, scope, path, title, doc_type, content_hash, metadata, created_at, updated_at
+		FROM vault_documents
+		WHERE tenant_id = ? AND agent_id = ?
+		  AND (title LIKE ? ESCAPE '\' OR path LIKE ? ESCAPE '\')
+		ORDER BY updated_at DESC
+		LIMIT ?`
+	args := []any{opts.TenantID, opts.AgentID, pattern, pattern, maxResults * 2}
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	lowerQuery := strings.ToLower(query)
+	var results []store.VaultSearchResult
+	for rows.Next() {
+		doc, scanErr := scanVaultDocRow(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		// Post-query scoring
+		score := 1.0
+		if strings.Contains(strings.ToLower(doc.Title), lowerQuery) {
+			score += 0.3
+		}
+		if strings.Contains(strings.ToLower(doc.Path), lowerQuery) {
+			score += 0.1
+		}
+		if opts.MinScore > 0 && score < opts.MinScore {
+			continue
+		}
+		results = append(results, store.VaultSearchResult{
+			Document: *doc,
+			Score:    score,
+			Source:   "vault",
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
+	if len(results) > maxResults {
+		results = results[:maxResults]
+	}
+	return results, nil
+}
+
+// --- scan helpers ---
+
+func scanVaultDoc(row *sql.Row) (*store.VaultDocument, error) {
+	var doc store.VaultDocument
+	var meta []byte
+	ca, ua := &sqliteTime{}, &sqliteTime{}
+	err := row.Scan(&doc.ID, &doc.TenantID, &doc.AgentID, &doc.Scope, &doc.Path,
+		&doc.Title, &doc.DocType, &doc.ContentHash, &meta, ca, ua)
+	if err != nil {
+		return nil, err
+	}
+	doc.CreatedAt = ca.Time
+	doc.UpdatedAt = ua.Time
+	if len(meta) > 2 {
+		_ = json.Unmarshal(meta, &doc.Metadata)
+	}
+	return &doc, nil
+}
+
+func scanVaultDocRow(rows *sql.Rows) (*store.VaultDocument, error) {
+	var doc store.VaultDocument
+	var meta []byte
+	ca, ua := &sqliteTime{}, &sqliteTime{}
+	err := rows.Scan(&doc.ID, &doc.TenantID, &doc.AgentID, &doc.Scope, &doc.Path,
+		&doc.Title, &doc.DocType, &doc.ContentHash, &meta, ca, ua)
+	if err != nil {
+		return nil, err
+	}
+	doc.CreatedAt = ca.Time
+	doc.UpdatedAt = ua.Time
+	if len(meta) > 2 {
+		_ = json.Unmarshal(meta, &doc.Metadata)
+	}
+	return &doc, nil
+}
+
+// Interface compliance check.
+var _ store.VaultStore = (*SQLiteVaultStore)(nil)

@@ -15,7 +15,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 8
+const SchemaVersion = 9
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -202,6 +202,66 @@ UPDATE agents SET other_config = json_remove(other_config,
 	7: `ALTER TABLE episodic_summaries ADD COLUMN promoted_at TEXT;
 CREATE INDEX IF NOT EXISTS idx_episodic_unpromoted ON episodic_summaries(agent_id, user_id, created_at)
     WHERE promoted_at IS NULL;`,
+
+	// Version 8 → 9: add kg_dedup_candidates, secure_cli_user_credentials, vault_documents, vault_links.
+	8: `CREATE TABLE IF NOT EXISTS kg_dedup_candidates (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id     VARCHAR(255) NOT NULL DEFAULT '',
+    entity_a_id TEXT NOT NULL REFERENCES kg_entities(id) ON DELETE CASCADE,
+    entity_b_id TEXT NOT NULL REFERENCES kg_entities(id) ON DELETE CASCADE,
+    similarity  REAL NOT NULL,
+    status      VARCHAR(20) NOT NULL DEFAULT 'pending',
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(entity_a_id, entity_b_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kg_dedup_agent ON kg_dedup_candidates(agent_id, status);
+
+CREATE TABLE IF NOT EXISTS secure_cli_user_credentials (
+    id            TEXT NOT NULL PRIMARY KEY,
+    binary_id     TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    user_id       VARCHAR(255) NOT NULL,
+    encrypted_env BLOB NOT NULL,
+    metadata      TEXT NOT NULL DEFAULT '{}',
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id),
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(binary_id, user_id, tenant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_scuc_tenant ON secure_cli_user_credentials(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_scuc_binary ON secure_cli_user_credentials(binary_id);
+
+CREATE TABLE IF NOT EXISTS vault_documents (
+    id           TEXT NOT NULL PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_id     TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    scope        TEXT NOT NULL DEFAULT 'personal',
+    path         TEXT NOT NULL,
+    title        TEXT NOT NULL DEFAULT '',
+    doc_type     TEXT NOT NULL DEFAULT 'note',
+    content_hash TEXT NOT NULL DEFAULT '',
+    metadata     TEXT DEFAULT '{}',
+    created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(agent_id, scope, path)
+);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_tenant ON vault_documents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_agent_scope ON vault_documents(agent_id, scope);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_type ON vault_documents(agent_id, doc_type);
+CREATE INDEX IF NOT EXISTS idx_vault_docs_hash ON vault_documents(content_hash);
+
+CREATE TABLE IF NOT EXISTS vault_links (
+    id          TEXT NOT NULL PRIMARY KEY,
+    from_doc_id TEXT NOT NULL REFERENCES vault_documents(id) ON DELETE CASCADE,
+    to_doc_id   TEXT NOT NULL REFERENCES vault_documents(id) ON DELETE CASCADE,
+    link_type   TEXT NOT NULL DEFAULT 'wikilink',
+    context     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(from_doc_id, to_doc_id, link_type)
+);
+CREATE INDEX IF NOT EXISTS idx_vault_links_from ON vault_links(from_doc_id);
+CREATE INDEX IF NOT EXISTS idx_vault_links_to ON vault_links(to_doc_id);`,
 }
 
 // EnsureSchema creates tables if they don't exist and applies incremental migrations.
