@@ -67,6 +67,13 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		replyThreadTS = ev.TimeStamp
 	}
 
+	// For top-level mentions, encode the reply thread TS into localKey so
+	// subagent/team announce flows can route replies to the correct thread.
+	historyKey := localKey
+	if threadTS == "" && replyThreadTS != "" {
+		localKey = fmt.Sprintf("%s:thread:%s", channelID, replyThreadTS)
+	}
+
 	placeholderOpts := []slackapi.MsgOption{
 		slackapi.MsgOptionText("Thinking...", false),
 	}
@@ -82,7 +89,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 	annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
 	finalContent := annotated
 	if c.historyLimit > 0 {
-		finalContent = c.groupHistory.BuildContext(localKey, annotated, c.historyLimit)
+		finalContent = c.groupHistory.BuildContext(historyKey, annotated, c.historyLimit)
 	}
 
 	metadata := map[string]string{
@@ -106,7 +113,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		c.threadParticip.Store(participKey, time.Now())
 	}
 
-	c.groupHistory.Clear(localKey)
+	c.groupHistory.Clear(historyKey)
 }
 
 // isBotMentioned checks if the message text contains <@botUserID>.
