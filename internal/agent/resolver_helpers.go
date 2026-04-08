@@ -42,7 +42,9 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		} else {
 			sb.WriteString(fmt.Sprintf("- **%s** (%s)", m.AgentKey, m.Role))
 		}
-		if m.Frontmatter != "" {
+		// Only include detailed frontmatter for lead agents who need it
+		// for task assignment decisions. Members only need names & roles.
+		if m.Frontmatter != "" && selfRole == store.TeamRoleLead {
 			sb.WriteString(": " + m.Frontmatter)
 		}
 		sb.WriteString("\n")

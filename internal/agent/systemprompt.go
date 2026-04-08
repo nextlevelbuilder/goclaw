@@ -52,6 +52,7 @@ type SystemPromptConfig struct {
 	HasMemory     bool                   // memory_search/memory_get available?
 	HasSpawn      bool                   // spawn tool available?
 	IsTeamContext  bool                   // inject team sections (leader inbound OR team dispatch)
+	IsTeamLead     bool                   // this agent is the team lead (controls member roster rendering)
 	TeamWorkspace  string                 // absolute path to team shared workspace (empty if not in team)
 	TeamMembers    []store.TeamMemberData // team member roster for task assignment
 	TeamGuidance   string                 // edition-specific guidance from TeamActionPolicy.MemberGuidance()
@@ -266,8 +267,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildTeamWorkspaceSection(cfg.TeamWorkspace)...)
 	}
 
-	// 6.4. ## Team Members — inject roster so agent knows who to assign tasks to
-	if !cfg.IsBootstrap && cfg.IsTeamContext && len(cfg.TeamMembers) > 0 {
+	// 6.4. ## Team Members — inject roster so lead knows who to assign tasks to.
+	// Only rendered for the lead agent; member agents see the roster inside TEAM.md.
+	if !cfg.IsBootstrap && cfg.IsTeamContext && cfg.IsTeamLead && len(cfg.TeamMembers) > 0 {
 		lines = append(lines, buildTeamMembersSection(cfg.TeamMembers, cfg.TeamGuidance)...)
 	}
 
