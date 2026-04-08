@@ -220,6 +220,11 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	// 2. ## Tooling
 	lines = append(lines, buildToolingSection(cfg.ToolNames, cfg.SandboxEnabled, cfg.ShellDenyGroups)...)
 
+	// 2.1. ## Execution Bias — force action-oriented tool use (full mode only, skip bootstrap)
+	if !isMinimal && !cfg.IsBootstrap {
+		lines = append(lines, buildExecutionBiasSection()...)
+	}
+
 	// 2.3. ## Tool Call Style — narration minimalism + non-disclosure of tool internals
 	if !cfg.IsBootstrap {
 		lines = append(lines, buildToolCallStyleSection()...)
@@ -297,7 +302,20 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildUserIdentitySection(cfg.OwnerIDs)...)
 	}
 
-	// Cache boundary: everything above is stable per-agent config, below is dynamic per-turn.
+	// 12.5. ## Memory Recall — above boundary (section config is stable per-agent)
+	if !isMinimal && cfg.HasMemory {
+		hasMemoryGet := slices.Contains(cfg.ToolNames, "memory_get")
+		lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasKnowledgeGraph)...)
+	}
+
+	// 11a. # Project Context — stable files (AGENTS.md, TOOLS.md, USER_PREDEFINED.md)
+	// These rarely change and benefit from prompt caching.
+	stableFiles, dynamicFiles := splitStableDynamicContextFiles(otherFiles)
+	if len(stableFiles) > 0 {
+		lines = append(lines, buildProjectContextSection(stableFiles, cfg.AgentType)...)
+	}
+
+	// ── CACHE BOUNDARY ── stable config above, dynamic per-turn/per-user below.
 	// Anthropic provider splits at this marker into 2 system blocks for prompt caching.
 	lines = append(lines, CacheBoundaryMarker, "")
 
@@ -323,15 +341,10 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, header, "", "<extra_context>", cfg.ExtraPrompt, "</extra_context>", "")
 	}
 
-	// 11. # Project Context — remaining context files (persona files already injected early)
-	if len(otherFiles) > 0 {
-		lines = append(lines, buildProjectContextSection(otherFiles, cfg.AgentType)...)
-	}
-
-	// 12.5. ## Memory Recall — dedicated section (supplements recency reminder at end)
-	if !isMinimal && cfg.HasMemory {
-		hasMemoryGet := slices.Contains(cfg.ToolNames, "memory_get")
-		lines = append(lines, buildMemoryRecallSection(hasMemoryGet, cfg.HasKnowledgeGraph)...)
+	// 11b. # Project Context — dynamic files (USER.md, BOOTSTRAP.md, virtual files)
+	// Per-user/per-session content. Header already emitted by stable section above.
+	if len(dynamicFiles) > 0 {
+		lines = append(lines, buildProjectContextSection(dynamicFiles, cfg.AgentType, false)...)
 	}
 
 	// 13. ## Sub-Agent Spawning — skipped for team context and bootstrap
@@ -344,7 +357,6 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 
 	// 16. Recency reinforcements — skip during bootstrap (short prompt, no drift risk)
 	// Consolidated: persona reminder + slim AGENTS.md reminder (no memory duplication).
-	// Memory recall is covered by the dedicated ## Memory Recall section above.
 	if !cfg.IsBootstrap {
 		if len(personaFiles) > 0 {
 			lines = append(lines, buildPersonaReminder(personaFiles, cfg.AgentType, cfg.ProviderType)...)

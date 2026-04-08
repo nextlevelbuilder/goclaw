@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -88,5 +89,88 @@ func TestCacheBoundaryConstantConsistency(t *testing.T) {
 	if CacheBoundaryMarker != providers.CacheBoundaryMarker {
 		t.Errorf("agent.CacheBoundaryMarker=%q != providers.CacheBoundaryMarker=%q",
 			CacheBoundaryMarker, providers.CacheBoundaryMarker)
+	}
+}
+
+// --- Phase 1 tests ---
+
+// TestCacheBoundaryPosition verifies stable sections above boundary, dynamic below.
+func TestCacheBoundaryPosition(t *testing.T) {
+	cfg := SystemPromptConfig{
+		Mode:      PromptFull,
+		ToolNames: []string{"exec", "read_file", "memory_search", "memory_get"},
+		HasMemory: true,
+		OwnerIDs:  []string{"user1"},
+	}
+	prompt := BuildSystemPrompt(cfg)
+	parts := strings.SplitN(prompt, CacheBoundaryMarker, 2)
+	if len(parts) != 2 {
+		t.Fatal("expected 2 parts split at boundary")
+	}
+	stable, dynamic := parts[0], parts[1]
+	// Stable should contain these sections
+	for _, want := range []string{"## Tooling", "## Safety", "## Memory Recall", "## User Identity"} {
+		if !strings.Contains(stable, want) {
+			t.Errorf("stable prefix missing %q", want)
+		}
+	}
+	// Dynamic should contain these sections
+	for _, want := range []string{"Current date:", "## Runtime"} {
+		if !strings.Contains(dynamic, want) {
+			t.Errorf("dynamic suffix missing %q", want)
+		}
+	}
+	// Time must NOT be in stable
+	if strings.Contains(stable, "Current date:") {
+		t.Error("stable prefix should not contain time section")
+	}
+}
+
+// TestExecutionBiasInFullMode verifies Execution Bias present in full mode.
+func TestExecutionBiasInFullMode(t *testing.T) {
+	prompt := BuildSystemPrompt(SystemPromptConfig{Mode: PromptFull})
+	if !strings.Contains(prompt, "## Execution Bias") {
+		t.Error("full mode missing Execution Bias section")
+	}
+}
+
+// TestExecutionBiasAbsentInMinimal verifies Execution Bias absent in minimal mode.
+func TestExecutionBiasAbsentInMinimal(t *testing.T) {
+	prompt := BuildSystemPrompt(SystemPromptConfig{Mode: PromptMinimal})
+	if strings.Contains(prompt, "## Execution Bias") {
+		t.Error("minimal mode should not have Execution Bias section")
+	}
+}
+
+// TestExecutionBiasAbsentInBootstrap verifies Execution Bias suppressed during bootstrap.
+func TestExecutionBiasAbsentInBootstrap(t *testing.T) {
+	prompt := BuildSystemPrompt(SystemPromptConfig{Mode: PromptFull, IsBootstrap: true})
+	if strings.Contains(prompt, "## Execution Bias") {
+		t.Error("bootstrap mode should not have Execution Bias section")
+	}
+}
+
+// TestStableFilesAboveBoundary verifies AGENTS.md lands above boundary,
+// USER.md lands below boundary.
+func TestStableFilesAboveBoundary(t *testing.T) {
+	cfg := SystemPromptConfig{
+		Mode: PromptFull,
+		ContextFiles: []bootstrap.ContextFile{
+			{Path: "AGENTS.md", Content: "agent rules here"},
+			{Path: "USER.md", Content: "user profile here"},
+		},
+	}
+	prompt := BuildSystemPrompt(cfg)
+	parts := strings.SplitN(prompt, CacheBoundaryMarker, 2)
+	if len(parts) != 2 {
+		t.Fatal("expected 2 parts")
+	}
+	// AGENTS.md is stable → above boundary
+	if !strings.Contains(parts[0], "agent rules here") {
+		t.Error("AGENTS.md should be above cache boundary")
+	}
+	// USER.md is dynamic → below boundary
+	if !strings.Contains(parts[1], "user profile here") {
+		t.Error("USER.md should be below cache boundary")
 	}
 }
