@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -273,20 +272,9 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	result := &ChatResponse{FinishReason: "stop"}
 	accumulators := make(map[int]*toolCallAccumulator)
 
-	scanner := bufio.NewScanner(respBody)
-	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		// SSE spec allows both "data: value" and "data:value" (space is optional).
-		// Some providers (e.g. Kimi) omit the space after the colon.
-		data := strings.TrimPrefix(line, "data:")
-		data = strings.TrimPrefix(data, " ")
-		if data == "[DONE]" {
-			break
-		}
+	sse := NewSSEScanner(respBody)
+	for sse.Next() {
+		data := sse.Data()
 
 		var chunk openAIStreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
@@ -357,7 +345,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	}
 
 	// Check for scanner errors (timeout, connection reset, etc.)
-	if err := scanner.Err(); err != nil {
+	if err := sse.Err(); err != nil {
 		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 

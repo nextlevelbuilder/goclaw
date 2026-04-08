@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -134,18 +133,9 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	toolCalls := make(map[string]*codexToolCallAcc) // keyed by item_id
 	streamState := newCodexMessageStreamState()
 
-	scanner := bufio.NewScanner(respBody)
-	scanner.Buffer(make([]byte, 0, SSEScanBufInit), SSEScanBufMax)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data:")
-		data = strings.TrimPrefix(data, " ")
-		if data == "[DONE]" {
-			break
-		}
+	sse := NewSSEScanner(respBody)
+	for sse.Next() {
+		data := sse.Data()
 
 		var event codexSSEEvent
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
@@ -155,7 +145,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 		p.processSSEEvent(&event, result, toolCalls, streamState, onChunk)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := sse.Err(); err != nil {
 		return nil, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
