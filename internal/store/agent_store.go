@@ -250,6 +250,37 @@ func (a *AgentData) ParsePromptMode() string {
 	return mode
 }
 
+// ParsePinnedSkills returns per-agent pinned skill names from OtherConfig JSONB.
+// Max 10 enforced. Returns nil if not set.
+func (a *AgentData) ParsePinnedSkills() []string {
+	if len(a.OtherConfig) == 0 {
+		return nil
+	}
+	var bag map[string]json.RawMessage
+	if json.Unmarshal(a.OtherConfig, &bag) != nil {
+		return nil
+	}
+	raw, ok := bag["pinned_skills"]
+	if !ok {
+		return nil
+	}
+	var names []string
+	if json.Unmarshal(raw, &names) != nil {
+		return nil
+	}
+	// Filter empty strings
+	var result []string
+	for _, n := range names {
+		if n != "" {
+			result = append(result, n)
+		}
+	}
+	if len(result) > 10 {
+		result = result[:10]
+	}
+	return result
+}
+
 // ParseSkillNudgeInterval returns the tool-call interval for skill creation reminders.
 // Returns 15 (default) when column is 0 (unset).
 func (a *AgentData) ParseSkillNudgeInterval() int {

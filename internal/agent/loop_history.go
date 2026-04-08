@@ -273,6 +273,7 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		Mode:                   mode,
 		ToolNames:              toolNames,
 		SkillsSummary:          l.resolveSkillsSummary(ctx, skillFilter),
+		PinnedSkillsSummary:    l.resolvePinnedSkillsSummary(ctx),
 		HasMemory:              l.hasMemory,
 		HasSpawn:               l.tools != nil && hasSpawn,
 		IsTeamContext:          injectTeamContext,
@@ -450,6 +451,14 @@ func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) s
 
 	// Search mode: no XML in prompt, agent uses skill_search tool
 	return ""
+}
+
+// resolvePinnedSkillsSummary builds XML for pinned skills only (always inline).
+func (l *Loop) resolvePinnedSkillsSummary(ctx context.Context) string {
+	if l.skillsLoader == nil || len(l.pinnedSkills) == 0 {
+		return ""
+	}
+	return l.skillsLoader.BuildPinnedSummary(ctx, l.pinnedSkills)
 }
 
 // limitHistoryTurns keeps only the last N user turns (and their associated

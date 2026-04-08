@@ -106,8 +106,9 @@ type SystemPromptConfig struct {
 	ExtraPrompt   string                 // extra system prompt (subagent context, etc.)
 	AgentType     string                 // "open" or "predefined" — affects context file framing
 
-	HasSkillSearch     bool              // skill_search tool registered? (for search-mode prompt)
-	HasSkillManage     bool              // skill_manage tool registered + skill_evolve enabled for this agent
+	HasSkillSearch      bool              // skill_search tool registered? (for search-mode prompt)
+	HasSkillManage      bool              // skill_manage tool registered + skill_evolve enabled for this agent
+	PinnedSkillsSummary string            // XML summary of pinned skills only (hybrid mode)
 	HasMCPToolSearch   bool              // mcp_tool_search tool registered? (MCP search mode)
 	HasKnowledgeGraph  bool              // knowledge_graph_search tool registered?
 	MCPToolDescs       map[string]string // MCP tool name → description (inline mode only)
@@ -326,10 +327,13 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		lines = append(lines, buildSelfEvolveSection()...)
 	}
 
-	// 4. ## Skills — full + task (task forces search mode, drops inline/manage)
-	if (isFull || isTask) && !cfg.IsBootstrap && (cfg.SkillsSummary != "" || cfg.HasSkillSearch || cfg.HasSkillManage) {
-		if isTask {
-			// Task mode: search-only, no inline summaries or skill management
+	// 4. ## Skills — full + task (pinned skills use hybrid section)
+	if (isFull || isTask) && !cfg.IsBootstrap && (cfg.SkillsSummary != "" || cfg.HasSkillSearch || cfg.HasSkillManage || cfg.PinnedSkillsSummary != "") {
+		if cfg.PinnedSkillsSummary != "" {
+			// Hybrid mode: pinned skills inline + search for rest
+			lines = append(lines, buildSkillsHybridSection(cfg.PinnedSkillsSummary, cfg.HasSkillSearch, isFull && cfg.HasSkillManage)...)
+		} else if isTask {
+			// Task mode without pinned: search-only
 			lines = append(lines, buildSkillsSection("", cfg.HasSkillSearch, false)...)
 		} else {
 			lines = append(lines, buildSkillsSection(cfg.SkillsSummary, cfg.HasSkillSearch, cfg.HasSkillManage)...)

@@ -449,6 +449,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			DisabledTools:          disabledTools,
 			ReasoningConfig:        store.ResolveEffectiveReasoningConfig(providerReasoningDefaults, ag.ParseReasoningConfig()),
 			PromptMode:             PromptMode(ag.ParsePromptMode()),
+			PinnedSkills:           ag.ParsePinnedSkills(),
 			SelfEvolve:             ag.ParseSelfEvolve(),
 			SkillEvolve:            ag.AgentType == store.AgentTypePredefined && ag.ParseSkillEvolve(),
 			SkillNudgeInterval:     ag.ParseSkillNudgeInterval(),

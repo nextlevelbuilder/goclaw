@@ -409,6 +409,16 @@ func (l *Loader) BuildSummary(ctx context.Context, allowList []string) string {
 	return strings.Join(lines, "\n")
 }
 
+// BuildPinnedSummary generates XML summary for only the pinned skill names.
+// Delegates to BuildSummary with pinned names as allowlist.
+// Returns empty string if none match.
+func (l *Loader) BuildPinnedSummary(ctx context.Context, pinnedNames []string) string {
+	if len(pinnedNames) == 0 {
+		return ""
+	}
+	return l.BuildSummary(ctx, pinnedNames)
+}
+
 // Version returns the current skill snapshot version.
 // Consumers compare this to their cached version to detect changes.
 func (l *Loader) Version() int64 {

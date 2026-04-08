@@ -162,6 +162,9 @@ type Loop struct {
 	// Prompt mode from agent other_config (empty = full).
 	promptMode PromptMode
 
+	// Pinned skills from agent other_config (always inline, max 10).
+	pinnedSkills []string
+
 	// Self-evolve: predefined agents can update SOUL.md through chat
 	selfEvolve bool
 
@@ -318,6 +321,9 @@ type LoopConfig struct {
 	// Prompt mode from agent other_config ("full", "task", "minimal", "none")
 	PromptMode PromptMode
 
+	// Pinned skills from agent other_config (always inline, max 10)
+	PinnedSkills []string
+
 	// Self-evolve: predefined agents can update SOUL.md (style/tone) through chat
 	SelfEvolve bool
 
@@ -449,6 +455,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		disabledTools:          cfg.DisabledTools,
 		reasoningConfig:        cfg.ReasoningConfig,
 		promptMode:             cfg.PromptMode,
+		pinnedSkills:           cfg.PinnedSkills,
 		selfEvolve:             cfg.SelfEvolve,
 		skillEvolve:            cfg.SkillEvolve,
 		skillNudgeInterval:     cfg.SkillNudgeInterval,

@@ -140,6 +140,32 @@ func splitStableDynamicContextFiles(files []bootstrap.ContextFile) (stable, dyna
 	return
 }
 
+// buildSkillsHybridSection generates a hybrid skills section: pinned skills inline + search for rest.
+func buildSkillsHybridSection(pinnedSummary string, hasSearch, hasManage bool) []string {
+	lines := []string{"## Skills", ""}
+	if pinnedSummary != "" {
+		lines = append(lines,
+			"Pinned skills (always available — scan these first):",
+			pinnedSummary,
+			"",
+		)
+	}
+	if hasSearch {
+		lines = append(lines,
+			"For other skills, run `skill_search` with **English keywords** describing the domain.",
+			"If a match is found, read its SKILL.md at the returned location, then follow it.",
+			"",
+		)
+	}
+	if hasManage {
+		lines = append(lines, "### Skill Creation", "",
+			"After complex tasks (5+ tool calls), create skills for repeatable processes.",
+			"Use: `skill_manage(action=\"create|patch|delete\", ...)`. Only manage your own skills.",
+			"")
+	}
+	return lines
+}
+
 // buildSandboxSection creates the "## Sandbox" section matching TS system-prompt.ts lines 476-519.
 func buildSandboxSection(cfg SystemPromptConfig) []string {
 	lines := []string{

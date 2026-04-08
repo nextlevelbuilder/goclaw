@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // fullTestConfig returns a SystemPromptConfig with all features enabled.
@@ -166,6 +167,58 @@ func TestModeResolutionDefault(t *testing.T) {
 	mode := resolvePromptMode("", "session-1", "")
 	if mode != PromptFull {
 		t.Errorf("default should be full, got %s", mode)
+	}
+}
+
+// --- Phase 4: Pinned Skills tests ---
+
+func TestPinnedSkillsHybridSection(t *testing.T) {
+	cfg := SystemPromptConfig{
+		Mode:                PromptFull,
+		HasSkillSearch:      true,
+		PinnedSkillsSummary: "<available_skills><skill><name>github</name></skill></available_skills>",
+	}
+	prompt := BuildSystemPrompt(cfg)
+	if !strings.Contains(prompt, "Pinned skills") {
+		t.Error("hybrid section should have 'Pinned skills' header")
+	}
+	if !strings.Contains(prompt, "<available_skills>") {
+		t.Error("hybrid section should include pinned skills XML")
+	}
+	if !strings.Contains(prompt, "skill_search") {
+		t.Error("hybrid section should mention skill_search for other skills")
+	}
+}
+
+func TestTaskModePinnedSkillsHybrid(t *testing.T) {
+	cfg := fullTestConfig()
+	cfg.Mode = PromptTask
+	cfg.PinnedSkillsSummary = "<available_skills><skill><name>github</name></skill></available_skills>"
+	prompt := BuildSystemPrompt(cfg)
+	if !strings.Contains(prompt, "<available_skills>") {
+		t.Error("task mode should include pinned skills XML")
+	}
+	if !strings.Contains(prompt, "skill_search") {
+		t.Error("task mode should have skill_search for non-pinned")
+	}
+}
+
+func TestFullModeNoPinnedNoChange(t *testing.T) {
+	cfg := fullTestConfig()
+	cfg.PinnedSkillsSummary = "" // no pinned skills
+	prompt := BuildSystemPrompt(cfg)
+	// Standard search mode (fullTestConfig has HasSkillSearch=true, no SkillsSummary)
+	if !strings.Contains(prompt, "skill_search") {
+		t.Error("full mode without pinned should use search mode")
+	}
+}
+
+func TestPinnedSkillsMax10(t *testing.T) {
+	raw := []byte(`{"pinned_skills":["a","b","c","d","e","f","g","h","i","j","k","l"]}`)
+	ag := store.AgentData{OtherConfig: raw}
+	pinned := ag.ParsePinnedSkills()
+	if len(pinned) != 10 {
+		t.Errorf("expected 10 pinned skills, got %d", len(pinned))
 	}
 }
 
