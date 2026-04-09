@@ -1,14 +1,22 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { Combobox } from "@/components/ui/combobox";
 import { useCreateLink, useVaultDocuments } from "./hooks/use-vault";
 import type { VaultDocument } from "@/types/vault";
+
+const LINK_TYPES = [
+  { value: "reference", label: "Reference" },
+  { value: "related", label: "Related" },
+  { value: "extends", label: "Extends" },
+  { value: "depends_on", label: "Depends on" },
+  { value: "supersedes", label: "Supersedes" },
+];
 
 interface Props {
   agentId: string;
@@ -28,7 +36,9 @@ export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreate
   const [context, setContext] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const otherDocs = documents.filter((d) => d.id !== fromDoc.id);
+  const docOptions = documents
+    .filter((d) => d.id !== fromDoc.id)
+    .map((d) => ({ value: d.id, label: d.title || d.path }));
 
   const reset = () => {
     setToDocId("");
@@ -62,40 +72,31 @@ export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreate
       <DialogContent className="sm:max-w-md max-sm:inset-0">
         <DialogHeader>
           <DialogTitle>{t("createLink")}</DialogTitle>
+          <DialogDescription className="text-xs truncate">
+            {t("fields.fromDoc")}: {fromDoc.title || fromDoc.path}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label>{t("fields.fromDoc")}</Label>
-            <p className="text-sm text-muted-foreground truncate">{fromDoc.title || fromDoc.path}</p>
-          </div>
-
-          <div className="space-y-1.5">
             <Label htmlFor="link-to-doc">{t("fields.toDoc")} *</Label>
-            <select
-              id="link-to-doc"
+            <Combobox
               value={toDocId}
-              onChange={(e) => setToDocId(e.target.value)}
-              className="w-full text-base md:text-sm border rounded px-2 py-1.5 bg-background"
-              required
-            >
-              <option value="">{t("fields.selectDoc")}</option>
-              {otherDocs.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.title || d.path}
-                </option>
-              ))}
-            </select>
+              onChange={setToDocId}
+              options={docOptions}
+              placeholder={t("fields.selectDoc")}
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="link-type">{t("fields.linkType")}</Label>
-            <Input
-              id="link-type"
+            <Combobox
               value={linkType}
-              onChange={(e) => setLinkType(e.target.value)}
+              onChange={setLinkType}
+              options={LINK_TYPES}
+              allowCustom
+              customLabel={t("fields.customType") || "Custom:"}
               placeholder="reference"
-              className="text-base md:text-sm"
             />
           </div>
 
@@ -107,7 +108,7 @@ export function VaultLinkDialog({ agentId, fromDoc, open, onOpenChange, onCreate
               onChange={(e) => setContext(e.target.value)}
               placeholder={t("fields.linkContextPlaceholder")}
               className="text-base md:text-sm resize-none"
-              rows={3}
+              rows={2}
             />
           </div>
 
