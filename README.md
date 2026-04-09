@@ -239,12 +239,41 @@ Open **About** dialog → click **Update Now** (admin only). The update includes
   <img src="_statics/Agent Orchestration.jpg" alt="Agent Orchestration" width="800" />
 </p>
 
-Each agent runs with its own identity, tools, LLM provider, and context files.
+Each agent runs with its own identity, tools, LLM provider, and context files. Three delegation modes — sync (wait), async (fire-and-forget), bidirectional — connected through explicit permission links with concurrency limits.
 
-- **Shared task board** — Create, claim, complete, search tasks with `blocked_by` dependencies
-- **Tools**: `team_tasks` for task management, `spawn` for subagent orchestration
+> Details: [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams)
 
-> For delegation details, permission links, and concurrency control, see the [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams).
+## Knowledge Vault
+
+<p align="center">
+  <img src="_statics/Knowledge Vault.jpg" alt="Knowledge Vault" width="800" />
+</p>
+
+Document registry with `[[wikilinks]]` for bidirectional linking. Hybrid search combines full-text (BM25) and semantic (pgvector) for precise retrieval. Filesystem sync keeps vault in sync with on-disk files.
+
+## Self-Evolution
+
+<p align="center">
+  <img src="_statics/Self-Evolution System.jpg" alt="Self-Evolution" width="800" />
+</p>
+
+Agents improve themselves through a 3-stage guardrailed pipeline: metrics collection → suggestion analysis → auto-adaptation. Can refine communication style and domain expertise (CAPABILITIES.md) — but never change identity, name, or core purpose.
+
+## Provider Adapters
+
+<p align="center">
+  <img src="_statics/Provider Adapter System.jpg" alt="Provider Adapters" width="800" />
+</p>
+
+20+ LLM providers unified through a single adapter interface. Capability-based routing, encrypted API keys (AES-256-GCM), extended thinking support per-provider, and prompt caching for Anthropic + OpenAI.
+
+## Event-Driven Architecture
+
+<p align="center">
+  <img src="_statics/DomainEventBus.jpg" alt="DomainEventBus" width="800" />
+</p>
+
+Typed domain events power the consolidation pipeline — session summaries, knowledge graph extraction, and dreaming promotion all run asynchronously via worker pools with dedup and retry.
 
 ## Built-in Tools
 
