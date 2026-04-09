@@ -397,6 +397,32 @@
     "alreadyLinkedDetail": "WhatsApp đã kết nối. Để liên kết thiết bị khác, nhấn Liên kết lại — thao tác này sẽ đăng xuất phiên hiện tại.",
     "relinkDevice": "Liên kết lại",
     "connectedSuccess": "✅ Kết nối WhatsApp thành công!",
-    "tabQrCode": "Mã QR"
+    "tabQrCode": "Mã QR",
+    "groups": {
+      "title": "Nhóm WhatsApp",
+      "description": "Gán agent cho các nhóm WhatsApp cụ thể. Các nhóm chưa được gán sẽ sử dụng agent mặc định của channel.",
+      "discovered": "Nhóm đã phát hiện",
+      "noGroups": "Chưa phát hiện nhóm WhatsApp nào. Bot cần được kết nối và tham gia nhóm trước.",
+      "groupName": "Tên nhóm",
+      "jid": "JID",
+      "memberCount": "{{count}} thành viên",
+      "assignAgent": "Gán agent",
+      "inheritAgent": "Kế thừa (mặc định)",
+      "enabled": "Bật",
+      "disabled": "Tắt",
+      "configured": "Đã cấu hình",
+      "notConfigured": "Chưa cấu hình",
+      "addGroupManually": "Thêm nhóm thủ công",
+      "jidPlaceholder": "JID nhóm (vd: 123456789@g.us)",
+      "add": "Thêm",
+      "save": "Lưu thay đổi",
+      "saving": "Đang lưu...",
+      "saved": "Đã lưu",
+      "removeGroup": "Xóa nhóm",
+      "count": "{{count}} nhóm",
+      "noAgentOverride": "kế thừa mặc định",
+      "displayName": "Tên hiển thị",
+      "displayNamePlaceholder": "Tên thân thiện cho nhóm này"
+    }
   }
 }

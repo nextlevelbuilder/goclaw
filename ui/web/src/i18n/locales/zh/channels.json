@@ -397,6 +397,32 @@
     "alreadyLinkedDetail": "WhatsApp 已连接。如需连接其他设备，请点击【重新连接】——这将退出当前会话。",
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
-    "tabQrCode": "二维码"
+    "tabQrCode": "二维码",
+    "groups": {
+      "title": "WhatsApp 群组",
+      "description": "为特定 WhatsApp 群组分配 Agent。未分配的群组将继承 Channel 的默认 Agent。",
+      "discovered": "已发现的群组",
+      "noGroups": "未发现 WhatsApp 群组。请先确保 Bot 已连接并加入群组。",
+      "groupName": "群组名称",
+      "jid": "JID",
+      "memberCount": "{{count}} 位成员",
+      "assignAgent": "分配 Agent",
+      "inheritAgent": "继承（默认）",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "configured": "已配置",
+      "notConfigured": "未配置",
+      "addGroupManually": "手动添加群组",
+      "jidPlaceholder": "群组 JID（例如 123456789@g.us）",
+      "add": "添加",
+      "save": "保存更改",
+      "saving": "保存中...",
+      "saved": "已保存",
+      "removeGroup": "移除群组",
+      "count": "{{count}} 个群组",
+      "noAgentOverride": "继承默认",
+      "displayName": "显示名称",
+      "displayNamePlaceholder": "此群组的友好名称"
+    }
   }
 }

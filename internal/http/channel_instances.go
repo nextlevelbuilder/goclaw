@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,14 +17,34 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
+// WhatsAppGroupLister returns discovered WhatsApp groups for a channel instance.
+// Implemented by the channels.Manager to decouple HTTP from the channels package.
+type WhatsAppGroupLister interface {
+	ListWhatsAppGroups(channelName string) []WhatsAppGroupInfo
+}
+
+// WhatsAppGroupRefresher triggers an on-demand refresh of cached WhatsApp groups.
+type WhatsAppGroupRefresher interface {
+	RefreshWhatsAppGroups(channelName string)
+}
+
+// WhatsAppGroupInfo represents a discovered WhatsApp group exposed via API.
+type WhatsAppGroupInfo struct {
+	JID         string `json:"jid"`
+	Name        string `json:"name"`
+	MemberCount int    `json:"member_count,omitempty"`
+}
+
 // ChannelInstancesHandler handles channel instance CRUD endpoints.
 type ChannelInstancesHandler struct {
-	store           store.ChannelInstanceStore
-	agentStore      store.AgentStore
-	configPermStore store.ConfigPermissionStore
-	contactStore    store.ContactStore
-	tenantStore     store.TenantStore
-	msgBus          *bus.MessageBus
+	store              store.ChannelInstanceStore
+	agentStore         store.AgentStore
+	configPermStore    store.ConfigPermissionStore
+	contactStore       store.ContactStore
+	tenantStore        store.TenantStore
+	msgBus             *bus.MessageBus
+	waGroupLister      WhatsAppGroupLister
+	waGroupRefresher   WhatsAppGroupRefresher
 }
 
 // NewChannelInstancesHandler creates a handler for channel instance management endpoints.
@@ -39,6 +60,9 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/channels/instances/{id}", h.auth(h.handleGet))
 	mux.HandleFunc("PUT /v1/channels/instances/{id}", h.adminAuth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/channels/instances/{id}", h.adminAuth(h.handleDelete))
+
+	// WhatsApp group discovery
+	mux.HandleFunc("GET /v1/channels/instances/{id}/whatsapp/groups", h.auth(h.handleWhatsAppGroups))
 
 	// Channel contacts (global, not per-agent)
 	if h.contactStore != nil {
@@ -64,6 +88,16 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /v1/channels/instances/{id}/writers", h.adminAuth(h.handleAddWriter))
 		mux.HandleFunc("DELETE /v1/channels/instances/{id}/writers/{userId}", h.adminAuth(h.handleRemoveWriter))
 	}
+}
+
+// SetWhatsAppGroupLister injects the channel manager for WhatsApp group discovery.
+func (h *ChannelInstancesHandler) SetWhatsAppGroupLister(lister WhatsAppGroupLister) {
+	h.waGroupLister = lister
+}
+
+// SetWhatsAppGroupRefresher injects the refresher for on-demand WhatsApp group cache updates.
+func (h *ChannelInstancesHandler) SetWhatsAppGroupRefresher(refresher WhatsAppGroupRefresher) {
+	h.waGroupRefresher = refresher
 }
 
 func (h *ChannelInstancesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -535,6 +569,111 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"contacts": result})
+}
+
+// handleWhatsAppGroups returns discovered WhatsApp groups for a channel instance.
+// Merges live groups from whatsmeow with per-group config overrides from the instance.
+func (h *ChannelInstancesHandler) handleWhatsAppGroups(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "missing instance id")
+		return
+	}
+
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "invalid instance id")
+		return
+	}
+
+	inst, err := h.store.Get(r.Context(), uid)
+	if err != nil || inst == nil {
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "instance"))
+		return
+	}
+
+	if inst.ChannelType != "whatsapp" {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "not a WhatsApp instance")
+		return
+	}
+
+	// Parse existing group config overrides from instance config.
+	type groupOverride struct {
+		AgentID     string `json:"agent_id,omitempty"`
+		DisplayName string `json:"display_name,omitempty"`
+		Enabled     *bool  `json:"enabled,omitempty"`
+	}
+	type groupEntry struct {
+		JID         string `json:"jid"`
+		Name        string `json:"name"`
+		MemberCount int    `json:"member_count,omitempty"`
+		AgentID     string `json:"agent_id,omitempty"`
+		DisplayName string `json:"display_name,omitempty"`
+		Enabled     *bool  `json:"enabled,omitempty"`
+		Configured  bool   `json:"configured"`
+	}
+
+	configuredGroups := map[string]*groupOverride{}
+	if inst.Config != nil {
+		var cfg struct {
+			Groups map[string]*groupOverride `json:"groups"`
+		}
+		_ = json.Unmarshal(inst.Config, &cfg)
+		configuredGroups = cfg.Groups
+	}
+
+	// On-demand refresh: if ?refresh=true, trigger a cache refresh and wait briefly.
+	if r.URL.Query().Get("refresh") == "true" && h.waGroupRefresher != nil {
+		h.waGroupRefresher.RefreshWhatsAppGroups(inst.Name)
+		time.Sleep(2 * time.Second)
+	}
+
+	// Try to get live groups from the channel.
+	var discovered []WhatsAppGroupInfo
+	if h.waGroupLister != nil {
+		discovered = h.waGroupLister.ListWhatsAppGroups(inst.Name)
+	}
+
+	// Build merged result: discovered groups + configured-only groups.
+	seen := make(map[string]bool)
+	var result []groupEntry
+
+	for _, g := range discovered {
+		seen[g.JID] = true
+		entry := groupEntry{
+			JID:         g.JID,
+			Name:        g.Name,
+			MemberCount: g.MemberCount,
+		}
+		if gc, ok := configuredGroups[g.JID]; ok && gc != nil {
+			entry.AgentID = gc.AgentID
+			entry.DisplayName = gc.DisplayName
+			entry.Enabled = gc.Enabled
+			entry.Configured = true
+		}
+		result = append(result, entry)
+	}
+
+	// Add configured groups not in discovered list (channel may be offline).
+	for jid, gc := range configuredGroups {
+		if seen[jid] {
+			continue
+		}
+		result = append(result, groupEntry{
+			JID:         jid,
+			Name:        gc.DisplayName,
+			AgentID:     gc.AgentID,
+			DisplayName: gc.DisplayName,
+			Enabled:     gc.Enabled,
+			Configured:  true,
+		})
+	}
+
+	if result == nil {
+		result = []groupEntry{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"groups": result})
 }
 
 // isValidChannelType checks if the channel type is supported.

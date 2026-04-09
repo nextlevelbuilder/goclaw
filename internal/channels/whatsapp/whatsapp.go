@@ -13,7 +13,6 @@ import (
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -28,7 +27,7 @@ const (
 
 func init() {
 	// Set device name shown in WhatsApp's "Linked Devices" screen (once at package init).
-	wastore.DeviceProps.Os = proto.String("GoClaw")
+	wastore.DeviceProps.Os = new("GoClaw")
 }
 
 // Channel connects directly to WhatsApp via go.mau.fi/whatsmeow.
@@ -43,22 +42,26 @@ type Channel struct {
 	cancel          context.CancelFunc
 	parentCtx       context.Context // stored from Start() for Reauth() context chain
 	pairingService  store.PairingStore
-	pairingDebounce sync.Map // senderID → time.Time
-	approvedGroups  sync.Map // chatID → true (in-memory cache for paired groups)
+	pairingDebounce sync.Map                 // senderID → time.Time
+	approvedGroups  sync.Map                 // chatID → true (in-memory cache for paired groups)
 	groupHistory    *channels.PendingHistory // tracks group messages for context
 
 	// QR state
 	lastQRMu        sync.RWMutex
-	lastQRB64       string     // base64-encoded PNG, empty when authenticated
-	waAuthenticated bool       // true once WhatsApp account is connected
-	myJID           types.JID  // linked account's phone JID for mention detection
-	myLID           types.JID  // linked account's LID — WhatsApp's newer identifier
+	lastQRB64       string    // base64-encoded PNG, empty when authenticated
+	waAuthenticated bool      // true once WhatsApp account is connected
+	myJID           types.JID // linked account's phone JID for mention detection
+	myLID           types.JID // linked account's LID — WhatsApp's newer identifier
 
 	// typingCancel tracks active typing-refresh loops per chatID.
 	typingCancel sync.Map // chatID string → context.CancelFunc
 
 	// reauthMu serializes Reauth() and StartQRFlow() to prevent race when user clicks reauth rapidly.
 	reauthMu sync.Mutex
+
+	// cachedGroups stores groups discovered via GetJoinedGroups().
+	groupsMu     sync.RWMutex
+	cachedGroups []types.GroupInfo
 }
 
 // GetLastQRB64 returns the most recent QR PNG (base64).
@@ -179,6 +182,9 @@ func (c *Channel) handleEvent(evt any) {
 		c.handleLoggedOut(v)
 	case *events.PairSuccess:
 		slog.Info("whatsapp: pair success", "channel", c.Name())
+	case *events.JoinedGroup:
+		slog.Info("whatsapp: joined group, refreshing cache", "jid", v.JID.String(), "name", v.Name, "channel", c.Name())
+		go c.refreshCachedGroups()
 	}
 }
 
@@ -195,7 +201,67 @@ func (c *Channel) handleConnected() {
 	}
 	c.lastQRMu.Unlock()
 
+	// Cache joined groups for discovery API.
+	go c.refreshCachedGroups()
+
 	c.MarkHealthy("WhatsApp authenticated and connected")
+}
+
+// refreshCachedGroups fetches the list of groups the linked account has joined.
+func (c *Channel) refreshCachedGroups() {
+	if c.client == nil || !c.client.IsConnected() {
+		return
+	}
+	groups, err := c.client.GetJoinedGroups(context.Background())
+	if err != nil {
+		slog.Warn("whatsapp: failed to fetch joined groups", "error", err, "channel", c.Name())
+		return
+	}
+	c.groupsMu.Lock()
+	// Convert []*types.GroupInfo to []types.GroupInfo for storage.
+	c.cachedGroups = make([]types.GroupInfo, len(groups))
+	for i, g := range groups {
+		if g != nil {
+			c.cachedGroups[i] = *g
+		}
+	}
+	c.groupsMu.Unlock()
+	slog.Info("whatsapp: cached joined groups", "count", len(groups), "channel", c.Name())
+}
+
+// GetCachedGroups returns the cached list of joined WhatsApp groups (thread-safe).
+func (c *Channel) GetCachedGroups() []types.GroupInfo {
+	c.groupsMu.RLock()
+	defer c.groupsMu.RUnlock()
+	return c.cachedGroups
+}
+
+// WAGroupDiscovery is a simplified group info struct for cross-package use.
+type WAGroupDiscovery struct {
+	JID         string
+	Name        string
+	MemberCount int
+}
+
+// GetCachedGroupsRaw returns cached groups as simplified structs (avoids whatsmeow type dependency).
+func (c *Channel) GetCachedGroupsRaw() []WAGroupDiscovery {
+	c.groupsMu.RLock()
+	defer c.groupsMu.RUnlock()
+	result := make([]WAGroupDiscovery, len(c.cachedGroups))
+	for i, g := range c.cachedGroups {
+		result[i] = WAGroupDiscovery{
+			JID:         g.JID.String(),
+			Name:        g.Name,
+			MemberCount: g.ParticipantCount,
+		}
+	}
+	return result
+}
+
+// RefreshGroups triggers an on-demand refresh of the cached groups list.
+// This is called by the HTTP API when the user requests a group list refresh.
+func (c *Channel) RefreshGroups() {
+	go c.refreshCachedGroups()
 }
 
 // handleDisconnected processes the Disconnected event.

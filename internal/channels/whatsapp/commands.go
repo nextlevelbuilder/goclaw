@@ -7,7 +7,6 @@ import (
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
@@ -92,7 +91,7 @@ func (c *Channel) sendTextMessage(chatJID types.JID, text string) {
 		return
 	}
 	msg := &waE2E.Message{
-		Conversation: proto.String(text),
+		Conversation: new(text),
 	}
 	if _, err := c.client.SendMessage(c.ctx, chatJID, msg); err != nil {
 		slog.Warn("whatsapp: failed to send text message", "error", err)

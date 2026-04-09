@@ -1,4 +1,5 @@
-import { QrCode, Radio, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, QrCode, Radio, Trash2, Users } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,12 @@ import {
 } from "./channels-status-view";
 import { channelsWithAuth } from "./channel-wizard-registry";
 
+interface AgentInfo {
+  id: string;
+  display_name?: string;
+  agent_key?: string;
+}
+
 interface ChannelListRowProps {
   instance: ChannelInstanceData;
   status: ChannelRuntimeStatus | null;
@@ -23,6 +30,13 @@ interface ChannelListRowProps {
   onClick: () => void;
   onAuth?: () => void;
   onDelete?: () => void;
+  agents?: AgentInfo[];
+}
+
+function getAgentDisplayName(agents: AgentInfo[] | undefined, agentId: string): string {
+  if (!agents) return agentId.slice(0, 8);
+  const agent = agents.find((a) => a.id === agentId);
+  return agent?.display_name || agent?.agent_key || agentId.slice(0, 8);
 }
 
 export function ChannelListRow({
@@ -32,8 +46,17 @@ export function ChannelListRow({
   onClick,
   onAuth,
   onDelete,
+  agents,
 }: ChannelListRowProps) {
   const { t } = useTranslation("channels");
+  const [expanded, setExpanded] = useState(false);
+  const isWhatsApp = instance.channel_type === "whatsapp";
+
+  // Parse WhatsApp groups from config.
+  const config = (instance.config ?? {}) as Record<string, unknown>;
+  const groups = (isWhatsApp ? (config.groups as Record<string, { agent_id?: string; display_name?: string; enabled?: boolean | null }> | undefined) : undefined) ?? {};
+  const groupCount = Object.keys(groups).length;
+
   const displayName = instance.display_name || instance.name;
   const supportsReauth = channelsWithAuth.has(instance.channel_type);
   const statusMeta = getChannelStatusMeta(status, instance.enabled, t);
@@ -64,6 +87,17 @@ export function ChannelListRow({
       )}
     >
       <div className="flex items-stretch gap-2 p-3 sm:p-4">
+        {/* Expand toggle for WhatsApp */}
+        {isWhatsApp && groupCount > 0 && (
+          <button
+            type="button"
+            className="flex items-center justify-center w-6 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+          >
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onClick}
@@ -88,6 +122,11 @@ export function ChannelListRow({
                   <Badge variant="outline" className="text-[11px]">
                     {channelTypeLabels[instance.channel_type] || instance.channel_type}
                   </Badge>
+                  {isWhatsApp && groupCount > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {t("whatsapp.groups.count", { count: groupCount })}
+                    </Badge>
+                  )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span className="font-mono">{instance.name}</span>
@@ -151,6 +190,40 @@ export function ChannelListRow({
           )}
         </div>
       </div>
+
+      {/* WhatsApp group sub-rows */}
+      {isWhatsApp && expanded && groupCount > 0 && (
+        <div className="border-t bg-muted/30 px-4 py-2 space-y-1">
+          {Object.entries(groups).map(([jid, cfg]) => {
+            const groupAgentName = cfg.agent_id
+              ? getAgentDisplayName(agents, cfg.agent_id)
+              : t("whatsapp.groups.noAgentOverride");
+            const isDisabled = cfg.enabled === false;
+            return (
+              <button
+                key={jid}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onClick(); }}
+                className="flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left hover:bg-muted/60 transition-colors"
+              >
+                <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className={cn("text-xs font-medium truncate", isDisabled && "text-muted-foreground line-through")}>
+                  {cfg.display_name || jid}
+                </span>
+                <span className="text-[10px] text-muted-foreground font-mono truncate">{jid}</span>
+                <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                  → {groupAgentName}
+                </span>
+                {isDisabled && (
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+                    {t("whatsapp.groups.disabled")}
+                  </Badge>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
