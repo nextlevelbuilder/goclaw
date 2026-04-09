@@ -602,7 +602,9 @@
     "emptyFile": "empty",
     "estTokens": "Est {{tokens}} tokens",
     "insertContact": "Search contact to insert...",
-    "contentPlaceholder": "File content..."
+    "contentPlaceholder": "File content...",
+    "systemPromptPreview": "System Prompt",
+    "tokens": "tokens"
   },
   "fileEditor": {
     "editWithAi": "Edit with AI",

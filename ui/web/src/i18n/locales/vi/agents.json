@@ -559,7 +559,9 @@
     "emptyFile": "trống",
     "estTokens": "Ước {{tokens}} token",
     "insertContact": "Tìm liên hệ để chèn...",
-    "contentPlaceholder": "Nội dung tệp..."
+    "contentPlaceholder": "Nội dung tệp...",
+    "systemPromptPreview": "System Prompt",
+    "tokens": "tokens"
   },
   "fileEditor": {
     "editWithAi": "Chỉnh sửa với AI",

@@ -559,7 +559,9 @@
     "emptyFile": "空",
     "estTokens": "估计 {{tokens}} token",
     "insertContact": "搜索联系人以插入...",
-    "contentPlaceholder": "文件内容..."
+    "contentPlaceholder": "文件内容...",
+    "systemPromptPreview": "系统提示词",
+    "tokens": "tokens"
   },
   "fileEditor": {
     "editWithAi": "AI 编辑",
