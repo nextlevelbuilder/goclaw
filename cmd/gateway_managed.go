@@ -137,7 +137,7 @@ func wireExtras(
 	// V3 auto-inject: create AutoInjector if episodic store is available.
 	var autoInjector memorypkg.AutoInjector
 	if stores.Episodic != nil {
-		autoInjector = memorypkg.NewAutoInjector(stores.Episodic)
+		autoInjector = memorypkg.NewAutoInjector(stores.Episodic, stores.EvolutionMetrics)
 	}
 
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
@@ -304,11 +304,14 @@ func wireExtras(
 		slog.Info("memory layering enabled")
 	}
 
-	// V3: Wire episodic store on memory tools (search + expand)
+	// V3: Wire episodic store + evolution metrics on memory tools (search + expand)
 	if stores.Episodic != nil {
 		if searchTool, ok := toolsReg.Get("memory_search"); ok {
 			if mst, ok := searchTool.(*tools.MemorySearchTool); ok {
 				mst.SetEpisodicStore(stores.Episodic)
+				if stores.EvolutionMetrics != nil {
+					mst.SetEvolutionMetricsStore(stores.EvolutionMetrics)
+				}
 			}
 		}
 		if expandTool, ok := toolsReg.Get("memory_expand"); ok {

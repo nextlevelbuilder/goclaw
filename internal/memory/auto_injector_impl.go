@@ -2,20 +2,25 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // pgAutoInjector implements AutoInjector backed by EpisodicStore + FTS search.
 type pgAutoInjector struct {
 	episodicStore store.EpisodicStore
+	metricsStore  store.EvolutionMetricsStore // nil = metrics disabled
 }
 
 // NewAutoInjector creates an AutoInjector backed by episodic store search.
-func NewAutoInjector(es store.EpisodicStore) AutoInjector {
-	return &pgAutoInjector{episodicStore: es}
+func NewAutoInjector(es store.EpisodicStore, ms store.EvolutionMetricsStore) AutoInjector {
+	return &pgAutoInjector{episodicStore: es, metricsStore: ms}
 }
 
 // Inject searches episodic memory for relevant L0 abstracts and formats a prompt section.
@@ -77,10 +82,50 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 		return &InjectResult{MatchCount: len(results)}, nil
 	}
 
-	return &InjectResult{
+	result := &InjectResult{
 		Section:    sb.String(),
 		MatchCount: len(results),
 		Injected:   injected,
 		TopScore:   topScore,
-	}, nil
+	}
+
+	// Record retrieval metric non-blocking (best-effort).
+	a.recordRetrievalMetric(params, result)
+
+	return result, nil
+}
+
+// recordRetrievalMetric records an auto-inject retrieval metric in a background goroutine.
+func (a *pgAutoInjector) recordRetrievalMetric(params InjectParams, result *InjectResult) {
+	if a.metricsStore == nil || params.TenantID == "" {
+		return
+	}
+	tenantID, err := uuid.Parse(params.TenantID)
+	if err != nil {
+		return
+	}
+	agentID, err := uuid.Parse(params.AgentID)
+	if err != nil {
+		return
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
+		defer cancel()
+		value, _ := json.Marshal(map[string]any{
+			"result_count":  result.MatchCount,
+			"injected":      result.Injected,
+			"top_score":     result.TopScore,
+			"used_in_reply": result.Injected > 0,
+		})
+		if err := a.metricsStore.RecordMetric(bgCtx, store.EvolutionMetric{
+			ID:         uuid.New(),
+			TenantID:   tenantID,
+			AgentID:    agentID,
+			MetricType: store.MetricRetrieval,
+			MetricKey:  "auto_inject",
+			Value:      value,
+		}); err != nil {
+			slog.Debug("evolution.metric.auto_inject_failed", "error", err)
+		}
+	}()
 }

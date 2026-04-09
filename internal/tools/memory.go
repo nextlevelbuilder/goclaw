@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -13,9 +15,10 @@ import (
 
 // MemorySearchTool implements the memory_search tool for hybrid semantic + FTS search.
 type MemorySearchTool struct {
-	memStore      store.MemoryStore      // Postgres-backed
-	episodicStore store.EpisodicStore     // v3 episodic memory (nil = v2 fallback)
-	hasKG         bool                   // knowledge_graph_search tool is available
+	memStore      store.MemoryStore              // Postgres-backed
+	episodicStore store.EpisodicStore             // v3 episodic memory (nil = v2 fallback)
+	metricsStore  store.EvolutionMetricsStore     // evolution metrics (nil = disabled)
+	hasKG         bool                           // knowledge_graph_search tool is available
 }
 
 func NewMemorySearchTool() *MemorySearchTool {
@@ -30,6 +33,11 @@ func (t *MemorySearchTool) SetMemoryStore(ms store.MemoryStore) {
 // SetEpisodicStore enables v3 episodic search with tier awareness.
 func (t *MemorySearchTool) SetEpisodicStore(es store.EpisodicStore) {
 	t.episodicStore = es
+}
+
+// SetEvolutionMetricsStore enables retrieval metric recording.
+func (t *MemorySearchTool) SetEvolutionMetricsStore(ms store.EvolutionMetricsStore) {
+	t.metricsStore = ms
 }
 
 // SetHasKG enables the KG hint in search results.
@@ -169,7 +177,48 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 		output["episodic_hint"] = "Use memory_expand(id) for full details on episodic memories."
 	}
 	data, _ := json.MarshalIndent(output, "", "  ")
+
+	// Record retrieval metric non-blocking (best-effort).
+	t.recordRetrievalMetric(ctx, len(combined), episodicResults)
+
 	return NewResult(string(data))
+}
+
+// recordRetrievalMetric records a memory_search retrieval metric in a background goroutine.
+func (t *MemorySearchTool) recordRetrievalMetric(ctx context.Context, resultCount int, episodic []store.EpisodicSearchResult) {
+	if t.metricsStore == nil {
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return
+	}
+	agentID := store.AgentIDFromContext(ctx)
+	var topScore float64
+	for _, r := range episodic {
+		if r.Score > topScore {
+			topScore = r.Score
+		}
+	}
+	go func() {
+		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
+		defer cancel()
+		value, _ := json.Marshal(map[string]any{
+			"result_count":  resultCount,
+			"top_score":     topScore,
+			"used_in_reply": resultCount > 0,
+		})
+		if err := t.metricsStore.RecordMetric(bgCtx, store.EvolutionMetric{
+			ID:         uuid.New(),
+			TenantID:   tenantID,
+			AgentID:    agentID,
+			MetricType: store.MetricRetrieval,
+			MetricKey:  "memory_search",
+			Value:      value,
+		}); err != nil {
+			slog.Debug("evolution.metric.memory_search_failed", "error", err)
+		}
+	}()
 }
 
 // MemoryGetTool implements the memory_get tool for reading specific memory files.

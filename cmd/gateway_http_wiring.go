@@ -164,6 +164,9 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		if manageStore, ok := d.pgStores.Skills.(store.SkillManageStore); ok && d.skillsLoader != nil {
 			evoOpts = append(evoOpts, httpapi.WithSkillCreation(manageStore, d.skillsLoader, d.dataDir))
 		}
+		if d.pgStores.Agents != nil {
+			evoOpts = append(evoOpts, httpapi.WithAgentStore(d.pgStores.Agents))
+		}
 		d.server.SetEvolutionHandler(httpapi.NewEvolutionHandler(d.pgStores.EvolutionMetrics, d.pgStores.EvolutionSuggestions, evoOpts...))
 	}
 

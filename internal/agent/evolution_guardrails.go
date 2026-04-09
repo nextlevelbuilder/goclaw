@@ -66,7 +66,7 @@ func CheckGuardrails(g AdaptationGuardrails, sg store.EvolutionSuggestion, dataP
 			if currentRate, ok := params["current_usage_rate"].(float64); ok {
 				// Proposed change is bounded by max delta.
 				if math.Abs(currentRate) > maxDelta {
-					slog.Debug("evolution.guardrail.delta_check", "current_rate", currentRate, "max_delta", maxDelta)
+					return fmt.Errorf("delta %.2f exceeds max %.2f per cycle", currentRate, maxDelta)
 				}
 			}
 		}

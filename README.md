@@ -127,11 +127,7 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 ## Architecture
 
 <p align="center">
-  <img src="_statics/8-Stage Agent Pipeline.jpg" alt="8-Stage Agent Pipeline" width="800" />
-</p>
-
-<p align="center">
-  <img src="_statics/Mode Prompt System.jpg" alt="4-Mode Prompt System" width="800" />
+  <img src="_statics/Multi-Tenant Architecture.jpg" alt="Multi-Tenant Architecture" width="800" />
 </p>
 
 <p align="center">
@@ -139,7 +135,11 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 </p>
 
 <p align="center">
-  <img src="_statics/Multi-Tenant Architecture.jpg" alt="Multi-Tenant Architecture" width="800" />
+  <img src="_statics/8-Stage Agent Pipeline.jpg" alt="8-Stage Agent Pipeline" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/Mode Prompt System.jpg" alt="4-Mode Prompt System" width="800" />
 </p>
 
 ## Quick Start

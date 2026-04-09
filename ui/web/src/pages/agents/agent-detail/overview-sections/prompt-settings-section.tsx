@@ -28,7 +28,7 @@ const MODE_ICONS: Record<(typeof PROMPT_MODES)[number], LucideIcon> = {
  */
 const MODE_SECTIONS: Record<(typeof PROMPT_MODES)[number], string[]> = {
   full: ["persona", "tools", "execBias", "callStyle", "safety", "skills", "mcp", "memory", "sandbox", "evolution", "channelHints"],
-  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm", "pinnedSkills"],
+  task: ["styleEcho", "tools", "execBias", "safetySm", "skillsSearch", "mcpSearch", "memorySm"],
   minimal: ["tools", "safety", "pinnedSkills"],
   none: [],
 };

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -22,6 +23,9 @@ type EvolutionHandler struct {
 	skillStore  store.SkillManageStore
 	skillLoader *skills.Loader
 	dataDir     string
+
+	// Optional: agent store for applying threshold suggestions.
+	agentStore store.AgentStore
 }
 
 // EvolutionHandlerOpt configures optional EvolutionHandler dependencies.
@@ -34,6 +38,11 @@ func WithSkillCreation(ss store.SkillManageStore, loader *skills.Loader, dataDir
 		h.skillLoader = loader
 		h.dataDir = dataDir
 	}
+}
+
+// WithAgentStore enables threshold suggestion auto-apply on approval.
+func WithAgentStore(as store.AgentStore) EvolutionHandlerOpt {
+	return func(h *EvolutionHandler) { h.agentStore = as }
 }
 
 func NewEvolutionHandler(m store.EvolutionMetricsStore, s store.EvolutionSuggestionStore, opts ...EvolutionHandlerOpt) *EvolutionHandler {
@@ -202,14 +211,43 @@ func (h *EvolutionHandler) handleUpdateSuggestion(w http.ResponseWriter, r *http
 		reviewedBy = store.UserIDFromContext(r.Context())
 	}
 
-	// Skill creation on approval of skill_add suggestions.
-	if body.Status == "approved" && existing.SuggestionType == store.SuggestSkillAdd {
-		if err := h.applySkillDraft(r.Context(), *existing, body.SkillDraft, reviewedBy); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	// Handle approval: dispatch by suggestion type.
+	if body.Status == "approved" {
+		switch existing.SuggestionType {
+		case store.SuggestSkillAdd:
+			if err := h.applySkillDraft(r.Context(), *existing, body.SkillDraft, reviewedBy); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "action": "skill_created"})
+			return
+
+		case store.SuggestThreshold:
+			if h.agentStore == nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "threshold auto-apply not available"})
+				return
+			}
+			// Count recent retrieval data points for guardrail check.
+			since := time.Now().AddDate(0, 0, -7)
+			recentMetrics, err := h.metrics.QueryMetrics(r.Context(), agentID, store.MetricRetrieval, since, 500)
+			if err != nil {
+				slog.Warn("evolution.query_metrics_for_guardrail failed", "error", err)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query metrics for guardrail check"})
+				return
+			}
+			guardrails := agent.DefaultGuardrails()
+			if err := agent.CheckGuardrails(guardrails, *existing, len(recentMetrics)); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			if err := agent.ApplySuggestion(r.Context(), h.agentStore, h.suggestions, *existing); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "action": "threshold_applied"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "action": "skill_created"})
-		return
+		// Other types: fall through to status-only update.
 	}
 
 	if err := h.suggestions.UpdateSuggestionStatus(r.Context(), suggestionID, body.Status, reviewedBy); err != nil {
