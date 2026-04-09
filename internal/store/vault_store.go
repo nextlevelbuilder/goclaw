@@ -78,6 +78,7 @@ type VaultStore interface {
 	GetDocumentByID(ctx context.Context, tenantID, id string) (*VaultDocument, error)
 	DeleteDocument(ctx context.Context, tenantID, agentID, path string) error
 	ListDocuments(ctx context.Context, tenantID, agentID string, opts VaultListOptions) ([]VaultDocument, error)
+	CountDocuments(ctx context.Context, tenantID, agentID string, opts VaultListOptions) (int, error)
 	UpdateHash(ctx context.Context, tenantID, id, newHash string) error
 
 	// Search (FTS + vector hybrid)

@@ -5,8 +5,21 @@ import type { VaultDocument, VaultLink, VaultSearchResult } from "@/types/vault"
 
 export const VAULT_KEY = "vault";
 
+interface VaultDocListResponse {
+  documents: VaultDocument[];
+  total: number;
+}
+
+interface VaultListOpts {
+  scope?: string;
+  docType?: string;
+  teamId?: string;
+  limit?: number;
+  offset?: number;
+}
+
 /** List vault documents — cross-agent (agentId empty) or per-agent. */
-export function useVaultDocuments(agentId: string, opts: { scope?: string; docType?: string; limit?: number; offset?: number }) {
+export function useVaultDocuments(agentId: string, opts: VaultListOpts) {
   const http = useHttp();
 
   const params = useMemo(() => {
@@ -14,18 +27,24 @@ export function useVaultDocuments(agentId: string, opts: { scope?: string; docTy
     if (agentId) p.agent_id = agentId;
     if (opts.scope) p.scope = opts.scope;
     if (opts.docType) p.doc_type = opts.docType;
+    if (opts.teamId) p.team_id = opts.teamId;
     if (opts.limit) p.limit = String(opts.limit);
     if (opts.offset) p.offset = String(opts.offset);
     return p;
-  }, [agentId, opts.scope, opts.docType, opts.limit, opts.offset]);
+  }, [agentId, opts.scope, opts.docType, opts.teamId, opts.limit, opts.offset]);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [VAULT_KEY, "docs", params],
-    queryFn: () => http.get<VaultDocument[]>("/v1/vault/documents", params),
+    queryFn: () => http.get<VaultDocListResponse>("/v1/vault/documents", params),
     placeholderData: (prev) => prev,
   });
 
-  return { documents: data ?? [], loading: isLoading, fetching: isFetching };
+  return {
+    documents: data?.documents ?? [],
+    total: data?.total ?? 0,
+    loading: isLoading,
+    fetching: isFetching,
+  };
 }
 
 /** Search vault documents for a specific agent. */
@@ -90,6 +109,29 @@ export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
   });
 
   return { links: data ?? [], loading: isLoading };
+}
+
+/** Independent data fetch for graph view — higher limit, separate cache. */
+export function useVaultGraphData(agentId: string, opts?: { teamId?: string }) {
+  const http = useHttp();
+
+  const params = useMemo(() => {
+    const p: Record<string, string> = { limit: "500" };
+    if (agentId) p.agent_id = agentId;
+    if (opts?.teamId) p.team_id = opts.teamId;
+    return p;
+  }, [agentId, opts?.teamId]);
+
+  const { data: docData, isLoading: docsLoading } = useQuery({
+    queryKey: [VAULT_KEY, "graph-docs", params],
+    queryFn: () => http.get<VaultDocListResponse>("/v1/vault/documents", params),
+    staleTime: 60_000,
+  });
+
+  const documents = docData?.documents ?? [];
+  const { links, loading: linksLoading } = useVaultAllLinks(agentId, documents);
+
+  return { documents, links, loading: docsLoading || linksLoading };
 }
 
 /** Get links (outlinks + backlinks) for a vault document. */

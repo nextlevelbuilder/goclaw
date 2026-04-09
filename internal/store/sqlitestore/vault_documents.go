@@ -167,6 +167,42 @@ func (s *SQLiteVaultStore) ListDocuments(ctx context.Context, tenantID, agentID 
 	return docs, rows.Err()
 }
 
+// CountDocuments returns the total number of vault documents matching the given filters.
+func (s *SQLiteVaultStore) CountDocuments(ctx context.Context, tenantID, agentID string, opts store.VaultListOptions) (int, error) {
+	q := `SELECT COUNT(*) FROM vault_documents WHERE tenant_id = ?`
+	args := []any{tenantID}
+
+	if agentID != "" {
+		q += " AND agent_id = ?"
+		args = append(args, agentID)
+	}
+	if opts.TeamID != nil {
+		if *opts.TeamID != "" {
+			q += " AND team_id = ?"
+			args = append(args, *opts.TeamID)
+		} else {
+			q += " AND team_id IS NULL"
+		}
+	}
+	if opts.Scope != "" {
+		q += " AND scope = ?"
+		args = append(args, opts.Scope)
+	}
+	if len(opts.DocTypes) > 0 {
+		placeholders := strings.Repeat("?,", len(opts.DocTypes)-1) + "?"
+		q += " AND doc_type IN (" + placeholders + ")"
+		for _, dt := range opts.DocTypes {
+			args = append(args, dt)
+		}
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, q, args...).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // UpdateHash updates the content hash for a vault document.
 func (s *SQLiteVaultStore) UpdateHash(ctx context.Context, tenantID, id, newHash string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)

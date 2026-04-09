@@ -3,11 +3,14 @@ export interface VaultDocument {
   id: string;
   tenant_id: string;
   agent_id: string;
+  team_id?: string;
   scope: "personal" | "team" | "shared";
+  custom_scope?: string;
   path: string;
   title: string;
-  doc_type: "context" | "memory" | "note" | "skill" | "episodic";
+  doc_type: "context" | "memory" | "note" | "skill" | "episodic" | "media";
   content_hash: string;
+  summary?: string;
   metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

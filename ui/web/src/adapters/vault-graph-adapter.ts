@@ -34,6 +34,22 @@ export interface VaultGraphData {
   links: VaultGraphLink[];
 }
 
+/** Limit documents by degree centrality (highest-connected first). */
+export function limitVaultDocsByDegree(
+  docs: VaultDocument[],
+  links: VaultLink[],
+  nodeLimit: number,
+): VaultDocument[] {
+  if (docs.length <= nodeLimit) return docs;
+  const ids = new Set(docs.map((d) => d.id));
+  const deg = new Map<string, number>();
+  for (const l of links) {
+    if (ids.has(l.from_doc_id)) deg.set(l.from_doc_id, (deg.get(l.from_doc_id) ?? 0) + 1);
+    if (ids.has(l.to_doc_id)) deg.set(l.to_doc_id, (deg.get(l.to_doc_id) ?? 0) + 1);
+  }
+  return [...docs].sort((a, b) => (deg.get(b.id) ?? 0) - (deg.get(a.id) ?? 0)).slice(0, nodeLimit);
+}
+
 /** Build graph data from vault documents and their links. */
 export function buildVaultGraphData(
   documents: VaultDocument[],

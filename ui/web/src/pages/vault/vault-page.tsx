@@ -1,10 +1,11 @@
 import { useState, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, FileArchive, TableProperties, GitGraph, Plus } from "lucide-react";
+import { Search, FileArchive, TableProperties, GitGraph, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAgents } from "@/pages/agents/hooks/use-agents";
-import { useVaultDocuments, useVaultAllLinks } from "./hooks/use-vault";
+import { useTeams } from "@/pages/teams/hooks/use-teams";
+import { useVaultDocuments } from "./hooks/use-vault";
 import { VaultDocumentsTable } from "./vault-documents-table";
 import { VaultSearchDialog } from "./vault-search-dialog";
 import { VaultCreateDialog } from "./vault-create-dialog";
@@ -17,18 +18,32 @@ const VaultDetailDialog = lazy(() =>
   import("./vault-detail-dialog").then((m) => ({ default: m.VaultDetailDialog }))
 );
 
+const PAGE_SIZE = 100;
+
 export function VaultPage() {
   const { t } = useTranslation("vault");
   const { agents } = useAgents();
+  const { teams } = useTeams();
 
   const [selectedAgent, setSelectedAgent] = useState("");
+  const [selectedTeam, setSelectedTeam] = useState("");
   const [selectedDoc, setSelectedDoc] = useState<VaultDocument | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "graph">("table");
+  const [page, setPage] = useState(0);
 
-  const { documents, loading } = useVaultDocuments(selectedAgent, { limit: 50 });
-  const { links } = useVaultAllLinks(selectedAgent, viewMode === "graph" ? documents : []);
+  const { documents, total, loading } = useVaultDocuments(selectedAgent, {
+    teamId: selectedTeam || undefined,
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  });
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Reset page when filters change
+  const handleAgentChange = (v: string) => { setSelectedAgent(v); setPage(0); };
+  const handleTeamChange = (v: string) => { setSelectedTeam(v); setPage(0); };
 
   return (
     <div className="p-3 sm:p-4 space-y-4">
@@ -90,7 +105,6 @@ export function VaultPage() {
                     variant={viewMode === "graph" ? "default" : "ghost"}
                     size="xs" className="h-7 w-7 p-0"
                     onClick={() => setViewMode("graph")}
-                    disabled={!selectedAgent}
                   >
                     <GitGraph className="h-3.5 w-3.5" />
                   </Button>
@@ -102,36 +116,80 @@ export function VaultPage() {
         </div>
       </div>
 
-      {/* Agent filter */}
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground shrink-0">{t("filterAgent")}:</label>
-        <select
-          value={selectedAgent}
-          onChange={(e) => setSelectedAgent(e.target.value)}
-          className="text-base md:text-sm border rounded px-2 py-1 bg-background"
-        >
-          <option value="">{t("allAgents")}</option>
-          {(agents ?? []).map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.display_name || a.agent_key}
-            </option>
-          ))}
-        </select>
+      {/* Filters: Agent + Team */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground shrink-0">{t("filterAgent")}:</label>
+          <select
+            value={selectedAgent}
+            onChange={(e) => handleAgentChange(e.target.value)}
+            className="text-base md:text-sm border rounded px-2 py-1 bg-background"
+          >
+            <option value="">{t("allAgents")}</option>
+            {(agents ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.display_name || a.agent_key}
+              </option>
+            ))}
+          </select>
+        </div>
+        {(teams ?? []).length > 0 && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground shrink-0">{t("filterTeam", "Team")}:</label>
+            <select
+              value={selectedTeam}
+              onChange={(e) => handleTeamChange(e.target.value)}
+              className="text-base md:text-sm border rounded px-2 py-1 bg-background"
+            >
+              <option value="">{t("allTeams", "All teams")}</option>
+              {(teams ?? []).map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Content: Table or Graph */}
       {viewMode === "table" ? (
-        <VaultDocumentsTable
-          documents={documents}
-          agents={agents}
-          loading={loading}
-          onSelect={setSelectedDoc}
-        />
+        <>
+          <VaultDocumentsTable
+            documents={documents}
+            agents={agents}
+            loading={loading}
+            onSelect={setSelectedDoc}
+          />
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <Button
+                variant="outline" size="xs"
+                disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span>
+                {page + 1} / {totalPages}
+                <span className="ml-1.5 text-xs">({total})</span>
+              </span>
+              <Button
+                variant="outline" size="xs"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </>
       ) : (
         <Suspense fallback={<div className="h-[400px] animate-pulse rounded-md bg-muted" />}>
           <VaultGraphView
-            documents={documents}
-            links={links}
+            agentId={selectedAgent}
+            teamId={selectedTeam || undefined}
             onNodeClick={setSelectedDoc}
           />
         </Suspense>

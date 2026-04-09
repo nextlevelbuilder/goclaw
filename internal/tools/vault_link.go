@@ -45,6 +45,11 @@ func (t *VaultLinkTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Optional note describing the link relationship",
 			},
+			"link_type": map[string]any{
+				"type":        "string",
+				"description": "Link type: wikilink (default) or reference",
+				"enum":        []string{"wikilink", "reference"},
+			},
 		},
 		"required": []string{"from", "to"},
 	}
@@ -54,9 +59,16 @@ func (t *VaultLinkTool) Execute(ctx context.Context, args map[string]any) *Resul
 	fromPath, _ := args["from"].(string)
 	toPath, _ := args["to"].(string)
 	linkCtx, _ := args["context"].(string)
+	linkType, _ := args["link_type"].(string)
+	if linkType == "" {
+		linkType = "wikilink"
+	}
 
 	if fromPath == "" || toPath == "" {
 		return ErrorResult("both 'from' and 'to' paths are required")
+	}
+	if linkType != "wikilink" && linkType != "reference" {
+		return ErrorResult("link_type must be 'wikilink' or 'reference'")
 	}
 
 	agentID := store.AgentIDFromContext(ctx)
@@ -96,7 +108,7 @@ func (t *VaultLinkTool) Execute(ctx context.Context, args map[string]any) *Resul
 	link := &store.VaultLink{
 		FromDocID: fromDoc.ID,
 		ToDocID:   toDoc.ID,
-		LinkType:  "wikilink",
+		LinkType:  linkType,
 		Context:   linkCtx,
 	}
 	if err := t.vaultStore.CreateLink(ctx, link); err != nil {
@@ -120,7 +132,7 @@ func (t *VaultLinkTool) resolveOrRegister(ctx context.Context, tenantID, agentID
 		Scope:    scope,
 		Path:     path,
 		Title:    strings.TrimSuffix(path, ".md"),
-		DocType:  "note",
+		DocType:  inferVaultDocType(path),
 	}
 	if err := t.vaultStore.UpsertDocument(ctx, doc); err != nil {
 		return nil, err

@@ -11,6 +11,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// vaultDocListResponse wraps the document list with total count for pagination.
+type vaultDocListResponse struct {
+	Documents []store.VaultDocument `json:"documents"`
+	Total     int                   `json:"total"`
+}
+
 // VaultHandler serves Knowledge Vault document and link endpoints.
 type VaultHandler struct {
 	store      store.VaultStore
@@ -116,7 +122,11 @@ func (h *VaultHandler) handleListAllDocuments(w http.ResponseWriter, r *http.Req
 	if docs == nil {
 		docs = []store.VaultDocument{}
 	}
-	writeJSON(w, http.StatusOK, docs)
+	total, cntErr := h.store.CountDocuments(r.Context(), tenantID.String(), agentID, opts)
+	if cntErr != nil {
+		slog.Warn("vault.count failed", "error", cntErr)
+	}
+	writeJSON(w, http.StatusOK, vaultDocListResponse{Documents: docs, Total: total})
 }
 
 // handleListDocuments lists vault documents for a specific agent.
@@ -144,7 +154,11 @@ func (h *VaultHandler) handleListDocuments(w http.ResponseWriter, r *http.Reques
 	if docs == nil {
 		docs = []store.VaultDocument{}
 	}
-	writeJSON(w, http.StatusOK, docs)
+	total, cntErr := h.store.CountDocuments(r.Context(), tenantID.String(), agentID, opts)
+	if cntErr != nil {
+		slog.Warn("vault.count failed", "error", cntErr)
+	}
+	writeJSON(w, http.StatusOK, vaultDocListResponse{Documents: docs, Total: total})
 }
 
 // handleGetDocument returns a single vault document by ID, scoped to the agent.

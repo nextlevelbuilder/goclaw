@@ -12,6 +12,7 @@ import (
 )
 
 func newVaultStore(db *sql.DB) *pg.PGVaultStore {
+	pg.InitSqlx(db)
 	vs := pg.NewPGVaultStore(db)
 	vs.SetEmbeddingProvider(newMockEmbedProvider())
 	return vs
