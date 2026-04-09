@@ -138,6 +138,13 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		IsSilentReply:          IsSilentReply,
 		EmitSessionCompleted: func(ctx context.Context, sessionKey string, msgCount, tokensUsed, compactionCount int) {
 			if l.domainBus != nil {
+				// Include existing session summary (from previous compaction cycles).
+				// Current cycle's compaction runs async so its summary isn't ready yet,
+				// but previous summaries are available and useful for episodic creation.
+				var summary string
+				if compactionCount > 0 {
+					summary = l.sessions.GetSummary(ctx, sessionKey)
+				}
 				l.domainBus.Publish(eventbus.DomainEvent{
 					Type:     eventbus.EventSessionCompleted,
 					TenantID: l.tenantID.String(),
@@ -149,6 +156,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 						MessageCount:    msgCount,
 						TokensUsed:      tokensUsed,
 						CompactionCount: compactionCount,
+						Summary:         summary,
 					},
 				})
 			}

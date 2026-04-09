@@ -11,16 +11,17 @@ func generateL0Abstract(summary string) string {
 	sentences := splitSentences(summary)
 	for _, s := range sentences {
 		s = strings.TrimSpace(s)
-		if len(s) >= 20 { // skip very short fragments
-			if len(s) > 200 {
-				return s[:200] + "..."
+		runes := []rune(s)
+		if len(runes) >= 20 { // skip very short fragments
+			if len(runes) > 200 {
+				return string(runes[:200]) + "..."
 			}
 			return s
 		}
 	}
-	// Fallback: first 200 chars of summary
-	if len(summary) > 200 {
-		return summary[:200] + "..."
+	// Fallback: first 200 runes of summary (UTF-8 safe)
+	if runes := []rune(summary); len(runes) > 200 {
+		return string(runes[:200]) + "..."
 	}
 	return summary
 }

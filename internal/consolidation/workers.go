@@ -5,6 +5,10 @@
 package consolidation
 
 import (
+	"context"
+	"log/slog"
+	"time"
+
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -16,6 +20,7 @@ type ConsolidationDeps struct {
 	EpisodicStore store.EpisodicStore
 	MemoryStore   store.MemoryStore
 	KGStore       store.KnowledgeGraphStore
+	SessionStore  store.SessionCoreStore // for reading session messages during summarization
 	EventBus      eventbus.DomainEventBus
 	Provider      providers.Provider // for LLM summarization
 	Model         string
@@ -27,6 +32,7 @@ type ConsolidationDeps struct {
 func Register(deps ConsolidationDeps) func() {
 	episodic := &episodicWorker{
 		store:    deps.EpisodicStore,
+		sessions: deps.SessionStore,
 		provider: deps.Provider,
 		model:    deps.Model,
 		eventBus: deps.EventBus,
@@ -44,6 +50,7 @@ func Register(deps ConsolidationDeps) func() {
 		episodicStore: deps.EpisodicStore,
 		memoryStore:   deps.MemoryStore,
 		provider:      deps.Provider,
+		model:         deps.Model,
 		threshold:     dreamingDefaultThreshold,
 		debounce:      dreamingDefaultDebounce,
 	}
@@ -52,7 +59,28 @@ func Register(deps ConsolidationDeps) func() {
 	unsub2 := deps.EventBus.Subscribe(eventbus.EventEpisodicCreated, semantic.Handle)
 	unsub3 := deps.EventBus.Subscribe(eventbus.EventEntityUpserted, dedup.Handle)
 	unsub4 := deps.EventBus.Subscribe(eventbus.EventEpisodicCreated, dreaming.Handle)
-	return func() { unsub1(); unsub2(); unsub3(); unsub4() }
+
+	// Periodic pruning of expired episodic summaries (runs every 6 hours).
+	pruneStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				n, err := deps.EpisodicStore.PruneExpired(context.Background())
+				if err != nil {
+					slog.Warn("episodic prune failed", "error", err)
+				} else if n > 0 {
+					slog.Info("episodic prune completed", "deleted", n)
+				}
+			case <-pruneStop:
+				return
+			}
+		}
+	}()
+
+	return func() { unsub1(); unsub2(); unsub3(); unsub4(); close(pruneStop) }
 }
 
 // summarizationPrompt for LLM session summarization.

@@ -27,6 +27,7 @@ type dreamingWorker struct {
 	episodicStore store.EpisodicStore
 	memoryStore   store.MemoryStore
 	provider      providers.Provider
+	model         string        // LLM model for synthesis
 	threshold     int           // min unpromoted entries before running
 	debounce      time.Duration // min interval between runs per agent/user
 	lastRun       sync.Map      // key: "agentID:userID" → time.Time
@@ -89,11 +90,14 @@ func (w *dreamingWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 		return nil
 	}
 
-	// Store result in memory under a dated path.
+	// Store result in memory under a dated path and index for search.
 	path := fmt.Sprintf("_system/dreaming/%s-consolidated.md", time.Now().UTC().Format("20060102"))
 	if err := w.memoryStore.PutDocument(ctx, agentID, userID, path, synthesis); err != nil {
 		slog.Warn("dreaming: store document failed", "err", err, "path", path, "agent", agentID)
 		return nil
+	}
+	if err := w.memoryStore.IndexDocument(ctx, agentID, userID, path); err != nil {
+		slog.Warn("dreaming: index document failed", "err", err, "path", path, "agent", agentID)
 	}
 
 	// Mark entries as promoted.
@@ -127,7 +131,7 @@ func (w *dreamingWorker) synthesize(ctx context.Context, entries []store.Episodi
 			{Role: "system", Content: dreamingSystemPrompt},
 			{Role: "user", Content: "Session summaries:\n---\n" + body + "\n---"},
 		},
-		Model: "",
+		Model: w.model,
 		Options: map[string]any{
 			providers.OptMaxTokens: dreamingMaxTokens,
 		},

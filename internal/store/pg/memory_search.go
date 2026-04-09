@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -56,7 +57,7 @@ func (s *PGMemoryStore) Search(ctx context.Context, query string, agentID, userI
 		if opts.MinScore > 0 && m.Score < opts.MinScore {
 			continue
 		}
-		if opts.PathPrefix != "" && len(m.Path) < len(opts.PathPrefix) {
+		if opts.PathPrefix != "" && !strings.HasPrefix(m.Path, opts.PathPrefix) {
 			continue
 		}
 		filtered = append(filtered, m)

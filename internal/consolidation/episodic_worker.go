@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 // episodicWorker handles session.completed events → creates episodic summaries.
 type episodicWorker struct {
 	store    store.EpisodicStore
+	sessions store.SessionCoreStore // for reading session messages during summarization
 	provider providers.Provider
 	model    string
 	eventBus eventbus.DomainEventBus
@@ -99,15 +101,54 @@ func (w *episodicWorker) Handle(ctx context.Context, event eventbus.DomainEvent)
 	return nil
 }
 
-// summarizeSession calls LLM to summarize a session.
+// summarizeSession reads actual session messages and calls LLM to summarize.
 func (w *episodicWorker) summarizeSession(ctx context.Context, payload *eventbus.SessionCompletedPayload) (string, error) {
-	resp, err := w.provider.Chat(ctx, providers.ChatRequest{
+	// Try reading session messages for a real summary.
+	if w.sessions != nil {
+		messages := w.sessions.GetHistory(ctx, payload.SessionKey)
+		if len(messages) > 0 {
+			return w.summarizeFromMessages(ctx, messages)
+		}
+		// Messages may have been compacted away — try existing session summary.
+		if summary := w.sessions.GetSummary(ctx, payload.SessionKey); summary != "" {
+			return summary, nil
+		}
+	}
+	return "", fmt.Errorf("no messages or summary available for session %s", payload.SessionKey)
+}
+
+// summarizeFromMessages builds a conversation excerpt and calls LLM.
+func (w *episodicWorker) summarizeFromMessages(ctx context.Context, messages []providers.Message) (string, error) {
+	var sb strings.Builder
+	for _, m := range messages {
+		if m.Role == "system" {
+			continue
+		}
+		content := m.Content
+		// Rune-safe truncation to avoid corrupting UTF-8 (CJK, emoji).
+		if runes := []rune(content); len(runes) > 500 {
+			content = string(runes[:500]) + "..."
+		}
+		sb.WriteString(m.Role)
+		sb.WriteString(": ")
+		sb.WriteString(content)
+		sb.WriteByte('\n')
+		if sb.Len() > 8000 {
+			sb.WriteString("...(truncated)\n")
+			break
+		}
+	}
+
+	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	resp, err := w.provider.Chat(sctx, providers.ChatRequest{
 		Messages: []providers.Message{
 			{Role: "system", Content: summarizationPrompt},
-			{Role: "user", Content: fmt.Sprintf("Session: %s\nMessages: %d\nTokens: %d",
-				payload.SessionKey, payload.MessageCount, payload.TokensUsed)},
+			{Role: "user", Content: sb.String()},
 		},
-		Model: w.model,
+		Model:   w.model,
+		Options: map[string]any{"max_tokens": 1024, "temperature": 0.3},
 	})
 	if err != nil {
 		return "", err

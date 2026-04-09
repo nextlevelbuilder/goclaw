@@ -17,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
+	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
@@ -183,12 +184,20 @@ func runGateway() {
 			consolidationProvider, _ = providerRegistry.GetForTenant(providers.MasterTenantID, names[0])
 		}
 		if consolidationProvider != nil {
+			// Create KG extractor for semantic worker (entity/relation extraction from episodic summaries)
+			var kgExtractor *kg.Extractor
+			if pgStores.KnowledgeGraph != nil {
+				kgExtractor = kg.NewExtractor(consolidationProvider, consolidationProvider.DefaultModel(), 0)
+			}
 			cleanupConsolidation := consolidation.Register(consolidation.ConsolidationDeps{
 				EpisodicStore: pgStores.Episodic,
 				MemoryStore:   pgStores.Memory,
 				KGStore:       pgStores.KnowledgeGraph,
+				SessionStore:  pgStores.Sessions,
 				EventBus:      domainBus,
 				Provider:      consolidationProvider,
+				Model:         consolidationProvider.DefaultModel(),
+				Extractor:     kgExtractor,
 			})
 			defer cleanupConsolidation()
 			slog.Info("consolidation pipeline registered")
