@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -7,10 +6,9 @@ import { useTranslation } from "react-i18next";
 import type { AgentData } from "@/types/agent";
 import type { HeartbeatConfig } from "@/pages/agents/hooks/use-agent-heartbeat";
 import { useCountdown } from "@/hooks/use-countdown";
-import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting } from "./agent-display-utils";
+import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting, readPromptMode } from "./agent-display-utils";
 import { cn } from "@/lib/utils";
-import { useAgentVersion } from "../hooks/use-agent-version";
-import { V3InfoModal } from "@/components/agents/v3-info-modal/v3-info-modal";
+import { promptModeBadgeClass } from "./prompt-mode-badge-utils";
 
 interface AgentHeaderProps {
   agent: AgentData;
@@ -29,8 +27,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
   const title = agentDisplayName(agent, t("card.unnamedAgent"));
   const keyDisplay = agentKeyDisplay(agent.agent_key);
   const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
-  const version = useAgentVersion(agent.id);
-  const [v3InfoOpen, setV3InfoOpen] = useState(false);
+  const promptMode = readPromptMode(agent);
 
   const hbConfigured = heartbeat != null;
   const hbEnabled = heartbeat?.enabled ?? false;
@@ -78,14 +75,13 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
               <TooltipTrigger asChild>
                 <Badge
                   variant="outline"
-                  className={`text-[10px] cursor-pointer ${version === "v3" ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" : ""}`}
-                  onClick={() => setV3InfoOpen(true)}
+                  className={cn("text-[10px]", promptModeBadgeClass(promptMode))}
                 >
-                  {version}
+                  {t(`detail.prompt.mode.${promptMode}`)}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-[260px] text-xs">
-                {version === "v3" ? t("card.v3Tooltip") : t("card.v2Tooltip")}
+                {t(`detail.prompt.mode.${promptMode}Desc`)}
               </TooltipContent>
             </Tooltip>
             {agent.agent_type === "predefined" && (
@@ -155,7 +151,6 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
           <span className="hidden sm:inline">{t("delete.title")}</span>
         </Button>
       </div>
-      <V3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
     </TooltipProvider>
   );
 }

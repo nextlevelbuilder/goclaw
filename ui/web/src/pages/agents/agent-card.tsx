@@ -1,13 +1,12 @@
-import { useState } from "react";
 import { Bot, Star, RotateCcw, Trash2, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
-import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
-import { useAgentVersion } from "./hooks/use-agent-version";
-import { V3InfoModal } from "@/components/agents/v3-info-modal/v3-info-modal";
+import { cn } from "@/lib/utils";
+import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting, readPromptMode } from "./agent-detail/agent-display-utils";
+import { promptModeBadgeClass } from "./agent-detail/prompt-mode-badge-utils";
 
 interface AgentCardProps {
   agent: AgentData;
@@ -22,8 +21,7 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
   const selfEvolve = agent.agent_type === "predefined" && Boolean(agent.self_evolve);
   const emoji = agent.emoji ?? "";
   const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
-  const version = useAgentVersion(agent.id);
-  const [v3InfoOpen, setV3InfoOpen] = useState(false);
+  const promptMode = readPromptMode(agent);
 
   // Show agent_key as subtitle only if there's a display_name and agent_key is meaningful
   const showSubtitle = agent.display_name && !UUID_RE.test(agent.agent_key);
@@ -85,14 +83,13 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           <TooltipTrigger asChild>
             <Badge
               variant="outline"
-              className={`text-[11px] cursor-pointer ${version === "v3" ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" : ""}`}
-              onClick={(e) => { e.stopPropagation(); setV3InfoOpen(true); }}
+              className={cn("text-[11px]", promptModeBadgeClass(promptMode))}
             >
-              {version}
+              {t(`detail.prompt.mode.${promptMode}`)}
             </Badge>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-[260px] text-xs">
-            {version === "v3" ? t("card.v3Tooltip") : t("card.v2Tooltip")}
+            {t(`detail.prompt.mode.${promptMode}Desc`)}
           </TooltipContent>
         </Tooltip>
         {agent.agent_type === "predefined" && (
@@ -152,7 +149,6 @@ export function AgentCard({ agent, onClick, onResummon, onDelete }: AgentCardPro
           </Button>
         )}
       </div>
-      <V3InfoModal open={v3InfoOpen} onOpenChange={setV3InfoOpen} />
     </button>
   );
 }

@@ -103,6 +103,8 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
 
   return (
     <div className="space-y-4">
+      <PromptSettingsSection agent={agent} onUpdate={onUpdate} />
+
       <PersonalitySection
         agentKey={agent.agent_key}
         emoji={emoji}
@@ -151,8 +153,6 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
           onSkillNudgeIntervalChange={setSkillNudgeInterval}
         />
       )}
-
-      <PromptSettingsSection agent={agent} onUpdate={onUpdate} />
 
       <EngineVersionSection agentId={agent.id} />
 

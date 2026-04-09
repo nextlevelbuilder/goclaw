@@ -13,6 +13,12 @@ import type {
   ChatGPTOAuthRouteReadiness,
 } from "./chatgpt-oauth-quota-utils";
 
+/** Reads prompt_mode from agent.other_config JSONB bag, defaults to "full". */
+export function readPromptMode(agent: { other_config?: Record<string, unknown> | null }): string {
+  const bag = (agent.other_config ?? {}) as Record<string, unknown>;
+  return (bag.prompt_mode as string) || "full";
+}
+
 /** Matches a standard UUID v4 string. */
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

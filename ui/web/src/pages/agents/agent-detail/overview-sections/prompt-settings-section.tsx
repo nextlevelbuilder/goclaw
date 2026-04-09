@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
+import { Zap, Wrench, Package, CircleOff } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { AgentData } from "@/types/agent";
+import { readPromptMode } from "../agent-display-utils";
 
 interface Props {
   agent: AgentData;
@@ -14,10 +14,12 @@ interface Props {
 
 const PROMPT_MODES = ["full", "task", "minimal", "none"] as const;
 
-function readPromptMode(agent: AgentData): string {
-  const bag = (agent.other_config ?? {}) as Record<string, unknown>;
-  return (bag.prompt_mode as string) || "full";
-}
+const MODE_ICONS: Record<(typeof PROMPT_MODES)[number], LucideIcon> = {
+  full: Zap,
+  task: Wrench,
+  minimal: Package,
+  none: CircleOff,
+};
 
 export function PromptSettingsSection({ agent, onUpdate }: Props) {
   const { t } = useTranslation("agents");
@@ -46,42 +48,50 @@ export function PromptSettingsSection({ agent, onUpdate }: Props) {
 
   return (
     <section className="space-y-3 rounded-lg border p-3 sm:p-4">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
-        <h3 className="text-sm font-medium">{t("detail.prompt.title", "Prompt Settings")}</h3>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-xs text-muted-foreground">{t("detail.prompt.modeLabel", "System Prompt Mode")}</label>
-        <Select value={mode} onValueChange={setMode}>
-          <SelectTrigger className="w-[180px] text-base md:text-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PROMPT_MODES.map((m) => (
-              <SelectItem key={m} value={m}>
-                {t(`detail.prompt.mode.${m}`, m)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-[11px] text-muted-foreground">{modeHints[mode]}</p>
-      </div>
-
-      {dirty && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">{t("detail.prompt.title")}</h3>
+        {dirty && (
           <Button size="sm" onClick={handleSave} disabled={saving}>
             {saving ? t("saving", "Saving...") : t("save", "Save")}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {PROMPT_MODES.map((m) => {
+          const Icon = MODE_ICONS[m] as LucideIcon;
+          const selected = mode === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={cn(
+                "flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-all min-h-[64px] cursor-pointer",
+                selected
+                  ? "ring-2 ring-primary border-primary bg-primary/5"
+                  : "hover:border-primary/30",
+              )}
+            >
+              <Icon className={cn(
+                "h-4 w-4 shrink-0 mt-0.5",
+                selected ? "text-primary" : "text-muted-foreground",
+              )} />
+              <div className="min-w-0 flex-1">
+                <span className={cn(
+                  "text-xs font-medium",
+                  selected && "text-primary",
+                )}>
+                  {t(`detail.prompt.mode.${m}`)}
+                </span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {t(`detail.prompt.mode.${m}Desc`)}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 }
-
-const modeHints: Record<string, string> = {
-  full: "All sections — chatbot, main agent (default)",
-  task: "Enterprise automation — lean prompt, keeps tools/safety/skills",
-  minimal: "Subagent/cron — bare minimum sections",
-  none: "Identity line only — API/webhook integrations",
-};

@@ -184,6 +184,19 @@
     "evolution": { "title": "Tiến hóa" },
     "capabilities": "Khả năng",
     "llmSeesAs": "LLM nhìn thấy đây là",
+    "prompt": {
+      "title": "Chế độ System Prompt",
+      "mode": {
+        "full": "Đầy đủ",
+        "fullDesc": "Tất cả phần — chatbot, agent chính",
+        "task": "Tác vụ",
+        "taskDesc": "Tự động hóa doanh nghiệp — prompt gọn, giữ tools/safety/skills",
+        "minimal": "Tối giản",
+        "minimalDesc": "Subagent/cron — chỉ các phần tối thiểu",
+        "none": "Không",
+        "noneDesc": "Chỉ dòng định danh — tích hợp API/webhook"
+      }
+    },
     "engine": {
       "title": "Phiên Bản Engine",
       "learnMore": "Tìm hiểu thêm",

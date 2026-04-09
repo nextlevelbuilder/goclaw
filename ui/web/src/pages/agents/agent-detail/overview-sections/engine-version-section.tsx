@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Cpu, Workflow, Brain, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useV3Flags } from "@/hooks/use-v3-flags";
 import { V3InfoModal } from "@/components/agents/v3-info-modal/v3-info-modal";
@@ -24,9 +23,6 @@ export function EngineVersionSection({ agentId }: EngineVersionSectionProps) {
         <div className="flex items-center gap-2">
           <Cpu className="h-4 w-4 text-blue-500 shrink-0" />
           <h3 className="text-sm font-medium">{t("detail.engine.title")}</h3>
-          <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300">
-            v3
-          </Badge>
         </div>
         <button
           onClick={() => setInfoOpen(true)}

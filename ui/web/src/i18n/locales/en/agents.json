@@ -46,9 +46,6 @@
     "summonFailed": "Failed",
     "resummon": "Resummon",
     "delete": "Delete",
-    "v2Tooltip": "Legacy agent pipeline. Upgrade to v3 for episodic memory, metrics, and improved retrieval.",
-    "v3Tooltip": "New 8-stage pipeline with episodic memory, evolution metrics, and improved retrieval.",
-    "versionInfo": "What's new in v3?",
     "evolving": "Evolving",
     "static": "Static",
     "evolvingTooltip": "Agent can self-evolve its communication style (SOUL.md). Identity and workflow stay fixed.",
@@ -194,6 +191,19 @@
       "memoryHint": "Enable episodic memory and L0 auto-injection",
       "retrieval": "V3 Retrieval",
       "retrievalHint": "Enable new retrieval pipeline"
+    },
+    "prompt": {
+      "title": "System Prompt Mode",
+      "mode": {
+        "full": "Full",
+        "fullDesc": "All sections — chatbot, main agent",
+        "task": "Task",
+        "taskDesc": "Enterprise automation — lean prompt, keeps tools/safety/skills",
+        "minimal": "Minimal",
+        "minimalDesc": "Subagent/cron — bare minimum sections",
+        "none": "None",
+        "noneDesc": "Identity line only — API/webhook integrations"
+      }
     },
     "engine": {
       "title": "Engine Version",

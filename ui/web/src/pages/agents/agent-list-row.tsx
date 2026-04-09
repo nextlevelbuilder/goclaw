@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AgentData } from "@/types/agent";
-import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting } from "./agent-detail/agent-display-utils";
-import { useAgentVersion } from "./hooks/use-agent-version";
+import { cn } from "@/lib/utils";
+import { UUID_RE, agentDisplayName, hasActiveChatGPTOAuthRouting, readPromptMode } from "./agent-detail/agent-display-utils";
+import { promptModeBadgeClass } from "./agent-detail/prompt-mode-badge-utils";
 
 interface AgentListRowProps {
   agent: AgentData;
@@ -21,7 +22,7 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
   const selfEvolve = agent.agent_type === "predefined" && Boolean(agent.self_evolve);
   const emoji = agent.emoji ?? "";
   const hasOAuthRouting = hasActiveChatGPTOAuthRouting(agent.chatgpt_oauth_routing);
-  const version = useAgentVersion(agent.id);
+  const promptMode = readPromptMode(agent);
 
   return (
     <button
@@ -69,13 +70,13 @@ export function AgentListRow({ agent, ownerName, onClick, onResummon, onDelete }
           <TooltipTrigger asChild>
             <Badge
               variant="outline"
-              className={`text-[11px] ${version === "v3" ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300" : ""}`}
+              className={cn("text-[11px]", promptModeBadgeClass(promptMode))}
             >
-              {version}
+              {t(`detail.prompt.mode.${promptMode}`)}
             </Badge>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-[260px] text-xs">
-            {version === "v3" ? t("card.v3Tooltip") : t("card.v2Tooltip")}
+            {t(`detail.prompt.mode.${promptMode}Desc`)}
           </TooltipContent>
         </Tooltip>
         {selfEvolve && (
