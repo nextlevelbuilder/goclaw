@@ -653,29 +653,31 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		return
 	}
 
-	// Memory flush runs synchronously INSIDE the guard
-	// (so concurrent runs don't both trigger flush for the same compaction cycle).
-	flushSettings := ResolveMemoryFlushSettings(l.compactionCfg)
-	if l.shouldRunMemoryFlush(ctx, sessionKey, tokenEstimate, flushSettings) {
-		l.runMemoryFlush(ctx, sessionKey, flushSettings)
-	}
-
-	// Resolve keepLast before spawning goroutine (reads config under caller's scope).
+	// Resolve keepLast and flush settings before spawning goroutine.
 	keepLast := 4
 	if l.compactionCfg != nil && l.compactionCfg.KeepLastMessages > 0 {
 		keepLast = l.compactionCfg.KeepLastMessages
 	}
+	flushSettings := ResolveMemoryFlushSettings(l.compactionCfg)
 
-	// Summarize in background (holds the per-session lock until done)
+	// Summarize and flush in background (holds the per-session lock until done).
+	// This ensures the agent's response is delivered to the channel immediately
+	// without waiting for long-running context maintenance (RAG, summarization).
 	go func() {
 		defer sessionMu.Unlock()
 		defer safego.Recover(nil, "session", sessionKey)
 
-		// Re-check: history may have been truncated by a concurrent summarize
-		// that finished between our threshold check and acquiring the lock.
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 120*time.Second)
 		defer cancel()
 
+		// 1. Run memory flush first (if configured and threshold met)
+		if l.shouldRunMemoryFlush(sctx, sessionKey, tokenEstimate, flushSettings) {
+			l.runMemoryFlush(sctx, sessionKey, flushSettings)
+		}
+
+		// 2. Background summarization
+		// Re-check: history may have been truncated by a concurrent summarize
+		// that finished between our initial threshold check and this lock acquisition.
 		history := l.sessions.GetHistory(sctx, sessionKey)
 		if len(history) <= keepLast {
 			return
