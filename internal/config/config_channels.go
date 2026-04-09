@@ -20,6 +20,7 @@ type ChannelsConfig struct {
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
+	GoogleChat        GoogleChatConfig         `json:"google_chat"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
 }
 
@@ -192,6 +193,30 @@ type FeishuConfig struct {
 	STTTenantID       string              `json:"stt_tenant_id,omitempty"`
 	STTTimeoutSeconds int                 `json:"stt_timeout_seconds,omitempty"`
 	VoiceAgentID      string              `json:"voice_agent_id,omitempty"`
+}
+
+type GoogleChatConfig struct {
+	Enabled            bool                `json:"enabled"`
+	ServiceAccountFile string              `json:"serviceAccountFile"`
+	Mode               string              `json:"mode"`                          // "pubsub" (phase 1) | "webhook" (phase 2)
+	ProjectID          string              `json:"projectId"`
+	SubscriptionID     string              `json:"subscriptionId"`
+	PullIntervalMs     int                 `json:"pullIntervalMs,omitempty"`
+	BotUser            string              `json:"botUser,omitempty"`
+	DMPolicy           string              `json:"dm_policy,omitempty"`           // "open" (default), "allowlist", "disabled"
+	GroupPolicy        string              `json:"group_policy,omitempty"`        // "open" (default), "allowlist", "disabled"
+	RequireMention     *bool               `json:"require_mention,omitempty"`     // require @bot mention in groups (default true)
+	AllowFrom          FlexibleStringSlice `json:"allow_from,omitempty"`
+	HistoryLimit       int                 `json:"history_limit,omitempty"`       // max pending group messages (default 50, 0=disabled)
+	LongFormThreshold  int                 `json:"longFormThreshold,omitempty"`
+	LongFormFormat     string              `json:"longFormFormat,omitempty"`      // "md" (default) | "txt"
+	MediaMaxMB         int                 `json:"mediaMaxMb,omitempty"`
+	FileRetentionDays  int                 `json:"fileRetentionDays,omitempty"`   // auto-delete Drive files (0 = keep forever)
+	DrivePermission    string              `json:"drivePermission,omitempty"`     // "domain" (default) | "anyone"
+	DriveDomain        string              `json:"driveDomain,omitempty"`         // domain for "domain" permission (default "vnpay.vn")
+	DMStream           *bool               `json:"dm_stream,omitempty"`           // enable streaming for DMs (default true)
+	GroupStream        *bool               `json:"group_stream,omitempty"`        // enable streaming for groups (default false)
+	BlockReply         *bool               `json:"block_reply,omitempty"`
 }
 
 // ProvidersConfig maps provider name to its config.
