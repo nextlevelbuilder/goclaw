@@ -111,7 +111,8 @@ export function useVaultAllLinks(agentId: string, documents: { id: string }[]) {
   return { links: data ?? [], loading: isLoading };
 }
 
-/** Independent data fetch for graph view — higher limit, separate cache. */
+/** Independent data fetch for graph view — higher limit, separate cache.
+ *  Fetches links per-agent (groups docs by agent_id) so links work in all-agents mode too. */
 export function useVaultGraphData(agentId: string, opts?: { teamId?: string }) {
   const http = useHttp();
 
@@ -129,9 +130,55 @@ export function useVaultGraphData(agentId: string, opts?: { teamId?: string }) {
   });
 
   const documents = docData?.documents ?? [];
-  const { links, loading: linksLoading } = useVaultAllLinks(agentId, documents);
 
-  return { documents, links, loading: docsLoading || linksLoading };
+  // Build a stable cache key from doc IDs
+  const docIdKey = useMemo(
+    () => documents.map((d) => d.id).sort().join(","),
+    [documents],
+  );
+
+  // Fetch links grouped by agent_id — works for both single-agent and all-agents mode.
+  const { data: linksData, isLoading: linksLoading } = useQuery({
+    queryKey: [VAULT_KEY, "graph-links", docIdKey],
+    queryFn: async () => {
+      if (documents.length === 0) return [];
+      // Group doc IDs by agent_id
+      const byAgent = new Map<string, string[]>();
+      for (const doc of documents) {
+        const aid = doc.agent_id;
+        if (!aid) continue;
+        if (!byAgent.has(aid)) byAgent.set(aid, []);
+        byAgent.get(aid)!.push(doc.id);
+      }
+
+      const allLinks: VaultLink[] = [];
+      for (const [aid, ids] of byAgent) {
+        const batchSize = 10;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          const results = await Promise.all(
+            batch.map((id) =>
+              http.get<{ outlinks: VaultLink[]; backlinks: VaultLink[] }>(
+                `/v1/agents/${aid}/vault/documents/${id}/links`,
+              ).catch(() => ({ outlinks: [], backlinks: [] })),
+            ),
+          );
+          for (const r of results) allLinks.push(...r.outlinks);
+        }
+      }
+      // Dedup
+      const seen = new Set<string>();
+      return allLinks.filter((l) => {
+        if (seen.has(l.id)) return false;
+        seen.add(l.id);
+        return true;
+      });
+    },
+    enabled: documents.length > 0,
+    staleTime: 60_000,
+  });
+
+  return { documents, links: linksData ?? [], loading: docsLoading || linksLoading };
 }
 
 /** Get links (outlinks + backlinks) for a vault document. */
