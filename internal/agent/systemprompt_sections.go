@@ -421,7 +421,14 @@ func buildSpawnSection() []string {
 func buildRuntimeSection(cfg SystemPromptConfig) []string {
 	var parts []string
 	if cfg.AgentID != "" {
-		parts = append(parts, fmt.Sprintf("agent=%s", cfg.AgentID))
+		agentLabel := cfg.AgentID
+		if cfg.DisplayName != "" {
+			agentLabel = fmt.Sprintf("%s (%s)", cfg.DisplayName, cfg.AgentID)
+		}
+		parts = append(parts, fmt.Sprintf("agent=%s", agentLabel))
+	}
+	if cfg.AgentUUID != "" {
+		parts = append(parts, fmt.Sprintf("id=%s", cfg.AgentUUID))
 	}
 	if cfg.Channel != "" {
 		parts = append(parts, fmt.Sprintf("channel=%s", cfg.Channel))

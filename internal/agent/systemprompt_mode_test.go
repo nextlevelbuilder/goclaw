@@ -447,3 +447,24 @@ func TestMinModeOrdering(t *testing.T) {
 		t.Error("min(none, full) should be none")
 	}
 }
+
+func TestTaskModeIdentityIncluded(t *testing.T) {
+	cfg := SystemPromptConfig{
+		Mode:      PromptTask,
+		AgentID:   "tieu-thong",
+		AgentType: store.AgentTypePredefined,
+		ToolNames: []string{"exec", "read_file"},
+		ContextFiles: []bootstrap.ContextFile{
+			{Path: "SOUL.md", Content: "You are tieu-thong."},
+			{Path: "IDENTITY.md", Content: "# IDENTITY.md\n- Name: Tieu Thong\n- Purpose: Knowledge agent"},
+			{Path: "AGENTS_TASK.md", Content: "task rules"},
+		},
+	}
+	prompt := BuildSystemPrompt(cfg)
+	if !strings.Contains(prompt, "IDENTITY.md") {
+		t.Error("task mode should include IDENTITY.md header")
+	}
+	if !strings.Contains(prompt, "Tieu Thong") {
+		t.Error("task mode should include IDENTITY.md content")
+	}
+}

@@ -86,12 +86,12 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 		}
 	}
 
-	// --- Team + Delegation ---
+	// --- Team + Delegation (none mode skips team entirely) ---
 	orchMode := ResolveOrchestrationMode(ctx, ag.ID, deps.TeamStore, deps.AgentLinks)
 	var isTeamCtx bool
 	var teamMembers []store.TeamMemberData
 	var teamWorkspace, teamGuidance string
-	if deps.TeamStore != nil {
+	if mode != PromptNone && deps.TeamStore != nil {
 		if team, err := deps.TeamStore.GetTeamForAgent(ctx, ag.ID); err == nil && team != nil {
 			isTeamCtx = true
 			if deps.DataDir != "" {
@@ -124,6 +124,8 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 	// --- Build system prompt (same function as LLM pipeline) ---
 	return BuildSystemPrompt(SystemPromptConfig{
 		AgentID:              ag.AgentKey,
+		AgentUUID:            ag.ID.String(),
+		DisplayName:          ag.DisplayName,
 		Model:                ag.Model,
 		Mode:                 mode,
 		ToolNames:            toolNames,

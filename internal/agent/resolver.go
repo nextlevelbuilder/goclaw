@@ -403,6 +403,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		restrictVal := true // always restrict agents to their workspace
 		loop := NewLoop(LoopConfig{
 			ID:                     ag.AgentKey,
+			DisplayName:            ag.DisplayName,
 			AgentUUID:              ag.ID,
 			TenantID:               ag.TenantID,
 			AgentType:              ag.AgentType,

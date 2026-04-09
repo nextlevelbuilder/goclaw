@@ -68,6 +68,7 @@ type CacheInvalidateFunc func(agentID uuid.UUID, userID string)
 // Think → Act → Observe cycle with tool execution.
 type Loop struct {
 	id               string
+	displayName      string
 	agentUUID        uuid.UUID // set for context propagation
 	tenantID         uuid.UUID // agent's owning tenant
 	agentType        string    // "open" or "predefined"
@@ -285,9 +286,10 @@ type LoopConfig struct {
 	ShellDenyGroups map[string]bool
 
 	// Agent UUID + tenant for context propagation to tools
-	AgentUUID  uuid.UUID
-	TenantID   uuid.UUID // agent's owning tenant — injected into execution context
-	AgentType  string    // "open" or "predefined"
+	AgentUUID   uuid.UUID
+	TenantID    uuid.UUID // agent's owning tenant — injected into execution context
+	AgentType   string    // "open" or "predefined"
+	DisplayName string    // human-readable agent display name (for runtime section)
 	IsTeamLead bool      // agent leads a team (from resolver detection)
 
 	// Per-user profile + file seeding + dynamic context loading
@@ -401,6 +403,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 
 	return &Loop{
 		id:                     cfg.ID,
+		displayName:            cfg.DisplayName,
 		agentUUID:              cfg.AgentUUID,
 		tenantID:               cfg.TenantID,
 		agentType:              cfg.AgentType,

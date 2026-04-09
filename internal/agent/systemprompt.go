@@ -93,6 +93,8 @@ const CacheBoundaryMarker = "<!-- GOCLAW_CACHE_BOUNDARY -->"
 // Matches the params of TS buildAgentSystemPrompt().
 type SystemPromptConfig struct {
 	AgentID       string
+	AgentUUID     string // agent UUID for runtime identification
+	DisplayName   string // human-readable agent display name
 	Model         string
 	Workspace     string
 	Channel       string                 // runtime channel instance name (e.g. "my-telegram-bot")
@@ -359,17 +361,18 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	lines = append(lines, buildWorkspaceSection(cfg.Workspace, cfg.SandboxEnabled, cfg.SandboxContainerDir)...)
 
 	// 6.3. ## Team Workspace — only when team context is active (leader inbound OR team dispatch)
-	if !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) {
+	// None mode skips team sections entirely — identity-only prompt has no team awareness.
+	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && hasTeamWorkspace(cfg.ToolNames) {
 		lines = append(lines, buildTeamWorkspaceSection(cfg.TeamWorkspace)...)
 	}
 
 	// 6.4. ## Team Members — inject roster so agent knows who to assign tasks to
-	if !cfg.IsBootstrap && cfg.IsTeamContext && len(cfg.TeamMembers) > 0 {
+	if !isNone && !cfg.IsBootstrap && cfg.IsTeamContext && len(cfg.TeamMembers) > 0 {
 		lines = append(lines, buildTeamMembersSection(cfg.TeamMembers, cfg.TeamGuidance)...)
 	}
 
 	// 6.45. ## Delegation Targets — from agent_links (ModeDelegate or ModeTeam with targets)
-	if !cfg.IsBootstrap && len(cfg.DelegateTargets) > 0 && cfg.OrchMode != ModeSpawn {
+	if !isNone && !cfg.IsBootstrap && len(cfg.DelegateTargets) > 0 && cfg.OrchMode != ModeSpawn {
 		lines = append(lines, buildOrchestrationSection(OrchestrationSectionData{
 			Mode:            cfg.OrchMode,
 			DelegateTargets: cfg.DelegateTargets,
