@@ -2,13 +2,15 @@ import { useState, useCallback, useRef, useEffect } from "react";
 
 export function useClipboard(timeout = 2000) {
   const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => clearTimeout(timerRef.current), []);
+  useEffect(() => () => {
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+  }, []);
 
   const markCopied = useCallback(() => {
     setCopied(true);
-    clearTimeout(timerRef.current);
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setCopied(false), timeout);
   }, [timeout]);
 

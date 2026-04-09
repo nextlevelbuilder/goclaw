@@ -195,6 +195,9 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) {
 			codex.WithRoutingDefaults(oauthSettings.CodexPool.Strategy, oauthSettings.CodexPool.ExtraProviderNames)
 		}
 		h.providerReg.RegisterForTenant(p.TenantID, codex)
+	case store.ProviderGitHubCopilotOAuth:
+		ts := oauth.NewGitHubCopilotTokenSource(h.store, h.secretStore, p.Name).WithTenantID(p.TenantID)
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewGitHubCopilotProvider(p.Name, ts, apiBase, ""))
 	case store.ProviderAnthropicNative:
 		h.providerReg.RegisterForTenant(p.TenantID, providers.NewAnthropicProvider(p.APIKey,
 			providers.WithAnthropicBaseURL(apiBase)))

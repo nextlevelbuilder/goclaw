@@ -19,7 +19,7 @@ export interface ChatGPTOAuthProviderStatus {
 export function useChatGPTOAuthProviderStatuses(providers: ProviderData[], enabled = true) {
   const http = useHttp();
   const oauthProviders = useMemo(
-    () => providers.filter((provider) => provider.provider_type === "chatgpt_oauth"),
+    () => providers.filter((provider) => provider.provider_type === "chatgpt_oauth" || provider.provider_type === "github_copilot_oauth"),
     [providers],
   );
   const providerKeys = oauthProviders.map((provider) => `${provider.name}:${provider.enabled ? "1" : "0"}`);
@@ -39,8 +39,11 @@ export function useChatGPTOAuthProviderStatuses(providers: ProviderData[], enabl
         }
 
         try {
+          const statusPath = provider.provider_type === "github_copilot_oauth"
+            ? `/v1/auth/copilot/${encodeURIComponent(provider.name)}/status`
+            : `/v1/auth/chatgpt/${encodeURIComponent(provider.name)}/status`;
           const status = await http.get<ChatGPTOAuthStatusResponse>(
-            `/v1/auth/chatgpt/${encodeURIComponent(provider.name)}/status`,
+            statusPath,
           );
           return {
             provider,

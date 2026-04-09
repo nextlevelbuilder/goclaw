@@ -33,10 +33,12 @@ export function RegenerateDialog({
   const [prompt, setPrompt] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup auto-close timer on unmount
-  useEffect(() => () => { clearTimeout(closeTimerRef.current); }, []);
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+  }, []);
 
   // Reset state when dialog opens
   useEffect(() => {

@@ -9,31 +9,32 @@ import (
 
 // Provider type constants.
 const (
-	ProviderAnthropicNative = "anthropic_native"
-	ProviderOpenAICompat    = "openai_compat"
-	ProviderGeminiNative    = "gemini_native"
-	ProviderOpenRouter      = "openrouter"
-	ProviderGroq            = "groq"
-	ProviderDeepSeek        = "deepseek"
-	ProviderMistral         = "mistral"
-	ProviderXAI             = "xai"
-	ProviderMiniMax         = "minimax_native"
-	ProviderCohere          = "cohere"
-	ProviderPerplexity      = "perplexity"
-	ProviderDashScope       = "dashscope"
-	ProviderBailian         = "bailian"
-	ProviderChatGPTOAuth    = "chatgpt_oauth"
-	ProviderClaudeCLI       = "claude_cli"
-	ProviderSuno            = "suno"
-	ProviderYesScale        = "yescale"
-	ProviderZai             = "zai"
-	ProviderZaiCoding       = "zai_coding"
-	ProviderOllama          = "ollama"       // local or self-hosted Ollama (no API key)
-	ProviderOllamaCloud     = "ollama_cloud" // Ollama Cloud (Bearer token required)
-	ProviderACP             = "acp"          // ACP (Agent Client Protocol) agent subprocess
-	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
-	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
-	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
+	ProviderAnthropicNative   = "anthropic_native"
+	ProviderOpenAICompat       = "openai_compat"
+	ProviderGeminiNative       = "gemini_native"
+	ProviderOpenRouter         = "openrouter"
+	ProviderGroq               = "groq"
+	ProviderDeepSeek           = "deepseek"
+	ProviderMistral            = "mistral"
+	ProviderXAI                = "xai"
+	ProviderMiniMax            = "minimax_native"
+	ProviderCohere             = "cohere"
+	ProviderPerplexity         = "perplexity"
+	ProviderDashScope          = "dashscope"
+	ProviderBailian            = "bailian"
+	ProviderChatGPTOAuth       = "chatgpt_oauth"
+	ProviderGitHubCopilotOAuth = "github_copilot_oauth"
+	ProviderClaudeCLI          = "claude_cli"
+	ProviderSuno               = "suno"
+	ProviderYesScale           = "yescale"
+	ProviderZai                = "zai"
+	ProviderZaiCoding          = "zai_coding"
+	ProviderOllama             = "ollama"       // local or self-hosted Ollama (no API key)
+	ProviderOllamaCloud        = "ollama_cloud" // Ollama Cloud (Bearer token required)
+	ProviderACP                = "acp"          // ACP (Agent Client Protocol) agent subprocess
+	ProviderNovita             = "novita"          // Novita AI (OpenAI-compatible endpoint)
+	ProviderBytePlus           = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
+	ProviderBytePlusCoding     = "byteplus_coding" // BytePlus ModelArk Coding Plan
 
 	// Novita AI defaults.
 	NovitaDefaultAPIBase = "https://api.novita.ai/openai"
@@ -61,6 +62,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderDashScope:       true,
 	ProviderBailian:         true,
 	ProviderChatGPTOAuth:    true,
+	ProviderGitHubCopilotOAuth: true,
 	ProviderClaudeCLI:       true,
 	ProviderSuno:            true,
 	ProviderYesScale:        true,
@@ -111,6 +113,16 @@ type ChatGPTOAuthProviderSettings struct {
 	CodexPool *ChatGPTOAuthRoutingConfig `json:"codex_pool,omitempty"`
 }
 
+// GitHubCopilotOAuthProviderSettings stores non-secret metadata for GitHub Copilot OAuth providers.
+type GitHubCopilotOAuthProviderSettings struct {
+	ExpiresAt        int64  `json:"expires_at,omitempty"`
+	Scopes           string `json:"scopes,omitempty"`
+	EnterpriseDomain string `json:"enterprise_domain,omitempty"`
+	GitHubLogin      string `json:"github_login,omitempty"`
+	CopilotPlan      string `json:"copilot_plan,omitempty"`
+	BaseURL          string `json:"base_url,omitempty"`
+}
+
 // ParseEmbeddingSettings extracts embedding config from a provider's settings JSONB.
 // Returns nil if not configured.
 func ParseEmbeddingSettings(settings json.RawMessage) *EmbeddingSettings {
@@ -140,6 +152,22 @@ func ParseChatGPTOAuthProviderSettings(settings json.RawMessage) *ChatGPTOAuthPr
 		return nil
 	}
 	s.CodexPool.OverrideMode = ""
+	return &s
+}
+
+// ParseGitHubCopilotOAuthProviderSettings extracts provider metadata for GitHub Copilot OAuth providers.
+// Returns nil when no meaningful metadata is present.
+func ParseGitHubCopilotOAuthProviderSettings(settings json.RawMessage) *GitHubCopilotOAuthProviderSettings {
+	if len(settings) == 0 {
+		return nil
+	}
+	var s GitHubCopilotOAuthProviderSettings
+	if json.Unmarshal(settings, &s) != nil {
+		return nil
+	}
+	if s.ExpiresAt == 0 && s.Scopes == "" && s.EnterpriseDomain == "" && s.GitHubLogin == "" && s.CopilotPlan == "" && s.BaseURL == "" {
+		return nil
+	}
 	return &s
 }
 
@@ -181,6 +209,7 @@ var NoEmbeddingTypes = map[string]bool{
 	ProviderACP:             true,
 	ProviderClaudeCLI:       true,
 	ProviderChatGPTOAuth:    true,
+	ProviderGitHubCopilotOAuth: true,
 	ProviderSuno:            true,
 }
 
