@@ -11,7 +11,6 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
@@ -61,7 +60,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		chunks := chunkText(formatted, maxMessageLen)
 		for _, chunk := range chunks {
 			waMsg := &waE2E.Message{
-				Conversation: proto.String(chunk),
+				Conversation: new(chunk),
 			}
 			if _, err := c.client.SendMessage(c.ctx, chatJID, waMsg); err != nil {
 				return fmt.Errorf("send whatsapp message: %w", err)
@@ -90,14 +89,14 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			ImageMessage: &waE2E.ImageMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
+				Caption:       new(caption),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 
@@ -108,14 +107,14 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			VideoMessage: &waE2E.VideoMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
+				Caption:       new(caption),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 
@@ -126,13 +125,13 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			AudioMessage: &waE2E.AudioMessage{
-				Mimetype:      proto.String(mime),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 
@@ -143,14 +142,14 @@ func (c *Channel) buildMediaMessage(data []byte, mime, caption string) (*waE2E.M
 		}
 		return &waE2E.Message{
 			DocumentMessage: &waE2E.DocumentMessage{
-				Caption:       proto.String(caption),
-				Mimetype:      proto.String(mime),
+				Caption:       new(caption),
+				Mimetype:      new(mime),
 				URL:           &uploaded.URL,
 				DirectPath:    &uploaded.DirectPath,
 				MediaKey:      uploaded.MediaKey,
 				FileEncSHA256: uploaded.FileEncSHA256,
 				FileSHA256:    uploaded.FileSHA256,
-				FileLength:    proto.Uint64(uint64(len(data))),
+				FileLength:    new(uint64(len(data))),
 			},
 		}, nil
 	}

@@ -140,6 +140,14 @@ type WhatsAppConfig struct {
 	RequireMention *bool               `json:"require_mention,omitempty"` // only respond in groups when bot is @mentioned (default false)
 	HistoryLimit   int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
 	BlockReply     *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
+	Groups         map[string]*WhatsAppGroupConfig `json:"groups,omitempty"` // per-group overrides, key = group JID (e.g. "123456@g.us")
+}
+
+// WhatsAppGroupConfig defines per-group overrides for a WhatsApp channel.
+type WhatsAppGroupConfig struct {
+	AgentID     string `json:"agent_id,omitempty"`      // override agent for this group (empty = inherit instance agent)
+	DisplayName string `json:"display_name,omitempty"`  // friendly name for the group (shown in UI)
+	Enabled     *bool  `json:"enabled,omitempty"`       // disable bot for this group (default: true)
 }
 
 type ZaloConfig struct {

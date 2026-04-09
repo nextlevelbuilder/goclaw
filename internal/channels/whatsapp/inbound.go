@@ -59,6 +59,13 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 			slog.Info("whatsapp group message rejected by policy", "sender_id", senderID, "chat_id", chatID, "policy", c.config.GroupPolicy)
 			return
 		}
+		// Per-group enabled check.
+		if gc, ok := c.config.Groups[chatID]; ok && gc != nil {
+			if gc.Enabled != nil && !*gc.Enabled {
+				slog.Debug("whatsapp group disabled by config", "chat_id", chatID)
+				return
+			}
+		}
 	}
 
 	if !c.IsAllowed(senderID) {
@@ -158,6 +165,14 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		userID = senderID[:idx]
 	}
 
+	// Resolve agent: per-group override or instance default.
+	agentID := c.AgentID()
+	if peerKind == "group" {
+		if gc, ok := c.config.Groups[chatID]; ok && gc != nil && gc.AgentID != "" {
+			agentID = gc.AgentID
+		}
+	}
+
 	c.Bus().PublishInbound(bus.InboundMessage{
 		Channel:  c.Name(),
 		SenderID: senderID,
@@ -166,7 +181,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		Media:    mediaFiles,
 		PeerKind: peerKind,
 		UserID:   userID,
-		AgentID:  c.AgentID(),
+		AgentID:  agentID,
 		TenantID: c.TenantID(),
 		Metadata: metadata,
 	})
