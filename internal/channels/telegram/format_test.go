@@ -182,3 +182,42 @@ func TestChunkHTML(t *testing.T) {
 		})
 	}
 }
+
+func TestMarkdownToTelegramHTML_URLsWithUnderscores(t *testing.T) {
+	tests := []struct {
+		name string
+		input string
+		want  string
+		deny  string
+	}{
+		{
+			name:  "bare URL with underscores not broken by italic",
+			input: "Check https://pre.glomotra.dev/uk/syngas_dailymail_2026_ai/?fname=James here",
+			want:  "https://pre.glomotra.dev/uk/syngas_dailymail_2026_ai/?fname=James",
+			deny:  "<i>",
+		},
+		{
+			name:  "URL without underscores unchanged",
+			input: "Visit https://example.com/path today",
+			want:  "https://example.com/path",
+		},
+		{
+			name:  "markdown link with underscored URL preserved",
+			input: "[Click](https://example.com/a_b_c)",
+			want:  `href="https://example.com/a_b_c"`,
+			deny:  "<i>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := markdownToTelegramHTML(tt.input)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("expected %q in output, got: %s", tt.want, got)
+			}
+			if tt.deny != "" && strings.Contains(got, tt.deny) {
+				t.Errorf("unexpected %q in output, got: %s", tt.deny, got)
+			}
+		})
+	}
+}

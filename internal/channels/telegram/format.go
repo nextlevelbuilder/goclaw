@@ -61,6 +61,17 @@ func markdownToTelegramHTML(text string) string {
 	inlineCodes := extractInlineCodes(text)
 	text = inlineCodes.text
 
+
+	// Extract and protect bare URLs from italic parsing.
+	// URLs with underscores (e.g. syngas_dailymail_2026_ai) get broken by
+	// the italic regex which matches _text_ patterns inside URLs.
+	var urlPlaceholders []string
+	reURL := regexp.MustCompile(`https?://[^\s<>\)\]]+`)
+	text = reURL.ReplaceAllStringFunc(text, func(s string) string {
+		idx := len(urlPlaceholders)
+		urlPlaceholders = append(urlPlaceholders, s)
+		return fmt.Sprintf("\x00URL%d\x00", idx)
+	})
 	// Strip markdown headers
 	text = regexp.MustCompile(`(?m)^#{1,6}\s+(.+)$`).ReplaceAllString(text, "$1")
 
@@ -114,6 +125,12 @@ func markdownToTelegramHTML(text string) string {
 
 	// List items
 	text = regexp.MustCompile(`(?m)^[-*]\s+`).ReplaceAllString(text, "• ")
+
+	// Restore bare URLs (protected from italic parsing above).
+	for i, u := range urlPlaceholders {
+		escaped := escapeHTML(u)
+		text = strings.ReplaceAll(text, fmt.Sprintf("\x00URL%d\x00", i), escaped)
+	}
 
 	// Restore inline code
 	for i, code := range inlineCodes.codes {
