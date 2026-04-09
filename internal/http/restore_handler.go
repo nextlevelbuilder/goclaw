@@ -49,6 +49,12 @@ func (h *RestoreHandler) handleRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !backupInProgress.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, protocol.ErrInternal, "a backup or restore operation is already in progress")
+		return
+	}
+	defer backupInProgress.Store(false)
+
 	q := r.URL.Query()
 	skipDB := q.Get("skip_db") == "true" || q.Get("skip_db") == "1"
 	skipFiles := q.Get("skip_files") == "true" || q.Get("skip_files") == "1"

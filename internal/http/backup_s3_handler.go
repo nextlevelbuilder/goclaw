@@ -174,13 +174,19 @@ func (h *BackupS3Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		BackupToken string `json:"backup_token"`
-		BackupPath  string `json:"backup_path"`
 	}
 	if !bindJSON(w, r, locale, &req) {
 		return
 	}
 
-	archivePath := req.BackupPath
+	// Only accept backup_token — never arbitrary file paths (prevents file exfiltration)
+	if req.BackupToken == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, "backup_token is required"))
+		return
+	}
+
+	archivePath := ""
 	fileName := ""
 
 	if req.BackupToken != "" {

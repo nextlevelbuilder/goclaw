@@ -35,10 +35,17 @@ func createNewTenant(ctx context.Context, db *sql.DB, sourceSlug, targetSlug str
 	if targetSlug != "" {
 		slug = targetSlug
 	}
+
+	// Fail explicitly if slug exists — prevent silent NOOP that would orphan imported data
+	var existingID uuid.UUID
+	err := db.QueryRowContext(ctx, `SELECT id FROM tenants WHERE slug = $1`, slug).Scan(&existingID)
+	if err == nil {
+		return uuid.Nil, fmt.Errorf("tenant slug %q already exists (id=%s); use upsert mode or choose a different slug", slug, existingID)
+	}
+
 	newID := uuid.New()
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO tenants (id, slug, name, created_at, updated_at)
-		 VALUES ($1, $2, $3, NOW(), NOW()) ON CONFLICT DO NOTHING`,
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO tenants (id, slug, name, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())`,
 		newID, slug, slug,
 	)
 	if err != nil {

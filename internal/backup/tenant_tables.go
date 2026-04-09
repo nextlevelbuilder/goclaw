@@ -184,6 +184,10 @@ func ImportTableRows(ctx context.Context, db *sql.DB, tableName string, reader i
 
 		i := 1
 		for col, val := range row {
+			// Validate column name to prevent SQL injection from crafted JSONL
+			if !isValidColumnName(col) {
+				continue
+			}
 			cols = append(cols, col)
 			params = append(params, fmt.Sprintf("$%d", i))
 			vals = append(vals, val)
@@ -204,6 +208,24 @@ func ImportTableRows(ctx context.Context, db *sql.DB, tableName string, reader i
 	}
 
 	return count, sc.Err()
+}
+
+// isValidColumnName checks that a column name contains only safe characters.
+// Prevents SQL injection from crafted JSONL column keys.
+func isValidColumnName(name string) bool {
+	if len(name) == 0 || len(name) > 128 {
+		return false
+	}
+	for i, c := range name {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' {
+			continue
+		}
+		if i > 0 && c >= '0' && c <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // RemapTenantID replaces the tenant_id value in a JSON row map with newTenantID.

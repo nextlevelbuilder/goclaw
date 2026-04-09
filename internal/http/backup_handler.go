@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/backup"
@@ -15,6 +16,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// backupInProgress prevents concurrent backup/restore operations.
+var backupInProgress atomic.Bool
 
 // BackupHandler handles system backup endpoints.
 // All routes require admin role; download/preflight routes further require owner.
@@ -57,6 +61,12 @@ func (h *BackupHandler) handleBackup(w http.ResponseWriter, r *http.Request) {
 			i18n.T(locale, i18n.MsgNoAccess, "system backup"))
 		return
 	}
+
+	if !backupInProgress.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, protocol.ErrInternal, "a backup or restore operation is already in progress")
+		return
+	}
+	defer backupInProgress.Store(false)
 
 	var req struct {
 		ExcludeDB    bool `json:"exclude_db"`

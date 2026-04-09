@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -189,20 +190,6 @@ func addFileToTar(tw *tar.Writer, filePath, tarName string) error {
 		return err
 	}
 
-	buf := make([]byte, 32<<10)
-	for {
-		n, readErr := f.Read(buf)
-		if n > 0 {
-			if _, writeErr := tw.Write(buf[:n]); writeErr != nil {
-				return writeErr
-			}
-		}
-		if readErr != nil {
-			if readErr.Error() == "EOF" {
-				break
-			}
-			return readErr
-		}
-	}
-	return nil
+	_, err = io.Copy(tw, f)
+	return err
 }
