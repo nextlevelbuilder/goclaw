@@ -84,6 +84,7 @@ All notable changes to GoClaw Gateway are documented here. Format follows [Keep 
   - Updated `internal/store/vault_store.go` with UpdateSummaryAndReembed, FindSimilarDocs methods
   - Updated PostgreSQL and SQLite vault document stores
 
+
 #### WhatsApp Native Protocol Integration (2026-04-06)
 - **Direct protocol migration**: Replaced Node.js Baileys bridge with direct in-process WhatsApp connectivity
 - **Database auth persistence**: Auth state, device keys, and client metadata stored in PostgreSQL (standard) or SQLite (desktop)

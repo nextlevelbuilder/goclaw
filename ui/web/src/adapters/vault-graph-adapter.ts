@@ -4,9 +4,10 @@ import type { VaultDocument, VaultLink } from "@/types/vault";
 export const VAULT_TYPE_COLORS: Record<string, string> = {
   context: "#3b82f6",  // blue
   memory: "#8b5cf6",   // purple
-  note: "#6b7280",     // gray
+  note: "#eab308",     // yellow
   skill: "#22c55e",    // green
   episodic: "#f97316", // orange
+  media: "#ef4444",    // red
 };
 const DEFAULT_COLOR = "#9ca3af";
 

@@ -58,6 +58,7 @@ type Channel struct {
 	// pairingService, pairingDebounce, approvedGroups, groupHistory are inherited from channels.BaseChannel.
 }
 
+
 // GetLastQRB64 returns the most recent QR PNG (base64).
 func (c *Channel) GetLastQRB64() string {
 	c.lastQRMu.RLock()
@@ -115,6 +116,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("whatsapp get device: %w", err)
 	}
+
 
 	c.client = whatsmeow.NewClient(deviceStore, nil)
 	c.client.AddEventHandler(c.handleEvent)

@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect, useLayoutEffect, useCallback } from "react";
+import { useRef, useMemo, useEffect, useLayoutEffect, useCallback, useState } from "react";
 import ForceGraph2D, { type ForceGraphMethods } from "react-force-graph-2d";
 import { useUiStore } from "@/stores/use-ui-store";
 import { buildVaultGraphData, limitVaultDocsByDegree, VAULT_TYPE_COLORS } from "@/adapters/vault-graph-adapter";
@@ -14,10 +14,12 @@ const DEFAULT_NODE_LIMIT = 200;
 interface Props {
   agentId: string;
   teamId?: string;
-  onNodeClick?: (doc: VaultDocument) => void;
+  selectedDocId?: string | null;
+  onNodeSelect?: (docId: string | null) => void;
+  onNodeDoubleClick?: (doc: VaultDocument) => void;
 }
 
-export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
+export function VaultGraphView({ agentId, teamId, selectedDocId, onNodeSelect, onNodeDoubleClick }: Props) {
   const theme = useUiStore((s) => s.theme);
   const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
@@ -27,11 +29,9 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
   const [ready, setReady] = useState(false);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodeLimit, setNodeLimit] = useState(DEFAULT_NODE_LIMIT);
   const zoomRef = useRef(1);
   const zoomDisplayRef = useRef<HTMLSpanElement>(null);
-
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickRef = useRef<string | null>(null);
 
@@ -56,32 +56,35 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Limit docs by degree centrality
+  // Pan camera to externally-selected node
+  useEffect(() => {
+    if (!selectedDocId || !graphRef.current) return;
+    const node = graphData.nodes.find((n) => n.id === selectedDocId);
+    if (node?.x != null && node?.y != null) {
+      graphRef.current.centerAt(node.x, node.y, 300);
+    }
+  }, [selectedDocId]);
+
   const totalCount = allDocs.length;
   const isLimited = totalCount > nodeLimit;
-  const documents = useMemo(
-    () => limitVaultDocsByDegree(allDocs, links, nodeLimit),
-    [allDocs, links, nodeLimit],
-  );
-
+  const documents = useMemo(() => limitVaultDocsByDegree(allDocs, links, nodeLimit), [allDocs, links, nodeLimit]);
   const docMap = useMemo(() => new Map(documents.map((d) => [d.id, d])), [documents]);
   const graphData = useMemo(() => buildVaultGraphData(documents, links), [documents, links]);
 
-  // Highlight sets from selected node
+  // Highlight sets from selectedDocId (controlled by parent)
   const { highlightNodes, highlightLinks } = useMemo(() => {
-    if (!selectedNodeId) return { highlightNodes: new Set<string>(), highlightLinks: new Set<string>() };
-    const node = graphData.nodes.find((n) => n.id === selectedNodeId);
+    if (!selectedDocId) return { highlightNodes: new Set<string>(), highlightLinks: new Set<string>() };
+    const node = graphData.nodes.find((n) => n.id === selectedDocId);
     if (!node) return { highlightNodes: new Set<string>(), highlightLinks: new Set<string>() };
-    return { highlightNodes: new Set([selectedNodeId, ...node.neighbors]), highlightLinks: new Set(node.linkIds) };
-  }, [selectedNodeId, graphData.nodes]);
+    return { highlightNodes: new Set([selectedDocId, ...node.neighbors]), highlightLinks: new Set(node.linkIds) };
+  }, [selectedDocId, graphData.nodes]);
 
-  // Node rendering: circle + label + highlight/dim
   const nodeCanvasObject = useCallback(
     (node: VaultGraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const x = node.x ?? 0, y = node.y ?? 0;
-      const isSelected = node.id === selectedNodeId;
+      const isSelected = node.id === selectedDocId;
       const isNeighbor = highlightNodes.has(node.id);
-      const isDimmed = !!selectedNodeId && !isSelected && !isNeighbor;
+      const isDimmed = !!selectedDocId && !isSelected && !isNeighbor;
       const r = NODE_R + Math.min(node.degree, 10);
 
       ctx.beginPath();
@@ -90,33 +93,26 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
       ctx.fill();
 
       if (isSelected) {
-        ctx.strokeStyle = node.color;
-        ctx.lineWidth = 2.5 / globalScale;
-        ctx.shadowColor = node.color;
-        ctx.shadowBlur = 8 / globalScale;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        ctx.strokeStyle = node.color; ctx.lineWidth = 2.5 / globalScale;
+        ctx.shadowColor = node.color; ctx.shadowBlur = 8 / globalScale;
+        ctx.stroke(); ctx.shadowBlur = 0;
       } else if (isNeighbor) {
-        ctx.strokeStyle = node.color;
-        ctx.lineWidth = 1.5 / globalScale;
-        ctx.stroke();
+        ctx.strokeStyle = node.color; ctx.lineWidth = 1.5 / globalScale; ctx.stroke();
       }
 
       if (globalScale > 0.5 || isSelected || isNeighbor) {
         const fontSize = Math.max(11 / globalScale, 2);
         ctx.font = `${isSelected ? "bold " : ""}${fontSize}px Inter, system-ui, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
+        ctx.textAlign = "center"; ctx.textBaseline = "top";
         ctx.fillStyle = isDimmed
           ? (isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)")
           : (isDark ? "#e2e8f0" : "#1e293b");
         ctx.fillText(node.title.slice(0, 24), x, y + r + 2 / globalScale);
       }
     },
-    [selectedNodeId, highlightNodes, isDark],
+    [selectedDocId, highlightNodes, isDark],
   );
 
-  // Link label overlay for highlighted links
   const linkCanvasObject = useCallback(
     (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
       if (!highlightLinks.has(link.id)) return;
@@ -126,8 +122,7 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
       const fontSize = Math.max(9 / globalScale, 2);
       const text = link.label || "";
       ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const metrics = ctx.measureText(text);
       const pad = 2 / globalScale;
       ctx.fillStyle = isDark ? "rgba(15,23,42,0.85)" : "rgba(255,255,255,0.9)";
@@ -138,41 +133,33 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
     [highlightLinks, isDark],
   );
 
-  // Click: single = highlight, double = open detail
+  // Single-click = highlight (notify parent), double-click = open detail
   const handleNodeClick = useCallback(
     (node: VaultGraphNode) => {
       if (clickTimerRef.current && lastClickRef.current === node.id) {
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-        lastClickRef.current = null;
+        clearTimeout(clickTimerRef.current); clickTimerRef.current = null; lastClickRef.current = null;
         const doc = docMap.get(node.id);
-        if (doc && onNodeClick) onNodeClick(doc);
+        if (doc) onNodeDoubleClick?.(doc);
         return;
       }
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
       lastClickRef.current = node.id;
       clickTimerRef.current = setTimeout(() => {
-        setSelectedNodeId((prev) => (prev === node.id ? null : node.id));
+        onNodeSelect?.(node.id === selectedDocId ? null : node.id);
         clickTimerRef.current = null;
       }, DOUBLE_CLICK_MS);
     },
-    [docMap, onNodeClick],
+    [docMap, selectedDocId, onNodeSelect, onNodeDoubleClick],
   );
 
-  const handleZoomIn = useCallback(() => {
-    const fg = graphRef.current;
-    if (fg) fg.zoom(Math.min((fg.zoom() ?? 1) * 1.5, 8), 300);
-  }, []);
-  const handleZoomOut = useCallback(() => {
-    const fg = graphRef.current;
-    if (fg) fg.zoom(Math.max((fg.zoom() ?? 1) / 1.5, 0.1), 300);
-  }, []);
+  const handleZoomIn = useCallback(() => { const fg = graphRef.current; if (fg) fg.zoom(Math.min((fg.zoom() ?? 1) * 1.5, 8), 300); }, []);
+  const handleZoomOut = useCallback(() => { const fg = graphRef.current; if (fg) fg.zoom(Math.max((fg.zoom() ?? 1) / 1.5, 0.1), 300); }, []);
   const handleFitToView = useCallback(() => graphRef.current?.zoomToFit(300, 20), []);
 
   return (
-    <div className="flex flex-col rounded-md border overflow-hidden bg-background" style={{ height: 460 }}>
+    <div className="flex h-full flex-col overflow-hidden bg-background">
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground px-3 py-1.5 border-b">
+      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground px-3 py-1 border-b shrink-0">
         {Object.entries(VAULT_TYPE_COLORS).map(([type, color]) => (
           <span key={type} className="flex items-center gap-1">
             <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
@@ -181,7 +168,7 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
         ))}
       </div>
 
-      {/* Graph canvas — containerRef must always mount so ResizeObserver can fire */}
+      {/* Graph canvas */}
       <div ref={containerRef} className="min-h-0 flex-1 relative">
         {loading && allDocs.length === 0 ? (
           <div className="h-full animate-pulse rounded-md bg-muted" />
@@ -189,21 +176,14 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No documents</div>
         ) : ready ? (
           <ForceGraph2D
-            ref={graphRef}
-            graphData={graphData}
-            width={dimensions.width}
-            height={dimensions.height}
-            nodeCanvasObject={nodeCanvasObject}
-            nodeCanvasObjectMode={() => "replace"}
+            ref={graphRef} graphData={graphData} width={dimensions.width} height={dimensions.height}
+            nodeCanvasObject={nodeCanvasObject} nodeCanvasObjectMode={() => "replace"}
             nodePointerAreaPaint={(node, color, ctx) => {
               const r = NODE_R + Math.min((node as VaultGraphNode).degree, 10) + 3;
-              ctx.beginPath();
-              ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, 2 * Math.PI);
-              ctx.fillStyle = color;
-              ctx.fill();
+              ctx.beginPath(); ctx.arc(node.x ?? 0, node.y ?? 0, r, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
             }}
             onNodeClick={handleNodeClick}
-            onBackgroundClick={() => setSelectedNodeId(null)}
+            onBackgroundClick={() => onNodeSelect?.(null)}
             onZoom={(transform) => {
               zoomRef.current = transform.k;
               if (zoomDisplayRef.current) zoomDisplayRef.current.textContent = `${Math.round(transform.k * 100)}%`;
@@ -213,33 +193,19 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
             linkCanvasObject={linkCanvasObject}
             linkCanvasObjectMode={(link: any) => (highlightLinks.has(link.id) ? "after" : undefined)}
             linkDirectionalParticles={(link: any) => (highlightLinks.has(link.id) ? 2 : 0)}
-            linkDirectionalParticleWidth={3}
-            linkDirectionalParticleSpeed={0.004}
-            linkDirectionalArrowLength={4}
-            linkDirectionalArrowRelPos={1}
-            backgroundColor="transparent"
-            d3AlphaDecay={0.04}
-            d3VelocityDecay={0.3}
-            warmupTicks={40}
-            cooldownTime={4000}
-            enableNodeDrag
-            minZoom={0.1}
-            maxZoom={8}
+            linkDirectionalParticleWidth={3} linkDirectionalParticleSpeed={0.004}
+            linkDirectionalArrowLength={4} linkDirectionalArrowRelPos={1}
+            backgroundColor="transparent" d3AlphaDecay={0.04} d3VelocityDecay={0.3}
+            warmupTicks={40} cooldownTime={4000} enableNodeDrag minZoom={0.1} maxZoom={8}
           />
         ) : null}
       </div>
 
       {/* Stats bar */}
       <VaultGraphControls
-        docCount={totalCount}
-        linkCount={links.length}
-        nodeLimit={nodeLimit}
-        isLimited={isLimited}
-        zoomDisplayRef={zoomDisplayRef}
-        onNodeLimitChange={setNodeLimit}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onFitToView={handleFitToView}
+        docCount={totalCount} linkCount={links.length} nodeLimit={nodeLimit} isLimited={isLimited}
+        zoomDisplayRef={zoomDisplayRef} onNodeLimitChange={setNodeLimit}
+        onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onFitToView={handleFitToView}
       />
     </div>
   );
