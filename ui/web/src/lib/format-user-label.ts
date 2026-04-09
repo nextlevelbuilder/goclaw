@@ -25,7 +25,11 @@ export function formatUserLabel(userId: string, resolve?: Resolver): string {
     }
   }
 
-  // Fallback: prefix numeric IDs with #, string IDs with @
-  if (/^\d+$/.test(userId)) return `#${userId}`;
+  // Fallback: prefix numeric IDs with #
+  if (/^-?\d+$/.test(userId)) return `#${userId}`;
+
+  // Truncate long opaque IDs (e.g. oc_295eb80d325c976cbeb4a779e2010518)
+  if (userId.length > 20) return `${userId.slice(0, 10)}…${userId.slice(-4)}`;
+
   return userId;
 }

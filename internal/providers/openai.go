@@ -27,6 +27,8 @@ type OpenAIProvider struct {
 	authPrefix   string // auth header prefix, defaults to "Bearer " if empty
 	defaultModel string
 	providerType string // DB provider_type (e.g. "gemini_native", "openai", "minimax_native")
+	siteURL      string // optional site URL for provider identification (e.g. OpenRouter HTTP-Referer)
+	siteTitle    string // optional site title for provider identification (e.g. OpenRouter X-Title)
 	client       *http.Client
 	retryConfig  RetryConfig
 }
@@ -111,6 +113,14 @@ func (p *OpenAIProvider) WithChatPath(path string) *OpenAIProvider {
 // Default is "Bearer " if not set.
 func (p *OpenAIProvider) WithAuthPrefix(prefix string) *OpenAIProvider {
 	p.authPrefix = prefix
+	return p
+}
+
+// WithSiteInfo sets site identification headers sent with API requests.
+// Used by OpenRouter for rankings (HTTP-Referer, X-Title).
+func (p *OpenAIProvider) WithSiteInfo(url, title string) *OpenAIProvider {
+	p.siteURL = url
+	p.siteTitle = title
 	return p
 }
 
@@ -575,6 +585,13 @@ func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser
 			prefix = "Bearer "
 		}
 		httpReq.Header.Set("Authorization", prefix+p.apiKey)
+	}
+	// OpenRouter identification headers for rankings/analytics
+	if p.siteURL != "" {
+		httpReq.Header.Set("HTTP-Referer", p.siteURL)
+	}
+	if p.siteTitle != "" {
+		httpReq.Header.Set("X-Title", p.siteTitle)
 	}
 
 	resp, err := p.client.Do(httpReq)
