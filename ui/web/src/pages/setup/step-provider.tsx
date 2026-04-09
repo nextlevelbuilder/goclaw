@@ -17,6 +17,7 @@ import {
 import { PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { CLISection } from "@/pages/providers/provider-cli-section";
+import { CursorCLISection } from "@/pages/providers/provider-cursor-cli-section";
 import { OAuthSection } from "@/pages/providers/provider-oauth-section";
 import { slugify } from "@/lib/slug";
 import type { ProviderData, ProviderInput } from "@/types/provider";
@@ -45,8 +46,10 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
   const isOAuth = providerType === "chatgpt_oauth";
   const isCLI = providerType === "claude_cli";
+  const isCursorCLI = providerType === "cursor_cli";
   // Local Ollama uses no API key — the server accepts any non-empty Bearer value internally
   const isOllama = providerType === "ollama";
+  const noApiKeyProvider = isCLI || isCursorCLI || isOllama;
 
   const handleTypeChange = (value: string) => {
     setProviderType(value);
@@ -97,7 +100,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
   const handleSubmit = async () => {
     if (isOAuth) return;
-    if (!isEditing && !isCLI && !isOllama && !apiKey.trim()) { setError(t("provider.errors.apiKeyRequired")); return; }
+    if (!isEditing && !noApiKeyProvider && !apiKey.trim()) { setError(t("provider.errors.apiKeyRequired")); return; }
     setLoading(true);
     setError("");
     try {
@@ -116,7 +119,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
           name: name.trim(),
           provider_type: providerType,
           api_base: apiBase.trim() || undefined,
-          api_key: isCLI || isOllama || isOAuth ? undefined : apiKey.trim(),
+          api_key: noApiKeyProvider || isOAuth ? undefined : apiKey.trim(),
           enabled: true,
         }) as ProviderData;
         onComplete(provider);
@@ -139,6 +142,8 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
                 ? t("provider.descriptionOauth")
                 : isCLI
                 ? t("provider.descriptionCli")
+                : isCursorCLI
+                ? t("provider.descriptionCursorCli")
                 : t("provider.description")}
             </p>
           </div>
@@ -195,6 +200,8 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
             </>
           ) : isCLI ? (
             <CLISection open={true} />
+          ) : isCursorCLI ? (
+            <CursorCLISection open={true} />
           ) : (
             <>
               <div className="space-y-2">
@@ -228,7 +235,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
 
           {!isOAuth && (
             <div className="flex justify-end">
-              <Button onClick={handleSubmit} disabled={loading || (!isEditing && !isCLI && !isOllama && !apiKey.trim())}>
+              <Button onClick={handleSubmit} disabled={loading || (!isEditing && !noApiKeyProvider && !apiKey.trim())}>
                 {loading
                   ? isEditing ? t("provider.updating", "Updating...") : t("provider.creating")
                   : isEditing ? t("provider.update", "Update") : t("provider.create")}

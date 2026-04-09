@@ -15,8 +15,8 @@ import (
 
 // ModelInfo is a normalized model entry returned by the list-models endpoint.
 type ModelInfo struct {
-	ID        string                        `json:"id"`
-	Name      string                        `json:"name,omitempty"`
+	ID        string                         `json:"id"`
+	Name      string                         `json:"name,omitempty"`
 	Reasoning *providers.ReasoningCapability `json:"reasoning,omitempty"`
 }
 
@@ -86,6 +86,12 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Cursor CLI — curated model list for the dashboard (no remote /models API; see cursorCLIModels).
+	if p.ProviderType == store.ProviderCursorCLI {
+		respond(cursorCLIModels())
+		return
+	}
+
 	if p.APIKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "API key")})
 		return
@@ -95,12 +101,13 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 	defer cancel()
 
 	var models []ModelInfo
+	var errModels error
 
 	switch p.ProviderType {
 	case "anthropic_native":
-		models, err = fetchAnthropicModels(ctx, p.APIKey, h.resolveAPIBase(p))
+		models, errModels = fetchAnthropicModels(ctx, p.APIKey, h.resolveAPIBase(p))
 	case "gemini_native":
-		models, err = fetchGeminiModels(ctx, p.APIKey)
+		models, errModels = fetchGeminiModels(ctx, p.APIKey)
 	case "bailian":
 		models = bailianModels()
 	case "dashscope":
@@ -115,11 +122,11 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		if apiBase == "" {
 			apiBase = "https://api.openai.com/v1"
 		}
-		models, err = fetchOpenAIModels(ctx, apiBase, p.APIKey)
+		models, errModels = fetchOpenAIModels(ctx, apiBase, p.APIKey)
 	}
 
-	if err != nil {
-		slog.Warn("providers.models", "provider", p.Name, "error", err)
+	if errModels != nil {
+		slog.Warn("providers.models", "provider", p.Name, "error", errModels)
 		// Return empty list instead of error — provider may not support /models
 		respond([]ModelInfo{})
 		return

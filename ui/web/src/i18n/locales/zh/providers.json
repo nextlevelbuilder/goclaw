@@ -202,6 +202,20 @@
     "runOnServer": "在服务器终端运行：",
     "recheckButton": "重新检查"
   },
+  "cursorCli": {
+    "description": "Cursor CLI 使用本地",
+    "descriptionSuffix": "二进制。在服务器上用浏览器登录 — GoClaw 不保存 Cursor API 密钥。",
+    "checkingAuth": "正在检查认证...",
+    "authenticatedAs": "已认证为",
+    "switchAccount": "切换账户？",
+    "switchAccountInstructions": "在服务器终端运行：",
+    "switchAccountRecheck": "然后点击",
+    "switchAccountRecheckSuffix": "重新检查。",
+    "notAuthenticated": "未认证",
+    "runOnServer": "在服务器终端运行：",
+    "recheckButton": "重新检查",
+    "authCheckFailed": "无法检查认证状态"
+  },
   "detail": {
     "advanced": "高级设置",
     "identity": "身份",
@@ -212,6 +226,8 @@
     "acpConfigDesc": "Agent子进程设置",
     "cliConfig": "Claude CLI",
     "cliConfigDesc": "本地CLI认证",
+    "cursorCliConfig": "Cursor CLI",
+    "cursorCliConfigDesc": "本地 Cursor agent 认证",
     "oauthConfig": "ChatGPT Subscription (OAuth)",
     "oauthConfigDesc": "管理这个具名 OpenAI/Codex 账户的登录状态",
     "nameReadonly": "Provider标识符，无法更改",

@@ -18,6 +18,7 @@
   "provider": {
     "title": "配置 LLM Provider",
     "descriptionCli": "使用本地 Claude CLI 连接，无需 API 密钥。",
+    "descriptionCursorCli": "使用本机 Cursor CLI 连接，无需 API 密钥。",
     "descriptionOauth": "登录以创建一个具名的 OpenAI Codex OAuth 账户。现在先设置别名，之后再添加更多别名用于池成员或 round robin。",
     "description": "连接 AI Provider为您的Agent提供支持，需要 API 密钥。",
     "providerType": "Provider类型",

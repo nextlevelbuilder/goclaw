@@ -18,6 +18,7 @@
   "provider": {
     "title": "Cấu hình provider LLM",
     "descriptionCli": "Kết nối bằng Claude CLI cục bộ. Không cần API key.",
+    "descriptionCursorCli": "Kết nối bằng Cursor CLI cục bộ. Không cần API key.",
     "descriptionOauth": "Đăng nhập để tạo một tài khoản OpenAI Codex OAuth có bí danh riêng. Đặt bí danh ngay bây giờ, rồi thêm các bí danh khác sau này cho pool members hoặc round robin.",
     "description": "Kết nối với provider AI để cấp nguồn cho agent. Bạn cần có API key.",
     "providerType": "Loại provider",

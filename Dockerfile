@@ -64,6 +64,7 @@ ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
 ARG ENABLE_FULL_SKILLS=false
 ARG ENABLE_CLAUDE_CLI=false
+ARG ENABLE_CURSOR_AGENT=false
 
 # Copy pinned Python deps (cleaned up after install).
 # requirements-base.txt: shared deps for ENABLE_PYTHON and ENABLE_FULL_SKILLS.
@@ -97,6 +98,12 @@ RUN set -eux; \
     if [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
         npm install -g --cache /tmp/npm-cache @anthropic-ai/claude-code@^2.1.91; \
         rm -rf /tmp/npm-cache; \
+    fi; \
+    if [ "$ENABLE_CURSOR_AGENT" = "true" ]; then \
+        apk add --no-cache bash curl git openssh-client; \
+        curl https://cursor.com/install -fsSL | bash; \
+        ln -sf /root/.local/bin/agent /usr/local/bin/agent; \
+        rm -rf /root/.cache; \
     fi; \
     rm -f /tmp/requirements-base.txt /tmp/requirements-skills.txt
 
@@ -134,10 +141,10 @@ RUN chmod +x /app/docker-entrypoint.sh && \
 # while pip/npm subdirs are goclaw-owned (runtime installs by the app process).
 # Symlink .claude → data volume so Claude CLI credentials persist across container recreates.
 RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
-        /app/data/.runtime/pip-cache /app/data/.claude /app/skills /app/tsnet-state /app/.goclaw \
+        /app/data/.runtime/pip-cache /app/data/.claude /app/skills /app/tsnet-state /app/.goclaw /app/.cursor \
     && ln -s /app/data/.claude /app/.claude \
     && touch /app/data/.runtime/apk-packages \
-    && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw \
+    && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw /app/.cursor \
     && chown goclaw:goclaw /app/bundled-skills /app/data \
     && chown root:goclaw /app/data/.runtime /app/data/.runtime/apk-packages \
     && chmod 0750 /app/data/.runtime \
