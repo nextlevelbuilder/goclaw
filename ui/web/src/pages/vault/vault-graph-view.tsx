@@ -168,10 +168,6 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
   }, []);
   const handleFitToView = useCallback(() => graphRef.current?.zoomToFit(300, 20), []);
 
-  if (loading && allDocs.length === 0) {
-    return <div className="h-[400px] animate-pulse rounded-md bg-muted" />;
-  }
-
   return (
     <div className="flex flex-col rounded-md border overflow-hidden bg-background" style={{ height: 460 }}>
       {/* Legend */}
@@ -184,9 +180,11 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
         ))}
       </div>
 
-      {/* Graph canvas */}
+      {/* Graph canvas — containerRef must always mount so ResizeObserver can fire */}
       <div ref={containerRef} className="min-h-0 flex-1 relative">
-        {allDocs.length === 0 ? (
+        {loading && allDocs.length === 0 ? (
+          <div className="h-full animate-pulse rounded-md bg-muted" />
+        ) : allDocs.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No documents</div>
         ) : ready ? (
           <ForceGraph2D
