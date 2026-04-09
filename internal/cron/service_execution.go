@@ -257,12 +257,12 @@ func (cs *Service) executeJobByID(jobID string, scheduledAtMS int64) {
 			schedule := &cs.store.Jobs[i].Schedule
 			// For "every" (interval) jobs, compute next run from the original
 			// scheduled time (anchor) to prevent drift and synchronization.
-			if schedule.Kind == "every" && schedule.EveryMS != nil && *schedule.EveryMS > 0 {
-				next := scheduledAtMS + *schedule.EveryMS
-				// If execution took longer than the interval, advance to the next future slot
-				for next <= now {
-					next += *schedule.EveryMS
-				}
+			if schedule.Kind == "every" && schedule.EveryMS != nil && *schedule.EveryMS > 0 && scheduledAtMS > 0 {
+				interval := *schedule.EveryMS
+				// O(1) advance to the next future slot from anchor
+				elapsed := now - scheduledAtMS
+				periods := elapsed / interval
+				next := scheduledAtMS + (periods+1)*interval
 				cs.store.Jobs[i].State.NextRunAtMS = &next
 			} else {
 				next := cs.computeNextRun(schedule, now)

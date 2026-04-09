@@ -73,6 +73,11 @@ func (s *SQLiteCronStore) InvalidateCache() {
 //   - Recomputes next_run_at for jobs where it is NULL (crashed mid-execution).
 //   - Advances past-due jobs (next_run_at < now) to their next future run time,
 //     preventing a flood of all missed jobs firing simultaneously after downtime.
+//
+// NOTE: After prolonged downtime, all past-due "every" jobs with the same interval
+// will synchronize (all get next_run_at = now + interval). This is inherent because
+// the original schedule anchor is not persisted. After the first execution cycle,
+// anchor-based scheduling in executeOneJob preserves spacing going forward.
 func (s *SQLiteCronStore) recomputeStaleJobs() {
 	now := time.Now()
 	rows, err := s.db.QueryContext(s.baseCtx,
@@ -175,7 +180,7 @@ func (s *SQLiteCronStore) checkAndRunDueJobs() {
 		wg.Add(1)
 		go func(job store.CronJob) {
 			defer wg.Done()
-			s.executeOneJob(job, handler)
+			s.executeOneJob(job, handler, true)
 		}(job)
 	}
 	wg.Wait()
@@ -185,20 +190,30 @@ func (s *SQLiteCronStore) checkAndRunDueJobs() {
 	s.mu.Unlock()
 }
 
-// executeOneJob runs a single cron job with retry, logs the result, and updates next_run_at.
-func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *store.CronJob) (*store.CronJobResult, error)) {
+// executeOneJob runs a claimed job. When reloadClaimed is true (scheduler path),
+// it re-reads the job from DB to verify claim invariants (enabled + next_run_at IS NULL).
+// When false (manual RunJob path), it uses the already-loaded job directly.
+func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *store.CronJob) (*store.CronJobResult, error), reloadClaimed bool) {
 	// Preserve the original scheduled time before reload clears it.
 	// For "every" jobs, this anchor is used to compute the next run from the
 	// intended schedule time (not "now"), preventing drift and synchronization.
 	scheduledAtMS := job.State.NextRunAtMS
 
-	if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
-		freshJob, ok := s.loadClaimedJob(id)
-		if !ok {
-			slog.Info("cron job skipped after claim state changed", "id", job.ID)
-			return
+	// For manual runs (reloadClaimed=false), don't use anchor — manual triggers
+	// should reset the schedule to now + interval, not preserve the original offset.
+	if !reloadClaimed {
+		scheduledAtMS = nil
+	}
+
+	if reloadClaimed {
+		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
+			freshJob, ok := s.loadClaimedJob(id)
+			if !ok {
+				slog.Info("cron job skipped after claim state changed", "id", job.ID)
+				return
+			}
+			job = *freshJob
 		}
-		job = *freshJob
 	}
 
 	startTime := time.Now()
@@ -269,10 +284,10 @@ func (s *SQLiteCronStore) executeOneJob(job store.CronJob, handler func(job *sto
 		if schedule.Kind == "every" && scheduledAtMS != nil && schedule.EveryMS != nil && *schedule.EveryMS > 0 {
 			anchor := time.UnixMilli(*scheduledAtMS)
 			interval := time.Duration(*schedule.EveryMS) * time.Millisecond
-			next := anchor.Add(interval)
-			for !next.After(now) {
-				next = next.Add(interval)
-			}
+			// O(1) advance to the next future slot from anchor
+			elapsed := now.Sub(anchor)
+			periods := int64(elapsed / interval)
+			next := anchor.Add(interval * time.Duration(periods+1))
 			nextRunValue = next
 		} else {
 			next := computeNextRun(&schedule, now, s.defaultTZ)

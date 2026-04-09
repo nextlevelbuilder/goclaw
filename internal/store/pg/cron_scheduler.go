@@ -82,6 +82,10 @@ func (s *PGCronStore) recomputeStaleJobs() {
 	// Fix jobs with NULL next_run_at OR past-due next_run_at.
 	// Past-due jobs happen when the server was down and their scheduled time passed.
 	// Without this, ALL past-due jobs would fire simultaneously on the first tick.
+	// NOTE: After prolonged downtime, all past-due "every" jobs with the same interval
+	// will synchronize (all get next_run_at = now + interval). This is inherent because
+	// the original schedule anchor is not persisted. After the first execution cycle,
+	// anchor-based scheduling in executeOneJob preserves spacing going forward.
 	now := time.Now()
 	rows, err := s.db.QueryContext(s.baseCtx,
 		`SELECT id, schedule_kind, cron_expression, run_at, timezone, interval_ms
@@ -203,6 +207,12 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 	// of interval-based jobs after server restarts.
 	scheduledAtMS := job.State.NextRunAtMS
 
+	// For manual runs (reloadClaimed=false), don't use anchor — manual triggers
+	// should reset the schedule to now + interval, not preserve the original offset.
+	if !reloadClaimed {
+		scheduledAtMS = nil
+	}
+
 	if reloadClaimed {
 		if id, parseErr := uuid.Parse(job.ID); parseErr == nil {
 			freshJob, ok := s.loadClaimedJob(id)
@@ -288,11 +298,10 @@ func (s *PGCronStore) executeOneJob(job store.CronJob, handler func(job *store.C
 		if schedule.Kind == "every" && scheduledAtMS != nil && schedule.EveryMS != nil && *schedule.EveryMS > 0 {
 			anchor := time.UnixMilli(*scheduledAtMS)
 			interval := time.Duration(*schedule.EveryMS) * time.Millisecond
-			next := anchor.Add(interval)
-			// If execution took longer than the interval, advance to the next future slot
-			for !next.After(now) {
-				next = next.Add(interval)
-			}
+			// O(1) advance to the next future slot from anchor
+			elapsed := now.Sub(anchor)
+			periods := int64(elapsed / interval)
+			next := anchor.Add(interval * time.Duration(periods+1))
 			nextRunValue = next
 		} else {
 			next := computeNextRun(&schedule, now, s.defaultTZ)
