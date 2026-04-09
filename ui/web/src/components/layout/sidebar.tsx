@@ -28,6 +28,7 @@ import {
   Building2,
   ArrowLeftRight,
   FileArchive,
+  DatabaseBackup,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SidebarGroup } from "./sidebar-group";
@@ -137,6 +138,9 @@ export function Sidebar({ collapsed, onNavItemClick }: SidebarProps) {
           )}
           <SidebarItem to={ROUTES.APPROVALS} icon={ShieldCheck} label={t("nav.approvals")} collapsed={collapsed} />
           <SidebarItem to={ROUTES.IMPORT_EXPORT} icon={ArrowLeftRight} label={t("nav.importExport")} collapsed={collapsed} />
+          {isOwner && (
+            <SidebarItem to={ROUTES.BACKUP_RESTORE} icon={DatabaseBackup} label={t("nav.backupRestore")} collapsed={collapsed} />
+          )}
         </SidebarGroup>
         )}
       </nav>

@@ -43,5 +43,6 @@ export const ROUTES = {
   TENANTS: "/admin/tenants",
   TENANT_DETAIL: "/admin/tenants/:id",
   SETUP: "/setup",
+  BACKUP_RESTORE: "/backup-restore",
   SELECT_TENANT: "/select-tenant",
 } as const;

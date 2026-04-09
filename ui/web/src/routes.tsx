@@ -111,6 +111,9 @@ const TenantsAdminPage = lazyWithRetry(() =>
 const TenantDetailPage = lazyWithRetry(() =>
   import("@/pages/tenants-admin/tenant-detail-page").then((m) => ({ default: m.TenantDetailPage })),
 );
+const BackupRestorePage = lazyWithRetry(() =>
+  import("@/pages/backup-restore/backup-restore-page").then((m) => ({ default: m.BackupRestorePage })),
+);
 const TenantSelectorPage = lazyWithRetry(() =>
   import("@/pages/login/tenant-selector").then((m) => ({ default: m.TenantSelectorPage })),
 );
@@ -158,6 +161,7 @@ export function AppRoutes() {
           <Route path={ROUTES.CHAT_PATTERN} element={<ChatPage />} />
           <Route path={ROUTES.AGENTS} element={<AgentsPage key="list" />} />
           <Route path={ROUTES.IMPORT_EXPORT} element={<RequireAdmin><ImportExportPage /></RequireAdmin>} />
+          <Route path={ROUTES.BACKUP_RESTORE} element={<RequireAdmin><BackupRestorePage /></RequireAdmin>} />
           <Route path={ROUTES.AGENT_CODEX_POOL} element={<RequireAdmin><AgentCodexPoolPage /></RequireAdmin>} />
           <Route path={ROUTES.AGENT_DETAIL} element={<AgentsPage key="detail" />} />
           <Route path={ROUTES.TEAMS} element={<TeamsPage key="list" />} />

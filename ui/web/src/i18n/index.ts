@@ -39,6 +39,7 @@ import enTenants from "./locales/en/tenants.json";
 import enSystemSettings from "./locales/en/system-settings.json";
 import enImportExport from "./locales/en/import-export.json";
 import enV3Capabilities from "./locales/en/v3-capabilities.json";
+import enBackup from "./locales/en/backup.json";
 
 // --- VI namespaces ---
 import viCommon from "./locales/vi/common.json";
@@ -78,6 +79,7 @@ import viTenants from "./locales/vi/tenants.json";
 import viSystemSettings from "./locales/vi/system-settings.json";
 import viImportExport from "./locales/vi/import-export.json";
 import viV3Capabilities from "./locales/vi/v3-capabilities.json";
+import viBackup from "./locales/vi/backup.json";
 
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
@@ -117,6 +119,7 @@ import zhTenants from "./locales/zh/tenants.json";
 import zhSystemSettings from "./locales/zh/system-settings.json";
 import zhImportExport from "./locales/zh/import-export.json";
 import zhV3Capabilities from "./locales/zh/v3-capabilities.json";
+import zhBackup from "./locales/zh/backup.json";
 
 const STORAGE_KEY = "goclaw:language";
 
@@ -137,6 +140,7 @@ const ns = [
   "setup", "memory", "vault", "storage", "pending-messages", "contacts", "activity", "api-keys",
   "cli-credentials", "packages", "tenants", "system-settings", "import-export",
   "v3-capabilities",
+  "backup",
 ] as const;
 
 i18n.use(initReactI18next).init({
@@ -157,6 +161,7 @@ i18n.use(initReactI18next).init({
       "system-settings": enSystemSettings,
       "import-export": enImportExport,
       "v3-capabilities": enV3Capabilities,
+      backup: enBackup,
     },
     vi: {
       common: viCommon, sidebar: viSidebar, topbar: viTopbar, login: viLogin,
@@ -174,6 +179,7 @@ i18n.use(initReactI18next).init({
       "system-settings": viSystemSettings,
       "import-export": viImportExport,
       "v3-capabilities": viV3Capabilities,
+      backup: viBackup,
     },
     zh: {
       common: zhCommon, sidebar: zhSidebar, topbar: zhTopbar, login: zhLogin,
@@ -191,6 +197,7 @@ i18n.use(initReactI18next).init({
       "system-settings": zhSystemSettings,
       "import-export": zhImportExport,
       "v3-capabilities": zhV3Capabilities,
+      backup: zhBackup,
     },
   },
   ns: [...ns],

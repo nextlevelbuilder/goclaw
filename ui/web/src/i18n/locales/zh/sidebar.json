@@ -40,6 +40,7 @@
     "apiKeys": "API Keys",
     "apiDocs": "API 文档",
     "packages": "软件包",
-    "tenants": "租户"
+    "tenants": "租户",
+    "backupRestore": "备份与恢复"
   }
 }
