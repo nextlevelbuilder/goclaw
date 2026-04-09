@@ -483,5 +483,17 @@
     "relinkDevice": "Re-link Device",
     "connectedSuccess": "✅ WhatsApp connected successfully!",
     "tabQrCode": "QR Code"
+  },
+  "whatsappGroupOverrides": {
+    "title": "WhatsApp Group Agents",
+    "hint": "Assign a specific agent to handle each WhatsApp group. Groups without an override use the default channel agent.",
+    "groupLabel": "Group: {{id}}",
+    "agentLabel": "Agent",
+    "selectAgent": "Use channel default",
+    "addGroupPlaceholder": "Group JID (e.g. 123456@g.us)",
+    "addGroup": "Add Group",
+    "knownGroups": "Discovered Groups",
+    "saveGroups": "Save Groups",
+    "saving": "Saving..."
   }
 }

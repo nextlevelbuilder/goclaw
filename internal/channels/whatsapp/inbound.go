@@ -142,6 +142,26 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 			metadata["user_name"], "", peerKind, "user", "", "")
 	}
 
+	// Collect group as a contact for UI group discovery.
+	if cc := c.ContactCollector(); cc != nil && peerKind == "group" {
+		cc.EnsureContact(ctx, c.Type(), c.Name(), chatID, "", "", "", "group", "group", "", "")
+	}
+
+	// Resolve group-specific agent override.
+	targetAgentID := c.AgentID()
+	if peerKind == "group" && c.config.Groups != nil {
+		if grp, ok := c.config.Groups[chatID]; ok && grp != nil {
+			if grp.Enabled != nil && !*grp.Enabled {
+				slog.Debug("whatsapp group message rejected: group disabled", "chat_id", chatID)
+				return
+			}
+			if grp.AgentID != "" {
+				targetAgentID = grp.AgentID
+				slog.Debug("whatsapp group agent override", "chat_id", chatID, "agent_id", targetAgentID)
+			}
+		}
+	}
+
 	// Typing indicator.
 	if prevCancel, ok := c.typingCancel.LoadAndDelete(chatID); ok {
 		if fn, ok := prevCancel.(context.CancelFunc); ok {
@@ -166,7 +186,7 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 		Media:    mediaFiles,
 		PeerKind: peerKind,
 		UserID:   userID,
-		AgentID:  c.AgentID(),
+		AgentID:  targetAgentID,
 		TenantID: c.TenantID(),
 		Metadata: metadata,
 	})

@@ -398,5 +398,17 @@
     "relinkDevice": "重新连接",
     "connectedSuccess": "✅ WhatsApp 连接成功！",
     "tabQrCode": "二维码"
+  },
+  "whatsappGroupOverrides": {
+    "title": "WhatsApp 群组 Agent",
+    "hint": "为每个 WhatsApp 群组指定专门的 Agent 处理。未配置的群组使用 Channel 默认 Agent。",
+    "groupLabel": "群组: {{id}}",
+    "agentLabel": "Agent",
+    "selectAgent": "使用 Channel 默认",
+    "addGroupPlaceholder": "群组 JID（例如 123456@g.us）",
+    "addGroup": "添加群组",
+    "knownGroups": "已发现的群组",
+    "saveGroups": "保存群组",
+    "saving": "保存中..."
   }
 }
