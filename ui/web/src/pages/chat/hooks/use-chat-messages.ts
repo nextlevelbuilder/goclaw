@@ -101,9 +101,10 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           if (cancelled) return;
           if (res.isRunning) { setIsRunning(true); if (res.runId) runIdRef.current = res.runId; }
           if (res.activity) { setActivity(res.activity); activityRef.current = res.activity; }
-        }).catch(() => {});
+        }).catch((err) => console.error("[useChatMessages] session status failed:", err));
       ws.call<{ tasks?: ActiveTeamTask[] }>(Methods.TEAMS_TASK_ACTIVE_BY_SESSION, { sessionKey })
-        .then((res) => { if (!cancelled && res.tasks?.length) setTeamTasks(res.tasks); }).catch(() => {});
+        .then((res) => { if (!cancelled && res.tasks?.length) setTeamTasks(res.tasks); })
+        .catch((err) => console.error("[useChatMessages] active tasks failed:", err));
     }
     return () => { cancelled = true; };
   }, [sessionKey, loadHistory, ws, setTeamTasks]);

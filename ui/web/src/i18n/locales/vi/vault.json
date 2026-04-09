@@ -23,6 +23,7 @@
   "deleteLink": "Xóa liên kết",
   "columns": {
     "title": "Tiêu đề",
+    "agent": "Agent",
     "path": "Đường dẫn",
     "type": "Loại",
     "scope": "Phạm vi",

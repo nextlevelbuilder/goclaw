@@ -16,6 +16,7 @@ export const queryKeys = {
     links: (agentId: string) => ["agents", agentId, "links"] as const,
     instances: (agentId: string) => ["agents", agentId, "instances"] as const,
     codexPoolActivity: (agentId: string, limit: number) => ["agents", agentId, "codex-pool-activity", limit] as const,
+    systemPromptPreview: (agentKey: string, mode: string) => ["agents", agentKey, "system-prompt-preview", mode] as const,
   },
   sessions: {
     all: ["sessions"] as const,

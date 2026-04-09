@@ -6,13 +6,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useVaultDocuments, useVaultAllLinks } from "./hooks/use-vault";
 import { VaultDocumentsTable } from "./vault-documents-table";
-import { VaultDetailDialog } from "./vault-detail-dialog";
 import { VaultSearchDialog } from "./vault-search-dialog";
 import { VaultCreateDialog } from "./vault-create-dialog";
 import type { VaultDocument } from "@/types/vault";
 
 const VaultGraphView = lazy(() =>
   import("./vault-graph-view").then((m) => ({ default: m.VaultGraphView })),
+);
+const VaultDetailDialog = lazy(() =>
+  import("./vault-detail-dialog").then((m) => ({ default: m.VaultDetailDialog }))
 );
 
 export function VaultPage() {
@@ -121,6 +123,7 @@ export function VaultPage() {
       {viewMode === "table" ? (
         <VaultDocumentsTable
           documents={documents}
+          agents={agents}
           loading={loading}
           onSelect={setSelectedDoc}
         />
@@ -135,12 +138,14 @@ export function VaultPage() {
       )}
 
       {/* Detail dialog */}
-      <VaultDetailDialog
-        doc={selectedDoc}
-        open={!!selectedDoc}
-        onOpenChange={(open) => !open && setSelectedDoc(null)}
-        onDeleted={() => setSelectedDoc(null)}
-      />
+      <Suspense fallback={null}>
+        <VaultDetailDialog
+          doc={selectedDoc}
+          open={!!selectedDoc}
+          onOpenChange={(open) => !open && setSelectedDoc(null)}
+          onDeleted={() => setSelectedDoc(null)}
+        />
+      </Suspense>
 
       {/* Create document dialog */}
       {selectedAgent && (

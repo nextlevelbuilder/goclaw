@@ -65,7 +65,7 @@ export function useLogs() {
       ws.call(Methods.LOGS_TAIL, {
         action: "start",
         level: useLogsStore.getState().level,
-      }).catch(() => {});
+      }).catch((err) => console.error("[useLogs] reconnect tail failed:", err));
     }
     prevConnected.current = ws.isConnected;
   }, [ws, ws.isConnected]);

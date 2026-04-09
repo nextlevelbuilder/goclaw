@@ -45,7 +45,8 @@ export function ZaloContactsPicker({ instanceId, hasCredentials, value, onChange
   useEffect(() => {
     if (hasCredentials && !autoLoaded.current) {
       autoLoaded.current = true;
-      fetchContacts({ instance_id: instanceId }).then(setContacts).catch(() => {});
+      fetchContacts({ instance_id: instanceId }).then(setContacts)
+        .catch((err) => console.error("[ZaloContactsPicker] auto-load failed:", err));
     }
   }, [hasCredentials, instanceId, fetchContacts]);
 

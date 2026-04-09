@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { Eye, Loader2 } from "lucide-react";
 import { useHttp } from "@/hooks/use-ws";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 const MODES = ["full", "task", "minimal", "none"] as const;
@@ -29,26 +31,15 @@ export function SystemPromptPreview({ agentKey }: SystemPromptPreviewProps) {
   const { t } = useTranslation("agents");
   const http = useHttp();
   const [mode, setMode] = useState<PromptMode>("full");
-  const [data, setData] = useState<PreviewResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const fetchPreview = useCallback(async (m: PromptMode) => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await http.get<PreviewResponse>(
-        `/v1/agents/${agentKey}/system-prompt-preview?mode=${m}`,
-      );
-      setData(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load preview");
-    } finally {
-      setLoading(false);
-    }
-  }, [http, agentKey]);
-
-  useEffect(() => { fetchPreview(mode); }, [mode, fetchPreview]);
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: queryKeys.agents.systemPromptPreview(agentKey, mode),
+    queryFn: () => http.get<PreviewResponse>(
+      `/v1/agents/${agentKey}/system-prompt-preview?mode=${mode}`,
+    ),
+    staleTime: 30_000,
+  });
+  const error = queryError instanceof Error ? queryError.message : queryError ? "Failed to load preview" : "";
 
   return (
     <div className="flex h-full flex-col rounded-lg border bg-background">
@@ -113,7 +104,7 @@ function renderPromptWithBoundary(prompt: string) {
   return (
     <>
       {before}
-      <span className="my-1 block border-t border-dashed border-amber-500/50 py-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+      <span className="my-1 block border-t border-dashed border-amber-500/50 py-1 text-2xs font-medium text-amber-600 dark:text-amber-400">
         ── cache boundary ── stable above · dynamic below ──
       </span>
       {after}

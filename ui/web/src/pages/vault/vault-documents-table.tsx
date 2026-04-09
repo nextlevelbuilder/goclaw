@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format";
+import type { AgentData } from "@/types/agent";
 import type { VaultDocument } from "@/types/vault";
 
 const DOC_TYPE_COLORS: Record<string, string> = {
@@ -17,14 +19,28 @@ const SCOPE_COLORS: Record<string, string> = {
   shared: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300",
 };
 
+/** Truncate path from the start, keeping the tail visible (e.g. ".../subdir/file.md") */
+function truncatePath(path: string, maxLen = 40): string {
+  if (path.length <= maxLen) return path;
+  return "\u2026" + path.slice(-(maxLen - 1));
+}
+
 interface Props {
   documents: VaultDocument[];
+  agents?: AgentData[];
   loading: boolean;
   onSelect: (doc: VaultDocument) => void;
 }
 
-export function VaultDocumentsTable({ documents, loading, onSelect }: Props) {
+export function VaultDocumentsTable({ documents, agents, loading, onSelect }: Props) {
   const { t } = useTranslation("vault");
+
+  // Build agent lookup map: id → display_name or agent_key
+  const agentMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of agents ?? []) map.set(a.id, a.display_name || a.agent_key);
+    return map;
+  }, [agents]);
 
   if (loading && documents.length === 0) {
     return <div className="h-[200px] animate-pulse rounded-md bg-muted" />;
@@ -45,6 +61,7 @@ export function VaultDocumentsTable({ documents, loading, onSelect }: Props) {
           <thead>
             <tr className="border-b bg-muted/50 text-left">
               <th className="px-3 py-2 font-medium">{t("columns.title")}</th>
+              <th className="px-3 py-2 font-medium">{t("columns.agent")}</th>
               <th className="px-3 py-2 font-medium">{t("columns.path")}</th>
               <th className="px-3 py-2 font-medium">{t("columns.type")}</th>
               <th className="px-3 py-2 font-medium">{t("columns.scope")}</th>
@@ -61,8 +78,11 @@ export function VaultDocumentsTable({ documents, loading, onSelect }: Props) {
                 <td className="px-3 py-2 font-medium max-w-[200px] truncate" title={doc.title}>
                   {doc.title || doc.path.split("/").pop()}
                 </td>
-                <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate" title={doc.path}>
-                  {doc.path}
+                <td className="px-3 py-2 text-muted-foreground text-xs whitespace-nowrap">
+                  {agentMap.get(doc.agent_id) ?? doc.agent_id.slice(0, 8)}
+                </td>
+                <td className="px-3 py-2 text-muted-foreground max-w-[200px]" title={doc.path}>
+                  <span className="font-mono text-xs">{truncatePath(doc.path)}</span>
                 </td>
                 <td className="px-3 py-2">
                   <Badge variant="outline" className={DOC_TYPE_COLORS[doc.doc_type] ?? ""}>

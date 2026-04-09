@@ -23,6 +23,7 @@
   "deleteLink": "删除链接",
   "columns": {
     "title": "标题",
+    "agent": "Agent",
     "path": "路径",
     "type": "类型",
     "scope": "范围",

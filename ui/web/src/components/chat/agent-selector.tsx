@@ -34,7 +34,7 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         const active = (res.agents ?? []).filter((a) => a.status === "active");
         setAgents(active);
       })
-      .catch(() => {});
+      .catch((err) => console.error("[AgentSelector] fetch agents failed:", err));
   }, [http, connected]);
 
   useLayoutEffect(() => {

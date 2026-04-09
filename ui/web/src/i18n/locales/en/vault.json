@@ -23,6 +23,7 @@
   "deleteLink": "Delete link",
   "columns": {
     "title": "Title",
+    "agent": "Agent",
     "path": "Path",
     "type": "Type",
     "scope": "Scope",

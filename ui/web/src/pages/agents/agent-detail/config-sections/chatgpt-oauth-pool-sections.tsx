@@ -91,7 +91,7 @@ export function MembershipSection({
           {t("chatgptOAuthRouting.loadingAccounts")}
         </div>
       ) : selectableExtraProviders.length > 0 ? (
-        <div className="grid gap-2 xl:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           {selectableExtraProviders.map((provider) => {
             const selected = selectedExtras.has(provider.name);
             const failureKind = getQuotaFailureKind(quotaByName?.get(provider.name));
@@ -157,14 +157,14 @@ export function SelectedAccountsSection({ selectedEntries }: SelectedAccountsSec
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {t("chatgptOAuthRouting.selectedAccountsLabel")}
         </p>
-        <Badge variant="outline" className="h-6 px-2 text-[11px]">
+        <Badge variant="outline" className="h-6 px-2 text-xs-plus">
           {t("chatgptOAuthRouting.selectedCount", { count: selectedEntries.length })}
         </Badge>
       </div>
 
       {selectedEntries.length > 0 ? (
         <div className="rounded-lg border bg-muted/10 p-3 [@media(max-height:760px)]:p-2.5">
-          <div className="grid gap-1.5 xl:grid-cols-2 [@media(max-height:760px)]:gap-1">
+          <div className="grid gap-1.5 sm:grid-cols-2 [@media(max-height:760px)]:gap-1">
             {selectedEntries.map((entry) => (
               <div
                 key={entry.name}
@@ -177,7 +177,7 @@ export function SelectedAccountsSection({ selectedEntries }: SelectedAccountsSec
                   <Badge
                     variant="outline"
                     className={cn(
-                      "h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs",
+                      "h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs",
                       roleBadgeClass(entry.role),
                     )}
                   >
@@ -186,7 +186,7 @@ export function SelectedAccountsSection({ selectedEntries }: SelectedAccountsSec
                   {entry.availability !== "ready" && (
                     <Badge
                       variant={statusBadgeVariant(entry.availability)}
-                      className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                      className="h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
                     >
                       {t(`chatgptOAuthRouting.status.${entry.availability}`)}
                     </Badge>
@@ -194,7 +194,7 @@ export function SelectedAccountsSection({ selectedEntries }: SelectedAccountsSec
                   {entry.routeReadiness !== "healthy" && (
                     <Badge
                       variant={routeBadgeVariant(entry.routeReadiness)}
-                      className="h-5 px-1.5 text-[10px] xl:h-6 xl:px-2 xl:text-xs"
+                      className="h-5 px-1.5 text-2xs xl:h-6 xl:px-2 xl:text-xs"
                     >
                       {t(routeLabelKey(entry.routeReadiness))}
                     </Badge>
@@ -233,7 +233,7 @@ export function PoolStateSection({
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("chatgptOAuthRouting.poolStateTitle")}
       </p>
-      <div className="grid items-start gap-1.5 xl:grid-cols-3 [@media(max-height:760px)]:gap-1">
+      <div className="grid items-start gap-1.5 sm:grid-cols-2 xl:grid-cols-3 [@media(max-height:760px)]:gap-1">
         <StateGroup
           title={t("chatgptOAuthRouting.routerActiveTitle")}
           count={routerActiveEntries.length}

@@ -26,7 +26,7 @@ export function AgentPickerPrompt({ onSelect }: AgentPickerPromptProps) {
       .then((res) => {
         setAgents((res.agents ?? []).filter((a) => a.status === "active"));
       })
-      .catch(() => {});
+      .catch((err) => console.error("[AgentPickerPrompt] fetch agents failed:", err));
   }, [http, connected]);
 
   return (
