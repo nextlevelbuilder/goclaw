@@ -28,7 +28,7 @@ func IsDefaultChannelInstance(name string) bool {
 	if strings.HasSuffix(name, "/default") {
 		return true
 	}
-	// Legacy Telegram default uses bare name "telegram"
+	// Legacy config-based defaults that were seeded with bare channel-type names.
 	switch name {
 	case "telegram", "discord", "feishu", "zalo_oa", "whatsapp":
 		return true

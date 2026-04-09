@@ -8,7 +8,7 @@ export const cliCredentialSchema = z.object({
   denyVerbose: z.string().optional(),
   timeout: z.number().min(1),
   tips: z.string().optional(),
-  agentId: z.string().optional(),
+  isGlobal: z.boolean(),
   enabled: z.boolean(),
 });
 

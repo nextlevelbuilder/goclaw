@@ -1175,7 +1175,7 @@ CREATE TABLE IF NOT EXISTS secure_cli_binaries (
     deny_verbose    TEXT NOT NULL DEFAULT '[]',
     timeout_seconds INTEGER NOT NULL DEFAULT 30,
     tips            TEXT NOT NULL DEFAULT '',
-    agent_id        TEXT REFERENCES agents(id) ON DELETE CASCADE,
+    is_global       BOOLEAN NOT NULL DEFAULT 1,
     enabled         BOOLEAN NOT NULL DEFAULT 1,
     created_by      TEXT NOT NULL DEFAULT '',
     tenant_id       TEXT NOT NULL REFERENCES tenants(id),
@@ -1184,10 +1184,31 @@ CREATE TABLE IF NOT EXISTS secure_cli_binaries (
 );
 
 CREATE INDEX IF NOT EXISTS idx_secure_cli_binary_name ON secure_cli_binaries(binary_name);
-CREATE INDEX IF NOT EXISTS idx_secure_cli_agent_id ON secure_cli_binaries(agent_id) WHERE agent_id IS NOT NULL;
--- COALESCE(agent_id, '') simulates the PG COALESCE(agent_id, null-sentinel) unique constraint
-CREATE UNIQUE INDEX IF NOT EXISTS idx_secure_cli_unique_binary_agent ON secure_cli_binaries(binary_name, COALESCE(agent_id, ''));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_secure_cli_unique_binary_tenant ON secure_cli_binaries(binary_name, tenant_id);
 CREATE INDEX IF NOT EXISTS idx_secure_cli_binaries_tenant ON secure_cli_binaries(tenant_id);
+
+-- ============================================================
+-- Table: secure_cli_agent_grants
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS secure_cli_agent_grants (
+    id              TEXT NOT NULL PRIMARY KEY,
+    binary_id       TEXT NOT NULL REFERENCES secure_cli_binaries(id) ON DELETE CASCADE,
+    agent_id        TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    deny_args       TEXT,
+    deny_verbose    TEXT,
+    timeout_seconds INTEGER,
+    tips            TEXT,
+    enabled         BOOLEAN NOT NULL DEFAULT 1,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE(binary_id, agent_id, tenant_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_scag_binary ON secure_cli_agent_grants(binary_id);
+CREATE INDEX IF NOT EXISTS idx_scag_agent ON secure_cli_agent_grants(agent_id);
+CREATE INDEX IF NOT EXISTS idx_scag_tenant ON secure_cli_agent_grants(tenant_id);
 
 -- ============================================================
 -- Table: api_keys

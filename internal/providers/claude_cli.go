@@ -39,6 +39,7 @@ const OptTenantID = "tenant_id"
 // It acts as a thin proxy: CLI manages session history, tool execution, and context.
 // GoClaw only forwards the latest user message and streams back the response.
 type ClaudeCLIProvider struct {
+	name               string // provider name (default: "claude-cli")
 	cliPath            string // path to claude binary (default: "claude")
 	defaultModel       string // default: "sonnet"
 	baseWorkDir        string // base dir for agent workspaces
@@ -53,6 +54,15 @@ type ClaudeCLIProvider struct {
 
 // ClaudeCLIOption configures the provider.
 type ClaudeCLIOption func(*ClaudeCLIProvider)
+
+// WithClaudeCLIName overrides the provider name (default: "claude-cli").
+func WithClaudeCLIName(name string) ClaudeCLIOption {
+	return func(p *ClaudeCLIProvider) {
+		if name != "" {
+			p.name = name
+		}
+	}
+}
 
 // WithClaudeCLIModel sets the default model alias.
 func WithClaudeCLIModel(model string) ClaudeCLIOption {
@@ -110,6 +120,7 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 		cliPath = "claude"
 	}
 	p := &ClaudeCLIProvider{
+		name:         "claude-cli",
 		cliPath:      cliPath,
 		defaultModel: "sonnet",
 		baseWorkDir:  defaultCLIWorkDir(),
@@ -122,7 +133,7 @@ func NewClaudeCLIProvider(cliPath string, opts ...ClaudeCLIOption) *ClaudeCLIPro
 	return p
 }
 
-func (p *ClaudeCLIProvider) Name() string        { return "claude-cli" }
+func (p *ClaudeCLIProvider) Name() string        { return p.name }
 func (p *ClaudeCLIProvider) DefaultModel() string { return p.defaultModel }
 
 // Close cleans up temp files (per-session MCP configs, hooks settings). Implements io.Closer.

@@ -228,6 +228,36 @@ func TestBuildRequestBody_NoReasoningAliasInOutput(t *testing.T) {
 	}
 }
 
+// TestBuildRequestBody_TogetherQwenOmitsAssistantReasoningContent verifies Together-hosted Qwen
+// does not get reasoning_content on assistant history (HTTP 400 input validation otherwise).
+func TestBuildRequestBody_TogetherQwenOmitsAssistantReasoningContent(t *testing.T) {
+	p := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
+
+	req := ChatRequest{
+		Messages: []Message{
+			{
+				Role:     "assistant",
+				Content:  "Dạ em có thể thấy images...",
+				Thinking: "User is asking if I can read images.",
+			},
+			{Role: "user", Content: "hello"},
+		},
+	}
+
+	body := p.buildRequestBody("Qwen/Qwen3.5-397B-A17B", req, false)
+	msgs, ok := body["messages"].([]map[string]any)
+	if !ok {
+		t.Fatal("messages missing")
+	}
+	for _, m := range msgs {
+		if role, _ := m["role"].(string); role == "assistant" {
+			if _, has := m["reasoning_content"]; has {
+				t.Fatalf("Together Qwen must omit reasoning_content, got msg=%v", m)
+			}
+		}
+	}
+}
+
 // TestBuildRequestBody_NoReasoningContentWhenThinkingEmpty confirms that assistant messages
 // without Thinking content do not emit a reasoning_content key at all.
 func TestBuildRequestBody_NoReasoningContentWhenThinkingEmpty(t *testing.T) {

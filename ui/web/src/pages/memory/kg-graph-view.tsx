@@ -1,6 +1,6 @@
 import { useRef, useMemo, useCallback, useState, useEffect, useLayoutEffect } from "react";
 import ForceGraph2D, { type ForceGraphMethods } from "react-force-graph-2d";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 import { useUiStore } from "@/stores/use-ui-store";
@@ -30,6 +30,21 @@ export function KGGraphView({ entities: allEntities, relations: allRelations, on
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodeLimit, setNodeLimit] = useState(DEFAULT_NODE_LIMIT);
   const [ready, setReady] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+
+  const ZOOM_STEP = 1.5;
+
+  const handleZoomIn = useCallback(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    fg.zoom(Math.min((fg.zoom() ?? 1) * ZOOM_STEP, 8), 300);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    fg.zoom(Math.max((fg.zoom() ?? 1) / ZOOM_STEP, 0.1), 300);
+  }, []);
 
   // Double-click detection refs
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -223,6 +238,7 @@ export function KGGraphView({ entities: allEntities, relations: allRelations, on
           linkDirectionalParticleSpeed={0.004}
           onNodeClick={handleNodeClick}
           onBackgroundClick={handleBackgroundClick}
+          onZoom={(transform) => setZoomLevel(transform.k)}
           onEngineStop={handleEngineStop}
           backgroundColor="transparent"
           d3AlphaDecay={0.04}
@@ -243,6 +259,15 @@ export function KGGraphView({ entities: allEntities, relations: allRelations, on
           <span>· {t("kg.graphView.limitNote", { limit: nodeLimit, total: totalCount })}</span>
         )}
         <div className="flex-1" />
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={handleZoomOut}>
+            <ZoomOut className="h-3 w-3" />
+          </Button>
+          <span className="w-9 text-center">{Math.round(zoomLevel * 100)}%</span>
+          <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={handleZoomIn}>
+            <ZoomIn className="h-3 w-3" />
+          </Button>
+        </div>
         <select
           value={nodeLimit}
           onChange={(e) => setNodeLimit(Number(e.target.value))}

@@ -305,6 +305,8 @@ var dbTypeToMediaType = map[string]string{
 	"bailian":          "dashscope",
 	"anthropic_native": "anthropic",
 	"suno":             "suno",
+	"byteplus":         "byteplus",
+	"byteplus_coding":  "byteplus",
 }
 
 // ResolveProviderType returns the media routing type for a provider.
@@ -345,6 +347,8 @@ func providerTypeFromName(name string) string {
 		return "anthropic"
 	case name == "suno" || strings.HasPrefix(name, "suno"):
 		return "suno"
+	case name == "byteplus" || strings.HasPrefix(name, "byteplus"):
+		return "byteplus"
 	case name == "yescale":
 		return "openai"
 	default:

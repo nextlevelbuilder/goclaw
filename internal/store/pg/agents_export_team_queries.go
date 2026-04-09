@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -95,7 +96,7 @@ func ExportTeamByLead(ctx context.Context, db *sql.DB, agentID uuid.UUID) (*Team
 			" FROM agent_teams WHERE lead_agent_id = $1"+tc,
 		args...,
 	).Scan(&teamID, &t.Name, &t.Description, &t.Status, &t.Settings)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, uuid.Nil, nil, nil
 	}
 	if err != nil {
@@ -421,7 +422,7 @@ func ExportTeamPreviewCounts(ctx context.Context, db *sql.DB, agentID uuid.UUID)
 	err = db.QueryRowContext(ctx,
 		"SELECT id FROM agent_teams WHERE lead_agent_id = $1"+tc, args...,
 	).Scan(&teamID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
 		// Still count agent links even if no team
 		_ = db.QueryRowContext(ctx,

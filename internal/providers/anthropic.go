@@ -38,6 +38,7 @@ func resolveAnthropicModel(model, defaultModel string) string {
 
 // AnthropicProvider implements Provider using the Anthropic Claude API via net/http.
 type AnthropicProvider struct {
+	name         string // provider name (default: "anthropic")
 	apiKey       string
 	baseURL      string
 	defaultModel string
@@ -48,6 +49,7 @@ type AnthropicProvider struct {
 // NewAnthropicProvider creates a new Anthropic provider.
 func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProvider {
 	p := &AnthropicProvider{
+		name:         "anthropic",
 		apiKey:       apiKey,
 		baseURL:      anthropicAPIBase,
 		defaultModel: defaultClaudeModel,
@@ -62,6 +64,15 @@ func NewAnthropicProvider(apiKey string, opts ...AnthropicOption) *AnthropicProv
 
 type AnthropicOption func(*AnthropicProvider)
 
+// WithAnthropicName overrides the provider name (default: "anthropic").
+func WithAnthropicName(name string) AnthropicOption {
+	return func(p *AnthropicProvider) {
+		if name != "" {
+			p.name = name
+		}
+	}
+}
+
 func WithAnthropicModel(model string) AnthropicOption {
 	return func(p *AnthropicProvider) { p.defaultModel = model }
 }
@@ -74,7 +85,7 @@ func WithAnthropicBaseURL(baseURL string) AnthropicOption {
 	}
 }
 
-func (p *AnthropicProvider) Name() string           { return "anthropic" }
+func (p *AnthropicProvider) Name() string           { return p.name }
 func (p *AnthropicProvider) DefaultModel() string   { return p.defaultModel }
 func (p *AnthropicProvider) SupportsThinking() bool { return true }
 

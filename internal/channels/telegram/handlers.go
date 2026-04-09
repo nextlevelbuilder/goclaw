@@ -22,6 +22,15 @@ func (c *Channel) handleMessage(ctx context.Context, update telego.Update) {
 		return
 	}
 
+	// Proactive migration detection: group upgraded to supergroup.
+	// Must run BEFORE isServiceMessage() — migration messages have no text/media.
+	if message.MigrateToChatID != 0 {
+		slog.Info("telegram: group migrated to supergroup (inbound)",
+			"old_chat_id", message.Chat.ID, "new_chat_id", message.MigrateToChatID)
+		c.migrateGroupChat(ctx, message.Chat.ID, message.MigrateToChatID)
+		return
+	}
+
 	// Skip service messages (member added/removed, title changed, etc.).
 	// These have no text/caption and no meaningful media — processing them
 	// pollutes mention gate and history with "[empty message]" entries.

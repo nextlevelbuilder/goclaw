@@ -66,7 +66,9 @@ func validateChatGPTOAuthPoolGraph(providers []store.LLMProviderData) error {
 
 			member, ok := providersByName[memberName]
 			if !ok {
-				return fmt.Errorf("provider %q references unknown OpenAI Codex pool member %q", provider.Name, memberName)
+				// Stale reference — member was deleted or disabled. Skip
+				// instead of blocking the pool owner from saving.
+				continue
 			}
 			if member.ProviderType != store.ProviderChatGPTOAuth {
 				return fmt.Errorf("provider %q can only add chatgpt_oauth members; %q is %s", provider.Name, memberName, member.ProviderType)
@@ -126,7 +128,66 @@ func validateChatGPTOAuthProviderCandidate(
 		finalProviders = append(finalProviders, *candidate)
 	}
 
-	return validateChatGPTOAuthPoolGraph(finalProviders)
+	if err := validateChatGPTOAuthPoolGraph(finalProviders); err != nil {
+		return err
+	}
+
+	// Strip stale member references from the candidate's settings so they
+	// don't accumulate as garbage in the DB after deleted/disabled providers.
+	stripStalePoolMembers(candidate, finalProviders)
+	return nil
+}
+
+// stripStalePoolMembers removes pool member names from the candidate's
+// settings that no longer exist in the active provider set. This prevents
+// deleted/disabled provider names from accumulating as garbage in the DB.
+func stripStalePoolMembers(candidate *store.LLMProviderData, activeProviders []store.LLMProviderData) {
+	if candidate == nil || len(candidate.Settings) == 0 {
+		return
+	}
+
+	// Parse full settings as generic map to preserve non-pool fields.
+	var raw map[string]any
+	if json.Unmarshal(candidate.Settings, &raw) != nil {
+		return
+	}
+	cpRaw, ok := raw["codex_pool"]
+	if !ok {
+		return
+	}
+	cpMap, ok := cpRaw.(map[string]any)
+	if !ok {
+		return
+	}
+	namesRaw, ok := cpMap["extra_provider_names"]
+	if !ok {
+		return
+	}
+	namesSlice, ok := namesRaw.([]any)
+	if !ok || len(namesSlice) == 0 {
+		return
+	}
+
+	known := make(map[string]bool, len(activeProviders))
+	for _, p := range activeProviders {
+		known[p.Name] = true
+	}
+
+	filtered := make([]any, 0, len(namesSlice))
+	for _, n := range namesSlice {
+		if name, ok := n.(string); ok && known[name] {
+			filtered = append(filtered, name)
+		}
+	}
+
+	if len(filtered) == len(namesSlice) {
+		return // nothing changed
+	}
+
+	cpMap["extra_provider_names"] = filtered
+	if updated, err := json.Marshal(raw); err == nil {
+		candidate.Settings = updated
+	}
 }
 
 func validateChatGPTOAuthAgentRouting(

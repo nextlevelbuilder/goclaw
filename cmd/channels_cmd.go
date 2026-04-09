@@ -44,7 +44,7 @@ func channelsListCmd() *cobra.Command {
 				{"discord", cfg.Channels.Discord.Enabled, cfg.Channels.Discord.Token != ""},
 				{"zalo", cfg.Channels.Zalo.Enabled, cfg.Channels.Zalo.Token != ""},
 				{"feishu", cfg.Channels.Feishu.Enabled, cfg.Channels.Feishu.AppID != ""},
-				{"whatsapp", cfg.Channels.WhatsApp.Enabled, cfg.Channels.WhatsApp.BridgeURL != ""},
+				{"whatsapp", cfg.Channels.WhatsApp.Enabled, cfg.Channels.WhatsApp.Enabled},
 			}
 
 			if jsonOutput {

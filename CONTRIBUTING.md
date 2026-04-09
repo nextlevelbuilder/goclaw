@@ -78,6 +78,44 @@ Developer                    Reviewer                 Owner
     │                            │                      ├─ merge to dev
     │                            │                      │
     │                            │        (when stable) ├─ PR dev → main
-    │                            │                      ├─ merge → release
-    │                            │                      ├─ tag → CD triggers
+    │                            │                      ├─ merge → auto release
+    │                            │                      │  (semantic-release)
 ```
+
+## Releases
+
+### Standard (automatic)
+
+Merge `dev` → `main`. `go-semantic-release` analyzes commit messages and auto-creates:
+- GitHub Release with version tag (`vX.Y.Z`)
+- Cross-platform binaries (linux/darwin × amd64/arm64)
+- Docker images (4 variants: latest, base, full, otel + web)
+- SHA256 checksums
+- Discord notification
+
+### Beta (manual tag)
+
+Push a beta tag from `dev` to create a prerelease:
+
+```bash
+# Standard beta — builds Docker + Linux binaries
+git tag v2.67.0-beta.1
+git push origin v2.67.0-beta.1
+
+# Desktop beta — builds macOS .dmg + Windows .exe
+git tag lite-v1.2.0-beta.1
+git push origin lite-v1.2.0-beta.1
+```
+
+Beta releases are marked as **prerelease** on GitHub and use `:beta` rolling Docker tag.
+
+### Desktop / Lite
+
+Push a `lite-v*` tag to build desktop apps:
+
+```bash
+git tag lite-v1.1.0
+git push origin lite-v1.1.0
+```
+
+Tags with `-beta` or `-rc` suffix automatically create prereleases.

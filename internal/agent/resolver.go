@@ -92,6 +92,9 @@ type ResolverDeps struct {
 	// Memory store for extractive memory fallback
 	MemoryStore store.MemoryStore
 
+	// Contact store for user identity resolution (channel contacts → tenant users)
+	ContactStore store.ContactStore
+
 	// Tenant store for workspace path resolution
 	TenantStore store.TenantStore
 
@@ -417,6 +420,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MCPStore:               deps.MCPStore,
 			MCPPool:                deps.MCPPool,
 			MCPUserCredSrvs:        mcpUserCredSrvs,
+			UserResolver:           newContactResolver(deps.ContactStore),
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)

@@ -12,7 +12,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useHttp } from "@/hooks/use-ws";
-import { useAgents } from "@/pages/agents/hooks/use-agents";
 import type { SecureCLIBinary, CLICredentialInput, CLIPreset } from "./hooks/use-cli-credentials";
 import { CliCredentialEnvVarsSection } from "./cli-credential-env-vars-section";
 import { CliCredentialBinaryFields } from "./cli-credential-binary-fields";
@@ -34,7 +33,6 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
   const { t } = useTranslation("cli-credentials");
   const { t: tc } = useTranslation("common");
   const http = useHttp();
-  const { agents } = useAgents();
 
   const [selectedPreset, setSelectedPreset] = useState(NONE_PRESET);
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
@@ -63,7 +61,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       denyVerbose: "",
       timeout: 30,
       tips: "",
-      agentId: "",
+      isGlobal: true,
       enabled: true,
     },
   });
@@ -80,7 +78,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       denyVerbose: (credential?.deny_verbose ?? []).join(", "),
       timeout: credential?.timeout_seconds ?? 30,
       tips: credential?.tips ?? "",
-      agentId: credential?.agent_id ?? "",
+      isGlobal: credential?.is_global ?? true,
       enabled: credential?.enabled ?? true,
     });
     setEnvValues({});
@@ -129,7 +127,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
       denyVerbose: p.deny_verbose.join(", "),
       timeout: p.timeout,
       tips: p.tips,
-      agentId: "",
+      isGlobal: true,
       enabled: true,
     });
     setEnvValues({});
@@ -184,7 +182,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
         deny_verbose: splitCommaList(values.denyVerbose ?? ""),
         timeout_seconds: values.timeout,
         tips: values.tips?.trim() ?? "",
-        agent_id: values.agentId?.trim() || undefined,
+        is_global: values.isGlobal,
         enabled: values.enabled,
       };
       if (selectedPreset !== NONE_PRESET) payload.preset = selectedPreset;
@@ -254,7 +252,7 @@ export function CliCredentialFormDialog({ open, onOpenChange, credential, preset
             onCheckBinary={handleCheckBinary}
           />
 
-          <CliCredentialScopeFields form={form} agents={agents} />
+          <CliCredentialScopeFields form={form} />
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>

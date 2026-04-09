@@ -245,6 +245,8 @@ func TestScheduler_DropOldPolicy(t *testing.T) {
 		DebounceMs: 0,
 	}, runFn)
 	defer sched.Stop()
+	// Close blockCh before Stop() (LIFO) so goroutines unblock and Stop() doesn't hang.
+	defer func() { select { case <-blockCh: default: close(blockCh) } }()
 
 	ctx := context.Background()
 	session := "agent:default:drop-test"
@@ -292,8 +294,15 @@ func TestScheduler_DropOldPolicy(t *testing.T) {
 		// OK, still pending
 	}
 
-	// Unblock everything
+	// Unblock everything and drain queued runs before Stop().
+	// Without draining, Stop() races with scheduleNext() causing wg.Wait() to hang.
 	close(blockCh)
+
+	select {
+	case <-ch3:
+	case <-time.After(5 * time.Second):
+		t.Fatal("queued run didn't complete after unblock")
+	}
 }
 
 func TestScheduler_InterruptMode(t *testing.T) {
@@ -318,6 +327,8 @@ func TestScheduler_InterruptMode(t *testing.T) {
 		DebounceMs: 0,
 	}, runFn)
 	defer sched.Stop()
+	// Close blockCh before Stop() (LIFO) so goroutines unblock and Stop() doesn't hang.
+	defer func() { select { case <-blockCh: default: close(blockCh) } }()
 
 	ctx := context.Background()
 	session := "agent:default:interrupt-test"

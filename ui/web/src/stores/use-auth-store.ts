@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { LOCAL_STORAGE_KEYS } from "@/lib/constants";
 import { clearSetupSkippedState } from "@/lib/setup-skip";
 import type { TenantMembership } from "@/types/tenant";
 
@@ -43,7 +44,7 @@ export const useAuthStore = create<AuthState>()(
       tenantSlug: "",
       isOwner: false,
       availableTenants: [],
-      tenantSelected: false,
+      tenantSelected: !!localStorage.getItem(LOCAL_STORAGE_KEYS.TENANT_ID),
 
       setCredentials: (token, userId) => {
         set({ token, userId });

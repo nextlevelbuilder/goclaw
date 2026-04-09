@@ -1,0 +1,94 @@
+go: downloading github.com/golang-migrate/migrate/v4 v4.19.1
+go: downloading github.com/jackc/pgx/v5 v5.6.0
+go: downloading github.com/google/uuid v1.6.0
+go: downloading github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
+go: downloading github.com/charmbracelet/huh v0.8.0
+go: downloading github.com/spf13/cobra v1.10.2
+go: downloading github.com/bwmarrin/discordgo v0.29.0
+go: downloading golang.org/x/sync v0.19.0
+go: downloading github.com/slack-go/slack v0.19.0
+go: downloading github.com/mattn/go-runewidth v0.0.16
+go: downloading github.com/mymmrac/telego v1.6.0
+go: downloading github.com/fsnotify/fsnotify v1.9.0
+go: downloading github.com/titanous/json5 v1.0.0
+go: downloading github.com/disintegration/imaging v1.6.2
+go: downloading golang.org/x/image v0.27.0
+go: downloading golang.org/x/time v0.14.0
+go: downloading github.com/mark3labs/mcp-go v0.44.0
+go: downloading github.com/adhocore/gronx v1.19.6
+go: downloading github.com/go-rod/rod v0.116.2
+go: downloading github.com/lib/pq v1.10.9
+go: downloading github.com/mattn/go-shellwords v1.0.12
+go: downloading golang.org/x/net v0.49.0
+go: downloading golang.org/x/text v0.33.0
+go: downloading github.com/rivo/uniseg v0.4.7
+go: downloading github.com/catppuccin/go v0.3.0
+go: downloading github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
+go: downloading github.com/charmbracelet/bubbletea v1.3.6
+go: downloading github.com/charmbracelet/lipgloss v1.1.0
+go: downloading github.com/charmbracelet/x/cellbuf v0.0.13
+go: downloading github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0
+go: downloading github.com/mitchellh/hashstructure/v2 v2.0.2
+go: downloading github.com/spf13/pflag v1.0.9
+go: downloading golang.org/x/crypto v0.47.0
+go: downloading golang.org/x/sys v0.42.0
+go: downloading github.com/valyala/fasthttp v1.69.0
+go: downloading github.com/invopop/jsonschema v0.13.0
+go: downloading github.com/spf13/cast v1.7.1
+go: downloading github.com/yosida95/uritemplate/v3 v3.0.2
+go: downloading github.com/dustin/go-humanize v1.0.1
+go: downloading github.com/charmbracelet/x/ansi v0.9.3
+go: downloading github.com/charmbracelet/x/term v0.2.1
+go: downloading github.com/atotto/clipboard v0.1.4
+go: downloading github.com/grbit/go-json v0.11.0
+go: downloading github.com/valyala/fastjson v1.6.7
+go: downloading github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
+go: downloading github.com/muesli/cancelreader v0.2.2
+go: downloading github.com/muesli/termenv v0.16.0
+go: downloading github.com/wk8/go-ordered-map/v2 v2.1.8
+go: downloading github.com/ysmood/goob v0.4.0
+go: downloading github.com/ysmood/got v0.40.0
+go: downloading github.com/ysmood/gson v0.7.3
+go: downloading github.com/ysmood/fetchup v0.2.3
+go: downloading github.com/ysmood/leakless v0.9.0
+go: downloading github.com/andybalholm/brotli v1.2.0
+go: downloading github.com/klauspost/compress v1.18.2
+go: downloading github.com/valyala/bytebufferpool v1.0.0
+go: downloading github.com/jackc/pgpassfile v1.0.0
+go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+go: downloading github.com/jackc/puddle/v2 v2.2.2
+go: downloading github.com/lucasb-eyer/go-colorful v1.2.0
+go: downloading github.com/bahlo/generic-list-go v0.2.0
+go: downloading github.com/buger/jsonparser v1.1.1
+go: downloading github.com/mailru/easyjson v0.7.7
+go: downloading gopkg.in/yaml.v3 v3.0.1
+go: downloading github.com/aymanbagabas/go-osc52/v2 v2.0.1
+go: downloading github.com/mattn/go-isatty v0.0.20
+go: downloading github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc
+go: downloading github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
+=== RUN   TestSetupToolRegistryExecWorkspacePaths
+2026/04/08 01:24:40 INFO memory + knowledge graph tools registered (PG-backed)
+2026/04/08 01:24:40 INFO web_search tool enabled
+2026/04/08 01:24:40 INFO web_fetch tool enabled policy="" blocked=0
+2026/04/08 01:24:40 INFO tts enabled provider=edge auto=off
+2026/04/08 01:24:40 INFO tool rate limiting enabled per_hour=150
+2026/04/08 01:24:40 INFO exec approval enabled security=full ask=off
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/personal_workspace_prefixed_uploads_allowed
+    gateway_setup_exec_workspace_test.go:133: denied = true, want false; output = command denied by safety policy: matches pattern /tmp/TestSetupToolRegistryExecWorkspacePaths1657441769/001
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/team_workspace_quoted_input_allowed
+    gateway_setup_exec_workspace_test.go:133: denied = true, want false; output = command denied by safety policy: matches pattern /tmp/TestSetupToolRegistryExecWorkspacePaths1657441769/001
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/legacy_dotgoclaw_uploads_layout_allowed
+    gateway_setup_exec_workspace_test.go:133: denied = true, want false; output = command denied by safety policy: matches pattern /tmp/TestSetupToolRegistryExecWorkspacePaths1657441769/001
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/team_workspace_symlink_escape_denied
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/unrelated_data_dir_path_denied
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/workspace_local_dotgoclaw_denied
+--- FAIL: TestSetupToolRegistryExecWorkspacePaths (0.00s)
+    --- FAIL: TestSetupToolRegistryExecWorkspacePaths/personal_workspace_prefixed_uploads_allowed (0.00s)
+    --- FAIL: TestSetupToolRegistryExecWorkspacePaths/team_workspace_quoted_input_allowed (0.00s)
+    --- FAIL: TestSetupToolRegistryExecWorkspacePaths/legacy_dotgoclaw_uploads_layout_allowed (0.00s)
+    --- PASS: TestSetupToolRegistryExecWorkspacePaths/team_workspace_symlink_escape_denied (0.00s)
+    --- PASS: TestSetupToolRegistryExecWorkspacePaths/unrelated_data_dir_path_denied (0.00s)
+    --- PASS: TestSetupToolRegistryExecWorkspacePaths/workspace_local_dotgoclaw_denied (0.00s)
+FAIL
+FAIL	github.com/nextlevelbuilder/goclaw/cmd	0.019s
+FAIL

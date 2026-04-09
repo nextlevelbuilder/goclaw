@@ -253,6 +253,7 @@
     "reasoningFallbackBehavior": "Fallback Behavior",
     "codexPoolDefaultsTitle": "Thiết lập pool mặc định",
     "codexPoolDefaultsDescription": "Định nghĩa pool OpenAI Codex dùng lại do chính bí danh này sở hữu cho các agent dùng nó làm provider chính.",
+    "poolManagedByDescription": "Provider này là thành viên của pool thuộc sở hữu bởi {{owner}}. Để thay đổi cài đặt pool, hãy vào trang pool owner.",
     "oauthDisplayNameRecommendation": "Thêm tên hiển thị nếu bạn muốn nhãn rõ ràng hơn khi nhiều tài khoản OpenAI Codex OAuth xuất hiện trong pool.",
     "poolActivityTitle": "Hoạt động pool",
     "poolActivityDescription": "Hoạt động runtime tổng hợp trên tất cả agent sử dụng pool Codex của provider này.",
@@ -266,6 +267,8 @@
   "list": {
     "poolOwner": "Chủ pool",
     "poolMember": "Thành viên pool",
+    "poolAvailable": "Sẵn sàng pool",
+    "poolBadge": "Pool",
     "standalone": "Độc lập",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "Được quản lý bởi {{provider}}",
@@ -327,6 +330,27 @@
     "downgradeDesc": "Normalize to the nearest supported lower level, or disable when no lower supported level exists",
     "provider_default": "Use Model Default",
     "provider_defaultDesc": "Let the selected model fall back to its own default reasoning effort"
+  },
+  "poolCta": {
+    "unpooledCount": "{{count}} tài khoản sẵn sàng tạo pool",
+    "setupPool": "Thiết lập pool",
+    "dismiss": "Bỏ qua"
+  },
+  "poolWizard": {
+    "title": "Thiết lập Pool",
+    "description": "Gộp các tài khoản ChatGPT để tự động chuyển đổi dự phòng và cân bằng tải.",
+    "selectOwner": "Chủ sở hữu Pool",
+    "selectOwnerHint": "Tài khoản chính sở hữu cấu hình pool.",
+    "selectMembers": "Thành viên Pool",
+    "selectMembersHint": "Chọn các tài khoản để thêm vào pool.",
+    "selectAll": "Chọn tất cả",
+    "deselectAll": "Bỏ chọn tất cả",
+    "selectedCount": "{{count}} đã chọn",
+    "strategy": "Chiến lược",
+    "createPool": "Tạo Pool",
+    "noMembers": "Chọn ít nhất một thành viên để tạo pool.",
+    "success": "Tạo pool thành công.",
+    "error": "Không thể tạo pool."
   },
   "toast": {
     "created": "Đã tạo provider",

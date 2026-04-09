@@ -20,6 +20,7 @@ import type { ModelInfo } from "@/pages/providers/hooks/use-provider-models";
 interface AgentIdentityAndModelFieldsProps {
   form: UseFormReturn<AgentCreateFormData>;
   enabledProviders: ProviderData[];
+  poolOwnerNames?: Set<string>;
   models: ModelInfo[];
   modelsLoading: boolean;
   verifying: boolean;
@@ -35,6 +36,7 @@ interface AgentIdentityAndModelFieldsProps {
 export function AgentIdentityAndModelFields({
   form,
   enabledProviders,
+  poolOwnerNames,
   models,
   modelsLoading,
   verifying,
@@ -109,7 +111,14 @@ export function AgentIdentityAndModelFields({
                   <SelectContent>
                     {enabledProviders.map((p) => (
                       <SelectItem key={p.name} value={p.name}>
-                        {p.display_name || p.name}
+                        <span className="flex items-center gap-2">
+                          {p.display_name || p.name}
+                          {poolOwnerNames?.has(p.name) && (
+                            <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
+                              {t("providers:list.poolBadge")}
+                            </span>
+                          )}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

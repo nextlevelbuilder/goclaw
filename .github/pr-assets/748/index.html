@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR #748 — fix(exec): allow uploaded files in active workspaces</title>
+<style>
+:root {
+  --bg: #0d0d0d;
+  --fg: #e8e4df;
+  --card: #1a1714;
+  --border: #2d2923;
+  --accent: #ef4444;
+  --good: #22c55e;
+  --muted: #8a837d;
+  --code: #151210;
+}
+.light {
+  --bg: #f8f6f3;
+  --fg: #1a1714;
+  --card: #ffffff;
+  --border: #e5e0da;
+  --accent: #dc2626;
+  --good: #15803d;
+  --muted: #6b6560;
+  --code: #f3f0eb;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 2rem;
+  line-height: 1.5;
+}
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 100;
+}
+h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.subtitle { color: var(--muted); margin-bottom: 2rem; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.summary-card, .env, .comparison, .supporting {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.summary-card { padding: 1rem; }
+.summary-card h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.04em;
+}
+.env, .supporting, .comparison { padding: 1.25rem; margin-bottom: 1.5rem; }
+.env { color: var(--muted); font-size: 0.92rem; }
+.comparison h2, .supporting h2 {
+  font-size: 1.05rem;
+  margin-bottom: 1rem;
+}
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+.col-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+.before { color: var(--muted); }
+.after { color: var(--accent); }
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--code);
+}
+.panel img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.terminal {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 1rem;
+  min-height: 320px;
+}
+.hl-bad {
+  display: inline-block;
+  background: rgba(239, 68, 68, 0.14);
+  border-left: 3px solid var(--accent);
+  padding: 0.05rem 0.35rem;
+}
+.hl-good {
+  display: inline-block;
+  background: rgba(34, 197, 94, 0.14);
+  border-left: 3px solid var(--good);
+  padding: 0.05rem 0.35rem;
+}
+.desc {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-top: 0.65rem;
+}
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--code);
+  padding: 0.12rem 0.32rem;
+  border-radius: 4px;
+}
+ul { margin-left: 1.1rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="document.documentElement.classList.toggle('light'); this.textContent = document.documentElement.classList.contains('light') ? '● Dark' : '○ Light'">○ Light</button>
+
+<h1>fix(exec): allow uploaded files in active workspaces</h1>
+<p class="subtitle">PR #748 — visual proof pack for issue #739</p>
+
+<div class="summary">
+  <div class="summary-card">
+    <h3>Bug</h3>
+    <p>Active workspace files under deny-roots were rejected by <code>exec</code> even when they belonged to the current upload/team scope.</p>
+  </div>
+  <div class="summary-card">
+    <h3>Root Cause</h3>
+    <p>Path exemptions were static and non-shell-aware, so quoted, prefixed, and legacy screenshot-era upload paths still matched the deny root.</p>
+  </div>
+  <div class="summary-card">
+    <h3>Fix</h3>
+    <p>Shell-aware parsing + canonical path checks now exempt the active personal <code>.uploads</code> subtree, the legacy <code>uploads</code> subtree, and the active team workspace.</p>
+  </div>
+</div>
+
+<div class="env">
+  Before source: stable <code>claw:3000</code> backed by the unfixed <code>/opt/goclaw</code> deployment (<code>v2.7.1</code>). After source: temporary PR deployment on <code>claw:3001</code>, backed by <code>goclaw-pr748:local</code> built from the fixed code commit <code>83fa1342</code>. Both UI captures use fresh chats with the same user and <code>GLM thục bô</code>. Callout border marks the reviewed <code>exec</code> row.
+</div>
+
+<div class="comparison">
+  <h2>UI Before / After</h2>
+  <div class="grid">
+    <div>
+      <div class="col-header before">Before</div>
+      <div class="panel">
+        <img src="pr748-before-absolute-goclaw-blocked.png" alt="Before: stable claw blocks absolute .goclaw upload path">
+      </div>
+      <p class="desc">Stable <code>claw</code> release, fresh chat with <code>GLM thục bô</code>: the agent runs the exact absolute <code>/app/.goclaw/.../.uploads/...jpg</code> copy command and the <code>exec</code> row fails with the safety-policy <code>.goclaw/</code> denial.</p>
+    </div>
+    <div>
+      <div class="col-header after">After</div>
+      <div class="panel">
+        <img src="pr748-after-absolute-goclaw-allowed.png" alt="After: fixed temporary claw deployment allows absolute .goclaw upload path">
+      </div>
+      <p class="desc">Temporary fixed deployment on <code>claw:3001</code>, fresh chat with the same agent: the same absolute <code>/app/.goclaw/.../.uploads/...jpg</code> copy command now completes successfully and returns <code>/tmp/partner-abs.png</code>.</p>
+    </div>
+  </div>
+</div>
+
+<div class="comparison">
+  <h2>Gateway Reproduction</h2>
+  <div class="grid">
+    <div>
+      <div class="col-header before">Before</div>
+      <div class="panel">
+<pre class="terminal">$ ssh claw 'docker run --rm -v /tmp/goclaw-739-before:/src -w /src golang:1.26 sh -lc "/usr/local/go/bin/go test ./cmd -run TestSetupToolRegistryExecWorkspacePaths -count=1 -v"'
+=== RUN   TestSetupToolRegistryExecWorkspacePaths
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/personal_workspace_prefixed_uploads_allowed
+<span class="hl-bad">gateway_setup_exec_workspace_test.go:133: denied = true, want false; output = command denied by safety policy: matches pattern /tmp/TestSetupToolRegistryExecWorkspacePaths.../001</span>
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/team_workspace_quoted_input_allowed
+<span class="hl-bad">gateway_setup_exec_workspace_test.go:133: denied = true, want false; output = command denied by safety policy: matches pattern /tmp/TestSetupToolRegistryExecWorkspacePaths.../001</span>
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/legacy_dotgoclaw_uploads_layout_allowed
+<span class="hl-bad">gateway_setup_exec_workspace_test.go:133: denied = true, want false; output = command denied by safety policy: matches pattern /tmp/TestSetupToolRegistryExecWorkspacePaths.../001</span>
+FAIL</pre>
+      </div>
+      <p class="desc">Baseline source on <code>claw</code>: the exact gateway wiring still rejects all three representative workspace-path forms.</p>
+    </div>
+    <div>
+      <div class="col-header after">After</div>
+      <div class="panel">
+<pre class="terminal">$ go test ./cmd -run TestSetupToolRegistryExecWorkspacePaths -count=1 -v
+=== RUN   TestSetupToolRegistryExecWorkspacePaths
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/personal_workspace_prefixed_uploads_allowed
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/team_workspace_quoted_input_allowed
+=== RUN   TestSetupToolRegistryExecWorkspacePaths/legacy_dotgoclaw_uploads_layout_allowed
+<span class="hl-good">--- PASS: TestSetupToolRegistryExecWorkspacePaths (0.01s)</span>
+<span class="hl-good">    --- PASS: personal_workspace_prefixed_uploads_allowed</span>
+<span class="hl-good">    --- PASS: team_workspace_quoted_input_allowed</span>
+<span class="hl-good">    --- PASS: legacy_dotgoclaw_uploads_layout_allowed</span>
+PASS</pre>
+      </div>
+      <p class="desc">Current worktree: the same gateway path handling now passes for personal uploads, team workspace paths, and the screenshot-era legacy <code>.goclaw/.../uploads</code> layout.</p>
+    </div>
+  </div>
+</div>
+
+<div class="supporting">
+  <h2>Supporting Live Recreation on <code>claw</code></h2>
+  <div class="panel">
+    <img src="claw-live-glm-thuc-bo-before.png" alt="Live claw recreation with GLM thục bô">
+  </div>
+  <p class="desc">
+    This earlier live run documents the same production agent and workspace context on stable <code>claw</code>. The report’s primary Before/After pair above is the clean isolated proof you asked for; this screenshot is kept as supporting context for the reproduction journey.
+  </p>
+</div>
+
+<div class="comparison">
+  <h2>What This Proves</h2>
+  <ul>
+    <li>Quoted/prefixed upload arguments now survive the deny matcher when they point into the active personal <code>.uploads</code> subtree, the legacy <code>.goclaw/.../uploads</code> subtree, or the active team workspace.</li>
+    <li>Symlink escapes, unrelated <code>dataDir</code> files, and workspace-local <code>.goclaw/*</code> remain denied.</li>
+    <li>The visual behavior difference is now shown on two real frontends: stable <code>claw:3000</code> Before and temporary fixed <code>claw:3001</code> After, both using fresh conversations.</li>
+  </ul>
+</div>
+</body>
+</html>

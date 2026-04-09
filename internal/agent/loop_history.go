@@ -66,12 +66,19 @@ func (l *Loop) filteredToolNamesForChannel(channelType string) []string {
 }
 
 // buildCredentialCLIContext generates the TOOLS.md supplement for credentialed CLIs.
-// Returns empty string if no secure CLI store is configured or no enabled CLIs.
+// Uses agent-scoped list when agent UUID is available: returns only global CLIs
+// plus explicitly granted CLIs, with grant overrides merged.
 func (l *Loop) buildCredentialCLIContext(ctx context.Context) string {
 	if l.secureCLIStore == nil {
 		return ""
 	}
-	creds, err := l.secureCLIStore.ListEnabled(ctx)
+	var creds []store.SecureCLIBinary
+	var err error
+	if l.agentUUID != uuid.Nil {
+		creds, err = l.secureCLIStore.ListForAgent(ctx, l.agentUUID)
+	} else {
+		creds, err = l.secureCLIStore.ListEnabled(ctx)
+	}
 	if err != nil || len(creds) == 0 {
 		return ""
 	}
@@ -431,10 +438,7 @@ func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) s
 	// Cap description length to match BuildSummary() truncation (skillDescMaxLen=200 runes).
 	totalChars := 0
 	for _, s := range filtered {
-		descLen := len(s.Description)
-		if descLen > 200 {
-			descLen = 200
-		}
+		descLen := min(len(s.Description), 200)
 		totalChars += len(s.Name) + descLen + 10 // +10 for XML tags overhead
 	}
 	estimatedTokens := totalChars / 4

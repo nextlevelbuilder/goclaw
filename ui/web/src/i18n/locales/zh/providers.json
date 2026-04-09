@@ -271,6 +271,7 @@
     "reasoningFallbackBehavior": "Fallback Behavior",
     "codexPoolDefaultsTitle": "默认账户池",
     "codexPoolDefaultsDescription": "为把这个别名作为主 provider 的 agent 定义由该别名拥有的可复用 OpenAI Codex 账户池。",
+    "poolManagedByDescription": "此 provider 是 {{owner}} 所拥有的池的成员。如需更改池设置，请前往池所有者页面。",
     "oauthDisplayNameRecommendation": "如果您希望多个 OpenAI Codex OAuth 账户在池里显示得更清楚，可以补充显示名称。",
     "poolActivityTitle": "池活动",
     "poolActivityDescription": "汇总所有使用该 provider Codex 池的 agent 的运行时活动。",
@@ -284,6 +285,8 @@
   "list": {
     "poolOwner": "池拥有者",
     "poolMember": "池成员",
+    "poolAvailable": "可组池",
+    "poolBadge": "池",
     "standalone": "独立账户",
     "reasoningDefault": "Reasoning {{level}}",
     "managedBy": "由 {{provider}} 管理",
@@ -345,6 +348,27 @@
     "downgradeDesc": "Normalize to the nearest supported lower level, or disable when no lower supported level exists",
     "provider_default": "Use Model Default",
     "provider_defaultDesc": "Let the selected model fall back to its own default reasoning effort"
+  },
+  "poolCta": {
+    "unpooledCount": "{{count}} 个账户可以组建池",
+    "setupPool": "设置池",
+    "dismiss": "忽略"
+  },
+  "poolWizard": {
+    "title": "设置池",
+    "description": "合并 ChatGPT 账户以实现自动故障转移和负载均衡。",
+    "selectOwner": "池所有者",
+    "selectOwnerHint": "拥有池配置的主账户。",
+    "selectMembers": "池成员",
+    "selectMembersHint": "选择要加入池的账户。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "selectedCount": "已选 {{count}} 个",
+    "strategy": "策略",
+    "createPool": "创建池",
+    "noMembers": "至少选择一个成员才能创建池。",
+    "success": "池创建成功。",
+    "error": "池创建失败。"
   },
   "toast": {
     "created": "Provider已创建",

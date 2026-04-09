@@ -160,7 +160,7 @@ type secureCLICreateRequest struct {
 	DenyVerbose    json.RawMessage `json:"deny_verbose,omitempty"`
 	TimeoutSeconds int             `json:"timeout_seconds,omitempty"`
 	Tips           string          `json:"tips,omitempty"`
-	AgentID        *uuid.UUID      `json:"agent_id,omitempty"`
+	IsGlobal       *bool           `json:"is_global,omitempty"`
 	Enabled        bool            `json:"enabled"`
 }
 
@@ -224,7 +224,7 @@ func (h *SecureCLIHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 		DenyVerbose:    req.DenyVerbose,
 		TimeoutSeconds: req.TimeoutSeconds,
 		Tips:           req.Tips,
-		AgentID:        req.AgentID,
+		IsGlobal:       req.IsGlobal == nil || *req.IsGlobal, // default true
 		Enabled:        req.Enabled,
 		CreatedBy:      store.UserIDFromContext(r.Context()),
 	}
@@ -282,7 +282,7 @@ func (h *SecureCLIHandler) handleUpdate(w http.ResponseWriter, r *http.Request) 
 	allowed := map[string]bool{
 		"binary_name": true, "binary_path": true, "description": true,
 		"env": true, "deny_args": true, "deny_verbose": true,
-		"timeout_seconds": true, "tips": true, "agent_id": true, "enabled": true,
+		"timeout_seconds": true, "tips": true, "is_global": true, "enabled": true,
 	}
 	for k := range updates {
 		if !allowed[k] {

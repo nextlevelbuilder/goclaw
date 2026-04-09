@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -23,15 +24,16 @@ import (
 
 // ChatMethods handles chat.send, chat.history, chat.abort, chat.inject.
 type ChatMethods struct {
-	agents         *agent.Router
-	sessions       store.SessionStore
-	rateLimiter    *gateway.RateLimiter
-	eventBus       bus.EventPublisher
-	postTurn tools.PostTurnProcessor
+	agents      *agent.Router
+	sessions    store.SessionStore
+	cfg         *config.Config
+	rateLimiter *gateway.RateLimiter
+	eventBus    bus.EventPublisher
+	postTurn    tools.PostTurnProcessor
 }
 
-func NewChatMethods(agents *agent.Router, sess store.SessionStore, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
-	return &ChatMethods{agents: agents, sessions: sess, rateLimiter: rl, eventBus: eventBus}
+func NewChatMethods(agents *agent.Router, sess store.SessionStore, cfg *config.Config, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
+	return &ChatMethods{agents: agents, sessions: sess, cfg: cfg, rateLimiter: rl, eventBus: eventBus}
 }
 
 // SetPostTurnProcessor sets the post-turn processor for team task dispatch.
@@ -50,12 +52,18 @@ func (m *ChatMethods) Register(router *gateway.MethodRouter) {
 
 // handleSessionStatus returns the running state and activity for a session.
 // Used by the frontend to restore UI state after switching between sessions.
-func (m *ChatMethods) handleSessionStatus(_ context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+func (m *ChatMethods) handleSessionStatus(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
 	var params struct {
 		SessionKey string `json:"sessionKey"`
 	}
 	if err := json.Unmarshal(req.Params, &params); err != nil || params.SessionKey == "" {
-		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "sessionKey required"))
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "sessionKey")))
+		return
+	}
+
+	// Ownership check: non-admin users can only query their own sessions.
+	if !requireSessionOwner(ctx, m.sessions, m.cfg, client, req.ID, params.SessionKey) {
 		return
 	}
 
@@ -164,6 +172,15 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	sessionKey := params.SessionKey
 	if sessionKey == "" {
 		sessionKey = sessions.BuildWSSessionKey(params.AgentID, uuid.NewString())
+	}
+
+	// Ownership check: when resuming an existing session, verify the caller owns it.
+	// Skip for new sessions (Get returns nil) so first-message creation is not blocked.
+	if params.SessionKey != "" && !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, userID) {
+		if sess := m.sessions.Get(ctx, sessionKey); sess != nil && sess.UserID != userID {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "session")))
+			return
+		}
 	}
 
 	// Detach from HTTP request context so agent runs survive page navigation/reconnect.
@@ -316,6 +333,11 @@ func (m *ChatMethods) handleHistory(ctx context.Context, client *gateway.Client,
 		sessionKey = sessions.BuildWSSessionKey(params.AgentID, uuid.NewString())
 	}
 
+	// Ownership check: non-admin users can only read their own session history.
+	if params.SessionKey != "" && !requireSessionOwner(ctx, m.sessions, m.cfg, client, req.ID, sessionKey) {
+		return
+	}
+
 	history := m.sessions.GetHistory(ctx, sessionKey)
 
 	// Sign file URLs before delivery — sessions store clean paths.
@@ -352,6 +374,11 @@ func (m *ChatMethods) handleInject(ctx context.Context, client *gateway.Client, 
 	}
 	if params.Message == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgMsgRequired)))
+		return
+	}
+
+	// Ownership check: non-admin users can only inject into their own sessions.
+	if !requireSessionOwner(ctx, m.sessions, m.cfg, client, req.ID, params.SessionKey) {
 		return
 	}
 
@@ -402,6 +429,17 @@ func (m *ChatMethods) handleAbort(ctx context.Context, client *gateway.Client, r
 
 	if params.SessionKey == "" && params.RunID == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "sessionKey or runId")))
+		return
+	}
+
+	// Non-admin users must provide sessionKey for ownership verification.
+	if params.SessionKey == "" && params.RunID != "" && !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "sessionKey")))
+		return
+	}
+
+	// Ownership check: non-admin users can only abort their own sessions.
+	if params.SessionKey != "" && !requireSessionOwner(ctx, m.sessions, m.cfg, client, req.ID, params.SessionKey) {
 		return
 	}
 

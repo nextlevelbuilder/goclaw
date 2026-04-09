@@ -68,9 +68,7 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "webhook_secret", label: "Webhook Secret", type: "password" },
   ],
   zalo_personal: [],
-  whatsapp: [
-    { key: "bridge_url", label: "Bridge URL", type: "text", required: true, placeholder: "http://bridge:3000" },
-  ],
+  whatsapp: [],
 };
 
 // --- Config schemas ---
@@ -151,6 +149,7 @@ export const configSchema: Record<string, FieldDef[]> = {
   whatsapp: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
+    { key: "require_mention", label: "Require @Mention in Groups", type: "boolean", help: "Only respond in group chats when the bot is explicitly @mentioned" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "WhatsApp user IDs" },
     { key: "block_reply", label: "Block Reply", type: "select", options: blockReplyOptions, defaultValue: "inherit", help: "Deliver intermediate text during tool iterations" },
   ],
@@ -222,5 +221,10 @@ export const wizardConfig: Partial<Record<string, WizardConfig>> = {
     createLabel: "wizard.zaloPersonal.createLabel",
     formBanner: "wizard.zaloPersonal.formBanner",
     excludeConfigFields: ["allow_from"],
+  },
+  whatsapp: {
+    steps: ["auth"],
+    createLabel: "wizard.whatsapp.createLabel",
+    formBanner: "wizard.whatsapp.formBanner",
   },
 };

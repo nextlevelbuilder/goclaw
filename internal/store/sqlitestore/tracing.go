@@ -251,6 +251,29 @@ func (s *SQLiteTracingStore) DeleteTracesOlderThan(ctx context.Context, cutoff t
 	return res.RowsAffected()
 }
 
+// RecoverStaleRunningTraces marks traces stuck in "running" since before cutoff as "error".
+// Also recovers their stuck spans. Called on startup to fix orphans from crashes.
+func (s *SQLiteTracingStore) RecoverStaleRunningTraces(ctx context.Context, cutoff time.Time) (int64, error) {
+	// Recover stuck spans first.
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE spans SET status = 'error', error = 'recovered: server restart',
+		   end_time = datetime('now'), duration_ms = CAST((julianday('now') - julianday(start_time)) * 86400000 AS INTEGER)
+		 WHERE status = 'running' AND start_time < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("recover stale spans: %w", err)
+	}
+
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE traces SET status = 'error',
+		   error = 'recovered: stuck in running state (server restart)',
+		   end_time = datetime('now'), duration_ms = CAST((julianday('now') - julianday(start_time)) * 86400000 AS INTEGER)
+		 WHERE status = 'running' AND start_time < ?`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("recover stale running traces: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // ListCodexPoolSpans is not supported in SQLite (Codex pool is a standard-edition feature).
 func (s *SQLiteTracingStore) ListCodexPoolSpans(_ context.Context, _, _ uuid.UUID, _ []string, _ int) ([]store.CodexPoolSpan, error) {
 	return nil, nil

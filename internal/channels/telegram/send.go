@@ -28,6 +28,16 @@ var (
 	htmlTagRe            = regexp.MustCompile(`<[^>]*>`)
 )
 
+// extractMigrateChatID checks if a Telegram API error contains a group→supergroup
+// migration indicator and returns the new chat ID, or 0 if not a migration error.
+func extractMigrateChatID(err error) int64 {
+	var apiErr *telegoapi.Error
+	if errors.As(err, &apiErr) && apiErr.Parameters != nil && apiErr.Parameters.MigrateToChatID != 0 {
+		return apiErr.Parameters.MigrateToChatID
+	}
+	return 0
+}
+
 const (
 	sendMaxRetries     = 3
 	sendRetryDelay     = 2 * time.Second
@@ -229,7 +239,17 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			c.placeholders.Delete(localKey)
 			_ = c.deleteMessage(ctx, chatID, pID.(int))
 		}
-		return c.sendMediaMessage(ctx, chatID, msg, replyToMsgID, threadID)
+		err := c.sendMediaMessage(ctx, chatID, msg, replyToMsgID, threadID)
+		// Migration fallback: group upgraded to supergroup — retry with new chat ID.
+		if err != nil {
+			if newChatID := extractMigrateChatID(err); newChatID != 0 {
+				slog.Info("telegram: group migrated to supergroup (media send-path)",
+					"old_chat_id", chatID, "new_chat_id", newChatID)
+				c.migrateGroupChat(ctx, chatID, newChatID)
+				return c.sendMediaMessage(ctx, newChatID, msg, replyToMsgID, threadID)
+			}
+		}
+		return err
 	}
 
 	// Text-only message
@@ -407,6 +427,17 @@ func (c *Channel) sendHTMLWithDepth(ctx context.Context, chatID int64, htmlConte
 	})
 
 	if err != nil {
+		// Case 0: Group migrated to supergroup — update DB and retry with new chat ID.
+		if newChatID := extractMigrateChatID(err); newChatID != 0 {
+			slog.Info("telegram: group migrated to supergroup (send-path)",
+				"old_chat_id", chatID, "new_chat_id", newChatID)
+			c.migrateGroupChat(ctx, chatID, newChatID)
+			if depth < maxSplitDepth {
+				return c.sendHTMLWithDepth(ctx, newChatID, htmlContent, replyTo, threadID, depth+1)
+			}
+			return fmt.Errorf("migration retry depth exceeded: %w", err)
+		}
+
 		errStr := err.Error()
 
 		// Case 1: Message too long. Split into smaller chunks and send individually.

@@ -3,56 +3,30 @@ import type { UseFormReturn } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { AgentData } from "@/types/agent";
 import type { CliCredentialFormData } from "@/schemas/credential.schema";
-
-const GLOBAL_AGENT = "__global__";
 
 interface CliCredentialScopeFieldsProps {
   form: UseFormReturn<CliCredentialFormData>;
-  agents: AgentData[];
 }
 
-/** Renders agent scope selector and enabled toggle for a CLI credential. */
-export function CliCredentialScopeFields({ form, agents }: CliCredentialScopeFieldsProps) {
+/** Renders is_global toggle and enabled switch for a CLI credential. */
+export function CliCredentialScopeFields({ form }: CliCredentialScopeFieldsProps) {
   const { t } = useTranslation("cli-credentials");
   const { t: tc } = useTranslation("common");
   const { control } = form;
 
   return (
     <>
-      <div className="grid gap-1.5">
-        <Label>
-          {t("form.agentId")}{" "}
-          <span className="text-xs text-muted-foreground">({t("form.agentIdHint")})</span>
-        </Label>
+      <div className="flex items-center justify-between rounded-md border p-3">
+        <div className="space-y-0.5">
+          <Label htmlFor="cc-global">{t("form.isGlobal")}</Label>
+          <p className="text-xs text-muted-foreground">{t("form.isGlobalHint")}</p>
+        </div>
         <Controller
           control={control}
-          name="agentId"
+          name="isGlobal"
           render={({ field }) => (
-            <Select
-              value={field.value || GLOBAL_AGENT}
-              onValueChange={(v) => field.onChange(v === GLOBAL_AGENT ? "" : v)}
-            >
-              <SelectTrigger className="text-base md:text-sm">
-                <SelectValue placeholder={t("placeholders.agentId")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={GLOBAL_AGENT}>{t("placeholders.agentId")}</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.display_name || a.agent_key || a.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Switch id="cc-global" checked={field.value} onCheckedChange={field.onChange} />
           )}
         />
       </div>

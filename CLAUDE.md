@@ -85,6 +85,53 @@ make desktop-build VERSION=0.1.0             # Build .app (macOS) or .exe (Windo
 make desktop-dmg VERSION=0.1.0               # Create .dmg installer (macOS only)
 ```
 
+## CI/CD & Releases
+
+### Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `ci.yaml` | push main, PR→main/dev | Go build+test+vet, Web build |
+| `release.yaml` | push main | semantic-release → binaries + Docker (4 variants + web) + Discord |
+| `release-beta.yaml` | tag `v*-beta*` / `v*-rc*` | Beta binaries + Docker + GitHub prerelease |
+| `release-desktop.yaml` | tag `lite-v*` | Desktop app (macOS+Windows), auto prerelease for `-beta`/`-rc` tags |
+
+### Creating Releases
+
+**Standard release** — merge `dev` → `main`. `go-semantic-release` auto-creates version from conventional commits.
+
+**Beta release** (from dev):
+```bash
+git tag v2.67.0-beta.1 && git push origin v2.67.0-beta.1   # standard beta
+git tag lite-v1.2.0-beta.1 && git push origin lite-v1.2.0-beta.1  # lite beta
+```
+
+**Desktop release:**
+```bash
+git tag lite-v1.1.0 && git push origin lite-v1.1.0   # stable
+git tag lite-v1.1.0-beta.1 && git push origin lite-v1.1.0-beta.1  # beta (prerelease)
+```
+
+### Docker Images
+
+Published to GHCR (`ghcr.io/nextlevelbuilder/goclaw`) and Docker Hub (`digitop/goclaw`).
+
+| Variant | Tag | Contents |
+|---------|-----|----------|
+| latest | `:latest`, `:vX.Y.Z` | Backend + web UI + Python |
+| base | `:base`, `:vX.Y.Z-base` | Backend only, no UI/runtimes |
+| full | `:full`, `:vX.Y.Z-full` | All runtimes + skills pre-installed |
+| otel | `:otel`, `:vX.Y.Z-otel` | Latest + OpenTelemetry tracing |
+| web | `-web:latest` | Standalone web UI (Nginx) |
+| beta | `:beta`, `:vX.Y.Z-beta.N` | Beta builds from dev |
+
+### Tag Pattern Safety
+
+- `release.yaml`: branch-triggered (push main) → `go-semantic-release` creates clean `vX.Y.Z` tags
+- `release-beta.yaml`: tag-triggered (`v*-beta*`, `v*-rc*`) — never matches clean semver
+- `release-desktop.yaml`: tag-triggered (`lite-v*`) — `lite-` prefix prevents overlap
+- No workflow triggers overlap — each tag pattern is distinct
+
 ## Desktop Edition (Lite)
 
 - **Build tag:** `//go:build sqliteonly` — desktop binary includes only SQLite, no PostgreSQL

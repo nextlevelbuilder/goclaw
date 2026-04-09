@@ -14,6 +14,7 @@ import type { AgentData } from "@/types/agent";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import { useProviderVerify } from "@/pages/providers/hooks/use-provider-verify";
+import { getChatGPTOAuthPoolOwnership } from "@/pages/providers/provider-utils";
 import { useAgentPresets } from "./agent-presets";
 import { agentCreateSchema, type AgentCreateFormData } from "@/schemas/agent.schema";
 import { AgentIdentityAndModelFields } from "./agent-identity-and-model-fields";
@@ -28,7 +29,7 @@ interface AgentCreateDialogProps {
 export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateDialogProps) {
   const { t } = useTranslation("agents");
   const agentPresets = useAgentPresets();
-  const { providers } = useProviders();
+  const { providers, refresh: refreshProviders } = useProviders();
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
@@ -55,7 +56,15 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   const agentKey = watch("agentKey");
   const displayName = watch("displayName");
 
-  const enabledProviders = providers.filter((p) => p.enabled);
+  const poolOwnership = useMemo(() => getChatGPTOAuthPoolOwnership(providers), [providers]);
+  const enabledProviders = useMemo(
+    () => providers.filter((p) => p.enabled && !poolOwnership.ownerByMember.has(p.name)),
+    [providers, poolOwnership],
+  );
+  const poolOwnerNames = useMemo(
+    () => new Set(poolOwnership.membersByOwner.keys()),
+    [poolOwnership],
+  );
   const selectedProvider = useMemo(
     () => enabledProviders.find((p) => p.name === provider),
     [enabledProviders, provider],
@@ -67,12 +76,14 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
   useEffect(() => { resetVerify(); }, [provider, model, resetVerify]);
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      refreshProviders();
+    } else {
       reset();
       setSubmitError("");
       resetVerify();
     }
-  }, [open, reset, resetVerify]);
+  }, [open, reset, resetVerify, refreshProviders]);
 
   const handleVerify = async () => {
     if (!selectedProviderId || !model.trim()) return;
@@ -103,12 +114,6 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
     }
   };
 
-  const handleVerifyAndCreate = async () => {
-    if (!selectedProviderId || !model.trim()) return;
-    const res = await verify(selectedProviderId, model.trim());
-    if (res?.valid) await handleSubmitForm(form.getValues());
-  };
-
   const handleProviderChange = (value: string) => {
     setValue("provider", value, { shouldValidate: true });
     setValue("model", "", { shouldValidate: false });
@@ -129,6 +134,7 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
           <AgentIdentityAndModelFields
             form={form}
             enabledProviders={enabledProviders}
+            poolOwnerNames={poolOwnerNames}
             models={models}
             modelsLoading={modelsLoading}
             verifying={verifying}
@@ -146,15 +152,8 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
           </Button>
           {loading ? (
             <Button disabled>{t("create.creating")}</Button>
-          ) : !verifyResult?.valid && selectedProviderId && model.trim() ? (
-            <Button onClick={handleVerifyAndCreate} disabled={verifying || !canCreate}>
-              {verifying ? t("create.checking") : t("create.checkAndCreate")}
-            </Button>
           ) : (
-            <Button
-              onClick={handleSubmit(handleSubmitForm)}
-              disabled={!canCreate || !verifyResult?.valid || loading}
-            >
+            <Button onClick={handleSubmit(handleSubmitForm)} disabled={!canCreate || loading}>
               {t("create.create")}
             </Button>
           )}

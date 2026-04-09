@@ -205,8 +205,8 @@ func pruneContextMessages(msgs []providers.Message, contextWindowTokens int, cfg
 		tailChars := settings.softTrimTailChars
 		if hasImportantTail(msg.Content) {
 			totalBudget := headChars + tailChars
-			headChars = totalBudget * 7 / 10
-			tailChars = totalBudget - headChars
+			tailChars = totalBudget * 7 / 10
+			headChars = totalBudget - tailChars
 		}
 		head := takeHead(msg.Content, headChars)
 		tail := takeTail(msg.Content, tailChars)
@@ -296,10 +296,7 @@ func estimateMessageChars(m providers.Message) int {
 // hasImportantTail checks if the last ~500 chars of content contain error/summary keywords.
 func hasImportantTail(content string) bool {
 	runes := []rune(content)
-	checkLen := 500
-	if checkLen > len(runes) {
-		checkLen = len(runes)
-	}
+	checkLen := min(500, len(runes))
 	tail := string(runes[len(runes)-checkLen:])
 	return importantTailRe.MatchString(tail)
 }

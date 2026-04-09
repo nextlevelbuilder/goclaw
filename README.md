@@ -355,3 +355,13 @@ GoClaw is built upon the original [OpenClaw](https://github.com/openclaw/opencla
 ## License
 
 [CC BY-NC 4.0](LICENSE) — Creative Commons Attribution-NonCommercial 4.0 International
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=nextlevelbuilder%2Fgoclaw&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=nextlevelbuilder/goclaw&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=nextlevelbuilder/goclaw&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=nextlevelbuilder/goclaw&type=date&legend=top-left" />
+ </picture>
+</a>

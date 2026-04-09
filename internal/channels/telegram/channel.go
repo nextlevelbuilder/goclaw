@@ -465,3 +465,36 @@ func resolveThreadIDForSend(threadID int) int {
 	}
 	return threadID
 }
+
+// migrateGroupChat handles a Telegram group→supergroup migration by updating
+// all DB references (paired_devices, sessions, channel_contacts) and invalidating
+// in-memory caches. Safe to call multiple times (idempotent).
+func (c *Channel) migrateGroupChat(ctx context.Context, oldChatID, newChatID int64) {
+	oldStr := fmt.Sprintf("%d", oldChatID)
+	newStr := fmt.Sprintf("%d", newChatID)
+
+	slog.Info("telegram: migrating group chat",
+		"old_chat_id", oldStr, "new_chat_id", newStr, "channel", c.Name())
+
+	// Update DB (paired_devices, sessions, channel_contacts).
+	if c.pairingService != nil {
+		if err := c.pairingService.MigrateGroupChatID(ctx, c.Name(), oldStr, newStr); err != nil {
+			slog.Error("telegram: failed to migrate group chat in DB",
+				"old_chat_id", oldStr, "new_chat_id", newStr, "error", err)
+			return
+		}
+	}
+
+	// Invalidate approvedGroups cache.
+	c.approvedGroups.Delete(oldStr)
+	c.approvedGroups.Store(newStr, true)
+
+	// Clear pairing reply debounce for old group sender.
+	oldGroupSender := fmt.Sprintf("group:%d", oldChatID)
+	c.pairingReplySent.Delete(oldGroupSender)
+
+	// Clear in-memory pending history for old key (will rebuild from DB on next access).
+	if c.groupHistory != nil {
+		c.groupHistory.Clear(oldStr)
+	}
+}

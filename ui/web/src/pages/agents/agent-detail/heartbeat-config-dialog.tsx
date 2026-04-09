@@ -45,7 +45,7 @@ export function HeartbeatConfigDialog({
 }: HeartbeatConfigDialogProps) {
   const { t } = useTranslation("agents");
   const { channels: availableChannels } = useChannels();
-  const { providers } = useProviders();
+  const { providers, refresh: refreshProviders } = useProviders();
   const channelNames = Object.keys(availableChannels);
   const userTz = useUiStore((s) => s.timezone);
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -112,6 +112,7 @@ export function HeartbeatConfigDialog({
 
   useEffect(() => {
     if (!open) return;
+    refreshProviders();
     if (config) {
       form.reset({
         enabled: config.enabled,

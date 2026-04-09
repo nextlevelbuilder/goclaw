@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PR #671 — Pool Management UX Evidence</title>
+<style>
+  :root { --bg: #0d0d0d; --fg: #e8e4df; --muted: #8a8278; --accent: #e8733a; --card: #1a1714; --border: #2d2923; --badge-fix-bg: #1a2e1a; --badge-fix-fg: #4ade80; --badge-fix-bd: #2d5a2d; --badge-be-bg: #1a1a2e; --badge-be-fg: #818cf8; --badge-be-bd: #2d2d5a; }
+  .light { --bg: #f8f6f3; --fg: #1a1714; --muted: #6b6560; --accent: #d4612a; --card: #ffffff; --border: #e5e0da; --badge-fix-bg: #dcfce7; --badge-fix-fg: #166534; --badge-fix-bd: #bbf7d0; --badge-be-bg: #e0e7ff; --badge-be-fg: #3730a3; --badge-be-bd: #c7d2fe; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; transition: background 0.2s, color 0.2s; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; }
+  .theme-toggle { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.75rem; font-size: 0.8rem; color: var(--muted); cursor: pointer; transition: all 0.2s; }
+  .theme-toggle:hover { color: var(--fg); border-color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 2.5rem; }
+  .subtitle a { color: var(--accent); text-decoration: none; }
+  .comparison { margin-bottom: 3rem; }
+  .comparison h2 { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem; border-left: 3px solid var(--accent); padding-left: 0.75rem; }
+  .comparison .desc { color: var(--muted); font-size: 0.875rem; margin-bottom: 1rem; padding-left: calc(0.75rem + 3px); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+  .col { background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; transition: background 0.2s, border-color 0.2s; }
+  .col-header { padding: 0.5rem 0.75rem; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
+  .col-header.before { color: var(--muted); }
+  .col-header.after { color: var(--accent); }
+  .col img { width: 100%; display: block; }
+  .callout { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 2rem; font-size: 0.875rem; color: var(--muted); transition: background 0.2s, border-color 0.2s; }
+  .callout strong { color: var(--fg); }
+  .badge { display: inline-block; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+  .badge-fix { background: var(--badge-fix-bg); color: var(--badge-fix-fg); border: 1px solid var(--badge-fix-bd); }
+  .badge-backend { background: var(--badge-be-bg); color: var(--badge-be-fg); border: 1px solid var(--badge-be-bd); }
+  .fixes { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 2rem; }
+  .fix-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; flex: 1; min-width: 200px; transition: background 0.2s, border-color 0.2s; }
+  .fix-item h3 { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem; }
+  .fix-item p { font-size: 0.75rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top-bar">
+    <h1>PR #671 — Pool Management UX</h1>
+    <button class="theme-toggle" onclick="document.documentElement.classList.toggle('light'); this.textContent = document.documentElement.classList.contains('light') ? '● Dark' : '○ Light'">○ Light</button>
+  </div>
+  <p class="subtitle">
+    <a href="https://github.com/nextlevelbuilder/goclaw/pull/671">nextlevelbuilder/goclaw#671</a> &middot;
+    Closes <a href="https://github.com/nextlevelbuilder/goclaw/issues/670">#670</a> &middot;
+    Relates <a href="https://github.com/nextlevelbuilder/goclaw/issues/583">#583</a>
+  </p>
+
+  <div class="fixes">
+    <div class="fix-item">
+      <h3><span class="badge badge-fix">Fix 1</span> Selector affordance</h3>
+      <p>Dashed primary border + icon badge + "Click to add" hint. Unmistakably interactive in both themes.</p>
+    </div>
+    <div class="fix-item">
+      <h3><span class="badge badge-backend">Fix 2</span> Stale pool refs</h3>
+      <p>Backend skips unknown members instead of blocking saves. Deleted/disabled providers no longer cause errors.</p>
+    </div>
+    <div class="fix-item">
+      <h3><span class="badge badge-fix">Fix 3</span> Managed-by banner</h3>
+      <p>Pool members now show which pool they belong to, with a direct link to the owner provider.</p>
+    </div>
+    <div class="fix-item">
+      <h3><span class="badge badge-fix">Fix 4</span> Pool discovery</h3>
+      <p>Per-card "Pool available" badge replaces verbose info banner. One-click wizard to create pools from unpooled accounts.</p>
+    </div>
+    <div class="fix-item">
+      <h3><span class="badge badge-fix">Fix 5</span> Provider selector</h3>
+      <p>Pool members hidden from agent provider dropdown. Only pool owners listed — routing handles members automatically.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Environment:</strong> Same GoClaw v2.65.0 instance, dark theme, user kai / tenant Master.
+    Before = production dashboard (claw:3000). After = local dev server (localhost:5173) with this PR.
+  </div>
+
+  <div class="comparison">
+    <h2>1. Pool Owner — Available Accounts Selector</h2>
+    <p class="desc">Before: bare text, no icon, invisible border in dark mode. After: dashed primary border, + icon badge, "Click to add" label.</p>
+    <div class="grid">
+      <div class="col">
+        <div class="col-header before">Before</div>
+        <img src="before-pool-owner-annotated.png" alt="Before: pool owner selector">
+      </div>
+      <div class="col">
+        <div class="col-header after">After</div>
+        <img src="after-pool-owner-unselected-annotated.png" alt="After: pool owner selector with dashed border and plus icon">
+      </div>
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h2>2. Pool Member — Managed-By Banner</h2>
+    <p class="desc">Before: pool section completely hidden, no explanation. After: "Pool Defaults" section shows owner name + clickable link.</p>
+    <div class="grid">
+      <div class="col">
+        <div class="col-header before">Before</div>
+        <img src="before-pool-member-annotated.png" alt="Before: pool member page, no pool section visible">
+      </div>
+      <div class="col">
+        <div class="col-header after">After</div>
+        <img src="after-pool-member-annotated.png" alt="After: pool member page with managed-by banner and link">
+      </div>
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h2>3. Provider List — Pool Discovery</h2>
+    <p class="desc">Before: verbose info banner with pool stats took up space. After: clean per-card "Pool available" badge on each unpooled account.</p>
+    <div class="grid">
+      <div class="col">
+        <div class="col-header before">Before</div>
+        <img src="before-provider-list-annotated.png" alt="Before: provider list with verbose info banner">
+      </div>
+      <div class="col">
+        <div class="col-header after">After</div>
+        <img src="after-provider-list-annotated.png" alt="After: provider list with per-card Pool available badges">
+      </div>
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h2>4. Agent Provider Selector — Pool Members Hidden</h2>
+    <p class="desc">Before: pool member (codex-secondary) shown as standalone option, no pool indicator. After: member hidden, pool owner shows "Pool" badge so users know it routes to multiple accounts.</p>
+    <div class="grid">
+      <div class="col">
+        <div class="col-header before">Before</div>
+        <img src="before-agent-provider-annotated.png" alt="Before: provider dropdown showing pool member as standalone option">
+      </div>
+      <div class="col">
+        <div class="col-header after">After</div>
+        <img src="after-agent-provider-annotated.png" alt="After: provider dropdown with pool member hidden">
+      </div>
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h2>5. Pool Setup Wizard</h2>
+    <p class="desc">New one-click wizard dialog opened from any "Pool available" badge. Select owner, members, strategy — all in one step.</p>
+    <div class="grid" style="grid-template-columns: 1fr;">
+      <div class="col" style="max-width: 720px; margin: 0 auto;">
+        <div class="col-header after">New</div>
+        <img src="after-pool-wizard.png" alt="Pool setup wizard dialog with owner/member selection and strategy toggle">
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

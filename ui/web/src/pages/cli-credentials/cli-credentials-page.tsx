@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { KeyRound, Plus, RefreshCw, Pencil, Trash2, Users } from "lucide-react";
+import { KeyRound, Plus, RefreshCw, Pencil, Trash2, Users, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -12,6 +12,7 @@ import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { useCliCredentials, useCliCredentialPresets } from "./hooks/use-cli-credentials";
 import { CliCredentialFormDialog } from "./cli-credential-form-dialog";
 import { CLIUserCredentialsDialog } from "./cli-user-credentials-dialog";
+import { CliCredentialGrantsDialog } from "./cli-credential-grants-dialog";
 import type { SecureCLIBinary, CLICredentialInput } from "./hooks/use-cli-credentials";
 
 export function CliCredentialsPage() {
@@ -23,6 +24,7 @@ export function CliCredentialsPage() {
   const [deleteTarget, setDeleteTarget] = useState<SecureCLIBinary | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [userCredsTarget, setUserCredsTarget] = useState<SecureCLIBinary | null>(null);
+  const [grantsTarget, setGrantsTarget] = useState<SecureCLIBinary | null>(null);
 
   const { items, loading, refresh, createCredential, updateCredential, deleteCredential } =
     useCliCredentials();
@@ -118,8 +120,8 @@ export function CliCredentialsPage() {
                       {item.description || "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={item.agent_id ? "secondary" : "outline"}>
-                        {item.agent_id ? tc("agent") : tc("global")}
+                      <Badge variant={item.is_global ? "outline" : "secondary"}>
+                        {item.is_global ? tc("global") : t("columns.restricted")}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
@@ -130,6 +132,9 @@ export function CliCredentialsPage() {
                     <td className="px-4 py-3 text-muted-foreground">{item.timeout_seconds}s</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => setGrantsTarget(item)} title={t("grants.title", { name: item.binary_name })}>
+                          <Shield className="h-3.5 w-3.5" />
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => setUserCredsTarget(item)} title={t("userCredentials.title")}>
                           <Users className="h-3.5 w-3.5" />
                         </Button>
@@ -183,6 +188,14 @@ export function CliCredentialsPage() {
           open={!!userCredsTarget}
           onOpenChange={(open: boolean) => !open && setUserCredsTarget(null)}
           binary={userCredsTarget}
+        />
+      )}
+
+      {grantsTarget && (
+        <CliCredentialGrantsDialog
+          open={!!grantsTarget}
+          onOpenChange={(open) => !open && setGrantsTarget(null)}
+          binary={grantsTarget}
         />
       )}
     </div>

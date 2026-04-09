@@ -27,7 +27,7 @@ func (s *SQLiteAgentStore) GetAgentContextFiles(ctx context.Context, agentID uui
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = ?"+tClause,
+		"SELECT agent_id, file_name, content FROM agent_context_files WHERE agent_id = ?"+tClause+" ORDER BY file_name",
 		append([]any{agentID}, tArgs...)...)
 	if err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func (s *SQLiteAgentStore) GetUserContextFiles(ctx context.Context, agentID uuid
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = ? AND user_id = ?"+tClause,
+		"SELECT agent_id, user_id, file_name, content FROM user_context_files WHERE agent_id = ? AND user_id = ?"+tClause+" ORDER BY file_name",
 		append([]any{agentID, userID}, tArgs...)...)
 	if err != nil {
 		return nil, err

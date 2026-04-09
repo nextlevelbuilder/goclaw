@@ -101,6 +101,7 @@ func (c *Collector) SetExporter(exp SpanExporter) {
 func (c *Collector) Start() {
 	c.wg.Add(1)
 	go c.flushLoop()
+	go c.recoverStaleTraces() // fix orphan traces from previous crash
 	slog.Info("tracing collector started")
 }
 
@@ -221,6 +222,26 @@ func (c *Collector) flushLoop() {
 			c.flush()
 			return
 		}
+	}
+}
+
+// recoverStaleTraces marks "running" traces older than 30 min as "error".
+// Called once on startup to fix orphans left by a previous crash or stuck goroutine.
+func (c *Collector) recoverStaleTraces() {
+	const staleThreshold = 30 * time.Minute
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	recovered, err := c.store.RecoverStaleRunningTraces(ctx, cutoff)
+	if err != nil {
+		slog.Warn("tracing: failed to recover stale running traces", "error", err)
+		return
+	}
+	if recovered > 0 {
+		slog.Info("tracing: recovered stale running traces on startup",
+			"count", recovered, "older_than", cutoff.Format(time.RFC3339))
 	}
 }
 

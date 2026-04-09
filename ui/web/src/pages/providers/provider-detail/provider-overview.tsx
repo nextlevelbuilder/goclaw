@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy } from "lucide-react";
+import { Link } from "react-router";
+import {
+  Copy,
+  Info,
+  ExternalLink,
+} from "lucide-react";
 import { StickySaveBar } from "@/components/shared/sticky-save-bar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -249,6 +254,20 @@ export function ProviderOverview({ provider, onUpdate }: ProviderOverviewProps) 
 
       {canEditPoolRouting ? (
         <ChatGPTOAuthRoutingSection title={t("detail.codexPoolDefaultsTitle")} description={t("detail.codexPoolDefaultsDescription")} currentProvider={provider.name} providers={providers} value={poolRouting} onChange={setPoolRouting} showOverrideMode={false} canManageProviders quotaByName={quotaByName} quotaLoading={quotasLoading || quotasFetching} entries={poolEntries} />
+      ) : isOAuth && managedByProvider ? (
+        <section className="space-y-3 rounded-lg border border-dashed p-3 sm:p-4 overflow-hidden">
+          <h3 className="text-sm font-medium">{t("detail.codexPoolDefaultsTitle")}</h3>
+          <div className="flex items-start gap-3 rounded-lg bg-muted/30 px-3 py-3">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="space-y-1.5 text-sm">
+              <p className="text-muted-foreground">{t("detail.poolManagedByDescription", { owner: managedByProvider.display_name || managedByProvider.name })}</p>
+              <Link to={`/providers/${managedByProvider.id}`} className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
+                {managedByProvider.display_name || managedByProvider.name}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {isPoolOwner ? (

@@ -45,7 +45,6 @@ func initTailscale(ctx context.Context, cfg *config.Config, mux http.Handler) fu
 	}
 	if err != nil {
 		slog.Warn("Tailscale listener failed to start", "error", err)
-		srv.Close()
 		return nil
 	}
 

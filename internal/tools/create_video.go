@@ -15,13 +15,14 @@ import (
 )
 
 // videoGenProviderPriority is the default order for video generation providers.
-var videoGenProviderPriority = []string{"gemini", "minimax", "openrouter"}
+var videoGenProviderPriority = []string{"gemini", "minimax", "openrouter", "byteplus"}
 
 // videoGenModelDefaults maps provider names to default video generation models.
 var videoGenModelDefaults = map[string]string{
 	"gemini":     "veo-3.1-lite-generate-preview",
 	"minimax":    "MiniMax-Hailuo-2.3",
 	"openrouter": "google/veo-3.1-lite-generate-preview",
+	"byteplus":   "seedance-1-5-pro",
 }
 
 // maxImageToVideoBytes is the maximum image file size for image-to-video (20 MB).
@@ -218,6 +219,8 @@ func (t *CreateVideoTool) callProvider(ctx context.Context, cp credentialProvide
 		return t.callGeminiVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio, params)
 	case "minimax":
 		return callMinimaxVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, params)
+	case "byteplus":
+		return callBytePlusVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio, params)
 	default:
 		return t.callChatVideoGen(ctx, cp.APIKey(), cp.APIBase(), model, prompt, duration, aspectRatio, params)
 	}

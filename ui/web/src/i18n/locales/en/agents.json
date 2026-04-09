@@ -606,10 +606,14 @@
       "userIdPlaceholder": "Enter user ID (e.g. telegram:386246614)",
       "warning": "When sharing is enabled, all shared users can read and write files in the same workspace directory. Memory sharing is controlled separately. Context files remain isolated per user.",
       "memoryGroupLabel": "Memory & Knowledge Graph",
+      "memoryGroupDescription": "Control memory and knowledge graph isolation between users",
       "folderGroupLabel": "Workspace Folders",
-      "shareMemory": "Shared Memory & KG",
-      "shareMemoryTip": "All users access the same memory and knowledge graph. Independent of workspace folder sharing. When off, each user has their own isolated memory space.",
-      "shareMemoryNote": "Toggling this does not migrate data — existing per-user memories become inaccessible in shared mode."
+      "shareMemory": "Shared Memory",
+      "shareMemoryTip": "All users access the same memory store. When off, each user has their own isolated memory space. KG sharing is controlled separately below.",
+      "shareMemoryNote": "Toggling this does not migrate data — existing per-user memories become inaccessible in shared mode.",
+      "shareKG": "Shared Knowledge Graph",
+      "shareKGTip": "All users access the same knowledge graph. When off, each user has their own isolated KG with global canonical fallback for read operations.",
+      "shareKGNote": "Toggling this does not migrate data — existing per-user KG entities become inaccessible in shared mode."
     },
     "compaction": {
       "title": "Compaction",
