@@ -19,12 +19,8 @@ import { useAgentPresets } from "./agent-presets";
 import { agentCreateSchema, type AgentCreateFormData } from "@/schemas/agent.schema";
 import { AgentIdentityAndModelFields } from "./agent-identity-and-model-fields";
 import { AgentDescriptionSection } from "./agent-description-section";
-import { Zap, Wrench, Package, CircleOff } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
-
-const PROMPT_MODES = ["full", "task", "minimal", "none"] as const;
-const MODE_ICONS = { full: Zap, task: Wrench, minimal: Package, none: CircleOff };
+import { PromptModeCards, type PromptMode } from "./prompt-mode-cards";
 
 interface AgentCreateDialogProps {
   open: boolean;
@@ -156,22 +152,11 @@ export function AgentCreateDialog({ open, onOpenChange, onCreate }: AgentCreateD
           {/* Prompt Mode selector */}
           <div className="space-y-1.5">
             <Label>{t("detail.prompt.title")}</Label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {PROMPT_MODES.map((m) => {
-                const Icon = MODE_ICONS[m];
-                const selected = watch("promptMode") === m || (!watch("promptMode") && m === "full");
-                return (
-                  <button key={m} type="button"
-                    onClick={() => setValue("promptMode", m === "full" ? undefined : m)}
-                    className={cn("flex flex-col items-center gap-1 rounded-md border p-2 text-xs cursor-pointer",
-                      selected ? "ring-2 ring-primary border-primary" : "hover:border-primary/30"
-                    )}>
-                    <Icon className="h-3.5 w-3.5" />
-                    {t(`detail.prompt.mode.${m}`)}
-                  </button>
-                );
-              })}
-            </div>
+            <PromptModeCards
+              value={(watch("promptMode") ?? "full") as PromptMode}
+              onChange={(m) => setValue("promptMode", m === "full" ? undefined : m)}
+              compact
+            />
           </div>
 
           {submitError && <p className="text-sm text-destructive">{submitError}</p>}
