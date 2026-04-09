@@ -98,6 +98,21 @@ func (r *relationRow) toRelation() store.Relation {
 	return rel
 }
 
+// relationExportRow extends relationRow with valid_from/valid_until for export queries.
+type relationExportRow struct {
+	relationRow
+	ValidFrom  *time.Time `db:"valid_from"`
+	ValidUntil *time.Time `db:"valid_until"`
+}
+
+// toRelation converts a relationExportRow to store.Relation including temporal fields.
+func (r *relationExportRow) toRelation() store.Relation {
+	rel := r.relationRow.toRelation()
+	rel.ValidFrom = r.ValidFrom
+	rel.ValidUntil = r.ValidUntil
+	return rel
+}
+
 // traversalRow is an sqlx scan struct for the recursive CTE traversal query.
 type traversalRow struct {
 	entityRow

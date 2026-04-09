@@ -30,6 +30,8 @@ type AgentsHandler struct {
 	tracingStore     store.TracingStore
 	memoryStore      store.MemoryStore         // for import (nil = disabled)
 	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
+	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
+	vaultStore       store.VaultStore          // for vault import (nil = disabled)
 	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
 	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
 	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
@@ -62,6 +64,18 @@ func (h *AgentsHandler) SetDataDir(dataDir string) {
 func (h *AgentsHandler) SetImportStores(mem store.MemoryStore, kg store.KnowledgeGraphStore) {
 	h.memoryStore = mem
 	h.kgStore = kg
+}
+
+// SetEpisodicStore attaches the episodic store for Tier 2 memory import.
+// Not available in SQLite/lite builds — nil is safe (episodic import is skipped).
+func (h *AgentsHandler) SetEpisodicStore(ep store.EpisodicStore) {
+	h.episodicStore = ep
+}
+
+// SetVaultStore attaches the vault store for Knowledge Vault import.
+// nil is safe — vault import is skipped when not set.
+func (h *AgentsHandler) SetVaultStore(vs store.VaultStore) {
+	h.vaultStore = vs
 }
 
 // isOwnerUser checks if the given user ID is a system owner.

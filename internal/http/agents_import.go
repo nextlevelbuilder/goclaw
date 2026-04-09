@@ -47,6 +47,14 @@ type importArchive struct {
 	userProfiles     []pg.UserProfileExport
 	userOverrides    []pg.UserOverrideExport
 	workspaceFiles   map[string][]byte // relative path → content
+	// Episodic section: Tier 2 session summaries
+	episodicSummaries []pg.EpisodicSummaryExport
+	// Evolution section: self-evolution metrics + suggestions
+	evolutionMetrics     []pg.EvolutionMetricExport
+	evolutionSuggestions []pg.EvolutionSuggestionExport
+	// Vault section: Knowledge Vault documents + links
+	vaultDocuments []pg.VaultDocumentExport
+	vaultLinks     []pg.VaultLinkExport
 	// Team section (used by standalone team import)
 	teamMeta      *pg.TeamExport
 	teamMembers   []pg.TeamMemberExport
@@ -70,12 +78,23 @@ type importUserContextFile struct {
 
 // ImportSummary is returned after a successful import.
 type ImportSummary struct {
-	AgentID      string `json:"agent_id"`
-	AgentKey     string `json:"agent_key"`
-	ContextFiles int    `json:"context_files"`
-	MemoryDocs   int    `json:"memory_docs"`
-	KGEntities   int    `json:"kg_entities"`
-	KGRelations  int    `json:"kg_relations"`
+	AgentID              string `json:"agent_id"`
+	AgentKey             string `json:"agent_key"`
+	ContextFiles         int    `json:"context_files"`
+	UserContextFiles     int    `json:"user_context_files"`
+	MemoryDocs           int    `json:"memory_docs"`
+	KGEntities           int    `json:"kg_entities"`
+	KGRelations          int    `json:"kg_relations"`
+	CronJobs             int    `json:"cron_jobs"`
+	UserProfiles         int    `json:"user_profiles"`
+	UserOverrides        int    `json:"user_overrides"`
+	WorkspaceFiles       int    `json:"workspace_files"`
+	EpisodicSummaries    int    `json:"episodic_summaries"`
+	EvolutionMetrics     int    `json:"evolution_metrics"`
+	EvolutionSuggestions int    `json:"evolution_suggestions"`
+	VaultDocuments       int    `json:"vault_documents"`
+	VaultLinks           int    `json:"vault_links"`
+	TeamImported         bool   `json:"team_imported"`
 }
 
 // parseImportSections parses the ?include= query param (comma-separated section names).
@@ -91,6 +110,9 @@ func parseImportSections(raw string) map[string]bool {
 		"user_overrides":  true,
 		"workspace":       true,
 		"team":            true,
+		"episodic":        true,
+		"evolution":       true,
+		"vault":           true,
 	}
 	if raw == "" {
 		return all
@@ -139,11 +161,22 @@ func (h *AgentsHandler) handleImportPreview(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"manifest":      arc.manifest,
-		"context_files": len(arc.contextFiles),
-		"memory_docs":   len(arc.memoryGlobal) + countUserMemory(arc.memoryUsers),
-		"kg_entities":   len(arc.kgEntities),
-		"kg_relations":  len(arc.kgRelations),
+		"manifest":              arc.manifest,
+		"context_files":         len(arc.contextFiles),
+		"user_context_files":    len(arc.userContextFiles),
+		"memory_docs":           len(arc.memoryGlobal) + countUserMemory(arc.memoryUsers),
+		"kg_entities":           len(arc.kgEntities),
+		"kg_relations":          len(arc.kgRelations),
+		"cron_jobs":             len(arc.cronJobs),
+		"user_profiles":         len(arc.userProfiles),
+		"user_overrides":        len(arc.userOverrides),
+		"workspace_files":       len(arc.workspaceFiles),
+		"episodic_summaries":    len(arc.episodicSummaries),
+		"evolution_metrics":     len(arc.evolutionMetrics),
+		"evolution_suggestions": len(arc.evolutionSuggestions),
+		"vault_documents":       len(arc.vaultDocuments),
+		"vault_links":           len(arc.vaultLinks),
+		"team":                  arc.teamMeta != nil,
 	})
 }
 
@@ -314,6 +347,9 @@ func (h *AgentsHandler) doImportNewAgent(ctx context.Context, r *http.Request, a
 		"user_overrides":  true,
 		"workspace":       true,
 		"team":            true,
+		"episodic":        true,
+		"evolution":       true,
+		"vault":           true,
 	}
 	summary, err := h.doMergeImport(ctx, ag, arc, sections, progressFn)
 	if err != nil {
@@ -345,10 +381,11 @@ func (h *AgentsHandler) doMergeImport(ctx context.Context, ag *store.AgentData, 
 			if err := h.agents.SetUserContextFile(ctx, ag.ID, ucf.userID, ucf.fileName, ucf.content); err != nil {
 				return nil, fmt.Errorf("set user context file %s/%s: %w", ucf.userID, ucf.fileName, err)
 			}
-			summary.ContextFiles++
+			summary.UserContextFiles++
 		}
 		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "context_files", Status: "done", Current: summary.ContextFiles, Total: summary.ContextFiles})
+			total := summary.ContextFiles + summary.UserContextFiles
+			progressFn(ProgressEvent{Phase: "context_files", Status: "done", Current: total, Total: total})
 		}
 	}
 
@@ -396,33 +433,46 @@ func (h *AgentsHandler) doMergeImport(ctx context.Context, ag *store.AgentData, 
 		}
 	}
 
-	// Section: cron — always imported as disabled, skip duplicates by name
+	// Section: cron — always imported as disabled; UPDATE existing by name, INSERT new
 	if sections["cron"] && len(arc.cronJobs) > 0 {
 		tid := importTenantID(ctx)
 		for _, j := range arc.cronJobs {
-			// Check if cron job with same name already exists (no UNIQUE constraint on name)
+			// cron_jobs has no UNIQUE constraint on (agent_id, name), so use SELECT+UPDATE/INSERT
 			var exists bool
 			_ = h.db.QueryRowContext(ctx,
 				`SELECT EXISTS(SELECT 1 FROM cron_jobs WHERE agent_id = $1 AND name = $2 AND tenant_id = $3)`,
 				ag.ID, j.Name, tid,
 			).Scan(&exists)
 			if exists {
-				continue
+				_, err := h.db.ExecContext(ctx,
+					`UPDATE cron_jobs
+					 SET schedule_kind=$1, cron_expression=$2, interval_ms=$3,
+					     run_at=$4, timezone=$5, payload=$6, delete_after_run=$7
+					 WHERE agent_id=$8 AND name=$9 AND tenant_id=$10`,
+					j.ScheduleKind, j.CronExpression, j.IntervalMS,
+					nullStr(j.RunAt), j.Timezone, j.Payload, j.DeleteAfterRun,
+					ag.ID, j.Name, tid,
+				)
+				if err != nil {
+					slog.Warn("agents.import.cron_job.update", "agent_id", ag.ID, "name", j.Name, "error", err)
+				}
+			} else {
+				_, err := h.db.ExecContext(ctx,
+					`INSERT INTO cron_jobs
+					   (agent_id, name, enabled, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id)
+					 VALUES ($1, $2, false, $3, $4, $5, $6, $7, $8, $9, $10)`,
+					ag.ID, j.Name, j.ScheduleKind,
+					j.CronExpression, j.IntervalMS, nullStr(j.RunAt), j.Timezone,
+					j.Payload, j.DeleteAfterRun, tid,
+				)
+				if err != nil {
+					slog.Warn("agents.import.cron_job.insert", "agent_id", ag.ID, "name", j.Name, "error", err)
+				}
 			}
-			_, err := h.db.ExecContext(ctx,
-				`INSERT INTO cron_jobs
-				   (agent_id, name, enabled, schedule_kind, cron_expression, interval_ms, run_at, timezone, payload, delete_after_run, tenant_id)
-				 VALUES ($1, $2, false, $3, $4, $5, $6, $7, $8, $9, $10)`,
-				ag.ID, j.Name, j.ScheduleKind,
-				j.CronExpression, j.IntervalMS, nullStr(j.RunAt), j.Timezone,
-				j.Payload, j.DeleteAfterRun, tid,
-			)
-			if err != nil {
-				slog.Warn("agents.import.cron_job", "agent_id", ag.ID, "name", j.Name, "error", err)
-			}
+			summary.CronJobs++
 		}
 		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "cron", Status: "done", Current: len(arc.cronJobs), Total: len(arc.cronJobs)})
+			progressFn(ProgressEvent{Phase: "cron", Status: "done", Current: summary.CronJobs, Total: len(arc.cronJobs)})
 		}
 	}
 
@@ -439,29 +489,37 @@ func (h *AgentsHandler) doMergeImport(ctx context.Context, ag *store.AgentData, 
 			)
 			if err != nil {
 				slog.Warn("agents.import.user_profile", "agent_id", ag.ID, "user_id", p.UserID, "error", err)
+				continue
 			}
+			summary.UserProfiles++
 		}
 		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "user_profiles", Status: "done", Current: len(arc.userProfiles), Total: len(arc.userProfiles)})
+			progressFn(ProgressEvent{Phase: "user_profiles", Status: "done", Current: summary.UserProfiles, Total: len(arc.userProfiles)})
 		}
 	}
 
-	// Section: user_overrides — insert if not exists
+	// Section: user_overrides — UPSERT: update provider/model/settings on conflict(agent_id, user_id)
 	if sections["user_overrides"] && len(arc.userOverrides) > 0 {
 		tid := importTenantID(ctx)
 		for _, o := range arc.userOverrides {
 			_, err := h.db.ExecContext(ctx,
 				`INSERT INTO user_agent_overrides (agent_id, user_id, provider, model, settings, tenant_id)
 				 VALUES ($1, $2, $3, $4, $5, $6)
-				 ON CONFLICT DO NOTHING`,
+				 ON CONFLICT (agent_id, user_id) DO UPDATE SET
+				     provider = EXCLUDED.provider,
+				     model = EXCLUDED.model,
+				     settings = EXCLUDED.settings,
+				     updated_at = NOW()`,
 				ag.ID, o.UserID, o.Provider, o.Model, coalesceJSON(o.Settings), tid,
 			)
 			if err != nil {
 				slog.Warn("agents.import.user_override", "agent_id", ag.ID, "user_id", o.UserID, "error", err)
+				continue
 			}
+			summary.UserOverrides++
 		}
 		if progressFn != nil {
-			progressFn(ProgressEvent{Phase: "user_overrides", Status: "done", Current: len(arc.userOverrides), Total: len(arc.userOverrides)})
+			progressFn(ProgressEvent{Phase: "user_overrides", Status: "done", Current: summary.UserOverrides, Total: len(arc.userOverrides)})
 		}
 	}
 
@@ -472,6 +530,7 @@ func (h *AgentsHandler) doMergeImport(ctx context.Context, ag *store.AgentData, 
 		if wsErr != nil {
 			slog.Warn("import: workspace extraction failed", "path", wsPath, "error", wsErr)
 		}
+		summary.WorkspaceFiles = imported
 		if progressFn != nil {
 			progressFn(ProgressEvent{Phase: "workspace", Status: "done", Current: imported, Total: len(arc.workspaceFiles)})
 		}
@@ -481,6 +540,191 @@ func (h *AgentsHandler) doMergeImport(ctx context.Context, ag *store.AgentData, 
 	if sections["team"] && arc.teamMeta != nil {
 		if err := h.importTeamSection(ctx, ag, arc, progressFn); err != nil {
 			slog.Warn("import: team section failed", "agent_id", ag.ID, "error", err)
+		} else {
+			summary.TeamImported = true
+		}
+	}
+
+	// Section: evolution metrics + suggestions — raw SQL (no store interface required)
+	// Metrics are time-series: re-import duplicates are acceptable for v1.
+	// Suggestions: dedup by (agent_id, suggestion_type, suggestion) via SELECT EXISTS.
+	if sections["evolution"] {
+		tid := importTenantID(ctx)
+		if len(arc.evolutionMetrics) > 0 {
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "evolution_metrics", Status: "running", Total: len(arc.evolutionMetrics)})
+			}
+			for _, m := range arc.evolutionMetrics {
+				_, err := h.db.ExecContext(ctx,
+					`INSERT INTO agent_evolution_metrics
+					   (agent_id, session_key, metric_type, metric_key, value, created_at, tenant_id)
+					 VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7)`,
+					ag.ID, m.SessionKey, m.MetricType, m.MetricKey,
+					nullJSON(m.Value), m.CreatedAt, tid,
+				)
+				if err != nil {
+					slog.Warn("agents.import.evolution_metric", "agent_id", ag.ID, "error", err)
+					continue
+				}
+				summary.EvolutionMetrics++
+			}
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "evolution_metrics", Status: "done", Current: summary.EvolutionMetrics, Total: len(arc.evolutionMetrics)})
+			}
+		}
+		if len(arc.evolutionSuggestions) > 0 {
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "evolution_suggestions", Status: "running", Total: len(arc.evolutionSuggestions)})
+			}
+			for _, s := range arc.evolutionSuggestions {
+				var exists bool
+				_ = h.db.QueryRowContext(ctx,
+					`SELECT EXISTS(SELECT 1 FROM agent_evolution_suggestions
+					  WHERE agent_id = $1 AND suggestion_type = $2 AND suggestion = $3 AND tenant_id = $4)`,
+					ag.ID, s.SuggestionType, s.Suggestion, tid,
+				).Scan(&exists)
+				if exists {
+					continue
+				}
+				_, err := h.db.ExecContext(ctx,
+					`INSERT INTO agent_evolution_suggestions
+					   (agent_id, suggestion_type, suggestion, rationale, parameters,
+					    status, reviewed_by, reviewed_at, created_at, tenant_id)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8::timestamptz, $9::timestamptz, $10)`,
+					ag.ID, s.SuggestionType, s.Suggestion, s.Rationale,
+					nullJSON(s.Parameters), s.Status,
+					nullStrVal(s.ReviewedBy), nullStr(s.ReviewedAt),
+					s.CreatedAt, tid,
+				)
+				if err != nil {
+					slog.Warn("agents.import.evolution_suggestion", "agent_id", ag.ID, "type", s.SuggestionType, "error", err)
+					continue
+				}
+				summary.EvolutionSuggestions++
+			}
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "evolution_suggestions", Status: "done", Current: summary.EvolutionSuggestions, Total: len(arc.evolutionSuggestions)})
+			}
+		}
+	}
+
+	// Section: episodic summaries (Tier 2 memory) — PG only, nil-guarded
+	if sections["episodic"] && h.episodicStore != nil && len(arc.episodicSummaries) > 0 {
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "episodic", Status: "running", Total: len(arc.episodicSummaries)})
+		}
+		tid := importTenantID(ctx)
+		for _, ep := range arc.episodicSummaries {
+			exists, _ := h.episodicStore.ExistsBySourceID(ctx, ag.ID.String(), ep.UserID, ep.SourceID)
+			if exists {
+				continue
+			}
+			epSum := &store.EpisodicSummary{
+				TenantID:   tid,
+				AgentID:    ag.ID,
+				UserID:     ep.UserID,
+				SessionKey: ep.SessionKey,
+				Summary:    ep.Summary,
+				KeyTopics:  ep.KeyTopics,
+				L0Abstract: ep.L0Abstract,
+				SourceType: ep.SourceType,
+				SourceID:   ep.SourceID,
+				TurnCount:  ep.TurnCount,
+				TokenCount: ep.TokenCount,
+				// Embedding: nil (not exported; re-index separately)
+				// ExpiresAt: not restored (summaries have no expiry on import)
+			}
+			if err := h.episodicStore.Create(ctx, epSum); err != nil {
+				slog.Warn("agents.import.episodic", "agent_id", ag.ID, "source_id", ep.SourceID, "error", err)
+				continue
+			}
+			summary.EpisodicSummaries++
+		}
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "episodic", Status: "done", Current: summary.EpisodicSummaries, Total: len(arc.episodicSummaries)})
+		}
+	}
+
+	// Section: vault (Knowledge Vault documents + links)
+	if sections["vault"] && h.vaultStore != nil && len(arc.vaultDocuments) > 0 {
+		tid := importTenantID(ctx)
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "vault_documents", Status: "running", Total: len(arc.vaultDocuments)})
+		}
+		for _, d := range arc.vaultDocuments {
+			doc := &store.VaultDocument{
+				TenantID:    tid.String(),
+				AgentID:     ag.ID.String(),
+				TeamID:      nil, // team_id not portable
+				Scope:       d.Scope,
+				CustomScope: d.CustomScope,
+				Path:        d.Path,
+				Title:       d.Title,
+				DocType:     d.DocType,
+				ContentHash: d.ContentHash,
+				Summary:     d.Summary,
+				// Embedding nil — re-indexed by vault FS sync
+			}
+			if len(d.Metadata) > 0 {
+				if err := json.Unmarshal(d.Metadata, &doc.Metadata); err != nil {
+					doc.Metadata = nil
+				}
+			}
+			if err := h.vaultStore.UpsertDocument(ctx, doc); err != nil {
+				slog.Warn("agents.import.vault_doc", "agent_id", ag.ID, "path", d.Path, "error", err)
+				continue
+			}
+			summary.VaultDocuments++
+		}
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "vault_documents", Status: "done", Current: summary.VaultDocuments, Total: len(arc.vaultDocuments)})
+		}
+
+		// Two-pass link import: build pathToID map first
+		if len(arc.vaultLinks) > 0 {
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "vault_links", Status: "running", Total: len(arc.vaultLinks)})
+			}
+			pathToID := make(map[string]string)
+			rows, qErr := h.db.QueryContext(ctx,
+				`SELECT id, path FROM vault_documents WHERE agent_id = $1 AND tenant_id = $2`,
+				ag.ID, tid,
+			)
+			if qErr == nil {
+				for rows.Next() {
+					var id, path string
+					if err := rows.Scan(&id, &path); err == nil {
+						pathToID[path] = id
+					}
+				}
+				if err := rows.Err(); err != nil {
+					slog.Warn("agents.import.vault_link_resolution", "error", err)
+				}
+				rows.Close()
+			}
+
+			for _, l := range arc.vaultLinks {
+				fromID, ok1 := pathToID[l.FromDocPath]
+				toID, ok2 := pathToID[l.ToDocPath]
+				if !ok1 || !ok2 {
+					// Target doc not found — skip gracefully
+					continue
+				}
+				link := &store.VaultLink{
+					FromDocID: fromID,
+					ToDocID:   toID,
+					LinkType:  l.LinkType,
+					Context:   l.Context,
+				}
+				if err := h.vaultStore.CreateLink(ctx, link); err != nil {
+					slog.Warn("agents.import.vault_link", "agent_id", ag.ID, "from", l.FromDocPath, "to", l.ToDocPath, "error", err)
+					continue
+				}
+				summary.VaultLinks++
+			}
+			if progressFn != nil {
+				progressFn(ProgressEvent{Phase: "vault_links", Status: "done", Current: summary.VaultLinks, Total: len(arc.vaultLinks)})
+			}
 		}
 	}
 
@@ -509,6 +753,8 @@ func (h *AgentsHandler) ingestKGByUser(ctx context.Context, agentID string, arc 
 			Description: e.Description,
 			Properties:  e.Properties,
 			Confidence:  e.Confidence,
+			ValidFrom:   e.ValidFrom,
+			ValidUntil:  e.ValidUntil,
 		})
 	}
 	for _, rel := range arc.kgRelations {
@@ -524,6 +770,8 @@ func (h *AgentsHandler) ingestKGByUser(ctx context.Context, agentID string, arc 
 			RelationType:   rel.RelationType,
 			Confidence:     rel.Confidence,
 			Properties:     rel.Properties,
+			ValidFrom:      rel.ValidFrom,
+			ValidUntil:     rel.ValidUntil,
 		})
 	}
 	for uid, g := range groups {

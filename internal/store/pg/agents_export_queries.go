@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -78,16 +79,87 @@ type UserOverrideExport struct {
 	Settings json.RawMessage `json:"settings,omitempty" db:"settings"`
 }
 
+// EpisodicSummaryExport is the portable representation of a Tier 2 episodic memory entry.
+// Excludes: id, tenant_id, agent_id (reconstructed on import), embedding (vector), promoted_at.
+type EpisodicSummaryExport struct {
+	UserID     string   `json:"user_id"`
+	SessionKey string   `json:"session_key"`
+	Summary    string   `json:"summary"`
+	KeyTopics  []string `json:"key_topics"`
+	L0Abstract string   `json:"l0_abstract"`
+	SourceType string   `json:"source_type"`
+	SourceID   string   `json:"source_id"`
+	TurnCount  int      `json:"turn_count"`
+	TokenCount int      `json:"token_count"`
+	CreatedAt  string   `json:"created_at"` // RFC3339 UTC
+	ExpiresAt  *string  `json:"expires_at,omitempty"`
+}
+
+// VaultDocumentExport is the portable representation of a vault document.
+// Excludes: id, tenant_id, agent_id, team_id (reconstructed on import), embedding (re-indexed by FS sync).
+type VaultDocumentExport struct {
+	Scope       string          `json:"scope" db:"scope"`
+	CustomScope *string         `json:"custom_scope,omitempty" db:"custom_scope"`
+	Path        string          `json:"path" db:"path"`
+	Title       string          `json:"title" db:"title"`
+	DocType     string          `json:"doc_type" db:"doc_type"`
+	ContentHash string          `json:"content_hash" db:"content_hash"`
+	Summary     string          `json:"summary" db:"summary"`
+	Metadata    json.RawMessage `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt   string          `json:"created_at" db:"created_at"`
+	UpdatedAt   string          `json:"updated_at" db:"updated_at"`
+}
+
+// VaultLinkExport is the portable representation of a vault link.
+// Links reference documents by path (not UUID) for portability across systems.
+type VaultLinkExport struct {
+	FromDocPath string `json:"from_doc_path"`
+	ToDocPath   string `json:"to_doc_path"`
+	LinkType    string `json:"link_type" db:"link_type"`
+	Context     string `json:"context" db:"context"`
+	CreatedAt   string `json:"created_at" db:"created_at"`
+}
+
+// EvolutionMetricExport is the portable representation of an evolution metric data point.
+// Excludes: id, tenant_id, agent_id (reconstructed on import).
+type EvolutionMetricExport struct {
+	SessionKey string          `json:"session_key" db:"session_key"`
+	MetricType string          `json:"metric_type" db:"metric_type"`
+	MetricKey  string          `json:"metric_key" db:"metric_key"`
+	Value      json.RawMessage `json:"value" db:"value"`
+	CreatedAt  string          `json:"created_at" db:"created_at"` // RFC3339 UTC
+}
+
+// EvolutionSuggestionExport is the portable representation of an evolution suggestion.
+// Excludes: id, tenant_id, agent_id (reconstructed on import).
+type EvolutionSuggestionExport struct {
+	SuggestionType string          `json:"suggestion_type" db:"suggestion_type"`
+	Suggestion     string          `json:"suggestion" db:"suggestion"`
+	Rationale      string          `json:"rationale" db:"rationale"`
+	Parameters     json.RawMessage `json:"parameters,omitempty" db:"parameters"`
+	Status         string          `json:"status" db:"status"`
+	ReviewedBy     string          `json:"reviewed_by,omitempty" db:"reviewed_by"`
+	ReviewedAt     *string         `json:"reviewed_at,omitempty" db:"reviewed_at"`
+	CreatedAt      string          `json:"created_at" db:"created_at"`
+}
+
 type ExportPreview struct {
-	ContextFiles     int `json:"context_files" db:"context_files"`
-	UserContextFiles int `json:"user_context_files_users" db:"user_context_files_users"`
-	MemoryGlobal     int `json:"memory_global" db:"memory_global"`
-	MemoryPerUser    int `json:"memory_per_user" db:"memory_per_user"`
-	KGEntities       int `json:"kg_entities" db:"kg_entities"`
-	KGRelations      int `json:"kg_relations" db:"kg_relations"`
-	CronJobs         int `json:"cron_jobs" db:"cron_jobs"`
-	UserProfiles     int `json:"user_profiles" db:"user_profiles"`
-	UserOverrides    int `json:"user_overrides" db:"user_overrides"`
+	ContextFiles       int `json:"context_files" db:"context_files"`
+	UserContextFiles   int `json:"user_context_files_users" db:"user_context_files_users"`
+	MemoryGlobal       int `json:"memory_global" db:"memory_global"`
+	MemoryPerUser      int `json:"memory_per_user" db:"memory_per_user"`
+	KGEntities         int `json:"kg_entities" db:"kg_entities"`
+	KGRelations        int `json:"kg_relations" db:"kg_relations"`
+	CronJobs           int `json:"cron_jobs" db:"cron_jobs"`
+	UserProfiles       int `json:"user_profiles" db:"user_profiles"`
+	UserOverrides      int `json:"user_overrides" db:"user_overrides"`
+	EpisodicSummaries  int `json:"episodic_summaries" db:"episodic_summaries"`
+	// Evolution section (Stage 1 + Stage 2 self-evolution)
+	EvolutionMetrics     int `json:"evolution_metrics" db:"evolution_metrics"`
+	EvolutionSuggestions int `json:"evolution_suggestions" db:"evolution_suggestions"`
+	// Vault section (Knowledge Vault documents and links)
+	VaultDocuments int `json:"vault_documents" db:"vault_documents"`
+	VaultLinks     int `json:"vault_links" db:"vault_links"`
 	// Team section
 	TeamTasks   int `json:"team_tasks" db:"team_tasks"`
 	TeamMembers int `json:"team_members" db:"team_members"`
@@ -217,10 +289,10 @@ func ExportKGEntities(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]sto
 
 	for {
 		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
-		var eRows []entityRow
+		var eRows []entityTemporalRow
 		if err := pkgSqlxDB.SelectContext(ctx, &eRows,
 			"SELECT id, agent_id, user_id, external_id, name, entity_type, description,"+
-				" properties, source_id, confidence, created_at, updated_at"+
+				" properties, source_id, confidence, created_at, updated_at, valid_from, valid_until"+
 				" FROM kg_entities WHERE agent_id = $1"+tc+
 				" AND id > $"+itoa(cursorParam)+
 				" ORDER BY id LIMIT $"+itoa(limitParam),
@@ -260,10 +332,10 @@ func ExportKGRelations(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]st
 
 	for {
 		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
-		var rRows []relationRow
+		var rRows []relationExportRow
 		if err := pkgSqlxDB.SelectContext(ctx, &rRows,
 			"SELECT id, agent_id, user_id, source_entity_id, relation_type, target_entity_id,"+
-				" confidence, properties, created_at"+
+				" confidence, properties, created_at, valid_from, valid_until"+
 				" FROM kg_relations WHERE agent_id = $1"+tc+
 				" AND id > $"+itoa(cursorParam)+
 				" ORDER BY id LIMIT $"+itoa(limitParam),
@@ -304,13 +376,18 @@ func ExportPreviewCounts(ctx context.Context, db *sql.DB, agentID uuid.UUID) (*E
 			(SELECT COUNT(*) FROM kg_relations           WHERE agent_id = $1`+tc+`) AS kg_relations,
 			(SELECT COUNT(*) FROM cron_jobs              WHERE agent_id = $1`+tc+`) AS cron_jobs,
 			(SELECT COUNT(*) FROM user_agent_profiles    WHERE agent_id = $1`+tc+`) AS user_profiles,
-			(SELECT COUNT(*) FROM user_agent_overrides   WHERE agent_id = $1`+tc+`) AS user_overrides
+			(SELECT COUNT(*) FROM user_agent_overrides   WHERE agent_id = $1`+tc+`) AS user_overrides,
+			(SELECT COUNT(*) FROM episodic_summaries         WHERE agent_id = $1`+tc+`) AS episodic_summaries,
+			(SELECT COUNT(*) FROM agent_evolution_metrics    WHERE agent_id = $1`+tc+`) AS evolution_metrics,
+			(SELECT COUNT(*) FROM agent_evolution_suggestions WHERE agent_id = $1`+tc+`) AS evolution_suggestions
 	`, args...).Scan(
 		&p.ContextFiles, &p.UserContextFiles,
 		&p.MemoryGlobal, &p.MemoryPerUser,
 		&p.KGEntities, &p.KGRelations,
 		&p.CronJobs,
 		&p.UserProfiles, &p.UserOverrides,
+		&p.EpisodicSummaries,
+		&p.EvolutionMetrics, &p.EvolutionSuggestions,
 	)
 	if err != nil {
 		return nil, err
@@ -318,6 +395,16 @@ func ExportPreviewCounts(ctx context.Context, db *sql.DB, agentID uuid.UUID) (*E
 
 	// Team counts (separate query — agent may not be a lead)
 	p.TeamTasks, p.TeamMembers, p.AgentLinks, _ = ExportTeamPreviewCounts(ctx, db, agentID)
+
+	// Vault counts (separate query — vault_documents/links tables)
+	_ = db.QueryRowContext(ctx,
+		`SELECT
+			(SELECT COUNT(*) FROM vault_documents WHERE agent_id = $1`+tc+`) AS vault_documents,
+			(SELECT COUNT(*) FROM vault_links vl
+			  JOIN vault_documents fd ON vl.from_doc_id = fd.id
+			  WHERE fd.agent_id = $1`+tc+`) AS vault_links`,
+		args...,
+	).Scan(&p.VaultDocuments, &p.VaultLinks)
 
 	return &p, nil
 }
@@ -423,5 +510,248 @@ func ExportUserOverrides(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]
 		append([]any{agentID}, tcArgs...)...,
 	)
 	return result, err
+}
+
+// ExportEvolutionMetrics returns all evolution metrics for the given agent using cursor-based pagination.
+// Excludes: id, tenant_id, agent_id (reconstructed on import).
+func ExportEvolutionMetrics(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]EvolutionMetricExport, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	baseArgs := append([]any{agentID}, tcArgs...)
+	cursorParam := len(baseArgs) + 1
+	limitParam := cursorParam + 1
+
+	var result []EvolutionMetricExport
+	cursor := uuid.Nil
+
+	for {
+		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
+		rows, err := db.QueryContext(ctx,
+			"SELECT id, session_key, metric_type, metric_key, value,"+
+				" to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at"+
+				" FROM agent_evolution_metrics WHERE agent_id = $1"+tc+
+				" AND id > $"+itoa(cursorParam)+
+				" ORDER BY id LIMIT $"+itoa(limitParam),
+			args...,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		count := 0
+		for rows.Next() {
+			var id uuid.UUID
+			var m EvolutionMetricExport
+			if err := rows.Scan(&id, &m.SessionKey, &m.MetricType, &m.MetricKey, &m.Value, &m.CreatedAt); err != nil {
+				slog.Warn("export.evolution_metrics.scan", "error", err)
+				continue
+			}
+			result = append(result, m)
+			cursor = id
+			count++
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if count < exportBatchSize {
+			break
+		}
+	}
+	return result, nil
+}
+
+// ExportEvolutionSuggestions returns all evolution suggestions for the given agent.
+// Low volume (suggestions are human-reviewed), so simple SELECT without cursor pagination.
+// Excludes: id, tenant_id, agent_id (reconstructed on import).
+func ExportEvolutionSuggestions(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]EvolutionSuggestionExport, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx,
+		"SELECT suggestion_type, suggestion, rationale, parameters, status,"+
+			" COALESCE(reviewed_by, ''),"+
+			" to_char(reviewed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'),"+
+			" to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"+
+			" FROM agent_evolution_suggestions WHERE agent_id = $1"+tc+
+			" ORDER BY created_at",
+		append([]any{agentID}, tcArgs...)...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []EvolutionSuggestionExport
+	for rows.Next() {
+		var s EvolutionSuggestionExport
+		if err := rows.Scan(
+			&s.SuggestionType, &s.Suggestion, &s.Rationale, &s.Parameters, &s.Status,
+			&s.ReviewedBy, &s.ReviewedAt, &s.CreatedAt,
+		); err != nil {
+			slog.Warn("export.evolution_suggestions.scan", "error", err)
+			continue
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
+
+// ExportEpisodicSummaries returns all episodic summaries for the given agent using cursor-based pagination.
+// Excludes: id, tenant_id, agent_id (reconstructed), embedding, promoted_at.
+func ExportEpisodicSummaries(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]EpisodicSummaryExport, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	baseArgs := append([]any{agentID}, tcArgs...)
+	cursorParam := len(baseArgs) + 1
+	limitParam := cursorParam + 1
+
+	var result []EpisodicSummaryExport
+	cursor := uuid.Nil
+
+	for {
+		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
+		rows, err := db.QueryContext(ctx,
+			"SELECT user_id, session_key, summary, key_topics, l0_abstract,"+
+				" source_type, source_id, turn_count, token_count,"+
+				" to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,"+
+				" to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS expires_at,"+
+				" id"+
+				" FROM episodic_summaries WHERE agent_id = $1"+tc+
+				" AND id > $"+itoa(cursorParam)+
+				" ORDER BY id LIMIT $"+itoa(limitParam),
+			args...,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		count := 0
+		for rows.Next() {
+			var ep EpisodicSummaryExport
+			var topics pq.StringArray
+			var id uuid.UUID
+			if err := rows.Scan(
+				&ep.UserID, &ep.SessionKey, &ep.Summary, &topics, &ep.L0Abstract,
+				&ep.SourceType, &ep.SourceID, &ep.TurnCount, &ep.TokenCount,
+				&ep.CreatedAt, &ep.ExpiresAt,
+				&id,
+			); err != nil {
+				slog.Warn("export.episodic.scan", "error", err)
+				continue
+			}
+			ep.KeyTopics = []string(topics)
+			result = append(result, ep)
+			cursor = id
+			count++
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if count < exportBatchSize {
+			break
+		}
+	}
+	return result, nil
+}
+
+// ExportVaultDocuments returns all vault documents for the given agent using cursor-based pagination.
+// Excludes: id, tenant_id, agent_id, team_id (reconstructed on import), embedding (re-indexed by FS sync).
+func ExportVaultDocuments(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]VaultDocumentExport, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+
+	baseArgs := append([]any{agentID}, tcArgs...)
+	cursorParam := len(baseArgs) + 1
+	limitParam := cursorParam + 1
+
+	var result []VaultDocumentExport
+	cursor := uuid.Nil
+
+	for {
+		args := append(append([]any{}, baseArgs...), cursor, exportBatchSize)
+		rows, err := db.QueryContext(ctx,
+			"SELECT scope, custom_scope, path, title, doc_type, content_hash, summary, metadata,"+
+				" to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,"+
+				" to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at,"+
+				" id"+
+				" FROM vault_documents WHERE agent_id = $1"+tc+
+				" AND id > $"+itoa(cursorParam)+
+				" ORDER BY id LIMIT $"+itoa(limitParam),
+			args...,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		count := 0
+		for rows.Next() {
+			var d VaultDocumentExport
+			var id uuid.UUID
+			if err := rows.Scan(
+				&d.Scope, &d.CustomScope, &d.Path, &d.Title, &d.DocType,
+				&d.ContentHash, &d.Summary, &d.Metadata,
+				&d.CreatedAt, &d.UpdatedAt, &id,
+			); err != nil {
+				slog.Warn("export.vault_documents.scan", "error", err)
+				continue
+			}
+			result = append(result, d)
+			cursor = id
+			count++
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if count < exportBatchSize {
+			break
+		}
+	}
+	return result, nil
+}
+
+// ExportVaultLinks returns all vault links for the given agent, resolving doc UUIDs to paths.
+// Links are only exported where the source doc belongs to the agent.
+func ExportVaultLinks(ctx context.Context, db *sql.DB, agentID uuid.UUID) ([]VaultLinkExport, error) {
+	tc, tcArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx,
+		"SELECT fd.path, td.path, vl.link_type, vl.context,"+
+			" to_char(vl.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"+
+			" FROM vault_links vl"+
+			" JOIN vault_documents fd ON vl.from_doc_id = fd.id"+
+			" JOIN vault_documents td ON vl.to_doc_id = td.id"+
+			" WHERE fd.agent_id = $1"+tc+
+			" ORDER BY vl.created_at",
+		append([]any{agentID}, tcArgs...)...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []VaultLinkExport
+	for rows.Next() {
+		var l VaultLinkExport
+		if err := rows.Scan(&l.FromDocPath, &l.ToDocPath, &l.LinkType, &l.Context, &l.CreatedAt); err != nil {
+			slog.Warn("export.vault_links.scan", "error", err)
+			continue
+		}
+		result = append(result, l)
+	}
+	return result, rows.Err()
 }
 

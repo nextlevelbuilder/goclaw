@@ -100,6 +100,8 @@ type KGEntityExport struct {
 	Description string            `json:"description,omitempty"`
 	Properties  map[string]string `json:"properties,omitempty"`
 	Confidence  float64           `json:"confidence"`
+	ValidFrom   *time.Time        `json:"valid_from,omitempty"`
+	ValidUntil  *time.Time        `json:"valid_until,omitempty"`
 }
 
 // KGRelationExport is a portable KG relation using external IDs.
@@ -110,6 +112,8 @@ type KGRelationExport struct {
 	RelationType     string            `json:"relation_type"`
 	Confidence       float64           `json:"confidence"`
 	Properties       map[string]string `json:"properties,omitempty"`
+	ValidFrom        *time.Time        `json:"valid_from,omitempty"`
+	ValidUntil       *time.Time        `json:"valid_until,omitempty"`
 }
 
 // MemoryExport is a portable memory document.
@@ -436,6 +440,8 @@ func (h *AgentsHandler) writeExportArchive(ctx context.Context, w io.Writer, ag 
 				Description: e.Description,
 				Properties:  e.Properties,
 				Confidence:  e.Confidence,
+				ValidFrom:   e.ValidFrom,
+				ValidUntil:  e.ValidUntil,
 			})
 		}
 
@@ -472,6 +478,8 @@ func (h *AgentsHandler) writeExportArchive(ctx context.Context, w io.Writer, ag 
 				RelationType:     rel.RelationType,
 				Confidence:       rel.Confidence,
 				Properties:       rel.Properties,
+				ValidFrom:        rel.ValidFrom,
+				ValidUntil:       rel.ValidUntil,
 			})
 		}
 
@@ -580,6 +588,123 @@ func (h *AgentsHandler) writeExportArchive(ctx context.Context, w io.Writer, ag 
 			slog.Warn("export: workspace walk failed", "path", wsPath, "error", wsErr)
 		}
 		manifest.Sections["workspace"] = map[string]any{"file_count": fileCount, "total_bytes": totalBytes}
+	}
+
+	// Section: episodic summaries (Tier 2 memory)
+	if sections["episodic"] {
+		summaries, qErr := pg.ExportEpisodicSummaries(ctx, h.db, ag.ID)
+		if qErr != nil {
+			slog.Warn("export: failed to query episodic summaries", "agent", ag.AgentKey, "error", qErr)
+		}
+		if len(summaries) > 0 {
+			data, err := marshalJSONL(summaries)
+			if err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("marshal episodic summaries: %w", err)
+			}
+			if err := addToTar(tw, "episodic/summaries.jsonl", data); err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("write episodic/summaries.jsonl: %w", err)
+			}
+		}
+		manifest.Sections["episodic"] = map[string]int{"count": len(summaries)}
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "episodic", Status: "done", Detail: fmt.Sprintf("%d summaries", len(summaries))})
+		}
+	}
+
+	// Section: evolution (metrics + suggestions, PG only — nil-guarded at import side)
+	if sections["evolution"] {
+		metrics, qErr := pg.ExportEvolutionMetrics(ctx, h.db, ag.ID)
+		if qErr != nil {
+			slog.Warn("export: failed to query evolution metrics", "agent", ag.AgentKey, "error", qErr)
+		}
+		if len(metrics) > 0 {
+			data, err := marshalJSONL(metrics)
+			if err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("marshal evolution metrics: %w", err)
+			}
+			if err := addToTar(tw, "evolution/metrics.jsonl", data); err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("write evolution/metrics.jsonl: %w", err)
+			}
+		}
+
+		suggestions, qErr := pg.ExportEvolutionSuggestions(ctx, h.db, ag.ID)
+		if qErr != nil {
+			slog.Warn("export: failed to query evolution suggestions", "agent", ag.AgentKey, "error", qErr)
+		}
+		if len(suggestions) > 0 {
+			data, err := marshalJSONL(suggestions)
+			if err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("marshal evolution suggestions: %w", err)
+			}
+			if err := addToTar(tw, "evolution/suggestions.jsonl", data); err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("write evolution/suggestions.jsonl: %w", err)
+			}
+		}
+		manifest.Sections["evolution"] = map[string]int{
+			"metrics":     len(metrics),
+			"suggestions": len(suggestions),
+		}
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "evolution", Status: "done", Detail: fmt.Sprintf("%d metrics, %d suggestions", len(metrics), len(suggestions))})
+		}
+	}
+
+	// Section: vault (Knowledge Vault documents + links)
+	if sections["vault"] {
+		vaultDocs, qErr := pg.ExportVaultDocuments(ctx, h.db, ag.ID)
+		if qErr != nil {
+			slog.Warn("export: failed to query vault documents", "agent", ag.AgentKey, "error", qErr)
+		}
+		if len(vaultDocs) > 0 {
+			data, err := marshalJSONL(vaultDocs)
+			if err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("marshal vault documents: %w", err)
+			}
+			if err := addToTar(tw, "vault/documents.jsonl", data); err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("write vault/documents.jsonl: %w", err)
+			}
+		}
+
+		vaultLinks, qErr := pg.ExportVaultLinks(ctx, h.db, ag.ID)
+		if qErr != nil {
+			slog.Warn("export: failed to query vault links", "agent", ag.AgentKey, "error", qErr)
+		}
+		if len(vaultLinks) > 0 {
+			data, err := marshalJSONL(vaultLinks)
+			if err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("marshal vault links: %w", err)
+			}
+			if err := addToTar(tw, "vault/links.jsonl", data); err != nil {
+				tw.Close()
+				gw.Close()
+				return fmt.Errorf("write vault/links.jsonl: %w", err)
+			}
+		}
+		manifest.Sections["vault"] = map[string]int{
+			"documents": len(vaultDocs),
+			"links":     len(vaultLinks),
+		}
+		if progressFn != nil {
+			progressFn(ProgressEvent{Phase: "vault", Status: "done", Detail: fmt.Sprintf("%d docs, %d links", len(vaultDocs), len(vaultLinks))})
+		}
 	}
 
 	// Manifest last — has accurate final counts
@@ -711,11 +836,31 @@ func marshalAgentConfig(ag *store.AgentData) ([]byte, error) {
 	}, "", "  ")
 }
 
+// allExportSections is the complete set of exportable section keys.
+var allExportSections = map[string]bool{
+	"config":          true,
+	"context_files":   true,
+	"memory":          true,
+	"knowledge_graph": true,
+	"cron":            true,
+	"user_profiles":   true,
+	"user_overrides":  true,
+	"workspace":       true,
+	"team":            true,
+	"episodic":        true,
+	"evolution":       true,
+	"vault":           true,
+}
+
 // parseExportSections parses the ?sections= query param.
 // Defaults to config + context_files when empty.
+// Use sections=all to include every section including episodic.
 func parseExportSections(raw string) map[string]bool {
 	if raw == "" {
 		return map[string]bool{"config": true, "context_files": true}
+	}
+	if strings.TrimSpace(raw) == "all" {
+		return allExportSections
 	}
 	out := make(map[string]bool)
 	for s := range strings.SplitSeq(raw, ",") {
