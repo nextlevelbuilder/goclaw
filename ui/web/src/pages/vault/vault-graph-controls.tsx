@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
@@ -9,7 +10,7 @@ interface Props {
   linkCount: number;
   nodeLimit: number;
   isLimited: boolean;
-  zoomLevel: number;
+  zoomDisplayRef: RefObject<HTMLSpanElement | null>;
   onNodeLimitChange: (limit: number) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export function VaultGraphControls({
-  docCount, linkCount, nodeLimit, isLimited, zoomLevel,
+  docCount, linkCount, nodeLimit, isLimited, zoomDisplayRef,
   onNodeLimitChange, onZoomIn, onZoomOut, onFitToView,
 }: Props) {
   const { t } = useTranslation("vault");
@@ -34,7 +35,7 @@ export function VaultGraphControls({
         <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={onZoomOut}>
           <ZoomOut className="h-3 w-3" />
         </Button>
-        <span className="w-9 text-center">{Math.round(zoomLevel * 100)}%</span>
+        <span ref={zoomDisplayRef} className="w-9 text-center">100%</span>
         <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={onZoomIn}>
           <ZoomIn className="h-3 w-3" />
         </Button>

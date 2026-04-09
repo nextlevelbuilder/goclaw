@@ -29,7 +29,8 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
   const [ready, setReady] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodeLimit, setNodeLimit] = useState(DEFAULT_NODE_LIMIT);
-  const [zoomLevel, setZoomLevel] = useState(1);
+  const zoomRef = useRef(1);
+  const zoomDisplayRef = useRef<HTMLSpanElement>(null);
 
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClickRef = useRef<string | null>(null);
@@ -203,7 +204,10 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
             }}
             onNodeClick={handleNodeClick}
             onBackgroundClick={() => setSelectedNodeId(null)}
-            onZoom={(transform) => setZoomLevel(transform.k)}
+            onZoom={(transform) => {
+              zoomRef.current = transform.k;
+              if (zoomDisplayRef.current) zoomDisplayRef.current.textContent = `${Math.round(transform.k * 100)}%`;
+            }}
             linkColor={(link: any) => highlightLinks.has(link.id) ? "#64748b" : (isDark ? "#334155" : "#cbd5e1")}
             linkWidth={(link: any) => (highlightLinks.has(link.id) ? 2 : 0.5)}
             linkCanvasObject={linkCanvasObject}
@@ -231,7 +235,7 @@ export function VaultGraphView({ agentId, teamId, onNodeClick }: Props) {
         linkCount={links.length}
         nodeLimit={nodeLimit}
         isLimited={isLimited}
-        zoomLevel={zoomLevel}
+        zoomDisplayRef={zoomDisplayRef}
         onNodeLimitChange={setNodeLimit}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
