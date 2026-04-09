@@ -21,17 +21,9 @@ import { useProviderModels } from "@/pages/providers/hooks/use-provider-models";
 import {
   getChatGPTOAuthProviderRouting,
   getProviderReasoningDefaults,
-  normalizeReasoningEffort,
-  normalizeReasoningFallback,
   deriveLegacyThinkingLevel,
 } from "@/types/provider";
-import {
-  buildAgentOtherConfigWithChatGPTOAuthRouting,
-  normalizeChatGPTOAuthRouting,
-} from "./agent-display-utils";
-import { buildDraftRouting } from "./codex-pool-routing-draft-utils";
-
-const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
+import { deriveState, buildAdvancedUpdatePayload } from "./agent-advanced-state-utils";
 
 interface AgentAdvancedDialogProps {
   open: boolean;
@@ -55,52 +47,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   )?.reasoning ?? null;
   const expertReasoningAvailable = Boolean(currentModelCapability?.levels?.length);
 
-  const deriveState = (a: AgentData) => {
-    // Read reasoning from top-level reasoning_config, with fallback to other_config for transition
-    const reasoningCfg = (a.reasoning_config ?? (a.other_config as Record<string, unknown> | null)?.reasoning ?? {}) as Record<string, unknown>;
-    const rawThinkingLevel = normalizeReasoningEffort(
-      a.thinking_level ?? (a.other_config as Record<string, unknown> | null)?.thinking_level,
-    );
-    const hasReasoningObject = Boolean(a.reasoning_config) || Boolean((a.other_config as Record<string, unknown> | null)?.reasoning);
-    const reasoningMode: ReasoningOverrideMode = reasoningCfg.override_mode === "inherit"
-      ? "inherit"
-      : hasReasoningObject || rawThinkingLevel
-        ? "custom"
-        : "inherit";
-    const reasoningEffort = normalizeReasoningEffort(reasoningCfg.effort)
-      || rawThinkingLevel
-      || providerReasoningDefaults?.effort
-      || "off";
-    const reasoningFallback = normalizeReasoningFallback(reasoningCfg.fallback);
-    // Read routing from top-level field, fallback to other_config for transition
-    const routing = normalizeChatGPTOAuthRouting(a.chatgpt_oauth_routing ?? a.other_config);
-    const draftRouting = buildDraftRouting(routing);
-    return {
-      reasoningMode,
-      thinkingLevel: SIMPLE_REASONING_LEVELS.has(reasoningEffort)
-        ? reasoningEffort
-        : deriveLegacyThinkingLevel(reasoningEffort),
-      reasoningEffort,
-      reasoningFallback: reasoningMode === "inherit"
-        ? providerReasoningDefaults?.fallback ?? "downgrade"
-        : reasoningFallback,
-      reasoningExpert: reasoningMode === "custom" && (
-        hasReasoningObject
-        || !SIMPLE_REASONING_LEVELS.has(reasoningEffort)
-        || reasoningFallback !== "downgrade"
-      ),
-      chatgptRouting: draftRouting,
-      // Read workspace_sharing from top-level, fallback to other_config for transition
-      wsSharing: (a.workspace_sharing ?? (a.other_config as Record<string, unknown> | null)?.workspace_sharing ?? {}) as WorkspaceSharingConfig,
-      comp: a.compaction_config ?? {},
-      pruneEnabled: a.context_pruning?.mode !== "off",
-      prune: a.context_pruning ?? {},
-      sbEnabled: a.sandbox_config != null,
-      sb: a.sandbox_config ?? {},
-    };
-  };
-
-  const init = deriveState(agent);
+  const init = deriveState(agent, currentProvider);
   const [wsSharing, setWsSharing] = useState<WorkspaceSharingConfig>(init.wsSharing);
   const [reasoningMode, setReasoningMode] = useState<ReasoningOverrideMode>(init.reasoningMode);
   const [thinkingLevel, setThinkingLevel] = useState(init.thinkingLevel);
@@ -118,7 +65,7 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   useEffect(() => {
     if (!open) return;
     refreshProviders();
-    const s = deriveState(agent);
+    const s = deriveState(agent, currentProvider);
     setReasoningMode(s.reasoningMode);
     setThinkingLevel(s.thinkingLevel);
     setReasoningEffort(s.reasoningEffort);
@@ -165,50 +112,25 @@ export function AgentAdvancedDialog({ open, onOpenChange, agent, onUpdate }: Age
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Build routing payload (chatgpt_oauth_routing at top level)
-      const routingPayload = buildAgentOtherConfigWithChatGPTOAuthRouting(
+      const updates = buildAdvancedUpdatePayload({
         agent,
+        currentProvider,
+        providersLoading,
+        providerModelsLoading,
+        expertReasoningAvailable,
+        reasoningMode,
+        reasoningEffort,
+        reasoningExpert,
+        reasoningFallback,
+        thinkingLevel,
         chatgptRouting,
-        currentProvider?.settings,
-      );
-
-      const capabilityResolutionPending = !currentProvider || providersLoading || providerModelsLoading;
-      const updates: Record<string, unknown> = {
-        compaction_config: comp,
-        context_pruning: pruneEnabled ? (Object.keys(prune).length > 0 ? prune : null) : { mode: "off" },
-        sandbox_config: sbEnabled ? sb : null,
-        // chatgpt_oauth_routing comes from routingPayload at top level
-        ...routingPayload,
-      };
-
-      // Build reasoning_config and thinking_level as top-level fields
-      if (reasoningMode === "inherit") {
-        updates.reasoning_config = { override_mode: "inherit" };
-        updates.thinking_level = null;
-      } else {
-        const shouldPersistExpertReasoning = reasoningExpert
-          && (expertReasoningAvailable || capabilityResolutionPending);
-        const requestedEffort = shouldPersistExpertReasoning ? reasoningEffort : thinkingLevel;
-        const legacyThinkingLevel = deriveLegacyThinkingLevel(requestedEffort);
-        updates.thinking_level = legacyThinkingLevel !== "off" ? legacyThinkingLevel : null;
-        const reasoningConfig: Record<string, unknown> = {
-          override_mode: "custom",
-          effort: requestedEffort,
-        };
-        if (reasoningFallback !== "downgrade") reasoningConfig.fallback = reasoningFallback;
-        updates.reasoning_config = reasoningConfig;
-      }
-
-      // workspace_sharing at top level
-      if (
-        wsSharing.shared_dm || wsSharing.shared_group ||
-        (wsSharing.shared_users?.length ?? 0) > 0 || wsSharing.share_memory
-      ) {
-        updates.workspace_sharing = wsSharing;
-      } else {
-        updates.workspace_sharing = null;
-      }
-
+        wsSharing,
+        comp,
+        pruneEnabled,
+        prune,
+        sbEnabled,
+        sb,
+      });
       await onUpdate(updates);
       onOpenChange(false);
     } catch {

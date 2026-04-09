@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,13 +11,18 @@ import { AgentFilesTab } from "./agent-files-tab";
 import { AgentInstancesTab } from "./agent-instances-tab";
 import { AgentPermissionsTab } from "./agent-permissions-tab";
 import { AgentEvolutionTab } from "./evolution-tab/agent-evolution-tab";
-import { AgentAdvancedDialog } from "./agent-advanced-dialog";
-import { HeartbeatConfigDialog } from "./heartbeat-config-dialog";
 import { SummoningModal } from "../summoning-modal";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { agentDisplayName } from "./agent-display-utils";
 import { SystemPromptDialog } from "./system-prompt-dialog";
+
+const AgentAdvancedDialog = lazy(() =>
+  import("./agent-advanced-dialog").then((m) => ({ default: m.AgentAdvancedDialog }))
+);
+const HeartbeatConfigDialog = lazy(() =>
+  import("./heartbeat-config-dialog").then((m) => ({ default: m.HeartbeatConfigDialog }))
+);
 
 interface AgentDetailPageProps {
   agentId: string;
@@ -122,13 +127,15 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
       </div>
 
       {advancedOpen ? (
-        <AgentAdvancedDialog
-          key={agent.id}
-          open={advancedOpen}
-          onOpenChange={setAdvancedOpen}
-          agent={agent}
-          onUpdate={updateAgent}
-        />
+        <Suspense fallback={null}>
+          <AgentAdvancedDialog
+            key={agent.id}
+            open={advancedOpen}
+            onOpenChange={setAdvancedOpen}
+            agent={agent}
+            onUpdate={updateAgent}
+          />
+        </Suspense>
       ) : null}
 
       <SummoningModal
@@ -141,20 +148,22 @@ export function AgentDetailPage({ agentId, onBack }: AgentDetailPageProps) {
       />
 
       {heartbeatOpen && (
-        <HeartbeatConfigDialog
-          open={heartbeatOpen}
-          onOpenChange={setHeartbeatOpen}
-          config={hb.config}
-          saving={hb.saving}
-          update={hb.update}
-          test={hb.test}
-          getChecklist={hb.getChecklist}
-          setChecklist={hb.setChecklist}
-          fetchTargets={hb.fetchTargets}
-          refresh={hb.refresh}
-          agentProvider={agent?.provider}
-          agentModel={agent?.model}
-        />
+        <Suspense fallback={null}>
+          <HeartbeatConfigDialog
+            open={heartbeatOpen}
+            onOpenChange={setHeartbeatOpen}
+            config={hb.config}
+            saving={hb.saving}
+            update={hb.update}
+            test={hb.test}
+            getChecklist={hb.getChecklist}
+            setChecklist={hb.setChecklist}
+            fetchTargets={hb.fetchTargets}
+            refresh={hb.refresh}
+            agentProvider={agent?.provider}
+            agentModel={agent?.model}
+          />
+        </Suspense>
       )}
 
       {promptOpen && (

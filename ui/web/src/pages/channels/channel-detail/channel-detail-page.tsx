@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -10,19 +10,18 @@ import { ChannelGeneralTab } from "./channel-general-tab";
 import { ChannelCredentialsTab } from "./channel-credentials-tab";
 import { ChannelGroupsTab } from "./channel-groups-tab";
 import { ChannelManagersTab } from "./channel-managers-tab";
-import { ChannelAdvancedDialog } from "./channel-advanced-dialog";
 import { ChannelDiagnosticsCard } from "./channel-diagnostics-card";
-import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { DetailPageSkeleton } from "@/components/shared/loading-skeleton";
 import { useChannels } from "../hooks/use-channels";
-import { channelsWithAuth, reauthDialogs } from "../channel-wizard-registry";
+import { channelsWithAuth } from "../channel-wizard-registry";
 import {
-  formatRelativeTime,
   getChannelCheckedLabel,
   getChannelRemediationMeta,
   getRenderableChannelStatus,
   getChannelStatusMeta,
 } from "../channels-status-view";
+import { useChannelTimeline } from "./channel-detail-timeline-hook";
+import { ChannelDetailDialogs } from "./channel-detail-dialogs";
 
 interface ChannelDetailPageProps {
   instanceId: string;
@@ -129,57 +128,7 @@ export function ChannelDetailPage({
       ? { label: remediation.label, onClick: handleRemediationAction }
       : null;
 
-  const timelineItems = useMemo(() => {
-    const items: Array<{ label: string; value: string }> = [];
-    const firstFailed = formatRelativeTime(status?.first_failed_at);
-    const lastChecked = formatRelativeTime(status?.checked_at);
-    const lastHealthy = formatRelativeTime(status?.last_healthy_at);
-
-    if (firstFailed) {
-      items.push({
-        label: t("detail.timeline.firstFailed", { defaultValue: "First failed" }),
-        value: firstFailed,
-      });
-    }
-    if (lastChecked) {
-      items.push({
-        label: t("detail.timeline.lastChecked", { defaultValue: "Last checked" }),
-        value: lastChecked,
-      });
-    }
-    if (status?.consecutive_failures) {
-      items.push({
-        label: t("detail.timeline.failures", { defaultValue: "Failures" }),
-        value: t("detail.timeline.failureStreak", {
-          defaultValue: "{{count}} in a row",
-          count: status.consecutive_failures,
-        }),
-      });
-    } else if (status?.failure_count) {
-      items.push({
-        label: t("detail.timeline.failures", { defaultValue: "Failures" }),
-        value: t("detail.timeline.failureTotal", {
-          defaultValue: "{{count}} total",
-          count: status.failure_count,
-        }),
-      });
-    }
-    if (lastHealthy) {
-      items.push({
-        label: t("detail.timeline.lastHealthy", { defaultValue: "Last healthy" }),
-        value: lastHealthy,
-      });
-    }
-
-    return items;
-  }, [
-    status?.checked_at,
-    status?.consecutive_failures,
-    status?.failure_count,
-    status?.first_failed_at,
-    status?.last_healthy_at,
-    t,
-  ]);
+  const timelineItems = useChannelTimeline(status, t);
 
   const showDiagnosticsCard =
     status?.state === "failed" ||
@@ -198,10 +147,6 @@ export function ChannelDetailPage({
     t("detail.reviewDiagnostics", {
       defaultValue: "Review the latest diagnosis in this channel before changing settings.",
     });
-
-  const ReauthDialog = supportsReauth
-    ? reauthDialogs[instance?.channel_type ?? ""]
-    : null;
 
   if (loading || !instance) {
     return <DetailPageSkeleton tabs={4} />;
@@ -295,44 +240,18 @@ export function ChannelDetailPage({
         </div>
       </div>
 
-      <ChannelAdvancedDialog
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
+      <ChannelDetailDialogs
         instance={instance}
+        advancedOpen={advancedOpen}
+        setAdvancedOpen={setAdvancedOpen}
+        reauthOpen={reauthOpen}
+        setReauthOpen={setReauthOpen}
+        deleteOpen={deleteOpen}
+        setDeleteOpen={setDeleteOpen}
+        supportsReauth={supportsReauth}
+        onDelete={onDelete}
         onUpdate={updateInstance}
       />
-
-      {ReauthDialog && (
-        <ReauthDialog
-          open={reauthOpen}
-          onOpenChange={setReauthOpen}
-          instanceId={instance.id}
-          instanceName={instance.display_name || instance.name}
-          onSuccess={() => {
-            setReauthOpen(false);
-          }}
-        />
-      )}
-
-      {onDelete && (
-        <ConfirmDeleteDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          title={t("delete.title")}
-          description={t("delete.description", {
-            name: instance.display_name || instance.name,
-          })}
-          confirmValue={instance.display_name || instance.name}
-          confirmLabel={t("delete.confirmLabel")}
-          onConfirm={async () => {
-            onDelete({
-              id: instance.id,
-              name: instance.display_name || instance.name,
-            });
-            setDeleteOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
