@@ -16,6 +16,9 @@ const (
 	EventRunCompleted   EventType = "run.completed"
 	EventToolExecuted     EventType = "tool.executed"
 
+	// Vault events (v3 enrichment pipeline)
+	EventVaultDocUpserted EventType = "vault.doc_upserted"
+
 	// Delegation events (v3 orchestration)
 	EventDelegateSent      EventType = "delegate.sent"
 	EventDelegateCompleted EventType = "delegate.completed"
@@ -100,4 +103,14 @@ type DelegateFailedPayload struct {
 	FromAgent    string
 	ToAgent      string
 	Error        string
+}
+
+// VaultDocUpsertedPayload is emitted after a vault document is registered/updated.
+type VaultDocUpsertedPayload struct {
+	DocID       string // vault_documents.id (UUID)
+	TenantID    string // tenant context (per-item for batch safety)
+	AgentID     string // agent that wrote the file
+	Path        string // workspace-relative file path
+	ContentHash string // SHA-256 of content at write time
+	Workspace   string // absolute workspace path for file reading
 }

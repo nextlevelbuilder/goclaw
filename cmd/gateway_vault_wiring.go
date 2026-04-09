@@ -3,6 +3,7 @@ package cmd
 import (
 	"log/slog"
 
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/vault"
@@ -11,7 +12,7 @@ import (
 // wireVault wires Knowledge Vault tools and interceptors into the tool registry.
 // All wiring is skipped if stores.Vault is nil.
 // Pattern mirrors wireExtras KG wiring: register tools, set stores, set interceptors.
-func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string) {
+func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string, bus eventbus.DomainEventBus) {
 	if stores.Vault == nil {
 		return
 	}
@@ -34,7 +35,7 @@ func wireVault(stores *store.Stores, toolsReg *tools.Registry, workspace string)
 	vaultSearchTool.SetSearchService(searchSvc)
 
 	// Build shared VaultInterceptor for read/write tool vault registration.
-	vaultIntc := tools.NewVaultInterceptor(stores.Vault, workspace)
+	vaultIntc := tools.NewVaultInterceptor(stores.Vault, workspace, bus)
 
 	// Wire interceptor into write_file (registers doc on write).
 	if writeTool, ok := toolsReg.Get("write_file"); ok {

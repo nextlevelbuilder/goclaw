@@ -90,6 +90,13 @@ type VaultStore interface {
 	GetBacklinks(ctx context.Context, tenantID, docID string) ([]VaultBacklink, error)
 	DeleteDocLinks(ctx context.Context, tenantID, docID string) error
 
+	// Enrichment
+	// UpdateSummaryAndReembed updates summary text and re-generates embedding from title+path+summary.
+	UpdateSummaryAndReembed(ctx context.Context, tenantID, docID, summary string) error
+	// FindSimilarDocs finds documents with similar embeddings to the given docID.
+	// Returns top-N neighbors excluding the source doc. Score = cosine similarity.
+	FindSimilarDocs(ctx context.Context, tenantID, agentID, docID string, limit int) ([]VaultSearchResult, error)
+
 	// Embedding
 	SetEmbeddingProvider(provider EmbeddingProvider)
 	Close() error

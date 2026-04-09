@@ -176,6 +176,20 @@ func (s *SQLiteVaultStore) UpdateHash(ctx context.Context, tenantID, id, newHash
 	return err
 }
 
+// UpdateSummaryAndReembed updates summary (no embedding in SQLite).
+func (s *SQLiteVaultStore) UpdateSummaryAndReembed(ctx context.Context, tenantID, docID, summary string) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE vault_documents SET summary = ?, updated_at = ? WHERE id = ? AND tenant_id = ?`,
+		summary, now, docID, tenantID)
+	return err
+}
+
+// FindSimilarDocs is a no-op in SQLite (no vector support).
+func (s *SQLiteVaultStore) FindSimilarDocs(ctx context.Context, tenantID, agentID, docID string, limit int) ([]store.VaultSearchResult, error) {
+	return nil, nil
+}
+
 // Search performs LIKE-based search on vault documents (no FTS/vector in lite).
 func (s *SQLiteVaultStore) Search(ctx context.Context, opts store.VaultSearchOptions) ([]store.VaultSearchResult, error) {
 	query := opts.Query

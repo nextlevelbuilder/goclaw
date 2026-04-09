@@ -38,6 +38,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/vault"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -204,6 +205,25 @@ func runGateway() {
 			slog.Info("consolidation pipeline registered")
 		} else {
 			slog.Warn("consolidation pipeline skipped: no provider available")
+		}
+	}
+
+	// V3: Wire vault enrichment worker (async summary + embedding + auto-linking).
+	// Resolves provider independently from consolidation pipeline.
+	if pgStores.Vault != nil {
+		var vaultProvider providers.Provider
+		if names := providerRegistry.ListForTenant(providers.MasterTenantID); len(names) > 0 {
+			vaultProvider, _ = providerRegistry.GetForTenant(providers.MasterTenantID, names[0])
+		}
+		if vaultProvider != nil {
+			cleanupVaultEnrich := vault.RegisterEnrichWorker(vault.EnrichWorkerDeps{
+				VaultStore: pgStores.Vault,
+				Provider:   vaultProvider,
+				Model:      vaultProvider.DefaultModel(),
+				EventBus:   domainBus,
+			})
+			defer cleanupVaultEnrich()
+			slog.Info("vault enrichment worker registered")
 		}
 	}
 

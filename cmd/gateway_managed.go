@@ -339,7 +339,7 @@ func wireExtras(
 	}
 
 	// Wire vault tools and interceptors (conditional on vault store availability)
-	wireVault(stores, toolsReg, workspace)
+	wireVault(stores, toolsReg, workspace, domainBus)
 
 	// Wire delegate tool for inter-agent delegation via agent_links.
 	if stores.AgentLinks != nil && stores.Agents != nil {

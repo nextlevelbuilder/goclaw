@@ -5,7 +5,10 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/vault"
 )
@@ -14,11 +17,12 @@ import (
 type VaultInterceptor struct {
 	vaultStore store.VaultStore
 	workspace  string
+	eventBus   eventbus.DomainEventBus // nil-safe: enrichment disabled if nil
 }
 
 // NewVaultInterceptor creates a new vault interceptor.
-func NewVaultInterceptor(vs store.VaultStore, workspace string) *VaultInterceptor {
-	return &VaultInterceptor{vaultStore: vs, workspace: workspace}
+func NewVaultInterceptor(vs store.VaultStore, workspace string, bus eventbus.DomainEventBus) *VaultInterceptor {
+	return &VaultInterceptor{vaultStore: vs, workspace: workspace, eventBus: bus}
 }
 
 // inferScopeFromContext returns scope and team_id based on RunContext.
@@ -68,6 +72,27 @@ func (v *VaultInterceptor) AfterWrite(ctx context.Context, resolvedPath, content
 	}
 	if err := v.vaultStore.UpsertDocument(ctx, doc); err != nil {
 		slog.Warn("vault.after_write", "path", relPath, "err", err)
+		return
+	}
+
+	// Publish enrichment event (async summary + embedding + auto-linking).
+	if v.eventBus != nil {
+		v.eventBus.Publish(eventbus.DomainEvent{
+			ID:        uuid.Must(uuid.NewV7()).String(),
+			Type:      eventbus.EventVaultDocUpserted,
+			SourceID:  doc.ID + ":" + hash, // unique per content version, avoids bus-level dedup suppression
+			TenantID:  tenantID,
+			AgentID:   agentID,
+			Timestamp: time.Now(),
+			Payload: eventbus.VaultDocUpsertedPayload{
+				DocID:       doc.ID,
+				TenantID:    tenantID,
+				AgentID:     agentID,
+				Path:        relPath,
+				ContentHash: hash,
+				Workspace:   v.workspace,
+			},
+		})
 	}
 }
 
@@ -115,6 +140,27 @@ func (v *VaultInterceptor) AfterWriteMedia(ctx context.Context, resolvedPath, su
 	}
 	if err := v.vaultStore.UpsertDocument(ctx, doc); err != nil {
 		slog.Warn("vault.after_write_media", "path", relPath, "err", err)
+		return
+	}
+
+	// Publish enrichment event (async embedding + auto-linking; may skip summarize if caption provided).
+	if v.eventBus != nil {
+		v.eventBus.Publish(eventbus.DomainEvent{
+			ID:        uuid.Must(uuid.NewV7()).String(),
+			Type:      eventbus.EventVaultDocUpserted,
+			SourceID:  doc.ID + ":" + hash,
+			TenantID:  tenantID,
+			AgentID:   agentID,
+			Timestamp: time.Now(),
+			Payload: eventbus.VaultDocUpsertedPayload{
+				DocID:       doc.ID,
+				TenantID:    tenantID,
+				AgentID:     agentID,
+				Path:        relPath,
+				ContentHash: hash,
+				Workspace:   v.workspace,
+			},
+		})
 	}
 }
 
