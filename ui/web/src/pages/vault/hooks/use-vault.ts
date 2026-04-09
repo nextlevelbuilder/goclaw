@@ -122,7 +122,7 @@ export function useVaultFileContent(path: string | null) {
       `/v1/storage/files/${encodeURIComponent(path!)}`,
     ),
     enabled: !!path,
-    staleTime: 30_000,
+    staleTime: 60_000,
     retry: false,
     placeholderData: (prev) => prev,
   });

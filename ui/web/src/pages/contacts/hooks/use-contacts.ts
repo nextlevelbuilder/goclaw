@@ -36,6 +36,7 @@ export function useContacts(filters: ContactFilters = {}) {
       return { contacts: res.contacts ?? [], total: res.total ?? 0 };
     },
     placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
 
   const contacts = data?.contacts ?? [];

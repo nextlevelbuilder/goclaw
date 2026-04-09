@@ -19,11 +19,15 @@ export function useV3Flags(agentId: string) {
   const { data: flags, isLoading } = useQuery({
     queryKey: queryKeys.v3Flags.detail(agentId),
     queryFn: () => http.get<V3Flags>(`/v1/agents/${agentId}/v3-flags`),
+    staleTime: 60_000,
   });
 
   const toggleFlag = useCallback(
     async (key: keyof V3Flags, value: boolean) => {
       try {
+        queryClient.setQueryData<V3Flags>(queryKeys.v3Flags.detail(agentId), (old) =>
+          old ? { ...old, [key]: value } : old,
+        );
         await http.patch(`/v1/agents/${agentId}/v3-flags`, { [key]: value });
         queryClient.invalidateQueries({ queryKey: queryKeys.v3Flags.detail(agentId) });
       } catch {

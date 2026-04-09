@@ -82,6 +82,7 @@ export function useCron() {
       });
       return res.jobs ?? [];
     },
+    staleTime: 60_000,
     enabled: connected,
   });
 
@@ -115,6 +116,9 @@ export function useCron() {
   const toggleJob = useCallback(
     async (jobId: string, enabled: boolean) => {
       try {
+        queryClient.setQueryData<CronJob[]>(queryKeys.cron.all, (old) =>
+          old?.map((j) => (j.id === jobId ? { ...j, enabled } : j)),
+        );
         await ws.call(Methods.CRON_TOGGLE, { jobId, enabled });
         await invalidate();
         toast.success(enabled ? i18next.t("cron:toast.enabled") : i18next.t("cron:toast.disabled"));

@@ -41,6 +41,11 @@ export function useBuiltinTools() {
   const updateTool = useCallback(
     async (name: string, data: { enabled?: boolean; settings?: Record<string, unknown> }) => {
       try {
+        if (data.enabled !== undefined) {
+          queryClient.setQueryData<BuiltinToolData[]>(queryKeys.builtinTools.all, (old) =>
+            old?.map((t) => (t.name === name ? { ...t, enabled: data.enabled! } : t)),
+          );
+        }
         await http.put(`/v1/tools/builtin/${name}`, data);
         await invalidate();
         toast.success(i18next.t("tools:builtin.settingsDialog.toast.saved"));
@@ -55,6 +60,9 @@ export function useBuiltinTools() {
   const setTenantConfig = useCallback(
     async (name: string, enabled: boolean) => {
       try {
+        queryClient.setQueryData<BuiltinToolData[]>(queryKeys.builtinTools.all, (old) =>
+          old?.map((t) => (t.name === name ? { ...t, tenant_enabled: enabled } : t)),
+        );
         await http.put(`/v1/tools/builtin/${name}/tenant-config`, { enabled });
         await invalidate();
         toast.success(i18next.t("tools:builtin.settingsDialog.toast.saved"));

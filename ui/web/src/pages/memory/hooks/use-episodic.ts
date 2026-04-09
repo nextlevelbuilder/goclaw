@@ -21,6 +21,7 @@ export function useEpisodicSummaries(agentId: string, opts: { userId?: string; l
   const { data, isLoading } = useQuery({
     queryKey: [EPISODIC_KEY, agentId, params],
     queryFn: () => http.get<EpisodicSummary[]>(`/v1/agents/${agentId}/episodic`, params),
+    staleTime: 60_000,
     enabled: !!agentId,
   });
 

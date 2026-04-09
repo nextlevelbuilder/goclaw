@@ -30,7 +30,7 @@ export function usePackages() {
   const { data, isFetching: loading, refetch } = useQuery({
     queryKey: queryKeys.packages.all,
     queryFn: () => http.get<InstalledPackages>("/v1/packages"),
-    staleTime: 30_000,
+    staleTime: 60_000,
     enabled: connected,
   });
 

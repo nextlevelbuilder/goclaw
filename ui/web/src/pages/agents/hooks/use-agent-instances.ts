@@ -32,6 +32,7 @@ export function useAgentInstances(agentId: string) {
       const res = await http.get<{ instances: UserInstance[] }>(`/v1/agents/${agentId}/instances`);
       return res.instances ?? [];
     },
+    staleTime: 60_000,
     enabled: !!agentId,
   });
 

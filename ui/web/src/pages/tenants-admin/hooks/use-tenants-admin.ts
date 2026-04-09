@@ -37,7 +37,7 @@ export function useTenantsAdmin() {
         return { tenants, isOwner: false };
       }
     },
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const tenants = data?.tenants ?? [];

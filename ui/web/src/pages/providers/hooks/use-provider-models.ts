@@ -19,6 +19,7 @@ export function useProviderModels(providerId: string | undefined) {
       );
       return res;
     },
+    staleTime: 60_000,
     enabled: !!providerId,
   });
 

@@ -59,6 +59,7 @@ export function useTtsConfig() {
       const ttsConfig = (res.config?.tts as TtsConfig) ?? DEFAULT_TTS;
       return { ...DEFAULT_TTS, ...ttsConfig };
     },
+    staleTime: 60_000,
     enabled: connected,
   });
 

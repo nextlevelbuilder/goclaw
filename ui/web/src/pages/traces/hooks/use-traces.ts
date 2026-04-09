@@ -36,6 +36,7 @@ export function useTraces(filters: TraceFilters = {}) {
       return { traces: res.traces ?? [], total: res.total ?? 0 };
     },
     placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
 
   const traces = data?.traces ?? [];

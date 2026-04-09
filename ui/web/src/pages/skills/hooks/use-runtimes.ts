@@ -22,7 +22,7 @@ export function useRuntimes() {
   const { data, isPending: loading, refetch } = useQuery({
     queryKey: queryKeys.skills.runtimes,
     queryFn: () => http.get<RuntimeStatus>("/v1/skills/runtimes"),
-    staleTime: 120_000,
+    staleTime: 5 * 60_000,
     enabled: connected,
   });
 

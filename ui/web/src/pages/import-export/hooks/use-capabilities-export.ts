@@ -19,7 +19,7 @@ export function useSkillsExportPreview() {
   return useQuery({
     queryKey: ["skills-export-preview"],
     queryFn: () => http.get<SkillsExportPreview>("/v1/skills/export/preview"),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 }
 
@@ -28,7 +28,7 @@ export function useMcpExportPreview() {
   return useQuery({
     queryKey: ["mcp-export-preview"],
     queryFn: () => http.get<McpExportPreview>("/v1/mcp/export/preview"),
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 }
 

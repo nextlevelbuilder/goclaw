@@ -22,7 +22,7 @@ export function usePackageRuntimes() {
   const { data, isFetching: loading, refetch } = useQuery({
     queryKey: queryKeys.packages.runtimes,
     queryFn: () => http.get<RuntimeStatus>("/v1/packages/runtimes"),
-    staleTime: 120_000,
+    staleTime: 5 * 60_000,
     enabled: connected,
   });
 

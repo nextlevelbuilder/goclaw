@@ -18,7 +18,7 @@ export function useTenantDetail(tenantId: string) {
       return res ?? null;
     },
     enabled: !!tenantId,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const { data: users = [], isLoading: usersLoading, isFetching: usersRefreshing } = useQuery({
@@ -28,7 +28,7 @@ export function useTenantDetail(tenantId: string) {
       return res?.users ?? [];
     },
     enabled: !!tenantId,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const invalidateUsers = useCallback(

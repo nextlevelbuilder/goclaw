@@ -19,6 +19,7 @@ export function useOrchestration(agentId: string) {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.orchestration.detail(agentId),
     queryFn: () => http.get<OrchestrationInfo>(`/v1/agents/${agentId}/orchestration`),
+    staleTime: 60_000,
   });
 
   return {

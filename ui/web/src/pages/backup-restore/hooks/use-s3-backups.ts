@@ -13,7 +13,7 @@ export function useS3Backups(enabled: boolean) {
     queryKey: ["s3-backups"],
     queryFn: () => http.get<{ backups: S3BackupEntry[] }>("/v1/system/backup/s3/list"),
     enabled,
-    staleTime: 30_000,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 }

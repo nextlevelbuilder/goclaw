@@ -30,6 +30,7 @@ export function useKnowledgeGraph(filters: KGFilters) {
       params.limit = "200";
       return (await http.get<KGEntity[]>(`/v1/agents/${filters.agentId}/kg/entities`, params)) ?? [];
     },
+    staleTime: 60_000,
     enabled: !!filters.agentId,
   });
 
@@ -121,6 +122,7 @@ export function useKGStats(agentId: string, userId?: string) {
       if (userId) params.user_id = userId;
       return http.get<KGStats>(`/v1/agents/${agentId}/kg/stats`, params);
     },
+    staleTime: 60_000,
     enabled: !!agentId,
     placeholderData: (prev) => prev,
   });
@@ -144,6 +146,7 @@ export function useKGGraph(agentId: string, userId?: string) {
       if (userId) params.user_id = userId;
       return http.get<KGGraphData>(`/v1/agents/${agentId}/kg/graph`, params);
     },
+    staleTime: 60_000,
     enabled: !!agentId,
   });
 
@@ -169,6 +172,7 @@ export function useKGDedup(agentId: string, userId?: string) {
       if (userId) params.user_id = userId;
       return (await http.get<KGDedupCandidate[]>(`/v1/agents/${agentId}/kg/dedup`, params)) ?? [];
     },
+    staleTime: 60_000,
     enabled: !!agentId,
     placeholderData: (prev) => prev,
   });
