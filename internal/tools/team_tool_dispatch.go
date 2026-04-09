@@ -363,6 +363,10 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 		if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
 			taskPeerKind = pk
 		}
+		taskLocalKey := ""
+		if lk, ok := task.Metadata[TaskMetaLocalKey].(string); ok {
+			taskLocalKey = lk
+		}
 		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, BuildTaskEventPayload(
 			teamID.String(), task.ID.String(),
 			store.TeamTaskStatusInProgress,
@@ -372,6 +376,7 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 			WithChannel(task.Channel),
 			WithChatID(task.ChatID),
 			WithPeerKind(taskPeerKind),
+			WithLocalKey(taskLocalKey),
 		))
 
 		// Append completed blocker results so the member agent has context.

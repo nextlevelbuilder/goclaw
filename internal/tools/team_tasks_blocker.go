@@ -49,6 +49,10 @@ func (t *TeamTasksTool) handleBlockerComment(
 	if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
 		blockerPeerKind = pk
 	}
+	blockerLocalKey := ""
+	if lk, ok := task.Metadata[TaskMetaLocalKey].(string); ok {
+		blockerLocalKey = lk
+	}
 	t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskFailed, BuildTaskEventPayload(
 		team.ID.String(), taskID.String(),
 		store.TeamTaskStatusFailed,
@@ -60,6 +64,7 @@ func (t *TeamTasksTool) handleBlockerComment(
 		WithChannel(task.Channel),
 		WithChatID(task.ChatID),
 		WithPeerKind(blockerPeerKind),
+		WithLocalKey(blockerLocalKey),
 	))
 
 	// Escalate to leader if enabled in team settings.

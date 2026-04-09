@@ -95,6 +95,11 @@ func WithPeerKind(pk string) TaskEventOption {
 	return func(p *protocol.TeamTaskEventPayload) { p.PeerKind = pk }
 }
 
+// WithLocalKey sets LocalKey on the payload for forum topic routing.
+func WithLocalKey(lk string) TaskEventOption {
+	return func(p *protocol.TeamTaskEventPayload) { p.LocalKey = lk }
+}
+
 // WithCommentText sets CommentText on the payload.
 func WithCommentText(t string) TaskEventOption {
 	return func(p *protocol.TeamTaskEventPayload) { p.CommentText = t }
