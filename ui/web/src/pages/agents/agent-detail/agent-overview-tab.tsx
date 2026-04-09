@@ -8,7 +8,6 @@ import { PersonalitySection } from "./overview-sections/personality-section";
 import { ModelBudgetSection } from "./overview-sections/model-budget-section";
 import { SkillsSection } from "./overview-sections/skills-section";
 import { EvolutionSection } from "./overview-sections/evolution-section";
-import { EngineVersionSection } from "./overview-sections/engine-version-section";
 import { PromptSettingsSection } from "./overview-sections/prompt-settings-section";
 import { PinnedSkillsSection } from "./overview-sections/pinned-skills-section";
 import { OrchestrationSection } from "./overview-sections/orchestration-section";
@@ -153,8 +152,6 @@ export function AgentOverviewTab({ agent, onUpdate, heartbeat, onManageCodexPool
           onSkillNudgeIntervalChange={setSkillNudgeInterval}
         />
       )}
-
-      <EngineVersionSection agentId={agent.id} />
 
       {/* Memory — always visible, per-agent overrides */}
       <MemorySection

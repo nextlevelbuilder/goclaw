@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -9,6 +10,7 @@ import { useCountdown } from "@/hooks/use-countdown";
 import { agentDisplayName, agentKeyDisplay, hasActiveChatGPTOAuthRouting, readPromptMode } from "./agent-display-utils";
 import { cn } from "@/lib/utils";
 import { promptModeBadgeClass } from "./prompt-mode-badge-utils";
+import { V3CapabilitiesModal } from "@/components/agents/v3-capabilities-modal/v3-capabilities-modal";
 
 interface AgentHeaderProps {
   agent: AgentData;
@@ -21,6 +23,7 @@ interface AgentHeaderProps {
 
 export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, onHeartbeat }: AgentHeaderProps) {
   const { t } = useTranslation("agents");
+  const [v3Open, setV3Open] = useState(false);
 
   const emoji = agent.emoji ?? "";
   const selfEvolve = Boolean(agent.self_evolve);
@@ -84,6 +87,13 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
                 {t(`detail.prompt.mode.${promptMode}Desc`)}
               </TooltipContent>
             </Tooltip>
+            <Badge
+              variant="outline"
+              className="text-[10px] bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 cursor-pointer"
+              onClick={() => setV3Open(true)}
+            >
+              V3
+            </Badge>
             {agent.agent_type === "predefined" && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -151,6 +161,7 @@ export function AgentHeader({ agent, heartbeat, onBack, onDelete, onAdvanced, on
           <span className="hidden sm:inline">{t("delete.title")}</span>
         </Button>
       </div>
+      <V3CapabilitiesModal open={v3Open} onOpenChange={setV3Open} />
     </TooltipProvider>
   );
 }
