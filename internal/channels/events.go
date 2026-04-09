@@ -290,13 +290,13 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		attempt := extractPayloadString(payload, "attempt")
 		maxAttempts := extractPayloadString(payload, "maxAttempts")
 		retryMsg := fmt.Sprintf("Provider busy, retrying... (%s/%s)", attempt, maxAttempts)
+		retryMeta := copyRoutingMeta(rc.Metadata)
+		retryMeta["placeholder_update"] = "true"
 		m.bus.PublishOutbound(bus.OutboundMessage{
-			Channel: rc.ChannelName,
-			ChatID:  rc.ChatID,
-			Content: retryMsg,
-			Metadata: map[string]string{
-				"placeholder_update": "true",
-			},
+			Channel:  rc.ChannelName,
+			ChatID:   rc.ChatID,
+			Content:  retryMsg,
+			Metadata: retryMeta,
 		})
 	}
 
