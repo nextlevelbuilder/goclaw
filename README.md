@@ -127,11 +127,19 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 ## Architecture
 
 <p align="center">
-  <img src="_statics/architecture.jpg" alt="GoClaw Architecture" width="800" />
+  <img src="_statics/8-Stage Agent Pipeline.jpg" alt="8-Stage Agent Pipeline" width="800" />
 </p>
 
 <p align="center">
-  <img src="_statics/goclaw_multi_tenant.png" alt="GoClaw Multi-Tenant" width="800" />
+  <img src="_statics/Mode Prompt System.jpg" alt="4-Mode Prompt System" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/3-Tier Memory Architecture.jpg" alt="3-Tier Memory" width="800" />
+</p>
+
+<p align="center">
+  <img src="_statics/Multi-Tenant Architecture.jpg" alt="Multi-Tenant Architecture" width="800" />
 </p>
 
 ## Quick Start
@@ -227,26 +235,11 @@ Open **About** dialog → click **Update Now** (admin only). The update includes
 
 ## Multi-Agent Orchestration
 
-GoClaw supports agent teams and inter-agent delegation — each agent runs with its own identity, tools, LLM provider, and context files.
-
-### Agent Delegation
-
 <p align="center">
-  <img src="_statics/agent-delegation.jpg" alt="Agent Delegation" width="700" />
+  <img src="_statics/Agent Orchestration.jpg" alt="Agent Orchestration" width="800" />
 </p>
 
-| Mode | How it works | Best for |
-|------|-------------|----------|
-| **Sync** | Agent A asks Agent B and **waits** for the answer | Quick lookups, fact checks |
-| **Async** | Agent A asks Agent B and **moves on**. B announces later | Long tasks, reports, deep analysis |
-
-Agents communicate through explicit **permission links** with direction control (`outbound`, `inbound`, `bidirectional`) and concurrency limits at both per-link and per-agent levels.
-
-### Agent Teams
-
-<p align="center">
-  <img src="_statics/agent-teams.jpg" alt="Agent Teams Workflow" width="800" />
-</p>
+Each agent runs with its own identity, tools, LLM provider, and context files.
 
 - **Shared task board** — Create, claim, complete, search tasks with `blocked_by` dependencies
 - **Tools**: `team_tasks` for task management, `spawn` for subagent orchestration
