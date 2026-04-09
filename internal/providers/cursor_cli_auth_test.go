@@ -26,14 +26,6 @@ func TestParseStatusStdoutText(t *testing.T) {
 	}
 }
 
-func TestParseAboutText(t *testing.T) {
-	raw := "About Cursor CLI\n\nUser Email          user@example.com\n"
-	st := parseAboutText(stripANSISequences(raw))
-	if st == nil || !st.LoggedIn || st.Email != "user@example.com" {
-		t.Fatalf("got %+v", st)
-	}
-}
-
 func TestParseStatusTextNotLoggedIn(t *testing.T) {
 	raw := "Not logged in. Run agent login.\n"
 	st := parseStatusText(stripANSISequences(raw))

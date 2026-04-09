@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -25,8 +26,6 @@ type cursorAuthJSON struct {
 
 var (
 	ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
-	// about: "User Email          user@host"
-	cursorAboutEmailRe = regexp.MustCompile(`(?m)^User Email\s+(\S+)\s*$`)
 	// status: "✓ Logged in as user@host" (after ANSI strip)
 	cursorStatusEmailRe = regexp.MustCompile(`Logged in as\s+(\S+)`)
 )
@@ -40,8 +39,6 @@ func stripANSISequences(s string) string {
 // We invoke `agent status` (no extra flags). Output may be JSON (starts with '{') or plain
 // text (e.g. "✓ Logged in as …"); we strip ANSI escapes and parse either form.
 //
-// If status output cannot be interpreted, we fall back to `agent about`.
-//
 // Login is `agent login`; credentials stay on disk for the CLI.
 func CheckCursorAuthStatus(ctx context.Context, cliPath string) (*CursorAuthStatus, error) {
 	if cliPath == "" {
@@ -54,6 +51,7 @@ func CheckCursorAuthStatus(ctx context.Context, cliPath string) (*CursorAuthStat
 	}
 
 	cmd := exec.CommandContext(ctx, resolved, "status")
+	cmd.Env = filterCursorEnv(os.Environ())
 	out, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(stripANSISequences(string(out)))
 
@@ -61,19 +59,10 @@ func CheckCursorAuthStatus(ctx context.Context, cliPath string) (*CursorAuthStat
 		return st, nil
 	}
 
-	out2, errAbout := exec.CommandContext(ctx, resolved, "about").CombinedOutput()
-	textAbout := strings.TrimSpace(stripANSISequences(string(out2)))
-	if st := parseAboutText(textAbout); st != nil {
-		return st, nil
-	}
-
 	if err != nil {
 		return nil, fmt.Errorf("agent status failed: %w", err)
 	}
-	if errAbout != nil {
-		return nil, fmt.Errorf("agent about failed after unparsable status output: %w", errAbout)
-	}
-	return nil, fmt.Errorf("could not parse agent status or about output")
+	return nil, fmt.Errorf("could not parse agent status output")
 }
 
 // parseStatusStdout handles JSON or plain-text lines from `agent status`.
@@ -94,18 +83,6 @@ func parseStatusStdout(text string) *CursorAuthStatus {
 		}
 	}
 	return parseStatusText(text)
-}
-
-func parseAboutText(text string) *CursorAuthStatus {
-	m := cursorAboutEmailRe.FindStringSubmatch(text)
-	if len(m) < 2 {
-		return nil
-	}
-	email := strings.TrimSpace(m[1])
-	if email == "" || email == "-" || strings.EqualFold(email, "none") {
-		return &CursorAuthStatus{LoggedIn: false}
-	}
-	return &CursorAuthStatus{LoggedIn: true, Email: email}
 }
 
 func parseStatusText(text string) *CursorAuthStatus {

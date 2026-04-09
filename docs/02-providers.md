@@ -40,7 +40,6 @@ Authentication and timeouts vary by provider type:
 - **Anthropic**: `x-api-key` header + `anthropic-version: 2023-06-01`
 - **OpenAI-compatible**: `Authorization: Bearer` token
 - **Claude CLI**: stdio subprocess (no auth; uses local CLI session)
-- **Cursor CLI**: `CURSOR_API_KEY` env var injection per-call
 - **Codex**: OAuth access token (auto-refreshed via TokenSource)
 - **ACP**: JSON-RPC 2.0 over subprocess stdio
 - **DashScope**: `Authorization: Bearer` token (inherits from OpenAI-compatible)

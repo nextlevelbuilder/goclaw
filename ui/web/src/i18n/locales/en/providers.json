@@ -181,7 +181,7 @@
   },
   "cursorCli": {
     "description": "Cursor CLI uses your local",
-    "descriptionSuffix": "binary. Sign in with browser login on the server — GoClaw does not store a Cursor API key.",
+    "descriptionSuffix": "binary. Sign in with browser login on the server — GoClaw uses your local Cursor CLI session.",
     "checkingAuth": "Checking authentication...",
     "authenticatedAs": "Authenticated as",
     "switchAccount": "Switch account?",

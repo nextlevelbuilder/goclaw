@@ -204,7 +204,7 @@
   },
   "cursorCli": {
     "description": "Cursor CLI 使用本地",
-    "descriptionSuffix": "二进制。在服务器上用浏览器登录 — GoClaw 不保存 Cursor API 密钥。",
+    "descriptionSuffix": "二进制。在服务器上用浏览器登录 — GoClaw 使用您本地的 Cursor CLI 登录会话。",
     "checkingAuth": "正在检查认证...",
     "authenticatedAs": "已认证为",
     "switchAccount": "切换账户？",

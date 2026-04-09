@@ -82,35 +82,37 @@ func claudeCLIModels() []ModelInfo {
 func cursorCLIModels() []ModelInfo {
 	return []ModelInfo{
 		// Cursor
+		{ID: "auto", Name: "Auto"},
+		{ID: "composer-2-fast", Name: "Cursor Composer 2 Fast"},
 		{ID: "composer-2", Name: "Cursor Composer 2"},
 		{ID: "composer-1.5", Name: "Cursor Composer 1.5"},
-		{ID: "composer-1", Name: "Cursor Composer 1"},
 		// Anthropic
-		{ID: "claude-sonnet-4-6", Name: "Claude 4.6 Sonnet"},
-		{ID: "claude-sonnet-4-5", Name: "Claude 4.5 Sonnet"},
-		{ID: "claude-opus-4-6", Name: "Claude 4.6 Opus"},
-		{ID: "claude-opus-4-6-fast", Name: "Claude 4.6 Opus-fast"},
-		{ID: "claude-opus-4-5", Name: "Claude 4.5 Opus"},
-		{ID: "claude-haiku-4-5", Name: "Claude 4.5 Haiku"},
+		{ID: "claude-4.6-sonnet-medium", Name: "Claude 4.6 Sonnet"},
+		{ID: "claude-4.6-sonnet-medium-thinking", Name: "Claude 4.6 Sonnet (Thinking)"},
+		{ID: "claude-4.6-opus-high", Name: "Claude 4.6 Opus High"},
+		{ID: "claude-4.6-opus-high-thinking", Name: "Claude 4.6 Opus High (Thinking)"},
+		{ID: "claude-4.5-sonnet", Name: "Claude 4.5 Sonnet"},
+		{ID: "claude-4.5-sonnet-thinking", Name: "Claude 4.5 Sonnet (Thinking)"},
+		{ID: "claude-4.5-opus-high", Name: "Claude 4.5 Opus High"},
+		{ID: "claude-4.5-opus-high-thinking", Name: "Claude 4.5 Opus High (Thinking)"},
 		// OpenAI
 		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
-		{ID: "gpt-5.4", Name: "GPT-5.4"},
-		{ID: "gpt-5.4-mini", Name: "GPT-5.4-mini"},
-		{ID: "gpt-5.4-nano", Name: "GPT-5.4-nano"},
+		{ID: "gpt-5.3-codex-fast", Name: "GPT-5.3 Codex Fast"},
+		{ID: "gpt-5.4-medium", Name: "GPT-5.4 Medium"},
+		{ID: "gpt-5.4-medium-fast", Name: "GPT-5.4 Medium Fast"},
+		{ID: "gpt-5.4-mini-medium", Name: "GPT-5.4 Mini Medium"},
+		{ID: "gpt-5.4-nano-medium", Name: "GPT-5.4 Nano Medium"},
 		{ID: "gpt-5.2", Name: "GPT-5.2"},
-		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex"},
-		{ID: "gpt-5", Name: "GPT-5"},
-		{ID: "gpt-5-codex", Name: "GPT-5 Codex"},
-		{ID: "gpt-5-fast", Name: "GPT-5-fast"},
-		{ID: "gpt-5-mini", Name: "GPT-5-mini"},
+		{ID: "gpt-5.2-fast", Name: "GPT-5.2 Fast"},
+		{ID: "gpt-5.1", Name: "GPT-5.1"},
+		{ID: "gpt-5.1-high", Name: "GPT-5.1 High"},
+		{ID: "gpt-5-mini", Name: "GPT-5 Mini"},
 		// Google
 		{ID: "gemini-3.1-pro", Name: "Gemini 3.1 Pro"},
-		{ID: "gemini-3-pro", Name: "Gemini 3 Pro"},
 		{ID: "gemini-3-flash", Name: "Gemini 3 Flash"},
-		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash"},
 		// Other
 		{ID: "grok-4-20", Name: "Grok 4-20"},
-		{ID: "kimi-k2-5", Name: "Kimi K2-5"},
+		{ID: "kimi-k2.5", Name: "Kimi K2.5"},
 	}
 }
 

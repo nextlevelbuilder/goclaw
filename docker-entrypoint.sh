@@ -48,7 +48,7 @@ if [ "$(id -u)" = "0" ]; then
   chown root:goclaw "$APK_LIST" 2>/dev/null || true
   chmod 0640 "$APK_LIST" 2>/dev/null || true
 fi
-if [ -f "$APK_LIST" ] && [ -s "$APK_LIST" ]; then
+if command -v apk >/dev/null 2>&1 && [ -f "$APK_LIST" ] && [ -s "$APK_LIST" ]; then
   echo "Re-installing persisted system packages..."
   VALID_PKGS=""
   while IFS= read -r pkg || [ -n "$pkg" ]; do
@@ -98,6 +98,51 @@ fi
 # Warn if Claude credentials are mounted but CLI binary is missing (forgot --build).
 if [ -d /app/.claude-host ] && ! command -v claude >/dev/null 2>&1; then
   echo "WARNING: Claude credentials mounted but claude CLI not installed. Rebuild with: --build"
+fi
+
+# Copy Cursor CLI auth/session files from root-owned read-only mount.
+# Runtime `agent` lookup uses XDG config (`$HOME/.config/cursor`) for the app user.
+if [ -d /app/.cursor-host ]; then
+  (
+    if command -v su-exec >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
+      su-exec goclaw sh -c '
+        set -e
+        umask 077
+        mkdir -p /app/.config/cursor
+        for f in /app/.cursor-host/*; do
+          [ -f "$f" ] || continue
+          cp "$f" /app/.config/cursor/
+        done
+        for d in auth tokens; do
+          if [ -d "/app/.cursor-host/$d" ]; then
+            rm -rf "/app/.config/cursor/$d"
+            cp -R "/app/.cursor-host/$d" "/app/.config/cursor/$d"
+          fi
+        done
+      '
+    else
+      (
+        umask 077
+        mkdir -p /app/.config/cursor
+        for f in /app/.cursor-host/*; do
+          [ -f "$f" ] || continue
+          cp "$f" /app/.config/cursor/
+        done
+        for d in auth tokens; do
+          if [ -d "/app/.cursor-host/$d" ]; then
+            rm -rf "/app/.config/cursor/$d"
+            cp -R "/app/.cursor-host/$d" "/app/.config/cursor/$d"
+          fi
+        done
+      )
+    fi
+    echo "Cursor CLI credentials synced from host to /app/.config/cursor."
+  ) || echo "WARNING: Cursor credentials sync failed (non-fatal)"
+fi
+
+# Warn if Cursor host credentials are mounted but CLI binary is missing (forgot --build).
+if [ -d /app/.cursor-host ] && ! command -v agent >/dev/null 2>&1; then
+  echo "WARNING: Cursor credentials mounted but agent CLI not installed. Rebuild with: --build"
 fi
 
 # Run command with privilege drop (su-exec in Docker, direct otherwise).

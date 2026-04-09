@@ -56,8 +56,8 @@ RUN set -eux; \
     CGO_ENABLED=0 GOOS=linux \
     go build -ldflags="-s -w" -o /out/pkg-helper ./cmd/pkg-helper
 
-# ── Stage 2: Runtime ──
-FROM alpine:3.22
+# ── Stage 2A: Runtime (default/alpine) ──
+FROM alpine:3.22 AS runtime-alpine
 
 ARG ENABLE_SANDBOX=false
 ARG ENABLE_PYTHON=false
@@ -100,10 +100,15 @@ RUN set -eux; \
         rm -rf /tmp/npm-cache; \
     fi; \
     if [ "$ENABLE_CURSOR_AGENT" = "true" ]; then \
-        apk add --no-cache bash curl git openssh-client; \
+        apk add --no-cache bash curl git openssh-client libc6-compat gcompat libstdc++; \
         curl https://cursor.com/install -fsSL | bash; \
-        ln -sf /root/.local/bin/agent /usr/local/bin/agent; \
-        rm -rf /root/.cache; \
+        AGENT_LINK="$(readlink -f /root/.local/bin/agent)"; \
+        AGENT_DIR="$(dirname "$AGENT_LINK")"; \
+        mkdir -p /opt/cursor-agent; \
+        cp -R "$AGENT_DIR"/. /opt/cursor-agent/; \
+        chmod -R a+rX /opt/cursor-agent; \
+        ln -sf /opt/cursor-agent/cursor-agent /usr/local/bin/agent; \
+        rm -rf /root/.cache /root/.local/share/cursor-agent /root/.local/bin/agent /root/.local/bin/cursor-agent; \
     fi; \
     rm -f /tmp/requirements-base.txt /tmp/requirements-skills.txt
 
@@ -170,3 +175,104 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["serve"]
+
+# ── Stage 2B: Runtime (cursor/glibc) ──
+FROM debian:bookworm-slim AS runtime-cursor
+
+ARG ENABLE_SANDBOX=false
+ARG ENABLE_PYTHON=false
+ARG ENABLE_NODE=false
+ARG ENABLE_FULL_SKILLS=false
+ARG ENABLE_CLAUDE_CLI=false
+ARG ENABLE_CURSOR_AGENT=false
+
+COPY docker/requirements-base.txt docker/requirements-skills.txt /tmp/
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates wget curl git openssh-client bash gosu; \
+    if [ "$ENABLE_FULL_SKILLS" = "true" ]; then \
+        apt-get install -y --no-install-recommends python3 python3-pip nodejs npm pandoc gh poppler-utils; \
+        pip3 install --no-cache-dir --break-system-packages \
+            -r /tmp/requirements-base.txt -r /tmp/requirements-skills.txt; \
+        npm install -g --cache /tmp/npm-cache docx@^9.6.1 pptxgenjs@^4.0.1; \
+        rm -rf /tmp/npm-cache /root/.cache; \
+    else \
+        if [ "$ENABLE_PYTHON" = "true" ]; then \
+            apt-get install -y --no-install-recommends python3 python3-pip; \
+            pip3 install --no-cache-dir --break-system-packages \
+                -r /tmp/requirements-base.txt; \
+        fi; \
+        if [ "$ENABLE_NODE" = "true" ] || [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
+            apt-get install -y --no-install-recommends nodejs npm; \
+        fi; \
+    fi; \
+    if [ "$ENABLE_CLAUDE_CLI" = "true" ]; then \
+        npm install -g --cache /tmp/npm-cache @anthropic-ai/claude-code@^2.1.91; \
+        rm -rf /tmp/npm-cache; \
+    fi; \
+    if [ "$ENABLE_CURSOR_AGENT" = "true" ]; then \
+        curl https://cursor.com/install -fsSL | bash; \
+        AGENT_LINK="$(readlink -f /root/.local/bin/agent)"; \
+        AGENT_DIR="$(dirname "$AGENT_LINK")"; \
+        mkdir -p /opt/cursor-agent; \
+        cp -R "$AGENT_DIR"/. /opt/cursor-agent/; \
+        chmod -R a+rX /opt/cursor-agent; \
+        ln -sf /opt/cursor-agent/cursor-agent /usr/local/bin/agent; \
+        rm -rf /root/.cache /root/.local/share/cursor-agent /root/.local/bin/agent /root/.local/bin/cursor-agent; \
+    fi; \
+    ln -sf /usr/sbin/gosu /sbin/su-exec; \
+    rm -rf /var/lib/apt/lists/*; \
+    rm -f /tmp/requirements-base.txt /tmp/requirements-skills.txt
+
+RUN useradd -m -u 1000 -d /app goclaw
+WORKDIR /app
+
+COPY --from=builder /out/goclaw /app/goclaw
+COPY --from=builder /out/pkg-helper /app/pkg-helper
+COPY --from=builder /src/migrations/ /app/migrations/
+COPY --from=builder /src/skills/ /app/bundled-skills/
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+
+RUN set -eux; \
+    sed -i 's/\r$//' /app/docker-entrypoint.sh; \
+    cd /app/bundled-skills; \
+    for skill in docx pptx xlsx; do \
+        if [ -d "${skill}/scripts" ] && [ ! -d "${skill}/scripts/office" ]; then \
+            rm -f "${skill}/scripts/office"; \
+            cp -r _shared/office "${skill}/scripts/office"; \
+        fi; \
+    done
+
+RUN chmod +x /app/docker-entrypoint.sh && \
+    chmod 755 /app/pkg-helper && chown root:root /app/pkg-helper
+
+RUN mkdir -p /app/workspace /app/data/.runtime/pip /app/data/.runtime/npm-global/lib \
+        /app/data/.runtime/pip-cache /app/data/.claude /app/skills /app/tsnet-state /app/.goclaw /app/.cursor \
+    && ln -s /app/data/.claude /app/.claude \
+    && touch /app/data/.runtime/apk-packages \
+    && chown -R goclaw:goclaw /app/workspace /app/skills /app/tsnet-state /app/.goclaw /app/.cursor \
+    && chown goclaw:goclaw /app/bundled-skills /app/data \
+    && chown root:goclaw /app/data/.runtime /app/data/.runtime/apk-packages \
+    && chmod 0750 /app/data/.runtime \
+    && chmod 0640 /app/data/.runtime/apk-packages \
+    && chown -R goclaw:goclaw /app/data/.runtime/pip /app/data/.runtime/npm-global /app/data/.runtime/pip-cache /app/data/.claude
+
+ENV GOCLAW_CONFIG=/app/config.json \
+    GOCLAW_WORKSPACE=/app/workspace \
+    GOCLAW_DATA_DIR=/app/data \
+    GOCLAW_SKILLS_DIR=/app/skills \
+    GOCLAW_MIGRATIONS_DIR=/app/migrations \
+    GOCLAW_HOST=0.0.0.0 \
+    GOCLAW_PORT=18790
+
+EXPOSE 18790
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://localhost:18790/health || exit 1
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["serve"]
+
+# Default target for regular builds.
+FROM runtime-alpine AS final

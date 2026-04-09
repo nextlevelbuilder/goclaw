@@ -1,5 +1,5 @@
 # Optional overlay: install Cursor Agent CLI and sync credentials from host into container.
-# Mounts host ~/.cursor as read-only; entrypoint copies credentials to a persistent volume.
+# Mounts host ~/.cursor as read-only; entrypoint copies credentials to app XDG path.
 # Adds ENABLE_CURSOR_AGENT build arg to install Cursor CLI using the official installer.
 #
 # Usage:
@@ -8,18 +8,15 @@
 # Optional:
 #   - Set GOCLAW_CURSOR_CLI_PATH to override binary path (default: agent)
 #   - If host mount is unavailable, run auth once inside container:
-#       docker compose exec goclaw agent auth login
+#       docker compose exec -u goclaw goclaw agent login
 
 services:
   goclaw:
     build:
+      target: runtime-cursor
       args:
         ENABLE_CURSOR_AGENT: "true"
     environment:
       - GOCLAW_CURSOR_CLI_PATH=${GOCLAW_CURSOR_CLI_PATH:-agent}
     volumes:
       - ${HOME}/.cursor:/app/.cursor-host:ro
-      - goclaw-cursor-config:/app/.cursor
-
-volumes:
-  goclaw-cursor-config:

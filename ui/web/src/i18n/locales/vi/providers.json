@@ -186,7 +186,7 @@
   },
   "cursorCli": {
     "description": "Cursor CLI dùng nhị phân",
-    "descriptionSuffix": "cục bộ. Đăng nhập trình duyệt trên máy chủ — GoClaw không lưu API key Cursor.",
+    "descriptionSuffix": "cục bộ. Đăng nhập bằng trình duyệt trên máy chủ — GoClaw dùng session Cursor CLI cục bộ của bạn.",
     "checkingAuth": "Đang kiểm tra xác thực...",
     "authenticatedAs": "Đã xác thực là",
     "switchAccount": "Chuyển tài khoản?",
