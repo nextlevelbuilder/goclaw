@@ -15,6 +15,7 @@ import (
 const (
 	DefaultGitHubCopilotProviderName = "github-copilot"
 	DefaultGitHubCopilotAPIBase      = "https://api.individual.githubcopilot.com"
+	DefaultGitHubCopilotProxyBase    = "https://proxy.individual.githubcopilot.com"
 	GitHubCopilotUserAgent           = "GitHubCopilotChat/0.35.0"
 	GitHubCopilotEditorVersion       = "vscode/1.107.0"
 	GitHubCopilotPluginVersion       = "copilot-chat/0.35.0"
@@ -96,7 +97,7 @@ func gitHubCopilotURLs(domain string) (deviceCodeURL, accessTokenURL, copilotTok
 		fmt.Sprintf("https://api.%s/copilot_internal/v2/token", domain)
 }
 
-func getGitHubCopilotBaseURLFromToken(token string) string {
+func getGitHubCopilotProxyHostFromToken(token string) string {
 	match := strings.Split(token, "proxy-ep=")
 	if len(match) < 2 {
 		return ""
@@ -106,6 +107,14 @@ func getGitHubCopilotBaseURLFromToken(token string) string {
 		proxyHost = proxyHost[:idx]
 	}
 	proxyHost = strings.TrimSpace(proxyHost)
+	if proxyHost == "" {
+		return ""
+	}
+	return proxyHost
+}
+
+func getGitHubCopilotBaseURLFromToken(token string) string {
+	proxyHost := getGitHubCopilotProxyHostFromToken(token)
 	if proxyHost == "" {
 		return ""
 	}
@@ -126,6 +135,16 @@ func GetGitHubCopilotBaseURL(token, enterpriseDomain string) string {
 		return "https://copilot-api." + domain
 	}
 	return DefaultGitHubCopilotAPIBase
+}
+
+func GetGitHubCopilotProxyBaseURL(token, enterpriseDomain string) string {
+	if host := getGitHubCopilotProxyHostFromToken(token); host != "" {
+		return "https://" + host
+	}
+	if domain := NormalizeGitHubCopilotDomain(enterpriseDomain); domain != "" {
+		return "https://proxy." + domain
+	}
+	return DefaultGitHubCopilotProxyBase
 }
 
 func fetchGitHubCopilotJSON(target string, init func(*http.Request)) (map[string]any, error) {

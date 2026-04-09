@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, CheckCircle, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useHttp } from "@/hooks/use-ws";
+import { queryKeys } from "@/lib/query-keys";
 import { toast } from "@/stores/use-toast-store";
 import { isValidSlug } from "@/lib/slug";
 
@@ -38,6 +40,7 @@ export function GitHubCopilotOAuthSection({
   displayName,
 }: GitHubCopilotOAuthSectionProps) {
   const http = useHttp();
+  const queryClient = useQueryClient();
   const resolvedProviderName = providerName?.trim() ?? "";
   const hasValidProvider = resolvedProviderName.length > 0 && isValidSlug(resolvedProviderName);
   const [status, setStatus] = useState<GitHubCopilotOAuthStatus | null>(null);
@@ -71,6 +74,10 @@ export function GitHubCopilotOAuthSection({
     }
   }, [hasValidProvider, http, resolvedProviderName]);
 
+  const invalidateProviders = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.providers.all });
+  }, [queryClient]);
+
   useEffect(() => {
     fetchStatus();
     return stopPolling;
@@ -86,10 +93,11 @@ export function GitHubCopilotOAuthSection({
       const next = await fetchStatus();
       if (next?.authenticated) {
         stopPolling();
+        await invalidateProviders();
       }
     }, 2000);
     return stopPolling;
-  }, [fetchStatus, status?.authenticated, status?.pending]);
+  }, [fetchStatus, invalidateProviders, status?.authenticated, status?.pending]);
 
   const handleStart = async () => {
     if (!hasValidProvider) return;
@@ -104,6 +112,7 @@ export function GitHubCopilotOAuthSection({
       );
       if (res.status === "already_authenticated") {
         await fetchStatus();
+        await invalidateProviders();
         onSuccess();
         return;
       }
@@ -129,6 +138,7 @@ export function GitHubCopilotOAuthSection({
       await http.post(`/v1/auth/copilot/${encodeURIComponent(resolvedProviderName)}/logout`);
       stopPolling();
       setStatus({ authenticated: false });
+      await invalidateProviders();
       toast.success("GitHub Copilot disconnected");
     } catch (err) {
       toast.error("Failed to disconnect GitHub Copilot", err instanceof Error ? err.message : "");
