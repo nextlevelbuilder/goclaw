@@ -278,3 +278,76 @@ func TestMethodScopes_ApprovalMethod(t *testing.T) {
 		t.Fatalf("approvals method should require [approvals, admin], got %v", scopes)
 	}
 }
+
+// --- MethodScopes: write/read method scopes ---
+
+func TestMethodScopes_WriteMethod(t *testing.T) {
+	scopes := MethodScopes(protocol.MethodChatSend)
+	hasWrite, hasAdmin := false, false
+	for _, s := range scopes {
+		if s == ScopeWrite {
+			hasWrite = true
+		}
+		if s == ScopeAdmin {
+			hasAdmin = true
+		}
+	}
+	if !hasWrite || !hasAdmin {
+		t.Errorf("write method should require [write, admin], got %v", scopes)
+	}
+}
+
+func TestMethodScopes_ReadMethod(t *testing.T) {
+	scopes := MethodScopes("sessions.list")
+	if len(scopes) != 3 {
+		t.Fatalf("read method should have 3 scopes [read, write, admin], got %v", scopes)
+	}
+	hasRead, hasWrite, hasAdmin := false, false, false
+	for _, s := range scopes {
+		switch s {
+		case ScopeRead:
+			hasRead = true
+		case ScopeWrite:
+			hasWrite = true
+		case ScopeAdmin:
+			hasAdmin = true
+		}
+	}
+	if !hasRead || !hasWrite || !hasAdmin {
+		t.Errorf("read method should allow [read, write, admin], got %v", scopes)
+	}
+}
+
+func TestMethodScopes_DevicePairMethod(t *testing.T) {
+	scopes := MethodScopes("device.pair.request")
+	hasPairing, hasAdmin := false, false
+	for _, s := range scopes {
+		if s == ScopePairing {
+			hasPairing = true
+		}
+		if s == ScopeAdmin {
+			hasAdmin = true
+		}
+	}
+	if !hasPairing || !hasAdmin {
+		t.Errorf("device.pair method should require [pairing, admin], got %v", scopes)
+	}
+}
+
+// --- PolicyEngine concurrent safety ---
+
+func TestPolicyEngine_IsOwner_ConcurrentSafe(t *testing.T) {
+	pe := NewPolicyEngine([]string{"alice", "bob"})
+	done := make(chan bool)
+	for range 100 {
+		go func() {
+			pe.IsOwner("alice")
+			pe.IsOwner("charlie")
+			done <- true
+		}()
+	}
+	for range 100 {
+		<-done
+	}
+}
+
