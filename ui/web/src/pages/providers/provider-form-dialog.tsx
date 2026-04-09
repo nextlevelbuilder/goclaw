@@ -24,8 +24,14 @@ import {
 } from "@/components/ui/select";
 import type { ProviderData, ProviderInput } from "./hooks/use-providers";
 import { slugify } from "@/lib/slug";
-import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
+import {
+  DEFAULT_CODEX_OAUTH_ALIAS,
+  DEFAULT_GITHUB_COPILOT_OAUTH_ALIAS,
+  PROVIDER_TYPES,
+  suggestUniqueProviderAlias,
+} from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
+import { GitHubCopilotOAuthSection } from "./provider-github-copilot-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
 import { Loader2 } from "lucide-react";
@@ -66,7 +72,9 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   const name = watch("name");
 
   const hasClaudeCLI = existingProviders.some((p) => p.provider_type === "claude_cli");
-  const isOAuth = providerType === "chatgpt_oauth";
+  const isChatGPTOAuth = providerType === "chatgpt_oauth";
+  const isGitHubCopilotOAuth = providerType === "github_copilot_oauth";
+  const isOAuth = isChatGPTOAuth || isGitHubCopilotOAuth;
   const isCLI = providerType === "claude_cli";
   const isACP = providerType === "acp";
 
@@ -120,12 +128,15 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
     setValue("providerType", v, { shouldValidate: true });
     const preset = PROVIDER_TYPES.find((pt) => pt.value === v);
     setValue("apiBase", preset?.apiBase || "");
-    if (v === "chatgpt_oauth") {
-      if (!name || providerType !== "chatgpt_oauth") {
-        setValue("name", suggestUniqueProviderAlias(existingProviders));
+    if (v === "chatgpt_oauth" || v === "github_copilot_oauth") {
+      const baseAlias = v === "github_copilot_oauth"
+        ? DEFAULT_GITHUB_COPILOT_OAUTH_ALIAS
+        : DEFAULT_CODEX_OAUTH_ALIAS;
+      if (!name || providerType !== v) {
+        setValue("name", suggestUniqueProviderAlias(existingProviders, { baseAlias }));
       }
     } else {
-      if (name === DEFAULT_CODEX_OAUTH_ALIAS) setValue("name", "");
+      if (name === DEFAULT_CODEX_OAUTH_ALIAS || name === DEFAULT_GITHUB_COPILOT_OAUTH_ALIAS) setValue("name", "");
     }
   };
 
@@ -168,13 +179,22 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
                   />
                 </div>
               </div>
-              <OAuthSection
-                providerName={name}
-                displayName={watch("displayName") || ""}
-                apiBase={watch("apiBase") || ""}
-                authenticatedActionLabel={t("form.close")}
-                onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }}
-              />
+              {isChatGPTOAuth ? (
+                <OAuthSection
+                  providerName={name}
+                  displayName={watch("displayName") || ""}
+                  apiBase={watch("apiBase") || ""}
+                  authenticatedActionLabel={t("form.close")}
+                  onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }}
+                />
+              ) : (
+                <GitHubCopilotOAuthSection
+                  providerName={name}
+                  displayName={watch("displayName") || ""}
+                  authenticatedActionLabel={t("form.close")}
+                  onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["providers"] }); onOpenChange(false); }}
+                />
+              )}
             </>
           ) : (
             <>

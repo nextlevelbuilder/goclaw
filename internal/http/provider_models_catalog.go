@@ -101,3 +101,20 @@ func chatGPTOAuthModels() []ModelInfo {
 		{ID: "gpt-5.1", Name: "GPT-5.1"},
 	})
 }
+
+// githubCopilotModels returns the curated, currently supported GitHub Copilot OAuth model set.
+// Initial implementation intentionally scopes to GPT-family models that can use the Responses transport.
+func githubCopilotModels() []ModelInfo {
+	return withReasoningCapabilities([]ModelInfo{
+		{ID: "gpt-5.4", Name: "GPT-5.4"},
+		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
+		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
+		{ID: "gpt-5.3-codex-spark", Name: "GPT-5.3 Codex Spark"},
+		{ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex"},
+		{ID: "gpt-5.2", Name: "GPT-5.2"},
+		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex"},
+		{ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max"},
+		{ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini"},
+		{ID: "gpt-5.1", Name: "GPT-5.1"},
+	})
+}

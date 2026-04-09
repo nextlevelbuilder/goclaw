@@ -21,6 +21,7 @@ import { ConfigGroupHeader } from "@/components/shared/config-group-header";
 import { PROVIDER_TYPES } from "@/constants/providers";
 import { CLISection } from "../provider-cli-section";
 import { OAuthSection } from "../provider-oauth-section";
+import { GitHubCopilotOAuthSection } from "../provider-github-copilot-oauth-section";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
 interface ProviderAdvancedDialogProps {
@@ -52,7 +53,9 @@ export function ProviderAdvancedDialog({
 
   const isACP = provider.provider_type === "acp";
   const isCLI = provider.provider_type === "claude_cli";
-  const isOAuth = provider.provider_type === "chatgpt_oauth";
+  const isChatGPTOAuth = provider.provider_type === "chatgpt_oauth";
+  const isGitHubCopilotOAuth = provider.provider_type === "github_copilot_oauth";
+  const isOAuth = isChatGPTOAuth || isGitHubCopilotOAuth;
   const isStandard = !isACP && !isCLI && !isOAuth;
 
   const typeInfo = PROVIDER_TYPES.find((pt) => pt.value === provider.provider_type);
@@ -248,13 +251,22 @@ export function ProviderAdvancedDialog({
                 title={t("detail.oauthConfig")}
                 description={t("detail.oauthConfigDesc")}
               />
-              <OAuthSection
-                providerName={provider.name}
-                displayName={provider.display_name}
-                apiBase={provider.api_base}
-                authenticatedActionLabel={t("form.close")}
-                onSuccess={() => onOpenChange(false)}
-              />
+              {isChatGPTOAuth ? (
+                <OAuthSection
+                  providerName={provider.name}
+                  displayName={provider.display_name}
+                  apiBase={provider.api_base}
+                  authenticatedActionLabel={t("form.close")}
+                  onSuccess={() => onOpenChange(false)}
+                />
+              ) : (
+                <GitHubCopilotOAuthSection
+                  providerName={provider.name}
+                  displayName={provider.display_name}
+                  authenticatedActionLabel={t("form.close")}
+                  onSuccess={() => onOpenChange(false)}
+                />
+              )}
             </>
           )}
         </div>

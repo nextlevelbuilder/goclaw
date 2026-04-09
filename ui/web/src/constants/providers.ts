@@ -10,9 +10,11 @@ export interface ProviderTypeInfo {
 type ProviderAliasSource = string | { name?: string | null };
 
 export const DEFAULT_CODEX_OAUTH_ALIAS = "openai-codex";
+export const DEFAULT_GITHUB_COPILOT_OAUTH_ALIAS = "github-copilot";
 
 export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: "chatgpt_oauth", label: "ChatGPT Subscription (OAuth)", apiBase: "", placeholder: "" },
+  { value: "github_copilot_oauth", label: "GitHub Copilot (OAuth)", apiBase: "", placeholder: "" },
   { value: "anthropic_native", label: "Anthropic (Native)", apiBase: "", placeholder: "https://api.anthropic.com" },
   { value: "openai_compat", label: "OpenAI Compatible", apiBase: "", placeholder: "https://api.openai.com/v1" },
   { value: "gemini_native", label: "Google Gemini", apiBase: "https://generativelanguage.googleapis.com/v1beta/openai", placeholder: "" },

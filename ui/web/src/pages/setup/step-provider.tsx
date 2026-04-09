@@ -18,6 +18,7 @@ import { PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/provider
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { CLISection } from "@/pages/providers/provider-cli-section";
 import { OAuthSection } from "@/pages/providers/provider-oauth-section";
+import { GitHubCopilotOAuthSection } from "@/pages/providers/provider-github-copilot-oauth-section";
 import { slugify } from "@/lib/slug";
 import type { ProviderData, ProviderInput } from "@/types/provider";
 
@@ -43,7 +44,9 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const isOAuth = providerType === "chatgpt_oauth";
+  const isChatGPTOAuth = providerType === "chatgpt_oauth";
+  const isGitHubCopilotOAuth = providerType === "github_copilot_oauth";
+  const isOAuth = isChatGPTOAuth || isGitHubCopilotOAuth;
   const isCLI = providerType === "claude_cli";
   // Local Ollama uses no API key — the server accepts any non-empty Bearer value internally
   const isOllama = providerType === "ollama";
@@ -51,10 +54,13 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
   const handleTypeChange = (value: string) => {
     setProviderType(value);
     const preset = PROVIDER_TYPES.find((t) => t.value === value);
-    setName(value === "chatgpt_oauth"
-      ? (providerType === "chatgpt_oauth"
+    setName(value === "chatgpt_oauth" || value === "github_copilot_oauth"
+      ? ((providerType === value)
         ? name
-        : suggestUniqueProviderAlias(providers, { excludeName: existingProvider?.name }))
+        : suggestUniqueProviderAlias(providers, {
+            excludeName: existingProvider?.name,
+            baseAlias: value === "github_copilot_oauth" ? "github-copilot" : "openai-codex",
+          }))
       : slugify(value));
     setApiBase(preset?.apiBase || "");
     setApiKey("");
@@ -78,7 +84,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
         provider = res.providers?.find(
-          (p) => p.provider_type === "chatgpt_oauth" && p.name === name.trim(),
+          (p) => (p.provider_type === "chatgpt_oauth" || p.provider_type === "github_copilot_oauth") && p.name === name.trim(),
         );
         if (provider) break;
         if (attempt < 2) await new Promise((r) => setTimeout(r, 1000));
@@ -185,13 +191,22 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
                 />
               </div>
 
-              <OAuthSection
-                providerName={name}
-                displayName={oauthDisplayName}
-                apiBase={apiBase}
-                onSuccess={handleOAuthSuccess}
-                authenticatedActionLabel={t("model.continue")}
-              />
+              {isChatGPTOAuth ? (
+                <OAuthSection
+                  providerName={name}
+                  displayName={oauthDisplayName}
+                  apiBase={apiBase}
+                  onSuccess={handleOAuthSuccess}
+                  authenticatedActionLabel={t("model.continue")}
+                />
+              ) : (
+                <GitHubCopilotOAuthSection
+                  providerName={name}
+                  displayName={oauthDisplayName}
+                  onSuccess={handleOAuthSuccess}
+                  authenticatedActionLabel={t("model.continue")}
+                />
+              )}
             </>
           ) : isCLI ? (
             <CLISection open={true} />

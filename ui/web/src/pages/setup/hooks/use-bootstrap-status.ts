@@ -31,7 +31,7 @@ export function useBootstrapStatus() {
       provider.api_key === "***"
       || provider.provider_type === "claude_cli"
       || provider.provider_type === "ollama"
-      || (provider.provider_type === "chatgpt_oauth" && readyOAuthProviders.has(provider.name))
+      || ((provider.provider_type === "chatgpt_oauth" || provider.provider_type === "github_copilot_oauth") && readyOAuthProviders.has(provider.name))
     ));
     const hasAgent = agents.length > 0;
 

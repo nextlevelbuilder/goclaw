@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -58,6 +59,30 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 
 	if p.ProviderType == store.ProviderChatGPTOAuth {
 		respond(chatGPTOAuthModels())
+		return
+	}
+
+	if p.ProviderType == store.ProviderGitHubCopilotOAuth {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		defer cancel()
+		ts := oauth.NewGitHubCopilotTokenSource(h.store, h.secretStore, p.Name).WithTenantID(p.TenantID)
+		token, tokenErr := ts.Token()
+		if tokenErr != nil {
+			slog.Warn("providers.models.github_copilot.token", "provider", p.Name, "error", tokenErr)
+			respond([]ModelInfo{})
+			return
+		}
+		enterpriseDomain := ""
+		if settings := store.ParseGitHubCopilotOAuthProviderSettings(p.Settings); settings != nil {
+			enterpriseDomain = settings.EnterpriseDomain
+		}
+		models, err := fetchGitHubCopilotModels(ctx, ts.APIBase(), token, enterpriseDomain)
+		if err != nil {
+			slog.Warn("providers.models.github_copilot", "provider", p.Name, "error", err)
+			respond([]ModelInfo{})
+			return
+		}
+		respond(withReasoningCapabilities(models))
 		return
 	}
 

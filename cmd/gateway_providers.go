@@ -340,6 +340,9 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 				codex.WithRoutingDefaults(oauthSettings.CodexPool.Strategy, oauthSettings.CodexPool.ExtraProviderNames)
 			}
 			registry.RegisterForTenant(p.TenantID, codex)
+		case store.ProviderGitHubCopilotOAuth:
+			ts := oauth.NewGitHubCopilotTokenSource(provStore, secretStore, p.Name).WithTenantID(p.TenantID)
+			registry.RegisterForTenant(p.TenantID, providers.NewGitHubCopilotProvider(p.Name, ts, p.APIBase, ""))
 		case store.ProviderAnthropicNative:
 			registry.RegisterForTenant(p.TenantID, providers.NewAnthropicProvider(p.APIKey,
 				providers.WithAnthropicName(p.Name),

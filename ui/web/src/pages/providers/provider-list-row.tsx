@@ -52,7 +52,7 @@ export function ProviderListRow({
     label: provider.provider_type,
     variant: "outline" as const,
   };
-  const subtitle = provider.provider_type === "chatgpt_oauth"
+  const subtitle = provider.provider_type === "chatgpt_oauth" || provider.provider_type === "github_copilot_oauth"
     ? t("card.oauthAlias", { name: provider.name })
     : provider.display_name
       ? provider.name

@@ -20,7 +20,7 @@ export function ProviderHeader({ provider, onBack, onAdvanced, onDelete }: Provi
   const typeInfo = PROVIDER_TYPES.find((pt) => pt.value === provider.provider_type);
   const typeLabel = typeInfo?.label ?? provider.provider_type;
   const displayTitle = provider.display_name || provider.name;
-  const subtitle = provider.provider_type === "chatgpt_oauth"
+  const subtitle = provider.provider_type === "chatgpt_oauth" || provider.provider_type === "github_copilot_oauth"
     ? t("card.oauthAlias", { name: provider.name })
     : provider.name;
 

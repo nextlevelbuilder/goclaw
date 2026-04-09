@@ -66,6 +66,15 @@ func (s *codexMessageStreamState) recordTextDelta(itemID string, outputIndex, co
 }
 
 func (s *codexMessageStreamState) recordFinalText(itemID string, outputIndex, contentIndex int, text string, result *ChatResponse, onChunk func(StreamChunk)) {
+	s.rememberFinalText(itemID, outputIndex, contentIndex, text)
+	msg := s.ensureMessage(itemID, "", outputIndex)
+	if !shouldEmitCodexPhase(msg.phase) {
+		return
+	}
+	msg.flushContiguous(result, onChunk)
+}
+
+func (s *codexMessageStreamState) rememberFinalText(itemID string, outputIndex, contentIndex int, text string) {
 	if text == "" {
 		return
 	}
@@ -73,11 +82,7 @@ func (s *codexMessageStreamState) recordFinalText(itemID string, outputIndex, co
 	part := msg.ensurePart(contentIndex)
 	prev := part.text
 	part.text = text
-	if !shouldEmitCodexPhase(msg.phase) {
-		return
-	}
 	part.reconcileCompleted(prev)
-	msg.flushContiguous(result, onChunk)
 }
 
 func (s *codexMessageStreamState) flushMessage(itemID string, result *ChatResponse, onChunk func(StreamChunk)) {
@@ -118,6 +123,23 @@ func (s *codexMessageStreamState) updateResultPhase(result *ChatResponse) {
 			return
 		}
 	}
+}
+
+func (s *codexMessageStreamState) bestCompletedMessage() *codexMessageState {
+	ordered := s.preferredMessages()
+	if len(ordered) == 0 {
+		return nil
+	}
+	best := ordered[0]
+	bestLen := best.normalizedTextLen()
+	for _, msg := range ordered[1:] {
+		msgLen := msg.normalizedTextLen()
+		if msgLen > bestLen || (msgLen == bestLen && msg.outputIndex > best.outputIndex) {
+			best = msg
+			bestLen = msgLen
+		}
+	}
+	return best
 }
 
 // preferredMessages returns messages ordered by outputIndex, preferring
@@ -196,6 +218,29 @@ func (m *codexMessageState) flushContiguous(result *ChatResponse, onChunk func(S
 		}
 		part.emitMissing(result, onChunk)
 	}
+}
+
+func (m *codexMessageState) normalizedText() string {
+	var b strings.Builder
+	var last string
+	for nextIndex := 0; ; nextIndex++ {
+		part, ok := m.parts[nextIndex]
+		if !ok {
+			return b.String()
+		}
+		if part.text == "" {
+			continue
+		}
+		if part.text == last {
+			continue
+		}
+		b.WriteString(part.text)
+		last = part.text
+	}
+}
+
+func (m *codexMessageState) normalizedTextLen() int {
+	return len(m.normalizedText())
 }
 
 func (p *codexTextPartState) emitMissing(result *ChatResponse, onChunk func(StreamChunk)) {

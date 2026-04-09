@@ -11,6 +11,7 @@ type BadgeVariant = "default" | "secondary" | "outline";
 const SPECIAL_VARIANTS: Record<string, BadgeVariant> = {
   anthropic_native: "default",
   chatgpt_oauth: "default",
+  github_copilot_oauth: "default",
   claude_cli: "outline",
   acp: "outline",
 };
@@ -121,6 +122,25 @@ export function ProviderApiKeyBadge({
       <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
         <Link2 className="h-3 w-3" />{t("card.connected")}
       </span>
+    );
+  }
+  if (provider.provider_type === "github_copilot_oauth") {
+    if (provider.enabled === false) {
+      return (
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <CircleSlash2 className="h-3 w-3" />{t("card.disabled")}
+        </span>
+      );
+    }
+    if (provider.api_key === "***") {
+      return (
+        <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+          <Link2 className="h-3 w-3" />GitHub connected
+        </span>
+      );
+    }
+    return (
+      <span className="text-[11px] text-muted-foreground/60">Sign in required</span>
     );
   }
   if (provider.provider_type === "claude_cli") {

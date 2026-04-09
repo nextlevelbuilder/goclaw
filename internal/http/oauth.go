@@ -33,6 +33,7 @@ type OAuthHandler struct {
 
 	mu            sync.Mutex
 	pending       map[string]*pendingOAuthFlow
+	pendingCopilot map[string]*pendingGitHubCopilotFlow
 	activeFlowKey string // only one active flow at a time (fixed callback port)
 }
 
@@ -55,6 +56,7 @@ func NewOAuthHandler(provStore store.ProviderStore, secretStore store.ConfigSecr
 		providerReg: providerReg,
 		msgBus:      msgBus,
 		pending:     make(map[string]*pendingOAuthFlow),
+		pendingCopilot: make(map[string]*pendingGitHubCopilotFlow),
 	}
 }
 
@@ -65,6 +67,9 @@ func (h *OAuthHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/start", h.auth(h.handleStart))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/callback", h.auth(h.handleManualCallback))
 	mux.HandleFunc("POST /v1/auth/chatgpt/{provider}/logout", h.auth(h.handleLogout))
+	mux.HandleFunc("GET /v1/auth/copilot/{provider}/status", h.auth(h.handleGitHubCopilotStatus))
+	mux.HandleFunc("POST /v1/auth/copilot/{provider}/start", h.auth(h.handleGitHubCopilotStart))
+	mux.HandleFunc("POST /v1/auth/copilot/{provider}/logout", h.auth(h.handleGitHubCopilotLogout))
 
 	mux.HandleFunc("GET /v1/auth/openai/status", h.auth(h.handleStatus))
 	mux.HandleFunc("GET /v1/auth/openai/quota", h.auth(h.handleQuota))
