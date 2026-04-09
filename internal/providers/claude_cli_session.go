@@ -167,6 +167,7 @@ func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 		PeerKind:  extractStringOpt(opts, OptPeerKind),
 		Workspace: extractStringOpt(opts, OptWorkspace),
 		TenantID:  extractStringOpt(opts, OptTenantID),
+		LocalKey:  extractStringOpt(opts, OptLocalKey),
 	}
 }
 

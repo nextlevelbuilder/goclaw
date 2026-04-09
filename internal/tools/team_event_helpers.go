@@ -116,6 +116,7 @@ func WithContextInfo(ctx context.Context) TaskEventOption {
 		p.Channel = ToolChannelFromCtx(ctx)
 		p.ChatID = ToolChatIDFromCtx(ctx)
 		p.PeerKind = ToolPeerKindFromCtx(ctx)
+		p.LocalKey = ToolLocalKeyFromCtx(ctx)
 	}
 }
 
