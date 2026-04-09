@@ -185,7 +185,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 		if s.cfg.Gateway.Token != "" {
 			bridgeHandler := mcpbridge.NewBridgeServer(s.tools, "1.0.0", s.msgBus)
 			handler := tokenAuthMiddleware(s.cfg.Gateway.Token,
-				bridgeContextMiddleware(s.cfg.Gateway.Token, bridgeHandler))
+				bridgeContextMiddleware(s.cfg.Gateway.Token, s.agentStore, bridgeHandler))
 			mux.Handle("/mcp/bridge", handler)
 		} else {
 			slog.Warn("security.mcp_bridge_disabled: no gateway token configured, MCP bridge is disabled")
@@ -212,7 +212,7 @@ func (s *Server) BuildMux() *http.ServeMux {
 // access agent/user scope and resolve workspace-relative paths.
 // When a gateway token is configured, the context headers must be accompanied by
 // a valid X-Bridge-Sig HMAC to prevent forgery.
-func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handler {
+func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		agentIDStr := r.Header.Get("X-Agent-ID")
@@ -221,6 +221,8 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 		chatID := r.Header.Get("X-Chat-ID")
 		peerKind := r.Header.Get("X-Peer-Kind")
 		workspace := r.Header.Get("X-Workspace")
+		localKey := r.Header.Get("X-Local-Key")
+		sessionKey := r.Header.Get("X-Session-Key")
 
 		if agentIDStr != "" || userID != "" {
 			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
@@ -234,7 +236,7 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 			// Verify HMAC signature over all context fields.
 			tenantIDStr := r.Header.Get("X-Tenant-ID")
 			sig := r.Header.Get("X-Bridge-Sig")
-			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig)
+			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, localKey, sessionKey)
 			if !ok {
 				slog.Warn("security.mcp_bridge: invalid bridge context signature",
 					"agent_id", agentIDStr, "user_id", userID)
@@ -245,6 +247,18 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 			if agentIDStr != "" {
 				if id, err := uuid.Parse(agentIDStr); err == nil {
 					ctx = store.WithAgentID(ctx, id)
+
+					// Inject per-agent shell deny group overrides so the exec tool
+					// respects the same policy as the normal agent loop.
+					if agentStore != nil {
+						ag, err := agentStore.GetByIDUnscoped(ctx, id)
+						if err == nil && ag != nil {
+							groups := ag.ParseShellDenyGroups()
+							if groups != nil {
+								ctx = store.WithShellDenyGroups(ctx, groups)
+							}
+						}
+					}
 				}
 			}
 			if userID != "" {
@@ -273,6 +287,12 @@ func bridgeContextMiddleware(gatewayToken string, next http.Handler) http.Handle
 		// Only when agent context is present (HMAC-protected) to prevent unauthenticated path injection.
 		if workspace != "" && (agentIDStr != "" || userID != "") {
 			ctx = tools.WithToolWorkspace(ctx, workspace)
+		}
+		if localKey != "" {
+			ctx = tools.WithToolLocalKey(ctx, localKey)
+		}
+		if sessionKey != "" {
+			ctx = tools.WithToolSessionKey(ctx, sessionKey)
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))

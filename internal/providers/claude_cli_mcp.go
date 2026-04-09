@@ -91,6 +91,7 @@ type BridgeContext struct {
 	PeerKind  string
 	Workspace string
 	TenantID  string
+	LocalKey  string
 }
 
 // WriteMCPConfig writes a per-session MCP config file with agent context headers.
@@ -98,10 +99,10 @@ type BridgeContext struct {
 // outside the agent's workDir so tokens are not exposed.
 // Skips write if content is unchanged. Returns the file path.
 func (d *MCPConfigData) WriteMCPConfig(ctx context.Context, sessionKey string, bc BridgeContext) string {
-	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID)
+	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID, bc.LocalKey)
 }
 
-func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID string) string {
+func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey string) string {
 	if d == nil || (len(d.Servers) == 0 && d.GatewayAddr == "" && d.AgentMCPLookup == nil) {
 		return ""
 	}
@@ -151,9 +152,15 @@ func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, 
 		if tenantID != "" && !strings.ContainsAny(tenantID, "\r\n\x00") {
 			headers["X-Tenant-ID"] = tenantID
 		}
+		if localKey != "" && !strings.ContainsAny(localKey, "\r\n\x00") {
+			headers["X-Local-Key"] = localKey
+		}
+		if sessionKey != "" && !strings.ContainsAny(sessionKey, "\r\n\x00") {
+			headers["X-Session-Key"] = sessionKey
+		}
 		// HMAC signature over all context fields to prevent header forgery
 		if d.GatewayToken != "" && (agentID != "" || userID != "") {
-			headers["X-Bridge-Sig"] = SignBridgeContext(d.GatewayToken, agentID, userID, channel, chatID, peerKind, workspace, tenantID)
+			headers["X-Bridge-Sig"] = SignBridgeContext(d.GatewayToken, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey, sessionKey)
 		}
 
 		bridgeEntry := map[string]any{
@@ -257,9 +264,13 @@ func sanitizePathSegment(s string) string {
 
 // SignBridgeContext computes HMAC-SHA256 over all bridge context fields to prevent forgery.
 // Payload: agentID|userID|channel|chatID|peerKind|workspace|tenantID
-func SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID string) string {
+func SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID string, extra ...string) string {
 	mac := hmac.New(sha256.New, []byte(key))
-	mac.Write([]byte(agentID + "|" + userID + "|" + channel + "|" + chatID + "|" + peerKind + "|" + workspace + "|" + tenantID))
+	payload := agentID + "|" + userID + "|" + channel + "|" + chatID + "|" + peerKind + "|" + workspace + "|" + tenantID
+	for _, e := range extra {
+		payload += "|" + e
+	}
+	mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -269,10 +280,15 @@ func SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspac
 // Falls back to old formats for backward compatibility with sessions whose MCP config
 // was written before the workspace or tenantID fields were added.
 // Callers must NOT trust the tenantID header when tenantVerified is false.
-func VerifyBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID, sig string) (bool, bool) {
-	// Current format: all fields including tenantID
-	expected := SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID)
+func VerifyBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID, sig string, extra ...string) (bool, bool) {
+	// Current format: all fields including localKey
+	expected := SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID, extra...)
 	if hmac.Equal([]byte(expected), []byte(sig)) {
+		return true, true
+	}
+	// Fallback: without extra fields (pre-localKey sessions)
+	noExtra := SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID)
+	if hmac.Equal([]byte(noExtra), []byte(sig)) {
 		return true, true
 	}
 	// Fallback: without tenantID (pre-tenantID sessions)
