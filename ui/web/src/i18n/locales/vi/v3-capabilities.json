@@ -1,0 +1,56 @@
+{
+  "title": "Agent Capabilities V3",
+  "subtitle": "Cac he thong cot loi cua agent",
+  "note": "Tat ca tinh nang luon bat cho agent v3.",
+  "tabs": {
+    "pipeline": "Pipeline",
+    "memory": "Bo nho",
+    "knowledge": "Tri thuc",
+    "orchestration": "Dieu phoi"
+  },
+  "pipeline": {
+    "title": "Pipeline 8 giai doan",
+    "description": "Moi tin nhan di qua 8 giai doan co cau truc trong 3 pha.",
+    "setup": "Khoi tao",
+    "setupDesc": "Lam giau context voi cau hinh agent, workspace, lich su nguoi dung, va ky uc tu phien truoc.",
+    "iteration": "Vong lap",
+    "iterationDesc": "Lap lai cho den khi hoan thanh hoac dat gioi han.",
+    "think": "Suy nghi",
+    "thinkDesc": "LLM suy luan voi day du context",
+    "prune": "Cat tia",
+    "pruneDesc": "Quan ly token va nen lich su",
+    "tools": "Cong cu",
+    "toolsDesc": "Thuc thi tool call tu LLM",
+    "observe": "Quan sat",
+    "observeDesc": "Thu thap va xac nhan ket qua",
+    "checkpoint": "Luu diem",
+    "checkpointDesc": "Luu trang thai trung gian",
+    "finalize": "Hoan tat",
+    "finalizeDesc": "Luu metadata, phat su kien cho consolidation bo nho, va don dep."
+  },
+  "memory": {
+    "title": "He thong bo nho 3 tang",
+    "description": "Bo nho luy tien tu hoi thoai den tri thuc dai han.",
+    "l0Title": "L0 Bo nho lam viec",
+    "l0Desc": "Lich su phien voi nen tu dong theo token. Khi lich su vuot nguong, tin nhan cu duoc tom tat qua LLM va cat bot. Memory flush trich xuat du lieu quan trong truoc khi nen.",
+    "l1Title": "L1 Bo nho su kien",
+    "l1Desc": "Tom tat phien tao sau moi lan chay. Moi ban tom tat co L0 abstract (~50 token) de inject nhanh. Tim kiem FTS + vector voi TTL 90 ngay. Abstract lien quan duoc tu dong inject vao system prompt moi luot.",
+    "l2Title": "L2 Bo nho ngu nghia",
+    "l2Desc": "Do thi tri thuc voi thuc the va quan he trich xuat qua LLM (nguong 0.75). Tu dong ghep trung. Dreaming tong hop 5+ ban tom tat thanh tai lieu kien thuc dai han.",
+    "eventFlow": "Su kien: session.completed kich hoat tao L1, tiep tuc kich hoat trich xuat L2 va dreaming."
+  },
+  "knowledge": {
+    "kgTitle": "Do thi tri thuc",
+    "kgDesc": "Thuc the (nguoi, du an, cong nghe) va quan he duoc trich xuat tu tom tat phien qua LLM. Phien ban thoi gian theo doi khi du lieu hop le. Tim kiem qua knowledge_graph_search voi duyet da buoc den 5 cap.",
+    "vaultTitle": "Kho tri thuc",
+    "vaultDesc": "So dang ky tai lieu voi [[wikilink]]. Tim kiem ket hop vault (40%) + episodic (30%) + KG (30%). SHA-256 phat hien thay doi noi dung.",
+    "dreamingTitle": "Dreaming",
+    "dreamingDesc": "Khi 5+ ban tom tat phien tich luy, LLM tong hop du lieu dai han: so thich nguoi dung, kien truc du an, mau lap lai, quyet dinh quan trong. Luu lam tai lieu tim kiem duoc. Debounce 10 phut moi agent."
+  },
+  "orchestration": {
+    "delegateTitle": "Uy quyen agent",
+    "delegateDesc": "Agent uy quyen nhiem vu cho agent duoc lien ket qua agent_links voi kiem tra quyen. Che do dong bo cho ket qua. Che do bat dong bo phat ngay va thong bao ket qua sau.",
+    "evolutionTitle": "Tu tien hoa",
+    "evolutionDesc": "Theo doi su dung tool va retrieval hang tuan. Phat hien 3 mau: su dung retrieval thap (< 20%), ty le loi tool cao (< 10%), va mau tool lap lai (> 100 lan/tuan). De xuat dieu chinh cau hinh voi tu dong ap dung co bao ve."
+  }
+}

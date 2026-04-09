@@ -38,6 +38,7 @@ import enPackages from "./locales/en/packages.json";
 import enTenants from "./locales/en/tenants.json";
 import enSystemSettings from "./locales/en/system-settings.json";
 import enImportExport from "./locales/en/import-export.json";
+import enV3Capabilities from "./locales/en/v3-capabilities.json";
 
 // --- VI namespaces ---
 import viCommon from "./locales/vi/common.json";
@@ -76,6 +77,7 @@ import viPackages from "./locales/vi/packages.json";
 import viTenants from "./locales/vi/tenants.json";
 import viSystemSettings from "./locales/vi/system-settings.json";
 import viImportExport from "./locales/vi/import-export.json";
+import viV3Capabilities from "./locales/vi/v3-capabilities.json";
 
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
@@ -114,6 +116,7 @@ import zhPackages from "./locales/zh/packages.json";
 import zhTenants from "./locales/zh/tenants.json";
 import zhSystemSettings from "./locales/zh/system-settings.json";
 import zhImportExport from "./locales/zh/import-export.json";
+import zhV3Capabilities from "./locales/zh/v3-capabilities.json";
 
 const STORAGE_KEY = "goclaw:language";
 
@@ -133,6 +136,7 @@ const ns = [
   "usage", "approvals", "nodes", "logs", "tools", "mcp", "tts",
   "setup", "memory", "vault", "storage", "pending-messages", "contacts", "activity", "api-keys",
   "cli-credentials", "packages", "tenants", "system-settings", "import-export",
+  "v3-capabilities",
 ] as const;
 
 i18n.use(initReactI18next).init({
@@ -152,6 +156,7 @@ i18n.use(initReactI18next).init({
       tenants: enTenants,
       "system-settings": enSystemSettings,
       "import-export": enImportExport,
+      "v3-capabilities": enV3Capabilities,
     },
     vi: {
       common: viCommon, sidebar: viSidebar, topbar: viTopbar, login: viLogin,
@@ -168,6 +173,7 @@ i18n.use(initReactI18next).init({
       tenants: viTenants,
       "system-settings": viSystemSettings,
       "import-export": viImportExport,
+      "v3-capabilities": viV3Capabilities,
     },
     zh: {
       common: zhCommon, sidebar: zhSidebar, topbar: zhTopbar, login: zhLogin,
@@ -184,6 +190,7 @@ i18n.use(initReactI18next).init({
       tenants: zhTenants,
       "system-settings": zhSystemSettings,
       "import-export": zhImportExport,
+      "v3-capabilities": zhV3Capabilities,
     },
   },
   ns: [...ns],
