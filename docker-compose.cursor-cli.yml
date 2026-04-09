@@ -1,0 +1,25 @@
+# Optional overlay: install Cursor Agent CLI and sync credentials from host into container.
+# Mounts host ~/.cursor as read-only; entrypoint copies credentials to a persistent volume.
+# Adds ENABLE_CURSOR_AGENT build arg to install Cursor CLI using the official installer.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.cursor-cli.yml up -d --build
+#
+# Optional:
+#   - Set GOCLAW_CLAUDE_CLI_PATH to override binary path (default: agent)
+#   - If host mount is unavailable, run auth once inside container:
+#       docker compose exec goclaw agent auth login
+
+services:
+  goclaw:
+    build:
+      args:
+        ENABLE_CURSOR_AGENT: "true"
+    environment:
+      - GOCLAW_CLAUDE_CLI_PATH=${GOCLAW_CLAUDE_CLI_PATH:-agent}
+    volumes:
+      - ${HOME}/.cursor:/app/.cursor-host:ro
+      - goclaw-cursor-config:/app/.cursor
+
+volumes:
+  goclaw-cursor-config:
